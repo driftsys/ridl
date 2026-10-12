@@ -221,7 +221,9 @@ pub fn run(invocation: &Invocation, stdout_to: &Path) -> Result<ExitStatus, Stri
 /// With `handoff`, nothing is spawned: the invocation is written to a request
 /// file next to `stdout_to`, and the call waits until the operator has run
 /// the prompt with an agent of their own, written its output to `stdout_to`,
-/// and created the done file. A handed-off run has no exit code.
+/// and created the done file. The request file holds the invocation's
+/// working directory, arguments, environment and prompt. A handed-off run
+/// has no exit code.
 pub fn execute(
     invocation: &Invocation,
     stdout_to: &Path,
@@ -240,6 +242,16 @@ pub fn execute(
     request.insert(
         "args".into(),
         toml::Value::Array(invocation.args.iter().map(|a| a.clone().into()).collect()),
+    );
+    request.insert(
+        "env".into(),
+        toml::Value::Table(
+            invocation
+                .env
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone().into()))
+                .collect(),
+        ),
     );
     request.insert("prompt".into(), invocation.stdin.clone().into());
     let path = request_path(stdout_to);
@@ -558,7 +570,7 @@ mod tests {
         let invocation = Invocation {
             program: "claude".into(),
             args: vec!["-p".into()],
-            env: vec![],
+            env: vec![("CLAUDE_CONFIG_DIR".into(), "/r/home".into())],
             cwd: dir.join("ws"),
             stdin: "the prompt".into(),
         };
@@ -570,8 +582,12 @@ mod tests {
                     std::thread::sleep(std::time::Duration::from_millis(20));
                 }
                 let text = std::fs::read_to_string(&request).unwrap();
-                assert!(
-                    text.contains("the prompt") && text.contains("/ws"),
+                let request: toml::Table = toml::from_str(&text).unwrap();
+                assert_eq!(request["prompt"].as_str(), Some("the prompt"), "{text}");
+                assert!(request["cwd"].as_str().unwrap().ends_with("/ws"), "{text}");
+                assert_eq!(
+                    request["env"]["CLAUDE_CONFIG_DIR"].as_str(),
+                    Some("/r/home"),
                     "{text}"
                 );
                 std::fs::write(&out, "transcript").unwrap();

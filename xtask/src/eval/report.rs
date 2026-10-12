@@ -58,6 +58,11 @@ fn runs(out: &Path) -> Result<Vec<Run>, String> {
     Ok(runs)
 }
 
+/// Whether `out` holds at least one result file.
+pub fn has_results(out: &Path) -> Result<bool, String> {
+    Ok(out.is_dir() && !runs(out)?.is_empty())
+}
+
 fn mean(values: impl Iterator<Item = f64>) -> f64 {
     let (sum, count) = values.fold((0.0, 0usize), |(s, c), v| (s + v, c + 1));
     if count == 0 { 0.0 } else { sum / count as f64 }

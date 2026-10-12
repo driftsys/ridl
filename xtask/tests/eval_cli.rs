@@ -372,6 +372,9 @@ fn a_handed_off_claude_run_is_scored_and_judged_by_codex() {
         |request| {
             let cwd = request["cwd"].as_str().unwrap();
             assert!(request["prompt"].as_str().unwrap().len() > 10);
+            // The operator's agent needs the run's own configuration home.
+            let home = request["env"]["CLAUDE_CONFIG_DIR"].as_str().unwrap();
+            assert_eq!(Path::new(home), Path::new(cwd).with_file_name("home"));
             std::fs::write(format!("{cwd}/ridl.toml"), "[package]\n").unwrap();
             [
                 format!(r#"{{"type":"assistant","message":{{"content":[{{"type":"tool_use","name":"Read","input":{{"file_path":"{cwd}/.claude/skills/ridl-authoring/SKILL.md"}}}}]}}}}"#),
@@ -390,6 +393,14 @@ fn a_handed_off_claude_run_is_scored_and_judged_by_codex() {
     assert_eq!(stderr.matches("eval: handoff: ").count(), 1, "{stderr}");
     let result = result(&out, "design-0001", "claude-with-1");
     assert_eq!(result["agent_exit"].as_integer(), Some(-1));
+    // No claude process ran, so the pinned model is not claimed.
+    assert_eq!(result["handoff"].as_bool(), Some(true));
+    assert_eq!(result["model"].as_str(), Some("handoff"));
+    assert_eq!(result["rubric"]["handoff"].as_bool(), Some(false));
+    assert_eq!(
+        result["rubric"]["judge_model"].as_str(),
+        Some(pinned_model("codex").as_str())
+    );
     assert_eq!(result["mechanical"]["passed"].as_bool(), Some(true));
     assert_eq!(result["rubric"]["judge_host"].as_str(), Some("codex"));
     assert_eq!(result["rubric"]["score"].as_float(), Some(1.0));
@@ -435,6 +446,141 @@ fn the_claude_judge_of_a_codex_run_is_handed_off() {
     let codex = result(&out, "design-0001", "codex-without-1");
     assert_eq!(codex["rubric"]["judge_host"].as_str(), Some("claude"));
     assert_eq!(codex["rubric"]["score"].as_float(), Some(1.0));
+    assert_eq!(codex["handoff"].as_bool(), Some(false));
+    assert_eq!(
+        codex["model"].as_str(),
+        Some(pinned_model("codex").as_str())
+    );
+    assert_eq!(codex["rubric"]["handoff"].as_bool(), Some(true));
+    assert_eq!(codex["rubric"]["judge_model"].as_str(), Some("handoff"));
+}
+
+/// The model `evals/runner.toml` pins for a host.
+fn pinned_model(host: &str) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../evals/runner.toml");
+    let runner: toml::Value = toml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    runner[host]["model"].as_str().unwrap().to_owned()
+}
+
+#[test]
+fn each_run_and_judgement_uses_and_records_its_host_pinned_model() {
+    let fakes = fakes_with(None);
+    let (claude, codex) = (pinned_model("claude"), pinned_model("codex"));
+    assert_ne!(claude, codex);
+    for host in ["claude", "codex"] {
+        let out = fakes.dir.join(format!("results-{host}"));
+        let output = eval(
+            &fakes,
+            &[
+                "--task",
+                "design-0001",
+                "--host",
+                host,
+                "--skill",
+                "without",
+                "--out",
+                out.to_str().unwrap(),
+            ],
+            true,
+        );
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let result = result(&out, "design-0001", &format!("{host}-without-1"));
+        let (model, judge_model) = if host == "claude" {
+            (&claude, &codex)
+        } else {
+            (&codex, &claude)
+        };
+        assert_eq!(result["model"].as_str(), Some(model.as_str()));
+        assert_eq!(result["handoff"].as_bool(), Some(false));
+        assert_eq!(
+            result["rubric"]["judge_model"].as_str(),
+            Some(judge_model.as_str())
+        );
+        assert_eq!(result["rubric"]["handoff"].as_bool(), Some(false));
+    }
+    let calls = fakes.calls();
+    let line = |prefix: &str, marker: &str| {
+        calls
+            .lines()
+            .find(|l| l.starts_with(prefix) && l.contains(marker))
+            .unwrap_or_else(|| panic!("no {prefix} call with {marker}:\n{calls}"))
+            .to_owned()
+    };
+    let claude_agent = line("claude -p", "--mcp-config");
+    let claude_judge = line("claude -p", "--json-schema");
+    let codex_agent = line("codex exec", "--json");
+    let codex_judge = line("codex exec", "--output-schema");
+    assert!(
+        claude_agent.contains(&format!("--model {claude} ")),
+        "{claude_agent}"
+    );
+    assert!(
+        codex_judge.contains(&format!("-m {codex} ")),
+        "{codex_judge}"
+    );
+    assert!(
+        codex_agent.contains(&format!("-m {codex} ")),
+        "{codex_agent}"
+    );
+    assert!(
+        claude_judge.contains(&format!("--model {claude} ")),
+        "{claude_judge}"
+    );
+}
+
+#[test]
+fn an_out_directory_that_holds_results_needs_append() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    let args = |append: bool| {
+        let mut args = vec![
+            "--task",
+            "design-0001",
+            "--host",
+            "claude",
+            "--skill",
+            "without",
+            "--runs",
+            "2",
+            "--out",
+            out.to_str().unwrap(),
+        ];
+        if append {
+            args.push("--append");
+        }
+        args.into_iter().map(str::to_owned).collect::<Vec<_>>()
+    };
+    let run = |args: Vec<String>| {
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        eval(&fakes, &args, true)
+    };
+    let first = run(args(false));
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert!(out.join("design-0001/claude-without-1.toml").is_file());
+    assert!(out.join("design-0001/claude-without-2.toml").is_file());
+    let second = run(args(false));
+    assert_eq!(second.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&second.stderr);
+    assert!(
+        stderr.contains("already holds results") && stderr.contains("--append"),
+        "{stderr}"
+    );
+    let calls = fakes.calls().lines().count();
+    let appended = run(args(true));
+    assert!(
+        appended.status.success(),
+        "{}",
+        String::from_utf8_lossy(&appended.stderr)
+    );
+    assert!(fakes.calls().lines().count() > calls);
 }
 
 #[test]
@@ -568,6 +714,7 @@ fn a_passed_run_is_judged_by_the_other_host_and_summarised() {
                 "without",
                 "--out",
                 out.to_str().unwrap(),
+                "--append",
             ],
             true,
         );

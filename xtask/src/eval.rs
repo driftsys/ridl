@@ -3,7 +3,12 @@
 //! under `evals/results/<date>/`.
 //!
 //! `cargo xtask eval [--task <id>]... [--host claude|codex]... [--runs <n>]
-//! [--skill with|without|both] [--out <dir>] [--claude-handoff]`
+//! [--skill with|without|both] [--out <dir>] [--append] [--claude-handoff]`
+//!
+//! The summary and the gate read every result under `--out`, so the eval
+//! refuses an `--out` that already holds results, since they would be merged
+//! into the new summary and gate. `--append` allows it, for adding runs to an
+//! earlier invocation's results on purpose.
 //!
 //! Each host signs in with its CLI's own login. Codex runs get a copy of the
 //! stored `auth.json`. Claude runs read `CLAUDE_CODE_OAUTH_TOKEN`, which
@@ -28,6 +33,8 @@ pub struct Options {
     /// `true` runs with the skill, `false` without it.
     pub skill: Vec<bool>,
     pub out: Option<PathBuf>,
+    /// Write into an `--out` that already holds results.
+    pub append: bool,
     pub claude_handoff: bool,
 }
 
@@ -38,6 +45,7 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
         runs: 1,
         skill: vec![true, false],
         out: None,
+        append: false,
         claude_handoff: false,
     };
     let mut iter = args.iter();
@@ -70,6 +78,7 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
                 }
             }
             "--out" => options.out = Some(PathBuf::from(value()?)),
+            "--append" => options.append = true,
             "--claude-handoff" => options.claude_handoff = true,
             other => return Err(format!("unknown argument: {other}")),
         }
@@ -101,6 +110,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
         .out
         .clone()
         .unwrap_or_else(|| root.join("evals/results").join(today()));
+    if !options.append && report::has_results(&out)? {
+        return Err(format!(
+            "{} already holds results, which the summary and the gate would merge with this run's; pass another --out, or --append to add to them",
+            out.display()
+        ));
+    }
     let skill = root.join("skills/ridl-authoring");
     let versions: Vec<(Host, String)> = options
         .hosts
@@ -140,7 +155,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     let mut result = toml::Table::new();
                     result.insert("task".into(), task.id.clone().into());
                     result.insert("host".into(), host.name().into());
-                    result.insert("model".into(), host.model(&models).into());
+                    // A handed-off run ran on the operator's agent, not on
+                    // the pinned model.
+                    let model = if handoff {
+                        "handoff"
+                    } else {
+                        host.model(&models)
+                    };
+                    result.insert("model".into(), model.into());
+                    result.insert("handoff".into(), handoff.into());
                     let version = versions
                         .iter()
                         .find(|(h, _)| *h == host)
@@ -367,11 +390,8 @@ fn judge_run(
         .transpose()?;
     let invocation = judge::judge_invocation(judge, judge.model(models), &dir, &text);
     let stdout = dir.join("stdout.json");
-    host::execute(
-        &invocation,
-        &stdout,
-        claude_handoff && judge == Host::Claude,
-    )?;
+    let handoff = claude_handoff && judge == Host::Claude;
+    host::execute(&invocation, &stdout, handoff)?;
     drop(login);
     let reply = match judge {
         Host::Claude => read(&stdout).and_then(|out| judge::claude_reply(&out)),
@@ -380,7 +400,13 @@ fn judge_run(
     std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
     let mut table = toml::Table::new();
     table.insert("judge_host".into(), judge.name().into());
-    table.insert("judge_model".into(), judge.model(models).into());
+    let model = if handoff {
+        "handoff"
+    } else {
+        judge.model(models)
+    };
+    table.insert("judge_model".into(), model.into());
+    table.insert("handoff".into(), handoff.into());
     match reply.and_then(|reply| judge::parse_verdict(&reply, &items)) {
         Ok(met) => {
             table.insert(
