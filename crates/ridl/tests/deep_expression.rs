@@ -90,6 +90,32 @@ fn wait_for_exit(child: &mut Child, what: &str) -> ExitStatus {
     }
 }
 
+/// Reports a language server that did not answer, with everything known
+/// about it: which wait gave up, whether the channel timed out or the
+/// server's stdout closed — which says the server had already exited —
+/// its exit status, and its stderr.
+///
+/// Every wait on the server reports this way. One of them failed once in CI
+/// and the message named only the wait that noticed, which was not enough to
+/// say whether the server was slow or gone (driftsys/ridl#789).
+fn lsp_gave_up(child: &mut Child, what: &str, err: mpsc::RecvTimeoutError) -> ! {
+    let reason = match err {
+        mpsc::RecvTimeoutError::Timeout => format!("nothing arrived within {TIMEOUT:?}"),
+        mpsc::RecvTimeoutError::Disconnected => {
+            "the server's stdout closed, so it had already exited".to_string()
+        }
+    };
+    let _ = child.kill();
+    let status = match child.wait() {
+        Ok(status) => status.to_string(),
+        Err(err) => format!("could not be reaped: {err}"),
+    };
+    panic!(
+        "ridl lsp published no {what}: {reason}; the server's {status}; stderr:\n{}",
+        stderr_of(child)
+    );
+}
+
 /// The child's stderr, for a failure message, once it has exited.
 fn stderr_of(child: &mut Child) -> String {
     let mut text = String::new();
@@ -334,7 +360,7 @@ fn ridl_lsp_publishes_form_102_for_every_long_chain_shape_and_keeps_serving() {
         match messages.recv_timeout(remaining) {
             Ok(Message::Response(response)) if response.id == initialize => break,
             Ok(_) => {}
-            Err(err) => panic!("no initialize response within {TIMEOUT:?}: {err}"),
+            Err(err) => lsp_gave_up(&mut child, "initialize response", err),
         }
     }
     Message::Notification(Notification::new("initialized".to_string(), json!({})))
@@ -374,14 +400,7 @@ fn ridl_lsp_publishes_form_102_for_every_long_chain_shape_and_keeps_serving() {
                         .collect();
                 }
                 Ok(_) => {}
-                Err(_) => {
-                    let _ = child.kill();
-                    let status = child.wait().expect("reap ridl lsp");
-                    panic!(
-                        "ridl lsp published nothing for the {shape} (status {status:?}):\n{}",
-                        stderr_of(&mut child)
-                    );
-                }
+                Err(err) => lsp_gave_up(&mut child, &format!("diagnostics for the {shape}"), err),
             }
         };
         assert!(
@@ -404,7 +423,7 @@ fn ridl_lsp_publishes_form_102_for_every_long_chain_shape_and_keeps_serving() {
         match messages.recv_timeout(remaining) {
             Ok(Message::Response(response)) if response.id == shutdown => break,
             Ok(_) => {}
-            Err(err) => panic!("no shutdown response within {TIMEOUT:?}: {err}"),
+            Err(err) => lsp_gave_up(&mut child, "shutdown response", err),
         }
     }
     Message::Notification(Notification::new("exit".to_string(), json!(null)))
