@@ -2933,3 +2933,291 @@ fn a_member_baseline_is_published_at_the_workspace_root() {
     assert!(root.join(".ridl/baseline/veh.cluster.ir.json").is_file());
     assert!(!root.join("cluster/.ridl").exists());
 }
+
+/// (driftsys/ridl#590) A member retired in place names the siblings whose
+/// ordinal changed beside it.
+///
+/// `{gone, door, latch}` becomes `{reserved gone, latch, door}`: the
+/// tombstone keeps ordinal 0, and `door` and `latch` swap. `ridl diff`
+/// reports no reorder beside a removal, and the retirement is the only
+/// change it does report, so if this message does not name the swap nothing
+/// does.
+#[test]
+fn check_names_the_siblings_that_moved_beside_a_retirement() {
+    let source = "package veh.cluster
+type DoorState: integer [0..1]
+type LatchState: integer [0..3]
+struct Report {
+  gone: DoorState
+  door: DoorState
+  latch: LatchState
+}
+";
+    let dir = TempDir::new("retire-and-swap");
+    let root = package_workspace(&dir, source);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type DoorState: integer [0..1]
+type LatchState: integer [0..3]
+struct Report {
+  reserved gone
+  latch: LatchState
+  door: DoorState
+}
+",
+    );
+
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    let block = ridl_407_block(&stderr, "gone");
+    assert!(
+        block.contains("`latch`") && block.contains("`door`"),
+        "the retirement names the swapped siblings:\n{stderr}",
+    );
+}
+
+/// (driftsys/ridl#590) An append warning that carries three reasons joins
+/// them as `quoted_list` joins names — "a, b and c" — not with " and "
+/// between every pair.
+#[test]
+fn check_joins_three_append_reasons_with_commas() {
+    let source = "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  gone: DoorState
+  door: DoorState
+  latch: DoorState
+}
+";
+    let dir = TempDir::new("append-three-reasons");
+    let root = package_workspace(&dir, source);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    // In one edit: `gone` is removed, `fresh` is inserted at its ordinal,
+    // `door` and `latch` therefore change ordinal, and `tail` is appended.
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  fresh: DoorState
+  latch: DoorState
+  door: DoorState
+  tail: DoorState
+}
+",
+    );
+
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    let block = ridl_407_block(&stderr, "tail");
+    let reasons = ["changed ordinal", "is no longer declared", "was inserted"];
+    let present: Vec<&str> = reasons
+        .iter()
+        .copied()
+        .filter(|reason| block.contains(reason))
+        .collect();
+    assert_eq!(
+        present.len(),
+        3,
+        "the fixture must reach all three reasons, got {present:?}:\n{stderr}",
+    );
+    assert!(
+        !block.contains("and `gone` is no longer declared and"),
+        "three reasons read as a list, not as a chain of `and`:\n{block}",
+    );
+}
+
+/// (driftsys/ridl#590) When the same edit gives a removed member's ordinal
+/// to a new member, the removal says so rather than calling the ordinal one
+/// "a later member could take" — the insertion warning in the same run
+/// already says it is taken.
+#[test]
+fn check_says_who_took_a_removed_members_ordinal() {
+    let dir = TempDir::new("replaced-in-place");
+    let root = package_workspace(&dir, COMPOSITES);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write(
+        "cluster.ridl",
+        &COMPOSITES.replacen(
+            "  door: DoorState\n  latch",
+            "  hinge: DoorState\n  latch",
+            1,
+        ),
+    );
+
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    let block = ridl_407_block(&stderr, "door");
+    assert!(
+        block.contains("`hinge`"),
+        "the removal names the member that took the ordinal:\n{stderr}",
+    );
+    assert!(
+        !block.contains("which a later member could take"),
+        "the ordinal is taken already, so it is not one a later member could take:\n{block}",
+    );
+}
+
+/// (driftsys/ridl#590) A struct field whose type changes in place is
+/// breaking, and `ridl diff` gates it, but no ordinal moves and the desk
+/// draws nothing. The catalogue says the desk warns once per change the diff
+/// reports as breaking; this is the change that is not one, and it is what
+/// the qualification in that sentence is for.
+#[test]
+fn check_is_silent_for_an_in_place_field_type_change_the_gate_refuses() {
+    let dir = TempDir::new("constraint-changed");
+    let root = package_workspace(&dir, COMPOSITES);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    // `door` keeps its ordinal and its name; only its type changes.
+    dir.write(
+        "cluster.ridl",
+        &COMPOSITES.replacen(
+            "  door: DoorState\n  latch",
+            "  door: LatchState\n  latch",
+            1,
+        ),
+    );
+
+    let (code, diff) = diff_against_baseline(&root);
+    assert_eq!(code, 1, "the gate refuses an in-place type change:\n{diff}");
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert!(
+        !stderr.contains("RIDL-407"),
+        "no ordinal moved, so the desk draws nothing:\n{stderr}",
+    );
+    assert_eq!(code, 0, "the desk leaves the exit code alone:\n{stderr}");
+}
+
+/// (driftsys/ridl#590) A member added above every live ordinal but below a
+/// tombstone's is an insertion into a retired slot's range, not an append:
+/// `CompositeBody::high_water` reads the `reserved` entries as well as the
+/// live members. Deleting the `reserved` chain from it passed every test,
+/// because no fixture put a tombstone above every live ordinal.
+#[test]
+fn check_reads_a_tombstone_above_every_live_member_as_the_high_water_mark() {
+    let source = "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  door: DoorState
+  latch: DoorState
+  reserved gone
+}
+";
+    let dir = TempDir::new("tombstone-high-water");
+    let root = package_workspace(&dir, source);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    // `fresh` takes the tombstone's ordinal: above every live member, but
+    // not above everything the baseline retires.
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  door: DoorState
+  latch: DoorState
+  fresh: DoorState
+}
+",
+    );
+
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    let block = ridl_407_block(&stderr, "fresh");
+    assert!(
+        block.contains("which the published baseline retires"),
+        "the member lands in a retired slot, not after every ordinal:\n{block}",
+    );
+}
+
+/// (driftsys/ridl#590) `quoted_list`'s three-or-more form reads
+/// "`a`, `b` and `c`". Changing its comma join to " and " passed every test,
+/// because no fixture moved three members at once.
+#[test]
+fn check_lists_three_moved_siblings_with_commas() {
+    let source = "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  gone: DoorState
+  a: DoorState
+  b: DoorState
+  c: DoorState
+}
+";
+    let dir = TempDir::new("three-moved");
+    let root = package_workspace(&dir, source);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    // `gone` is deleted, so `a`, `b` and `c` each lose an ordinal.
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  a: DoorState
+  b: DoorState
+  c: DoorState
+}
+",
+    );
+
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    let block = ridl_407_block(&stderr, "gone");
+    assert!(
+        block.contains("`a`, `b` and `c`"),
+        "three names read as a list, not as a chain of `and`:\n{block}",
+    );
+}
+
+/// (driftsys/ridl#590) A removal whose ordinal is taken *and* whose siblings
+/// slid reads as one sentence with one conjunction. Each consequence is a
+/// bare clause and `and_list` adds the conjunction once, so a clause that
+/// carried its own would read "and X and and Y".
+#[test]
+fn check_joins_both_consequences_of_a_removal_with_one_conjunction() {
+    let source = "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  gone: DoorState
+  a: DoorState
+  b: DoorState
+}
+";
+    let dir = TempDir::new("removal-both-consequences");
+    let root = package_workspace(&dir, source);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    // `gone` goes, `fresh` takes its ordinal, and `a` and `b` swap.
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  fresh: DoorState
+  b: DoorState
+  a: DoorState
+}
+",
+    );
+
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    let block = ridl_407_block(&stderr, "gone");
+    assert!(
+        block.contains("`fresh` has taken it in this edit") && block.contains("slid into"),
+        "the fixture must reach both consequences:\n{block}",
+    );
+    assert!(
+        !block.contains(" and and "),
+        "one conjunction, not two:\n{block}",
+    );
+}
