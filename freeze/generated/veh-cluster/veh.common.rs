@@ -3110,6 +3110,14 @@ pub(crate) fn __ridl_fb_encode_SensorBounds(
         offset: 12u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.labels;
+            if __c.is_empty() || __c.len() > 16usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("SensorBounds"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
             let mut __offsets: ::std::vec::Vec<::ridl_rt::flatbuffers::Pos> = ::std::vec::Vec::with_capacity(
                 __c.len(),
             );
@@ -3125,6 +3133,14 @@ pub(crate) fn __ridl_fb_encode_SensorBounds(
         offset: 16u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.meta;
+            if __c.len() > 32usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("SensorBounds"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
             let mut __offsets: ::std::vec::Vec<::ridl_rt::flatbuffers::Pos> = ::std::vec::Vec::with_capacity(
                 __c.len(),
             );

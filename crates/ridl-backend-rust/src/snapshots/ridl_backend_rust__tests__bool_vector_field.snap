@@ -258,6 +258,14 @@ pub(crate) fn __ridl_fb_encode_Flags(
         offset: 4u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.values;
+            if __c.len() > 4usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Flags"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
             let mut __bytes: ::std::vec::Vec<::core::primitive::u8> = ::std::vec::Vec::with_capacity(
                 __c.len() * 1usize,
             );
@@ -275,6 +283,14 @@ pub(crate) fn __ridl_fb_encode_Flags(
         offset: 8u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.engaged;
+            if __c.len() > 4usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Flags"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
             let mut __bytes: ::std::vec::Vec<::core::primitive::u8> = ::std::vec::Vec::with_capacity(
                 __c.len() * 1usize,
             );

@@ -44,7 +44,9 @@ are trait methods rather than inherent methods so that a member of the
 interface can have one of these names. Without the `use` of the prelude,
 `cabin::Client::new` does not compile. The other imports are for the snippets
 below: `Loopback` is the runtime, `CatalogRef` and `Interface` name the catalog
-the face was generated from, and `Provenance` is read from a signal sample.
+the face was generated from, and `Provenance` is read from a signal sample. A
+`Loopback` carries FlatBuffers, which is its default encoding; the face takes
+the encoding from the port it is bound to and names none itself.
 
 The package module holds:
 

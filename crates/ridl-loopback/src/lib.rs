@@ -31,7 +31,10 @@
 //! each handle wakes its own waiters (see "Waking" below).
 //! [`Loopback`] is the aggregate: it implements all twelve port traits by
 //! delegating to the six role handles it holds, and it is what a generated
-//! `Client`, `Publisher` or `dispatch` is normally built over.
+//! `Client`, `Publisher` or `dispatch` is normally built over, and it states
+//! the encoding the face encodes with. Every handle carries that encoding as
+//! its type parameter `E` and implements [`Encoded`] with it; the default is
+//! FlatBuffers, and [`Loopback::with_encoding`] names another.
 //!
 //! ```
 //! use ridl_loopback::Loopback;
@@ -67,7 +70,7 @@
 //! against. What it therefore never returns:
 //! `WriteError::NotOwner`, `RaiseError::NotOwner`, `ServeError::NotOwner`, any
 //! port error's `Contract` variant except
-//! [`FixedReader::read_fixed`](ridl_rt::port::FixedReader::read_fixed)'s, and
+//! [`FixedReader::read_fixed`]'s, and
 //! `Freshness::Fresh` or `Freshness::Stale`. Nothing detaches, because every
 //! handle holds the store alive, so `Detached` never appears either. The one
 //! bound is the call table's [`Loopback::SLOTS`]: a send with every slot
@@ -96,7 +99,7 @@
 //! not observe. A registration of the waker already stored refreshes it
 //! without waking it. No waker is woken while the store is locked.
 //!
-//! [`Attached::catalog`](ridl_rt::port::Attached::catalog) returns the
+//! [`Attached::catalog`] returns the
 //! `CatalogRef` the runtime was built with, unexamined. ADR-0021 decision 3
 //! places a check of it against the interface's own `CATALOG` in a generated
 //! face's constructor, once, when the face is built; the constructor the Rust
@@ -111,11 +114,12 @@ use std::sync::{Arc, Mutex};
 use std::task::Waker;
 
 use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
+use ridl_rt::encoding::{Encoding, FlatBuffers};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
-    Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, EventSink,
-    EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample, ReadError,
-    ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
+    Attached, Caller, Changed, Claim, ClaimId, Clock, CoherentSignals, Correlation, Encoded,
+    EventSink, EventSource, FixedReader, Handler, Interest, RaiseError, RawOccurrence, RawSample,
+    ReadError, ScannableSignals, SendError, ServeError, SettleError, SignalReader, SignalWriter,
     SubscribeError, Wakeable, Watermark, WriteError,
 };
 use ridl_rt::sample::{Duration, Timestamp};
@@ -132,20 +136,21 @@ use handle::{lock, Shared};
 use store::Store;
 
 /// The six role handles of one runtime, as [`Loopback::split`] hands them out.
-pub struct Handles {
+/// Each carries the runtime's encoding `E`.
+pub struct Handles<E: Encoding = FlatBuffers> {
     /// `Attached`, `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`
     /// and `CoherentSignals`.
-    pub reader: ReaderHandle,
+    pub reader: ReaderHandle<E>,
     /// `SignalWriter`.
-    pub writer: WriterHandle,
+    pub writer: WriterHandle<E>,
     /// `EventSource`.
-    pub source: SourceHandle,
+    pub source: SourceHandle<E>,
     /// `EventSink`.
-    pub sink: SinkHandle,
+    pub sink: SinkHandle<E>,
     /// `Caller`.
-    pub caller: CallerHandle,
+    pub caller: CallerHandle<E>,
     /// `Handler`.
-    pub handler: HandlerHandle,
+    pub handler: HandlerHandle<E>,
 }
 
 /// The aggregate handle: one value implementing all twelve port traits by
@@ -156,13 +161,20 @@ pub struct Handles {
 /// `SignalReader + EventSource + Caller` at once, which no single role handle
 /// satisfies. That is what an aggregate is for (ADR-0021 decision 12). Pass it
 /// by value, or as `&mut` under the forwarding impls of ADR-0021 decision 11.
-pub struct Loopback {
+///
+/// The type parameter `E` is the encoding its ports carry, stated for a face
+/// over it to read through [`Encoded`]. The default is [`FlatBuffers`], because
+/// both ends of a loopback are one process and FlatBuffers is the codec that
+/// reads a payload in place; [`new`](Loopback::new) builds that default, and
+/// [`with_encoding`](Loopback::with_encoding) names another. The encoding is
+/// carried, not applied: the loopback moves bytes and decodes none of them.
+pub struct Loopback<E: Encoding = FlatBuffers> {
     shared: Shared,
     catalog: CatalogRef,
-    handles: Handles,
+    handles: Handles<E>,
 }
 
-impl Loopback {
+impl Loopback<FlatBuffers> {
     /// The number of calls the runtime holds at once. A call holds its slot
     /// from its send until one of these reclaims it:
     ///
@@ -197,19 +209,38 @@ impl Loopback {
     /// directly must forget each correlation itself once it has read the
     /// outcome, or drop the caller handle, which forgets that handle's calls;
     /// otherwise it gets `SendError::Busy` from its seventeenth call on.
-    pub const SLOTS: usize = 16;
+    ///
+    /// The count is the store's and the same under every encoding, so it is
+    /// defined once, here, where `Loopback::SLOTS` resolves with no type
+    /// argument.
+    pub const SLOTS: usize = store::SLOTS;
 
     /// A runtime attached to `catalog`, with an empty store and its clock at
-    /// [`Timestamp`] 0.
+    /// [`Timestamp`] 0, whose ports carry FlatBuffers, the loopback's
+    /// default encoding.
     ///
     /// The catalog is carried, not checked: see the crate documentation.
     #[must_use]
     pub fn new(catalog: CatalogRef) -> Self {
+        Loopback::<FlatBuffers>::with_encoding(catalog)
+    }
+}
+
+impl<E: Encoding> Loopback<E> {
+    /// A runtime attached to `catalog`, with an empty store and its clock at
+    /// [`Timestamp`] 0, whose ports carry `E`.
+    ///
+    /// `Loopback::<Proto3>::with_encoding(catalog)` is a runtime whose ports
+    /// carry proto3, which a face over them reads through [`Encoded`]. The
+    /// catalog is carried, not checked: see the crate documentation.
+    #[must_use]
+    pub fn with_encoding(catalog: CatalogRef) -> Self {
         Loopback::over(Arc::new(Mutex::new(Store::new())), catalog)
     }
 
-    /// An aggregate of six new role handles on `shared`: what `new` and
-    /// `attach` both build, over a new store and over this one.
+    /// An aggregate of six new role handles on `shared`: what
+    /// `with_encoding` and `attach` both build, over a new store and over
+    /// this one.
     fn over(shared: Shared, catalog: CatalogRef) -> Self {
         let handles = Handles {
             reader: ReaderHandle::new(Arc::clone(&shared), catalog),
@@ -230,7 +261,7 @@ impl Loopback {
     /// keeps the same store, so a value published through `writer` is read
     /// through `reader`.
     #[must_use]
-    pub fn split(self) -> Handles {
+    pub fn split(self) -> Handles<E> {
         self.handles
     }
 
@@ -249,34 +280,34 @@ impl Loopback {
     ///
     /// Not `Clone`: `docs/design/ridl-loopback.md` records why.
     #[must_use]
-    pub fn attach(&self) -> Loopback {
+    pub fn attach(&self) -> Loopback<E> {
         Loopback::over(Arc::clone(&self.shared), self.catalog)
     }
 
     /// An additional reader handle on the same store.
     #[must_use]
-    pub fn reader(&self) -> ReaderHandle {
+    pub fn reader(&self) -> ReaderHandle<E> {
         ReaderHandle::new(Arc::clone(&self.shared), self.catalog)
     }
 
     /// An additional writer handle on the same store, with its own staging
     /// area and its own per channel sequence counters.
     #[must_use]
-    pub fn writer(&self) -> WriterHandle {
+    pub fn writer(&self) -> WriterHandle<E> {
         WriterHandle::new(Arc::clone(&self.shared), self.catalog)
     }
 
     /// An additional event source on the same store, with its own
     /// subscription set and its own queue.
     #[must_use]
-    pub fn source(&self) -> SourceHandle {
+    pub fn source(&self) -> SourceHandle<E> {
         SourceHandle::new(Arc::clone(&self.shared), self.catalog)
     }
 
     /// An additional event sink on the same store, with its own sequence
     /// counter.
     #[must_use]
-    pub fn sink(&self) -> SinkHandle {
+    pub fn sink(&self) -> SinkHandle<E> {
         SinkHandle::new(Arc::clone(&self.shared), self.catalog)
     }
 
@@ -284,7 +315,7 @@ impl Loopback {
     /// Two callers on one provider therefore never collide on a sequence
     /// number (driftsys/ridl#308).
     #[must_use]
-    pub fn caller(&self) -> CallerHandle {
+    pub fn caller(&self) -> CallerHandle<E> {
         CallerHandle::new(Arc::clone(&self.shared), self.catalog)
     }
 
@@ -295,7 +326,7 @@ impl Loopback {
     /// every waiting call, and one that has served members is presented only
     /// those. A claim belongs to the handler it was presented to.
     #[must_use]
-    pub fn handler(&self) -> HandlerHandle {
+    pub fn handler(&self) -> HandlerHandle<E> {
         HandlerHandle::new(Arc::clone(&self.shared), self.catalog)
     }
 
@@ -341,19 +372,25 @@ impl Loopback {
 // The aggregate's twelve port implementations, each one a delegation.
 // ---------------------------------------------------------------------------
 
-impl Attached for Loopback {
+impl<E: Encoding> Attached for Loopback<E> {
     fn catalog(&self) -> &CatalogRef {
         self.handles.reader.catalog()
     }
 }
 
-impl Clock for Loopback {
+/// One session has one encoding: every port of this runtime carries `E`, and
+/// an aggregate from [`Loopback::attach`] carries the same `E`.
+impl<E: Encoding> Encoded for Loopback<E> {
+    type Encoding = E;
+}
+
+impl<E: Encoding> Clock for Loopback<E> {
     fn now(&self) -> Timestamp {
         self.handles.reader.now()
     }
 }
 
-impl SignalReader for Loopback {
+impl<E: Encoding> SignalReader for Loopback<E> {
     fn read(
         &self,
         iface: InterfaceNo,
@@ -364,7 +401,7 @@ impl SignalReader for Loopback {
     }
 }
 
-impl FixedReader for Loopback {
+impl<E: Encoding> FixedReader for Loopback<E> {
     fn read_fixed(
         &self,
         iface: InterfaceNo,
@@ -375,7 +412,7 @@ impl FixedReader for Loopback {
     }
 }
 
-impl ScannableSignals for Loopback {
+impl<E: Encoding> ScannableSignals for Loopback<E> {
     fn generation(&self, iface: InterfaceNo) -> u64 {
         self.handles.reader.generation(iface)
     }
@@ -385,7 +422,7 @@ impl ScannableSignals for Loopback {
     }
 }
 
-impl CoherentSignals for Loopback {
+impl<E: Encoding> CoherentSignals for Loopback<E> {
     fn read_coherent(
         &self,
         iface: InterfaceNo,
@@ -397,7 +434,7 @@ impl CoherentSignals for Loopback {
     }
 }
 
-impl SignalWriter for Loopback {
+impl<E: Encoding> SignalWriter for Loopback<E> {
     fn set(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), WriteError> {
         self.handles.writer.set(iface, ord, bytes)
     }
@@ -415,7 +452,7 @@ impl SignalWriter for Loopback {
     }
 }
 
-impl EventSource for Loopback {
+impl<E: Encoding> EventSource for Loopback<E> {
     fn subscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), SubscribeError> {
         self.handles.source.subscribe(iface, ords)
     }
@@ -429,7 +466,7 @@ impl EventSource for Loopback {
     }
 }
 
-impl EventSink for Loopback {
+impl<E: Encoding> EventSink for Loopback<E> {
     fn raise(
         &mut self,
         iface: InterfaceNo,
@@ -441,7 +478,7 @@ impl EventSink for Loopback {
     }
 }
 
-impl Caller for Loopback {
+impl<E: Encoding> Caller for Loopback<E> {
     fn command(
         &mut self,
         iface: InterfaceNo,
@@ -479,7 +516,7 @@ impl Caller for Loopback {
     }
 }
 
-impl Handler for Loopback {
+impl<E: Encoding> Handler for Loopback<E> {
     fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError> {
         self.handles.handler.serve(iface, ords)
     }
@@ -499,7 +536,7 @@ impl Handler for Loopback {
 
 /// Each key goes to the handle that observes it: `Outcome` and `Slot` to the
 /// caller, `Event` to the source, and `Claim` to the handler.
-impl Wakeable for Loopback {
+impl<E: Encoding> Wakeable for Loopback<E> {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
             Interest::Outcome(_) | Interest::Slot => self.handles.caller.wake_on(what, waker),
@@ -528,6 +565,8 @@ const _: () = {
     assert_send::<CallerHandle>();
     assert_send::<HandlerHandle>();
 
-    // The aggregate is as `Send` as the handles it holds.
+    // The aggregate is as `Send` as the handles it holds, whatever its
+    // encoding: `PhantomData` of a unit marker type adds no restriction.
     assert_send::<Loopback>();
+    assert_send::<Loopback<ridl_rt::encoding::Proto3>>();
 };

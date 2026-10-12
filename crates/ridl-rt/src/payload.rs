@@ -201,6 +201,15 @@ pub enum EncodeError {
         /// The bytes the output buffer has.
         available: usize,
     },
+    /// The value breaks a typl constraint: `INVALID_VALUE`, ridl §10.2.
+    ///
+    /// The mirror of [`VerifyError::Contract`]: the encoder refused the value
+    /// and reports the rule the receiver's `verify` would have reported for
+    /// the same value, so the two sides name one violation. A bounded
+    /// collection is the shape this reaches: it is a plain field of the
+    /// generated type, so a value longer than its declared bound is
+    /// representable, and the encoder is where it is refused.
+    Contract(Violation),
 }
 
 /// A check that failed.

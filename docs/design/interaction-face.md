@@ -172,23 +172,43 @@ consumer side is:
   reads and the calls are inherent methods; `new` is `ridl_rt::face::Bind`'s,
   `next_event` is `ridl_rt::face::Events`'s, and `subscribe_<event>` is a method
   of the module's generated `Subscribe` trait (the paragraph "The fixed methods
-  are trait methods" below). The trait bounds on `P` are computed from the
-  interface's interaction kinds and no others: `SignalReader` when it declares a
-  signal, `EventSource` when it declares an event, `Caller` and `Clock` when it
-  declares a command or a query (`Clock` for the call's deadline), and
-  `Wakeable` when it declares an event, a command or a query (for the wait).
-  This is RA-19: a `Client` never carries a bound its own interface does not
-  need. It is proven, not merely asserted, by
+  are trait methods" below). The trait bounds on `P` are `Encoded`, which every
+  interaction of the interface needs because every interaction encodes, and then
+  the bounds computed from the interface's interaction kinds and no others:
+  `SignalReader` when it declares a signal, `EventSource` when it declares an
+  event, `Caller` and `Clock` when it declares a command or a query (`Clock` for
+  the call's deadline), and `Wakeable` when it declares an event, a command or a
+  query (for the wait). Each impl of `Client<P>` also carries the generated
+  `where` clause of the section "The encoding and the ports" below. This is
+  RA-19: a `Client` never carries a bound its own interface does not need. It is
+  proven, not merely asserted, by
   `ra19_a_minimal_signal_only_port_constructs_the_signal_only_client` in
   `tests/interaction_face.rs`, which constructs the fixture's signal-only `Horn`
-  interface's `Client` with a port implementing only `SignalReader` and
-  `Attached` — a bound the emitter should not have added would fail this to
+  interface's `Client` with a port implementing only `SignalReader`, `Attached`
+  and `Encoded` — a bound the emitter should not have added would fail this to
   compile — and the three other bound sets are pinned by
   `tests/face_generation.rs`. (The converse — that a bound the interface does
   need is never missing — is not separately proven: under-bounding cannot
   compile at all.)
 - **`Event`** — one enum per interface that declares an event, with one variant
   per event carrying `Occurrence<T>`, which `next_event` routes into by ordinal.
+  `Occurrence<T>` derives `Debug`, `Clone`, `Copy`, `PartialEq` and `Eq`, each
+  under the matching bound on `T`, so the enum emits each trait on its own
+  condition rather than all or none: `Debug`, `Clone` and `PartialEq` always,
+  because every generated payload type derives all three unconditionally; `Copy`
+  when every payload it carries is `Copy`; `Eq` when every payload it carries is
+  `Eq`. The conditions are the derive eligibility the generated payload types
+  already follow (`src/derives.rs`), read for the payload types rather than
+  restated. A payload that is `Clone` but not `Copy` therefore keeps the enum's
+  `Clone`, `PartialEq` and `Eq`, and loses only `Copy`. The enum is **not**
+  `#[non_exhaustive]`: that attribute protects a consumer who upgrades a
+  dependency without recompiling against the new source, and the generated crate
+  is regenerated with its consumer, so a new event arrives with a recompile and
+  the exhaustive `match` failing is the signal that there is one to handle.
+  Marking it `#[non_exhaustive]` would replace that signal with a wildcard arm
+  that drops the new event. `ridl diff` calls adding an event a compatible
+  evolution of the interface, which is a statement about the wire and not about
+  a generated Rust `match` (driftsys/ridl#486).
 - **One future type per command and per query, `<Name>Call<'a, P>`**, and
   **`NextEvent<'a, P>`** when the interface declares an event.
 - **`blocking::Client<P>`**, under the emitted crate's `std` feature — the
@@ -359,10 +379,12 @@ runtime's finding, and carries no acceptance value.
 
 ## The provider face
 
-- **`Publisher<W: ...>`** — over `SignalWriter` when the interface declares a
-  signal and `EventSink` when it declares an event, with one `set` and one
-  `invalidate_*` per signal, `commit`, and one `raise` per event. Unchanged by
-  the async clients. The sets and the raises are inherent; `new` is
+- **`Publisher<W: ...>`** — over `Encoded`, which its sets and raises need,
+  `SignalWriter` when the interface declares a signal and `EventSink` when it
+  declares an event, with one `set` and one `invalidate_*` per signal, `commit`,
+  and one `raise` per event. Its impls carry the generated `where` clause of
+  "The encoding and the ports", with `W::Encoding`. Unchanged by the async
+  clients. The sets and the raises are inherent; `new` is
   `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s, and
   `invalidate_<signal>` is a method of the module's generated `Invalidate`
   trait, emitted with `Publish`'s impl only when the interface declares a signal
@@ -371,42 +393,45 @@ runtime's finding, and carries no acceptance value.
   the interface declares one. **A method takes its argument by reference**
   (`fn set_level(&mut self, level: &Level)`), because the internal step reads
   the argument again when it evaluates a query's `ensure` clause after the
-  provider returns, and the generated payload types implement neither `Copy` nor
-  `Clone`. A command method returns nothing — a command has no failure the
-  application reports (ridl §6.1) — and a query method returns its declared
-  reply type.
+  provider returns. The generated doc once gave a second reason, that the
+  payload types implement neither `Copy` nor `Clone`; that stopped being true
+  when the payload types took their derive set, and the choice stands on the
+  first reason alone (driftsys/ridl#486). A command method returns nothing — a
+  command has no failure the application reports (ridl §6.1) — and a query
+  method returns its declared reply type.
 - **`serve`** — the next section.
 
 ## `serve`, the internal step, and the settlement table
 
-**`serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P) -> Serve<'_, H, P>`**
-calls `Handler::serve` with the interface's command and query ordinals when the
-function runs; a refusal is a future ready with `ProviderError::Serve`. Each
-poll registers `Interest::Claim`, then settles claims through the internal
-one-pass step, at most 32 in one poll (`SERVE_BUDGET`, a private constant of
-each interface module that emits `serve`; ADR-0023's 2026-09-28 amendment). A
-poll that took 32 claims wakes its own waker and is `Pending`, so the executor
-polls it again after other tasks have run, because a future that holds one poll
-for an unbounded time blocks every other task on a single-threaded executor; a
-poll that found no claim left before 32 is `Pending` without waking itself. The
-32 are counted as claims are taken, not as their settlements are accepted; the
-one exception is a refused settlement of an oversized claim, which ends the poll
-with the budget unspent and no self-wake (below). The self-wake is discarded
-under `ridl_rt::task::noop_waker`, so a frame loop that polls `Serve` once per
-frame with it settles at most 32 claims per frame; a loop that polls with
-`ridl_rt::task::flag_waker` polls again while the flag was set, up to its own
-limit of polls per frame. The handler port's failure resolves the future to
-`ProviderError::Claim`, with every claim settled before it staying settled.
-`Output` is `Result<Infallible, ProviderError>`: the future never resolves to
-`Ok` (F-7). It holds the handler by value, the provider by `&mut`, and the claim
-buffer `CLAIM_BUFFER` of the interface's table, `MAX_BUFFER_SIZE` bytes, inline,
-so the application supplies no buffer and reads no count. A resolved `Serve`
-panics when it is polled again. Over `ridl-loopback`, registering the served set
-means a handler under `serve` is presented only the interface's own members; the
-settlement table's unknown-route rows are reachable only through the internal
-step directly, which is how `tests/interaction_face.rs` still exercises them —
-the test file is inside the crate that `include!`s the fixture, so `pub(crate)`
-reaches it.
+**`serve<H: Encoded + Handler + Wakeable, P: Provider>(h: H, p: &mut P) -> Serve<'_, H, P>`**,
+with the generated `where` clause of "The encoding and the ports" over
+`H::Encoding`, calls `Handler::serve` with the interface's command and query
+ordinals when the function runs; a refusal is a future ready with
+`ProviderError::Serve`. Each poll registers `Interest::Claim`, then settles
+claims through the internal one-pass step, at most 32 in one poll
+(`SERVE_BUDGET`, a private constant of each interface module that emits `serve`;
+ADR-0023's 2026-09-28 amendment). A poll that took 32 claims wakes its own waker
+and is `Pending`, so the executor polls it again after other tasks have run,
+because a future that holds one poll for an unbounded time blocks every other
+task on a single-threaded executor; a poll that found no claim left before 32 is
+`Pending` without waking itself. The 32 are counted as claims are taken, not as
+their settlements are accepted; the one exception is a refused settlement of an
+oversized claim, which ends the poll with the budget unspent and no self-wake
+(below). The self-wake is discarded under `ridl_rt::task::noop_waker`, so a
+frame loop that polls `Serve` once per frame with it settles at most 32 claims
+per frame; a loop that polls with `ridl_rt::task::flag_waker` polls again while
+the flag was set, up to its own limit of polls per frame. The handler port's
+failure resolves the future to `ProviderError::Claim`, with every claim settled
+before it staying settled. `Output` is `Result<Infallible, ProviderError>`: the
+future never resolves to `Ok` (F-7). It holds the handler by value, the provider
+by `&mut`, and the claim buffer `CLAIM_BUFFER` of the interface's table,
+`MAX_BUFFER_SIZE` bytes, inline, so the application supplies no buffer and reads
+no count. A resolved `Serve` panics when it is polled again. Over
+`ridl-loopback`, registering the served set means a handler under `serve` is
+presented only the interface's own members; the settlement table's unknown-route
+rows are reachable only through the internal step directly, which is how
+`tests/interaction_face.rs` still exercises them — the test file is inside the
+crate that `include!`s the fixture, so `pub(crate)` reaches it.
 
 **The internal step, `dispatch`**, is `pub(crate)` and returns
 `Result<usize, ReadError>` — the count of claims `Handler::settle` accepted, or
@@ -518,10 +543,12 @@ a command or a query — a signal-only interface's `Client` never waits, so it h
 no blocking form — the face module holds `pub mod blocking`:
 
 ```rust,ignore
-pub struct Client<P: /* the async Client's bounds */> {
+pub struct Client<P: /* the async Client's bounds, Encoded first */> {
     inner: super::Client<P>,
     timeout: Option<std::time::Duration>,
 }
+// each impl below also carries the generated `where` clause of
+// "The encoding and the ports", over `P::Encoding`
 impl<P: ...> ridl_rt::face::Bind for Client<P> {
     type Port = P;
     fn new(port: P) -> Self;                                          // timeout None
@@ -542,7 +569,7 @@ impl<P: ...> Client<P> {
     pub fn set_level(&mut self, level: Level) -> Result<(), ClientError>;
     pub fn average(&mut self, window: Window) -> Result<Average, ClientError>;
 }
-pub fn serve<H: Handler + Wakeable, P: Provider>(h: H, p: &mut P, timeout: Option<Duration>)
+pub fn serve<H: Encoded + Handler + Wakeable, P: Provider>(h: H, p: &mut P, timeout: Option<Duration>)
     -> Result<(), ProviderError>;   // only when the interface declares a command or a query
 ```
 
@@ -605,18 +632,45 @@ that purpose alone.
 
 ## The encoding and the ports
 
-**The face runs over the generated FlatBuffers codec**
-([its design record](flatbuffers-codec.md)). It names that encoding by its full
-path, `::ridl_rt::encoding::FlatBuffers`, at every buffer it sizes and every
-`Ref` it builds, the way the codec's own `Payload` implementations name it and
-the way the prelude names are written (driftsys/ridl#420). The face gains no
-type parameter: a `Client<E: Encoding, ...>` would put `E` on every descriptor,
-every provider trait and every caller, and a `where` bound per payload type on
-every impl, for a choice made once per generated package.
+**The face takes its encoding from its port.** Every generated item that is
+generic over a face port bounds that parameter on `::ridl_rt::port::Encoded`,
+before the port roles its interface needs, and names `P::Encoding` wherever an
+encoding is required: `Client`, `blocking::Client`, `Publisher`, the call
+futures, `NextEvent`, `dispatch`, `serve` and `Serve`. The rest of the face
+takes no port parameter, and no encoding with it — the provider, subscribe and
+invalidate traits, the descriptors, the prelude, and free functions such as the
+catalog check and the blocking module's deadline helper. The face declares no
+type parameter for the encoding and writes no encoding path: a
+`Client<E: Encoding, ...>` would put `E` on every descriptor, every provider
+trait and every caller, and application code would name the wire encoding, which
+is the transport's property.
 
-A face that reads its encoding from its port (`P::Encoding`, through
-`ridl_rt::port::Encoded`) with no type parameter of its own is later work,
-tracked as driftsys/ridl#801; the paragraph above describes the face as built.
+A buffer is named through that associated type: a payload's buffer is
+`<T as Payload<P::Encoding>>::BUFFER`, and the claim and event buffers are
+`<Iface as Sizes<P::Encoding>>::CLAIM_BUFFER` and `EVENT_BUFFER`.
+
+**The bounds are written out on each impl and each function that needs them.**
+Generic code that encodes or decodes a payload `T` needs
+`T: Payload<P::Encoding>`, and a trait's `where` clause is not assumed by its
+users on stable Rust, so the emitter writes, as a generated `where` clause on
+each impl and each free function that encodes, decodes or projects through
+`Sizes`, `Iface: Sizes<P::Encoding>` and one `T: Payload<P::Encoding>` per
+payload type that face uses. A program pays nothing for this: its port's
+encoding is one the emitted codecs satisfy, and it writes no bound. The cost
+falls on a consumer who writes a helper generic over the port, which has to
+restate the same clause, and on the length of the generated signatures.
+
+A port whose encoding the generated package does not carry is refused where the
+face is bound to it, because the `Sizes<P::Encoding>` predicate has no impl. A
+consumer that binds a generated face to a runtime it did not write names an
+encoding only where it builds that runtime: `Loopback::new(catalog)` is the
+loopback's FlatBuffers default, and `Loopback::<E>::with_encoding(catalog)`
+names another. A program that writes its own port names the encoding in that
+port's `Encoded` implementation, and one that writes its own `Payload<E>` or
+`Sizes<E>` implementation names it there. Each transport picks its own default
+from how coupled its two ends are; the table of defaults is in
+[the `ridl-rt` design record](ridl-rt.md), which owns the `Encoded` trait, and
+the loopback is the one row of it that is built.
 
 The codecs a package carries are listed in the manifest:
 `[backend.rust]
@@ -629,7 +683,7 @@ points as a slice, `generate_face_with(package, encodings)` and
 with no codec, no descriptor and no face. `repr(C)` and proto3 join the enum
 when the Rust backend emits their codecs; until then the backend refuses those
 names, so a second encoding cannot produce a face over implementations that do
-not exist. A consumer names the encoding from `ridl_rt::encoding`.
+not exist.
 
 `generate_face_with` with a non-empty list emits the codec, the descriptors and
 the face beside the items `generate` emits, and `generate_pipeline` does the
@@ -849,16 +903,16 @@ rather than written as prose.
 3. **The manifest selects the codecs, and the port selects the encoding a face
    uses.** `[backend.rust] encodings` in the manifest names the codecs the
    generated package carries, and `--emit rust` alone emits the domain types
-   only. The emitted code names the one built codec by its path,
-   `::ridl_rt::encoding::FlatBuffers`, at each site (until 2026-09-29 through a
-   `pub type Wire` alias; see "The encoding and the ports"). No flag selects an
-   encoding: a flag is one value for a whole build, but the codecs a package
-   carries are a property of the package and are set per backend in the manifest
-   beside the backend's other settings, and the encoding a face uses is a
-   property of the transport, which is the port. A `--wire` flag would also be a
-   CLI surface that a manifest key already covers. The schema emits stay on
-   `--emit`. ADR-0018 decisions 4 and 5 carry the amendment; the port rule
-   (`P::Encoding`) lands in the design named above and is not built.
+   only. The emitted codec and the descriptor's `Sizes` impl name the one built
+   codec by its path, `::ridl_rt::encoding::FlatBuffers` (until 2026-09-29
+   through a `pub type Wire` alias; see "The encoding and the ports"); the face
+   names `P::Encoding` instead. No flag selects an encoding: a flag is one value
+   for a whole build, but the codecs a package carries are a property of the
+   package and are set per backend in the manifest beside the backend's other
+   settings, and the encoding a face uses is a property of the transport, which
+   is the port. A `--wire` flag would also be a CLI surface that a manifest key
+   already covers. The schema emits stay on `--emit`. ADR-0018 decisions 4 and 5
+   carry the amendment, and its decision 15 the port rule.
 
 4. **A cross-package reference resolves, and the codec is no longer withheld for
    it** (driftsys/ridl#467). `Ctx` carries the other packages of the build and
@@ -944,6 +998,53 @@ clients: a consumer with no `use` of a prelude gets E0599 on every fixed method.
 ADR-0023 decision 7 and ADR-0021 decision 19 record it; the design note is
 archived as
 [`2026-09-28-face-fixed-methods-traits-design.md`](../archive/2026-09-28-face-fixed-methods-traits-design.md).
+
+## The crate paths and the payload buffers (driftsys/ridl#487)
+
+**The crate root of a single-package build gains no re-export.** The path a
+consumer writes repeats what the crate name already carries —
+`veh_cabin::veh::cabin::cabin::Client` repeats `veh` and `cabin` — and the cure
+proposed for it was a re-export at the crate root, emitted when the build holds
+exactly one package. That is declined, because the re-export's presence would
+depend on a property of the build rather than on the package being built: a
+consumer writes `veh_cabin::cabin::Client`, someone adds a second, unrelated
+package to the workspace, and the short path disappears from a change that has
+nothing to do with the package the consumer uses. A generated API that changes
+shape because of its neighbours is worse than one that is verbose. The
+repetition is also not this emitter's to remove: it comes from the crate name
+being derived from the package name, so if the verbosity is worth addressing,
+the place is how `ridlc` names the crate and its module tree, for every
+workspace alike, and not a special case for one.
+
+**Every face method sizes its payload buffer from `MAX_SIZE` and puts it on the
+stack.** That follows from two decisions the records already hold: the face
+allocates nothing
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)), and the
+declared bound is the buffer size ([the codec design](flatbuffers-codec.md)). So
+a payload such as `[string [0..256]; 0..1000]` gives a stack frame on the order
+of a megabyte, whatever the actual value carries. This is recorded as a known
+property rather than a defect, and nothing in the corpus meets it. The two ways
+out are named here so that a consumer who does meet it finds them stated: a
+caller-supplied buffer variant of each method, which is the shape `dispatch`
+already has, or a runtime that hands the face a buffer it owns. Neither is
+built.
+
+**A bounded collection is a plain field, not a newtype.** A field declared
+`labels : [Label; 1..16]` is emitted as a `Vec`, so a value that breaks the
+declared bound is representable; the generated `encode` refuses it with
+`Rule::Length`, the same rule the verifier reports, so it does not reach the
+wire (driftsys/ridl#829). Making it unrepresentable instead, by emitting a
+newtype with a checked constructor, is declined (driftsys/ridl#889). A named
+constrained type — `type Serial : string [4..8]` — is a newtype because the
+author named it, and an author who wants a collection checked at construction
+declares a named type for it. The bound of `[Label; 1..16]` belongs to the
+field, and no type carries it, so the newtype would need a name this emitter
+invented: one the author never wrote, cannot change, and would meet in its own
+code, its rustdoc, every diagnostic and the frozen surface.
+[ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
+pins the name transform so that this emitter does not invent names. The cost
+accepted is that such a value is refused when it is encoded rather than when it
+is built.
 
 ## What is provisional
 

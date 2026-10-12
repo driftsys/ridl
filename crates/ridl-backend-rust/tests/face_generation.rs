@@ -58,6 +58,21 @@ fn at(source: &str, needle: &str) -> usize {
         .unwrap_or_else(|| panic!("generated source has no `{needle}`"))
 }
 
+/// The face's encoding predicates for `Cabin`, whitespace-stripped: the
+/// interface's `Sizes` bound and one `Payload` bound per payload type the
+/// interface uses, in declaration order, over the port type parameter `port`.
+/// `prefix` is the path the face names a same-package declaration by, which is
+/// one module deeper inside `blocking`.
+fn cabin_where(port: &str, prefix: &str) -> String {
+    let mut clause = format!("{prefix}Cabin:::ridl_rt::contract::Sizes<{port}::Encoding>,");
+    for payload in ["Temperature", "Warning", "Level", "Window", "Average"] {
+        clause.push_str(&format!(
+            "{prefix}{payload}:::ridl_rt::payload::Payload<{port}::Encoding>,"
+        ));
+    }
+    clause
+}
+
 fn face() -> String {
     let package = ir::compile_fixture("interaction_face.ridl");
     generate_face_with(&package, &[WireEncoding::FlatBuffers])
@@ -92,10 +107,21 @@ fn the_client_is_bound_by_every_port_its_interface_needs() {
     // for the wait on the queue (the async face design, note F-10).
     assert!(
         d.contains(
-            "pubstructClient<P:::ridl_rt::port::SignalReader+::ridl_rt::port::EventSource\
-             +::ridl_rt::port::Caller+::ridl_rt::port::Clock+::ridl_rt::port::Wakeable,>"
+            "pubstructClient<P:::ridl_rt::port::Encoded+::ridl_rt::port::SignalReader\
+             +::ridl_rt::port::EventSource+::ridl_rt::port::Caller+::ridl_rt::port::Clock\
+             +::ridl_rt::port::Wakeable,>"
         ),
         "Cabin client port bounds",
+    );
+    // The face reads the encoding of its bytes from its port, so every impl
+    // of the client states the interface's size table and each payload type
+    // in that encoding; the struct carries its port bounds alone.
+    assert!(
+        d.contains(&format!(
+            "::ridl_rt::face::BindforClient<P>where{}{{typePort=P;",
+            cabin_where("P", "super::")
+        )),
+        "the client's Bind impl carries the face's encoding predicates",
     );
     // ADR-0023 decision 5: the face holds its port by value and has no
     // lifetime parameter, so `Client::new(&mut port)` infers `P` as
@@ -118,7 +144,7 @@ fn a_signal_only_interface_gets_a_client_bound_only_by_signal_reader() {
     let d = dense(&horn);
 
     assert!(
-        d.contains("pubstructClient<P:::ridl_rt::port::SignalReader"),
+        d.contains("pubstructClient<P:::ridl_rt::port::Encoded+::ridl_rt::port::SignalReader"),
         "Horn client is bound by SignalReader",
     );
     assert!(
@@ -144,7 +170,7 @@ fn a_signal_only_interface_gets_a_client_bound_only_by_signal_reader() {
         "no Wakeable bound on a signal-only client"
     );
     assert!(
-        d.contains("pubstructPublisher<W:::ridl_rt::port::SignalWriter>"),
+        d.contains("pubstructPublisher<W:::ridl_rt::port::Encoded+::ridl_rt::port::SignalWriter>"),
         "a signal-only interface still gets a publisher, bound by SignalWriter alone",
     );
     assert!(
@@ -166,7 +192,10 @@ fn an_event_only_interface_gets_a_client_bound_by_event_source_and_wakeable() {
     let d = dense(&module(&face(), "siren"));
 
     assert!(
-        d.contains("pubstructClient<P:::ridl_rt::port::EventSource+::ridl_rt::port::Wakeable>"),
+        d.contains(
+            "pubstructClient<P:::ridl_rt::port::Encoded+::ridl_rt::port::EventSource\
+             +::ridl_rt::port::Wakeable,>"
+        ),
         "Siren client port bounds",
     );
     assert!(
@@ -179,7 +208,8 @@ fn an_event_only_interface_gets_a_client_bound_by_event_source_and_wakeable() {
     );
     assert!(
         d.contains(
-            "pubstructNextEvent<'a,P:::ridl_rt::port::EventSource+::ridl_rt::port::Wakeable,>"
+            "pubstructNextEvent<'a,P:::ridl_rt::port::Encoded+::ridl_rt::port::EventSource\
+             +::ridl_rt::port::Wakeable,>"
         ),
         "the event future carries the same two bounds",
     );
@@ -194,7 +224,8 @@ fn a_calls_only_interface_gets_a_client_bound_by_caller_clock_and_wakeable() {
 
     assert!(
         d.contains(
-            "pubstructClient<P:::ridl_rt::port::Caller+::ridl_rt::port::Clock+::ridl_rt::port::Wakeable"
+            "pubstructClient<P:::ridl_rt::port::Encoded+::ridl_rt::port::Caller\
+             +::ridl_rt::port::Clock+::ridl_rt::port::Wakeable"
         ),
         "Valve client port bounds",
     );
@@ -218,7 +249,7 @@ fn the_client_reads_a_signal_through_the_signal_reader_port() {
         "signal accessor returns a Sample of the declared payload",
     );
     assert!(
-        d.contains("self.port.read(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(1u32),&mutbuf,)"),
+        d.contains("self.port.read(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(1u32),buf,)"),
         "the accessor calls SignalReader::read"
     );
     assert!(
@@ -282,7 +313,7 @@ fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
     // of the same trait.
     let async_region = &d[..at(&d, "pubmodblocking{")];
     let implemented = async_region
-        .split_once("SubscribeforClient<P>{")
+        .split_once("SubscribeforClient<P>where")
         .map(|(_, rest)| rest)
         .unwrap_or_default();
     assert!(
@@ -300,7 +331,10 @@ fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
     // `poll_next_event`, which the future's `poll` calls after it registers
     // `Interest::Event` (the async face design, notes F-5 and F-10).
     assert!(
-        d.contains("::ridl_rt::face::EventsforClient<P>{typeNext<'a>=NextEvent<'a,P>whereSelf:'a;"),
+        d.contains(&format!(
+            "::ridl_rt::face::EventsforClient<P>where{}{{typeNext<'a>=NextEvent<'a,P>whereSelf:'a;",
+            cabin_where("P", "super::")
+        )),
         "the async client's Events::Next is the named event future",
     );
     assert!(
@@ -308,7 +342,10 @@ fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
         "next_event returns the named event future",
     );
     assert!(
-        d.contains("pub(crate)fnpoll_next_event<P:::ridl_rt::port::EventSource>(port:&mutP"),
+        d.contains(
+            "pub(crate)fnpoll_next_event<P:::ridl_rt::port::Encoded\
+             +::ridl_rt::port::EventSource,>(port:&mutP"
+        ),
         "the event read is internal plumbing over a bare port",
     );
     assert!(d.contains("port.next("), "polling calls EventSource::next");
@@ -385,12 +422,16 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
     );
     assert!(
         d.contains(
-            "pub(crate)fnsend_set_level<P:::ridl_rt::port::Caller>(__port:&mutP,level:&super::Level"
+            "pub(crate)fnsend_set_level<P:::ridl_rt::port::Encoded+::ridl_rt::port::Caller>\
+             (__port:&mutP,level:&super::Level"
         ),
         "the command's send is internal and takes the argument by reference",
     );
     assert!(
-        d.contains("->::core::result::Result<SetLevelCorrelation,::ridl_rt::port::SendError>{"),
+        d.contains(&format!(
+            "->::core::result::Result<SetLevelCorrelation,::ridl_rt::port::SendError>where{}{{",
+            cabin_where("P", "super::")
+        )),
         "the internal send returns the command's own correlation newtype",
     );
     assert!(
@@ -416,12 +457,16 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
     );
     assert!(
         d.contains(
-            "pub(crate)fnsend_average<P:::ridl_rt::port::Caller>(__port:&mutP,window:&super::Window"
+            "pub(crate)fnsend_average<P:::ridl_rt::port::Encoded+::ridl_rt::port::Caller>\
+             (__port:&mutP,window:&super::Window"
         ),
         "the query's send is internal and takes the argument by reference",
     );
     assert!(
-        d.contains("->::core::result::Result<AverageCorrelation,::ridl_rt::port::SendError>{"),
+        d.contains(&format!(
+            "->::core::result::Result<AverageCorrelation,::ridl_rt::port::SendError>where{}{{",
+            cabin_where("P", "super::")
+        )),
         "the internal send returns the query's own correlation newtype",
     );
     assert!(
@@ -430,7 +475,8 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
     );
     assert!(
         d.contains(
-            "pub(crate)fnpoll_average_reply<P:::ridl_rt::port::Caller>(port:&mutP,correlation:AverageCorrelation"
+            "pub(crate)fnpoll_average_reply<P:::ridl_rt::port::Encoded+::ridl_rt::port::Caller,>\
+             (port:&mutP,correlation:AverageCorrelation"
         ),
         "the reply read is internal, typed by its query",
     );
@@ -465,7 +511,8 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
     );
     assert!(
         d.contains(
-            "pub(crate)fnpoll_set_level_ack<P:::ridl_rt::port::Caller>(port:&mutP,correlation:SetLevelCorrelation"
+            "pub(crate)fnpoll_set_level_ack<P:::ridl_rt::port::Encoded+::ridl_rt::port::Caller,>\
+             (port:&mutP,correlation:SetLevelCorrelation"
         ),
         "the acknowledgment read is internal, per command, and takes that command's newtype",
     );
@@ -481,7 +528,9 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
 #[test]
 fn each_call_returns_a_named_future_that_forgets_its_call_on_drop() {
     let d = dense(&module(&face(), "cabin"));
-    let bounds = "::ridl_rt::port::Caller+::ridl_rt::port::Clock+::ridl_rt::port::Wakeable";
+    let bounds = "::ridl_rt::port::Encoded+::ridl_rt::port::Caller\
+                  +::ridl_rt::port::Clock+::ridl_rt::port::Wakeable";
+    let clause = cabin_where("P", "super::");
 
     assert!(
         d.contains(&format!(
@@ -508,7 +557,7 @@ fn each_call_returns_a_named_future_that_forgets_its_call_on_drop() {
     let set_level = between(&d, "pubstructSetLevelCall<'a,", "pubstructAverageCall<'a,");
     assert!(
         set_level.contains(&format!(
-            "impl<P:{bounds},>::core::future::FutureforSetLevelCall<'_,P>{{\
+            "impl<P:{bounds},>::core::future::FutureforSetLevelCall<'_,P>where{clause}{{\
              typeOutput=::core::result::Result<(),::ridl_rt::error::ClientError>;"
         )),
         "a command's future resolves to the delivery result under ClientError",
@@ -597,11 +646,13 @@ fn each_call_returns_a_named_future_that_forgets_its_call_on_drop() {
 #[test]
 fn serve_returns_a_future_over_the_internal_dispatch_step() {
     let d = dense(&module(&face(), "cabin"));
-    let bounds = "H:::ridl_rt::port::Handler+::ridl_rt::port::Wakeable,P:Provider";
+    let bounds = "H:::ridl_rt::port::Encoded+::ridl_rt::port::Handler\
+                  +::ridl_rt::port::Wakeable,P:Provider";
+    let clause = cabin_where("H", "super::");
 
     assert!(
         d.contains(&format!(
-            "pubfnserve<H,P>(muth:H,p:&mutP)->Serve<'_,H,P>where{bounds},{{"
+            "pubfnserve<H,P>(muth:H,p:&mutP)->Serve<'_,H,P>where{bounds},{clause}{{"
         )),
         "serve's signature",
     );
@@ -616,14 +667,17 @@ fn serve_returns_a_future_over_the_internal_dispatch_step() {
     );
     assert!(
         d.contains(&format!(
-            "pubstructServe<'a,{bounds},>{{handler:H,provider:&'amutP,\
-             buf:<super::Cabinas::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers,>>::ClaimBuffer,state:ServeState,}}"
+            "pubstructServe<'a,{bounds},>\
+             wheresuper::Cabin:::ridl_rt::contract::Sizes<H::Encoding>,\
+             {{handler:H,provider:&'amutP,\
+             buf:<super::Cabinas::ridl_rt::contract::Sizes<H::Encoding>>::ClaimBuffer,\
+             state:ServeState,}}"
         )),
         "the serve future holds the handler by value, the provider by &mut, and the claim buffer inline",
     );
     assert!(
         d.contains(&format!(
-            "impl<{bounds},>::core::marker::UnpinforServe<'_,H,P>{{}}"
+            "impl<{bounds},>::core::marker::UnpinforServe<'_,H,P>where{clause}{{}}"
         )),
         "the serve future is Unpin whatever the handler type, because nothing in it is pinned",
     );
@@ -642,7 +696,8 @@ fn serve_returns_a_future_over_the_internal_dispatch_step() {
              <super::Cabinas::ridl_rt::contract::Interface>::NUMBER,),cx.waker(),);"
         ) < at(
             &poll,
-            "dispatch(&mutthis.handler,&mut*this.provider,&mutthis.buf,&mutbudget,)"
+            "dispatch(&mutthis.handler,&mut*this.provider,\
+             ::core::convert::AsMut::as_mut(&mutthis.buf),&mutbudget,)"
         ),
         "each poll registers Interest::Claim before it settles claims",
     );
@@ -653,7 +708,8 @@ fn serve_returns_a_future_over_the_internal_dispatch_step() {
     assert!(
         poll.contains(
             "letmutbudget=SERVE_BUDGET;matchdispatch(&mutthis.handler,&mut*this.provider,\
-             &mutthis.buf,&mutbudget,){Ok(_)=>{ifbudget==0{cx.waker().wake_by_ref();}\
+             ::core::convert::AsMut::as_mut(&mutthis.buf),&mutbudget,)\
+             {Ok(_)=>{ifbudget==0{cx.waker().wake_by_ref();}\
              ::core::task::Poll::Pending}"
         ),
         "a poll that spent its budget wakes itself and is Pending; one that found no \
@@ -690,14 +746,14 @@ fn bind_new_and_serve_check_the_ports_catalog() {
     );
     let check = "check_catalog(::ridl_rt::port::Attached::catalog(&port));";
 
-    let client = between(&d, "::ridl_rt::face::BindforClient<P>{", "Client{port}");
+    let client = between(&d, "::ridl_rt::face::BindforClient<P>where", "Client{port}");
     assert!(
         client.contains(check),
         "the client's new checks the port before it stores it"
     );
     let publisher = between(
         &d,
-        "::ridl_rt::face::BindforPublisher<W>{",
+        "::ridl_rt::face::BindforPublisher<W>where",
         "Publisher{port}",
     );
     assert!(
@@ -744,8 +800,9 @@ fn bind_new_and_serve_check_the_ports_catalog() {
 #[test]
 fn the_blocking_module_follows_the_interface() {
     let source = face();
-    let bounds = "::ridl_rt::port::SignalReader+::ridl_rt::port::EventSource\
-                  +::ridl_rt::port::Caller+::ridl_rt::port::Clock+::ridl_rt::port::Wakeable";
+    let bounds = "::ridl_rt::port::Encoded+::ridl_rt::port::SignalReader\
+                  +::ridl_rt::port::EventSource+::ridl_rt::port::Caller\
+                  +::ridl_rt::port::Clock+::ridl_rt::port::Wakeable";
 
     let cabin = dense(&module(&source, "cabin"));
     assert!(
@@ -771,14 +828,17 @@ fn the_blocking_module_follows_the_interface() {
     let blocking = &siren[at(&siren, "pubmodblocking{")..];
     assert!(
         blocking.contains(
-            "pubstructClient<P:::ridl_rt::port::EventSource+::ridl_rt::port::Wakeable>\
-             {inner:super::Client<P>,"
+            "pubstructClient<P:::ridl_rt::port::Encoded+::ridl_rt::port::EventSource\
+             +::ridl_rt::port::Wakeable,>{inner:super::Client<P>,"
         ),
         "an event-only interface's blocking client repeats its async client's two bounds",
     );
     assert!(
         blocking.contains(
-            "::ridl_rt::face::EventsforClient<P>{typeNext<'a>=::core::result::Result<\
+            "::ridl_rt::face::EventsforClient<P>where\
+             super::super::Siren:::ridl_rt::contract::Sizes<P::Encoding>,\
+             super::super::Warning:::ridl_rt::payload::Payload<P::Encoding>,\
+             {typeNext<'a>=::core::result::Result<\
              ::core::option::Option<super::Event>,::ridl_rt::port::ReadError,>whereSelf:'a;"
         ),
         "an event-only interface has a blocking client, whose Events::Next is the owned result",
@@ -800,7 +860,7 @@ fn the_publisher_writes_signals_and_raises_events() {
     let d = dense(&module(&face(), "cabin"));
 
     assert!(
-        d.contains("pubstructPublisher<W:::ridl_rt::port::SignalWriter+::ridl_rt::port::EventSink"),
+        d.contains("pubstructPublisher<W:::ridl_rt::port::Encoded+::ridl_rt::port::SignalWriter+::ridl_rt::port::EventSink"),
         "Cabin publisher port bounds",
     );
     assert!(
@@ -826,7 +886,10 @@ fn the_publisher_writes_signals_and_raises_events() {
         "one invalidate method per signal, declared by the per-interface trait",
     );
     assert!(
-        d.contains("InvalidateforPublisher<W>{fninvalidate_temperature(&mutself,)"),
+        d.contains(&format!(
+            "InvalidateforPublisher<W>where{}{{fninvalidate_temperature(&mutself,)",
+            cabin_where("W", "super::")
+        )),
         "the publisher implements Invalidate",
     );
     assert!(
@@ -842,8 +905,10 @@ fn the_publisher_writes_signals_and_raises_events() {
         "raising calls EventSink::raise"
     );
     assert!(
-        d.contains("::ridl_rt::face::PublishforPublisher<W>{")
-            && d.contains("fncommit(&mutself){self.port.commit()}"),
+        d.contains(&format!(
+            "::ridl_rt::face::PublishforPublisher<W>where{}{{",
+            cabin_where("W", "super::")
+        )) && d.contains("fncommit(&mutself){self.port.commit()}"),
         "the publisher commits through Publish, and commit calls SignalWriter::commit"
     );
 }
@@ -869,27 +934,38 @@ fn the_fixed_methods_are_trait_methods_and_the_prelude_follows_the_interface() {
         "no fixed or derived method of the face is inherent",
     );
     assert!(
-        cabin.contains("::ridl_rt::face::BindforClient<P>{typePort=P;")
-            && cabin.contains("::ridl_rt::face::BindforPublisher<W>{typePort=W;"),
+        cabin.contains(&format!(
+            "::ridl_rt::face::BindforClient<P>where{}{{typePort=P;",
+            cabin_where("P", "super::")
+        )) && cabin.contains(&format!(
+            "::ridl_rt::face::BindforPublisher<W>where{}{{typePort=W;",
+            cabin_where("W", "super::")
+        )),
         "both faces bind through Bind",
     );
     let blocking = &cabin[at(&cabin, "pubmodblocking{")..];
     assert!(
-        blocking.contains("::ridl_rt::face::BindforClient<P>{typePort=P;")
-            && blocking.contains("inner:<super::Client<P>as::ridl_rt::face::Bind>::new(port),"),
+        blocking.contains(&format!(
+            "::ridl_rt::face::BindforClient<P>where{}{{typePort=P;",
+            cabin_where("P", "super::super::")
+        )) && blocking.contains("inner:<super::Client<P>as::ridl_rt::face::Bind>::new(port),"),
         "the blocking client binds through Bind, and builds the async one through Bind's path",
     );
     assert!(
-        blocking.contains("::ridl_rt::face::TimeoutforClient<P>{")
-            && blocking.contains("fnwith_timeout(mutself,timeout:::std::time::Duration)->Self")
+        blocking.contains(&format!(
+            "::ridl_rt::face::TimeoutforClient<P>where{}{{",
+            cabin_where("P", "super::super::")
+        )) && blocking.contains("fnwith_timeout(mutself,timeout:::std::time::Duration)->Self")
             && blocking.contains(
                 "fnset_timeout(&mutself,timeout:::core::option::Option<::std::time::Duration>,)"
             ),
         "the blocking client's timeout methods are Timeout's",
     );
     assert!(
-        blocking.contains("super::SubscribeforClient<P>{")
-            && blocking.contains("super::Subscribe::subscribe_warning(&mutself.inner)")
+        blocking.contains(&format!(
+            "super::SubscribeforClient<P>where{}{{",
+            cabin_where("P", "super::super::")
+        )) && blocking.contains("super::Subscribe::subscribe_warning(&mutself.inner)")
             && blocking.contains("::ridl_rt::face::Events::next_event(&mutself.inner)"),
         "the blocking client delegates to the async one through the traits' paths",
     );
@@ -1024,6 +1100,12 @@ fn the_provider_trait_carries_the_settled_method_signatures() {
         d.contains("fnaverage(&mutself,window:&super::Window)->super::Average;"),
         "the query provider method returns its declared reply",
     );
+    // The by-reference choice stands on `serve` reading the argument again;
+    // the generated payload types do derive `Clone` (driftsys/ridl#486).
+    assert!(
+        !dense(&face()).contains("implementneither`Copy`nor`Clone`"),
+        "the Provider doc does not claim the payload types have no Copy and no Clone",
+    );
 }
 
 #[test]
@@ -1038,5 +1120,72 @@ fn the_pipeline_generate_emits_no_face_module() {
     assert!(
         !plain.contains("Publisher"),
         "the pipeline emits no publisher"
+    );
+}
+
+/// The face of `event_derives.ridl`, whose four interfaces carry one event
+/// each, over a payload that is `Copy` and `Eq`, one that is `Eq` alone, one
+/// that is `Copy` alone, and one that is neither.
+fn events_face() -> String {
+    let package = ir::compile_fixture("event_derives.ridl");
+    generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source
+}
+
+#[test]
+fn the_event_enum_derives_the_full_set_when_every_payload_does() {
+    let d = dense(&module(&events_face(), "plain"));
+
+    assert!(
+        d.contains("#[derive(Debug,Clone,Copy,PartialEq,Eq)]pubenumEvent{"),
+        "an Event over a payload that derives all four takes all five",
+    );
+}
+
+#[test]
+fn the_event_enum_keeps_the_equality_pair_when_a_payload_is_not_copy() {
+    let d = dense(&module(&events_face(), "noted"));
+
+    // `Note` holds a string-backed named scalar, so it is `Eq` and not
+    // `Copy`. The traits are independent, so only `Copy` is lost.
+    assert!(
+        d.contains("#[derive(Debug,Clone,PartialEq,Eq)]pubenumEvent{"),
+        "an Event over a payload that is not Copy keeps Clone, PartialEq and Eq",
+    );
+}
+
+#[test]
+fn the_event_enum_keeps_copy_when_a_payload_is_not_eq() {
+    let d = dense(&module(&events_face(), "drifted"));
+
+    // `Drift` holds a float-backed named scalar, so it is `Copy` and not
+    // `Eq`. Only `Eq` is lost.
+    assert!(
+        d.contains("#[derive(Debug,Clone,Copy,PartialEq)]pubenumEvent{"),
+        "an Event over a payload that is not Eq keeps Clone, Copy and PartialEq",
+    );
+}
+
+#[test]
+fn the_event_enum_keeps_the_unconditional_three_when_a_payload_has_neither() {
+    let d = dense(&module(&events_face(), "blended"));
+
+    // `Mixed` holds both a string-backed and a float-backed named scalar, so
+    // it is neither `Copy` nor `Eq`. The three unconditional traits remain.
+    assert!(
+        d.contains("#[derive(Debug,Clone,PartialEq)]pubenumEvent{"),
+        "an Event over a payload that is neither Copy nor Eq keeps Debug, Clone and PartialEq",
+    );
+}
+
+#[test]
+fn the_event_enum_is_not_non_exhaustive() {
+    // The generated crate is regenerated with its consumer, so a new event
+    // arrives with a recompile and an exhaustive match failing is the signal
+    // that there is one to handle (driftsys/ridl#486).
+    assert!(
+        !dense(&events_face()).contains("#[non_exhaustive]pubenumEvent"),
+        "the Event enum is not non_exhaustive",
     );
 }

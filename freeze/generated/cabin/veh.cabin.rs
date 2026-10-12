@@ -1290,10 +1290,18 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Cabin {
         }
         max
     };
-    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
-    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
-    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
-    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
 }
 #[doc(hidden)]
 pub struct CabinTemperature;
@@ -1391,17 +1399,25 @@ pub mod cabin {
     }
     ///The consumer face of interface `Cabin`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `next_event` is `ridl_rt::face::Events`'s and `subscribe_<event>` is this module's `Subscribe`'s, all in scope through `prelude`.
     pub struct Client<
-        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-            + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
     > {
         port: P,
     }
     impl<
-        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-            + ::ridl_rt::port::Wakeable,
-    > Client<P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > Client<P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         /// The current cabin air temperature.
         ///
         ///Reads signal `temperature` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
@@ -1415,15 +1431,18 @@ pub mod cabin {
             ::ridl_rt::sample::Sample<super::Temperature>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = <super::Temperature as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <super::Temperature as ::ridl_rt::payload::Payload<
+                P::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let raw = self
                 .port
                 .read(
                     <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(1u32),
-                    &mut buf,
+                    buf,
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
@@ -1438,7 +1457,7 @@ pub mod cabin {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         super::Temperature,
-                        ::ridl_rt::encoding::FlatBuffers,
+                        P::Encoding,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -1535,10 +1554,18 @@ The call's bound is the member's `max`, measured from the port's clock when this
         }
     }
     impl<
-        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-            + ::ridl_rt::port::Wakeable,
-    > ::ridl_rt::face::Bind for Client<P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::ridl_rt::face::Bind for Client<P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Port = P;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -1552,10 +1579,18 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         }
     }
     impl<
-        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-            + ::ridl_rt::port::Wakeable,
-    > ::ridl_rt::face::Events for Client<P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > ::ridl_rt::face::Events for Client<P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Next<'a> = NextEvent<'a, P> where Self: 'a;
         /**Takes the next occurrence of any subscribed event of interface `Cabin`, routed to its variant by ordinal, as a future: it resolves when an occurrence is waiting and is `Pending` while none is. One method serves every event, because the payload type is not known until the occurrence's ordinal is read. The future holds this client's port until it is dropped.
 
@@ -1565,10 +1600,18 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     impl<
-        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-            + ::ridl_rt::port::Wakeable,
-    > Subscribe for Client<P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+    > Subscribe for Client<P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         /// Sent when a subsystem leaves `OK`.
         ///
         ///Starts delivery of event `warning`.
@@ -1587,6 +1630,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     ///One occurrence of an event of interface `Cabin`.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Event {
         ///An occurrence of event `warning`.
         Warning(::ridl_rt::sample::Occurrence<super::Warning>),
@@ -1595,7 +1639,8 @@ The interface number is checked before the ordinal, for the reason `serve` check
     #[must_use = "the command was sent, or waits for a slot; its outcome is taken only when the future is polled"]
     pub struct SetLevelCall<
         'a,
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
     > {
         port: &'a mut P,
         phase: SetLevelPhase,
@@ -1608,8 +1653,17 @@ The interface number is checked before the ordinal, for the reason `serve` check
         Done,
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-    > SetLevelCall<'_, P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > SetLevelCall<'_, P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         fn expired(&self) -> bool {
             self.deadline.is_some_and(|deadline| self.port.now() > deadline)
         }
@@ -1619,8 +1673,17 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-    > ::core::future::Future for SetLevelCall<'_, P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for SetLevelCall<'_, P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Output = ::core::result::Result<(), ::ridl_rt::error::ClientError>;
         fn poll(
             self: ::core::pin::Pin<&mut Self>,
@@ -1698,7 +1761,8 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
     > ::core::ops::Drop for SetLevelCall<'_, P> {
         fn drop(&mut self) {
             if let SetLevelPhase::Waiting(correlation) = &self.phase {
@@ -1710,7 +1774,8 @@ The interface number is checked before the ordinal, for the reason `serve` check
     #[must_use = "the query was sent, or waits for a slot; its outcome is taken only when the future is polled"]
     pub struct AverageCall<
         'a,
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
     > {
         port: &'a mut P,
         phase: AveragePhase,
@@ -1723,8 +1788,17 @@ The interface number is checked before the ordinal, for the reason `serve` check
         Done,
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-    > AverageCall<'_, P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > AverageCall<'_, P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         fn expired(&self) -> bool {
             self.deadline.is_some_and(|deadline| self.port.now() > deadline)
         }
@@ -1734,8 +1808,17 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-    > ::core::future::Future for AverageCall<'_, P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for AverageCall<'_, P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Output = ::core::result::Result<
             super::Average,
             ::ridl_rt::error::ClientError,
@@ -1815,7 +1898,8 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
     > ::core::ops::Drop for AverageCall<'_, P> {
         fn drop(&mut self) {
             if let AveragePhase::Waiting(correlation) = &self.phase {
@@ -1827,13 +1911,23 @@ The interface number is checked before the ordinal, for the reason `serve` check
     #[must_use = "an occurrence is taken only when the future is polled"]
     pub struct NextEvent<
         'a,
-        P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::EventSource
+            + ::ridl_rt::port::Wakeable,
     > {
         port: &'a mut P,
     }
     impl<
-        P: ::ridl_rt::port::EventSource + ::ridl_rt::port::Wakeable,
-    > ::core::future::Future for NextEvent<'_, P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::EventSource
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for NextEvent<'_, P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Output = ::core::result::Result<Event, ::ridl_rt::port::ReadError>;
         fn poll(
             self: ::core::pin::Pin<&mut Self>,
@@ -1854,10 +1948,18 @@ The interface number is checked before the ordinal, for the reason `serve` check
             }
         }
     }
-    pub(crate) fn send_set_level<P: ::ridl_rt::port::Caller>(
+    pub(crate) fn send_set_level<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
         __port: &mut P,
         level: &super::Level,
-    ) -> ::core::result::Result<SetLevelCorrelation, ::ridl_rt::port::SendError> {
+    ) -> ::core::result::Result<SetLevelCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         let __arg = level;
         <super::CabinSetLevel as ::ridl_rt::contract::Command>::require(__arg)
             .map_err(|()| {
@@ -1865,17 +1967,27 @@ The interface number is checked before the ordinal, for the reason `serve` check
                     ::ridl_rt::error::Contract::PreconditionFailed,
                 )
             })?;
-        let mut buf = <super::Level as ::ridl_rt::payload::Payload<
-            ::ridl_rt::encoding::FlatBuffers,
+        let mut __buf = <super::Level as ::ridl_rt::payload::Payload<
+            P::Encoding,
         >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
         let bytes = match ::ridl_rt::payload::Ref::<
             super::Level,
-            ::ridl_rt::encoding::FlatBuffers,
-        >::encode(__arg, &mut buf) {
+            P::Encoding,
+        >::encode(__arg, buf) {
             Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(
-                    "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Level as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    "encoding `Level` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                     needed, available
                 )
             }
@@ -1890,18 +2002,34 @@ The interface number is checked before the ordinal, for the reason `serve` check
             )
             .map(SetLevelCorrelation)
     }
-    pub(crate) fn poll_set_level_ack<P: ::ridl_rt::port::Caller>(
+    pub(crate) fn poll_set_level_ack<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller,
+    >(
         port: &mut P,
         correlation: SetLevelCorrelation,
-    ) -> ::core::option::Option<
-        ::core::result::Result<(), ::ridl_rt::error::CallError>,
-    > {
+    ) -> ::core::option::Option<::core::result::Result<(), ::ridl_rt::error::CallError>>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         port.ack(correlation.0)
     }
-    pub(crate) fn send_average<P: ::ridl_rt::port::Caller>(
+    pub(crate) fn send_average<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
         __port: &mut P,
         window: &super::Window,
-    ) -> ::core::result::Result<AverageCorrelation, ::ridl_rt::port::SendError> {
+    ) -> ::core::result::Result<AverageCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         let __arg = window;
         <super::CabinAverage as ::ridl_rt::contract::Query>::require(__arg)
             .map_err(|()| {
@@ -1909,17 +2037,27 @@ The interface number is checked before the ordinal, for the reason `serve` check
                     ::ridl_rt::error::Contract::PreconditionFailed,
                 )
             })?;
-        let mut buf = <super::Window as ::ridl_rt::payload::Payload<
-            ::ridl_rt::encoding::FlatBuffers,
+        let mut __buf = <super::Window as ::ridl_rt::payload::Payload<
+            P::Encoding,
         >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
         let bytes = match ::ridl_rt::payload::Ref::<
             super::Window,
-            ::ridl_rt::encoding::FlatBuffers,
-        >::encode(__arg, &mut buf) {
+            P::Encoding,
+        >::encode(__arg, buf) {
             Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(
-                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<Window as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                     needed, available
                 )
             }
@@ -1934,7 +2072,9 @@ The interface number is checked before the ordinal, for the reason `serve` check
             )
             .map(AverageCorrelation)
     }
-    pub(crate) fn poll_average_reply<P: ::ridl_rt::port::Caller>(
+    pub(crate) fn poll_average_reply<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller,
+    >(
         port: &mut P,
         correlation: AverageCorrelation,
     ) -> ::core::result::Result<
@@ -1942,11 +2082,22 @@ The interface number is checked before the ordinal, for the reason `serve` check
             ::core::result::Result<super::Average, ::ridl_rt::error::CallError>,
         >,
         ::ridl_rt::port::ReadError,
-    > {
-        let mut buf = <super::Average as ::ridl_rt::payload::Payload<
-            ::ridl_rt::encoding::FlatBuffers,
+    >
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let mut __buf = <super::Average as ::ridl_rt::payload::Payload<
+            P::Encoding,
         >>::BUFFER;
-        match port.reply(correlation.0, &mut buf)? {
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        match port.reply(correlation.0, buf)? {
             None => Ok(None),
             Some(Err(error)) => Ok(Some(Err(error))),
             Some(Ok(len)) => {
@@ -1954,7 +2105,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
                     Some(
                         match ::ridl_rt::payload::Ref::<
                             super::Average,
-                            ::ridl_rt::encoding::FlatBuffers,
+                            P::Encoding,
                         >::verify(&buf[..len]) {
                             Ok(checked) => Ok(checked.decode()),
                             Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
@@ -1977,16 +2128,29 @@ The interface number is checked before the ordinal, for the reason `serve` check
             }
         }
     }
-    pub(crate) fn poll_next_event<P: ::ridl_rt::port::EventSource>(
+    pub(crate) fn poll_next_event<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::EventSource,
+    >(
         port: &mut P,
     ) -> ::core::result::Result<
         ::core::option::Option<Event>,
         ::ridl_rt::port::ReadError,
-    > {
-        let mut buf = <super::Cabin as ::ridl_rt::contract::Sizes<
-            ::ridl_rt::encoding::FlatBuffers,
+    >
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let mut __buf = <super::Cabin as ::ridl_rt::contract::Sizes<
+            P::Encoding,
         >>::EVENT_BUFFER;
-        let Some(occurrence) = port.next(&mut buf)? else {
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        let Some(occurrence) = port.next(buf)? else {
             return Ok(None);
         };
         if occurrence.iface != <super::Cabin as ::ridl_rt::contract::Interface>::NUMBER {
@@ -2003,7 +2167,7 @@ The interface number is checked before the ordinal, for the reason `serve` check
                         Event::Warning(::ridl_rt::sample::Occurrence {
                             payload: match ::ridl_rt::payload::Ref::<
                                 super::Warning,
-                                ::ridl_rt::encoding::FlatBuffers,
+                                P::Encoding,
                             >::verify(&buf[..occurrence.len]) {
                                 Ok(checked) => Ok(checked.decode()),
                                 Err(
@@ -2035,10 +2199,24 @@ The interface number is checked before the ordinal, for the reason `serve` check
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
     }
     ///The provider face of interface `Cabin`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
-    pub struct Publisher<W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink> {
+    pub struct Publisher<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter
+            + ::ridl_rt::port::EventSink,
+    > {
         port: W,
     }
-    impl<W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink> Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter
+            + ::ridl_rt::port::EventSink,
+    > Publisher<W>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         /// The current cabin air temperature.
         ///
         ///Stages a new value for signal `temperature`. It is published by `commit`.
@@ -2050,17 +2228,27 @@ The interface number is checked before the ordinal, for the reason `serve` check
             &mut self,
             value: super::Temperature,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = <super::Temperature as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <super::Temperature as ::ridl_rt::payload::Payload<
+                W::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Temperature,
-                ::ridl_rt::encoding::FlatBuffers,
-            >::encode(&value, &mut buf) {
+                W::Encoding,
+            >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Temperature as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -2084,17 +2272,27 @@ The interface number is checked before the ordinal, for the reason `serve` check
             &mut self,
             value: super::Warning,
         ) -> ::core::result::Result<(), ::ridl_rt::port::RaiseError> {
-            let mut buf = <super::Warning as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <super::Warning as ::ridl_rt::payload::Payload<
+                W::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Warning,
-                ::ridl_rt::encoding::FlatBuffers,
-            >::encode(&value, &mut buf) {
+                W::Encoding,
+            >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::RaiseError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `Warning` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Warning as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `Warning` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -2110,8 +2308,17 @@ The interface number is checked before the ordinal, for the reason `serve` check
         }
     }
     impl<
-        W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink,
-    > ::ridl_rt::face::Bind for Publisher<W> {
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter
+            + ::ridl_rt::port::EventSink,
+    > ::ridl_rt::face::Bind for Publisher<W>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         type Port = W;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -2125,15 +2332,34 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         }
     }
     impl<
-        W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink,
-    > ::ridl_rt::face::Publish for Publisher<W> {
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter
+            + ::ridl_rt::port::EventSink,
+    > ::ridl_rt::face::Publish for Publisher<W>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         /// Publishes every staged signal change.
         fn commit(&mut self) {
             self.port.commit()
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter + ::ridl_rt::port::EventSink> Invalidate
-    for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter
+            + ::ridl_rt::port::EventSink,
+    > Invalidate for Publisher<W>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         fn invalidate_temperature(
             &mut self,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
@@ -2146,7 +2372,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     /**What an application implements to serve interface `Cabin`'s calls.
 
-An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses, and the generated payload types implement neither `Copy` nor `Clone`.*/
+An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
     pub trait Provider {
         /// Sets the cabin level, below 100.
         ///
@@ -2185,13 +2411,17 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         budget: &mut usize,
     ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
     where
-        H: ::ridl_rt::port::Handler,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler,
         P: Provider,
+        super::Cabin: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         if buf.len()
-            < <super::Cabin as ::ridl_rt::contract::Sizes<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_BUFFER_SIZE
+            < <super::Cabin as ::ridl_rt::contract::Sizes<H::Encoding>>::MAX_BUFFER_SIZE
         {
             return Ok(0);
         }
@@ -2232,7 +2462,7 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                             ::ridl_rt::contract::Ordinal(3u32) => {
                                 let decoded = match ::ridl_rt::payload::Ref::<
                                     super::Level,
-                                    ::ridl_rt::encoding::FlatBuffers,
+                                    H::Encoding,
                                 >::verify(&buf[..claim.len]) {
                                     Ok(checked) => Ok(checked.decode()),
                                     Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
@@ -2287,7 +2517,7 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                             ::ridl_rt::contract::Ordinal(4u32) => {
                                 let decoded = match ::ridl_rt::payload::Ref::<
                                     super::Window,
-                                    ::ridl_rt::encoding::FlatBuffers,
+                                    H::Encoding,
                                 >::verify(&buf[..claim.len]) {
                                     Ok(checked) => Ok(checked.decode()),
                                     Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
@@ -2347,11 +2577,26 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                                                         )
                                                     }
                                                     Ok(()) => {
-                                                        let bytes = match ::ridl_rt::payload::Ref::<
+                                                        match ::ridl_rt::payload::Ref::<
                                                             super::Average,
-                                                            ::ridl_rt::encoding::FlatBuffers,
+                                                            H::Encoding,
                                                         >::encode(&reply, buf) {
-                                                            Ok(encoded) => encoded.bytes(),
+                                                            Ok(encoded) => {
+                                                                let bytes = encoded.bytes();
+                                                                h.settle(claim.id, Ok(bytes))
+                                                            }
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Contract(__violation),
+                                                            ) => {
+                                                                h.settle(
+                                                                    claim.id,
+                                                                    Err(
+                                                                        ::ridl_rt::error::CallError::Contract(
+                                                                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                                                                        ),
+                                                                    ),
+                                                                )
+                                                            }
                                                             Err(
                                                                 ::ridl_rt::payload::EncodeError::Capacity {
                                                                     needed,
@@ -2359,13 +2604,12 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                                                                 },
                                                             ) => {
                                                                 unreachable!(
-                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed `<Average as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                                                                    "encoding `Average` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                                                                     needed, available
                                                                 )
                                                             }
                                                             Err(_) => unreachable!("encoding `Average` failed"),
-                                                        };
-                                                        h.settle(claim.id, Ok(bytes))
+                                                        }
                                                     }
                                                 }
                                             }
@@ -2403,8 +2647,15 @@ Panics when `h` is attached to a catalog other than the one this face was genera
     #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
-        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
         P: Provider,
+        super::Cabin: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         check_catalog(::ridl_rt::port::Attached::catalog(&h));
         let state = match h
@@ -2419,24 +2670,24 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         Serve {
             handler: h,
             provider: p,
-            buf: <super::Cabin as ::ridl_rt::contract::Sizes<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::CLAIM_BUFFER,
+            buf: <super::Cabin as ::ridl_rt::contract::Sizes<H::Encoding>>::CLAIM_BUFFER,
             state,
         }
     }
-    ///The future `serve` returns over interface `Cabin`. It holds the handler, the provider, and the claim buffer of `<Cabin as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`, and polling it again after it resolved panics.
+    ///The future `serve` returns over interface `Cabin`. It holds the handler, the provider, and the claim buffer of `<Cabin as Sizes<H::Encoding>>::MAX_BUFFER_SIZE` bytes, in the encoding the handler port carries. It never resolves to `Ok`, and polling it again after it resolved panics.
     #[must_use = "claims are served only while the future is polled"]
     pub struct Serve<
         'a,
-        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
         P: Provider,
-    > {
+    >
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<H::Encoding>,
+    {
         handler: H,
         provider: &'a mut P,
-        buf: <super::Cabin as ::ridl_rt::contract::Sizes<
-            ::ridl_rt::encoding::FlatBuffers,
-        >>::ClaimBuffer,
+        buf: <super::Cabin as ::ridl_rt::contract::Sizes<H::Encoding>>::ClaimBuffer,
         state: ServeState,
     }
     #[derive(Clone, Copy)]
@@ -2449,13 +2700,31 @@ Panics when `h` is attached to a catalog other than the one this face was genera
     /// frame loop that stores it in its own state polls it through
     /// `Pin::new`.
     impl<
-        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
         P: Provider,
-    > ::core::marker::Unpin for Serve<'_, H, P> {}
+    > ::core::marker::Unpin for Serve<'_, H, P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<H::Encoding>,
+    {}
     impl<
-        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
         P: Provider,
-    > ::core::future::Future for Serve<'_, H, P> {
+    > ::core::future::Future for Serve<'_, H, P>
+    where
+        super::Cabin: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Temperature: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Warning: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
         type Output = ::core::result::Result<
             ::core::convert::Infallible,
             ::ridl_rt::error::ProviderError,
@@ -2485,7 +2754,7 @@ Panics when `h` is attached to a catalog other than the one this face was genera
                     match dispatch(
                         &mut this.handler,
                         &mut *this.provider,
-                        &mut this.buf,
+                        ::core::convert::AsMut::as_mut(&mut this.buf),
                         &mut budget,
                     ) {
                         Ok(_) => {
@@ -2525,18 +2794,26 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         }
         ///The blocking consumer face of interface `Cabin`: the async `Client` with a timeout, over the same ports. Every call is `ridl_rt::task::block_on` over the async call's future, so a call parks the calling thread until its outcome or this client's timeout. The member's `max` is measured by the future on the port's clock, and read only when the port wakes the call: a runtime that measures the bound and wakes the waiter when it passes ends the call at `max`; one that does not, `ridl-loopback` among them, leaves an unserved call waiting until this client's timeout. The timeout is `None` until `with_timeout` or `set_timeout` sets it, and with none a call returns only with its outcome, or at `max` on a runtime that wakes at it. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `with_timeout` and `set_timeout` are `ridl_rt::face::Timeout`'s, `next_event` is `ridl_rt::face::Events`'s and `subscribe_<event>` is the parent module's `Subscribe`'s, all in scope through the parent module's `prelude`.
         pub struct Client<
-            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-                + ::ridl_rt::port::Wakeable,
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
         > {
             inner: super::Client<P>,
             timeout: ::core::option::Option<::std::time::Duration>,
         }
         impl<
-            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-                + ::ridl_rt::port::Wakeable,
-        > Client<P> {
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        > Client<P>
+        where
+            super::super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
             /// The current cabin air temperature.
             ///
             ///Reads signal `temperature`, as `Client::temperature` does: a read never waits.
@@ -2636,10 +2913,18 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             }
         }
         impl<
-            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-                + ::ridl_rt::port::Wakeable,
-        > ::ridl_rt::face::Bind for Client<P> {
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        > ::ridl_rt::face::Bind for Client<P>
+        where
+            super::super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
             type Port = P;
             /**Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -2655,10 +2940,18 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
         impl<
-            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-                + ::ridl_rt::port::Wakeable,
-        > ::ridl_rt::face::Timeout for Client<P> {
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        > ::ridl_rt::face::Timeout for Client<P>
+        where
+            super::super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
             /// Sets the timeout every waiting method of this client is
             /// bounded by, and returns the client. A timeout shorter than a
             /// member's `max` is accepted, and ends the call first; a longer
@@ -2678,10 +2971,18 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
         impl<
-            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-                + ::ridl_rt::port::Wakeable,
-        > ::ridl_rt::face::Events for Client<P> {
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        > ::ridl_rt::face::Events for Client<P>
+        where
+            super::super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
             type Next<'a> = ::core::result::Result<
                 ::core::option::Option<super::Event>,
                 ::ridl_rt::port::ReadError,
@@ -2705,10 +3006,18 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
         impl<
-            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::EventSource
-                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
-                + ::ridl_rt::port::Wakeable,
-        > super::Subscribe for Client<P> {
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::EventSource + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        > super::Subscribe for Client<P>
+        where
+            super::super::Cabin: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Warning: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
             /// Sent when a subsystem leaves `OK`.
             ///
             ///Starts delivery of event `warning`, as the async client's `Subscribe::subscribe_warning` does.
@@ -2734,8 +3043,15 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             timeout: ::core::option::Option<::std::time::Duration>,
         ) -> ::core::result::Result<(), ::ridl_rt::error::ProviderError>
         where
-            H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+            H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+                + ::ridl_rt::port::Wakeable,
             P: super::Provider,
+            super::super::Cabin: ::ridl_rt::contract::Sizes<H::Encoding>,
+            super::super::Temperature: ::ridl_rt::payload::Payload<H::Encoding>,
+            super::super::Warning: ::ridl_rt::payload::Payload<H::Encoding>,
+            super::super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+            super::super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
+            super::super::Average: ::ridl_rt::payload::Payload<H::Encoding>,
         {
             let __deadline = __deadline_after(timeout);
             let mut __serve = super::serve(h, p);
@@ -2788,10 +3104,18 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Horn {
     ];
     const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
     const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
-    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
-    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
-    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
-    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
 }
 #[doc(hidden)]
 pub struct HornActive;
@@ -2823,10 +3147,14 @@ pub mod horn {
         }
     }
     ///The consumer face of interface `Horn`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
-    pub struct Client<P: ::ridl_rt::port::SignalReader> {
+    pub struct Client<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader> {
         port: P,
     }
-    impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+    impl<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader> Client<P>
+    where
+        super::Horn: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         /// The health of the horn.
         ///
         ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
@@ -2840,15 +3168,18 @@ pub mod horn {
             ::ridl_rt::sample::Sample<super::Health>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = <super::Health as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <super::Health as ::ridl_rt::payload::Payload<
+                P::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let raw = self
                 .port
                 .read(
                     <super::Horn as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(1u32),
-                    &mut buf,
+                    buf,
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
@@ -2863,7 +3194,7 @@ pub mod horn {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         super::Health,
-                        ::ridl_rt::encoding::FlatBuffers,
+                        P::Encoding,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -2892,7 +3223,13 @@ pub mod horn {
             })
         }
     }
-    impl<P: ::ridl_rt::port::SignalReader> ::ridl_rt::face::Bind for Client<P> {
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader,
+    > ::ridl_rt::face::Bind for Client<P>
+    where
+        super::Horn: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Port = P;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -2913,10 +3250,14 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
     }
     ///The provider face of interface `Horn`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
-    pub struct Publisher<W: ::ridl_rt::port::SignalWriter> {
+    pub struct Publisher<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> {
         port: W,
     }
-    impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Publisher<W>
+    where
+        super::Horn: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         /// The health of the horn.
         ///
         ///Stages a new value for signal `active`. It is published by `commit`.
@@ -2928,17 +3269,27 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             &mut self,
             value: super::Health,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = <super::Health as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <super::Health as ::ridl_rt::payload::Payload<
+                W::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::Health,
-                ::ridl_rt::encoding::FlatBuffers,
-            >::encode(&value, &mut buf) {
+                W::Encoding,
+            >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `Health` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<Health as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `Health` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -2952,7 +3303,13 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 )
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Bind for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Bind for Publisher<W>
+    where
+        super::Horn: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         type Port = W;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -2965,13 +3322,24 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Publisher { port }
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Publish for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Publish for Publisher<W>
+    where
+        super::Horn: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         /// Publishes every staged signal change.
         fn commit(&mut self) {
             self.port.commit()
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> Invalidate for Publisher<W> {
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Invalidate
+    for Publisher<W>
+    where
+        super::Horn: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         fn invalidate_active(
             &mut self,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {

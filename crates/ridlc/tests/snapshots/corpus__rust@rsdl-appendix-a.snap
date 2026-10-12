@@ -96,10 +96,18 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for CruiseCont
         max
     };
     const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
-    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
-    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
-    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
-    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
 }
 #[doc(hidden)]
 pub struct CruiseControlEngaged;
@@ -156,15 +164,23 @@ pub mod cruise_control {
     }
     ///The consumer face of interface `CruiseControl`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
     pub struct Client<
-        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
-            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
     > {
         port: P,
     }
     impl<
-        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
-            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-    > Client<P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > Client<P>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<P::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         ///Reads signal `engaged` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         ///
         /// # Rules
@@ -176,15 +192,18 @@ pub mod cruise_control {
             ::ridl_rt::sample::Sample<crate::veh::common::Engaged>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = <crate::veh::common::Engaged as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <crate::veh::common::Engaged as ::ridl_rt::payload::Payload<
+                P::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let raw = self
                 .port
                 .read(
                     <super::CruiseControl as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(1u32),
-                    &mut buf,
+                    buf,
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
@@ -199,7 +218,7 @@ pub mod cruise_control {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         crate::veh::common::Engaged,
-                        ::ridl_rt::encoding::FlatBuffers,
+                        P::Encoding,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -238,15 +257,18 @@ pub mod cruise_control {
             ::ridl_rt::sample::Sample<crate::veh::common::Speed>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = <crate::veh::common::Speed as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <crate::veh::common::Speed as ::ridl_rt::payload::Payload<
+                P::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let raw = self
                 .port
                 .read(
                     <super::CruiseControl as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(2u32),
-                    &mut buf,
+                    buf,
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
@@ -261,7 +283,7 @@ pub mod cruise_control {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         crate::veh::common::Speed,
-                        ::ridl_rt::encoding::FlatBuffers,
+                        P::Encoding,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -323,9 +345,16 @@ The call's bound is the member's `max`, measured from the port's clock when this
         }
     }
     impl<
-        P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
-            + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-    > ::ridl_rt::face::Bind for Client<P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::ridl_rt::face::Bind for Client<P>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<P::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Port = P;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -342,7 +371,8 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     #[must_use = "the command was sent, or waits for a slot; its outcome is taken only when the future is polled"]
     pub struct SetLeverCall<
         'a,
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
     > {
         port: &'a mut P,
         phase: SetLeverPhase,
@@ -355,8 +385,15 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         Done,
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-    > SetLeverCall<'_, P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > SetLeverCall<'_, P>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<P::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         fn expired(&self) -> bool {
             self.deadline.is_some_and(|deadline| self.port.now() > deadline)
         }
@@ -366,8 +403,15 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         }
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-    > ::core::future::Future for SetLeverCall<'_, P> {
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for SetLeverCall<'_, P>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<P::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Output = ::core::result::Result<(), ::ridl_rt::error::ClientError>;
         fn poll(
             self: ::core::pin::Pin<&mut Self>,
@@ -445,7 +489,8 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         }
     }
     impl<
-        P: ::ridl_rt::port::Caller + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
     > ::core::ops::Drop for SetLeverCall<'_, P> {
         fn drop(&mut self) {
             if let SetLeverPhase::Waiting(correlation) = &self.phase {
@@ -453,10 +498,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
     }
-    pub(crate) fn send_set_lever<P: ::ridl_rt::port::Caller>(
+    pub(crate) fn send_set_lever<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
         __port: &mut P,
         cmd: &crate::veh::common::LeverCmd,
-    ) -> ::core::result::Result<SetLeverCorrelation, ::ridl_rt::port::SendError> {
+    ) -> ::core::result::Result<SetLeverCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<P::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         let __arg = cmd;
         <super::CruiseControlSetLever as ::ridl_rt::contract::Command>::require(__arg)
             .map_err(|()| {
@@ -464,17 +515,27 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                     ::ridl_rt::error::Contract::PreconditionFailed,
                 )
             })?;
-        let mut buf = <crate::veh::common::LeverCmd as ::ridl_rt::payload::Payload<
-            ::ridl_rt::encoding::FlatBuffers,
+        let mut __buf = <crate::veh::common::LeverCmd as ::ridl_rt::payload::Payload<
+            P::Encoding,
         >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
         let bytes = match ::ridl_rt::payload::Ref::<
             crate::veh::common::LeverCmd,
-            ::ridl_rt::encoding::FlatBuffers,
-        >::encode(__arg, &mut buf) {
+            P::Encoding,
+        >::encode(__arg, buf) {
             Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
             Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                 unreachable!(
-                    "encoding `veh.common.LeverCmd` needs {} bytes and the argument buffer has {}; a legal value cannot exceed `<veh.common.LeverCmd as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                    "encoding `veh.common.LeverCmd` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                     needed, available
                 )
             }
@@ -489,12 +550,18 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             )
             .map(SetLeverCorrelation)
     }
-    pub(crate) fn poll_set_lever_ack<P: ::ridl_rt::port::Caller>(
+    pub(crate) fn poll_set_lever_ack<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller,
+    >(
         port: &mut P,
         correlation: SetLeverCorrelation,
-    ) -> ::core::option::Option<
-        ::core::result::Result<(), ::ridl_rt::error::CallError>,
-    > {
+    ) -> ::core::option::Option<::core::result::Result<(), ::ridl_rt::error::CallError>>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<P::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         port.ack(correlation.0)
     }
     ///Stages the invalid state of one signal of interface `CruiseControl`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
@@ -509,10 +576,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
     }
     ///The provider face of interface `CruiseControl`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
-    pub struct Publisher<W: ::ridl_rt::port::SignalWriter> {
+    pub struct Publisher<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> {
         port: W,
     }
-    impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Publisher<W>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<W::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         ///Stages a new value for signal `engaged`. It is published by `commit`.
         ///
         /// # Rules
@@ -522,17 +595,27 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             &mut self,
             value: crate::veh::common::Engaged,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = <crate::veh::common::Engaged as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <crate::veh::common::Engaged as ::ridl_rt::payload::Payload<
+                W::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let bytes = match ::ridl_rt::payload::Ref::<
                 crate::veh::common::Engaged,
-                ::ridl_rt::encoding::FlatBuffers,
-            >::encode(&value, &mut buf) {
+                W::Encoding,
+            >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `veh.common.Engaged` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<veh.common.Engaged as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `veh.common.Engaged` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -554,17 +637,27 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             &mut self,
             value: crate::veh::common::Speed,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = <crate::veh::common::Speed as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <crate::veh::common::Speed as ::ridl_rt::payload::Payload<
+                W::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let bytes = match ::ridl_rt::payload::Ref::<
                 crate::veh::common::Speed,
-                ::ridl_rt::encoding::FlatBuffers,
-            >::encode(&value, &mut buf) {
+                W::Encoding,
+            >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `veh.common.Speed` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<veh.common.Speed as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `veh.common.Speed` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -578,7 +671,15 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 )
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Bind for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Bind for Publisher<W>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<W::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         type Port = W;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -591,13 +692,28 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Publisher { port }
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Publish for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Publish for Publisher<W>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<W::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         /// Publishes every staged signal change.
         fn commit(&mut self) {
             self.port.commit()
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> Invalidate for Publisher<W> {
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Invalidate
+    for Publisher<W>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<W::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         fn invalidate_engaged(
             &mut self,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
@@ -619,7 +735,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     }
     /**What an application implements to serve interface `CruiseControl`'s calls.
 
-An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses, and the generated payload types implement neither `Copy` nor `Clone`.*/
+An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
     pub trait Provider {
         ///Serves command `setLever`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
         ///
@@ -639,12 +755,16 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         budget: &mut usize,
     ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
     where
-        H: ::ridl_rt::port::Handler,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler,
         P: Provider,
+        super::CruiseControl: ::ridl_rt::contract::Sizes<H::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<H::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<H::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         if buf.len()
             < <super::CruiseControl as ::ridl_rt::contract::Sizes<
-                ::ridl_rt::encoding::FlatBuffers,
+                H::Encoding,
             >>::MAX_BUFFER_SIZE
         {
             return Ok(0);
@@ -686,7 +806,7 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                             ::ridl_rt::contract::Ordinal(3u32) => {
                                 let decoded = match ::ridl_rt::payload::Ref::<
                                     crate::veh::common::LeverCmd,
-                                    ::ridl_rt::encoding::FlatBuffers,
+                                    H::Encoding,
                                 >::verify(&buf[..claim.len]) {
                                     Ok(checked) => Ok(checked.decode()),
                                     Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
@@ -768,8 +888,13 @@ Panics when `h` is attached to a catalog other than the one this face was genera
     #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
-        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
         P: Provider,
+        super::CruiseControl: ::ridl_rt::contract::Sizes<H::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<H::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<H::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         check_catalog(::ridl_rt::port::Attached::catalog(&h));
         let state = match h
@@ -785,22 +910,26 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             handler: h,
             provider: p,
             buf: <super::CruiseControl as ::ridl_rt::contract::Sizes<
-                ::ridl_rt::encoding::FlatBuffers,
+                H::Encoding,
             >>::CLAIM_BUFFER,
             state,
         }
     }
-    ///The future `serve` returns over interface `CruiseControl`. It holds the handler, the provider, and the claim buffer of `<CruiseControl as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes. It never resolves to `Ok`, and polling it again after it resolved panics.
+    ///The future `serve` returns over interface `CruiseControl`. It holds the handler, the provider, and the claim buffer of `<CruiseControl as Sizes<H::Encoding>>::MAX_BUFFER_SIZE` bytes, in the encoding the handler port carries. It never resolves to `Ok`, and polling it again after it resolved panics.
     #[must_use = "claims are served only while the future is polled"]
     pub struct Serve<
         'a,
-        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
         P: Provider,
-    > {
+    >
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<H::Encoding>,
+    {
         handler: H,
         provider: &'a mut P,
         buf: <super::CruiseControl as ::ridl_rt::contract::Sizes<
-            ::ridl_rt::encoding::FlatBuffers,
+            H::Encoding,
         >>::ClaimBuffer,
         state: ServeState,
     }
@@ -814,13 +943,27 @@ Panics when `h` is attached to a catalog other than the one this face was genera
     /// frame loop that stores it in its own state polls it through
     /// `Pin::new`.
     impl<
-        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
         P: Provider,
-    > ::core::marker::Unpin for Serve<'_, H, P> {}
+    > ::core::marker::Unpin for Serve<'_, H, P>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<H::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<H::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<H::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<H::Encoding>,
+    {}
     impl<
-        H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
         P: Provider,
-    > ::core::future::Future for Serve<'_, H, P> {
+    > ::core::future::Future for Serve<'_, H, P>
+    where
+        super::CruiseControl: ::ridl_rt::contract::Sizes<H::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<H::Encoding>,
+        crate::veh::common::Speed: ::ridl_rt::payload::Payload<H::Encoding>,
+        crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
         type Output = ::core::result::Result<
             ::core::convert::Infallible,
             ::ridl_rt::error::ProviderError,
@@ -850,7 +993,7 @@ Panics when `h` is attached to a catalog other than the one this face was genera
                     match dispatch(
                         &mut this.handler,
                         &mut *this.provider,
-                        &mut this.buf,
+                        ::core::convert::AsMut::as_mut(&mut this.buf),
                         &mut budget,
                     ) {
                         Ok(_) => {
@@ -888,16 +1031,24 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         }
         ///The blocking consumer face of interface `CruiseControl`: the async `Client` with a timeout, over the same ports. Every call is `ridl_rt::task::block_on` over the async call's future, so a call parks the calling thread until its outcome or this client's timeout. The member's `max` is measured by the future on the port's clock, and read only when the port wakes the call: a runtime that measures the bound and wakes the waiter when it passes ends the call at `max`; one that does not, `ridl-loopback` among them, leaves an unserved call waiting until this client's timeout. The timeout is `None` until `with_timeout` or `set_timeout` sets it, and with none a call returns only with its outcome, or at `max` on a runtime that wakes at it. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `with_timeout` and `set_timeout` are `ridl_rt::face::Timeout`'s, all in scope through the parent module's `prelude`.
         pub struct Client<
-            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
-                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
         > {
             inner: super::Client<P>,
             timeout: ::core::option::Option<::std::time::Duration>,
         }
         impl<
-            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
-                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-        > Client<P> {
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > Client<P>
+        where
+            super::super::CruiseControl: ::ridl_rt::contract::Sizes<P::Encoding>,
+            crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+            crate::veh::common::Speed: ::ridl_rt::payload::Payload<P::Encoding>,
+            crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
             ///Reads signal `engaged`, as `Client::engaged` does: a read never waits.
             ///
             /// # Rules
@@ -961,9 +1112,16 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             }
         }
         impl<
-            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
-                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-        > ::ridl_rt::face::Bind for Client<P> {
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > ::ridl_rt::face::Bind for Client<P>
+        where
+            super::super::CruiseControl: ::ridl_rt::contract::Sizes<P::Encoding>,
+            crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+            crate::veh::common::Speed: ::ridl_rt::payload::Payload<P::Encoding>,
+            crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
             type Port = P;
             /**Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -979,9 +1137,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
         impl<
-            P: ::ridl_rt::port::SignalReader + ::ridl_rt::port::Caller
-                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
-        > ::ridl_rt::face::Timeout for Client<P> {
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > ::ridl_rt::face::Timeout for Client<P>
+        where
+            super::super::CruiseControl: ::ridl_rt::contract::Sizes<P::Encoding>,
+            crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+            crate::veh::common::Speed: ::ridl_rt::payload::Payload<P::Encoding>,
+            crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
             /// Sets the timeout every waiting method of this client is
             /// bounded by, and returns the client. A timeout shorter than a
             /// member's `max` is accepted, and ends the call first; a longer
@@ -1012,8 +1177,13 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             timeout: ::core::option::Option<::std::time::Duration>,
         ) -> ::core::result::Result<(), ::ridl_rt::error::ProviderError>
         where
-            H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+            H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+                + ::ridl_rt::port::Wakeable,
             P: super::Provider,
+            super::super::CruiseControl: ::ridl_rt::contract::Sizes<H::Encoding>,
+            crate::veh::common::Engaged: ::ridl_rt::payload::Payload<H::Encoding>,
+            crate::veh::common::Speed: ::ridl_rt::payload::Payload<H::Encoding>,
+            crate::veh::common::LeverCmd: ::ridl_rt::payload::Payload<H::Encoding>,
         {
             let __deadline = __deadline_after(timeout);
             let mut __serve = super::serve(h, p);
@@ -1066,10 +1236,18 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for LaneAssist
     ];
     const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
     const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
-    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
-    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
-    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
-    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
 }
 #[doc(hidden)]
 pub struct LaneAssistActive;
@@ -1097,10 +1275,14 @@ pub mod lane_assist {
         }
     }
     ///The consumer face of interface `LaneAssist`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
-    pub struct Client<P: ::ridl_rt::port::SignalReader> {
+    pub struct Client<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader> {
         port: P,
     }
-    impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+    impl<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader> Client<P>
+    where
+        super::LaneAssist: ::ridl_rt::contract::Sizes<P::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         ///Reads signal `active` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         ///
         /// # Rules
@@ -1112,15 +1294,18 @@ pub mod lane_assist {
             ::ridl_rt::sample::Sample<crate::veh::common::Engaged>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = <crate::veh::common::Engaged as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <crate::veh::common::Engaged as ::ridl_rt::payload::Payload<
+                P::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let raw = self
                 .port
                 .read(
                     <super::LaneAssist as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(1u32),
-                    &mut buf,
+                    buf,
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
@@ -1135,7 +1320,7 @@ pub mod lane_assist {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         crate::veh::common::Engaged,
-                        ::ridl_rt::encoding::FlatBuffers,
+                        P::Encoding,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -1164,7 +1349,13 @@ pub mod lane_assist {
             })
         }
     }
-    impl<P: ::ridl_rt::port::SignalReader> ::ridl_rt::face::Bind for Client<P> {
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader,
+    > ::ridl_rt::face::Bind for Client<P>
+    where
+        super::LaneAssist: ::ridl_rt::contract::Sizes<P::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Port = P;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -1185,10 +1376,14 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
     }
     ///The provider face of interface `LaneAssist`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
-    pub struct Publisher<W: ::ridl_rt::port::SignalWriter> {
+    pub struct Publisher<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> {
         port: W,
     }
-    impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Publisher<W>
+    where
+        super::LaneAssist: ::ridl_rt::contract::Sizes<W::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         ///Stages a new value for signal `active`. It is published by `commit`.
         ///
         /// # Rules
@@ -1198,17 +1393,27 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             &mut self,
             value: crate::veh::common::Engaged,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = <crate::veh::common::Engaged as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <crate::veh::common::Engaged as ::ridl_rt::payload::Payload<
+                W::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let bytes = match ::ridl_rt::payload::Ref::<
                 crate::veh::common::Engaged,
-                ::ridl_rt::encoding::FlatBuffers,
-            >::encode(&value, &mut buf) {
+                W::Encoding,
+            >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `veh.common.Engaged` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<veh.common.Engaged as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `veh.common.Engaged` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -1222,7 +1427,13 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 )
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Bind for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Bind for Publisher<W>
+    where
+        super::LaneAssist: ::ridl_rt::contract::Sizes<W::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         type Port = W;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -1235,13 +1446,24 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Publisher { port }
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Publish for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Publish for Publisher<W>
+    where
+        super::LaneAssist: ::ridl_rt::contract::Sizes<W::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         /// Publishes every staged signal change.
         fn commit(&mut self) {
             self.port.commit()
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> Invalidate for Publisher<W> {
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Invalidate
+    for Publisher<W>
+    where
+        super::LaneAssist: ::ridl_rt::contract::Sizes<W::Encoding>,
+        crate::veh::common::Engaged: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         fn invalidate_active(
             &mut self,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
