@@ -244,9 +244,6 @@ pub fn load_workspace_with(
         match find_root(entry) {
             Some(root) => loader.load_root(db, &root)?,
             None => {
-                if let Some(error) = unreadable_manifest(entry) {
-                    return Err(error.into());
-                }
                 return Err(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!("no `ridl.toml` found at or above `{}`", entry.display()),
@@ -319,8 +316,9 @@ pub fn find_nested_manifest(dir: &Path) -> io::Result<Option<PathBuf>> {
 
 /// The directory [`load_workspace`] loads from for an entry at or below
 /// `dir` (ADR-0002 §4). It starts at the nearest directory at or above `dir`
-/// that contains a `ridl.toml`. When that manifest is a `[package]`, the walk
-/// continues upward:
+/// that contains a `ridl.toml`, as [`holds_manifest`] decides, so a manifest
+/// that is present but cannot be inspected is the root and the load reports
+/// why. When that manifest is a `[package]`, the walk continues upward:
 ///
 /// - at the first `[workspace]` manifest it stops; that workspace is the root
 ///   when its `members` names the package directory, and the package is the
@@ -349,7 +347,7 @@ pub fn find_root(dir: &Path) -> Option<PathBuf> {
         return Some(package);
     };
     for (levels, parent) in absolute_package.ancestors().skip(1).enumerate() {
-        if parent.join("ridl.toml").is_file() {
+        if holds_manifest(parent) {
             match read_manifest_kind(parent) {
                 None => return Some(up(&package, levels + 1)),
                 Some(ManifestKind::Workspace { members }) => {
@@ -375,25 +373,41 @@ pub fn find_root(dir: &Path) -> Option<PathBuf> {
 /// The nearest directory at or above `dir` that contains a `ridl.toml`, in
 /// the path form [`search_ancestors`] gives.
 fn nearest_manifest_dir(dir: &Path) -> Option<PathBuf> {
-    search_ancestors(dir, |candidate| {
-        candidate.join("ridl.toml").is_file().then_some(())
-    })
-    .map(|((), found)| found)
+    search_ancestors(dir, |candidate| holds_manifest(candidate).then_some(()))
+        .map(|((), found)| found)
+}
+
+/// Whether `dir` holds a `ridl.toml`. A `NotFound` error means it does not; a
+/// manifest that is present but cannot be inspected — a symbolic link loop,
+/// an unsearchable directory — gives any other error, and counts as present,
+/// so that the walk stops there and the load reports why reading it failed
+/// instead of passing the directory by (driftsys/ridl#845, driftsys/ridl#847).
+/// An entry named `ridl.toml` that is not a file counts as absent, as it did
+/// when this test was `is_file`.
+fn holds_manifest(dir: &Path) -> bool {
+    match fs::metadata(dir.join("ridl.toml")) {
+        Ok(metadata) => metadata.is_file(),
+        Err(error) => error.kind() != io::ErrorKind::NotFound,
+    }
 }
 
 /// The first directory at or above `dir` for which `probe` gives a value,
-/// with that value. A relative `dir` is searched through its absolute
-/// ancestors, so the search passes the current directory, and the directory
-/// returned keeps the relative form, with `.` for the current directory and
-/// `..` above it. The empty path stands for the current directory. `None`
-/// means no directory gives a value, or that `dir` is relative and the
-/// current directory cannot be read.
+/// with that value. `dir` is normalised lexically first, whether it is
+/// absolute or relative, so `pkg/../other` is searched from `other` and
+/// never probes `pkg` (driftsys/ridl#846). An absolute `dir` is searched
+/// through the ancestors of that normalised path, and the directory returned
+/// is absolute. A relative `dir` is searched through its absolute ancestors,
+/// so the search passes the current directory, and the directory returned
+/// keeps the relative form, with `.` for the current directory and `..`
+/// above it. The empty path stands for the current directory. `None` means
+/// no directory gives a value, or that `dir` is relative and the current
+/// directory cannot be read.
 fn search_ancestors<T>(
     dir: &Path,
     mut probe: impl FnMut(&Path) -> Option<T>,
 ) -> Option<(T, PathBuf)> {
     if dir.is_absolute() {
-        return dir
+        return normalize(dir)
             .ancestors()
             .find_map(|candidate| Some((probe(candidate)?, candidate.to_path_buf())));
     }
@@ -406,36 +420,6 @@ fn search_ancestors<T>(
         .ancestors()
         .enumerate()
         .find_map(|(levels, candidate)| Some((probe(candidate)?, up(&relative, levels))))
-}
-
-/// The error of the first `ridl.toml` at or above `dir` that cannot be
-/// inspected for a reason other than being absent, naming the manifest.
-/// `find_root` treats such a manifest as missing, so the caller uses this to
-/// report the real cause. The walk starts from the same directories as the
-/// manifest search of [`find_root`] ([`search_ancestors`]), the current
-/// directory and its ancestors included for a relative `dir`; it does not
-/// share the rest of `find_root`'s walk, which skips an unreadable manifest
-/// above a package (driftsys/ridl#847). A relative `dir` is normalised
-/// lexically first, so the manifest is named in that normalised relative
-/// form (`./ridl.toml` for `.`, `x/ridl.toml` for `./x` or `x/`), and an
-/// entry such as `link/..` probes `./ridl.toml`, not the directory the
-/// symbolic link leads to; [`find_root`] normalises the same way, so the
-/// manifest probed is the one the load looked for. The walk up the ancestors
-/// matters for the errors that can hit an ancestor's manifest while the
-/// entry itself is reachable, such as a symbolic link loop; a directory that
-/// cannot be searched also hides the entry below it.
-fn unreadable_manifest(dir: &Path) -> Option<io::Error> {
-    let (error, found) = search_ancestors(dir, |candidate| {
-        match fs::metadata(candidate.join("ridl.toml")) {
-            Err(e) if e.kind() != io::ErrorKind::NotFound => Some(e),
-            _ => None,
-        }
-    })?;
-    let manifest = found.join("ridl.toml");
-    Some(io::Error::new(
-        error.kind(),
-        format!("cannot read `{}`: {error}", manifest.display()),
-    ))
 }
 
 /// `error` with the path that failed added to its message.
@@ -3191,6 +3175,44 @@ service:veh.common.climate 2
         assert_eq!(
             find_root(&dir.path().join("a")),
             Some(dir.path().to_path_buf())
+        );
+    }
+
+    /// An absolute entry is normalised lexically before its ancestors are
+    /// searched, as a relative entry is, so `pkg/../other` does not find the
+    /// manifest of `pkg` (driftsys/ridl#846).
+    #[test]
+    fn find_root_normalises_an_absolute_entry_before_the_search() {
+        let dir = TempDir::new("find-root-absolute-dotdot");
+        dir.write("pkg/ridl.toml", PACKAGE_A);
+        dir.write("other/b.ridl", "package other\n");
+
+        assert_eq!(find_root(&dir.path().join("pkg/../other")), None);
+
+        let mut db = RidlDatabase::default();
+        let error = load_workspace(&mut db, &dir.path().join("pkg/../other"))
+            .err()
+            .expect("an entry outside every package does not load");
+        assert!(
+            error
+                .to_string()
+                .contains("no `ridl.toml` found at or above"),
+            "{error}"
+        );
+    }
+
+    /// An absolute entry with `..` that lands inside a package gives the
+    /// package directory in its normalised form.
+    #[test]
+    fn find_root_gives_the_normalised_root_of_an_absolute_entry() {
+        let dir = TempDir::new("find-root-absolute-normalised");
+        dir.write("pkg/ridl.toml", PACKAGE_A);
+        dir.write("pkg/src/a.ridl", "package a.src\n");
+        fs::create_dir_all(dir.path().join("pkg/other")).expect("create pkg/other");
+
+        assert_eq!(
+            find_root(&dir.path().join("pkg/other/../src")),
+            Some(dir.path().join("pkg"))
         );
     }
 
