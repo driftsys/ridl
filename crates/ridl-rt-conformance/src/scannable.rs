@@ -67,7 +67,6 @@ where
     let mut marks = [Watermark {
         iface: IFACE,
         generation: 0,
-        seq: 0,
     }];
     let mut out = [blank_change(); 4];
     let written = rt.scan(&mut marks, &mut out);
@@ -78,7 +77,6 @@ where
         marks[0].generation, 1,
         "the mark moved to the current generation"
     );
-    assert_eq!(marks[0].seq, 1);
 
     assert_eq!(
         rt.scan(&mut marks, &mut out),
@@ -108,7 +106,6 @@ where
     let mut marks = [Watermark {
         iface: IFACE,
         generation: 0,
-        seq: 0,
     }];
     let mut one = [blank_change(); 1];
     assert_eq!(

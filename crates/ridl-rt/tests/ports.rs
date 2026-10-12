@@ -287,7 +287,6 @@ fn both_extensions_are_usable_as_trait_objects() {
     let watermark = Watermark {
         iface: IFACE,
         generation: 7,
-        seq: 0,
     };
     let changed = Changed {
         iface: IFACE,

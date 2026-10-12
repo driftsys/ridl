@@ -584,7 +584,7 @@ pub trait ScannableSignals: SignalReader {
     fn generation(&self, iface: InterfaceNo) -> u64;
     fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize;
 }
-pub struct Watermark { pub iface: InterfaceNo, pub generation: u64, pub seq: u64 }
+pub struct Watermark { pub iface: InterfaceNo, pub generation: u64 }
 pub struct Changed { pub iface: InterfaceNo, pub ord: Ordinal, pub seq: u64 }
 
 /// Extension: reads of several signals of one interface from one publication.
@@ -600,6 +600,10 @@ pub trait Wakeable {
 }
 pub enum Interest { Outcome(Correlation), Slot, Event(InterfaceNo), Claim(InterfaceNo) }
 ```
+
+`Watermark` had a `seq` field until 2026-10-12. It was removed
+(driftsys/ridl#350, ADR-0021 decision 10's 2026-10-12 amendment) because `scan`
+selects only on the generation. `Changed::seq` remains.
 
 `Encoded` (since 2026-10-10) states the payload encoding of the bytes a port
 carries. One session has one encoding (the frame specification's rule), so a

@@ -352,9 +352,6 @@ impl Store {
                 written += 1;
             }
             mark.generation = current;
-            if let Some(highest) = staging.iter().map(|change| change.seq).max() {
-                mark.seq = highest;
-            }
         }
         written
     }

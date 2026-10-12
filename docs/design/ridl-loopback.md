@@ -572,11 +572,8 @@ lock each is a few lines.
   number of entries written so far" that keeps the order of `marks` a priority
   order and keeps the `ScannableSignals::scan` loop — grow `out` when the call
   returns 0 and a mark is still behind — the way to make progress.
-- **`Watermark::seq`** is set to the highest signal sequence number the scan
-  reported for that interface, and left unchanged when the scan reported none.
-  It is carried for the caller and is not what `scan` selects on. What that
-  field means is an open question of ADR-0021 decision 10 (driftsys/ridl#350);
-  this is one runtime's reading of it, offered as evidence, not as an answer.
+- **`Watermark`** carries the generation only; `scan` moves it to the current
+  generation of the interface.
 - **`read_coherent`** answers every ordinal from the one publication state the
   lock is held over, which is what makes the read coherent. It reports
   `ReadError::Short` with the size of the whole set, not of the first value, and
@@ -882,8 +879,7 @@ that.
   driftsys/ridl#309 (an invalid event payload). It changes no specification
   text; driftsys/ridl#544 aligned the ridl reference with the frame
   specification on both
-- Open against it: driftsys/ridl#350's `Watermark::seq` question, on which this
-  crate takes a reading; driftsys/ridl#381, which writes the catalog descriptor.
+- Open against it: driftsys/ridl#381, which writes the catalog descriptor.
   Giving this crate one, and with it every report in "What it cannot report", is
   not yet assigned to a story
 - `crates/ridl-loopback/src/lib.rs`, `src/handle.rs`, `src/store.rs` — the crate
