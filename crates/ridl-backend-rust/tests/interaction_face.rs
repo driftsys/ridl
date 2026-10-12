@@ -3394,6 +3394,41 @@ fn a_signal_only_face_bounds_only_its_own_payload() {
     }
 }
 
+/// Per-payload counters for the second codec, one pair for each payload type:
+/// how many times its `Proto3` `encode` ran, and how many times its `Proto3`
+/// `decode` ran.
+///
+/// A round trip that still encoded or decoded with FlatBuffers on one leg
+/// leaves that leg's counter at zero, which no assertion on the value that
+/// came back can see, because both ends of such a leg agree on the same wrong
+/// encoding and the runtime carries the payload as opaque bytes.
+trait Proto3Counts {
+    fn encodes() -> &'static std::sync::atomic::AtomicUsize;
+
+    fn decodes() -> &'static std::sync::atomic::AtomicUsize;
+
+    fn count_encode() {
+        Self::encodes().fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn count_decode() {
+        Self::decodes().fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The pair `(encodes, decodes)` since the last reset.
+    fn counts() -> (usize, usize) {
+        (
+            Self::encodes().load(std::sync::atomic::Ordering::Relaxed),
+            Self::decodes().load(std::sync::atomic::Ordering::Relaxed),
+        )
+    }
+
+    fn reset() {
+        Self::encodes().store(0, std::sync::atomic::Ordering::Relaxed);
+        Self::decodes().store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 /// A second codec for the fixture's payload types, written under the `Proto3`
 /// marker: the FlatBuffers bytes of the same value, reversed.
 ///
@@ -3404,9 +3439,27 @@ fn a_signal_only_face_bounds_only_its_own_payload() {
 /// size the interface's table states is the one FlatBuffers states, and the
 /// bytes are written at the end of the output buffer, so `Encoded::bytes` is a
 /// subslice and not a prefix, as it is for FlatBuffers.
+///
+/// Each payload also carries its own pair of `Proto3Counts` counters, raised
+/// by this codec's `encode` and `decode`, so that a test can state which leg
+/// of a round trip went through this codec and in which direction.
 macro_rules! reversed_codec {
     ($($payload:ident),* $(,)?) => {
         $(
+            impl Proto3Counts for generated::$payload {
+                fn encodes() -> &'static std::sync::atomic::AtomicUsize {
+                    static COUNT: std::sync::atomic::AtomicUsize =
+                        std::sync::atomic::AtomicUsize::new(0);
+                    &COUNT
+                }
+
+                fn decodes() -> &'static std::sync::atomic::AtomicUsize {
+                    static COUNT: std::sync::atomic::AtomicUsize =
+                        std::sync::atomic::AtomicUsize::new(0);
+                    &COUNT
+                }
+            }
+
             impl ridl_rt::payload::Payload<ridl_rt::encoding::Proto3> for generated::$payload {
                 const MAX_SIZE: usize = <generated::$payload as ridl_rt::payload::Payload<
                     ridl_rt::encoding::FlatBuffers,
@@ -3427,6 +3480,7 @@ macro_rules! reversed_codec {
                     out: &'o mut [u8],
                 ) -> Result<ridl_rt::payload::Encoded<'o, &'o [u8]>, ridl_rt::payload::EncodeError>
                 {
+                    <generated::$payload as Proto3Counts>::count_encode();
                     let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
                         ridl_rt::encoding::FlatBuffers,
                     >>::BUFFER;
@@ -3480,6 +3534,7 @@ macro_rules! reversed_codec {
                 fn decode(
                     proof: ridl_rt::payload::Ref<'_, Self, ridl_rt::encoding::Proto3>,
                 ) -> Self {
+                    <generated::$payload as Proto3Counts>::count_decode();
                     let buf = proof.bytes();
                     let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
                         ridl_rt::encoding::FlatBuffers,
@@ -3583,7 +3638,17 @@ fn a_second_codec_is_read_from_the_port_type() {
         "the two codecs produce different bytes, so the check above has force"
     );
 
-    // 3. A command and a query, served over a handler held by `&mut`.
+    // 3. A command and a query, served over a handler held by `&mut`. The
+    //    counters are reset first, so what they hold afterwards is what the
+    //    call legs did, not what the signal leg above did.
+    for reset in [
+        <generated::Temperature as Proto3Counts>::reset,
+        <generated::Level as Proto3Counts>::reset,
+        <generated::Window as Proto3Counts>::reset,
+        <generated::Average as Proto3Counts>::reset,
+    ] {
+        reset();
+    }
     let mut handler = rt.handler();
     let mut provider = TestProvider::new(7);
     {
@@ -3606,8 +3671,47 @@ fn a_second_codec_is_read_from_the_port_type() {
     }
     assert_eq!(provider.set_level_calls, vec![3]);
 
-    // 4. A FlatBuffers runtime beside it, in the same binary: `Loopback::new`
-    //    is the default encoding, and its bytes are the unreversed ones.
+    // 4. Each leg of those two calls went through this codec, in the
+    //    direction that leg uses. A leg left on FlatBuffers would hold zero
+    //    here, and the round trip above would still have passed, because both
+    //    of its ends would agree on FlatBuffers and the runtime carries the
+    //    payload as opaque bytes.
+    assert_eq!(
+        <generated::Level as Proto3Counts>::counts(),
+        (1, 1),
+        "the command's argument was encoded by the client and decoded by the dispatch \
+         with the port's own codec"
+    );
+    assert_eq!(
+        <generated::Window as Proto3Counts>::counts(),
+        (1, 1),
+        "the query's argument was encoded by the client and decoded by the dispatch \
+         with the port's own codec"
+    );
+    assert_eq!(
+        <generated::Average as Proto3Counts>::counts(),
+        (1, 1),
+        "the query's reply was encoded by the provider side and decoded by the client \
+         with the port's own codec"
+    );
+    assert_eq!(
+        <generated::Temperature as Proto3Counts>::counts(),
+        (0, 0),
+        "the call legs carry no signal payload, so the counters above count only those legs"
+    );
+
+    // 5. A FlatBuffers runtime beside it, in the same binary: `Loopback::new`
+    //    is the default encoding, and its bytes are the unreversed ones. The
+    //    counters are reset first, so that what they hold at the end states
+    //    whether this runtime reached the second codec at all.
+    for reset in [
+        <generated::Temperature as Proto3Counts>::reset,
+        <generated::Level as Proto3Counts>::reset,
+        <generated::Window as Proto3Counts>::reset,
+        <generated::Average as Proto3Counts>::reset,
+    ] {
+        reset();
+    }
     let rt_fb = Loopback::new(CATALOG);
     let mut publisher_fb = generated::cabin::Publisher::new(rt_fb.attach());
     let client_fb = generated::cabin::Client::new(rt_fb.attach());
@@ -3627,4 +3731,22 @@ fn a_second_codec_is_read_from_the_port_type() {
         flatbuffers.as_slice(),
         "the loopback's default encoding is FlatBuffers"
     );
+
+    // 6. The face over the FlatBuffers runtime reached no part of the second
+    //    codec.
+    for (name, counts) in [
+        (
+            "Temperature",
+            <generated::Temperature as Proto3Counts>::counts(),
+        ),
+        ("Level", <generated::Level as Proto3Counts>::counts()),
+        ("Window", <generated::Window as Proto3Counts>::counts()),
+        ("Average", <generated::Average as Proto3Counts>::counts()),
+    ] {
+        assert_eq!(
+            counts,
+            (0, 0),
+            "the FlatBuffers runtime used the second codec for `{name}`"
+        );
+    }
 }
