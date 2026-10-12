@@ -258,7 +258,8 @@ fn parse_hex(text: &str) -> Result<Vec<u8>, String> {
 /// frame specification §11.1: the table under `### 11.1 WebSocket` whose
 /// columns are `Id`, `Vector` and `Hex`. The table is the vectors' source;
 /// no encoder exists. A row whose bytes [`check_vector`] rejects, a
-/// malformed row, a duplicate `Id` and a missing or empty table are errors.
+/// malformed row, a separator row that is not one, a duplicate `Id`, a blank
+/// line inside the table and a missing or empty table are errors.
 fn frame_vectors(spec: &str) -> Result<Vec<String>, String> {
     let (_, section) = spec
         .split_once("### 11.1 WebSocket\n")
@@ -271,12 +272,24 @@ fn frame_vectors(spec: &str) -> Result<Vec<String>, String> {
         .by_ref()
         .find(|line| cells(line).as_deref() == Some(&["Id", "Vector", "Hex"][..]))
         .ok_or("§11.1 has no table with the columns `Id`, `Vector` and `Hex`")?;
-    lines.next();
+    let separator = lines.next().unwrap_or_default();
+    let is_separator = cells(separator).is_some_and(|row| {
+        row.len() == 3
+            && row
+                .iter()
+                .all(|cell| !cell.is_empty() && cell.bytes().all(|b| matches!(b, b'-' | b':')))
+    });
+    if !is_separator {
+        return Err(format!(
+            "the vector table's second line is not a separator row: {separator}"
+        ));
+    }
     let mut ids = std::collections::BTreeSet::new();
     let mut out = Vec::new();
-    for line in lines.take_while(|line| line.trim_start().starts_with('|')) {
+    let mut lines = lines.peekable();
+    while let Some(line) = lines.next_if(|line| line.trim_start().starts_with('|')) {
         let row = cells(line).ok_or_else(|| format!("a malformed vector row: {line}"))?;
-        let [id, _, hex] = row.as_slice() else {
+        let [id, vector, hex] = row.as_slice() else {
             return Err(format!("a vector row without three cells: {line}"));
         };
         let id = code_span(id)
@@ -294,13 +307,32 @@ fn frame_vectors(spec: &str) -> Result<Vec<String>, String> {
             .ok_or_else(|| format!("{id}: the `Hex` cell is not one code span"))?
             .replace(' ', "");
         let bytes = parse_hex(&hex).map_err(|e| format!("{id}: {e}"))?;
-        check_vector(&bytes).map_err(|e| format!("{id}: {e}"))?;
+        let payload = named_payload(vector).map_err(|e| format!("{id}: {e}"))?;
+        check_vector(&bytes, &payload).map_err(|e| format!("{id}: {e}"))?;
         out.push(format!("frame-vector {id} {hex}"));
+    }
+    if lines
+        .find(|line| !line.trim().is_empty())
+        .is_some_and(|line| line.trim_start().starts_with('|'))
+    {
+        return Err("a blank line inside the §11.1 vector table".to_string());
     }
     if out.is_empty() {
         return Err("the §11.1 vector table has no row".to_string());
     }
     Ok(out)
+}
+
+/// The payload a `Vector` cell names as `payload `<hex>``, or no bytes when
+/// it names none.
+fn named_payload(vector: &str) -> Result<Vec<u8>, String> {
+    let Some((_, rest)) = vector.split_once("payload `") else {
+        return Ok(Vec::new());
+    };
+    let (hex, _) = rest
+        .split_once('`')
+        .ok_or_else(|| format!("the payload in `{vector}` has no closing backtick"))?;
+    parse_hex(&hex.replace(' ', ""))
 }
 
 /// A little-endian `u32` at `bytes[at..at + 4]`.
@@ -362,12 +394,16 @@ fn check_attach(bytes: &[u8]) -> Result<(), String> {
 }
 
 /// The bytes of one vector against the layout of the frame specification
-/// §11.1 item 2: the header size of its form, whether the form carries a
-/// payload, and every code against its table.
-fn check_vector(bytes: &[u8]) -> Result<(), String> {
+/// §11.1 item 2: the header size of its form, every code against its table,
+/// and the bytes after the header. Whether the frame carries a payload is
+/// decided by its header — its form, a `publish`'s provenance and a
+/// `response`'s outcome — and the bytes after the header must be the
+/// `payload` the vector's `Vector` cell names, or none when it names none.
+fn check_vector(bytes: &[u8], payload: &[u8]) -> Result<(), String> {
     let form = *bytes.first().ok_or("the vector is empty")?;
-    let (header, payload) = match form {
-        1 => return check_attach(bytes),
+    let (header, may_carry) = match form {
+        1 if payload.is_empty() => return check_attach(bytes),
+        1 => return Err("an `attach` carries no payload".to_string()),
         2 => (3, false),
         3 | 5 | 6 => (10, false),
         4 => (12, false),
@@ -376,17 +412,39 @@ fn check_vector(bytes: &[u8]) -> Result<(), String> {
         10 => (36, true),
         other => return Err(format!("form {other} is outside 1..=10")),
     };
-    if bytes.len() < header || (!payload && bytes.len() != header) {
+    if bytes.len() < header {
         return Err(format!(
-            "{} bytes, but form {form} is a {header}-byte header{}",
-            bytes.len(),
-            if payload {
-                " plus a payload"
-            } else {
-                " and no payload"
-            }
+            "{} bytes, below the {header}-byte header of form {form}",
+            bytes.len()
         ));
     }
+    check_codes(form, bytes)?;
+    // `Live` is provenance 2 and `reply` is outcome 2 (§4).
+    let carries = may_carry
+        && match form {
+            7 => bytes[26] == 2,
+            10 => bytes[34] == 2,
+            _ => true,
+        };
+    let rest = &bytes[header..];
+    if !carries && !rest.is_empty() {
+        return Err(format!(
+            "{} bytes after the {header}-byte header of form {form}, whose header says it carries no payload",
+            rest.len()
+        ));
+    }
+    if rest != payload {
+        return Err(format!(
+            "the {} bytes after the header are not the {} bytes of the payload the `Vector` cell names",
+            rest.len(),
+            payload.len()
+        ));
+    }
+    Ok(())
+}
+
+/// The codes of a header of `form`, which is 2 to 10, against their tables.
+fn check_codes(form: u8, bytes: &[u8]) -> Result<(), String> {
     if form == 2 {
         return check_outcome(bytes[1], bytes[2]);
     }
@@ -456,13 +514,16 @@ mod tests {
         );
         assert!(lines.iter().any(|l| l.starts_with("proto ")));
         assert!(lines.iter().any(|l| l.starts_with("fbs ")));
+        // The dump holds every vector of the frame specification §11.1, in
+        // the table's order, and no other.
+        let spec = std::fs::read_to_string(root().join(FRAME_SPEC)).unwrap();
+        let vectors: Vec<&String> = lines
+            .iter()
+            .filter(|l| l.starts_with("frame-vector "))
+            .collect();
         assert_eq!(
-            lines
-                .iter()
-                .filter(|l| l.starts_with("frame-vector "))
-                .count(),
-            9,
-            "{lines:?}"
+            vectors,
+            frame_vectors(&spec).unwrap().iter().collect::<Vec<_>>()
         );
     }
 
@@ -543,35 +604,128 @@ mod tests {
         );
     }
 
-    /// A frame specification that holds only a §11.1 vector table with `rows`.
+    /// A frame specification that holds only a §11.1 vector table with `rows`,
+    /// followed by a §11.2 table whose row would be valid if it were read.
     fn spec_with(rows: &[&str]) -> String {
         format!(
-            "## 11. The Bindings\n\n### 11.1 WebSocket\n\nText.\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{}\n\n### 11.2 Binder on Android\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `ignored` | not read | `ff` |\n",
+            "## 11. The Bindings\n\n### 11.1 WebSocket\n\nText.\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{}\n\n### 11.2 Binder on Android\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `ignored` | not read | `02 01 00` |\n",
             rows.join("\n")
         )
+    }
+
+    /// The result of reading a one-row table whose row is `| `<id>` |
+    /// <vector> | `<hex>` |`.
+    fn one_row(id: &str, vector: &str, hex: &str) -> Result<Vec<String>, String> {
+        frame_vectors(&spec_with(&[&format!("| `{id}` | {vector} | `{hex}` |")]))
     }
 
     fn root() -> &'static Path {
         Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
     }
 
+    /// The `attach` header up to its `name_len`, with `encoding` 1.
+    const ATTACH_HEAD: &str =
+        "01 01000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+
+    /// The nine vectors the frame specification §11.1 held when the `wire`
+    /// dump first froze them. Version 1's vectors are never edited, so each is
+    /// still in the table; a vector added later needs no change here.
     #[test]
-    fn the_frame_specification_holds_the_nine_vectors() {
+    fn the_frame_specification_holds_the_frozen_vectors() {
         let text = std::fs::read_to_string(root().join(FRAME_SPEC)).unwrap();
-        assert_eq!(
-            frame_vectors(&text).unwrap(),
-            vec![
-                "frame-vector attach-1 010100000001000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f097665682e636162696e",
-                "frame-vector attached-accepted 020100",
-                "frame-vector attached-mismatch 020902",
-                "frame-vector subscribe-signal 03010100000002000000",
-                "frame-vector answer-accepted 040101000000020000000100",
-                "frame-vector publish-live 07010100000002000000ab89674523010000070000000000000002ff01",
-                "frame-vector request-command 09030100000003000000ab89674523010000010000000000000001",
-                "frame-vector response-accepted 0a030100000003000000ac89674523010000010000000000000001000000000000000100",
-                "frame-vector response-violation 0a040100000004000000ac89674523010000020000000000000002000000000000000301",
-            ]
-        );
+        let vectors = frame_vectors(&text).unwrap();
+        for frozen in [
+            "frame-vector attach-1 010100000001000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f097665682e636162696e",
+            "frame-vector attached-accepted 020100",
+            "frame-vector attached-mismatch 020902",
+            "frame-vector subscribe-signal 03010100000002000000",
+            "frame-vector answer-accepted 040101000000020000000100",
+            "frame-vector publish-live 07010100000002000000ab89674523010000070000000000000002ff01",
+            "frame-vector request-command 09030100000003000000ab89674523010000010000000000000001",
+            "frame-vector response-accepted 0a030100000003000000ac89674523010000010000000000000001000000000000000100",
+            "frame-vector response-violation 0a040100000004000000ac89674523010000020000000000000002000000000000000301",
+        ] {
+            assert!(
+                vectors.iter().any(|v| v == frozen),
+                "{frozen} is missing from {vectors:?}"
+            );
+        }
+    }
+
+    /// The `Header size` column of the §11.1 header table agrees with the
+    /// sizes [`check_vector`] checks: a vector of exactly a form's header size
+    /// is accepted and one byte less is refused. The `websocket` row of the
+    /// codegen model is derived from the same table by the test
+    /// `the_websocket_row_is_derived_from_the_frame_specification_header_table`
+    /// of `crates/ridlc/tests/layout.rs`; this crate does not depend on
+    /// `ridl-ir`, so the row is checked there and the checker here.
+    #[test]
+    fn the_header_table_of_the_frame_specification_is_the_checker_s() {
+        const FORMS: [&str; 10] = [
+            "attach",
+            "attached",
+            "subscribe",
+            "answer",
+            "unsubscribe",
+            "read",
+            "publish",
+            "occurrence",
+            "request",
+            "response",
+        ];
+        let text = std::fs::read_to_string(root().join(FRAME_SPEC)).unwrap();
+        let (_, section) = text.split_once("### 11.1 WebSocket\n").unwrap();
+        let mut lines = section.lines();
+        lines
+            .by_ref()
+            .find(|line| {
+                cells(line).is_some_and(|row| row.first() == Some(&"Form") && row.len() == 3)
+            })
+            .expect("the §11.1 header table");
+        lines.next();
+        let mut seen = Vec::new();
+        for line in lines.take_while(|line| line.starts_with('|')) {
+            let row = cells(line).unwrap();
+            let size: usize = row[2].split_whitespace().next().unwrap().parse().unwrap();
+            for name in row[0].split(", ") {
+                let name = code_span(name).unwrap();
+                let form = FORMS.iter().position(|f| *f == name).unwrap() + 1;
+                let form = u8::try_from(form).unwrap();
+                seen.push(form);
+                let valid = if form == 1 {
+                    // `39 + name`: the header and a one-byte name.
+                    let mut bytes = vec![1, 1, 0, 0, 0, 1];
+                    bytes.extend([0; 32]);
+                    bytes.extend([1, b'a']);
+                    assert_eq!(bytes.len(), size + 1);
+                    bytes
+                } else {
+                    let mut bytes = vec![0; size];
+                    bytes[0] = form;
+                    bytes[1] = 1;
+                    if size >= 10 {
+                        bytes[2] = 1;
+                        bytes[6] = 1;
+                    }
+                    match form {
+                        4 => bytes[10] = 1,
+                        7 => bytes[26] = 1,
+                        10 => bytes[34] = 1,
+                        _ => {}
+                    }
+                    bytes
+                };
+                assert_eq!(check_vector(&valid, &[]), Ok(()), "{name} at {size}");
+                let mut short = valid.clone();
+                short.remove(1 + usize::from(form == 1) * 6);
+                assert!(
+                    check_vector(&short, &[]).is_err(),
+                    "{name} one byte below {size}"
+                );
+            }
+        }
+        seen.sort_unstable();
+        assert_eq!(seen, (1..=10).collect::<Vec<u8>>());
     }
 
     #[test]
@@ -583,22 +737,144 @@ mod tests {
         );
     }
 
+    /// A header of exactly its size, and every code at the top of its range,
+    /// is accepted; so is a payload of zero bytes where the header says one
+    /// is present.
+    #[test]
+    fn a_vector_at_the_edges_of_its_layout_is_accepted() {
+        for (vector, hex, why) in [
+            (
+                "x",
+                "07 01 01000000 02000000 ab89674523010000 0000000000000000 01",
+                "publish Init, 27 bytes",
+            ),
+            (
+                "x",
+                "07 01 01000000 02000000 ab89674523010000 0700000000000000 03",
+                "publish Invalid(Declared), provenance 3",
+            ),
+            (
+                "x",
+                "07 01 01000000 02000000 ab89674523010000 0700000000000000 02",
+                "publish Live with a zero-byte payload",
+            ),
+            (
+                "payload `02 01`",
+                "07 01 01000000 02000000 ab89674523010000 0700000000000000 02 0201",
+                "publish Live with a payload",
+            ),
+            (
+                "x",
+                "08 02 01000000 02000000 ab89674523010000 0700000000000000",
+                "occurrence with a zero-byte payload",
+            ),
+            (
+                "x",
+                "09 03 01000000 03000000 ab89674523010000 0100000000000000",
+                "request with a zero-byte payload",
+            ),
+            (
+                "payload `aabb`",
+                "0a 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 02 00 aabb",
+                "response reply with a payload",
+            ),
+            (
+                "x",
+                "0a 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 02 00",
+                "response reply with a zero-byte payload",
+            ),
+            ("x", "02 03 06", "Rule 6"),
+            ("x", "02 09 05", "outcome 9, refusal 5"),
+            ("x", "05 05 01000000 02000000", "unsubscribe, kind 5"),
+            ("x", "06 01 01000000 02000000", "read"),
+            ("x", "04 05 01000000 02000000 09 05", "answer refused range"),
+        ] {
+            assert!(one_row("ok", vector, hex).is_ok(), "{why}");
+        }
+        let encoding_3 = ATTACH_HEAD.replacen(" 01 00", " 03 00", 1) + " 01 61";
+        assert!(one_row("ok", "x", &encoding_3).is_ok(), "encoding 3");
+    }
+
     #[test]
     fn a_vector_whose_length_disagrees_with_its_form_fails() {
-        for (hex, why) in [
-            ("02 01", "attached is 3 bytes"),
-            ("03 01 01000000 02000000 ff", "subscribe carries no payload"),
+        for (vector, hex, why) in [
+            ("x", "02 01", "attached is 3 bytes"),
+            ("x", "03 01 01000000 020000", "subscribe is 10 bytes"),
+            ("x", "05 01 01000000 020000", "unsubscribe is 10 bytes"),
+            ("x", "06 01 01000000 020000", "read is 10 bytes"),
+            ("x", "04 01 01000000 02000000 01", "answer is 12 bytes"),
             (
+                "x",
                 "07 01 01000000 02000000 ab89674523010000 0700000000000000",
                 "publish is 27 bytes at least",
             ),
             (
+                "x",
+                "08 01 01000000 02000000 ab89674523010000 07000000000000",
+                "occurrence is 26 bytes at least",
+            ),
+            (
+                "x",
+                "09 03 01000000 03000000 ab89674523010000 01000000000000",
+                "request is 26 bytes at least",
+            ),
+            (
+                "x",
                 "0a 03 01000000 03000000 ac89674523010000 0100000000000000 0100000000000000 01",
                 "response is 36 bytes at least",
             ),
+            // Bytes after a header that says the frame carries no payload,
+            // even when the `Vector` cell names them.
+            ("payload `ff`", "02 01 00 ff", "attached carries no payload"),
+            (
+                "payload `ff`",
+                "03 01 01000000 02000000 ff",
+                "subscribe carries no payload",
+            ),
+            (
+                "payload `ff`",
+                "04 01 01000000 02000000 01 00 ff",
+                "answer carries no payload",
+            ),
+            (
+                "payload `ff`",
+                "07 01 01000000 02000000 ab89674523010000 0000000000000000 01 ff",
+                "publish Init carries no payload",
+            ),
+            (
+                "payload `ff`",
+                "07 01 01000000 02000000 ab89674523010000 0700000000000000 03 ff",
+                "publish Invalid(Declared) carries no payload",
+            ),
+            (
+                "payload `ff`",
+                "0a 03 01000000 03000000 ac89674523010000 0100000000000000 0100000000000000 01 00 ff",
+                "response accepted carries no payload",
+            ),
+            // One header byte missing reads as a shorter payload, which is not
+            // the payload the `Vector` cell names.
+            (
+                "payload `0201`",
+                "07 01 01000000 02000000 ab89674523010000 07000000000000 02 0201",
+                "publish missing one seq byte",
+            ),
+            (
+                "payload `01`",
+                "09 03 01000000 03000000 ab89674523010000 01000000000000 01",
+                "request missing one seq byte",
+            ),
+            (
+                "x",
+                "08 01 01000000 02000000 ab89674523010000 0700000000000000 ff",
+                "an occurrence payload the Vector cell does not name",
+            ),
+            (
+                "payload `61`",
+                &format!("{ATTACH_HEAD} 01 61"),
+                "an attach carries no payload",
+            ),
         ] {
-            let text = spec_with(&[&format!("| `short` | x | `{hex}` |")]);
-            let err = frame_vectors(&text).expect_err(why);
+            let err = one_row("short", vector, hex).expect_err(why);
             assert!(err.contains("short"), "{why}: {err}");
         }
     }
@@ -606,57 +882,81 @@ mod tests {
     #[test]
     fn a_code_outside_its_table_fails() {
         for (hex, why) in [
-            ("0b", "form 11"),
+            ("0b 01 01000000 02000000", "form 11"),
+            ("00 01 01000000 02000000", "form 0"),
             ("02 0a 00", "outcome 10"),
+            ("02 00 00", "outcome 0"),
             ("02 01 01", "detail must be 0 with accepted"),
             ("02 03 07", "Rule code 7"),
+            ("02 03 00", "Rule code 0"),
             ("02 09 06", "refusal reason 6"),
+            ("02 09 00", "refusal reason 0"),
             ("03 06 01000000 02000000", "kind 6"),
+            ("03 00 01000000 02000000", "kind 0"),
             ("03 01 00000000 02000000", "interface 0"),
             ("03 01 01000000 00000000", "ordinal 0"),
+            ("04 01 01000000 02000000 0a 00", "answer outcome 10"),
+            (
+                "04 01 01000000 02000000 01 01",
+                "answer detail with accepted",
+            ),
             (
                 "07 01 01000000 02000000 ab89674523010000 0700000000000000 04",
                 "provenance 4",
             ),
+            (
+                "07 01 01000000 02000000 ab89674523010000 0700000000000000 00",
+                "provenance 0",
+            ),
+            (
+                "0a 03 01000000 03000000 ac89674523010000 0100000000000000 0100000000000000 0a 00",
+                "response outcome 10",
+            ),
+            (
+                "0a 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 03 07",
+                "response Rule code 7",
+            ),
         ] {
-            let text = spec_with(&[&format!("| `bad` | x | `{hex}` |")]);
-            let err = frame_vectors(&text).expect_err(why);
+            let err = one_row("bad", "x", hex).expect_err(why);
             assert!(err.contains("bad"), "{why}: {err}");
         }
+        let err = one_row("bad", "x", "0b 01 01000000 02000000").unwrap_err();
+        assert!(err.contains("form 11"), "{err}");
     }
 
     #[test]
     fn an_attach_with_a_bad_name_fails() {
-        let head =
-            "01 01000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
         for (tail, why) in [
             ("09 7665682e636162", "name_len 9 with 7 name bytes"),
+            ("01 6162", "name_len 1 with 2 name bytes"),
             ("00", "an empty name"),
             ("02 ff fe", "a name that is not UTF-8"),
         ] {
-            let text = spec_with(&[&format!("| `att` | x | `{head} {tail}` |")]);
-            let err = frame_vectors(&text).expect_err(why);
+            let err = one_row("att", "x", &format!("{ATTACH_HEAD} {tail}")).expect_err(why);
             assert!(err.contains("name"), "{why}: {err}");
         }
         assert!(
-            frame_vectors(&spec_with(&["| `short` | x | `01 01000000` |"])).is_err(),
+            one_row("short", "x", "01 01000000").is_err(),
             "an attach below 39 bytes"
         );
-        let wrong_version =
-            "01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 01 61";
-        assert!(frame_vectors(&spec_with(&[&format!("| `v` | x | `{wrong_version}` |")])).is_err());
-        let wrong_encoding =
-            "01 01000000 04 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 01 61";
-        assert!(
-            frame_vectors(&spec_with(&[&format!("| `e` | x | `{wrong_encoding}` |")])).is_err()
-        );
+        // 38 bytes: the whole hash and no `name_len`.
+        let err = one_row("short", "x", ATTACH_HEAD).expect_err("a 38-byte attach");
+        assert!(err.contains("39-byte"), "{err}");
+        let wrong_version = ATTACH_HEAD.replacen("01 01000000", "01 02000000", 1) + " 01 61";
+        assert!(one_row("v", "x", &wrong_version).is_err());
+        for encoding in ["00", "04"] {
+            let wrong_encoding =
+                ATTACH_HEAD.replacen(" 01 00", &format!(" {encoding} 00"), 1) + " 01 61";
+            assert!(
+                one_row("e", "x", &wrong_encoding).is_err(),
+                "encoding {encoding}"
+            );
+        }
     }
 
     #[test]
     fn a_malformed_vector_row_fails() {
         for (row, why) in [
-            ("| `odd` | x | `02 01 0` |", "an odd digit count"),
-            ("| `upper` | x | `02 01 0A` |", "an uppercase digit"),
             (
                 "| `plain` | x | 02 01 00 |",
                 "a Hex cell that is not a code span",
@@ -665,14 +965,59 @@ mod tests {
                 "| plain-id | x | `02 01 00` |",
                 "an Id cell that is not a code span",
             ),
-            ("| `Bad_Id` | x | `02 01 00` |", "an Id outside [a-z0-9-]"),
+            (
+                "| `Bad` | x | `02 01 00` |",
+                "an Id with an uppercase letter",
+            ),
+            ("| `bad_id` | x | `02 01 00` |", "an Id with an underscore"),
+            ("| `` | x | `02 01 00` |", "an empty Id"),
             ("| `two` | `02 01 00` |", "a row of two cells"),
         ] {
             assert!(frame_vectors(&spec_with(&[row])).is_err(), "{why}");
         }
+        // A hex error names the row's `Id`.
+        for (id, hex, why) in [
+            ("odd-row", "02 01 0", "an odd digit count"),
+            (
+                "upper-row",
+                &format!("{ATTACH_HEAD} 01 4A"),
+                "an uppercase digit",
+            ),
+        ] {
+            let err = one_row(id, "x", hex).expect_err(why);
+            assert!(err.contains(id), "{why}: {err}");
+            if id == "upper-row" {
+                assert!(err.contains("lowercase"), "{err}");
+            }
+        }
         let twice = spec_with(&["| `same` | x | `02 01 00` |", "| `same` | x | `02 09 02` |"]);
         let err = frame_vectors(&twice).expect_err("a duplicate Id");
         assert!(err.contains("same"), "{err}");
+    }
+
+    #[test]
+    fn the_vector_table_is_one_block_of_rows_under_its_header() {
+        // A second three-column table later in §11.1 is not read.
+        let later = spec_with(&["| `ok` | x | `02 01 00` |"]).replacen(
+            "\n\n### 11.2",
+            "\n\nMore text.\n\n| A | B | C |\n| - | - | - |\n| a | b | c |\n\n### 11.2",
+            1,
+        );
+        assert_eq!(
+            frame_vectors(&later).unwrap(),
+            vec!["frame-vector ok 020100"]
+        );
+        // A blank line inside the table does not drop the rows after it.
+        let split = spec_with(&[
+            "| `one` | x | `02 01 00` |",
+            "",
+            "| `two` | x | `02 09 02` |",
+        ]);
+        assert!(frame_vectors(&split).is_err(), "a blank line inside");
+        // The line after the header row is a separator row.
+        let no_separator =
+            "### 11.1 WebSocket\n\n| Id | Vector | Hex |\n| `ok` | x | `02 01 00` |\n";
+        assert!(frame_vectors(no_separator).is_err(), "no separator row");
     }
 
     #[test]
@@ -685,6 +1030,9 @@ mod tests {
             frame_vectors("### 11.1 WebSocket\n\nNo table.\n\n### 11.2 Binder\n").is_err(),
             "no table"
         );
+        // A table under the next heading is not §11.1's.
+        let next = "### 11.1 WebSocket\n\nNo table.\n\n### 11.2 Binder\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `ok` | x | `02 01 00` |\n";
+        assert!(frame_vectors(next).is_err(), "a table under §11.2");
         assert!(
             frame_vectors(&spec_with(&[])).is_err(),
             "a table with no row"
