@@ -7,6 +7,9 @@ and world boundaries readable keywords over ridl's kinds.
 
 Version: 0.1.0 — Draft
 
+Status: draft. No compiler accepts rxdl yet, and part of this reference waits
+for rmdl; the scope note below says which part.
+
 > **Provenance.** rxdl replaces uxdl. ADR-0012 retired uxdl as a family member
 > on the finding that its content was ridl's and its shape was not: at every
 > boundary with the non-software world the datum and its referent come apart,

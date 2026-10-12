@@ -5,7 +5,7 @@ units, constants, and composites, with package namespacing. typl is the root of
 the family lattice — every other profile (`ridl`, `rmdl`, `rsdl`) builds on the
 vocabulary typl declares.
 
-Version: 0.1.0 — Draft
+Version: 0.1.0
 
 > **Provenance.** This reference re-frames Language Reference §1–§11 of the RIDL
 > Language Reference as the named foundation layer (per the RIDL family concept
@@ -1463,7 +1463,9 @@ in which case it appears below with that version.
 
 The numbers are stable. Other documents cite these questions by number, so a
 resolved question's number is retired rather than reused, and the ledger records
-where its rule now lives. A number with no entry after the ledger is resolved.
+where its rule now lives. A number with no entry after the ledger is resolved,
+except §17.10, which is resolved and keeps its entry because other documents
+cite that section.
 
 ### 17.0 Disposition Ledger
 
@@ -1478,7 +1480,7 @@ where its rule now lives. A number with no entry after the ledger is resolved.
 | 17.7  | Value-rule expressions                                 | deferred to **the family `expr` core**                                                                              |
 | 17.8  | Standards-fixed invalid sentinel values                | deferred to **v0.2**; the rest of the original question is resolved                                                 |
 | 17.9  | Byte order                                             | **resolved for typl** — byte order is not a type property, §4.6; the deployment surface is rsdl's, at **rsdl v0.2** |
-| 17.10 | Canonical (deterministic) encoding                     | **resolved for typl** — not a type-layer property, §12.2; the rule is the frame specification's, at **v0.3**        |
+| 17.10 | Canonical (deterministic) encoding                     | **resolved** — not a type-layer property, §12.2; the frame specification §4 and each projection record own the rest |
 | 17.11 | Explicit wire-width floor                              | **split**: the layout consequence is resolved in §5.6; the `wire` clause is deferred to **v0.2**                    |
 | 17.12 | Integer-backed unit types                              | deferred to **v0.2**                                                                                                |
 | 17.13 | What a `string` is made of, and how it is encoded      | **resolved** — the rule is §4 and §4.4                                                                              |
@@ -1619,7 +1621,10 @@ named rather than written here. The same deployment surface is what §7.4's
 mixed-version decoder rule needs on a transport that cannot carry unknown
 trailing fields.
 
-### 17.10 Canonical (Deterministic) Encoding — resolved for typl; the rule is the frame specification's, at v0.3
+### 17.10 Canonical (Deterministic) Encoding — resolved; the frame specification and each projection record own the rest of the rule
+
+This question is resolved, and its entry stays below because the frame
+specification and ADR-0014 cite this section.
 
 Signed payloads, content-hashing of data, and the replay/test plane all want a
 bit-reproducible encoding (protobuf's deterministic-marshal caveats are the
@@ -1638,12 +1643,12 @@ travel in, which ADR-0014 does not touch.
 property, and the one ordering typl controls is a map's key order. The rule is
 §12.2.
 
-**Deferred, v0.3:** a reproducible byte sequence for a transmitted unit is a
-property of an encoding and its frame, so the rule belongs to the frame
-specification and to each projection record, not to this reference. **Written
-2026-09-22**: that document is
-[the frame specification](frame-specification.md), whose §4 makes the frame
-header canonical and leaves the payload's part to each projection record.
+**Placed:** a reproducible byte sequence for a transmitted unit is a property of
+an encoding and its frame, so the rule belongs to the frame specification and to
+each projection record, not to this reference. **Written 2026-09-22**: that
+document is [the frame specification](frame-specification.md), whose §4 makes
+the frame header canonical and leaves the payload's part to each projection
+record.
 
 ### 17.11 Explicit Wire-Width Floor — a deferred `wire` clause, v0.2
 
@@ -2371,4 +2376,4 @@ planned for v0.2: string enums (§17.1) and `uniqueItems` as an array constraint
 
 ---
 
-_End of typl Language Reference v0.1.0 — Draft._
+_End of typl Language Reference v0.1.0._

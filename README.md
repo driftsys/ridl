@@ -192,12 +192,14 @@ against `.git-std.toml`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
 
 ## Status
 
-All documents are working drafts (typl / ridl / rxdl / rmdl / rsdl at
-v0.1–v0.2). The design is captured; the typl v0.1 preview toolchain (epic E1 —
-compiler, `ridl fmt`, LSP, and VS Code extension) is built over the shared
-grammar and IR, epic E2 added the ridl interface layer over the same grammar and
-IR v2, epic E6 added rsdl's checks and its lowering to the IR, and the boundary
-model, rxdl and rmdl are sequenced in the roadmap.
+The typl and ridl references are no longer drafts; the version and status of
+every document are in the
+[family overview](docs/specification/ridl-family-overview.md). The design is
+captured; the typl v0.1 preview toolchain (epic E1 — compiler, `ridl fmt`, LSP,
+and VS Code extension) is built over the shared grammar and IR, epic E2 added
+the ridl interface layer over the same grammar and IR v2, epic E6 added rsdl's
+checks and its lowering to the IR, and the boundary model, rxdl and rmdl are
+sequenced in the roadmap.
 
 Continuous integration invokes the same `just` recipes that `just verify` runs
 locally, and `just gate-parity` fails if the two ever drift apart (ADR-0009).

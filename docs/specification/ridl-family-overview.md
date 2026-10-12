@@ -39,8 +39,8 @@ their instances on machines — rsdl never stands alone.
 | ADR-0002 — module system          | accepted  | normative           | `package`/`import`/`as`/`internal`, the unit (a manifest and its tree of source packages), manifest, lockfile, resolver                                                                                                                                            |
 | ADR-0026 — doc comments           | accepted  | normative           | doc comment carriers, doc links and their resolution, the four doc tags, the doc lints (typl §14, §16.5)                                                                                                                                                           |
 | ADR-0028 — docs in generated code | accepted  | normative           | what the codegen `Model` carries of an item's documentation, and how each backend renders it in generated code                                                                                                                                                     |
-| **typl Language Reference**       | 0.1 draft | normative           | vocabulary layer + family lexicon, keyword registry (§1.4), evolution model (§7.4)                                                                                                                                                                                 |
-| **ridl Language Reference**       | 0.2 draft | normative           | interaction layer + interact-core semantics: envelope, timing, init/invalid channels, errors, streams                                                                                                                                                              |
+| **typl Language Reference**       | 0.1       | normative           | vocabulary layer + family lexicon, keyword registry (§1.4), evolution model (§7.4)                                                                                                                                                                                 |
+| **ridl Language Reference**       | 0.2       | normative           | interaction layer + interact-core semantics: envelope, timing, init/invalid channels, errors, streams                                                                                                                                                              |
 | **rxdl Language Reference**       | 0.1 draft | draft — E7.1 only   | the unrestricted profile and the domain spellings; adds no semantics (ADR-0012). in scope: types, interfaces and wiring in one file (roadmap E7.1, not built). The model layer, the spellings and their bindings wait for rmdl                                     |
 | **rmdl Language Reference**       | 0.1 draft | normative           | behaviour layer: functions, models, steps/timeline semantics, flow stdlib                                                                                                                                                                                          |
 | **rsdl Language Reference**       | 0.2 draft | normative           | architecture layer: the system closure, components offering services and requiring interfaces, instances, distributions, deployments and machines, the derived links, crossing kinds and grants; posture derivation deferred                                       |
@@ -214,17 +214,17 @@ By home; see each reference for full statements.
   bounds, predicates, infix `match`, invariants (§17.7, the `expr` core) ·
   standards-fixed invalid sentinels, **narrowed by ADR-0013 decision 7 to the
   case where a published standard fixes the value** (§17.8, v0.2) · the
-  deployment surface for byte order (§17.9, rsdl v0.2) · the canonical-encoding
-  rule, owned by the frame specification (§17.10, v0.3) · the explicit
-  wire-width floor, the deferred `wire` clause (§17.11, v0.2) · integer-backed
-  unit types (§17.12, v0.2) · whether a reorder arriving with an addition or a
-  removal should also report `member_reordered` (§17.15, v0.2, behind
+  deployment surface for byte order (§17.9, rsdl v0.2) · the explicit wire-width
+  floor, the deferred `wire` clause (§17.11, v0.2) · integer-backed unit types
+  (§17.12, v0.2) · whether a reorder arriving with an addition or a removal
+  should also report `member_reordered` (§17.15, v0.2, behind
   driftsys/ridl#302). **Resolved and moved out of §17:** exclusive bounds
   (closed — typl §5.5) · recursion policy (closed — typl §7.3) · what a `string`
   is made of and how it is encoded (typl §4 and §4.4) · value-aware `enum` and
   `enumset` reorder comparison (typl §8 and §9) · byte order as a type property
-  (typl §4.6) · a canonical encoding as a type-layer property (typl §12.2) · the
-  layout consequence of a width change (typl §5.6).
+  (typl §4.6) · a canonical encoding as a type-layer property (typl §12.2), with
+  the rest of the rule in the frame specification §4 and each projection record
+  (§17.10) · the layout consequence of a width change (typl §5.6).
 - **ridl §17**: three questions remain, each deferred to **ridl v0.3** with the
   observation that reopens it — the failure-management specification and its
   safety/HA property direction (§17.8), the explicit one-time read and its
