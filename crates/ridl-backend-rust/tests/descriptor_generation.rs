@@ -143,20 +143,36 @@ fn the_size_table_derives_from_max_size() {
             "{what} of Cabin is sized over MAX_SIZE, not a literal: {expression}"
         );
     }
+    // A size named in an array length is reached through the whole path
+    // `<Self as Sizes<FlatBuffers>>::`, never through `Self::`: a program may
+    // implement `Sizes` for this interface in a second encoding, and then
+    // `Self::MAX_BUFFER_SIZE` names no one table (rustc E0283).
+    let table = dense("<Self as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>");
+    let claim_max = format!("{table}::MAX_BUFFER_SIZE");
+    let event_max = format!("{table}::EVENT_SOURCE_BUFFER_SIZE");
+    let cabin = without_trailing_commas(cabin);
     assert!(
-        cabin.contains("typeClaimBuffer=[::core::primitive::u8;Self::MAX_BUFFER_SIZE];"),
+        cabin.contains(&format!(
+            "typeClaimBuffer=[::core::primitive::u8;{claim_max}];"
+        )),
         "the claim buffer type is the table's own maximum"
     );
     assert!(
-        cabin.contains("typeEventBuffer=[::core::primitive::u8;Self::EVENT_SOURCE_BUFFER_SIZE];"),
+        cabin.contains(&format!(
+            "typeEventBuffer=[::core::primitive::u8;{event_max}];"
+        )),
         "the event buffer type is the table's own maximum"
     );
     assert!(
-        cabin.contains("constCLAIM_BUFFER:Self::ClaimBuffer=[0u8;Self::MAX_BUFFER_SIZE];"),
+        cabin.contains(&format!(
+            "constCLAIM_BUFFER:Self::ClaimBuffer=[0u8;{claim_max}];"
+        )),
         "the claim buffer is zeroed over the table's maximum"
     );
     assert!(
-        cabin.contains("constEVENT_BUFFER:Self::EventBuffer=[0u8;Self::EVENT_SOURCE_BUFFER_SIZE];"),
+        cabin.contains(&format!(
+            "constEVENT_BUFFER:Self::EventBuffer=[0u8;{event_max}];"
+        )),
         "the event buffer is zeroed over the table's maximum"
     );
 

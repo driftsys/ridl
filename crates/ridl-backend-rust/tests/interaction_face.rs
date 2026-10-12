@@ -3319,3 +3319,312 @@ fn every_hand_written_port_states_its_encoding() {
     assert_eq!(encoding_of::<doubles::FailingHandler>(), "flatbuffers");
     assert_eq!(encoding_of::<doubles::QueuedClaims>(), "flatbuffers");
 }
+
+// ---------------------------------------------------------------------------
+// The face reads its encoding from its port.
+// ---------------------------------------------------------------------------
+
+/// The face modules of the checked-in fixture: its text from the first line
+/// that starts with `pub mod` to the end.
+///
+/// The emitted codec comes first in the file and keeps the concrete encoding
+/// it is written for — `Payload<FlatBuffers>` for each payload type and
+/// `Sizes<FlatBuffers>` for each interface. The face is the part that must
+/// name no encoding of its own.
+fn face_modules() -> &'static str {
+    const FIXTURE: &str = include_str!("generated/interaction_face.rs");
+    let start = FIXTURE
+        .find("\npub mod ")
+        .expect("the fixture holds at least one face module");
+    &FIXTURE[start + 1..]
+}
+
+/// The text of one face module of the fixture, from its `pub mod` line to the
+/// next one or to the end.
+fn face_module(name: &str) -> &'static str {
+    let face = face_modules();
+    let head = format!("pub mod {name} {{");
+    let start = face
+        .find(&head)
+        .unwrap_or_else(|| panic!("the fixture holds a face module `{name}`"));
+    let rest = &face[start..];
+    let end = rest[1..]
+        .find("\npub mod ")
+        .map_or(rest.len(), |offset| offset + 1);
+    &rest[..end]
+}
+
+/// The face takes the encoding of its bytes from its port type and names no
+/// encoding itself: every path that once read `::ridl_rt::encoding::FlatBuffers`
+/// is now the projection `P::Encoding`, `W::Encoding` or `H::Encoding`, the
+/// parameter of the item the path sits in, and every port parameter is bound
+/// on `::ridl_rt::port::Encoded`.
+#[test]
+fn the_face_names_no_concrete_encoding() {
+    let face = face_modules();
+    assert!(
+        !face.contains("encoding::FlatBuffers"),
+        "the face still names a concrete encoding"
+    );
+    for needle in [
+        "::ridl_rt::port::Encoded",
+        "P::Encoding",
+        "W::Encoding",
+        "H::Encoding",
+    ] {
+        assert!(face.contains(needle), "the face does not name `{needle}`");
+    }
+}
+
+/// An interface that declares a signal and nothing else is bounded on the one
+/// payload type its face reads, and on no buffer it does not hold: `Horn`'s
+/// face names its own `Sizes` bound and `Health`, and neither the claim buffer
+/// nor the event buffer, which it has no call and no event to fill.
+#[test]
+fn a_signal_only_face_bounds_only_its_own_payload() {
+    let horn = face_module("horn");
+    for needle in [
+        "super::Horn: ::ridl_rt::contract::Sizes<P::Encoding>",
+        "super::Health: ::ridl_rt::payload::Payload<P::Encoding>",
+    ] {
+        assert!(horn.contains(needle), "`horn` does not name `{needle}`");
+    }
+    for needle in ["EVENT_BUFFER", "CLAIM_BUFFER", "super::Level:"] {
+        assert!(!horn.contains(needle), "`horn` names `{needle}`");
+    }
+}
+
+/// A second codec for the fixture's payload types, written under the `Proto3`
+/// marker: the FlatBuffers bytes of the same value, reversed.
+///
+/// It is not proto3. It is a codec whose bytes differ from the FlatBuffers
+/// ones for every value, carried by a marker a port can be typed with, so that
+/// a face which still encoded or decoded with FlatBuffers anywhere would be
+/// caught by the bytes seen on the port. Reversing keeps the length, so every
+/// size the interface's table states is the one FlatBuffers states, and the
+/// bytes are written at the end of the output buffer, so `Encoded::bytes` is a
+/// subslice and not a prefix, as it is for FlatBuffers.
+macro_rules! reversed_codec {
+    ($($payload:ident),* $(,)?) => {
+        $(
+            impl ridl_rt::payload::Payload<ridl_rt::encoding::Proto3> for generated::$payload {
+                const MAX_SIZE: usize = <generated::$payload as ridl_rt::payload::Payload<
+                    ridl_rt::encoding::FlatBuffers,
+                >>::MAX_SIZE;
+
+                type Buffer = <generated::$payload as ridl_rt::payload::Payload<
+                    ridl_rt::encoding::FlatBuffers,
+                >>::Buffer;
+
+                const BUFFER: Self::Buffer = <generated::$payload as ridl_rt::payload::Payload<
+                    ridl_rt::encoding::FlatBuffers,
+                >>::BUFFER;
+
+                type View<'a> = &'a [u8];
+
+                fn encode<'o>(
+                    &self,
+                    out: &'o mut [u8],
+                ) -> Result<ridl_rt::payload::Encoded<'o, &'o [u8]>, ridl_rt::payload::EncodeError>
+                {
+                    let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
+                        ridl_rt::encoding::FlatBuffers,
+                    >>::BUFFER;
+                    let mut reversed = <generated::$payload as ridl_rt::payload::Payload<
+                        ridl_rt::encoding::FlatBuffers,
+                    >>::BUFFER;
+                    let len = {
+                        let encoded = ridl_rt::payload::Ref::<
+                            generated::$payload,
+                            ridl_rt::encoding::FlatBuffers,
+                        >::encode(self, scratch.as_mut())?;
+                        let bytes = encoded.bytes();
+                        for (slot, byte) in
+                            reversed.as_mut().iter_mut().zip(bytes.iter().rev())
+                        {
+                            *slot = *byte;
+                        }
+                        bytes.len()
+                    };
+                    if out.len() < len {
+                        return Err(ridl_rt::payload::EncodeError::Capacity {
+                            needed: len,
+                            available: out.len(),
+                        });
+                    }
+                    let start = out.len() - len;
+                    out[start..].copy_from_slice(&reversed.as_ref()[..len]);
+                    let bytes: &'o [u8] = &out[start..];
+                    Ok(ridl_rt::payload::Encoded { bytes, view: bytes })
+                }
+
+                fn verify(buf: &[u8]) -> Result<&[u8], ridl_rt::payload::VerifyError> {
+                    let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
+                        ridl_rt::encoding::FlatBuffers,
+                    >>::BUFFER;
+                    if buf.len() > scratch.as_ref().len() {
+                        return Err(ridl_rt::payload::VerifyError::Structure(
+                            ridl_rt::payload::Malformed::TooLarge,
+                        ));
+                    }
+                    for (slot, byte) in scratch.as_mut().iter_mut().zip(buf.iter().rev()) {
+                        *slot = *byte;
+                    }
+                    ridl_rt::payload::Ref::<
+                        generated::$payload,
+                        ridl_rt::encoding::FlatBuffers,
+                    >::verify(&scratch.as_ref()[..buf.len()])?;
+                    Ok(buf)
+                }
+
+                fn decode(
+                    proof: ridl_rt::payload::Ref<'_, Self, ridl_rt::encoding::Proto3>,
+                ) -> Self {
+                    let buf = proof.bytes();
+                    let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
+                        ridl_rt::encoding::FlatBuffers,
+                    >>::BUFFER;
+                    for (slot, byte) in scratch.as_mut().iter_mut().zip(buf.iter().rev()) {
+                        *slot = *byte;
+                    }
+                    ridl_rt::payload::Ref::<
+                        generated::$payload,
+                        ridl_rt::encoding::FlatBuffers,
+                    >::verify(&scratch.as_ref()[..buf.len()])
+                        .expect("the bytes were checked before they were decoded")
+                        .decode()
+                }
+            }
+        )*
+    };
+}
+
+reversed_codec!(Temperature, Level, Window, Average, Health, Warning);
+
+/// `Cabin`'s size table under the second codec. Reversing keeps the length of
+/// every encoding, so every item repeats the FlatBuffers one.
+impl ridl_rt::contract::Sizes<ridl_rt::encoding::Proto3> for generated::Cabin {
+    const RESERVATIONS: &'static [u64] = <generated::Cabin as ridl_rt::contract::Sizes<
+        ridl_rt::encoding::FlatBuffers,
+    >>::RESERVATIONS;
+    const MAX_BUFFER_SIZE: usize = <generated::Cabin as ridl_rt::contract::Sizes<
+        ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE;
+    const EVENT_SOURCE_BUFFER_SIZE: usize = <generated::Cabin as ridl_rt::contract::Sizes<
+        ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE;
+    type ClaimBuffer =
+        <generated::Cabin as ridl_rt::contract::Sizes<ridl_rt::encoding::FlatBuffers>>::ClaimBuffer;
+    type EventBuffer =
+        <generated::Cabin as ridl_rt::contract::Sizes<ridl_rt::encoding::FlatBuffers>>::EventBuffer;
+    const CLAIM_BUFFER: Self::ClaimBuffer = <generated::Cabin as ridl_rt::contract::Sizes<
+        ridl_rt::encoding::FlatBuffers,
+    >>::CLAIM_BUFFER;
+    const EVENT_BUFFER: Self::EventBuffer = <generated::Cabin as ridl_rt::contract::Sizes<
+        ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_BUFFER;
+}
+
+/// The face encodes and decodes with the codec its port's type states, and two
+/// codecs live in one binary.
+///
+/// A `Loopback` typed with `Proto3` carries the reversed codec above; a face
+/// bound over it, with no type annotation at any binding, publishes a signal
+/// whose bytes on the port are the reversed ones and reads that signal back,
+/// and serves a command and a query over a handler held by `&mut`. A
+/// `Loopback` built with `new` beside it carries FlatBuffers, the default, and
+/// its bytes on the port are the FlatBuffers ones.
+#[test]
+fn a_second_codec_is_read_from_the_port_type() {
+    use ridl_rt::contract::Interaction;
+    use ridl_rt::encoding::{FlatBuffers, Proto3};
+    use ridl_rt::payload::{Payload, Ref};
+    use ridl_rt::port::SignalReader;
+
+    let ordinal = <generated::CabinTemperature as Interaction>::MEMBER.ordinal;
+    let value = generated::Temperature::new_unchecked(21);
+
+    // The FlatBuffers bytes of the published value, and this codec's bytes
+    // for it: the same bytes, reversed.
+    let mut scratch = <generated::Temperature as Payload<FlatBuffers>>::BUFFER;
+    let flatbuffers: Vec<u8> =
+        Ref::<generated::Temperature, FlatBuffers>::encode(&value, scratch.as_mut())
+            .expect("encode")
+            .bytes()
+            .to_vec();
+    let reversed: Vec<u8> = flatbuffers.iter().rev().copied().collect();
+
+    // 1. The signal round trip over the Proto3 runtime. No binding names an
+    //    encoding.
+    let rt = Loopback::<Proto3>::with_encoding(CATALOG);
+    let mut publisher = generated::cabin::Publisher::new(rt.attach());
+    let mut client = generated::cabin::Client::new(rt.attach());
+    publisher.temperature(value).expect("set");
+    publisher.commit();
+    let sample = client.temperature().expect("read");
+    assert_eq!(sample.value.get(), 21);
+    assert_eq!(sample.provenance, Provenance::Live);
+
+    // 2. The bytes the port carries are this codec's and not FlatBuffers'.
+    let reader = rt.attach();
+    let mut on_the_port = <generated::Temperature as Payload<FlatBuffers>>::BUFFER;
+    let raw = reader
+        .read(CABIN, ordinal, on_the_port.as_mut())
+        .expect("read");
+    let written = &on_the_port.as_ref()[..raw.len];
+    assert_eq!(
+        written,
+        reversed.as_slice(),
+        "the signal was published with the port's own codec"
+    );
+    assert_ne!(
+        written,
+        flatbuffers.as_slice(),
+        "the two codecs produce different bytes, so the check above has force"
+    );
+
+    // 3. A command and a query, served over a handler held by `&mut`.
+    let mut handler = rt.handler();
+    let mut provider = TestProvider::new(7);
+    {
+        let mut serve = generated::cabin::serve(&mut handler, &mut provider);
+        {
+            let mut call = client.set_level(generated::Level::new_unchecked(3));
+            assert!(poll_once(&mut call).is_pending());
+            assert!(poll_once(&mut serve).is_pending());
+            assert_eq!(poll_once(&mut call), Poll::Ready(Ok(())));
+        }
+        {
+            let mut call = client.average(generated::Window::new_unchecked(5));
+            assert!(poll_once(&mut call).is_pending());
+            assert!(poll_once(&mut serve).is_pending());
+            assert_eq!(
+                poll_once(&mut call),
+                Poll::Ready(Ok(generated::Average::new_unchecked(7)))
+            );
+        }
+    }
+    assert_eq!(provider.set_level_calls, vec![3]);
+
+    // 4. A FlatBuffers runtime beside it, in the same binary: `Loopback::new`
+    //    is the default encoding, and its bytes are the unreversed ones.
+    let rt_fb = Loopback::new(CATALOG);
+    let mut publisher_fb = generated::cabin::Publisher::new(rt_fb.attach());
+    let client_fb = generated::cabin::Client::new(rt_fb.attach());
+    publisher_fb.temperature(value).expect("set");
+    publisher_fb.commit();
+    let sample = client_fb.temperature().expect("read");
+    assert_eq!(sample.value.get(), 21);
+    assert_eq!(sample.provenance, Provenance::Live);
+
+    let reader_fb = rt_fb.attach();
+    let mut on_the_port_fb = <generated::Temperature as Payload<FlatBuffers>>::BUFFER;
+    let raw_fb = reader_fb
+        .read(CABIN, ordinal, on_the_port_fb.as_mut())
+        .expect("read");
+    assert_eq!(
+        &on_the_port_fb.as_ref()[..raw_fb.len],
+        flatbuffers.as_slice(),
+        "the loopback's default encoding is FlatBuffers"
+    );
+}

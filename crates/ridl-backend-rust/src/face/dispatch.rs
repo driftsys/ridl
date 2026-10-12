@@ -3,7 +3,9 @@
 //! provider, evaluates a query's `ensure`, and settles. The face as a whole is
 //! described in the documentation of the parent module, `face.rs`.
 
-use super::{Call, allow_deprecated, decode_args, encode_into, interface_number};
+use super::{
+    Call, allow_deprecated, decode_args, encode_into, encoding_bounds, ident, interface_number,
+};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 
@@ -14,15 +16,24 @@ use quote::quote;
 /// shadowed them or was shadowed by them. A ridl identifier cannot start with an
 /// underscore (`ridl check` refuses one), so `__arg` cannot be a parameter's
 /// name, as in the call method and the call futures.
-pub(super) fn dispatch(iface: &Ident, commands: &[Call], queries: &[Call]) -> TokenStream {
+pub(super) fn dispatch(
+    iface: &Ident,
+    payloads: &[&str],
+    commands: &[Call],
+    queries: &[Call],
+) -> TokenStream {
     let number = interface_number(iface);
+    // The handler port states the encoding of the argument bytes this step
+    // checks and of the reply bytes it writes.
+    let port = ident("H");
+    let encoding = encoding_bounds(&port, iface, payloads);
 
     let command_arms = commands.iter().map(|call| {
         let member = &call.member;
         let ordinal = &member.ordinal;
         let method = &member.method;
         let descriptor = &member.descriptor;
-        let decode = decode_args(call.arg_type);
+        let decode = decode_args(call.arg_type, &port);
         quote! {
             #ordinal => {
                 let decoded = #decode;
@@ -58,12 +69,13 @@ pub(super) fn dispatch(iface: &Ident, commands: &[Call], queries: &[Call]) -> To
         let ordinal = &member.ordinal;
         let method = &member.method;
         let descriptor = &member.descriptor;
-        let decode = decode_args(call.arg_type);
+        let decode = decode_args(call.arg_type, &port);
         let encode = encode_into(
             call.reply_type.unwrap_or(call.arg_type),
             quote! { &reply },
             quote! { buf },
             "the dispatch buffer",
+            &port,
         );
         quote! {
             #ordinal => {
@@ -116,13 +128,13 @@ pub(super) fn dispatch(iface: &Ident, commands: &[Call], queries: &[Call]) -> To
     // except an oversized claim whose settlement the handler refused, below —
     // and the pass stops when it reaches 0 without asking for another claim.
     // With a buffer of at least `<<Iface> as
-    // Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0
+    // Sizes<H::Encoding>>::MAX_BUFFER_SIZE` bytes, `Ok` with `budget` above 0
     // means the handler has no claim waiting, or refused the settlement of an
     // oversized claim that stays waiting; `Ok` with `budget` at 0 means claims
     // may still be waiting; `Err` means `Handler::next_claim` failed, and
     // every claim settled before the failure stays settled.
     // `ReadError::ShortClaim` is not a failure: the claim's arguments do not
-    // fit `<<Iface> as Sizes<FlatBuffers>>::MAX_BUFFER_SIZE`, the interface's
+    // fit `<<Iface> as Sizes<H::Encoding>>::MAX_BUFFER_SIZE`, the interface's
     // largest argument or reply payload, so they are larger than any valid
     // encoding of this interface's members, and the claim is settled
     // `Transport::Corrupt` by its id without being read, whichever interface
@@ -135,7 +147,7 @@ pub(super) fn dispatch(iface: &Ident, commands: &[Call], queries: &[Call]) -> To
     // wait until the handler can settle it (driftsys/ridl#569).
     //
     // `buf` must be at least `<<Iface> as
-    // Sizes<FlatBuffers>>::MAX_BUFFER_SIZE` bytes, because a reply is encoded
+    // Sizes<H::Encoding>>::MAX_BUFFER_SIZE` bytes, because a reply is encoded
     // into the same buffer as the arguments. A shorter buffer returns `Ok(0)`
     // without consuming a claim or changing `budget`.
     //
@@ -166,12 +178,13 @@ pub(super) fn dispatch(iface: &Ident, commands: &[Call], queries: &[Call]) -> To
             budget: &mut usize,
         ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
         where
-            H: ::ridl_rt::port::Handler,
+            H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler,
             P: Provider,
+            #encoding
         {
             if buf.len()
                 < <super::#iface as ::ridl_rt::contract::Sizes<
-                    ::ridl_rt::encoding::FlatBuffers,
+                    H::Encoding,
                 >>::MAX_BUFFER_SIZE
             {
                 return Ok(0);

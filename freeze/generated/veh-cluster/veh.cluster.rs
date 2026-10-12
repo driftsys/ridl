@@ -3011,10 +3011,18 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for WheelHisto
     ];
     const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
     const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
-    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
-    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
-    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
-    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
 }
 #[doc(hidden)]
 pub struct WheelHistoryWheelTicks;
@@ -3071,10 +3079,16 @@ pub mod wheel_history {
         }
     }
     ///The consumer face of interface `WheelHistory`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
-    pub struct Client<P: ::ridl_rt::port::SignalReader> {
+    pub struct Client<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader> {
         port: P,
     }
-    impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+    impl<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader> Client<P>
+    where
+        super::WheelHistory: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::Ratio: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         ///Reads signal `wheelTicks` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         ///
         /// # Rules
@@ -3086,15 +3100,18 @@ pub mod wheel_history {
             ::ridl_rt::sample::Sample<super::FanLevel>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = <super::FanLevel as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <super::FanLevel as ::ridl_rt::payload::Payload<
+                P::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let raw = self
                 .port
                 .read(
                     <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(1u32),
-                    &mut buf,
+                    buf,
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
@@ -3109,7 +3126,7 @@ pub mod wheel_history {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         super::FanLevel,
-                        ::ridl_rt::encoding::FlatBuffers,
+                        P::Encoding,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -3148,15 +3165,18 @@ pub mod wheel_history {
             ::ridl_rt::sample::Sample<crate::veh::common::Temperature>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = <crate::veh::common::Temperature as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <crate::veh::common::Temperature as ::ridl_rt::payload::Payload<
+                P::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let raw = self
                 .port
                 .read(
                     <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(3u32),
-                    &mut buf,
+                    buf,
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
@@ -3171,7 +3191,7 @@ pub mod wheel_history {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         crate::veh::common::Temperature,
-                        ::ridl_rt::encoding::FlatBuffers,
+                        P::Encoding,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -3210,15 +3230,18 @@ pub mod wheel_history {
             ::ridl_rt::sample::Sample<crate::veh::common::Ratio>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = <crate::veh::common::Ratio as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <crate::veh::common::Ratio as ::ridl_rt::payload::Payload<
+                P::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let raw = self
                 .port
                 .read(
                     <super::WheelHistory as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(5u32),
-                    &mut buf,
+                    buf,
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
@@ -3233,7 +3256,7 @@ pub mod wheel_history {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         crate::veh::common::Ratio,
-                        ::ridl_rt::encoding::FlatBuffers,
+                        P::Encoding,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -3262,7 +3285,15 @@ pub mod wheel_history {
             })
         }
     }
-    impl<P: ::ridl_rt::port::SignalReader> ::ridl_rt::face::Bind for Client<P> {
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader,
+    > ::ridl_rt::face::Bind for Client<P>
+    where
+        super::WheelHistory: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::Temperature: ::ridl_rt::payload::Payload<P::Encoding>,
+        crate::veh::common::Ratio: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Port = P;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -3291,10 +3322,16 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
     }
     ///The provider face of interface `WheelHistory`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
-    pub struct Publisher<W: ::ridl_rt::port::SignalWriter> {
+    pub struct Publisher<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> {
         port: W,
     }
-    impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Publisher<W>
+    where
+        super::WheelHistory: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Temperature: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Ratio: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         ///Stages a new value for signal `wheelTicks`. It is published by `commit`.
         ///
         /// # Rules
@@ -3304,17 +3341,20 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             &mut self,
             value: super::FanLevel,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = <super::FanLevel as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <super::FanLevel as ::ridl_rt::payload::Payload<
+                W::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::FanLevel,
-                ::ridl_rt::encoding::FlatBuffers,
-            >::encode(&value, &mut buf) {
+                W::Encoding,
+            >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `FanLevel` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<FanLevel as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `FanLevel` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -3336,17 +3376,20 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             &mut self,
             value: crate::veh::common::Temperature,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = <crate::veh::common::Temperature as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <crate::veh::common::Temperature as ::ridl_rt::payload::Payload<
+                W::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let bytes = match ::ridl_rt::payload::Ref::<
                 crate::veh::common::Temperature,
-                ::ridl_rt::encoding::FlatBuffers,
-            >::encode(&value, &mut buf) {
+                W::Encoding,
+            >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `veh.common.Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<veh.common.Temperature as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `veh.common.Temperature` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -3368,17 +3411,20 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             &mut self,
             value: crate::veh::common::Ratio,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = <crate::veh::common::Ratio as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <crate::veh::common::Ratio as ::ridl_rt::payload::Payload<
+                W::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let bytes = match ::ridl_rt::payload::Ref::<
                 crate::veh::common::Ratio,
-                ::ridl_rt::encoding::FlatBuffers,
-            >::encode(&value, &mut buf) {
+                W::Encoding,
+            >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `veh.common.Ratio` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<veh.common.Ratio as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `veh.common.Ratio` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -3392,7 +3438,15 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 )
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Bind for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Bind for Publisher<W>
+    where
+        super::WheelHistory: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Temperature: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Ratio: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         type Port = W;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -3405,13 +3459,28 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Publisher { port }
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Publish for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Publish for Publisher<W>
+    where
+        super::WheelHistory: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Temperature: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Ratio: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         /// Publishes every staged signal change.
         fn commit(&mut self) {
             self.port.commit()
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> Invalidate for Publisher<W> {
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Invalidate
+    for Publisher<W>
+    where
+        super::WheelHistory: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Temperature: ::ridl_rt::payload::Payload<W::Encoding>,
+        crate::veh::common::Ratio: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         fn invalidate_wheel_ticks(
             &mut self,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
@@ -3500,10 +3569,18 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for WheelSumma
     ];
     const MAX_BUFFER_SIZE: ::core::primitive::usize = 0usize;
     const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
-    type ClaimBuffer = [::core::primitive::u8; Self::MAX_BUFFER_SIZE];
-    type EventBuffer = [::core::primitive::u8; Self::EVENT_SOURCE_BUFFER_SIZE];
-    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; Self::MAX_BUFFER_SIZE];
-    const EVENT_BUFFER: Self::EventBuffer = [0u8; Self::EVENT_SOURCE_BUFFER_SIZE];
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
 }
 #[doc(hidden)]
 pub struct WheelSummaryWheelHealth;
@@ -3534,10 +3611,14 @@ pub mod wheel_summary {
         }
     }
     ///The consumer face of interface `WheelSummary`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
-    pub struct Client<P: ::ridl_rt::port::SignalReader> {
+    pub struct Client<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader> {
         port: P,
     }
-    impl<P: ::ridl_rt::port::SignalReader> Client<P> {
+    impl<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader> Client<P>
+    where
+        super::WheelSummary: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         ///Reads signal `wheelHealth` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
         ///
         /// # Rules
@@ -3549,15 +3630,18 @@ pub mod wheel_summary {
             ::ridl_rt::sample::Sample<super::FanLevel>,
             ::ridl_rt::port::ReadError,
         > {
-            let mut buf = <super::FanLevel as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <super::FanLevel as ::ridl_rt::payload::Payload<
+                P::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let raw = self
                 .port
                 .read(
                     <super::WheelSummary as ::ridl_rt::contract::Interface>::NUMBER,
                     ::ridl_rt::contract::Ordinal(1u32),
-                    &mut buf,
+                    buf,
                 )?;
             let (value, provenance) = match raw.provenance {
                 ::ridl_rt::sample::Provenance::Init
@@ -3572,7 +3656,7 @@ pub mod wheel_summary {
                 _ => {
                     match ::ridl_rt::payload::Ref::<
                         super::FanLevel,
-                        ::ridl_rt::encoding::FlatBuffers,
+                        P::Encoding,
                     >::verify(&buf[..raw.len]) {
                         Ok(checked) => (checked.decode(), raw.provenance),
                         Err(error) => {
@@ -3601,7 +3685,13 @@ pub mod wheel_summary {
             })
         }
     }
-    impl<P: ::ridl_rt::port::SignalReader> ::ridl_rt::face::Bind for Client<P> {
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader,
+    > ::ridl_rt::face::Bind for Client<P>
+    where
+        super::WheelSummary: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
         type Port = P;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -3622,10 +3712,14 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
     }
     ///The provider face of interface `WheelSummary`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
-    pub struct Publisher<W: ::ridl_rt::port::SignalWriter> {
+    pub struct Publisher<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> {
         port: W,
     }
-    impl<W: ::ridl_rt::port::SignalWriter> Publisher<W> {
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Publisher<W>
+    where
+        super::WheelSummary: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         ///Stages a new value for signal `wheelHealth`. It is published by `commit`.
         ///
         /// # Rules
@@ -3635,17 +3729,20 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             &mut self,
             value: super::FanLevel,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-            let mut buf = <super::FanLevel as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
+            let mut __buf = <super::FanLevel as ::ridl_rt::payload::Payload<
+                W::Encoding,
             >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
             let bytes = match ::ridl_rt::payload::Ref::<
                 super::FanLevel,
-                ::ridl_rt::encoding::FlatBuffers,
-            >::encode(&value, &mut buf) {
+                W::Encoding,
+            >::encode(&value, buf) {
                 Ok(encoded) => encoded.bytes(),
                 Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
                     unreachable!(
-                        "encoding `FanLevel` needs {} bytes and the payload buffer has {}; a legal value cannot exceed `<FanLevel as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
+                        "encoding `FanLevel` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`",
                         needed, available
                     )
                 }
@@ -3659,7 +3756,13 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 )
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Bind for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Bind for Publisher<W>
+    where
+        super::WheelSummary: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         type Port = W;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
 
@@ -3672,13 +3775,24 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             Publisher { port }
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> ::ridl_rt::face::Publish for Publisher<W> {
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Publish for Publisher<W>
+    where
+        super::WheelSummary: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         /// Publishes every staged signal change.
         fn commit(&mut self) {
             self.port.commit()
         }
     }
-    impl<W: ::ridl_rt::port::SignalWriter> Invalidate for Publisher<W> {
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Invalidate
+    for Publisher<W>
+    where
+        super::WheelSummary: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::FanLevel: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
         fn invalidate_wheel_health(
             &mut self,
         ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {

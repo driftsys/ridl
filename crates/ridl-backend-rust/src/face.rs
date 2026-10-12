@@ -13,8 +13,7 @@
 //!   `Caller` when it declares a command or a query, plus `Clock` for a call's
 //!   deadline and `Wakeable` for a call's or an event's wait. A signal read
 //!   returns its sample; a command, a query and `next_event` each return a
-//!   named future;
-//! - one future type per command and per query, `<Name>Call`, which sends
+//!   named future;//! - one future type per command and per query, `<Name>Call`, which sends
 //!   when the method is called, waits for a slot while the port is busy,
 //!   resolves on the outcome or at the member's bound, and forgets its call
 //!   when it leaves the waiting phase, on drop included; and `NextEvent`,
@@ -58,6 +57,25 @@
 //! An item whose interface declares nothing for it is not emitted: a
 //! signal-only interface gets a `Client` and a `Publisher` and no `Provider`,
 //! `dispatch` or `serve`, because no call can reach it.
+//!
+//! **The face names no encoding.** It takes the encoding of the bytes it
+//! writes and checks from its port type: every port parameter is bound on
+//! `ridl_rt::port::Encoded`, and every `Payload` and `Sizes` path the face
+//! writes projects through that parameter — `P::Encoding` on the client and
+//! its futures, `W::Encoding` on the publisher, `H::Encoding` on `serve`,
+//! `Serve` and `dispatch`. The face gains no type parameter of its own, so an
+//! application binds it as before and names no encoding either; the encoding
+//! is chosen once, where the runtime or the transport is built.
+//!
+//! A trait's `where` clause is not assumed by its users on stable Rust, so the
+//! predicates generic code needs are written out: each impl and each free
+//! function of the face carries a generated `where` clause naming the
+//! interface's `Sizes` in the port's encoding and one `Payload` per payload
+//! type the interface uses ([`encoding_bounds`]). A struct carries its port
+//! bounds alone, except `Serve`, whose claim-buffer field projects through
+//! `Sizes`, and the `Drop` impl of a call future, which Rust requires to
+//! repeat its type's bounds exactly. A consumer over a concrete port writes
+//! none of this; one that is itself generic over the port restates it.
 //!
 //! RA-20, as note F-15 restates it: generated code contains no thread, socket
 //! or timer, and no port waits; a face may return a future, and that future
@@ -268,6 +286,10 @@ pub(crate) fn one_interface(
     }
 
     let mut body: Vec<TokenStream> = Vec::new();
+    // The payload types the face encodes or decodes, collected once: every
+    // item of the face is bounded on the `Payload` of each in the encoding its
+    // port carries.
+    let payloads = payload_types(&signals, &events, &commands, &queries);
     body.extend(correlations(&commands, &queries));
     if !signals.is_empty() || !events.is_empty() || !commands.is_empty() || !queries.is_empty() {
         // Every interface that gets a `Client` gets `check_catalog`: the
@@ -277,24 +299,26 @@ pub(crate) fn one_interface(
             body.push(subscribe_trait(iface_name, &events));
         }
         body.push(client(
-            &iface, iface_name, &signals, &events, &commands, &queries,
+            &iface, iface_name, &payloads, &signals, &events, &commands, &queries,
         ));
     }
     if !events.is_empty() {
         body.push(event_enum(iface_name, &events));
     }
-    body.extend(futures(&iface, iface_name, &events, &commands, &queries));
-    body.extend(plumbing(&iface, &events, &commands, &queries));
+    body.extend(futures(
+        &iface, iface_name, &payloads, &events, &commands, &queries,
+    ));
+    body.extend(plumbing(&iface, &payloads, &events, &commands, &queries));
     if !signals.is_empty() || !events.is_empty() {
         if !signals.is_empty() {
             body.push(invalidate_trait(iface_name, &signals));
         }
-        body.push(publisher(&iface, iface_name, &signals, &events));
+        body.push(publisher(&iface, iface_name, &payloads, &signals, &events));
     }
     if !commands.is_empty() || !queries.is_empty() {
         body.push(provider(iface_name, &commands, &queries));
-        body.push(dispatch(&iface, &commands, &queries));
-        body.push(serve(&iface, iface_name, &commands, &queries));
+        body.push(dispatch(&iface, &payloads, &commands, &queries));
+        body.push(serve(&iface, iface_name, &payloads, &commands, &queries));
     }
 
     if body.is_empty() {
@@ -303,7 +327,9 @@ pub(crate) fn one_interface(
 
     // The prelude follows every trait it re-exports, and the blocking module
     // stays the module's last item.
-    let blocking = blocking(&iface, iface_name, &signals, &events, &commands, &queries);
+    let blocking = blocking(
+        &iface, iface_name, &payloads, &signals, &events, &commands, &queries,
+    );
     body.push(prelude(iface_name, &signals, &events, blocking.is_some()));
     body.extend(blocking);
 
@@ -353,8 +379,10 @@ fn correlations(commands: &[Call], queries: &[Call]) -> Vec<TokenStream> {
 }
 
 /// The port bounds of `Client<P>`: exactly the traits the interface's
-/// interactions need (RA-19). The blocking client repeats them, because it
-/// is the async client and its timeout and nothing more.
+/// interactions need (RA-19), over `Encoded`, which every port of a face
+/// carries because the face reads the encoding of its bytes from it. The
+/// blocking client repeats them, because it is the async client and its
+/// timeout and nothing more.
 fn client_bounds(
     signals: &[(Member, &str)],
     events: &[(Member, &str)],
@@ -362,7 +390,7 @@ fn client_bounds(
     queries: &[Call],
 ) -> Vec<TokenStream> {
     let has_calls = !commands.is_empty() || !queries.is_empty();
-    let mut bounds: Vec<TokenStream> = Vec::new();
+    let mut bounds: Vec<TokenStream> = vec![quote! { ::ridl_rt::port::Encoded }];
     if !signals.is_empty() {
         bounds.push(quote! { ::ridl_rt::port::SignalReader });
     }
@@ -387,6 +415,7 @@ fn client_bounds(
 fn client(
     iface: &Ident,
     iface_name: &str,
+    payloads: &[&str],
     signals: &[(Member, &str)],
     events: &[(Member, &str)],
     commands: &[Call],
@@ -394,6 +423,8 @@ fn client(
 ) -> TokenStream {
     let number = interface_number(iface);
     let bounds = client_bounds(signals, events, commands, queries);
+    let port = ident("P");
+    let encoding = encoding_bounds(&port, iface, payloads);
 
     let mut methods: Vec<TokenStream> = Vec::new();
 
@@ -402,7 +433,7 @@ fn client(
         let ordinal = &member.ordinal;
         let descriptor = &member.descriptor;
         let path = ty(payload);
-        let buffer = payload_buffer(payload);
+        let buffer = buffer_prologue(payload_buffer(payload, &port));
         let doc = format!(
             "Reads signal `{}` and returns its value with the provenance, the \
              freshness and the envelope the runtime resolved. Before the \
@@ -426,8 +457,8 @@ fn client(
                 ::ridl_rt::sample::Sample<#path>,
                 ::ridl_rt::port::ReadError,
             > {
-                let mut buf = #buffer;
-                let raw = self.port.read(#number, #ordinal, &mut buf)?;
+                #buffer
+                let raw = self.port.read(#number, #ordinal, buf)?;
                 let (value, provenance) = match raw.provenance {
                     ::ridl_rt::sample::Provenance::Init
                     | ::ridl_rt::sample::Provenance::Invalid(
@@ -435,7 +466,7 @@ fn client(
                     ) if raw.len == 0 => {
                         (<#descriptor as ::ridl_rt::contract::Signal>::init(), raw.provenance)
                     }
-                    _ => match ::ridl_rt::payload::Ref::<#path, ::ridl_rt::encoding::FlatBuffers>::verify(
+                    _ => match ::ridl_rt::payload::Ref::<#path, P::Encoding>::verify(
                         &buf[..raw.len],
                     ) {
                         Ok(checked) => (checked.decode(), raw.provenance),
@@ -506,7 +537,10 @@ fn client(
              belongs to. Subscribe on a port this interface owns."
         );
         fixed.push(quote! {
-            impl<P: #(#bounds)+*> ::ridl_rt::face::Events for Client<P> {
+            impl<P: #(#bounds)+*> ::ridl_rt::face::Events for Client<P>
+            where
+                #encoding
+            {
                 type Next<'a> = NextEvent<'a, P> where Self: 'a;
 
                 #[doc = #doc]
@@ -515,7 +549,10 @@ fn client(
                 }
             }
 
-            impl<P: #(#bounds)+*> Subscribe for Client<P> {
+            impl<P: #(#bounds)+*> Subscribe for Client<P>
+            where
+                #encoding
+            {
                 #(#subscribes)*
             }
         });
@@ -523,7 +560,10 @@ fn client(
 
     let inherent = (!methods.is_empty()).then(|| {
         quote! {
-            impl<P: #(#bounds)+*> Client<P> {
+            impl<P: #(#bounds)+*> Client<P>
+            where
+                #encoding
+            {
                 #(#methods)*
             }
         }
@@ -553,7 +593,10 @@ fn client(
 
         #inherent
 
-        impl<P: #(#bounds)+*> ::ridl_rt::face::Bind for Client<P> {
+        impl<P: #(#bounds)+*> ::ridl_rt::face::Bind for Client<P>
+        where
+            #encoding
+        {
             type Port = P;
 
             #[doc = #new_doc]
@@ -860,11 +903,14 @@ fn event_enum(iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
 fn publisher(
     iface: &Ident,
     iface_name: &str,
+    payloads: &[&str],
     signals: &[(Member, &str)],
     events: &[(Member, &str)],
 ) -> TokenStream {
     let number = interface_number(iface);
-    let mut bounds: Vec<TokenStream> = Vec::new();
+    let port = ident("W");
+    let encoding = encoding_bounds(&port, iface, payloads);
+    let mut bounds: Vec<TokenStream> = vec![quote! { ::ridl_rt::port::Encoded }];
     if !signals.is_empty() {
         bounds.push(quote! { ::ridl_rt::port::SignalWriter });
     }
@@ -878,12 +924,13 @@ fn publisher(
         let method = &member.method;
         let ordinal = &member.ordinal;
         let path = ty(payload);
-        let buffer = payload_buffer(payload);
+        let buffer = buffer_prologue(payload_buffer(payload, &port));
         let encode = encode_into(
             payload,
             quote! { &value },
-            quote! { &mut buf },
+            quote! { buf },
             "the payload buffer",
+            &port,
         );
         let set_doc = format!(
             "Stages a new value for signal `{}`. It is published by `commit`.",
@@ -896,7 +943,7 @@ fn publisher(
                 &mut self,
                 value: #path,
             ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
-                let mut buf = #buffer;
+                #buffer
                 let bytes = #encode;
                 self.port.set(#number, #ordinal, bytes)
             }
@@ -907,12 +954,13 @@ fn publisher(
         let method = &member.method;
         let ordinal = &member.ordinal;
         let path = ty(payload);
-        let buffer = payload_buffer(payload);
+        let buffer = buffer_prologue(payload_buffer(payload, &port));
         let encode = encode_into(
             payload,
             quote! { &value },
-            quote! { &mut buf },
+            quote! { buf },
             "the payload buffer",
+            &port,
         );
         let doc = format!("Raises one occurrence of event `{}`.", member.declared);
         let doc = member_doc(member, &doc);
@@ -922,7 +970,7 @@ fn publisher(
                 &mut self,
                 value: #path,
             ) -> ::core::result::Result<(), ::ridl_rt::port::RaiseError> {
-                let mut buf = #buffer;
+                #buffer
                 let bytes = #encode;
                 self.port.raise(#number, #ordinal, bytes, ::core::option::Option::None)
             }
@@ -944,14 +992,20 @@ fn publisher(
             }
         });
         quote! {
-            impl<W: #(#bounds)+*> ::ridl_rt::face::Publish for Publisher<W> {
+            impl<W: #(#bounds)+*> ::ridl_rt::face::Publish for Publisher<W>
+            where
+                #encoding
+            {
                 /// Publishes every staged signal change.
                 fn commit(&mut self) {
                     self.port.commit()
                 }
             }
 
-            impl<W: #(#bounds)+*> Invalidate for Publisher<W> {
+            impl<W: #(#bounds)+*> Invalidate for Publisher<W>
+            where
+                #encoding
+            {
                 #(#invalidates)*
             }
         }
@@ -978,11 +1032,17 @@ fn publisher(
             port: W,
         }
 
-        impl<W: #(#bounds)+*> Publisher<W> {
+        impl<W: #(#bounds)+*> Publisher<W>
+        where
+            #encoding
+        {
             #(#methods)*
         }
 
-        impl<W: #(#bounds)+*> ::ridl_rt::face::Bind for Publisher<W> {
+        impl<W: #(#bounds)+*> ::ridl_rt::face::Bind for Publisher<W>
+        where
+            #encoding
+        {
             type Port = W;
 
             #[doc = #new_doc]
@@ -1133,12 +1193,85 @@ fn ty(reference: &str) -> TokenStream {
     }
 }
 
+/// The payload types an interface's face encodes or decodes: the signal and
+/// event payloads, then each call's argument and reply, in declaration order,
+/// each once.
+///
+/// It is the list the `where` clause of every item of the face names, one
+/// `Payload` predicate per entry, so an interface is tied to exactly the
+/// codecs its own interactions use and to no other.
+fn payload_types<'a>(
+    signals: &[(Member<'a>, &'a str)],
+    events: &[(Member<'a>, &'a str)],
+    commands: &[Call<'a>],
+    queries: &[Call<'a>],
+) -> Vec<&'a str> {
+    fn push<'a>(types: &mut Vec<&'a str>, name: &'a str) {
+        if !name.is_empty() && !types.contains(&name) {
+            types.push(name);
+        }
+    }
+
+    let mut types: Vec<&'a str> = Vec::new();
+    for (_, payload) in signals.iter().chain(events) {
+        push(&mut types, payload);
+    }
+    for call in commands.iter().chain(queries) {
+        push(&mut types, call.arg_type);
+        if let Some(reply) = call.reply_type {
+            push(&mut types, reply);
+        }
+    }
+    types
+}
+
+/// The predicates that tie the face to the encoding of port `port`:
+/// `super::#iface: ::ridl_rt::contract::Sizes<#port::Encoding>` and one
+/// `#T: ::ridl_rt::payload::Payload<#port::Encoding>` per entry of `payloads`.
+///
+/// A trait's `where` clause is not assumed by its users on stable Rust, so
+/// generic code that encodes or decodes a payload states the predicate itself.
+/// It is written as a `where` clause on every impl and every free function of
+/// the face; a struct carries only its port bounds, except `Serve`, whose
+/// claim-buffer field projects through `Sizes`, and except the `Drop` impl of
+/// a call future, which Rust requires to repeat its type's bounds exactly.
+///
+/// Each predicate ends with a comma, so the clause is written after the port
+/// predicates of the item it sits on.
+fn encoding_bounds(port: &Ident, iface: &Ident, payloads: &[&str]) -> TokenStream {
+    let payloads = payloads.iter().map(|name| {
+        let path = ty(name);
+        quote! { #path: ::ridl_rt::payload::Payload<#port::Encoding>, }
+    });
+    quote! {
+        super::#iface: ::ridl_rt::contract::Sizes<#port::Encoding>,
+        #(#payloads)*
+    }
+}
+
 /// A zeroed stack buffer of the payload's own type, exactly as large as any
-/// legal value of `type_name`: the codec's `Payload::BUFFER`.
-fn payload_buffer(type_name: &str) -> TokenStream {
+/// legal value of `type_name`: the `Payload::BUFFER` of the encoding port
+/// `port` carries.
+fn payload_buffer(type_name: &str, port: &Ident) -> TokenStream {
     let path = ty(type_name);
     quote! {
-        <#path as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER
+        <#path as ::ridl_rt::payload::Payload<#port::Encoding>>::BUFFER
+    }
+}
+
+/// The two statements that put `buffer` on the stack and bind `buf` to its
+/// bytes.
+///
+/// `Payload::Buffer` and `Sizes::ClaimBuffer` are associated types, so the
+/// value `buffer` evaluates to is not an array the compiler can index or
+/// coerce to a slice; the trait states `AsMut<[u8]>` for exactly this, and the
+/// emitted code reaches the bytes through it. The storage carries the
+/// emitter-owned name `__buf`, which no ridl identifier can be, so the slice
+/// keeps the name `buf` the bodies below use.
+fn buffer_prologue(buffer: TokenStream) -> TokenStream {
+    quote! {
+        let mut __buf = #buffer;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(&mut __buf);
     }
 }
 
@@ -1152,7 +1285,7 @@ fn payload_buffer(type_name: &str) -> TokenStream {
 /// subslice. A call site that reconstructed `&target[..len]` would send the
 /// wrong bytes for any such encoding.
 ///
-/// `target` is at least `<T as Payload<FlatBuffers>>::MAX_SIZE` bytes at every
+/// `target` is at least `<T as Payload<P::Encoding>>::MAX_SIZE` bytes at every
 /// call site, and `MAX_SIZE` is the largest encoded size of any legal value, so
 /// `EncodeError::Capacity` cannot arise from a legal value. Reaching it means
 /// the value is outside its own type's range or its `Payload` implementation
@@ -1166,16 +1299,17 @@ fn encode_into(
     value: TokenStream,
     target: TokenStream,
     target_name: &str,
+    port: &Ident,
 ) -> TokenStream {
     let path = ty(type_name);
     let capacity = format!(
         "encoding `{type_name}` needs {{}} bytes and {target_name} has {{}}; a legal value \
-         cannot exceed `<{type_name} as Payload<FlatBuffers>>::MAX_SIZE`, so the value is outside \
-         its own type's range or its `Payload` implementation does not honor `MAX_SIZE`"
+         cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value is \
+         outside its own type's range or its `Payload` implementation does not honor `MAX_SIZE`"
     );
     let other = format!("encoding `{type_name}` failed");
     quote! {
-        match ::ridl_rt::payload::Ref::<#path, ::ridl_rt::encoding::FlatBuffers>::encode(
+        match ::ridl_rt::payload::Ref::<#path, #port::Encoding>::encode(
             #value,
             #target,
         ) {
@@ -1192,10 +1326,10 @@ fn encode_into(
 /// the failure maps to: malformed bytes are a transport corruption, and a
 /// value that breaks its typl constraints is a contract error carrying the
 /// violation.
-fn decode_args(type_name: &str) -> TokenStream {
+fn decode_args(type_name: &str, port: &Ident) -> TokenStream {
     let path = ty(type_name);
     quote! {
-        match ::ridl_rt::payload::Ref::<#path, ::ridl_rt::encoding::FlatBuffers>::verify(
+        match ::ridl_rt::payload::Ref::<#path, #port::Encoding>::verify(
             &buf[..claim.len],
         ) {
             Ok(checked) => Ok(checked.decode()),

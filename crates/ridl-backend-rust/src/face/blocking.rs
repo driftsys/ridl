@@ -44,11 +44,26 @@ fn ty(reference: &str) -> TokenStream {
     }
 }
 
+/// The face's encoding predicates, as the blocking module names them: the
+/// parent module's [`super::encoding_bounds`] with every same-package path one
+/// module deeper. Each predicate ends with a comma, as the parent's do.
+fn encoding_bounds(port: &Ident, iface: &Ident, payloads: &[&str]) -> TokenStream {
+    let payloads = payloads.iter().map(|name| {
+        let path = ty(name);
+        quote! { #path: ::ridl_rt::payload::Payload<#port::Encoding>, }
+    });
+    quote! {
+        super::super::#iface: ::ridl_rt::contract::Sizes<#port::Encoding>,
+        #(#payloads)*
+    }
+}
+
 /// The `blocking` module, or nothing for an interface with no event, command
 /// or query.
 pub(super) fn blocking(
     iface: &Ident,
     iface_name: &str,
+    payloads: &[&str],
     signals: &[(Member, &str)],
     events: &[(Member, &str)],
     commands: &[Call],
@@ -58,15 +73,24 @@ pub(super) fn blocking(
     if events.is_empty() && !has_calls {
         return None;
     }
-    let bounds = client_bounds(signals, events, commands, queries);
     let mut items = vec![
         deadline_after(),
         client(
-            iface, iface_name, &bounds, signals, events, commands, queries,
+            iface,
+            iface_name,
+            &encoding_bounds(&ident("P"), iface, payloads),
+            signals,
+            events,
+            commands,
+            queries,
         ),
     ];
     if has_calls {
-        items.push(serve(iface, iface_name));
+        items.push(serve(
+            iface,
+            iface_name,
+            &encoding_bounds(&ident("H"), iface, payloads),
+        ));
     }
 
     let doc = format!(
@@ -106,12 +130,15 @@ fn deadline_after() -> TokenStream {
 fn client(
     iface: &Ident,
     iface_name: &str,
-    bounds: &[TokenStream],
+    encoding: &TokenStream,
     signals: &[(Member, &str)],
     events: &[(Member, &str)],
     commands: &[Call],
     queries: &[Call],
 ) -> TokenStream {
+    // The blocking client is the async one and its timeout, so it repeats the
+    // async client's port bounds.
+    let bounds = client_bounds(signals, events, commands, queries);
     let new_doc = format!(
         "Binds the face to a port, with no timeout. The port is held by value: \
          pass a handle, or a `&mut` borrow of one.\n\n{}",
@@ -198,7 +225,10 @@ fn client(
              `ridl_rt::face::Events::next_event`."
         );
         quote! {
-            impl<P: #(#bounds)+*> ::ridl_rt::face::Events for Client<P> {
+            impl<P: #(#bounds)+*> ::ridl_rt::face::Events for Client<P>
+            where
+                #encoding
+            {
                 type Next<'a> = ::core::result::Result<
                     ::core::option::Option<super::Event>,
                     ::ridl_rt::port::ReadError,
@@ -221,7 +251,10 @@ fn client(
                 }
             }
 
-            impl<P: #(#bounds)+*> super::Subscribe for Client<P> {
+            impl<P: #(#bounds)+*> super::Subscribe for Client<P>
+            where
+                #encoding
+            {
                 #(#subscribes)*
             }
         }
@@ -229,7 +262,10 @@ fn client(
 
     let inherent = (!methods.is_empty()).then(|| {
         quote! {
-            impl<P: #(#bounds)+*> Client<P> {
+            impl<P: #(#bounds)+*> Client<P>
+            where
+                #encoding
+            {
                 #(#methods)*
             }
         }
@@ -268,7 +304,10 @@ fn client(
 
         #inherent
 
-        impl<P: #(#bounds)+*> ::ridl_rt::face::Bind for Client<P> {
+        impl<P: #(#bounds)+*> ::ridl_rt::face::Bind for Client<P>
+        where
+            #encoding
+        {
             type Port = P;
 
             #[doc = #new_doc]
@@ -281,7 +320,10 @@ fn client(
             }
         }
 
-        impl<P: #(#bounds)+*> ::ridl_rt::face::Timeout for Client<P> {
+        impl<P: #(#bounds)+*> ::ridl_rt::face::Timeout for Client<P>
+        where
+            #encoding
+        {
             /// Sets the timeout every waiting method of this client is
             /// bounded by, and returns the client. A timeout shorter than a
             /// member's `max` is accepted, and ends the call first; a longer
@@ -362,7 +404,7 @@ fn call_method(call: &Call, kind: &str, output: TokenStream, expired: &str) -> T
 
 /// `blocking::serve`: `block_on` over `serve`'s future, which never resolves
 /// to `Ok`, so `Ok(())` here means the timeout passed (note F-11).
-fn serve(iface: &Ident, iface_name: &str) -> TokenStream {
+fn serve(iface: &Ident, iface_name: &str, encoding: &TokenStream) -> TokenStream {
     let doc = format!(
         "Serves interface `{iface_name}`'s commands and queries with `p`, over \
          the handler port `h`, on the calling thread, until the handler port \
@@ -382,8 +424,11 @@ fn serve(iface: &Ident, iface_name: &str) -> TokenStream {
             timeout: ::core::option::Option<::std::time::Duration>,
         ) -> ::core::result::Result<(), ::ridl_rt::error::ProviderError>
         where
-            H: ::ridl_rt::port::Handler + ::ridl_rt::port::Wakeable,
+            H: ::ridl_rt::port::Encoded
+                + ::ridl_rt::port::Handler
+                + ::ridl_rt::port::Wakeable,
             P: super::Provider,
+            #encoding
         {
             let __deadline = __deadline_after(timeout);
             let mut __serve = super::serve(h, p);

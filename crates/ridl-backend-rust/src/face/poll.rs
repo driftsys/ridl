@@ -6,8 +6,8 @@
 //! of the parent module, `face.rs`.
 
 use super::{
-    Call, Member, correlation_type, encode_into, ident, interface_number, payload_buffer, read_fn,
-    send_fn, ty,
+    Call, Member, buffer_prologue, correlation_type, encode_into, encoding_bounds, ident,
+    interface_number, payload_buffer, read_fn, send_fn, ty,
 };
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
@@ -16,11 +16,17 @@ use quote::quote;
 /// over a bare port, so a future that holds `&mut P` can call them.
 pub(super) fn plumbing(
     iface: &Ident,
+    payloads: &[&str],
     events: &[(Member, &str)],
     commands: &[Call],
     queries: &[Call],
 ) -> Vec<TokenStream> {
     let number = interface_number(iface);
+    // Each function here is generic over the port, and reads the encoding of
+    // the bytes it writes or checks from it, so each carries the face's
+    // `where` clause over its own port parameter.
+    let port = ident("P");
+    let encoding = encoding_bounds(&port, iface, payloads);
     let mut items = Vec::new();
     for call in commands {
         items.push(send(
@@ -28,8 +34,9 @@ pub(super) fn plumbing(
             call,
             quote! { ::ridl_rt::contract::Command },
             quote! { command },
+            &encoding,
         ));
-        items.push(poll_ack(call));
+        items.push(poll_ack(call, &encoding));
     }
     for call in queries {
         items.push(send(
@@ -37,11 +44,12 @@ pub(super) fn plumbing(
             call,
             quote! { ::ridl_rt::contract::Query },
             quote! { query },
+            &encoding,
         ));
-        items.push(poll_reply(call));
+        items.push(poll_reply(call, &encoding));
     }
     if !events.is_empty() {
-        items.push(poll_next_event(iface, events));
+        items.push(poll_next_event(iface, events, &encoding));
     }
     items
 }
@@ -53,6 +61,7 @@ fn send(
     call: &Call,
     contract_trait: TokenStream,
     port_method: TokenStream,
+    encoding: &TokenStream,
 ) -> TokenStream {
     let member = &call.member;
     let ordinal = &member.ordinal;
@@ -61,12 +70,14 @@ fn send(
     let name = send_fn(call);
     let arg = &call.arg;
     let path = ty(call.arg_type);
-    let buffer = payload_buffer(call.arg_type);
+    let port = ident("P");
+    let buffer = buffer_prologue(payload_buffer(call.arg_type, &port));
     let encode = encode_into(
         call.arg_type,
         quote! { __arg },
-        quote! { &mut buf },
+        quote! { buf },
         "the argument buffer",
+        &port,
     );
     // The send is an internal, so it carries no doc. It sends the call once
     // and returns the correlation of its outcome, or the send's failure. A
@@ -80,17 +91,20 @@ fn send(
     // ridl parameter named `port`, `buf` or `bytes` collides with nothing in
     // this body (see `call_method`).
     quote! {
-        pub(crate) fn #name<P: ::ridl_rt::port::Caller>(
+        pub(crate) fn #name<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
             __port: &mut P,
             #arg: &#path,
-        ) -> ::core::result::Result<#correlation, ::ridl_rt::port::SendError> {
+        ) -> ::core::result::Result<#correlation, ::ridl_rt::port::SendError>
+        where
+            #encoding
+        {
             let __arg = #arg;
             <#descriptor as #contract_trait>::require(__arg).map_err(|()| {
                 ::ridl_rt::port::SendError::Contract(
                     ::ridl_rt::error::Contract::PreconditionFailed,
                 )
             })?;
-            let mut buf = #buffer;
+            #buffer
             let bytes = #encode;
             __port
                 .#port_method(#number, #ordinal, bytes, ::core::option::Option::None)
@@ -100,36 +114,40 @@ fn send(
 }
 
 /// One command's acknowledgment read.
-fn poll_ack(call: &Call) -> TokenStream {
+fn poll_ack(call: &Call, encoding: &TokenStream) -> TokenStream {
     let correlation = correlation_type(call);
     let name = read_fn(call);
     // Reads the command's delivery acknowledgment: `Some` once it is known,
     // `None` while it is not. It does not wait; the call's future polls it.
     // An internal: no doc.
     quote! {
-        pub(crate) fn #name<P: ::ridl_rt::port::Caller>(
+        pub(crate) fn #name<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
             port: &mut P,
             correlation: #correlation,
         ) -> ::core::option::Option<
             ::core::result::Result<(), ::ridl_rt::error::CallError>,
-        > {
+        >
+        where
+            #encoding
+        {
             port.ack(correlation.0)
         }
     }
 }
 
 /// One query's reply read, with the reply's own check.
-fn poll_reply(call: &Call) -> TokenStream {
+fn poll_reply(call: &Call, encoding: &TokenStream) -> TokenStream {
     let reply = call.reply_type.unwrap_or(call.arg_type);
     let correlation = correlation_type(call);
     let name = read_fn(call);
     let path = ty(reply);
-    let buffer = payload_buffer(reply);
+    let port = ident("P");
+    let buffer = buffer_prologue(payload_buffer(reply, &port));
     // Reads the query's reply: `Ok(Some)` once it is known, `Ok(None)` while
     // it is not, and the port's own failure when the read itself fails. It
     // does not wait; the call's future polls it. An internal: no doc.
     quote! {
-        pub(crate) fn #name<P: ::ridl_rt::port::Caller>(
+        pub(crate) fn #name<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
             port: &mut P,
             correlation: #correlation,
         ) -> ::core::result::Result<
@@ -137,15 +155,18 @@ fn poll_reply(call: &Call) -> TokenStream {
                 ::core::result::Result<#path, ::ridl_rt::error::CallError>,
             >,
             ::ridl_rt::port::ReadError,
-        > {
-            let mut buf = #buffer;
-            match port.reply(correlation.0, &mut buf)? {
+        >
+        where
+            #encoding
+        {
+            #buffer
+            match port.reply(correlation.0, buf)? {
                 None => Ok(None),
                 Some(Err(error)) => Ok(Some(Err(error))),
                 Some(Ok(len)) => Ok(Some(
                     match ::ridl_rt::payload::Ref::<
                         #path,
-                        ::ridl_rt::encoding::FlatBuffers,
+                        P::Encoding,
                     >::verify(&buf[..len]) {
                         Ok(checked) => Ok(checked.decode()),
                         Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
@@ -165,10 +186,14 @@ fn poll_reply(call: &Call) -> TokenStream {
 
 /// The event read `NextEvent` polls: one occurrence of any subscribed event,
 /// routed to its variant by ordinal.
-fn poll_next_event(iface: &Ident, events: &[(Member, &str)]) -> TokenStream {
-    let buffer = quote! {
-        <super::#iface as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>::EVENT_BUFFER
-    };
+fn poll_next_event(
+    iface: &Ident,
+    events: &[(Member, &str)],
+    encoding: &TokenStream,
+) -> TokenStream {
+    let buffer = buffer_prologue(quote! {
+        <super::#iface as ::ridl_rt::contract::Sizes<P::Encoding>>::EVENT_BUFFER
+    });
     let arms = events.iter().map(|(member, payload)| {
         let ordinal = &member.ordinal;
         let variant = ident(member.camel);
@@ -177,7 +202,7 @@ fn poll_next_event(iface: &Ident, events: &[(Member, &str)]) -> TokenStream {
             #ordinal => Ok(Some(Event::#variant(::ridl_rt::sample::Occurrence {
                 payload: match ::ridl_rt::payload::Ref::<
                     #path,
-                    ::ridl_rt::encoding::FlatBuffers,
+                    P::Encoding,
                 >::verify(&buf[..occurrence.len]) {
                     Ok(checked) => Ok(checked.decode()),
                     Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
@@ -196,14 +221,19 @@ fn poll_next_event(iface: &Ident, events: &[(Member, &str)]) -> TokenStream {
     // `Client`'s `ridl_rt::face::Events::next_event` gives. An internal: no
     // doc.
     quote! {
-        pub(crate) fn poll_next_event<P: ::ridl_rt::port::EventSource>(
+        pub(crate) fn poll_next_event<
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::EventSource,
+        >(
             port: &mut P,
         ) -> ::core::result::Result<
             ::core::option::Option<Event>,
             ::ridl_rt::port::ReadError,
-        > {
-            let mut buf = #buffer;
-            let Some(occurrence) = port.next(&mut buf)? else {
+        >
+        where
+            #encoding
+        {
+            #buffer
+            let Some(occurrence) = port.next(buf)? else {
                 return Ok(None);
             };
             if occurrence.iface
