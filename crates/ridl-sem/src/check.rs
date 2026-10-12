@@ -4601,6 +4601,9 @@ impl Checker<'_> {
             declared_init,
             init,
             timing,
+            // Every spelling the toolchain reads today lowers to dispatch and
+            // no shape (ADR-0012 decision 6, as amended on 2026-10-11).
+            family: v2::Family::Dispatch as i32,
         }
     }
 
@@ -4634,7 +4637,11 @@ impl Checker<'_> {
             member_name_range(event.name(), event.syntax()),
             timing::InteractionKind::Event,
         );
-        v2::EventDef { payload, timing }
+        v2::EventDef {
+            payload,
+            timing,
+            family: v2::Family::Dispatch as i32,
+        }
     }
 
     /// Resolves one interaction's timing to its IR `Timing` (ridl §9, ADR-0008
@@ -5092,6 +5099,8 @@ impl Checker<'_> {
             params,
             contracts,
             timing,
+            family: v2::Family::Dispatch as i32,
+            shape: v2::Shape::None as i32,
         }
     }
 
@@ -5126,6 +5135,7 @@ impl Checker<'_> {
             return_type,
             contracts,
             timing,
+            family: v2::Family::Dispatch as i32,
         }
     }
 
@@ -13365,6 +13375,37 @@ interface VehicleStatus {
             panic!("`{name}` is not an event");
         };
         event
+    }
+
+    /// The `CommandDef` of the interaction named `name`.
+    fn command_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::CommandDef {
+        let Some(v2::decl::Kind::CommandDef(command)) = &interaction(checked, name).kind else {
+            panic!("`{name}` is not a command");
+        };
+        command
+    }
+
+    /// Every spelling the toolchain reads today is dispatch with no shape
+    /// (ADR-0012 decision 6, as amended on 2026-10-11).
+    #[test]
+    fn every_spelling_lowers_to_dispatch_and_no_shape() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  signal s : Speed @10ms\n  event e : Speed @[100ms..1s]\n  \
+                 command c() @[..50ms]\n  query q(): Speed @[..50ms]\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), Vec::<&str>::new());
+        assert_eq!(
+            signal_def(&checked, "s").family,
+            v2::Family::Dispatch as i32
+        );
+        assert_eq!(event_def(&checked, "e").family, v2::Family::Dispatch as i32);
+        let command = command_def(&checked, "c");
+        assert_eq!(command.family, v2::Family::Dispatch as i32);
+        assert_eq!(command.shape, v2::Shape::None as i32);
+        assert_eq!(query_def(&checked, "q").family, v2::Family::Dispatch as i32);
     }
 
     #[test]

@@ -70,6 +70,7 @@ ridl.codegen.v1.CommandShape.clauses = 3 repeated ridl.codegen.v1.Clause
 ridl.codegen.v1.CommandShape.params = 1 repeated ridl.codegen.v1.Param
 ridl.codegen.v1.CommandShape.request = 2 singular ridl.codegen.v1.Payload
 ridl.codegen.v1.CommandShape.request_sizes = 4 singular ridl.codegen.v1.PayloadSizes
+ridl.codegen.v1.CommandShape.shape = 5 singular ridl.codegen.v1.Shape
 ridl.codegen.v1.Comparison.literal = 2 singular string
 ridl.codegen.v1.Comparison.literal_class = 3 singular ridl.codegen.v1.ScalarClass
 ridl.codegen.v1.Comparison.op = 1 singular ridl.codegen.v1.ComparisonOp
@@ -189,6 +190,12 @@ ridl.codegen.v1.EnumValue.value = 2 singular int64
 ridl.codegen.v1.EventShape.payload = 1 singular ridl.codegen.v1.Payload
 ridl.codegen.v1.Fallible.err = 2 singular ridl.codegen.v1.TypeRef
 ridl.codegen.v1.Fallible.ok = 1 singular ridl.codegen.v1.TypeRef
+ridl.codegen.v1.Family values FAMILY_ACQUISITION FAMILY_CONTROL FAMILY_DISPATCH FAMILY_INTENT FAMILY_PRESENTATION
+ridl.codegen.v1.Family.FAMILY_ACQUISITION = 3
+ridl.codegen.v1.Family.FAMILY_CONTROL = 4
+ridl.codegen.v1.Family.FAMILY_DISPATCH = 0
+ridl.codegen.v1.Family.FAMILY_INTENT = 2
+ridl.codegen.v1.Family.FAMILY_PRESENTATION = 1
 ridl.codegen.v1.FbEnum.type = 1 singular ridl.codegen.v1.TypeRef
 ridl.codegen.v1.FbEnum.width_bytes = 2 singular uint32
 ridl.codegen.v1.FbMap.entry_table = 1 singular uint32
@@ -321,6 +328,7 @@ ridl.codegen.v1.Interaction.command = 12 singular ridl.codegen.v1.CommandShape o
 ridl.codegen.v1.Interaction.deprecated = 6 optional string
 ridl.codegen.v1.Interaction.doc = 4 singular string
 ridl.codegen.v1.Interaction.event = 11 singular ridl.codegen.v1.EventShape oneof=shape
+ridl.codegen.v1.Interaction.family = 9 singular ridl.codegen.v1.Family
 ridl.codegen.v1.Interaction.fixed = 14 singular ridl.codegen.v1.FixedShape oneof=shape
 ridl.codegen.v1.Interaction.kind = 2 singular ridl.codegen.v1.Kind
 ridl.codegen.v1.Interaction.labels = 5 repeated string
@@ -478,6 +486,13 @@ ridl.codegen.v1.Service.rules = 11 repeated ridl.codegen.v1.Rule
 ridl.codegen.v1.Service.see = 9 repeated ridl.codegen.v1.DocLink
 ridl.codegen.v1.Service.since = 10 repeated string
 ridl.codegen.v1.Service.visibility = 2 singular ridl.codegen.v1.Visibility
+ridl.codegen.v1.Shape values SHAPE_ACTIVATE SHAPE_ADJUST SHAPE_DISMISS SHAPE_NONE SHAPE_SELECT SHAPE_TOGGLE
+ridl.codegen.v1.Shape.SHAPE_ACTIVATE = 1
+ridl.codegen.v1.Shape.SHAPE_ADJUST = 4
+ridl.codegen.v1.Shape.SHAPE_DISMISS = 5
+ridl.codegen.v1.Shape.SHAPE_NONE = 0
+ridl.codegen.v1.Shape.SHAPE_SELECT = 3
+ridl.codegen.v1.Shape.SHAPE_TOGGLE = 2
 ridl.codegen.v1.SignalShape.declared_init = 2 optional string
 ridl.codegen.v1.SignalShape.init = 3 singular ridl.codegen.v1.Init
 ridl.codegen.v1.SignalShape.payload = 1 singular ridl.codegen.v1.Payload
@@ -551,7 +566,9 @@ ridl.ir.v2.AttributeValue.scalar = 10 singular string oneof=kind
 ridl.ir.v2.Backing.primitive = 10 singular ridl.ir.v2.PrimitiveType oneof=kind
 ridl.ir.v2.Backing.unit = 11 singular string oneof=kind
 ridl.ir.v2.CommandDef.contracts = 2 repeated ridl.ir.v2.Contract
+ridl.ir.v2.CommandDef.family = 4 singular ridl.ir.v2.Family
 ridl.ir.v2.CommandDef.params = 1 repeated ridl.ir.v2.Param
+ridl.ir.v2.CommandDef.shape = 5 singular ridl.ir.v2.Shape
 ridl.ir.v2.CommandDef.timing = 3 singular ridl.ir.v2.Timing
 ridl.ir.v2.Component.attributes = 9 repeated ridl.ir.v2.Attribute
 ridl.ir.v2.Component.deprecated = 14 optional string
@@ -660,10 +677,17 @@ ridl.ir.v2.EnumValue.name = 1 singular string
 ridl.ir.v2.EnumValue.see = 5 repeated ridl.ir.v2.DocLink
 ridl.ir.v2.EnumValue.since = 6 repeated string
 ridl.ir.v2.EnumValue.value = 2 singular int64
+ridl.ir.v2.EventDef.family = 3 singular ridl.ir.v2.Family
 ridl.ir.v2.EventDef.payload = 1 singular string
 ridl.ir.v2.EventDef.timing = 2 singular ridl.ir.v2.Timing
 ridl.ir.v2.FallibleType.err = 2 singular string
 ridl.ir.v2.FallibleType.ok = 1 singular string
+ridl.ir.v2.Family values FAMILY_ACQUISITION FAMILY_CONTROL FAMILY_DISPATCH FAMILY_INTENT FAMILY_PRESENTATION
+ridl.ir.v2.Family.FAMILY_ACQUISITION = 3
+ridl.ir.v2.Family.FAMILY_CONTROL = 4
+ridl.ir.v2.Family.FAMILY_DISPATCH = 0
+ridl.ir.v2.Family.FAMILY_INTENT = 2
+ridl.ir.v2.Family.FAMILY_PRESENTATION = 1
 ridl.ir.v2.Field.declared_init = 4 optional string
 ridl.ir.v2.Field.deprecated = 8 optional string
 ridl.ir.v2.Field.doc = 6 singular string
@@ -778,6 +802,7 @@ ridl.ir.v2.Producer.instances = 3 repeated string
 ridl.ir.v2.Producer.not_yet_realizable = 4 singular bool
 ridl.ir.v2.Producer.service = 1 singular string
 ridl.ir.v2.QueryDef.contracts = 3 repeated ridl.ir.v2.Contract
+ridl.ir.v2.QueryDef.family = 5 singular ridl.ir.v2.Family
 ridl.ir.v2.QueryDef.params = 1 repeated ridl.ir.v2.Param
 ridl.ir.v2.QueryDef.return_type = 2 singular ridl.ir.v2.ReturnType
 ridl.ir.v2.QueryDef.timing = 4 singular ridl.ir.v2.Timing
@@ -826,7 +851,15 @@ ridl.ir.v2.ServiceShape reserved 1
 ridl.ir.v2.ServiceShape reserved 12
 ridl.ir.v2.ServiceShape.inline = 11 singular ridl.ir.v2.Interface oneof=kind
 ridl.ir.v2.ServiceShape.interface_ref = 10 singular string oneof=kind
+ridl.ir.v2.Shape values SHAPE_ACTIVATE SHAPE_ADJUST SHAPE_DISMISS SHAPE_NONE SHAPE_SELECT SHAPE_TOGGLE
+ridl.ir.v2.Shape.SHAPE_ACTIVATE = 1
+ridl.ir.v2.Shape.SHAPE_ADJUST = 4
+ridl.ir.v2.Shape.SHAPE_DISMISS = 5
+ridl.ir.v2.Shape.SHAPE_NONE = 0
+ridl.ir.v2.Shape.SHAPE_SELECT = 3
+ridl.ir.v2.Shape.SHAPE_TOGGLE = 2
 ridl.ir.v2.SignalDef.declared_init = 2 optional string
+ridl.ir.v2.SignalDef.family = 5 singular ridl.ir.v2.Family
 ridl.ir.v2.SignalDef.init = 3 singular ridl.ir.v2.InitValue
 ridl.ir.v2.SignalDef.payload = 1 singular string
 ridl.ir.v2.SignalDef.timing = 4 singular ridl.ir.v2.Timing

@@ -4542,6 +4542,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -4614,6 +4615,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -4686,6 +4688,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -4758,6 +4761,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "53"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -4822,6 +4826,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "50"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -4914,7 +4919,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 50
                 }
-              }
+              },
+              "shape": "SHAPE_NONE"
             }
           }
         },
@@ -4958,6 +4964,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "96"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -5156,6 +5163,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "streamFaults.reply: stream"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -5280,6 +5288,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "getFaultPage.reply: FaultPage | DiagError"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -5412,6 +5421,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "186"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -5474,6 +5484,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "capabilities.payload: array of ridl.std.Label"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -5556,6 +5567,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -5640,6 +5652,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -5718,6 +5731,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -5818,6 +5832,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "44"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -5890,6 +5905,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "54"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -5953,6 +5969,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "readTicks.request: ()"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6053,6 +6070,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "44"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6131,7 +6149,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 44
                 }
-              }
+              },
+              "shape": "SHAPE_NONE"
             }
           }
         },
@@ -6162,6 +6181,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "readSpan.request: ()"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6233,6 +6253,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "tickBounds.payload: array of tuple"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6310,6 +6331,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6410,6 +6432,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6500,6 +6523,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "54"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6596,6 +6620,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6668,6 +6693,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6739,6 +6765,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6809,6 +6836,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6880,6 +6908,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -6953,6 +6982,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "54"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -7016,6 +7046,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "46"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -7144,7 +7175,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 46
                 }
-              }
+              },
+              "shape": "SHAPE_NONE"
             }
           }
         },
@@ -7187,6 +7219,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "replayTrace.request: (samples)"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -7240,7 +7273,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
                 }
-              }
+              },
+              "shape": "SHAPE_NONE"
             }
           }
         },
@@ -7271,6 +7305,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "streamFilterHistory.reply: stream"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -7407,6 +7442,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "rebalance.request: (samples)"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -7518,6 +7554,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "getBounds.request: ()"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -7627,6 +7664,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "calibrate.reply: ClimateReport | HvacError"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -7776,6 +7814,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "getClimate.request: ()"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -7873,6 +7912,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "getCabinTemp.request: ()"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -7968,6 +8008,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "314"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -8030,6 +8071,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "supportedModes.payload: array of ridl.std.Label"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -8083,6 +8125,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -8180,7 +8223,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 43
                 }
-              }
+              },
+              "shape": "SHAPE_NONE"
             }
           }
         },
@@ -8211,6 +8255,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "43"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],
@@ -8326,7 +8371,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 43
                 }
-              }
+              },
+              "shape": "SHAPE_NONE"
             }
           }
         },
@@ -8357,6 +8403,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "scaledFan.request: ()"
               }
             },
+            "family": "FAMILY_DISPATCH",
             "links": [],
             "see": [],
             "since": [],

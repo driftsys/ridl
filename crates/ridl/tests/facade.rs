@@ -525,6 +525,59 @@ fn built_catalog_hash(emit: &str) -> String {
         .to_owned()
 }
 
+/// `ridl` with the arguments, returning the exit code and standard output.
+fn ridl_stdout(args: &[&std::ffi::OsStr]) -> (i32, String) {
+    let output = Command::new(env!("CARGO_BIN_EXE_ridl"))
+        .args(args)
+        .output()
+        .expect("the ridl binary must run");
+    let code = output.status.code().expect("the process exits with a code");
+    (code, String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// The catalog hash of `examples/cabin` is the one `freeze/wire.txt` records.
+/// The IR gained `family` and `shape` with zero values that encode to no
+/// byte, so the hash of every existing source is unchanged; this test holds
+/// the example and the dump to each other.
+#[test]
+fn the_cabin_catalog_hash_matches_the_wire_dump() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .expect("crates/ridl sits two levels below the repository root");
+    let wire = std::fs::read_to_string(root.join("freeze/wire.txt")).expect("freeze/wire.txt");
+    let recorded = wire
+        .lines()
+        .find_map(|line| line.strip_prefix("catalog-hash veh.cabin "))
+        .expect("the wire dump records the cabin catalog hash");
+    let out = TempDir::new("cabin-catalog");
+    let (code, stderr) = ridl(&[
+        "build".as_ref(),
+        root.join("examples/cabin").as_os_str(),
+        "--emit".as_ref(),
+        "catalog".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+    ]);
+    assert_eq!(code, 0, "examples/cabin must build, stderr:\n{stderr}");
+    let descriptor = std::fs::read_dir(out.path())
+        .expect("the out dir")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| path.is_file())
+        .expect("--emit catalog writes one descriptor");
+    let (code, described) = ridl_stdout(&["describe".as_ref(), descriptor.as_os_str()]);
+    assert_eq!(code, 0, "`ridl describe` must exit 0");
+    let json: serde_json::Value = serde_json::from_str(&described).expect("describe prints JSON");
+    let hex: String = json["hash"]
+        .as_array()
+        .expect("the descriptor carries `hash`")
+        .iter()
+        .map(|byte| format!("{:02x}", byte.as_u64().expect("a byte")))
+        .collect();
+    assert_eq!(hex, recorded);
+}
+
 /// driftsys/ridl#275's criterion: the catalog hash is the same whether a
 /// build emits proto3, FlatBuffers or both, and it is not the all-zero
 /// placeholder.
