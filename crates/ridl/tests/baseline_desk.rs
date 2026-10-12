@@ -3095,3 +3095,85 @@ fn check_is_silent_for_an_in_place_field_type_change_the_gate_refuses() {
     );
     assert_eq!(code, 0, "the desk leaves the exit code alone:\n{stderr}");
 }
+
+/// (driftsys/ridl#590) A member added above every live ordinal but below a
+/// tombstone's is an insertion into a retired slot's range, not an append:
+/// `CompositeBody::high_water` reads the `reserved` entries as well as the
+/// live members. Deleting the `reserved` chain from it passed every test,
+/// because no fixture put a tombstone above every live ordinal.
+#[test]
+fn check_reads_a_tombstone_above_every_live_member_as_the_high_water_mark() {
+    let source = "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  door: DoorState
+  latch: DoorState
+  reserved gone
+}
+";
+    let dir = TempDir::new("tombstone-high-water");
+    let root = package_workspace(&dir, source);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    // `fresh` takes the tombstone's ordinal: above every live member, but
+    // not above everything the baseline retires.
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  door: DoorState
+  latch: DoorState
+  fresh: DoorState
+}
+",
+    );
+
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    let block = ridl_407_block(&stderr, "fresh");
+    assert!(
+        block.contains("which the published baseline retires"),
+        "the member lands in a retired slot, not after every ordinal:\n{block}",
+    );
+}
+
+/// (driftsys/ridl#590) `quoted_list`'s three-or-more form reads
+/// "`a`, `b` and `c`". Changing its comma join to " and " passed every test,
+/// because no fixture moved three members at once.
+#[test]
+fn check_lists_three_moved_siblings_with_commas() {
+    let source = "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  gone: DoorState
+  a: DoorState
+  b: DoorState
+  c: DoorState
+}
+";
+    let dir = TempDir::new("three-moved");
+    let root = package_workspace(&dir, source);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    // `gone` is deleted, so `a`, `b` and `c` each lose an ordinal.
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  a: DoorState
+  b: DoorState
+  c: DoorState
+}
+",
+    );
+
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    let block = ridl_407_block(&stderr, "gone");
+    assert!(
+        block.contains("`a`, `b` and `c`"),
+        "three names read as a list, not as a chain of `and`:\n{block}",
+    );
+}
