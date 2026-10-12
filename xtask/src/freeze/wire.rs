@@ -783,6 +783,26 @@ mod tests {
                 "0a 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 02 00",
                 "response reply with a zero-byte payload",
             ),
+            (
+                "payload `ff`",
+                "08 02 01000000 02000000 ab89674523010000 0700000000000000 ff",
+                "occurrence carries its payload",
+            ),
+            (
+                "payload `ff`",
+                "09 03 01000000 03000000 ab89674523010000 0100000000000000 ff",
+                "request carries its payload",
+            ),
+            (
+                "payload `0201`",
+                "07 03 01000000 02000000 ab89674523010000 0700000000000000 02 0201",
+                "publish Live with a payload under kind 3",
+            ),
+            (
+                "payload `aabb`",
+                "0a 03 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 02 00 aabb",
+                "response reply with a payload under kind 3",
+            ),
             ("x", "02 03 06", "Rule 6"),
             ("x", "02 09 05", "outcome 9, refusal 5"),
             ("x", "05 05 01000000 02000000", "unsubscribe, kind 5"),
@@ -850,6 +870,11 @@ mod tests {
                 "payload `ff`",
                 "0a 03 01000000 03000000 ac89674523010000 0100000000000000 0100000000000000 01 00 ff",
                 "response accepted carries no payload",
+            ),
+            (
+                "payload `ff`",
+                "0a 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 03 01 ff",
+                "response violation carries no payload",
             ),
             // One header byte missing reads as a shorter payload, which is not
             // the payload the `Vector` cell names.
@@ -1019,6 +1044,42 @@ mod tests {
         // and the second accepted.
         let no_separator = "### 11.1 WebSocket\n\n| Id | Vector | Hex |\n| `ok` | x | `02 01 00` |\n| `ok2` | x | `02 09 02` |\n";
         assert!(frame_vectors(no_separator).is_err(), "no separator row");
+    }
+
+    /// The separator row has three cells of `-` and `:` only, none empty.
+    #[test]
+    fn the_separator_row_is_three_non_empty_cells_of_dashes_and_colons() {
+        let with = |separator: &str| {
+            format!(
+                "### 11.1 WebSocket\n\n| Id | Vector | Hex |\n{separator}\n| `ok` | x | `02 01 00` |\n"
+            )
+        };
+        assert!(
+            frame_vectors(&with("| :-- | :-: | --: |")).is_ok(),
+            "colons"
+        );
+        assert!(frame_vectors(&with("| --- | --- | --- |")).is_ok());
+        assert!(frame_vectors(&with("| --- | --- |")).is_err(), "two cells");
+        assert!(
+            frame_vectors(&with("| --- | --- | --- | --- |")).is_err(),
+            "four cells"
+        );
+        assert!(
+            frame_vectors(&with("| --- |  | --- |")).is_err(),
+            "an empty cell"
+        );
+        assert!(
+            frame_vectors(&with("| --- | -a- | --- |")).is_err(),
+            "a letter"
+        );
+    }
+
+    #[test]
+    fn a_payload_phrase_without_a_closing_backtick_fails() {
+        let err = named_payload("payload `ff").expect_err("no closing backtick");
+        assert!(err.contains("closing backtick"), "{err}");
+        assert_eq!(named_payload("payload `ff`"), Ok(vec![0xff]));
+        assert_eq!(named_payload("none"), Ok(Vec::new()));
     }
 
     #[test]

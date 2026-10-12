@@ -380,12 +380,22 @@ fn a_websocket_row_adds_its_frame_header_and_envelope_to_the_proto3_bound() {
             .clone()
     };
     let deployment = request.deployment.as_mut().expect("a deployment");
-    deployment.bindings = vec![v1::Binding {
-        name: "websocket".to_string(),
-        version: "test".to_string(),
-        frame_header_max_bytes: Some(100),
-        envelope_bytes: Some(7),
-    }];
+    // A row of another binding comes first, with numbers that would change
+    // the sum, so the row is chosen by its name and not by its position.
+    deployment.bindings = vec![
+        v1::Binding {
+            name: "other".to_string(),
+            version: "test".to_string(),
+            frame_header_max_bytes: Some(1000),
+            envelope_bytes: Some(1000),
+        },
+        v1::Binding {
+            name: "websocket".to_string(),
+            version: "test".to_string(),
+            frame_header_max_bytes: Some(100),
+            envelope_bytes: Some(7),
+        },
+    ];
     // `Warning`'s proto3 bound is 8 (the fixture derives it): 100 + 7 + 8.
     assert_eq!(max_message_bytes(&request, "warning"), json!(115));
     // `Temperature` has no proto3 bound, so the sum has no value.
