@@ -148,7 +148,6 @@ pub fn agent_invocation(host: Host, model: &str, dirs: &RunDirs, prompt: &str) -
         Host::Claude => (
             vec![
                 s("-p"),
-                s("--bare"),
                 s("--model"),
                 s(model),
                 s("--mcp-config"),
@@ -214,6 +213,87 @@ pub fn run(invocation: &Invocation, stdout_to: &Path) -> Result<ExitStatus, Stri
     child.wait().map_err(|e| e.to_string())
 }
 
+/// Runs `invocation` and returns its exit code, or `None` when it has none.
+/// With `handoff`, nothing is spawned: the invocation is written to a request
+/// file next to `stdout_to`, and the call waits until the operator has run
+/// the prompt with an agent of their own, written its output to `stdout_to`,
+/// and created the done file. A handed-off run has no exit code.
+pub fn execute(
+    invocation: &Invocation,
+    stdout_to: &Path,
+    handoff: bool,
+) -> Result<Option<i32>, String> {
+    if !handoff {
+        return run(invocation, stdout_to).map(|status| status.code());
+    }
+    let mut request = toml::Table::new();
+    request.insert("cwd".into(), invocation.cwd.display().to_string().into());
+    request.insert("output".into(), stdout_to.display().to_string().into());
+    request.insert(
+        "done".into(),
+        done_path(stdout_to).display().to_string().into(),
+    );
+    request.insert(
+        "args".into(),
+        toml::Value::Array(invocation.args.iter().map(|a| a.clone().into()).collect()),
+    );
+    request.insert("prompt".into(), invocation.stdin.clone().into());
+    let path = request_path(stdout_to);
+    std::fs::write(&path, toml::to_string(&request).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    eprintln!("eval: handoff: {}", path.display());
+    while !done_path(stdout_to).is_file() {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    Ok(None)
+}
+
+fn request_path(stdout_to: &Path) -> PathBuf {
+    stdout_to.with_extension("request.toml")
+}
+
+fn done_path(stdout_to: &Path) -> PathBuf {
+    stdout_to.with_extension("done")
+}
+
+/// The stored Codex login: `RIDL_EVAL_CODEX_LOGIN`, else `auth.json` in
+/// `$CODEX_HOME`, else in `~/.codex`.
+pub fn codex_login_path() -> PathBuf {
+    if let Ok(path) = std::env::var("RIDL_EVAL_CODEX_LOGIN") {
+        return PathBuf::from(path);
+    }
+    let home = std::env::var("CODEX_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".codex")
+        });
+    home.join("auth.json")
+}
+
+/// Copies the stored Codex login, and nothing else of the user's Codex home,
+/// into a run's home.
+pub fn copy_login(stored: &Path, home: &Path) -> Result<(), String> {
+    std::fs::copy(stored, home.join("auth.json"))
+        .map(|_| ())
+        .map_err(|e| {
+            format!(
+                "no stored Codex login at {} ({e}); run `codex login`",
+                stored.display()
+            )
+        })
+}
+
+/// Copies a run's login back when the run refreshed its token, so the stored
+/// login is not left with a token the refresh revoked.
+pub fn return_login(home: &Path, stored: &Path) -> Result<(), String> {
+    let used = home.join("auth.json");
+    let changed = std::fs::read(&used).ok() != std::fs::read(stored).ok();
+    if changed && used.is_file() {
+        std::fs::copy(&used, stored).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
     std::fs::create_dir_all(to).map_err(|e| e.to_string())?;
     for entry in std::fs::read_dir(from).map_err(|e| format!("read {}: {e}", from.display()))? {
@@ -242,9 +322,10 @@ mod tests {
     }
 
     #[test]
-    fn claude_runs_bare_with_only_the_ridl_server() {
+    fn claude_runs_in_an_empty_home_with_only_the_ridl_server() {
         let inv = agent_invocation(Host::Claude, "m", &dirs(Path::new("/r")), "p");
-        assert!(inv.args.contains(&"--bare".to_owned()));
+        // `--bare` refuses the OAuth token `claude setup-token` prints.
+        assert!(!inv.args.contains(&"--bare".to_owned()));
         assert!(inv.args.contains(&"--strict-mcp-config".to_owned()));
         assert!(inv.args.windows(2).any(|w| w == ["--model", "m"]));
         assert!(
@@ -343,6 +424,62 @@ mod tests {
         assert_eq!(std::fs::read_dir(&claude.home).unwrap().count(), 0);
         let codex = prepare_run(&scratch("codex"), &task, Host::Codex, false, &skill).unwrap();
         assert!(!codex.home.join("skills").exists());
+    }
+
+    #[test]
+    fn a_codex_run_gets_only_the_stored_login_and_returns_a_refreshed_one() {
+        let stored = scratch("stored").join("auth.json");
+        std::fs::write(&stored, "old").unwrap();
+        let home = scratch("home");
+        copy_login(&stored, &home).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(home.join("auth.json")).unwrap(),
+            "old"
+        );
+        assert_eq!(std::fs::read_dir(&home).unwrap().count(), 1);
+        std::fs::write(home.join("auth.json"), "refreshed").unwrap();
+        return_login(&home, &stored).unwrap();
+        assert_eq!(std::fs::read_to_string(&stored).unwrap(), "refreshed");
+    }
+
+    #[test]
+    fn a_missing_stored_login_is_an_error() {
+        let missing = scratch("none").join("auth.json");
+        let error = copy_login(&missing, &scratch("home")).unwrap_err();
+        assert!(error.contains("codex login"), "{error}");
+    }
+
+    #[test]
+    fn a_handed_off_invocation_waits_for_the_operator_output() {
+        let dir = scratch("handoff");
+        let out = dir.join("t.jsonl");
+        let invocation = Invocation {
+            program: "claude".into(),
+            args: vec!["-p".into()],
+            env: vec![],
+            cwd: dir.join("ws"),
+            stdin: "the prompt".into(),
+        };
+        let operator = {
+            let out = out.clone();
+            std::thread::spawn(move || {
+                let request = request_path(&out);
+                while !request.is_file() {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                let text = std::fs::read_to_string(&request).unwrap();
+                assert!(
+                    text.contains("the prompt") && text.contains("/ws"),
+                    "{text}"
+                );
+                std::fs::write(&out, "transcript").unwrap();
+                std::fs::write(done_path(&out), "").unwrap();
+            })
+        };
+        let code = execute(&invocation, &out, true).unwrap();
+        operator.join().unwrap();
+        assert_eq!(code, None);
+        assert_eq!(std::fs::read_to_string(&out).unwrap(), "transcript");
     }
 
     #[test]

@@ -149,7 +149,6 @@ pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> h
         Host::Claude => (
             vec![
                 s("-p"),
-                s("--bare"),
                 s("--model"),
                 s(model),
                 s("--tools"),
@@ -204,14 +203,37 @@ pub fn claude_reply(stdout: &str) -> Result<String, String> {
         .ok_or_else(|| "the Claude judge printed no result".to_owned())
 }
 
-/// The final message of a Claude run: the `result` of its last `result` line.
+/// The final message of a Claude run: the `result` of its last `result` line,
+/// or, in a handed-off run's transcript, which has no `result` line, the text
+/// of its last assistant message that holds text.
 pub fn claude_final_message(transcript: &str) -> String {
-    transcript
+    let lines: Vec<serde_json::Value> = transcript
         .lines()
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter_map(|line| serde_json::from_str(line).ok())
+        .collect();
+    let result = lines
+        .iter()
         .filter(|v| v["type"] == "result")
-        .filter_map(|v| v["result"].as_str().map(str::to_owned))
-        .next_back()
+        .filter_map(|v| v["result"].as_str())
+        .next_back();
+    let assistant_text = || {
+        lines
+            .iter()
+            .filter(|v| v["type"] == "assistant")
+            .filter_map(|v| {
+                let text: Vec<&str> = v["message"]["content"]
+                    .as_array()?
+                    .iter()
+                    .filter(|block| block["type"] == "text")
+                    .filter_map(|block| block["text"].as_str())
+                    .collect();
+                (!text.is_empty()).then(|| text.join("\n"))
+            })
+            .next_back()
+    };
+    result
+        .map(str::to_owned)
+        .or_else(assistant_text)
         .unwrap_or_default()
 }
 
@@ -365,6 +387,31 @@ mod tests {
     fn the_final_message_of_a_claude_run_is_its_last_result() {
         let t = "{\"type\":\"result\",\"result\":\"first\"}\n{\"type\":\"assistant\"}\n{\"type\":\"result\",\"result\":\"last\"}\n";
         assert_eq!(claude_final_message(t), "last");
+    }
+
+    #[test]
+    fn a_transcript_with_no_result_ends_with_its_last_assistant_text() {
+        let t = concat!(
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"first"}]}}"#,
+            "\n",
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{}}]}}"#,
+            "\n",
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"last"}]}}"#,
+            "\n",
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","content":"x"}]}}"#,
+            "\n"
+        );
+        assert_eq!(claude_final_message(t), "last");
+    }
+
+    #[test]
+    fn the_claude_judge_reads_no_stored_configuration_but_accepts_a_cli_login() {
+        let inv = judge_invocation(Host::Claude, "c", Path::new("/j"), "p");
+        assert!(!inv.args.contains(&"--bare".to_owned()));
+        assert!(
+            inv.env
+                .contains(&("CLAUDE_CONFIG_DIR".to_owned(), "/j/home".to_owned()))
+        );
     }
 
     #[test]

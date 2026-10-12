@@ -3,7 +3,14 @@
 //! under `evals/results/<date>/`.
 //!
 //! `cargo xtask eval [--task <id>]... [--host claude|codex]... [--runs <n>]
-//! [--skill with|without|both] [--out <dir>]`
+//! [--skill with|without|both] [--out <dir>] [--claude-handoff]`
+//!
+//! Each host signs in with its CLI's own login. Codex runs get a copy of the
+//! stored `auth.json`. Claude runs read `CLAUDE_CODE_OAUTH_TOKEN`, which
+//! `claude setup-token` prints, or `ANTHROPIC_API_KEY`. With
+//! `--claude-handoff`, no Claude command runs: each Claude agent run and each
+//! Claude judgement is written as a request file, and the eval waits until the
+//! operator has run it with an agent of their own (see `host::execute`).
 
 mod host;
 mod judge;
@@ -21,6 +28,7 @@ pub struct Options {
     /// `true` runs with the skill, `false` without it.
     pub skill: Vec<bool>,
     pub out: Option<PathBuf>,
+    pub claude_handoff: bool,
 }
 
 pub fn parse(args: &[String]) -> Result<Options, String> {
@@ -30,6 +38,7 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
         runs: 1,
         skill: vec![true, false],
         out: None,
+        claude_handoff: false,
     };
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -61,6 +70,7 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
                 }
             }
             "--out" => options.out = Some(PathBuf::from(value()?)),
+            "--claude-handoff" => options.claude_handoff = true,
             other => return Err(format!("unknown argument: {other}")),
         }
     }
@@ -86,7 +96,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let options = parse(args)?;
     let tasks = task::load_tasks(&root, &options.tasks)?;
     let models = host::load_models(&root)?;
-    check_keys()?;
+    check_logins(options.claude_handoff)?;
     let out = options
         .out
         .clone()
@@ -111,12 +121,16 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     let base = scratch_dir(&task.id, &label)?;
                     let dirs = host::prepare_run(&base, task, host, with_skill, &skill)?;
                     if host == Host::Codex {
-                        codex_login(&dirs.home)?;
+                        host::copy_login(&host::codex_login_path(), &dirs.home)?;
                     }
                     let invocation =
                         host::agent_invocation(host, host.model(&models), &dirs, &prompt);
-                    let status = host::run(&invocation, &dirs.transcript)?;
-                    eprintln!("eval: {} {label}: agent exited {status}", task.id);
+                    let handoff = options.claude_handoff && host == Host::Claude;
+                    let code = host::execute(&invocation, &dirs.transcript, handoff)?;
+                    if host == Host::Codex {
+                        host::return_login(&dirs.home, &host::codex_login_path())?;
+                    }
+                    eprintln!("eval: {} {label}: agent exited {code:?}", task.id);
                     let transcript = std::fs::read_to_string(&dirs.transcript).unwrap_or_default();
                     if with_skill && !score::skill_was_loaded(host, &transcript) {
                         return Err(format!(
@@ -137,13 +151,18 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     result.insert("host_version".into(), version.into());
                     result.insert("skill".into(), with_skill.into());
                     result.insert("run".into(), i64::from(n).into());
-                    result.insert(
-                        "agent_exit".into(),
-                        i64::from(status.code().unwrap_or(-1)).into(),
-                    );
+                    result.insert("agent_exit".into(), i64::from(code.unwrap_or(-1)).into());
                     result.insert("mechanical".into(), mechanical_table(&mechanical).into());
                     let rubric = if mechanical.passed() {
-                        judge_run(task, host, &models, &dirs, &transcript, &label)?
+                        judge_run(
+                            task,
+                            host,
+                            &models,
+                            &dirs,
+                            &transcript,
+                            &label,
+                            options.claude_handoff,
+                        )?
                     } else {
                         let mut skipped = toml::Table::new();
                         skipped.insert("score".into(), 0.0.into());
@@ -327,6 +346,7 @@ fn judge_run(
     dirs: &host::RunDirs,
     transcript: &str,
     label: &str,
+    claude_handoff: bool,
 ) -> Result<toml::Table, String> {
     let judge = host.other();
     let read = |path: &Path| std::fs::read_to_string(path).map_err(|e| e.to_string());
@@ -342,11 +362,18 @@ fn judge_run(
     std::fs::create_dir_all(dir.join("home")).map_err(|e| e.to_string())?;
     judge::write_schema(&dir)?;
     if judge == Host::Codex {
-        codex_login(&dir.join("home"))?;
+        host::copy_login(&host::codex_login_path(), &dir.join("home"))?;
     }
     let invocation = judge::judge_invocation(judge, judge.model(models), &dir, &text);
     let stdout = dir.join("stdout.json");
-    host::run(&invocation, &stdout)?;
+    host::execute(
+        &invocation,
+        &stdout,
+        claude_handoff && judge == Host::Claude,
+    )?;
+    if judge == Host::Codex {
+        host::return_login(&dir.join("home"), &host::codex_login_path())?;
+    }
     let reply = match judge {
         Host::Claude => read(&stdout).and_then(|out| judge::claude_reply(&out)),
         Host::Codex => read(&dir.join("verdict.json")),
@@ -385,34 +412,22 @@ fn mechanical_table(mechanical: &score::Mechanical) -> toml::Table {
     table
 }
 
-/// The judge of each host is the other host, so both keys are needed for any
-/// run. An eval run reads no stored login: Claude runs with `--bare` and each
-/// Codex run has a fresh home.
-fn check_keys() -> Result<(), String> {
-    for var in ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"] {
-        if std::env::var(var).map_or(true, |v| v.is_empty()) {
-            return Err(format!(
-                "{var} is not set; an eval run reads no stored login"
-            ));
-        }
+/// The judge of each host is the other host, so every run uses both hosts:
+/// Codex needs its stored login, and Claude, unless it is handed off, needs a
+/// token. No command runs before both are found.
+fn check_logins(claude_handoff: bool) -> Result<(), String> {
+    let stored = host::codex_login_path();
+    if !stored.is_file() {
+        return Err(format!(
+            "no stored Codex login at {}; run `codex login`",
+            stored.display()
+        ));
+    }
+    let set = |var: &str| std::env::var(var).is_ok_and(|v| !v.is_empty());
+    if !claude_handoff && !set("CLAUDE_CODE_OAUTH_TOKEN") && !set("ANTHROPIC_API_KEY") {
+        return Err("CLAUDE_CODE_OAUTH_TOKEN is not set (run `claude setup-token`), nor ANTHROPIC_API_KEY; or pass --claude-handoff".to_owned());
     }
     Ok(())
-}
-
-fn codex_login(home: &Path) -> Result<(), String> {
-    let invocation = host::Invocation {
-        program: Host::Codex.binary(),
-        args: vec!["login".into(), "--with-api-key".into()],
-        env: vec![("CODEX_HOME".into(), home.display().to_string())],
-        cwd: home.to_owned(),
-        stdin: std::env::var("OPENAI_API_KEY").unwrap_or_default(),
-    };
-    let status = host::run(&invocation, &home.join("login.log"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("codex login failed: {status}"))
-    }
 }
 
 /// A fresh directory under the system temporary directory, outside any git

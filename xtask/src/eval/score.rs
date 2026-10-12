@@ -78,8 +78,9 @@ pub fn used_ridl_check(transcript: &str) -> bool {
 }
 
 /// Whether the transcript shows that the host made the skill available.
-/// Claude: the `init` line lists `ridl-authoring` among its skills, or the
-/// agent called the `Skill` tool on it. Codex: the agent read a file of the
+/// Claude: the `init` line lists `ridl-authoring` among its skills, the
+/// agent called the `Skill` tool on it, or, in a handed-off run, the agent
+/// read its `SKILL.md`. Codex: the agent read a file of the
 /// skill's directory with a command. Text that only mentions the skill does
 /// not count.
 pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
@@ -97,7 +98,14 @@ pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
                         .get("input")
                         .and_then(|input| input.get("skill"))
                         .is_some_and(|s| s == "ridl-authoring");
-                listed || called
+                let read = str_field(map, "type") == Some("tool_use")
+                    && str_field(map, "name") == Some("Read")
+                    && map
+                        .get("input")
+                        .and_then(|input| input.get("file_path"))
+                        .and_then(serde_json::Value::as_str)
+                        .is_some_and(|p| p.ends_with("ridl-authoring/SKILL.md"));
+                listed || called || read
             }
             Host::Codex => {
                 str_field(map, "type") == Some("command_execution")
@@ -219,6 +227,14 @@ mod tests {
         assert!(skill_was_loaded(Host::Claude, CLAUDE_SKILL_CALL));
         assert!(!skill_was_loaded(Host::Claude, CLAUDE_INIT_WITHOUT));
         assert!(!skill_was_loaded(Host::Claude, TEXT_ONLY));
+    }
+
+    #[test]
+    fn a_handed_off_claude_run_loads_the_skill_by_reading_it() {
+        let read = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t3","name":"Read","input":{"file_path":"/r/ws/.claude/skills/ridl-authoring/SKILL.md"}}]}}"#;
+        let other = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t4","name":"Read","input":{"file_path":"/r/ws/ridl.toml"}}]}}"#;
+        assert!(skill_was_loaded(Host::Claude, read));
+        assert!(!skill_was_loaded(Host::Claude, other));
     }
 
     #[test]

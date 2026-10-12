@@ -54,8 +54,7 @@ fn fakes_with(claude_body: Option<&str>) -> Fakes {
         "codex",
         &format!(
             "{JUDGE_ITEMS}\n{}",
-            r#"[ "$1" = login ] && exit 0
-case "$*" in *--output-schema*)
+            r#"case "$*" in *--output-schema*)
   out=""; prev=""; for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
   echo "{\"items\":[$items]}" > "$out"; exit 0;;
 esac
@@ -76,24 +75,40 @@ echo '{"type":"item.completed","item":{"type":"mcp_tool_call","server":"ridl","t
     }
 }
 
-fn eval(fakes: &Fakes, args: &[&str], keys: bool) -> Output {
+/// Which host logins the eval command finds.
+#[derive(Clone, Copy)]
+enum Logins {
+    Both,
+    CodexOnly,
+    None,
+}
+
+fn command(fakes: &Fakes, args: &[&str], logins: Logins) -> Command {
+    let stored = fakes.dir.join("auth.json");
     let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
     command
         .arg("eval")
         .args(args)
         .env("RIDL_EVAL_CLAUDE", &fakes.claude)
         .env("RIDL_EVAL_CODEX", &fakes.codex)
-        .env("RIDL_EVAL_RIDL", &fakes.ridl);
-    if keys {
-        command
-            .env("ANTHROPIC_API_KEY", "fake")
-            .env("OPENAI_API_KEY", "fake");
-    } else {
-        command
-            .env_remove("ANTHROPIC_API_KEY")
-            .env_remove("OPENAI_API_KEY");
+        .env("RIDL_EVAL_RIDL", &fakes.ridl)
+        .env("RIDL_EVAL_CODEX_LOGIN", &stored)
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("CLAUDE_CODE_OAUTH_TOKEN");
+    match logins {
+        Logins::Both => {
+            std::fs::write(&stored, "{}").unwrap();
+            command.env("CLAUDE_CODE_OAUTH_TOKEN", "fake");
+        }
+        Logins::CodexOnly => std::fs::write(&stored, "{}").unwrap(),
+        Logins::None => {}
     }
-    command.output().unwrap()
+    command
+}
+
+fn eval(fakes: &Fakes, args: &[&str], logins: bool) -> Output {
+    let logins = if logins { Logins::Both } else { Logins::None };
+    command(fakes, args, logins).output().unwrap()
 }
 
 #[test]
@@ -155,7 +170,7 @@ fn a_codex_run_copies_its_transcript() {
 }
 
 #[test]
-fn an_unset_key_stops_the_run_before_any_host_is_called() {
+fn a_missing_codex_login_stops_the_run_before_any_host_is_called() {
     let marker_dir = fakes_with(None).dir;
     let fakes = fakes_with(Some(&format!("touch {}/called", marker_dir.display())));
     let output = eval(
@@ -171,8 +186,143 @@ fn an_unset_key_stops_the_run_before_any_host_is_called() {
         false,
     );
     assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("is not set"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("run `codex login`"));
     assert!(!marker_dir.join("called").exists());
+}
+
+#[test]
+fn a_missing_claude_token_stops_the_run_unless_claude_is_handed_off() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    let args = [
+        "--task",
+        "design-0001",
+        "--host",
+        "codex",
+        "--skill",
+        "without",
+        "--out",
+        out.to_str().unwrap(),
+    ];
+    let output = command(&fakes, &args, Logins::CodexOnly).output().unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("claude setup-token"));
+}
+
+/// Runs the eval with `--claude-handoff`, and acts as the operator: for each
+/// request the eval prints, writes `answer(request)` as the output and creates
+/// the done file.
+fn eval_handed_off(
+    fakes: &Fakes,
+    args: &[&str],
+    answer: impl Fn(&toml::Table) -> String,
+) -> Output {
+    use std::io::BufRead;
+    let mut child = command(fakes, args, Logins::CodexOnly)
+        .arg("--claude-handoff")
+        .stderr(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stderr = String::new();
+    for line in std::io::BufReader::new(child.stderr.take().unwrap()).lines() {
+        let line = line.unwrap();
+        if let Some(path) = line.strip_prefix("eval: handoff: ") {
+            let request: toml::Table =
+                toml::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+            std::fs::write(request["output"].as_str().unwrap(), answer(&request)).unwrap();
+            std::fs::write(request["done"].as_str().unwrap(), "").unwrap();
+        }
+        stderr.push_str(&line);
+        stderr.push('\n');
+    }
+    let mut output = child.wait_with_output().unwrap();
+    output.stderr = stderr.into_bytes();
+    output
+}
+
+#[test]
+fn a_handed_off_claude_run_is_scored_and_judged_by_codex() {
+    let fakes = fakes_with(Some("touch called"));
+    let out = fakes.dir.join("results");
+    let output = eval_handed_off(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "claude",
+            "--skill",
+            "with",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        |request| {
+            let cwd = request["cwd"].as_str().unwrap();
+            assert!(request["prompt"].as_str().unwrap().len() > 10);
+            std::fs::write(format!("{cwd}/ridl.toml"), "[package]\n").unwrap();
+            [
+                format!(r#"{{"type":"assistant","message":{{"content":[{{"type":"tool_use","name":"Read","input":{{"file_path":"{cwd}/.claude/skills/ridl-authoring/SKILL.md"}}}}]}}}}"#),
+                r#"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__ridl__ridl_check","input":{}}]}}"#.to_owned(),
+                r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Done."}]}}"#.to_owned(),
+            ]
+            .join("\n")
+        },
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(stderr.matches("eval: handoff: ").count(), 1, "{stderr}");
+    let result = result(&out, "design-0001", "claude-with-1");
+    assert_eq!(result["agent_exit"].as_integer(), Some(-1));
+    assert_eq!(result["mechanical"]["passed"].as_bool(), Some(true));
+    assert_eq!(result["rubric"]["judge_host"].as_str(), Some("codex"));
+    assert_eq!(result["rubric"]["score"].as_float(), Some(1.0));
+}
+
+#[test]
+fn the_claude_judge_of_a_codex_run_is_handed_off() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    let output = eval_handed_off(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "codex",
+            "--skill",
+            "without",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        |request| {
+            let prompt = request["prompt"].as_str().unwrap();
+            let items: Vec<String> = prompt
+                .lines()
+                .filter_map(|l| l.split_once(". **"))
+                .filter_map(|(n, _)| n.parse::<u32>().ok())
+                .map(|n| format!(r#"{{"n":{n},"met":true,"reason":"r"}}"#))
+                .collect();
+            format!(
+                r#"{{"structured_output":{{"items":[{}]}}}}"#,
+                items.join(",")
+            )
+        },
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(stderr.matches("eval: handoff: ").count(), 1, "{stderr}");
+    let codex = result(&out, "design-0001", "codex-without-1");
+    assert_eq!(codex["rubric"]["judge_host"].as_str(), Some("claude"));
+    assert_eq!(codex["rubric"]["score"].as_float(), Some(1.0));
 }
 
 #[test]
