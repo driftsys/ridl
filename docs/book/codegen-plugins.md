@@ -333,8 +333,8 @@ behind each state and each sum are in
 sizes a socket message adds the frame header and the envelope of the transport
 binding to the payload bound; the deployment section's `bindings` list carries
 those values: the `websocket` row of
-[the frame specification §11.1](reference/frame.md#111-websocket), a frame
-header of at most 20 bytes and an envelope of 16 bytes.
+[the frame specification §11.1](reference/frame.md#111-websocket), a data-plane
+frame header of at most 20 bytes and an envelope of 16 bytes.
 
 ## The catalog hash
 

@@ -27,6 +27,7 @@ gains one `frame-vector <id> <hex>` line per row of the vector table of the
 frame specification §11.1, so the frame envelope and the `attach` handshake are
 checked by the dump and leave the policy-only list. The Context bullet on the
 wire dump, decision 3 and decision 6's `Wire format` row are changed in place.
+The layouts and codes that no vector shows stay frozen by policy.
 
 ## Context
 
@@ -124,19 +125,21 @@ design in each:
      required, the required set of each schema object that has `properties` or
      `required`, each enum value and const, and each `additionalProperties`,
      `minimum` and `format`, the wire mapping (encoding names, the `.proto` and
-     `.fbs` lines for the corpus, the catalog hash of the cabin example) and the
-     minimum Rust version and edition. The check fails when a committed dump
-     differs from a regeneration. For a surface with a row in
-     `freeze/surfaces.toml`, it also fails when a line of the dump at the row's
-     `baseline` ref is missing from the dump at `HEAD`. An added line passes. A
-     changed line is a removed line plus an added line, so it fails. The
-     accepted-sources and wire dumps read frozen copies of the packages under
-     `examples/` and `evals/corpus/`, kept under
-     `xtask/tests/freeze-fixtures/sources/` at the path of each original, and
-     the catalog hash is read from the generated-crate copy of `examples/cabin`.
-     An edit to an example or to the corpus therefore changes no dump. A copy is
-     refreshed on purpose: adding a copy adds lines, and replacing a copy so
-     that a line is removed is a break.
+     `.fbs` lines for the corpus, the catalog hash of the cabin example, the
+     test vectors of the frame specification §11.1) and the minimum Rust version
+     and edition. The check fails when a committed dump differs from a
+     regeneration. For a surface with a row in `freeze/surfaces.toml`, it also
+     fails when a line of the dump at the row's `baseline` ref is missing from
+     the dump at `HEAD`. An added line passes. A changed line is a removed line
+     plus an added line, so it fails. The accepted-sources and wire dumps read
+     frozen copies of the packages under `examples/` and `evals/corpus/`, kept
+     under `xtask/tests/freeze-fixtures/sources/` at the path of each original,
+     and the catalog hash is read from the generated-crate copy of
+     `examples/cabin`. An edit to an example or to the corpus therefore changes
+     no dump. A copy is refreshed on purpose: adding a copy adds lines, and
+     replacing a copy so that a line is removed is a break. The frame vectors
+     are read from the frame specification itself, so an edit to a vector
+     changes the dump.
 
      Some lines hold a whole set or a requiredness, so a change that adds to a
      set, or that makes a requirement looser, also removes a line and fails. A
@@ -164,10 +167,11 @@ design in each:
    checked only against its committed dump, `generated-crate` is checked only
    for equality with a regeneration, and `runtime-crates` is not checked. The
    output of `ridl diff` and the `ridl-diff` categories, the exit codes of every
-   subcommand other than `ridl check`, and the formats of `interfaces.lock` and
-   `.ridl/baseline` are in no dump; they are frozen by policy only. This record
-   is the one that states the status of `ridl diff` and of the `ridl-diff`
-   categories.
+   subcommand other than `ridl check`, the formats of `interfaces.lock` and
+   `.ridl/baseline`, and the layouts and codes of the frame specification §4 and
+   §11.1 that no test vector shows are in no dump; they are frozen by policy
+   only. This record is the one that states the status of `ridl diff` and of the
+   `ridl-diff` categories.
 
 4. **A break of a frozen surface is approved by removing its row, then adding
    the row again.** `git show <baseline>:freeze/<surface>.txt` must read a dump

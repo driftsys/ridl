@@ -62,8 +62,9 @@ The repository checks each frozen surface that has a recorded baseline against
 that baseline, and a change that removes or alters something a user depends on
 fails the build. Some parts are promised by policy and not yet checked by a
 tool: the formats of `interfaces.lock` and `.ridl/baseline`, the exit codes of
-every subcommand other than `ridl check`, the output of `ridl diff`, and the
-categories that `ridl diff` reports. A contributor who must change a frozen
+every subcommand other than `ridl check`, the output of `ridl diff`, the
+categories that `ridl diff` reports, and the layouts and codes of the frame
+specification §4 and §11.1 that no test vector shows. A contributor who must change a frozen
 surface follows the steps in `CONTRIBUTING.md`, "Changing a frozen surface". The
 full policy, with the gate that checks each surface and the rules for approving
 a break, is [ADR-0029](../decisions/ADR-0029-stability-policy.md).

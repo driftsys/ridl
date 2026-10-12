@@ -556,8 +556,8 @@ workspace's system; a workspace has at most one system.
 
 ### Bindings, and what is not built
 
-The `bindings` list holds the `websocket` row (binding version 1, frame header
-at most 20 bytes, envelope 16 bytes), from
+The `bindings` list holds the `websocket` row (binding version 1, data-plane
+frame header at most 20 bytes, envelope 16 bytes), from
 [the frame specification](../specification/frame-specification.md) §11.1. The
 emitter writes one entry per row of the table of known bindings
 (`crates/ridl-ir/src/codegen/bindings.rs`), in name order.
