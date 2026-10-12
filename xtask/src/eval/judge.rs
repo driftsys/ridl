@@ -185,6 +185,7 @@ pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> h
         program: judge.binary(),
         args,
         env,
+        inherit: judge.inherited_env(),
         cwd: dir.to_owned(),
         stdin: prompt.to_owned(),
     }

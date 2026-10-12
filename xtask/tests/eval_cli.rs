@@ -18,7 +18,8 @@ fn script(dir: &Path, name: &str, body: &str) -> PathBuf {
 /// write a `ridl.toml` when the workspace has none and print one tool-call
 /// line naming `ridl_check`; `claude_body` replaces the fake Claude agent's
 /// script when given. Every fake appends its command line to `calls.log`. A
-/// fake judge saves the prompt it read as `<host>-judge-prompt.txt`.
+/// fake judge saves the prompt it read as `<host>-judge-prompt.txt`, and a
+/// fake host saves the environment it ran with as `<host>.env`.
 ///
 /// Files in the directory change what a fake prints: `check.json` is the
 /// output of `ridl check` on a workspace with a `ridl.toml`, `diff-verdict`
@@ -84,7 +85,7 @@ fn fakes_with(claude_body: Option<&str>) -> Fakes {
         &dir,
         "claude",
         &format!(
-            "echo \"claude $*\" >> '{d}/calls.log'\n{JUDGE_ITEMS}\ncase \"$*\" in *--json-schema*) printf '%s' \"$prompt\" > '{d}/claude-judge-prompt.txt'; echo \"{{\\\"type\\\":\\\"result\\\",\\\"structured_output\\\":{{\\\"items\\\":[$items]}}}}\"; exit 0;; esac\n{}",
+            "echo \"claude $*\" >> '{d}/calls.log'\n{JUDGE_ITEMS}\nenv > '{d}/claude.env'\ncase \"$*\" in *--json-schema*) printf '%s' \"$prompt\" > '{d}/claude-judge-prompt.txt'; echo \"{{\\\"type\\\":\\\"result\\\",\\\"structured_output\\\":{{\\\"items\\\":[$items]}}}}\"; exit 0;; esac\n{}",
             claude_body.unwrap_or(
                 r#"[ -f ridl.toml ] || printf '[package]\n' > ridl.toml; echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__ridl__ridl_check","input":{}}]}}'; echo '{"type":"result","result":"Done."}'"#,
             )
@@ -96,6 +97,7 @@ fn fakes_with(claude_body: Option<&str>) -> Fakes {
         &format!(
             r#"echo "codex $*" >> '{d}/calls.log'
 {JUDGE_ITEMS}
+env > '{d}/codex.env'
 case "$*" in *--output-schema*)
   printf '%s' "$prompt" > '{d}/codex-judge-prompt.txt'
   if [ -f '{d}/codex-verdict' ]; then cat '{d}/codex-verdict' > "$out"; else echo "{{\"items\":[$items]}}" > "$out"; fi
@@ -1017,5 +1019,54 @@ fn sample_reports_a_result_without_marks_as_an_error() {
         String::from_utf8_lossy(&output.stderr).contains("has no rubric.met"),
         "{}",
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn a_host_inherits_only_its_allowed_variables() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    let output = command(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "claude",
+            "--skill",
+            "without",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        Logins::Both,
+    )
+    .env("ANTHROPIC_MODEL", "stray")
+    .env("CLAUDECODE", "1")
+    .output()
+    .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let read = |name: &str| std::fs::read_to_string(fakes.dir.join(name)).unwrap();
+    let (claude, codex) = (read("claude.env"), read("codex.env"));
+    for env in [&claude, &codex] {
+        assert!(
+            !env.lines()
+                .any(|l| l.starts_with("ANTHROPIC_MODEL=") || l.starts_with("CLAUDECODE=")),
+            "{env}"
+        );
+        assert!(env.lines().any(|l| l.starts_with("PATH=")), "{env}");
+    }
+    assert!(claude.contains("CLAUDE_CODE_OAUTH_TOKEN=fake"), "{claude}");
+    assert!(
+        claude.lines().any(|l| l.starts_with("CLAUDE_CONFIG_DIR=")),
+        "{claude}"
+    );
+    assert!(!codex.contains("CLAUDE_CODE_OAUTH_TOKEN"), "{codex}");
+    assert!(
+        codex.lines().any(|l| l.starts_with("CODEX_HOME=")),
+        "{codex}"
     );
 }

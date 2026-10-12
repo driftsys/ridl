@@ -111,6 +111,17 @@ judge of a run on one host is the other host:
 - Claude reads `CLAUDE_CODE_OAUTH_TOKEN`, which `claude setup-token` prints, or
   `ANTHROPIC_API_KEY`.
 
+A host command inherits only `PATH`, `HOME`, `TMPDIR` and `LANG` from the eval's
+environment, plus `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` for Claude,
+and the eval sets the host home (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`). No other
+variable reaches it, so a setting such as `ANTHROPIC_MODEL` in the operator's
+shell does not change a result.
+
+The Claude agent runs with `--permission-mode bypassPermissions` and no OS
+sandbox: it can run any command as the user, inside or outside its temporary
+workspace. This is an accepted risk of the eval, which runs the pinned model on
+the eval's own prompts. Codex runs in its `workspace-write` sandbox.
+
 With `--claude-handoff`, no `claude` command runs and no Claude token is needed.
 For each Claude agent run and each Claude judgement, the eval writes a
 `*.request.toml` file in the run's directory, prints its path after

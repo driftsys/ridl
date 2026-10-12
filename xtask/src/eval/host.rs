@@ -39,6 +39,24 @@ impl Host {
         std::env::var(var).unwrap_or_else(|_| default.to_owned())
     }
 
+    /// The variables of the eval's own environment that a run or a judgement
+    /// on this host inherits. Every other variable is cleared, so a setting
+    /// such as `ANTHROPIC_MODEL` or `CLAUDECODE` in the operator's shell does
+    /// not change a result. The invocation sets its host home on top.
+    pub fn inherited_env(self) -> &'static [&'static str] {
+        match self {
+            Host::Claude => &[
+                "PATH",
+                "HOME",
+                "TMPDIR",
+                "LANG",
+                "CLAUDE_CODE_OAUTH_TOKEN",
+                "ANTHROPIC_API_KEY",
+            ],
+            Host::Codex => &["PATH", "HOME", "TMPDIR", "LANG"],
+        }
+    }
+
     pub fn model(self, models: &Models) -> &str {
         match self {
             Host::Claude => &models.claude,
@@ -137,7 +155,11 @@ pub fn prepare_run(
 pub struct Invocation {
     pub program: String,
     pub args: Vec<String>,
+    /// The variables the invocation sets.
     pub env: Vec<(String, String)>,
+    /// The variables it inherits from the eval's environment; no other
+    /// variable reaches the host.
+    pub inherit: &'static [&'static str],
     pub cwd: PathBuf,
     pub stdin: String,
 }
@@ -192,6 +214,7 @@ pub fn agent_invocation(host: Host, model: &str, dirs: &RunDirs, prompt: &str) -
         program: host.binary(),
         args,
         env,
+        inherit: host.inherited_env(),
         cwd: dirs.workspace.clone(),
         stdin: prompt.to_owned(),
     }
@@ -203,6 +226,13 @@ pub fn run(invocation: &Invocation, stdout_to: &Path) -> Result<ExitStatus, Stri
     let out = std::fs::File::create(stdout_to).map_err(|e| e.to_string())?;
     let mut child = Command::new(&invocation.program)
         .args(&invocation.args)
+        .env_clear()
+        .envs(
+            invocation
+                .inherit
+                .iter()
+                .filter_map(|k| std::env::var_os(k).map(|v| (*k, v))),
+        )
         .envs(invocation.env.iter().map(|(k, v)| (k, v)))
         .current_dir(&invocation.cwd)
         .stdin(Stdio::piped())
@@ -598,6 +628,7 @@ mod tests {
             program: "claude".into(),
             args: vec!["-p".into()],
             env: vec![("CLAUDE_CONFIG_DIR".into(), "/r/home".into())],
+            inherit: &[],
             cwd: dir.join("ws"),
             stdin: "the prompt".into(),
         };
