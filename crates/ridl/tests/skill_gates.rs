@@ -68,10 +68,12 @@ fn an_unknown_code_is_reported() {
     // The unknown code is assembled, so that the catalogue drift check in
     // `ridl_core::diag`, which reads quoted codes in Rust sources, does not
     // take this test's deliberate example for an uncatalogued code.
-    let unknown = format!("RIDL-{}", 999);
     let catalogue: BTreeSet<String> = [format!("TYPL-{}", 101)].into();
-    let text = format!("TYPL-101 and {unknown} in a skill file");
-    assert_eq!(unknown_codes(&text, &catalogue), [unknown]);
+    for prefix in ["TYPL", "RIDL", "RSDL", "FORM", "MANI"] {
+        let unknown = format!("{prefix}-{}", 999);
+        let text = format!("TYPL-101 and {unknown} in a skill file");
+        assert_eq!(unknown_codes(&text, &catalogue), [unknown]);
+    }
 }
 
 /// The anchor of a heading: lowercase, punctuation other than `-` and `_`
@@ -86,12 +88,28 @@ fn anchor(heading: &str) -> String {
         .collect()
 }
 
+/// The anchors of the headings of `markdown`. A `#` line inside a fenced
+/// code block is a comment, not a heading.
 fn anchors_of(markdown: &str) -> BTreeSet<String> {
+    let mut fenced = false;
     markdown
         .lines()
+        .filter(|l| {
+            if l.trim_start().starts_with("```") {
+                fenced = !fenced;
+            }
+            !fenced
+        })
         .filter_map(|l| l.strip_prefix('#'))
         .map(|l| anchor(l.trim_start_matches('#')))
         .collect()
+}
+
+#[test]
+fn a_hash_line_in_a_code_block_is_not_a_heading() {
+    let text = "# Title\n\n```sh\n# install the tool\n```\n\n## After\n";
+    let anchors: Vec<String> = anchors_of(text).into_iter().collect();
+    assert_eq!(anchors, ["after", "title"]);
 }
 
 /// For each `## ` section of a reference file: the targets
