@@ -294,7 +294,6 @@ impl ::core::default::Default for Health {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(C)]
 pub struct Warning {
     /// # Rules
     ///

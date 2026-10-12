@@ -2038,6 +2038,41 @@ fn enumset_derived_form() {
     insta::assert_snapshot!(rust_with_codec(decls));
 }
 
+/// A struct whose IR `fixed_layout` flag holds carries no layout attribute.
+/// The C header and the extern-C face that `#[repr(C)]` served were retired
+/// (ADR-0018 decision 6), and the layout belongs to the separate layout struct
+/// of ADR-0020 decision 1 and the codec between the two, so a domain type is a
+/// value object and nothing more. `#[repr(transparent)]` on a scalar newtype
+/// is unaffected: it constrains nothing.
+#[test]
+fn a_fixed_layout_struct_carries_no_layout_attribute() {
+    let reading = v2::StructDef {
+        members: vec![field_member(named_field(
+            "value",
+            1,
+            "Speed",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: true,
+    };
+    let decls = vec![
+        speed_decl(),
+        public_decl("SensorReading", v2::decl::Kind::StructDef(reading)),
+    ];
+    let rust = rust_with_codec(decls);
+
+    assert!(
+        !rust.contains("repr(C)"),
+        "a domain type carries no `repr(C)`, emitted:\n{rust}"
+    );
+    // The scalar newtype keeps its own attribute, which is a different one.
+    assert!(
+        rust.contains("repr(transparent)"),
+        "a scalar newtype keeps `repr(transparent)`, emitted:\n{rust}"
+    );
+}
+
 #[test]
 fn result_union() {
     let reading = v2::StructDef {
