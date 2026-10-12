@@ -30,7 +30,7 @@ ends in a specification you can design against but cannot compile — see
   and the diagnostics table of each reference.
 
 Writing your first `.ridl` file rather than reading a specification? Start with
-[Getting started](getting-started.md).
+[First steps](first-steps.md), then [Getting started](getting-started.md).
 
 For the motivation and the big picture, read the concept note
 ([`docs/wip/ridl-family-concept.md`](https://github.com/driftsys/ridl/blob/main/docs/wip/ridl-family-concept.md));

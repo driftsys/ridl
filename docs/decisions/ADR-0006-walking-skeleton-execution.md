@@ -33,9 +33,14 @@ landed.
    Nothing else in this decision changed — the crate set, the crate names, the
    edition, and the `0.0.0` version are as recorded.
 
-   _Amended (2026-09-14)._ `ridl-rt` is the one workspace crate on edition 2021,
-   tested as both editions ([ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md)
-   decision 10).
+   _Amended (2026-09-14)._ `ridl-rt` is on edition 2021, tested as both editions
+   ([ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10).
+
+   _Corrected (2026-10-12)._ The amendment above read "`ridl-rt` is the one
+   workspace crate on edition 2021", which stopped being true when
+   `ridl-rt-conformance` and `ridl-loopback` moved to edition 2021 too.
+   [ADR-0029](ADR-0029-stability-policy.md) decision 5 owns the list of the
+   crates held to edition 2021.
 
 2. **Semantic passes live in `ridl-core` for now.** The concept note places
    per-profile semantic passes in a `ridl-sem` crate, which E0 does not create.

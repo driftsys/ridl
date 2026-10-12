@@ -218,6 +218,9 @@ declare_categories! {
         RpcBoundChanged,
         /// A command/query require/ensure clause set changed.
         ContractChanged,
+        /// A name-paired interaction's family or operation shape changed
+        /// (ADR-0012 decision 6).
+        InteractionClassChanged,
         /// A derived wire width or scalar backing changed.
         WidthChanged,
         /// A scalar constraint (range, step, length, pattern) changed, or a
@@ -552,6 +555,7 @@ pub fn category_word(category: Category) -> &'static str {
         Category::TimingChanged => "timing_changed",
         Category::RpcBoundChanged => "rpc_bound_changed",
         Category::ContractChanged => "contract_changed",
+        Category::InteractionClassChanged => "interaction_class_changed",
         Category::WidthChanged => "width_changed",
         Category::ConstraintChanged => "constraint_changed",
         Category::InitChanged => "init_changed",
@@ -609,6 +613,7 @@ pub fn heading(category: Category) -> Option<&'static str> {
         | Category::TimingChanged
         | Category::RpcBoundChanged
         | Category::ContractChanged
+        | Category::InteractionClassChanged
         | Category::WidthChanged
         | Category::ConstraintChanged
         | Category::InitChanged

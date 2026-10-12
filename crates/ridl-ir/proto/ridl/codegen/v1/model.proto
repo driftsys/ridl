@@ -537,6 +537,9 @@ message Interaction {
   // have one payload, a command has its request, and a query has its request
   // and then its reply.
   Reservation reservation = 8;
+  // The family of the interaction (ADR-0012 decision 6), copied from the IR.
+  // A plugin that does not read it sees the core kind.
+  Family family = 9;
   oneof shape {
     SignalShape signal = 10;
     EventShape event = 11;
@@ -689,6 +692,10 @@ message CommandShape {
   // `ABSENT_CAUSE_NO_BOUND` for a single parameter that is a scalar no proto3
   // leaf bounds, such as a `string` with no length bound.
   PayloadSizes request_sizes = 4;
+  // The operation shape of an intent command, copied from the IR. On the
+  // command shape, not on Interaction, because Interaction's oneof is named
+  // shape.
+  Shape shape = 5;
 }
 
 message QueryShape {
@@ -1109,6 +1116,30 @@ enum Kind {
   KIND_COMMAND = 3;
   KIND_QUERY = 4;
   KIND_FIXED = 5;
+}
+
+// The interaction family (ADR-0012 decisions 2 and 6), mirrored from the IR.
+// The zero value is `FAMILY_DISPATCH`, not an `_UNSPECIFIED` value: every
+// interaction that exists today is dispatch, proto3 encodes no byte for a
+// zero enum field, so a model written before this field decodes as dispatch.
+enum Family {
+  FAMILY_DISPATCH = 0;
+  FAMILY_PRESENTATION = 1;
+  FAMILY_INTENT = 2;
+  FAMILY_ACQUISITION = 3;
+  FAMILY_CONTROL = 4;
+}
+
+// The operation shape of an intent command (ADR-0012 decisions 5 and 6),
+// mirrored from the IR. The zero value is `SHAPE_NONE` for the reason
+// `Family` gives.
+enum Shape {
+  SHAPE_NONE = 0;
+  SHAPE_ACTIVATE = 1;
+  SHAPE_TOGGLE = 2;
+  SHAPE_SELECT = 3;
+  SHAPE_ADJUST = 4;
+  SHAPE_DISMISS = 5;
 }
 
 enum ScalarClass {

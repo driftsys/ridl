@@ -87,19 +87,19 @@ fn duration_in_constraint_yields_two_coded_diagnostics() {
 
 /// The malformed interaction sources that reach the lowering with no name:
 /// FORM-101 (no name token) and FORM-105 (a family reserved word used as a
-/// name — `view` belongs to uxdl, so it is reserved family-wide but is not an
-/// active ridl keyword), at both interaction sites (an `interface` body and a
-/// service's inline shape).
+/// name — `states` is a ridl clause word, so it is reserved family-wide but is
+/// not an active ridl keyword), at both interaction sites (an `interface` body
+/// and a service's inline shape).
 const NAMELESS_INTERACTIONS: &[&str] = &[
     "interface I {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
     "interface I {\n  event : Speed\n  signal after : Speed @10ms\n}\n",
     "interface I {\n  command (g: Speed)\n  signal after : Speed @10ms\n}\n",
     "interface I {\n  query (): Speed\n  signal after : Speed @10ms\n}\n",
     "interface I {\n  fixed : Speed = 1.0\n  signal after : Speed @10ms\n}\n",
-    "interface I {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+    "interface I {\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}\n",
     "service veh.a.b {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
-    "service veh.a.b {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",
-    "interface I {\n  command setGear(view: Speed)\n  signal after : Speed @10ms\n}\n",
+    "service veh.a.b {\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+    "interface I {\n  command setGear(states: Speed)\n  signal after : Speed @10ms\n}\n",
 ];
 
 /// No nameless interaction reaches the IR through `compile`. Each source here

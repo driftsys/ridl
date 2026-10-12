@@ -247,10 +247,10 @@ E3.1–E3.3 · E9.10 · E9.12 · E8 — a thread beside all of it
 stories (2026-10-09).** A new step, the manifest naming the encodings a build
 emits (driftsys/ridl#801), now sits before E11.8, E11.9 and E11.12. After it,
 those three are independent of each other. E11.9 lands over FlatBuffers, and
-`frame-specification.md` section 11.1 (the WebSocket fixed to proto3, encoding
-tag 2) is amended when E11.9 lands; the specification is unchanged until then.
-E11.8's conformance oracle is `prost` through `protox` instead of `protoc`
-(steering note decision D). E11.12 starts with its projection record. See
+`frame-specification.md` section 11.1 was amended before 0.10.0 by the binding
+document; E11.9 implements it. E11.8's conformance oracle is `prost` through
+`protox` instead of `protoc` (steering note decision D). E11.12 starts with its
+projection record. See
 [`2026-10-06-ws-and-payload-formats-steering.md`](wip/2026-10-06-ws-and-payload-formats-steering.md)
 sections 2 and 4.
 
@@ -388,11 +388,12 @@ and the as-built description is
 [the codegen plugin design](design/codegen-plugins.md) with
 [ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 11.
 
-**The one open item** is the fixed overhead of the WebSocket binding.
+**The one open item** is the check of the WebSocket binding's overheads against
+a frame the transport writes (driftsys/ridl#265).
 
-| ID    | Story                                                                                                                                                                                                                                                                                                                                                                                                                                                | Done when                                                                                                                                                             | Size |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E17.3 | The fixed overheads in the request's deployment section: for each transport binding that defines them, the frame header size and the envelope size, each with the version it belongs to. Depends on E11.9 (driftsys/ridl#265), the first binding. **Partly landed (driftsys/ridl#731): the table of known bindings and the emitter that writes it into the section exist, and the table has no row. The WebSocket row is open (driftsys/ridl#718).** | a socket message's maximum size is the frame header plus the envelope plus the payload bound, and a test checks that sum against a frame the WebSocket binding writes | S    |
+| ID    | Story                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Done when                                                                                                                                                             | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E17.3 | The fixed overheads in the request's deployment section: for each transport binding that defines them, the frame header size and the envelope size, each with the version it belongs to. Depends on E11.9 (driftsys/ridl#265), the first binding. **Partly landed: the table of known bindings and its emitter (driftsys/ridl#731) and the `websocket` row of the frame specification §11.1 exist. The test that checks the sum against a frame the WebSocket transport writes is open (driftsys/ridl#718, with driftsys/ridl#265).** | a socket message's maximum size is the frame header plus the envelope plus the payload bound, and a test checks that sum against a frame the WebSocket binding writes | S    |
 
 **`repr(C)` joins when E11.12 lands.** The alignment and the layout of a slot
 for the third encoding come from its projection record; until then a channel
@@ -511,8 +512,9 @@ invalid-payload behaviour, the rule that a binding is written from the document
 alone, and the two bindings by name: E11.9's WebSocket transport and, on
 Android, a runtime's own binder contract. ridl specifies no Binder layout and no
 transaction code; this reverses the lane P driver's decision D-P5, which had the
-Kotlin backend generate an AIDL binding per interface (driftsys/ridl#516). No
-binding is written yet, and nothing in this workspace speaks the frame;
+Kotlin backend generate an AIDL binding per interface (driftsys/ridl#516). The
+WebSocket binding is now specified in §11.1 of the frame specification; its
+transport is not built, nothing in this workspace speaks the frame, and
 `ridl-loopback` runs in process.
 
 **E11.15 landed** (driftsys/ridl#445). `crates/ridl-loopback` is the first
@@ -1114,7 +1116,7 @@ reopening is an observation rather than an argument.
 | E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
 | E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                      |
 | E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR             |
-| E17  | layout inputs for plugins       | **step 1**, landed except the WebSocket binding's overheads (E17.3)                |
+| E17  | layout inputs for plugins       | **step 1**, landed except the check of the WebSocket overheads (E17.3)             |
 | E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                           |
 | E11  | the runtime library             | **step 1** — generated code links a library                                        |
 | E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                      |

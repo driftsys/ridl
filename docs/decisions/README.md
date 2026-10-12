@@ -81,7 +81,10 @@ other entry below is Accepted.
   cross-checks the four obligations against the International Vocabulary of
   Metrology with no decision change, and the `.rxdl` profile is given decision
   7's extensions, absorbing both the layer and the domain readings of the
-  wildcard.
+  wildcard. Amended 2026-10-11: the domain spellings are not reserved words — a
+  spelling is a keyword only as the first token of an interface member, in a
+  profile that implements it (the member-start rule), and the retired uxdl words
+  leave the implemented registry.
 
 - **ADR-0013 — Codegen backend scope.** _Proposed._ Classifies a backend by what
   its target can faithfully represent: a **wire** backend (proto3, FlatBuffers,
@@ -299,7 +302,10 @@ other entry below is Accepted.
   amendment, on decisions 10, 11, 17 and 19, moves the sizes a generated crate
   holds to the per-encoding table `contract::Sizes<E>`, gives each payload its
   own buffer and adds `port::Encoded`; a breaking change that ships in `ridl-rt`
-  0.9.0, the next release.
+  0.9.0, the next release. Its 2026-10-12 amendment, on decision 11, adds the
+  forwarding impl of `Encoded` for `&P`, a breaking change for a crate that
+  implemented `Encoded` for a shared reference to a type that itself implements
+  `Encoded` (driftsys/ridl#855).
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact

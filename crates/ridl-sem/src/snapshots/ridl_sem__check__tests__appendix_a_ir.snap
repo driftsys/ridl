@@ -325,7 +325,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
               "minUs": "10000",
               "maxUs": "10000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH"
           }
         },
         {
@@ -349,7 +350,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
               "minUs": "20000",
               "maxUs": "100000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH"
           }
         },
         {
@@ -373,7 +375,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
               "minUs": "50000",
               "maxUs": "1000000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH"
           }
         },
         {
@@ -393,7 +396,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
               "minUs": "50000",
               "maxUs": "500000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH"
           }
         },
         {
@@ -439,7 +443,9 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
               "minUs": "20000",
               "maxUs": "200000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH",
+            "shape": "SHAPE_NONE"
           }
         },
         {
@@ -512,7 +518,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
               "minUs": "10000",
               "maxUs": "50000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH"
           }
         },
         {
@@ -552,7 +559,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "1000000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH"
           }
         },
         {
@@ -590,7 +598,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
               "mode": "TIMING_MODE_RANGE",
               "maxUs": "100000",
               "defaultApplied": false
-            }
+            },
+            "family": "FAMILY_DISPATCH"
           }
         },
         {

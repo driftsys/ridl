@@ -132,7 +132,7 @@ pub use handle::{
     CallerHandle, HandlerHandle, ReaderHandle, SinkHandle, SourceHandle, WriterHandle,
 };
 
-use handle::{Shared, lock};
+use handle::{lock, Shared};
 use store::Store;
 
 /// The six role handles of one runtime, as [`Loopback::split`] hands them out.

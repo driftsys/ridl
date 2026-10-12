@@ -323,6 +323,7 @@ fn the_category_spellings_are_pinned() {
             "timing_changed",
             "rpc_bound_changed",
             "contract_changed",
+            "interaction_class_changed",
             "width_changed",
             "constraint_changed",
             "init_changed",

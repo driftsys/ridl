@@ -1,9 +1,11 @@
 //! The RIDL family reserved-word registry (typl reference §1.4).
 //!
 //! The family maintains one reserved-word registry across every profile: every
-//! family keyword is reserved in every profile, including keywords a profile
-//! does not accept. This module is the single source of truth the lexer maps
-//! identifiers against, and the source a governance test can read.
+//! word in it is reserved in every profile, including words a profile does not
+//! accept. The ADR-0012 domain spellings are not in it: a spelling is a keyword
+//! only as the first token of an interface member, in a profile that implements
+//! it. This module is the single source of truth the lexer maps identifiers
+//! against, and the source a governance test can read.
 //!
 //! An identifier that matches a keyword the active [`Profile`] uses lexes to
 //! that keyword's [`SyntaxKind`]; one that matches any other registry word lexes
@@ -132,27 +134,13 @@ pub const FAMILY_RESERVED: &[&str] = &[
     "event",
     "command",
     "query",
-    // Shared by ridl and uxdl — one registry entry per concept (typl §1.4).
+    // ridl. `fixed` is family-neutral (ADR-0012 decision 4).
     "fixed",
-    // uxdl.
-    "view",
-    "display",
-    "input",
-    "action",
-    "activate",
-    "toggle",
-    "select",
-    "adjust",
-    "dismiss",
-    "fetch",
+    // The two ridl clause words the general form names (§4.8). The other
+    // retired uxdl words left the registry with driftsys/ridl#370 and are
+    // identifiers in every profile.
     "states",
     "during",
-    "navigate",
-    "scroll",
-    "drag",
-    "observe",
-    "surface",
-    "agent",
     // expr core.
     "require",
     "ensure",
@@ -327,5 +315,43 @@ mod tests {
             !FAMILY_RESERVED.contains(&"final"),
             "`final` was retired from the registry, the way `default` was"
         );
+    }
+
+    #[test]
+    fn the_retired_uxdl_words_are_identifiers() {
+        // The retired uxdl words leave the registry, except `states` and
+        // `during`, which the general form names as ridl clauses
+        // (ADR-0012 decision 4 as amended on 2026-10-11).
+        for word in [
+            "view", "display", "input", "action", "activate", "toggle", "select", "adjust",
+            "dismiss", "fetch", "navigate", "scroll", "drag", "observe", "surface", "agent",
+        ] {
+            assert!(!is_reserved(word), "`{word}` must be an identifier");
+            for profile in [Profile::Typl, Profile::Ridl, Profile::Rsdl] {
+                assert_eq!(
+                    keyword_in(profile, word),
+                    None,
+                    "`{word}` must not be a keyword under {profile:?}"
+                );
+            }
+        }
+        for word in ["states", "during"] {
+            assert!(
+                is_reserved(word),
+                "`{word}` stays reserved: a ridl clause word"
+            );
+        }
+    }
+
+    #[test]
+    fn the_domain_spellings_are_identifiers_until_a_profile_implements_them() {
+        // A spelling is a keyword only as the first token of an interface
+        // member, in a profile that implements it; no profile does yet
+        // (ADR-0012 decision 4 as amended on 2026-10-11).
+        for word in [
+            "present", "notify", "measure", "detect", "actuate", "trigger", "supply", "read",
+        ] {
+            assert!(!is_reserved(word), "`{word}` must be an identifier");
+        }
     }
 }

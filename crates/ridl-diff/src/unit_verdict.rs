@@ -258,6 +258,7 @@ mod tests {
             kind: Some(decl::Kind::EventDef(EventDef {
                 payload: payload.to_owned(),
                 timing: None,
+                family: ridl_ir::v2::Family::Dispatch as i32,
             })),
             ..Default::default()
         }

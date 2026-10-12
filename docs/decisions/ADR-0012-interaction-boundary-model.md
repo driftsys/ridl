@@ -38,6 +38,52 @@ is that `.rxdl` becomes a production file kind rather than only an adoption one,
 which weakens "which files contain executable behaviour?" as a filesystem query;
 per-package restriction is the mitigation the concept note already prescribes.
 
+**Amendment, 2026-10-11 — the spellings are not reserved words (decision 4).**
+Decision 4 names the keyword per (kind, family) combination; typl §1.4 read that
+as a family-wide reservation of every spelling. The reservation is replaced by
+the member-start rule: a spelling is a keyword only as the first token of an
+interface member, in a profile that implements it, and an identifier everywhere
+else. An interface member line never starts with an identifier, so a profile
+that gains a spelling invalidates no source that compiled before, and the
+`keywords` freeze dump only gains a line (ADR-0029). The ROS 2 corpus, which
+maps a published interface set, names a field `present` and a query `trigger`: a
+family-wide reservation would have broken it. In the same amendment the uxdl
+words this record retired leave the implemented registry, except `states` and
+`during`, which the general form (§4.8) names as ridl clauses; the rmdl words
+stay reserved. Recorded under decision 4. Issue driftsys/ridl#370.
+
+**Amendment, 2026-10-11 — the registry as built (decisions 8 and 9).** The
+registry is `ridl_core::attributes::ATTRIBUTES`, one table that the ridl member
+check and the rsdl attribute reader read as their only allow-list. Its owner
+field has two values today, `core` and `backend` (a key whose namespace a
+configured backend claims); the `user:<namespace>` owner of decision 8 waits for
+a consumer, and no `extension:<name>` owner exists because no extension does.
+Four general-form keys with no consumer — `default`, `init`, `persist` and
+`invariant` — are not rows, so each draws FORM-106 where one of them drew
+FORM-107. `labels` and `deprecated` keep a row whose sites are the rsdl
+declarations, so on an interface member they draw FORM-107, as they did. For the
+rsdl system diff, which gives no verdict, decision 9's fail-closed rule reads
+"reported": `tier`, `labels`, `deprecated` and every backend key are reported
+changes, and `depth`, `slots` and `budget` are recorded as not reported, with
+the reason that a sizing value changes no link and no contract. Recorded under
+decisions 8 and 9. Issues driftsys/ridl#268 and driftsys/ridl#269.
+
+**Amendment, 2026-10-11 — the two enums as built (decision 6).** `Family` and
+`Shape` are enums of `ir.proto`, mirrored in the codegen model. `family` is a
+field of `SignalDef`, `EventDef`, `CommandDef` and `QueryDef`; `FixedDef` has
+none, because `fixed` is family-neutral (decision 4). `shape` is a field of
+`CommandDef` only, so a shaped signal, event or query cannot be expressed; in
+the codegen model it sits on `CommandShape`, because `Interaction`'s oneof is
+named `shape`. The zero values are `FAMILY_DISPATCH` and `SHAPE_NONE`, a
+departure from the `_UNSPECIFIED = 0` convention of the schema, so that every
+existing interaction encodes to the same bytes, its catalog hash does not
+change, and an IR written before the fields decodes correctly. The valid (kind,
+family, shape) combinations are one table, `ridl_ir::class`, with the open cells
+of decision 4 counted as valid; the IR readers and writers call it, so
+`(command, intent, none)` is refused where the IR is read, as decision 6 asks.
+`ridl diff` reports a family or shape change as `interaction_class_changed`,
+breaking in both directions. Issue driftsys/ridl#270.
+
 The exploration that produced it is recorded in
 `docs/archive/ridl-boundary-model-review.md`; where that record and this ADR
 disagree, this ADR is authoritative.
@@ -255,6 +301,11 @@ review and retracted for exactly this reason (decision 10).
    system uninvited; and **control has no query** because effect is observed by
    measuring back, never returned.
 
+   _Amended 2026-10-11:_ none of these spellings is a reserved word. A spelling
+   is a keyword only as the first token of an interface member, in a profile
+   that implements it (typl §1.4, the member-start rule). The retired uxdl words
+   are identifiers; `states` and `during` stay reserved as ridl clause words.
+
 5. **The intent operation set is closed, with no generic.** A person performs
    one act at a time; a multi-parameter operation is a function call, not a
    gesture. Sending a message is `supply` plus `select` plus `activate`;
@@ -279,6 +330,10 @@ review and retracted for exactly this reason (decision 10).
    desugaring that could drift and produce a spurious diff against a stored
    baseline. `(command, intent, no shape)` is simply an invalid combination —
    decision 5 expressed structurally rather than as a lint.
+
+   _Amended 2026-10-11:_ built. `family` on the four interaction kinds, `shape`
+   on the command only, zero values dispatch and none, the valid combinations in
+   `ridl_ir::class`, the diff category `interaction_class_changed`.
 
 7. **An extension is a spelling table plus backends. It has no grammar, no IR
    nodes, and no semantics.** All semantics — the kinds, the families, the
@@ -319,6 +374,9 @@ review and retracted for exactly this reason (decision 10).
    namespaced, so a later core addition cannot collide with a program's private
    key.
 
+   _Amended 2026-10-11:_ built as `ridl_core::attributes`. The owner is `core`
+   or `backend`; `user:<namespace>` waits for a consumer.
+
 9. **Unregistered attribute keys fail closed, in the compiler and in the gate.**
    An unknown key is a compile error, never a pass-through — pass-through turns
    a typo into silent semantics. A key with no diff category is classified
@@ -327,6 +385,10 @@ review and retracted for exactly this reason (decision 10).
    is classified `Compatible`, there is no general attribute-changed category,
    and tightening a tolerance bound is breaking. The four obligations therefore
    need diff categories of their own before any of them can be authored.
+
+   _Amended 2026-10-11:_ for the system diff, which gives no verdict,
+   fail-closed means reported. The three sizing keys are the recorded exception,
+   reason sizing.
 
 10. **The environment boundary needs no language of its own.** Proposed during
     the review and retracted. Every candidate decomposes: no-acknowledgment-of-
