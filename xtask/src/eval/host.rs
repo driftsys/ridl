@@ -5,7 +5,8 @@
 
 use super::task::Task;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Host {
@@ -220,8 +221,26 @@ pub fn agent_invocation(host: Host, model: &str, dirs: &RunDirs, prompt: &str) -
     }
 }
 
-/// Runs an invocation with its stdin, and writes its stdout to `stdout_to`.
-pub fn run(invocation: &Invocation, stdout_to: &Path) -> Result<ExitStatus, String> {
+/// How a host command ended.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Outcome {
+    /// The command exited, with its exit code, or `None` when a signal ended
+    /// it.
+    Exited(Option<i32>),
+    /// The operator ran a handed-off invocation and created the done file.
+    HandedOff,
+    /// The command was still running, or the operator had not created the
+    /// done file, when the timeout passed. A command is killed.
+    TimedOut,
+}
+
+/// Runs an invocation with its stdin, writes its stdout to `stdout_to`, and
+/// kills it when it runs longer than `timeout`.
+pub fn run(
+    invocation: &Invocation,
+    stdout_to: &Path,
+    timeout: Duration,
+) -> Result<Outcome, String> {
     use std::io::Write;
     let out = std::fs::File::create(stdout_to).map_err(|e| e.to_string())?;
     let mut child = Command::new(&invocation.program)
@@ -240,29 +259,42 @@ pub fn run(invocation: &Invocation, stdout_to: &Path) -> Result<ExitStatus, Stri
         .stderr(Stdio::inherit())
         .spawn()
         .map_err(|e| format!("spawn {}: {e}", invocation.program))?;
-    child
-        .stdin
-        .take()
-        .expect("a piped stdin")
-        .write_all(invocation.stdin.as_bytes())
-        .map_err(|e| e.to_string())?;
-    child.wait().map_err(|e| e.to_string())
+    // Written from another thread, so a command that never reads its stdin
+    // cannot hold the timeout off. A command that exits before reading it
+    // makes the write fail, which its exit status already reports.
+    let mut stdin = child.stdin.take().expect("a piped stdin");
+    let prompt = invocation.stdin.clone();
+    std::thread::spawn(move || {
+        let _ = stdin.write_all(prompt.as_bytes());
+    });
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(status) = child.try_wait().map_err(|e| e.to_string())? {
+            return Ok(Outcome::Exited(status.code()));
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(Outcome::TimedOut);
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
-/// Runs `invocation` and returns its exit code, or `None` when it has none.
-/// With `handoff`, nothing is spawned: the invocation is written to a request
-/// file next to `stdout_to`, and the call waits until the operator has run
-/// the prompt with an agent of their own, written its output to `stdout_to`,
-/// and created the done file. The request file holds the invocation's
-/// working directory, arguments, environment and prompt. A handed-off run
-/// has no exit code.
+/// Runs `invocation` and says how it ended. With `handoff`, nothing is
+/// spawned: the invocation is written to a request file next to
+/// `stdout_to`, and the call waits until the operator has run the prompt
+/// with an agent of their own, written its output to `stdout_to`, and
+/// created the done file, or until `timeout` passes. The request file holds
+/// the invocation's working directory, arguments, environment and prompt.
 pub fn execute(
     invocation: &Invocation,
     stdout_to: &Path,
     handoff: bool,
-) -> Result<Option<i32>, String> {
+    timeout: Duration,
+) -> Result<Outcome, String> {
     if !handoff {
-        return run(invocation, stdout_to).map(|status| status.code());
+        return run(invocation, stdout_to, timeout);
     }
     let mut request = toml::Table::new();
     request.insert("cwd".into(), invocation.cwd.display().to_string().into());
@@ -297,10 +329,14 @@ pub fn execute(
     .map_err(|e| e.to_string())?;
     std::fs::rename(&partial, &path).map_err(|e| e.to_string())?;
     eprintln!("eval: handoff: {}", path.display());
+    let deadline = Instant::now() + timeout;
     while !done_path(stdout_to).is_file() {
-        std::thread::sleep(std::time::Duration::from_millis(200));
+        if Instant::now() >= deadline {
+            return Ok(Outcome::TimedOut);
+        }
+        std::thread::sleep(Duration::from_millis(200));
     }
-    Ok(None)
+    Ok(Outcome::HandedOff)
 }
 
 fn request_path(stdout_to: &Path) -> PathBuf {
@@ -652,9 +688,9 @@ mod tests {
                 std::fs::write(done_path(&out), "").unwrap();
             })
         };
-        let code = execute(&invocation, &out, true).unwrap();
+        let outcome = execute(&invocation, &out, true, Duration::from_secs(60)).unwrap();
         operator.join().unwrap();
-        assert_eq!(code, None);
+        assert_eq!(outcome, Outcome::HandedOff);
         assert_eq!(std::fs::read_to_string(&out).unwrap(), "transcript");
     }
 
@@ -669,5 +705,51 @@ mod tests {
             dir = d.parent();
         }
         std::fs::remove_dir_all(&run).unwrap();
+    }
+
+    #[test]
+    fn a_handed_off_invocation_stops_waiting_at_the_timeout() {
+        let dir = scratch("handoff-timeout");
+        let invocation = Invocation {
+            program: "claude".into(),
+            args: vec![],
+            env: vec![],
+            inherit: &[],
+            cwd: dir.clone(),
+            stdin: "p".into(),
+        };
+        // On another thread, so a wait that ignores the timeout fails the
+        // test instead of hanging it.
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let outcome = execute(
+                &invocation,
+                &dir.join("t.jsonl"),
+                true,
+                Duration::from_millis(300),
+            );
+            let _ = send.send(outcome);
+        });
+        let outcome = receive
+            .recv_timeout(Duration::from_secs(10))
+            .expect("the wait stops at the timeout");
+        assert_eq!(outcome.unwrap(), Outcome::TimedOut);
+    }
+
+    #[test]
+    fn a_command_is_killed_at_the_timeout() {
+        let dir = scratch("run-timeout");
+        let invocation = Invocation {
+            program: "sleep".into(),
+            args: vec!["30".into()],
+            env: vec![],
+            inherit: &["PATH"],
+            cwd: dir.clone(),
+            stdin: String::new(),
+        };
+        let start = Instant::now();
+        let outcome = run(&invocation, &dir.join("out"), Duration::from_millis(300)).unwrap();
+        assert_eq!(outcome, Outcome::TimedOut);
+        assert!(start.elapsed() < Duration::from_secs(10));
     }
 }

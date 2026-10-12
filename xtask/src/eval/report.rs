@@ -11,6 +11,9 @@ struct Run {
     host: String,
     skill: bool,
     passed: bool,
+    /// The run could not be scored; it is listed and left out of every
+    /// rate and mean.
+    setup_error: bool,
     /// `None` when the judge reply was an error; such a run is listed and
     /// left out of the rubric means.
     score: Option<f64>,
@@ -58,6 +61,7 @@ fn runs(out: &Path) -> Result<Vec<Run>, String> {
                     .and_then(|m| m.get("passed"))
                     .and_then(toml::Value::as_bool)
                     .unwrap_or(false),
+                setup_error: value.get("setup_error").is_some(),
                 score: value
                     .get("rubric")
                     .and_then(|r| r.get("score"))
@@ -81,7 +85,10 @@ fn mean(values: impl Iterator<Item = f64>) -> f64 {
 
 /// The means of one side (with or without the skill) of a set of runs.
 fn side(runs: &[&Run], skill: bool) -> (f64, f64) {
-    let side: Vec<&&Run> = runs.iter().filter(|r| r.skill == skill).collect();
+    let side: Vec<&&Run> = runs
+        .iter()
+        .filter(|r| r.skill == skill && !r.setup_error)
+        .collect();
     (
         mean(side.iter().map(|r| if r.passed { 1.0 } else { 0.0 })),
         mean(side.iter().filter_map(|r| r.score)),
@@ -201,7 +208,7 @@ pub fn judged_runs(out: &Path) -> Result<Vec<String>, String> {
 
 /// Writes `out/summary.md`: per host, one row per task with the pass rates
 /// and the mean rubric scores with and without the skill, a row of means,
-/// and the runs whose judge reply was an error.
+/// the runs whose judge reply was an error, and the runs with a setup error.
 pub fn write_summary(out: &Path) -> Result<(), String> {
     let runs = runs(out)?;
     let mut text = String::from("# Eval results\n");
@@ -238,6 +245,17 @@ pub fn write_summary(out: &Path) -> Result<(), String> {
     if !errors.is_empty() {
         text.push_str("\n## Runs with a judge error\n\n");
         for key in errors {
+            text.push_str(&format!("- {key}\n"));
+        }
+    }
+    let setup: Vec<&str> = runs
+        .iter()
+        .filter(|r| r.setup_error)
+        .map(|r| r.key.as_str())
+        .collect();
+    if !setup.is_empty() {
+        text.push_str("\n## Runs with a setup error, left out of every rate and mean\n\n");
+        for key in setup {
             text.push_str(&format!("- {key}\n"));
         }
     }
@@ -448,6 +466,39 @@ mod tests {
         assert_eq!(
             agreement(&[(vec![], vec![true])]).unwrap_err(),
             "run 1 has 0 human labels for 1 rubric items"
+        );
+    }
+
+    #[test]
+    fn a_run_with_a_setup_error_is_left_out_of_every_rate_and_listed() {
+        let out = out("setup");
+        write(&out, "design-0001", "claude-with-1", true, true, Some(1.0));
+        write(
+            &out,
+            "design-0001",
+            "claude-without-1",
+            false,
+            true,
+            Some(0.5),
+        );
+        std::fs::write(
+            out.join("design-0001/claude-with-2.toml"),
+            "host = \"claude\"\nskill = true\nsetup_error = \"the host did not load the skill\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            out.join("design-0001/claude-without-2.toml"),
+            "host = \"claude\"\nskill = false\nsetup_error = \"the host ran past the timeout\"\n",
+        )
+        .unwrap();
+        let gates = gate(&out).unwrap();
+        assert_eq!(gates[0].pass_with, 1.0);
+        assert_eq!(gates[0].pass_without, 1.0);
+        write_summary(&out).unwrap();
+        let summary = std::fs::read_to_string(out.join("summary.md")).unwrap();
+        assert!(
+            summary.contains("- design-0001/claude-with-2\n- design-0001/claude-without-2\n"),
+            "{summary}"
         );
     }
 

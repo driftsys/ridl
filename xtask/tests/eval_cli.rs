@@ -276,9 +276,9 @@ fn a_finished_run_and_its_judgement_leave_no_scratch_directory() {
 }
 
 #[test]
-fn a_run_that_stops_with_an_error_leaves_no_login_copy() {
-    // The fake Codex agent never reads the skill, so the "with" run stops
-    // with a setup error after the agent ran.
+fn a_run_with_a_setup_error_leaves_no_login_copy() {
+    // The fake Codex agent never reads the skill, so the "with" run is a
+    // setup error after the agent ran.
     let fakes = fakes_with(None);
     let output = eval(
         &fakes,
@@ -294,7 +294,7 @@ fn a_run_that_stops_with_an_error_leaves_no_login_copy() {
         ],
         true,
     );
-    assert_eq!(output.status.code(), Some(2));
+    assert!(output.status.success());
     assert!(fakes.calls().contains("codex exec"), "{}", fakes.calls());
     let logins: Vec<_> = fakes
         .scratch()
@@ -681,8 +681,93 @@ fn a_deleted_manifest_fails_the_check_with_a_note() {
 
 #[test]
 fn a_with_run_whose_host_did_not_load_the_skill_is_a_setup_error() {
+    // Neither fake agent shows that it loaded the skill.
+    for host in ["claude", "codex"] {
+        let fakes = fakes_with(None);
+        let out = fakes.dir.join("results");
+        let output = eval(
+            &fakes,
+            &[
+                "--task",
+                "design-0001",
+                "--host",
+                host,
+                "--skill",
+                "both",
+                "--out",
+                out.to_str().unwrap(),
+            ],
+            true,
+        );
+        assert!(
+            output.status.success(),
+            "{host}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let with = result(&out, "design-0001", &format!("{host}-with-1"));
+        assert_eq!(
+            with.get("setup_error").and_then(toml::Value::as_str),
+            Some("the host did not load the skill"),
+            "{host}: {with:?}"
+        );
+        assert!(with.get("rubric").is_none() && with.get("mechanical").is_none());
+        // The batch went on to the "without" run.
+        let without = result(&out, "design-0001", &format!("{host}-without-1"));
+        assert_eq!(without["mechanical"]["passed"].as_bool(), Some(true));
+        assert!(
+            out.join(format!("transcripts/design-0001/{host}-with-1.jsonl"))
+                .is_file()
+        );
+        let summary = std::fs::read_to_string(out.join("summary.md")).unwrap();
+        assert!(
+            summary.contains(&format!("- design-0001/{host}-with-1")),
+            "{summary}"
+        );
+        assert_eq!(fakes.scratch(), Vec::<PathBuf>::new());
+    }
+}
+
+/// Runs design-0001 on Claude without the skill, with `extra` arguments,
+/// and returns the run's result.
+fn claude_run(fakes: &Fakes, extra: &[&str]) -> toml::Value {
+    let out = fakes.dir.join("results");
+    let mut args = vec![
+        "--task",
+        "design-0001",
+        "--host",
+        "claude",
+        "--skill",
+        "without",
+        "--out",
+        out.to_str().unwrap(),
+    ];
+    args.extend(extra);
+    let output = eval(fakes, &args, true);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    result(&out, "design-0001", "claude-without-1")
+}
+
+#[test]
+fn a_host_that_fails_with_no_transcript_is_a_setup_error() {
+    let fakes = fakes_with(Some("exit 3"));
+    let result = claude_run(&fakes, &[]);
+    assert_eq!(
+        result.get("setup_error").and_then(toml::Value::as_str),
+        Some("the host exited with Some(3) and wrote no transcript")
+    );
+    assert_eq!(result["agent_exit"].as_integer(), Some(3));
+    assert!(result.get("rubric").is_none());
+}
+
+#[test]
+fn a_host_that_cannot_be_started_is_a_setup_error() {
     let fakes = fakes_with(None);
-    let output = eval(
+    let out = fakes.dir.join("results");
+    let output = command(
         &fakes,
         &[
             "--task",
@@ -690,14 +775,38 @@ fn a_with_run_whose_host_did_not_load_the_skill_is_a_setup_error() {
             "--host",
             "claude",
             "--skill",
-            "with",
+            "without",
             "--out",
-            fakes.dir.join("results").to_str().unwrap(),
+            out.to_str().unwrap(),
         ],
-        true,
+        Logins::Both,
+    )
+    .env("RIDL_EVAL_CLAUDE", fakes.dir.join("no-such-claude"))
+    .output()
+    .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
     );
-    assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("did not load the skill"));
+    let result = result(&out, "design-0001", "claude-without-1");
+    let reason = result["setup_error"].as_str().unwrap();
+    assert!(
+        reason.starts_with("the host did not run: spawn"),
+        "{reason}"
+    );
+}
+
+#[test]
+fn a_host_that_runs_past_the_timeout_is_a_setup_error() {
+    let fakes = fakes_with(Some("exec sleep 60"));
+    let start = std::time::Instant::now();
+    let result = claude_run(&fakes, &["--timeout", "1"]);
+    assert!(start.elapsed() < std::time::Duration::from_secs(30));
+    assert_eq!(
+        result.get("setup_error").and_then(toml::Value::as_str),
+        Some("the host ran past the timeout")
+    );
 }
 
 #[test]

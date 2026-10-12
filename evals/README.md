@@ -89,7 +89,8 @@ results:
 
 ```sh
 cargo xtask eval [--task <id>]... [--host claude|codex]... [--runs <n>] \
-  [--skill with|without|both] [--out <dir>] [--append] [--claude-handoff]
+  [--skill with|without|both] [--out <dir>] [--append] [--claude-handoff] \
+  [--timeout <seconds>]
 ```
 
 With no option, every task runs once on both hosts, with and without the skill.
@@ -101,6 +102,13 @@ the design lints match `expect.lints`, an evolve task's `ridl diff` verdict
 matches `expect.diff`, and the agent checked its work with the `ridl_check` MCP
 tool or a shell `ridl check`); a run that passes is then judged against its
 rubric by the other host's model. `runner.toml` pins the model of each host.
+
+A run that cannot be scored is recorded with a `setup_error` and no score, and
+the batch goes on: a "with" run that shows no evidence of loading the skill, or
+a host that could not be started, exited with an error and wrote no transcript,
+or ran past `--timeout` (1800 seconds by default; the same limit bounds the wait
+for a handed-off run and each judgement). Such a run is left out of the pass
+rates and the rubric means of both sides, and `summary.md` lists it.
 
 Each host signs in with its own CLI login, and both are needed, because the
 judge of a run on one host is the other host:

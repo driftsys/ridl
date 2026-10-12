@@ -3,7 +3,16 @@
 //! under `evals/results/<date>/`.
 //!
 //! `cargo xtask eval [--task <id>]... [--host claude|codex]... [--runs <n>]
-//! [--skill with|without|both] [--out <dir>] [--append] [--claude-handoff]`
+//! [--skill with|without|both] [--out <dir>] [--append] [--claude-handoff]
+//! [--timeout <seconds>]`
+//!
+//! A run that cannot be scored is recorded with a `setup_error` and no
+//! score, and the batch goes on: a "with" run that shows no evidence of
+//! loading the skill, or a host that did not run (it could not be started,
+//! exited with an error and printed nothing, or ran past `--timeout`, 1800
+//! seconds by default, which also bounds the wait for a handed-off run). Such
+//! a run is left out of the pass rates and the rubric means and listed in the
+//! summary.
 //!
 //! The summary and the gate read every result under `--out`, so the eval
 //! refuses an `--out` that already holds results, since they would be merged
@@ -36,6 +45,8 @@ pub struct Options {
     /// Write into an `--out` that already holds results.
     pub append: bool,
     pub claude_handoff: bool,
+    /// How long one agent run or judgement may take.
+    pub timeout: std::time::Duration,
 }
 
 pub fn parse(args: &[String]) -> Result<Options, String> {
@@ -47,6 +58,7 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
         out: None,
         append: false,
         claude_handoff: false,
+        timeout: std::time::Duration::from_secs(1800),
     };
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -79,6 +91,15 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
             }
             "--out" => options.out = Some(PathBuf::from(value()?)),
             "--append" => options.append = true,
+            "--timeout" => {
+                let seconds: u64 = value()?
+                    .parse()
+                    .map_err(|_| "--timeout takes a number of seconds".to_owned())?;
+                if seconds == 0 {
+                    return Err("--timeout takes a number of seconds".to_owned());
+                }
+                options.timeout = std::time::Duration::from_secs(seconds);
+            }
             "--claude-handoff" => options.claude_handoff = true,
             other => return Err(format!("unknown argument: {other}")),
         }
@@ -141,17 +162,16 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     let invocation =
                         host::agent_invocation(host, host.model(&models), &dirs, &prompt);
                     let handoff = options.claude_handoff && host == Host::Claude;
-                    let code = host::execute(&invocation, &dirs.transcript, handoff)?;
+                    let outcome =
+                        host::execute(&invocation, &dirs.transcript, handoff, options.timeout);
                     drop(login);
-                    eprintln!("eval: {} {label}: agent exited {code:?}", task.id);
+                    eprintln!("eval: {} {label}: {outcome:?}", task.id);
                     let transcript = std::fs::read_to_string(&dirs.transcript).unwrap_or_default();
-                    if with_skill && !score::skill_was_loaded(host, &transcript) {
-                        return Err(format!(
-                            "{} {label}: the host did not load the skill; this is a setup error, not a result",
-                            task.id
-                        ));
-                    }
-                    let mechanical = score::score_mechanical(task, &dirs, &transcript);
+                    let setup_error = setup_error(&outcome, &transcript, host, with_skill);
+                    let code = match outcome {
+                        Ok(host::Outcome::Exited(code)) => code,
+                        _ => None,
+                    };
                     let mut result = toml::Table::new();
                     result.insert("task".into(), task.id.clone().into());
                     result.insert("host".into(), host.name().into());
@@ -173,24 +193,22 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     result.insert("skill".into(), with_skill.into());
                     result.insert("run".into(), i64::from(n).into());
                     result.insert("agent_exit".into(), i64::from(code.unwrap_or(-1)).into());
-                    result.insert("mechanical".into(), mechanical_table(&mechanical).into());
-                    let rubric = if mechanical.passed() {
-                        judge_run(
-                            task,
-                            host,
-                            &models,
-                            &dirs,
-                            &transcript,
-                            &label,
-                            options.claude_handoff,
-                        )?
+                    if let Some(reason) = setup_error {
+                        eprintln!("eval: {} {label}: setup error: {reason}", task.id);
+                        result.insert("setup_error".into(), reason.into());
                     } else {
-                        let mut skipped = toml::Table::new();
-                        skipped.insert("score".into(), 0.0.into());
-                        skipped.insert("skipped".into(), "mechanical checks failed".into());
-                        skipped
-                    };
-                    result.insert("rubric".into(), rubric.into());
+                        let mechanical = score::score_mechanical(task, &dirs, &transcript);
+                        result.insert("mechanical".into(), mechanical_table(&mechanical).into());
+                        let rubric = if mechanical.passed() {
+                            judge_run(task, host, &models, &dirs, &transcript, &label, &options)?
+                        } else {
+                            let mut skipped = toml::Table::new();
+                            skipped.insert("score".into(), 0.0.into());
+                            skipped.insert("skipped".into(), "mechanical checks failed".into());
+                            skipped
+                        };
+                        result.insert("rubric".into(), rubric.into());
+                    }
                     let result_dir = out.join(&task.id);
                     std::fs::create_dir_all(&result_dir).map_err(|e| e.to_string())?;
                     std::fs::write(
@@ -200,7 +218,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     .map_err(|e| e.to_string())?;
                     let transcripts = out.join("transcripts").join(&task.id);
                     std::fs::create_dir_all(&transcripts).map_err(|e| e.to_string())?;
-                    std::fs::copy(&dirs.transcript, transcripts.join(format!("{label}.jsonl")))
+                    std::fs::write(transcripts.join(format!("{label}.jsonl")), &transcript)
                         .map_err(|e| e.to_string())?;
                     // The result and the transcript are under `out`; nothing
                     // in the run's directory is read again.
@@ -222,6 +240,30 @@ pub fn run(args: &[String]) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+/// Why a run cannot be scored, or `None` when it can: the host could not be
+/// started, ran past the timeout, or exited with an error and wrote no
+/// transcript, or a "with" run shows no evidence that the host loaded the
+/// skill.
+fn setup_error(
+    outcome: &Result<host::Outcome, String>,
+    transcript: &str,
+    host: Host,
+    with_skill: bool,
+) -> Option<String> {
+    match outcome {
+        Err(e) => return Some(format!("the host did not run: {e}")),
+        Ok(host::Outcome::TimedOut) => return Some("the host ran past the timeout".to_owned()),
+        Ok(host::Outcome::Exited(code)) if *code != Some(0) && transcript.trim().is_empty() => {
+            return Some(format!(
+                "the host exited with {code:?} and wrote no transcript"
+            ));
+        }
+        _ => {}
+    }
+    (with_skill && !score::skill_was_loaded(host, transcript))
+        .then(|| "the host did not load the skill".to_owned())
 }
 
 /// The first line `<host> --version` prints, recorded in each result file so
@@ -377,7 +419,7 @@ fn judge_run(
     dirs: &host::RunDirs,
     transcript: &str,
     label: &str,
-    claude_handoff: bool,
+    options: &Options,
 ) -> Result<toml::Table, String> {
     let judge = host.other();
     let read = |path: &Path| std::fs::read_to_string(path).map_err(|e| e.to_string());
@@ -397,12 +439,16 @@ fn judge_run(
         .transpose()?;
     let invocation = judge::judge_invocation(judge, judge.model(models), &dir, &text);
     let stdout = dir.join("stdout.json");
-    let handoff = claude_handoff && judge == Host::Claude;
-    host::execute(&invocation, &stdout, handoff)?;
+    let handoff = options.claude_handoff && judge == Host::Claude;
+    let outcome = host::execute(&invocation, &stdout, handoff, options.timeout);
     drop(login);
-    let reply = match judge {
-        Host::Claude => read(&stdout).and_then(|out| judge::claude_reply(&out)),
-        Host::Codex => read(&dir.join("verdict.json")),
+    let reply = match outcome {
+        Err(e) => Err(format!("the judge did not run: {e}")),
+        Ok(host::Outcome::TimedOut) => Err("the judge ran past the timeout".to_owned()),
+        Ok(_) => match judge {
+            Host::Claude => read(&stdout).and_then(|out| judge::claude_reply(&out)),
+            Host::Codex => read(&dir.join("verdict.json")),
+        },
     };
     std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
     let mut table = toml::Table::new();
@@ -484,6 +530,7 @@ mod tests {
         assert_eq!(options.skill, [true, false]);
         assert_eq!(options.runs, 1);
         assert!(!options.append && !options.claude_handoff);
+        assert_eq!(options.timeout, std::time::Duration::from_secs(1800));
         assert!(options.tasks.is_empty() && options.out.is_none());
     }
 
