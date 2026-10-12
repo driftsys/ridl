@@ -1616,6 +1616,14 @@ fn refuse_overwrite(
 /// the `regex` version the workspace's `Cargo.lock` resolves, which is the
 /// version the checker links.
 ///
+/// The manifest declares edition 2021 and no `rust-version`. Edition 2021 is
+/// the edition ADR-0029 decision 5 promises the generated crate compiles as
+/// with Rust 1.83, and cargo before 1.85 cannot read a manifest that declares
+/// edition 2024. No `rust-version` is declared because the crate does not
+/// build on Rust 1.83 with its default features off (driftsys/ridl#874), so
+/// the value would claim more than holds. The backend's compile proofs build
+/// the emitted source as edition 2024 as well.
+///
 /// The `ridl-rt = "0.9"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
@@ -1636,7 +1644,7 @@ fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String]) -> 
         r#"{preamble}[package]
 name = "{crate_name}"
 version = "0.0.0"
-edition = "2024"
+edition = "2021"
 
 [features]
 default = ["validate-pattern", "std"]
