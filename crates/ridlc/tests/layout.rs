@@ -364,14 +364,14 @@ fn layout_json(request: &v1::CodegenRequest) -> Value {
 }
 
 /// A message's `max_message_bytes` is the `websocket` row's frame header
-/// bound plus its envelope plus the message's proto3 bound. The row is the
-/// one the toolchain puts in every deployment section.
+/// bound plus its envelope plus the message's proto3 bound. The test puts its
+/// own row in the request, with numbers no binding has, so the sum can only
+/// come from the row; without the row the sum has no value.
 #[test]
 fn a_websocket_row_adds_its_frame_header_and_envelope_to_the_proto3_bound() {
-    let (request, _) = request_for(&cabin(), "veh.cabin");
-    let actual = layout_json(&request);
-    let max_message_bytes = |member: &str| {
-        actual["messages"]
+    let (mut request, _) = request_for(&cabin(), "veh.cabin");
+    let max_message_bytes = |request: &v1::CodegenRequest, member: &str| {
+        layout_json(request)["messages"]
             .as_array()
             .expect("a list of messages")
             .iter()
@@ -379,10 +379,76 @@ fn a_websocket_row_adds_its_frame_header_and_envelope_to_the_proto3_bound() {
             .unwrap_or_else(|| panic!("a message for {member}"))["max_message_bytes"]
             .clone()
     };
-    // `Warning`'s proto3 bound is 8 (the fixture derives it): 20 + 16 + 8.
-    assert_eq!(max_message_bytes("warning"), json!(44));
+    let deployment = request.deployment.as_mut().expect("a deployment");
+    deployment.bindings = vec![v1::Binding {
+        name: "websocket".to_string(),
+        version: "test".to_string(),
+        frame_header_max_bytes: Some(100),
+        envelope_bytes: Some(7),
+    }];
+    // `Warning`'s proto3 bound is 8 (the fixture derives it): 100 + 7 + 8.
+    assert_eq!(max_message_bytes(&request, "warning"), json!(115));
     // `Temperature` has no proto3 bound, so the sum has no value.
-    assert_eq!(max_message_bytes("temperature"), Value::Null);
+    assert_eq!(max_message_bytes(&request, "temperature"), Value::Null);
+    request.deployment.as_mut().expect("a deployment").bindings = Vec::new();
+    assert_eq!(max_message_bytes(&request, "warning"), Value::Null);
+}
+
+/// The `Header size` column of the frame specification §11.1 header table,
+/// by form name. `attach`'s `39 + name` is read as 39.
+fn frame_header_sizes() -> std::collections::BTreeMap<String, u32> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/specification/frame-specification.md");
+    let text = fs::read_to_string(&path).expect("the frame specification is readable");
+    let (_, section) = text
+        .split_once("### 11.1 WebSocket\n")
+        .expect("a section 11.1");
+    let mut lines = section.lines();
+    lines
+        .by_ref()
+        .find(|line| line.starts_with("| Form ") && line.contains("| Header size |"))
+        .expect("the header table");
+    lines.next();
+    let mut sizes = std::collections::BTreeMap::new();
+    for line in lines.take_while(|line| line.starts_with('|')) {
+        let cells: Vec<&str> = line.trim_matches('|').split('|').map(str::trim).collect();
+        let size: u32 = cells[2]
+            .split_whitespace()
+            .next()
+            .and_then(|n| n.parse().ok())
+            .unwrap_or_else(|| panic!("a size in {line}"));
+        for form in cells[0].split(", ") {
+            sizes.insert(form.trim_matches('`').to_string(), size);
+        }
+    }
+    sizes
+}
+
+/// The `websocket` row the toolchain emits is derived from the header table
+/// of the frame specification §11.1: the envelope is the bytes an
+/// `occurrence` adds to the common 10 bytes of a `subscribe`, and the frame
+/// header bound is the largest data-plane header less the envelope. The
+/// table is also checked against the sizes `cargo xtask freeze` checks the
+/// vectors with (`xtask/src/freeze/wire.rs`), so the row, the table and the
+/// checker cannot disagree without a test failing.
+#[test]
+fn the_websocket_row_is_derived_from_the_frame_specification_header_table() {
+    let sizes = frame_header_sizes();
+    let envelope = sizes["occurrence"] - sizes["subscribe"];
+    let largest = ["publish", "occurrence", "request", "response"]
+        .iter()
+        .map(|form| sizes[*form])
+        .max()
+        .expect("four data-plane forms");
+    let (request, _) = request_for(&cabin(), "veh.cabin");
+    let deployment = request.deployment.as_ref().expect("a deployment");
+    let row = deployment
+        .bindings
+        .iter()
+        .find(|binding| binding.name == "websocket")
+        .expect("a websocket row");
+    assert_eq!(row.envelope_bytes, Some(envelope), "{sizes:?}");
+    assert_eq!(row.frame_header_max_bytes, Some(largest - envelope), "{sizes:?}");
 }
 
 /// The proto3 size states of one payload: `proto3` bounded at `bound`, or
