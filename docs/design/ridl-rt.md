@@ -748,10 +748,12 @@ decision 5), so these impls are what let it be built over a borrow of a handle.
 An owned handle, a `Clone` handle and a wrapper that adds tracing or a test
 double are accepted by the face's trait bounds with or without them, because
 such a type implements the port traits itself rather than borrowing through
-them. The impls are additive and need no `alloc`; `Box<P>` is not forwarded,
-under `std` either, although that feature brings `alloc` in: nothing needs a
-boxed port, because a face holds its port by value or by `&mut`, and an impl
-nothing uses is not added (ADR-0021 decision 11, amended 2026-09-26).
+them. The impls are additive, except that the `&P` impl of `Encoded` is recorded
+as a break for a downstream impl that overlaps with it (ADR-0021 decision 11,
+amended 2026-10-12), and need no `alloc`; `Box<P>` is not forwarded, under `std`
+either, although that feature brings `alloc` in: nothing needs a boxed port,
+because a face holds its port by value or by `&mut`, and an impl nothing uses is
+not added (ADR-0021 decision 11, amended 2026-09-26).
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
 records them and the reasoning.
 

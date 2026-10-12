@@ -29,9 +29,9 @@ fn a_mut_borrow_carries_the_ports_encoding() {
 
 /// A port that carries Protobuf bytes, so an impl that fixes the encoding
 /// to one type does not pass for both fixtures.
-struct Q;
+struct Pb;
 
-impl Encoded for Q {
+impl Encoded for Pb {
     type Encoding = Proto3;
 }
 
@@ -48,6 +48,12 @@ fn forwards<T: Encoded + ?Sized>() {
 #[test]
 fn borrows_have_the_same_encoding_type_as_the_port() {
     forwards::<P>();
-    forwards::<Q>();
+    forwards::<Pb>();
     forwards::<dyn Encoded<Encoding = Proto3>>();
+}
+
+#[test]
+fn a_shared_borrow_reads_the_second_ports_encoding_at_runtime() {
+    let port = Pb;
+    assert_eq!(name(&&port), "proto3");
 }

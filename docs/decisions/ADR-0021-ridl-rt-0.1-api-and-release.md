@@ -156,8 +156,9 @@ driftsys/ridl#801; the as-built record is
 **Amendment (2026-10-12) — decision 11: `port::Encoded` forwards for `&P`.**
 `Encoded` is also implemented for a shared reference, in the same form as the
 `&mut P` impl. This is a breaking change under decision 10 for a crate that
-implemented `Encoded` for a shared reference. It is tracked as driftsys/ridl#855
-and is made before 0.10.0 freezes the runtime crates.
+implemented `Encoded` for a shared reference to a type that itself implements
+`Encoded`, or to a generic type that can. It is tracked as driftsys/ridl#855 and
+is made before 0.10.0 freezes the runtime crates.
 
 Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the public API
 of `ridl-rt` and the minimum Rust version of decision 10 are frozen surfaces
@@ -675,11 +676,15 @@ trusted with no `unsafe` and no second verification pass.
     `ridl_rt::port` also gains `impl<P: Encoded + ?Sized> Encoded for &P`, in
     the same form as the `&mut P` impl, so `Encoded` forwards for both borrows
     like the other `&self`-only port traits (driftsys/ridl#855). The addition is
-    a break under decision 10 for a crate that implemented `Encoded` for a
-    shared reference, because that impl now overlaps with the blanket one;
-    `cargo semver-checks` does not detect an added blanket impl. The change is
-    made before 0.10.0 freezes the runtime crates, and no crate in this
-    workspace implements `Encoded` for a reference.
+    a break under decision 10 for a downstream crate that implemented `Encoded`
+    for `&Foo` where `Foo` itself implements `Encoded`, or where `Foo` is
+    generic and can: the two impls then overlap (E0119). An
+    `impl Encoded for &Foo` for a local `Foo` that does not implement `Encoded`
+    still compiles, and `impl Encoded for &dyn Encoded<..>` is refused by the
+    orphan rule with or without this change. `cargo-semver-checks` 0.51.0 has no
+    lint for an added blanket impl and reported no change for this impl. The
+    change is made before 0.10.0 freezes the runtime crates, and no crate in
+    this workspace implements `Encoded` for a reference.
 
 12. **Amendment (2026-09-20) — a runtime presents one handle per port role, it
     may also offer an aggregate handle per face, and `ridl-rt` adds no `Send` or

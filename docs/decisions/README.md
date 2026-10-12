@@ -298,7 +298,8 @@ other entry below is Accepted.
   own buffer and adds `port::Encoded`; a breaking change that ships in `ridl-rt`
   0.9.0, the next release. Its 2026-10-12 amendment, on decision 11, adds the
   forwarding impl of `Encoded` for `&P`, a breaking change for a crate that
-  implemented `Encoded` for a shared reference (driftsys/ridl#855).
+  implemented `Encoded` for a shared reference to a type that itself implements
+  `Encoded` (driftsys/ridl#855).
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact
