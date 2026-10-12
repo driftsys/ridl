@@ -597,18 +597,8 @@ fn package_binds(
     let Some(declaring) = rename::package_named(db, packages, package) else {
         return rsdl;
     };
-    let imported = declaring.files(db).iter().any(|file| {
-        nav::source_file(db, *file).imports().any(|import| {
-            let Some(qualified) = import.qualified_name() else {
-                return false;
-            };
-            let segments = nav::qualified_segments(qualified.syntax());
-            let bound = match import.alias() {
-                Some(alias) => alias.syntax().text().to_string(),
-                None => segments.last().cloned().unwrap_or_default(),
-            };
-            bound == name && segments != renamed
-        })
+    let imported = rename::imports_bind(db, declaring, name, |qualified| {
+        nav::qualified_segments(qualified) == renamed
     });
     rsdl || imported || rename::declares(db, ws, std, declaring, name)
 }
