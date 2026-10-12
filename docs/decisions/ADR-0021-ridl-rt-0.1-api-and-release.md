@@ -179,16 +179,17 @@ driftsys/ridl#909 corrected this amendment's heading and body in place. The
 first version said `None` for any violation that arrived over a frame; the text
 now limits `None` to a `contract(InvalidValue)` outcome decoded from a frame.
 
-**Amendment (2026-10-12) — decision 10: driftsys/ridl#350 is closed.** Item 13
-was settled by the 2026-10-10 amendment: `PayloadInfo` has no `max_size`, so
-`Payload::MAX_SIZE` is the one source of a payload's bound. Item 14 is a
-property of the generated float grid check, which the typl reference §4.3 states
-and driftsys/ridl#654 implements; it needs no `ridl-rt` change, and
-driftsys/ridl#802 is closed with a test of its example. `Watermark::seq` is
-removed, because `scan` never reads it and each `Changed` entry carries its own
-signal's sequence number. Under decision 10 the removal is breaking, and it is
-made before 0.10.0 freezes the runtime crates. Items 15, 16 and 17 are decisions
-12, 11 and 13.
+**Amendment (2026-10-12) — decision 10: every question of driftsys/ridl#350 is
+settled.** Items 5 and 12 were settled earlier (driftsys/ridl#890; decision 9's
+2026-10-12 amendment, driftsys/ridl#903 and #909). Item 13 was settled by the
+2026-10-10 amendment: `PayloadInfo` has no `max_size`, so `Payload::MAX_SIZE` is
+the one source of a payload's bound. Item 14 is a property of the generated
+float grid check, which the typl reference §4.3 states and driftsys/ridl#654
+implements; it needs no `ridl-rt` change, and driftsys/ridl#802 is closed with a
+test of its example. `Watermark::seq` is removed, because `scan` never reads it
+and each `Changed` entry carries its own signal's sequence number. Under
+decision 10 the removal is breaking, and it is made before 0.10.0 freezes the
+runtime crates. Items 15, 16 and 17 are decisions 12, 11 and 13.
 
 ## Context
 
@@ -574,7 +575,7 @@ trusted with no `unsafe` and no second verification pass.
     5 by the WebSocket binding (driftsys/ridl#890), item 12 by decision 9's
     2026-10-12 amendment, item 13 by the 2026-10-10 amendment, and item 14 and
     `Watermark::seq` by this decision's 2026-10-12 amendment in the status
-    section, which removes `Watermark::seq` and closes driftsys/ridl#350.
+    section, which removes `Watermark::seq`.
 
     **Amended (2026-09-21).** The independent-version sentence above no longer
     holds: ADR-0007 decision 14's 2026-09-21 amendment retires it. `ridl-rt` now
@@ -1214,7 +1215,9 @@ trusted with no `unsafe` and no second verification pass.
 - **Neutral — the `u16` fallback and the review debt stay open.** Decision 2's
   fallback and the driftsys/ridl#350 items decision 10 leaves open are not
   blocking anything scheduled now, and are recorded here so a future change to
-  either is judged against a known list rather than rediscovered.
+  either is judged against a known list rather than rediscovered. **Note
+  (2026-10-12):** Open question 1 closed on 2026-09-22 and Open question 2
+  closed on 2026-10-12.
 
 ## Open
 
