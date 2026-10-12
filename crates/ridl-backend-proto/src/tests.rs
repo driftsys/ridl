@@ -1136,6 +1136,58 @@ fn a_foreign_named_scalar_inlines_with_no_import() {
 }
 
 #[test]
+fn a_foreign_enum_set_inlines_with_no_import() {
+    // An enum set, like a named scalar, has a root box message in its own
+    // file, and a field never names it, so a foreign enum set field inlines
+    // to its width's scalar and needs no import.
+    let common = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Warnings".to_string(),
+            kind: Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                backing_enum: None,
+                bits: vec![v2::EnumValue {
+                    name: "LOW_FUEL".to_string(),
+                    value: 0,
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
+                }],
+                width: v2::IntWidth::U32 as i32,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let common_source = generate(&common).expect("generate common").proto_source;
+    assert!(
+        common_source.contains("message WarningsBox {"),
+        "got:\n{common_source}"
+    );
+    let package = struct_package_in(
+        "veh.cluster",
+        "Status",
+        "warnings",
+        1,
+        named_type("veh.common.Warnings"),
+    );
+    let generated = generate_with(&package, &[&common]).expect("generate");
+    assert!(
+        !generated.proto_source.contains("import"),
+        "a field never names an enum set's root box message, so it needs no \
+         import:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("uint32 warnings = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.cluster.proto", &generated.proto_source);
+}
+
+#[test]
 fn a_foreign_struct_reference_emits_an_import_and_the_qualified_name() {
     let common = v2::Package {
         name: "veh.common".to_string(),
@@ -1416,10 +1468,11 @@ fn the_backend_refuses_an_optional_collection_exactly_where_the_sizer_gives_no_b
     // The optional array or map rule is read by two callers: this backend,
     // which refuses the field, and the proto3 sizer in `ridl-ir`, which gives
     // the payload no bound. A payload the backend will not emit must have no
-    // proto3 row in the catalog, and one it emits must have one, so the two
-    // answers are compared over every shape the rule distinguishes: a struct
-    // field and a tuple field, of an array, a map and a scalar, optional and
-    // required.
+    // proto3 row in the catalog. Over the shapes below, which hold no other
+    // member the sizer leaves unbounded, the backend emits exactly the
+    // payloads the sizer bounds: an array, a map and a scalar, optional and
+    // required, as a struct field, a tuple field, and a field of a tuple
+    // nested in a tuple.
     use ridl_ir::projection::size::{Ctx, Encoding, PayloadShape, SizeState, size_state};
 
     let shapes = [
@@ -1434,12 +1487,11 @@ fn the_backend_refuses_an_optional_collection_exactly_where_the_sizer_gives_no_b
             } else {
                 ty.clone()
             };
-            for in_tuple in [false, true] {
-                let field = if in_tuple {
-                    tuple_of(vec![ty.clone()])
-                } else {
-                    ty.clone()
-                };
+            for depth in 0..3 {
+                let mut field = ty.clone();
+                for _ in 0..depth {
+                    field = tuple_of(vec![field]);
+                }
                 let package = struct_package("S", "t", 1, field);
                 let emitted = generate(&package).is_ok();
                 let others: [&v2::Package; 0] = [];
@@ -1448,13 +1500,13 @@ fn the_backend_refuses_an_optional_collection_exactly_where_the_sizer_gives_no_b
                 assert_eq!(
                     emitted,
                     matches!(state, SizeState::Bounded(_)),
-                    "{kind}, optional {is_optional}, in a tuple {in_tuple}: \
+                    "{kind}, optional {is_optional}, tuple depth {depth}: \
                      the backend emits {emitted}, the sizer answers {state:?}"
                 );
                 assert_eq!(
                     emitted,
                     !(is_optional && kind != "scalar"),
-                    "{kind}, optional {is_optional}, in a tuple {in_tuple}"
+                    "{kind}, optional {is_optional}, tuple depth {depth}"
                 );
             }
         }
@@ -1528,7 +1580,11 @@ fn an_optional_array_field_is_refused() {
     let package = struct_package("Trace", "samples", 1, ty);
     let error = generate(&package).expect_err("must refuse");
     assert!(
-        error.message.contains("optional array"),
+        error.message.contains("Trace.samples is an optional array")
+            && error
+                .message
+                .contains("cannot mark a repeated field absent")
+            && error.message.contains("wrap the array in a struct"),
         "got: {}",
         error.message
     );
@@ -1543,7 +1599,50 @@ fn an_optional_map_field_is_refused() {
     let package = struct_package("Index", "byName", 1, ty);
     let error = generate(&package).expect_err("must refuse");
     assert!(
-        error.message.contains("optional map"),
+        error.message.contains("Index.byName is an optional map")
+            && error.message.contains("cannot mark a map field absent")
+            && error.message.contains("wrap the map in a struct"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn a_refusal_inside_a_nested_tuple_names_the_source_path() {
+    // `S.t` holds a tuple whose field `f0` is a tuple whose field `f0` is an
+    // optional array. The refusal names that source path, not the generated
+    // `STField1.field_1`.
+    let package = struct_package(
+        "S",
+        "t",
+        1,
+        tuple_of(vec![tuple_of(vec![optional(array_of(float64_type()))])]),
+    );
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("S.t.f0.f0 is an optional array")
+            && error
+                .message
+                .contains("cannot mark a repeated field absent")
+            && error.message.contains("from the tuple field"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn an_array_of_arrays_in_a_tuple_field_names_the_source_path() {
+    // A refusal raised while resolving a tuple field's type names the tuple
+    // field's source path, `S.t.f0`, not the generated `ST.field_1`.
+    let package = struct_package(
+        "S",
+        "t",
+        1,
+        tuple_of(vec![array_of(array_of(float64_type()))]),
+    );
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("S.t.f0 is an array of arrays"),
         "got: {}",
         error.message
     );

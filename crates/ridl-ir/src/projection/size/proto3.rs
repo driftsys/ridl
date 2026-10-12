@@ -17,11 +17,13 @@
 //! include: a field with no type and a stream type (`resolve_field_type`), a
 //! name that does not resolve (`resolve_named`), a nested array or map and a
 //! map value that is an array or a map (`resolve_field_type`), a map key
-//! outside the integral and string scalars (`map_key_text`), an optional
-//! array or map field of a struct or a tuple (`emit_struct`,
-//! `emit_induced_tuple`, ADR-0013 decision 7), an enum live or retired value
-//! outside int32 (`emit_enum`), and a field number protobuf reserves or
-//! exceeds (`check_field_number`). The backend's name-collision
+//! outside the integral and string scalars (`map_key_text`), an enum live or
+//! retired value outside int32 (`emit_enum`), and a field number protobuf
+//! reserves or exceeds (`check_field_number`). One refusal is not reproduced
+//! but shared: an optional array or map field of a struct or a tuple
+//! (`emit_struct`, `emit_induced_tuple`, ADR-0013 decision 7) is the rule
+//! [`proto3_projection::optional_repeated`], which the backend and this sizer
+//! both call. The backend's name-collision
 //! refusals, at member and package scope, are **not** reproduced: two struct
 //! field names that coincide after `snake_case` (`emit_struct`); two enum
 //! values that coincide after `SCREAMING_SNAKE_CASE`, one that spells the
@@ -33,9 +35,10 @@
 //! claim that clashes, such as a declared type named as a generated
 //! `<Interface>Ordinal` table (`SymbolScope::claim`). A payload in a package
 //! the backend refuses on a name collision still gets a proto3 bound here: the
-//! wire size does not depend on the names. Moving the refusal rules into
-//! [`crate::projection::proto3`], where the backend and this sizer share
-//! them, is tracked by driftsys/ridl#690.
+//! wire size does not depend on the names. Moving the other refusal rules
+//! reproduced here into [`crate::projection::proto3`], where the backend and
+//! this sizer would share them as they share `optional_repeated`, is tracked
+//! by driftsys/ridl#690.
 //!
 //! proto3 has no unbounded state: typl bounds every collection, so a message
 //! is bounded or, when the projection refuses a member, absent. Every

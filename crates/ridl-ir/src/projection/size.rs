@@ -621,9 +621,10 @@ mod tests {
         // refuses for the same type. The relation does not hold elsewhere: for
         // a bare `integer` or `float` at a field position, and for an enum set
         // of unspecified width, the projection answers `None` while proto3
-        // emits `sint64` or `double`, so a leaf exists there. A string or bytes
-        // whose bound exceeds the projection's `MAX_ENCODABLE` also has a
-        // leaf, while the projection answers `None`.
+        // emits `sint64`, `double` and `int64` respectively, so a leaf exists
+        // there. A string or bytes whose bound exceeds the projection's
+        // `MAX_ENCODABLE` also has a leaf, while the projection answers
+        // `None`.
         let string_no_bound = decl("S", Some(decl::Kind::TypeDef(string_def(None))));
         let bytes_no_bound = decl("B", Some(decl::Kind::TypeDef(bytes_def(None))));
         let bytes_bound = decl("B32", Some(decl::Kind::TypeDef(bytes_def(Some(32)))));
