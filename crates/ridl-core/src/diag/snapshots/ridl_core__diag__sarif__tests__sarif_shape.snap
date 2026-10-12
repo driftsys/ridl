@@ -1570,6 +1570,42 @@ expression: log
               "defaultConfiguration": {
                 "level": "error"
               }
+            },
+            {
+              "id": "MANI-105",
+              "shortDescription": {
+                "text": "a remote unit has no top-level `[package]` manifest, or its name is not the `[imports]` key"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-106",
+              "shortDescription": {
+                "text": "a remote unit imports a key the consumer's `[imports]` does not name"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-107",
+              "shortDescription": {
+                "text": "a remote unit's tree does not match the `tree` hash in `ridl.lock`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-108",
+              "shortDescription": {
+                "text": "`--frozen`: a `ridl.lock` entry has no `tree` hash"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
             }
           ]
         }

@@ -1415,6 +1415,29 @@ diag_codes! {
         /// the cache; a frozen build never fetches (ADR-0002 §7).
         MANI_104 = "MANI-104", Error,
             "`--frozen`: a lockfile-pinned import is not cached";
+
+        /// A remote unit's tree holds no `ridl.toml` at its top level, the
+        /// manifest is a `[workspace]` manifest, or its `[package] name` is
+        /// not the `[imports]` key that names its URL (ADR-0002 §5).
+        MANI_105 = "MANI-105", Error,
+            "a remote unit has no top-level `[package]` manifest, or its name is not the `[imports]` key";
+
+        /// A key of a remote unit's `[imports]` is not a key of the
+        /// consumer's `[imports]`; the consumer lists every remote unit the
+        /// build needs (ADR-0002 §5).
+        MANI_106 = "MANI-106", Error,
+            "a remote unit imports a key the consumer's `[imports]` does not name";
+
+        /// The tree of a remote unit does not hash to the `tree` its
+        /// `ridl.lock` entry pins, or holds a file that is not a regular file
+        /// (ADR-0002 §7).
+        MANI_107 = "MANI-107", Error,
+            "a remote unit's tree does not match the `tree` hash in `ridl.lock`";
+
+        /// `--frozen` was requested and the `ridl.lock` entry has no `tree`;
+        /// a frozen run never rewrites the lockfile (ADR-0002 §7).
+        MANI_108 = "MANI-108", Error,
+            "`--frozen`: a `ridl.lock` entry has no `tree` hash";
     }
 }
 

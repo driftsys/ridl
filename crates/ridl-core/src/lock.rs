@@ -13,6 +13,7 @@
 //! ```toml
 //! [entries."https://registry.example.com/veh/common@v1.2.0"]
 //! sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+//! tree = "…"
 //! ```
 //!
 //! This module sits behind the `fs` feature: reading and writing the lockfile
@@ -48,11 +49,19 @@ pub struct Lockfile {
 }
 
 /// One lockfile entry: the SHA-256 content hash of the artifact a URL resolved
-/// to, as a lowercase hex string.
+/// to, as a lowercase hex string, and the `tree` hash of what it unpacks to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LockEntry {
     pub sha256: String,
+    /// The `tree` hash of the unpacked tree. `None` in a lockfile written
+    /// before the hash existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tree: Option<String>,
 }
+
+/// `<key> <type>` lines of `ridl.lock`, for the manifest freeze dump.
+pub const LOCK_KEYS: &[(&str, &str)] =
+    &[("entries.*.sha256", "string"), ("entries.*.tree", "string")];
 
 /// Reads and parses `ridl.lock` at `path`.
 ///
@@ -149,7 +158,34 @@ mod tests {
     fn entry(sha: &str) -> LockEntry {
         LockEntry {
             sha256: sha.to_string(),
+            tree: None,
         }
+    }
+
+    /// A lockfile written before `tree` existed reads with `tree: None`, and
+    /// an entry with a tree round-trips it.
+    #[test]
+    fn tree_is_optional_on_read_and_kept_on_write() {
+        let dir = TempDir::new("tree");
+        let path = dir.path().join("ridl.lock");
+        fs::write(
+            &path,
+            "[entries.\"https://r.example.com/a@v1\"]\nsha256 = \"aa\"\n",
+        )
+        .unwrap();
+        let (lock, diags) = read_lockfile(&path);
+        assert!(diags.is_empty());
+        let lock = lock.unwrap();
+        assert_eq!(lock.entries["https://r.example.com/a@v1"].tree, None);
+
+        let mut lock = lock;
+        lock.entries
+            .get_mut("https://r.example.com/a@v1")
+            .unwrap()
+            .tree = Some("bb".into());
+        write_lockfile(&path, &lock).unwrap();
+        assert!(fs::read_to_string(&path).unwrap().contains("tree = \"bb\""));
+        assert_eq!(read_lockfile(&path).0, Some(lock));
     }
 
     /// Writing a lockfile then reading it back reconstructs the exact same

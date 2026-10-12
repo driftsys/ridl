@@ -96,8 +96,8 @@ use ridl_core::diag::{
 use ridl_core::lint::{LintScopes, apply_lint_levels, drop_allowed_by_default};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{
-    Cache, Frozen, LoadedWorkspace, RidlDatabase, materialize_imports, parse_file, read_lockfile,
-    std_package, write_lockfile,
+    Cache, Frozen, ImportUnion, LoadedWorkspace, RidlDatabase, materialize_imports, parse_file,
+    read_lockfile, std_package, write_lockfile,
 };
 use ridl_ir::codegen::{self, v1};
 use ridl_sem::{
@@ -2049,15 +2049,14 @@ fn materialize_and_lock(
     };
 
     // The union of every import pin — the workspace root's and each package's
-    // (ADR-0002 §5). `materialize_imports` reads only the values (URLs) and
-    // deduplicates them, so keying the map by URL keeps every distinct URL.
-    let mut imports: BTreeMap<String, String> = BTreeMap::new();
-    for url in workspace.imports(db).values() {
-        imports.insert(url.clone(), url.clone());
+    // (ADR-0002 §5), keyed by URL so that every distinct URL is kept.
+    let mut imports = ImportUnion::new();
+    for (name, url) in workspace.imports(db) {
+        imports.entry(url.clone()).or_default().insert(name.clone());
     }
     for package in workspace.packages(db) {
-        for url in package.imports(db).values() {
-            imports.insert(url.clone(), url.clone());
+        for (name, url) in package.imports(db) {
+            imports.entry(url.clone()).or_default().insert(name.clone());
         }
     }
     if imports.is_empty() {
@@ -2066,7 +2065,7 @@ fn materialize_and_lock(
 
     let lock_path = root.join("ridl.lock");
     let (lock, mut diagnostics) = read_lockfile(&lock_path);
-    let (_resolved, regenerated, materialize_diags) =
+    let (_units, regenerated, materialize_diags) =
         materialize_imports(&imports, lock.as_ref(), &Cache::user_default(), frozen);
     let had_error = materialize_diags
         .iter()

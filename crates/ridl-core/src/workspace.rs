@@ -31,7 +31,7 @@
 //! and for an entry the loader cannot compile at all, the bare `.rxdl` or
 //! `.rmdl` file.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -90,6 +90,12 @@ pub struct LoadedWorkspace {
     /// find the root and parse the manifest again (driftsys/ridl#760).
     pub root_package: Option<String>,
 }
+
+/// The union of a consumer's `[imports]` (ADR-0002 §5): every URL, mapped to
+/// the keys that name it across the root manifest and every member. Keyed by
+/// URL so that one key pinned to two URLs by two members keeps both URLs, and
+/// two keys naming one URL fetch it once.
+pub type ImportUnion = BTreeMap<String, BTreeSet<String>>;
 
 /// Unsaved source text for a file in a loaded package directory.
 #[derive(Clone, Debug, PartialEq, Eq)]

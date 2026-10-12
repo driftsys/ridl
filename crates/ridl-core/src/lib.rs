@@ -53,5 +53,6 @@ pub use std_lib::std_package;
 pub use tree_hash::{TreeHashError, tree_hash};
 #[cfg(feature = "fs")]
 pub use workspace::{
-    LoadError, LoadedWorkspace, Overlay, find_root, load_workspace, load_workspace_with,
+    ImportUnion, LoadError, LoadedWorkspace, Overlay, find_root, load_workspace,
+    load_workspace_with,
 };
