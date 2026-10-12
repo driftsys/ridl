@@ -303,7 +303,7 @@ pub(crate) mod tests {
         assert_eq!(snapshot.status().warnings, 1);
     }
     #[tokio::test]
-    async fn a_remote_import_is_reported_and_not_fetched() {
+    async fn a_remote_import_is_an_error_and_not_fetched() {
         let copy = TempWorkspace::copy("ws");
         let manifest = copy.0.join("b/ridl.toml");
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -334,9 +334,19 @@ pub(crate) mod tests {
         .unwrap()
         .unwrap()
         .unwrap();
-        assert!(snap.output.diagnostics.iter().any(
-            |d| d.severity == ridl_core::Severity::Info && d.message.contains("remote import")
-        ));
+        // The tools load no remote unit, so the import under the pinned key
+        // is the resolver's uncoded error naming the unit's URL.
+        assert!(
+            snap.output.diagnostics.iter().any(|d| {
+                d.severity == ridl_core::Severity::Error
+                    && d.message
+                        == format!(
+                            "unresolved import: `ext` is not a package of the remote unit at `https://{address}/ext.git`"
+                        )
+            }),
+            "{:?}",
+            snap.output.diagnostics
+        );
         assert_eq!(
             listener.accept().unwrap_err().kind(),
             std::io::ErrorKind::WouldBlock,

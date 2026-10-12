@@ -244,9 +244,10 @@ command line reports because it needs the network, the lockfile round trip or
 the baseline: MANI-101 to MANI-104 and the lockfile read and write diagnostics
 of `materialize_and_lock`, and the desk check against `.ridl/baseline` (RIDL-407
 and the rename hint on RIDL-409). `ridl_diff` with
-`old: "<root>/.ridl/baseline"` and `new: "<root>"` gives the same information. A
-remote import resolves in neither, and both report the same Info diagnostic. The
-crate README states this list.
+`old: "<root>/.ridl/baseline"` and `new: "<root>"` gives the same information.
+The tools load no remote unit, so an import under an `[imports]` key is the
+resolver's uncoded Error naming the unit's URL. The crate README states this
+list.
 
 ## 7. The tool surface as a contract
 
