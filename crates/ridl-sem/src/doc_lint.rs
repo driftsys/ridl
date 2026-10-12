@@ -30,7 +30,10 @@
 //! (`crate::resolve::resolve_doc_link`).
 
 use ridl_core::db::{InputFile, profile_of_path};
-use ridl_core::diag::{DiagCode, Diagnostic, FileId, FixIt, Severity, Span};
+use ridl_core::diag::{
+    DiagCode, Diagnostic, FileId, FixIt, Severity, Span, after_last_line_break, count_line_breaks,
+    ends_with_line_break, line_ending_of, lines as text_lines,
+};
 use ridl_syntax::ast::{AstNode, SourceFile, doc_comments_before};
 use ridl_syntax::{Profile, SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{NodeOrToken, TextRange};
@@ -210,26 +213,25 @@ fn is_internal(node: &SyntaxNode) -> bool {
 }
 
 /// The start of the line of `token`, the indentation before `token`, and the
-/// line ending of the preceding line break (`\n` when there is none). `None`
-/// when anything other than spaces and tabs precedes `token` on its line.
+/// line ending of the preceding line break (`\n` when there is none). A line
+/// break is an LF, a CRLF pair or a lone CR, as it is for the lexer and the
+/// diagnostic positions (driftsys/ridl#788). `None` when anything other than
+/// spaces and tabs precedes `token` on its line.
 fn line_start(token: &SyntaxToken) -> Option<(rowan::TextSize, String, &'static str)> {
     let start = token.text_range().start();
     let Some(previous) = token.prev_token() else {
         return Some((start, String::new(), "\n"));
     };
-    let newline = |text: &str| if text.contains("\r\n") { "\r\n" } else { "\n" };
     if previous.kind() != SyntaxKind::Whitespace {
-        return previous
-            .text()
-            .ends_with('\n')
-            .then(|| (start, String::new(), newline(previous.text())));
+        return ends_with_line_break(previous.text())
+            .then(|| (start, String::new(), line_ending_of(previous.text())));
     }
     let text = previous.text();
-    let indent = match text.rfind('\n') {
-        Some(index) => &text[index + 1..],
+    let indent = match after_last_line_break(text) {
+        Some(index) => &text[index..],
         None => match previous.prev_token() {
             None => text,
-            Some(before) if before.text().ends_with('\n') => text,
+            Some(before) if ends_with_line_break(before.text()) => text,
             Some(_) => return None,
         },
     };
@@ -237,7 +239,7 @@ fn line_start(token: &SyntaxToken) -> Option<(rowan::TextSize, String, &'static 
         return None;
     }
     let indent_len = rowan::TextSize::of(indent);
-    Some((start - indent_len, indent.to_string(), newline(text)))
+    Some((start - indent_len, indent.to_string(), line_ending_of(text)))
 }
 
 /// TYPL-407: a doc comment whose next non-trivia sibling is not a carrier
@@ -303,7 +305,7 @@ fn detached_doc_comment(node: &SyntaxNode, file_id: FileId) -> Option<Diagnostic
             break;
         }
         match token.kind() {
-            SyntaxKind::Whitespace if token.text().matches('\n').count() >= 2 => {
+            SyntaxKind::Whitespace if count_line_breaks(token.text()) >= 2 => {
                 blank_below = true;
             }
             SyntaxKind::DocComment if blank_below => {
@@ -448,10 +450,11 @@ fn doc_comment_style(token: &SyntaxToken, file_id: FileId) -> Option<Diagnostic>
 ///
 /// The lines after the first start with `indent`, the indentation of the
 /// comment itself, because the replacement starts at the comment's first
-/// character. The line ending is `\r\n` when the comment uses it.
+/// character. The line ending is the one the comment uses: `\r\n` for a CRLF
+/// pair, `\r` for a lone CR, `\n` otherwise.
 fn line_doc_replacement(body: &str, indent: &str) -> String {
-    let newline = if body.contains("\r\n") { "\r\n" } else { "\n" };
-    let mut raw = body.split('\n').map(|line| line.trim_end());
+    let newline = line_ending_of(body);
+    let mut raw = text_lines(body).map(|line| line.trim_end());
     let first = raw.next().unwrap_or_default().trim_start();
     let rest: Vec<&str> = raw.collect();
 
@@ -511,13 +514,13 @@ fn indentation_before(token: &SyntaxToken) -> String {
         return String::new();
     }
     let text = previous.text();
-    match text.rfind('\n') {
-        Some(index) => text[index + 1..].to_string(),
+    match after_last_line_break(text) {
+        Some(index) => text[index..].to_string(),
         // A whitespace token with no line break is the indentation only when
         // it starts the file or follows a line break.
         None => match previous.prev_token() {
             None => text.to_string(),
-            Some(before) if before.text().ends_with('\n') => text.to_string(),
+            Some(before) if ends_with_line_break(before.text()) => text.to_string(),
             Some(_) => String::new(),
         },
     }
@@ -612,6 +615,38 @@ mod tests {
         let found = typl_410(&checked);
         assert_eq!(found.len(), 1, "{:?}", checked.diagnostics);
         assert_eq!(found[0].fixits[0].replacement, "/// First.\r\n/// Second.");
+    }
+
+    /// (driftsys/ridl#788) A lone CR is a line break for the lexer, the
+    /// diagnostic positions and the formatter, so the doc-comment code reads
+    /// it as one too: the block's two lines are two lines, and the fix-it
+    /// rebuilds them with the file's own line ending.
+    #[test]
+    fn doc_comment_style_fixit_without_decoration_and_with_a_lone_cr() {
+        let text = "package demo\r\r/** First.\r    Second. */\rtype S: integer [0..300]\r";
+        let checked = check_source("demo.typl", text);
+        let found = typl_410(&checked);
+        assert_eq!(found.len(), 1, "{:?}", checked.diagnostics);
+        assert_eq!(found[0].fixits[0].replacement, "/// First.\r/// Second.");
+    }
+
+    /// (driftsys/ridl#788) The doc text of a block comment with lone-CR line
+    /// endings holds the block's lines, not one run-on line.
+    #[test]
+    fn a_block_comment_with_a_lone_cr_scans_to_two_lines() {
+        let text = "package demo\r\r/** First.\r    Second. */\rtype S: integer [0..300]\r";
+        let checked = check_source("demo.typl", text);
+        assert_eq!(doc_of(&checked, "S"), "First.\nSecond.");
+    }
+
+    /// (driftsys/ridl#788) A blank line written with two lone CRs detaches a
+    /// doc comment from the declaration below it, as one written with two
+    /// LFs does.
+    #[test]
+    fn a_blank_line_of_lone_crs_detaches_a_doc_comment() {
+        let text = "package demo\r/// A.\r\r/// B.\rtype S: integer [0..1]\r";
+        let checked = check_source("demo.typl", text);
+        assert_eq!(doc_of(&checked, "S"), "A.\nB.");
     }
 
     /// The doc the IR holds for the declaration `name` of `checked`.

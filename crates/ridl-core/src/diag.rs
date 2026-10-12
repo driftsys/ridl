@@ -1584,6 +1584,73 @@ pub(crate) fn ends_line(bytes: &[u8], at: usize) -> bool {
     }
 }
 
+/// The lines of `text` under the rule of [`line_col`]: a line ends at an LF, a
+/// CRLF pair or a lone CR. The line break is not part of the line, except that
+/// a CRLF pair leaves its CR at the end of the line it ends, so a caller that
+/// wants the text alone trims it. Every separator is one byte, so a caller that
+/// tracks byte offsets advances by `line.len() + 1` for each line but the last.
+///
+/// A trailing line break yields a final empty line, as [`str::split`] does.
+pub fn lines(text: &str) -> impl Iterator<Item = &str> {
+    let bytes = text.as_bytes();
+    let mut start = 0usize;
+    let mut at = 0usize;
+    std::iter::from_fn(move || {
+        if start > bytes.len() {
+            return None;
+        }
+        while at < bytes.len() {
+            if ends_line(bytes, at) {
+                let line = &text[start..at];
+                start = at + 1;
+                at = start;
+                return Some(line);
+            }
+            at += 1;
+        }
+        let line = &text[start..];
+        start = bytes.len() + 1;
+        Some(line)
+    })
+}
+
+/// Whether `text` ends with a line break: an LF, or a CR that ends the text.
+/// The counterpart of [`lines`] for a caller that only asks whether the text
+/// before a token ended its line.
+pub fn ends_with_line_break(text: &str) -> bool {
+    text.ends_with('\n') || text.ends_with('\r')
+}
+
+/// The byte index just after the last line break of `text`, or `None` when
+/// `text` holds none. The counterpart of `text.rfind('\n').map(|i| i + 1)` for
+/// the line-break rule of [`lines`].
+pub fn after_last_line_break(text: &str) -> Option<usize> {
+    let bytes = text.as_bytes();
+    (0..bytes.len())
+        .rev()
+        .find(|at| ends_line(bytes, *at))
+        .map(|at| at + 1)
+}
+
+/// The number of line breaks in `text`, under the rule of [`lines`].
+pub fn count_line_breaks(text: &str) -> usize {
+    let bytes = text.as_bytes();
+    (0..bytes.len()).filter(|at| ends_line(bytes, *at)).count()
+}
+
+/// The line ending `text` uses, for a fix-it that rebuilds the lines of a
+/// comment: `\r\n` when the text holds a CRLF pair, `\r` when it holds a lone
+/// CR and no pair, and `\n` otherwise.
+pub fn line_ending_of(text: &str) -> &'static str {
+    if text.contains("\r\n") {
+        "\r\n"
+    } else if text.contains('\r') {
+        "\r"
+    } else {
+        "\n"
+    }
+}
+
 /// A span in the JSON diagnostic contract: the file's path as registered in the
 /// [`SourceMap`] and 1-based start and end positions. `end` is exclusive: the
 /// position one past the last character in the span, not the position of the
@@ -2742,6 +2809,52 @@ mod json_tests {
             line_col(text, TextSize::from(4)),
             LineCol { line: 3, column: 1 }
         );
+    }
+
+    /// (driftsys/ridl#788) `lines` splits on the same rule `line_col` counts
+    /// on: an LF, a CRLF pair or a lone CR. Every separator is one byte, so a
+    /// caller that tracks byte offsets can advance by `line.len() + 1`.
+    #[test]
+    fn lines_splits_on_lf_crlf_and_a_lone_cr() {
+        assert_eq!(
+            lines("a\nb\r\nc\rd").collect::<Vec<_>>(),
+            ["a", "b\r", "c", "d"]
+        );
+        assert_eq!(lines("").collect::<Vec<_>>(), [""]);
+        assert_eq!(lines("a\n").collect::<Vec<_>>(), ["a", ""]);
+        assert_eq!(lines("a\r").collect::<Vec<_>>(), ["a", ""]);
+        // A CR followed by a CRLF pair is two breaks, as `line_col` counts it.
+        assert_eq!(lines("a\r\r\nb").collect::<Vec<_>>(), ["a", "\r", "b"]);
+        // Every separator is one byte.
+        for text in ["a\nb\r\nc\rd", "a\r\r\nb", "x"] {
+            let rebuilt: usize = lines(text).map(|line| line.len() + 1).sum::<usize>() - 1;
+            assert_eq!(rebuilt, text.len(), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn the_line_break_helpers_follow_the_same_rule() {
+        assert!(ends_with_line_break("a\n"));
+        assert!(ends_with_line_break("a\r"));
+        assert!(ends_with_line_break("a\r\n"));
+        assert!(!ends_with_line_break("a"));
+
+        assert_eq!(after_last_line_break("a\n  "), Some(2));
+        assert_eq!(after_last_line_break("a\r  "), Some(2));
+        assert_eq!(after_last_line_break("a\r\n  "), Some(3));
+        assert_eq!(after_last_line_break("  "), None);
+
+        assert_eq!(count_line_breaks("a\n\nb"), 2);
+        assert_eq!(count_line_breaks("a\r\rb"), 2);
+        assert_eq!(count_line_breaks("a\r\n\r\nb"), 2);
+        assert_eq!(count_line_breaks("ab"), 0);
+
+        assert_eq!(line_ending_of("a\r\nb"), "\r\n");
+        assert_eq!(line_ending_of("a\rb"), "\r");
+        assert_eq!(line_ending_of("a\nb"), "\n");
+        assert_eq!(line_ending_of("ab"), "\n");
+        // A text with both a pair and a lone CR takes the pair.
+        assert_eq!(line_ending_of("a\r\nb\rc"), "\r\n");
     }
 
     #[test]
