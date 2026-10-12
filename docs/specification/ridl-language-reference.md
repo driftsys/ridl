@@ -225,12 +225,15 @@ are evaluated on envelope timestamps; duplicate suppression of a retried call
 (§6.1) on the caller's identity plus the request's sequence number, so two
 callers are never merged under one sequence number, and a retry resends the
 request with its envelope unchanged
-([frame specification](frame-specification.md) §7); **sequence gaps make loss
-detectable** on pub/sub (a Stratum 3 detection, feeding §10.4 management);
-AUTOSAR E2E protection consumes the counter; deterministic replay (concept note
-§9.3) is ordered by it; observability spans derive from both. Generated
-subscriber/caller APIs expose the envelope alongside the value (value +
-provenance + envelope); request/reply correlation is likewise runtime-internal.
+([frame specification](frame-specification.md) §7); **a sequence gap makes loss
+detectable on an event channel** (a Stratum 3 detection, feeding §10.4
+management) — a gap on a signal channel is not a loss, because intermediate
+samples may be missed (§4); `seq` 0 is the envelope of a signal channel that has
+had no publication; AUTOSAR E2E protection consumes the counter; deterministic
+replay (concept note §9.3) is ordered by it; observability spans derive from
+both. Generated subscriber/caller APIs expose the envelope alongside the value
+(value + provenance + envelope); request/reply correlation is likewise
+runtime-internal.
 
 **System time.** The platform assumes **one synchronized time base across the
 system** — gPTP/PTP (IEEE 802.1AS in vehicle networks) or an equivalent shared
