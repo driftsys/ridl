@@ -770,6 +770,20 @@ fn labels(fakes: &Fakes, human: &str, judge: &str) -> PathBuf {
     path
 }
 
+/// A labels file of `items` items, on `agreed` of which the maintainer and
+/// the judge agree.
+fn labels_agreeing(fakes: &Fakes, items: usize, agreed: usize) -> PathBuf {
+    let judge = vec!["true"; items].join(", ");
+    let human: Vec<&str> = (0..items)
+        .map(|i| if i < agreed { "true" } else { "false" })
+        .collect();
+    labels(
+        fakes,
+        &format!("[{}]", human.join(", ")),
+        &format!("[{judge}]"),
+    )
+}
+
 #[test]
 fn an_unlabelled_run_is_an_input_error() {
     let fakes = fakes_with(None);
@@ -785,19 +799,36 @@ fn agreement_below_the_floor_fails() {
     let path = labels(&fakes, "[true, false]", "[true, true]");
     let output = eval(&fakes, &["agreement", path.to_str().unwrap()], true);
     assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stdout).contains("50%"));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("50.0%"));
 }
 
 #[test]
 fn agreement_at_the_floor_passes() {
     let fakes = fakes_with(None);
-    let path = labels(&fakes, "[true, true]", "[true, true]");
+    let path = labels_agreeing(&fakes, 5, 4);
     let output = eval(&fakes, &["agreement", path.to_str().unwrap()], true);
     assert_eq!(
         output.status.code(),
         Some(0),
         "{}",
         String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("80.0%"));
+}
+
+#[test]
+fn agreement_just_below_the_floor_fails_and_never_shows_the_floor() {
+    let fakes = fakes_with(None);
+    // 1999 of 2500 is 79.96%, which rounding would show as 80.0%.
+    let path = labels_agreeing(&fakes, 2500, 1999);
+    let output = eval(&fakes, &["agreement", path.to_str().unwrap()], true);
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("79.9%"), "{stdout}");
+    let report = std::fs::read_to_string(fakes.dir.join("agreement.md")).unwrap();
+    assert!(
+        report.contains("Agreement: 79.9% (floor 80.0%)."),
+        "{report}"
     );
 }
 
@@ -813,4 +844,178 @@ fn a_labels_file_without_human_labels_is_an_input_error() {
     let output = eval(&fakes, &["agreement", path.to_str().unwrap()], true);
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("has no human"));
+}
+
+/// Runs one task on one host without the skill into a fresh `--out`, and
+/// returns that directory and the run's result.
+fn run_one(fakes: &Fakes, task: &str, host: &str) -> (PathBuf, toml::Value) {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let out = fakes
+        .dir
+        .join(format!("results-{}", NEXT.fetch_add(1, Ordering::Relaxed)));
+    let output = eval(
+        fakes,
+        &[
+            "--task",
+            task,
+            "--host",
+            host,
+            "--skill",
+            "without",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        true,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result = result(&out, task, &format!("{host}-without-1"));
+    (out, result)
+}
+
+#[test]
+fn an_error_diagnostic_fails_the_run() {
+    let fakes = fakes_with(None);
+    std::fs::write(
+        fakes.dir.join("check.json"),
+        r#"[{"code":"TYPL-101","severity":"error","message":"m"}]"#,
+    )
+    .unwrap();
+    let (_, result) = run_one(&fakes, "design-0001", "claude");
+    let mechanical = &result["mechanical"];
+    assert_eq!(mechanical["no_error"].as_bool(), Some(false));
+    assert_eq!(mechanical["lints_match"].as_bool(), Some(true));
+    assert_eq!(mechanical["passed"].as_bool(), Some(false));
+}
+
+#[test]
+fn design_lints_must_match_the_task() {
+    let fakes = fakes_with(None);
+    std::fs::write(
+        fakes.dir.join("check.json"),
+        r#"[{"code":"TYPL-224","severity":"info","lint":"low-cohesion-interface","message":"m"}]"#,
+    )
+    .unwrap();
+    // review-0002 expects this lint; design-0001 expects none.
+    let (_, expected) = run_one(&fakes, "review-0002", "claude");
+    assert_eq!(expected["mechanical"]["lints_match"].as_bool(), Some(true));
+    assert_eq!(expected["mechanical"]["passed"].as_bool(), Some(true));
+    let (_, unexpected) = run_one(&fakes, "design-0001", "claude");
+    assert_eq!(unexpected["mechanical"]["no_error"].as_bool(), Some(true));
+    assert_eq!(
+        unexpected["mechanical"]["lints_match"].as_bool(),
+        Some(false)
+    );
+    assert_eq!(unexpected["mechanical"]["passed"].as_bool(), Some(false));
+}
+
+#[test]
+fn an_evolve_run_must_reach_the_expected_diff_verdict() {
+    let fakes = fakes_with(None);
+    std::fs::write(fakes.dir.join("diff-verdict"), "breaking").unwrap();
+    let (_, result) = run_one(&fakes, "evolve-0001", "claude");
+    assert_eq!(result["mechanical"]["diff_matches"].as_bool(), Some(false));
+    assert_eq!(result["mechanical"]["passed"].as_bool(), Some(false));
+}
+
+#[test]
+fn a_judge_reply_that_cannot_be_read_is_an_error_with_no_score() {
+    let fakes = fakes_with(None);
+    std::fs::write(fakes.dir.join("codex-verdict"), "It looks fine to me.").unwrap();
+    let (out, result) = run_one(&fakes, "design-0001", "claude");
+    let rubric = result["rubric"].as_table().unwrap();
+    assert_eq!(
+        rubric.get("error").and_then(toml::Value::as_str),
+        Some("the judge reply is not JSON")
+    );
+    assert!(rubric.get("score").is_none(), "{rubric:?}");
+    assert!(rubric.get("met").is_none(), "{rubric:?}");
+    let summary = std::fs::read_to_string(out.join("summary.md")).unwrap();
+    assert!(
+        summary.contains("## Runs with a judge error\n\n- design-0001/claude-without-1"),
+        "{summary}"
+    );
+}
+
+#[test]
+fn the_judge_sees_the_workspace_files_and_the_final_message() {
+    let fakes = fakes_with(Some(
+        r#"printf '[package]\n' > ridl.toml; printf 'package seen.by.judge\n' > a.typl; echo '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"mcp__ridl__ridl_check","input":{}}]}}'; echo '{"type":"result","result":"The Claude final answer."}'"#,
+    ));
+    run_one(&fakes, "design-0001", "claude");
+    let prompt = std::fs::read_to_string(fakes.dir.join("codex-judge-prompt.txt")).unwrap();
+    assert!(prompt.contains("### a.typl"), "{prompt}");
+    assert!(prompt.contains("package seen.by.judge"), "{prompt}");
+    assert!(prompt.contains("The Claude final answer."), "{prompt}");
+}
+
+#[test]
+fn the_codex_final_message_reaches_the_judge() {
+    let fakes = fakes_with(None);
+    run_one(&fakes, "design-0001", "codex");
+    let prompt = std::fs::read_to_string(fakes.dir.join("claude-judge-prompt.txt")).unwrap();
+    assert!(prompt.contains("The Codex final answer."), "{prompt}");
+}
+
+#[test]
+fn sample_writes_the_judged_runs_for_labelling() {
+    let fakes = fakes_with(None);
+    let (out, _) = run_one(&fakes, "design-0001", "claude");
+    let output = eval(&fakes, &["sample", "--from", out.to_str().unwrap()], true);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let labels: toml::Value =
+        toml::from_str(&std::fs::read_to_string(out.join("judge-check/labels.toml")).unwrap())
+            .unwrap();
+    let runs = labels["run"].as_array().unwrap();
+    assert_eq!(runs.len(), 1);
+    let run = &runs[0];
+    assert_eq!(run["task"].as_str(), Some("design-0001"));
+    assert_eq!(run["label"].as_str(), Some("claude-without-1"));
+    let rubric = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../evals/tasks/design-0001/rubric.md"),
+    )
+    .unwrap();
+    let count = rubric
+        .lines()
+        .filter(|l| {
+            l.split_once(". **")
+                .is_some_and(|(n, _)| n.parse::<u32>().is_ok())
+        })
+        .count();
+    let items = run["items"].as_array().unwrap();
+    assert_eq!(items.len(), count);
+    // The first item's text, which continues on the next lines.
+    let first = rubric.lines().next().unwrap().split_once("** ").unwrap().1;
+    assert!(items[0].as_str().unwrap().starts_with(first), "{items:?}");
+    assert_eq!(
+        run["judge"].as_array().unwrap(),
+        &vec![toml::Value::Boolean(true); count]
+    );
+    assert_eq!(run["human"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn sample_reports_a_result_without_marks_as_an_error() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    std::fs::create_dir_all(out.join("design-0001")).unwrap();
+    std::fs::write(
+        out.join("design-0001/claude-with-1.toml"),
+        "host = \"claude\"\nskill = true\n[mechanical]\npassed = true\n[rubric]\nscore = 1.0\n",
+    )
+    .unwrap();
+    let output = eval(&fakes, &["sample", "--from", out.to_str().unwrap()], true);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("has no rubric.met"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }

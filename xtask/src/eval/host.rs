@@ -142,8 +142,10 @@ pub struct Invocation {
     pub stdin: String,
 }
 
-/// The command that runs one agent session on `prompt`, without a user,
-/// with every permission granted inside its workspace.
+/// The command that runs one agent session on `prompt`, without a user.
+/// Codex runs with every permission inside its workspace
+/// (`-s workspace-write`); Claude runs with `bypassPermissions`, which is not
+/// limited to the workspace.
 pub fn agent_invocation(host: Host, model: &str, dirs: &RunDirs, prompt: &str) -> Invocation {
     let s = |v: &str| v.to_owned();
     let path = |p: &Path| p.display().to_string();
@@ -255,8 +257,15 @@ pub fn execute(
     );
     request.insert("prompt".into(), invocation.stdin.clone().into());
     let path = request_path(stdout_to);
-    std::fs::write(&path, toml::to_string(&request).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
+    // Written under another name and renamed, so an operator that sees the
+    // request file never reads it half written.
+    let partial = path.with_extension("partial");
+    std::fs::write(
+        &partial,
+        toml::to_string(&request).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    std::fs::rename(&partial, &path).map_err(|e| e.to_string())?;
     eprintln!("eval: handoff: {}", path.display());
     while !done_path(stdout_to).is_file() {
         std::thread::sleep(std::time::Duration::from_millis(200));
@@ -403,6 +412,11 @@ mod tests {
         );
         assert_eq!(inv.cwd, Path::new("/r/ws"));
         assert_eq!(inv.stdin, "p");
+        assert!(
+            inv.args
+                .windows(2)
+                .any(|w| w == ["--permission-mode", "bypassPermissions"])
+        );
     }
 
     #[test]
@@ -412,6 +426,8 @@ mod tests {
         assert!(inv.args.contains(&"--json".to_owned()));
         assert!(inv.args.windows(2).any(|w| w == ["-m", "m"]));
         assert!(inv.args.windows(2).any(|w| w == ["-o", "/r/last.md"]));
+        assert!(inv.args.windows(2).any(|w| w == ["-C", "/r/ws"]));
+        assert!(inv.args.windows(2).any(|w| w == ["-s", "workspace-write"]));
         assert!(
             inv.env
                 .contains(&("CODEX_HOME".to_owned(), "/r/home".to_owned()))
@@ -469,12 +485,23 @@ mod tests {
                 .is_file()
         );
         assert!(claude.workspace.join("ridl.toml").is_file());
+        let mcp: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(claude.home.parent().unwrap().join("mcp.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            mcp["mcpServers"]["ridl"],
+            serde_json::json!({ "command": ridl_binary(), "args": ["mcp"] })
+        );
         let codex = prepare_run(&scratch("codex"), &task, Host::Codex, true, &skill).unwrap();
         assert!(codex.home.join("skills/ridl-authoring/SKILL.md").is_file());
         assert!(
             std::fs::read_to_string(codex.home.join("config.toml"))
                 .unwrap()
-                .contains("[mcp_servers.ridl]")
+                .contains(&format!(
+                    "[mcp_servers.ridl]\ncommand = {:?}\nargs = [\"mcp\"]\n",
+                    ridl_binary()
+                ))
         );
         // `codex exec` never asks, so a tool that needs approval is refused.
         assert!(

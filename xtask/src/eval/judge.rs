@@ -140,8 +140,9 @@ pub fn write_schema(dir: &Path) -> Result<(), String> {
     std::fs::write(dir.join("schema.json"), SCHEMA).map_err(|e| e.to_string())
 }
 
-/// The judge runs with no tool and no MCP server, in `dir`, an empty
-/// directory with its own host home.
+/// The judge runs with no MCP server, in `dir`, an empty directory with its
+/// own host home. The Claude judge has no tool; the Codex judge keeps its
+/// shell tool in a read-only sandbox (`-s read-only`).
 pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> host::Invocation {
     let s = |v: &str| v.to_owned();
     let path = |p: PathBuf| p.display().to_string();
@@ -351,6 +352,11 @@ mod tests {
             parse_verdict("I think it is fine.", &items).unwrap_err(),
             "the judge reply is not JSON"
         );
+        let no_flag = r#"{"items":[{"n":1,"met":true},{"n":2},{"n":3,"met":true}]}"#;
+        assert_eq!(
+            parse_verdict(no_flag, &items).unwrap_err(),
+            "judge entry 2 has no met flag"
+        );
     }
 
     #[test]
@@ -362,6 +368,7 @@ mod tests {
             "Done.",
         );
         assert!(p.contains("Do X.") && p.contains("a.typl") && p.contains("Done."));
+        assert!(p.contains("### a.typl\n\n```\npackage p\n"), "{p}");
         assert!(!p.to_lowercase().contains("skill"));
     }
 
@@ -383,6 +390,11 @@ mod tests {
         assert!(inv.args.windows(2).any(|w| w == ["--tools", ""]));
         assert!(inv.args.contains(&"--json-schema".to_owned()));
         assert!(!inv.args.contains(&"--mcp-config".to_owned()));
+        assert!(
+            inv.args
+                .windows(2)
+                .any(|w| w == ["--output-format", "json"])
+        );
     }
 
     #[test]
@@ -392,12 +404,32 @@ mod tests {
         let plain = r#"{"type":"result","result":"{\"items\":[]}"}"#;
         assert_eq!(claude_reply(plain).unwrap(), r#"{"items":[]}"#);
         assert!(claude_reply("garbage").is_err());
+        let null = r#"{"type":"result","structured_output":null,"result":"{\"items\":[]}"}"#;
+        assert_eq!(claude_reply(null).unwrap(), r#"{"items":[]}"#);
     }
 
     #[test]
     fn the_final_message_of_a_claude_run_is_its_last_result() {
         let t = "{\"type\":\"result\",\"result\":\"first\"}\n{\"type\":\"assistant\"}\n{\"type\":\"result\",\"result\":\"last\"}\n";
         assert_eq!(claude_final_message(t), "last");
+    }
+
+    #[test]
+    fn a_result_line_wins_over_a_handback_and_the_last_handback_wins() {
+        let handback = |m: &str| {
+            format!(
+                r#"{{"type":"assistant","message":{{"content":[{{"type":"tool_use","name":"SubagentHandback","input":{{"message":"{m}"}}}}]}}}}"#
+            )
+        };
+        let result = r#"{"type":"result","result":"the result"}"#;
+        assert_eq!(
+            claude_final_message(&format!("{result}\n{}\n", handback("handed back"))),
+            "the result"
+        );
+        assert_eq!(
+            claude_final_message(&format!("{}\n{}\n", handback("first"), handback("last"))),
+            "last"
+        );
     }
 
     #[test]

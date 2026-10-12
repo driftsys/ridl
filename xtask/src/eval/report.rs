@@ -44,9 +44,20 @@ fn runs(out: &Path) -> Result<Vec<Run>, String> {
             runs.push(Run {
                 key: format!("{task}/{label}"),
                 task: task.to_owned(),
-                host: value["host"].as_str().unwrap_or_default().to_owned(),
-                skill: value["skill"].as_bool().unwrap_or(false),
-                passed: value["mechanical"]["passed"].as_bool().unwrap_or(false),
+                host: value
+                    .get("host")
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                skill: value
+                    .get("skill")
+                    .and_then(toml::Value::as_bool)
+                    .unwrap_or(false),
+                passed: value
+                    .get("mechanical")
+                    .and_then(|m| m.get("passed"))
+                    .and_then(toml::Value::as_bool)
+                    .unwrap_or(false),
                 score: value
                     .get("rubric")
                     .and_then(|r| r.get("score"))
@@ -371,6 +382,53 @@ mod tests {
         assert_eq!(picked[0], "t/00");
         assert_eq!(picked[1], "t/02");
         assert_eq!(sample(&runs[..10], 20).len(), 10);
+        // 45 runs give k = 2, which would pick 23 without the size limit.
+        let runs: Vec<String> = (0..45).map(|i| format!("t/{i:02}")).collect();
+        assert_eq!(sample(&runs, 20).len(), 20);
+    }
+
+    #[test]
+    fn only_passed_runs_with_a_score_are_judged_runs() {
+        let out = out("judged");
+        write(&out, "design-0001", "claude-with-1", true, true, Some(1.0));
+        write(&out, "design-0001", "claude-with-2", true, false, Some(0.0));
+        write(&out, "design-0001", "claude-with-3", true, true, None);
+        assert_eq!(judged_runs(&out).unwrap(), ["design-0001/claude-with-1"]);
+    }
+
+    #[test]
+    fn the_summary_mean_row_and_gate_line_follow_the_columns() {
+        let out = out("mean");
+        write(&out, "design-0001", "claude-with-1", true, true, Some(0.75));
+        write(
+            &out,
+            "design-0001",
+            "claude-without-1",
+            false,
+            false,
+            Some(0.25),
+        );
+        write_summary(&out).unwrap();
+        let summary = std::fs::read_to_string(out.join("summary.md")).unwrap();
+        assert!(
+            summary.contains("| **mean** | 1.00 | 0.00 | 0.75 | 0.25 |\n\nGate: holds.\n"),
+            "{summary}"
+        );
+    }
+
+    #[test]
+    fn a_result_file_missing_a_field_is_read_with_its_default() {
+        let out = out("missing");
+        std::fs::create_dir_all(out.join("design-0001")).unwrap();
+        std::fs::write(
+            out.join("design-0001/claude-with-1.toml"),
+            "task = \"design-0001\"\n",
+        )
+        .unwrap();
+        assert!(has_results(&out).unwrap());
+        let gates = gate(&out).unwrap();
+        assert_eq!(gates[0].host, "");
+        assert_eq!(gates[0].pass_without, 0.0);
     }
 
     #[test]

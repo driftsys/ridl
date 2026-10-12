@@ -282,7 +282,11 @@ fn sample_command(root: &Path, args: &[String]) -> Result<(), String> {
         run.insert("task".into(), task.into());
         run.insert("label".into(), label.into());
         run.insert("items".into(), toml::Value::Array(items));
-        run.insert("judge".into(), result["rubric"]["met"].clone());
+        let met = result
+            .get("rubric")
+            .and_then(|r| r.get("met"))
+            .ok_or_else(|| format!("{key}: the result has no rubric.met"))?;
+        run.insert("judge".into(), met.clone());
         run.insert("human".into(), toml::Value::Array(Vec::new()));
         runs.push(toml::Value::Table(run));
     }
@@ -347,14 +351,17 @@ fn agreement_command(args: &[String]) -> Result<(), String> {
             judge.len()
         ));
     }
-    let percent = (value * 100.0).round();
+    // Rounded down to one decimal, so a value below the floor never shows as
+    // the floor. The small offset keeps a value at the floor, such as 0.8,
+    // from showing as 79.9 through a binary rounding error.
+    let percent = (value * 1000.0 + 1e-6).floor() / 10.0;
     text.push_str(&format!(
-        "\nAgreement: {percent}% (floor {}%).\n",
+        "\nAgreement: {percent:.1}% (floor {:.1}%).\n",
         AGREEMENT_FLOOR * 100.0
     ));
     let dir = path.parent().unwrap_or(Path::new("."));
     std::fs::write(dir.join("agreement.md"), text).map_err(|e| e.to_string())?;
-    println!("eval: judge agreement {percent}%");
+    println!("eval: judge agreement {percent:.1}%");
     if value < AGREEMENT_FLOOR {
         std::process::exit(1);
     }
@@ -464,4 +471,30 @@ fn today() -> String {
         .output()
         .expect("run date");
     String::from_utf8_lossy(&out.stdout).trim().to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_argument_runs_both_hosts_with_and_without_the_skill_once() {
+        let options = parse(&[]).unwrap();
+        assert_eq!(options.hosts, [Host::Claude, Host::Codex]);
+        assert_eq!(options.skill, [true, false]);
+        assert_eq!(options.runs, 1);
+        assert!(!options.append && !options.claude_handoff);
+        assert!(options.tasks.is_empty() && options.out.is_none());
+    }
+
+    #[test]
+    fn named_hosts_and_skill_sides_replace_the_defaults() {
+        let args: Vec<String> = ["--host", "codex", "--skill", "with", "--runs", "3"]
+            .map(str::to_owned)
+            .into();
+        let options = parse(&args).unwrap();
+        assert_eq!(options.hosts, [Host::Codex]);
+        assert_eq!(options.skill, [true]);
+        assert_eq!(options.runs, 3);
+    }
 }

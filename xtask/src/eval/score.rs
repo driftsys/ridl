@@ -1,6 +1,7 @@
 //! Mechanical scoring of one run: the final workspace checks without an
 //! error, its design lints match the task, an evolve task's diff verdict
-//! matches, and the agent called `ridl_check`.
+//! matches, and the agent checked its workspace, with the `ridl_check` MCP
+//! tool or a shell `ridl check` (recorded as `verify_via`).
 
 use super::host::{Host, RunDirs, ridl_binary};
 use super::task::{Kind, Task};
@@ -93,8 +94,9 @@ fn names_the_skill_directory(command: &str) -> bool {
 
 /// Whether the transcript shows that the host made the skill available.
 /// Claude: the `init` line lists `ridl-authoring` among its skills, the
-/// agent called the `Skill` tool on it, or, in a handed-off run, the agent
-/// read its `SKILL.md` or ran a command on its directory. Codex: the agent read a file of the
+/// agent called the `Skill` tool on it, read its `SKILL.md`, or ran a
+/// command on its directory. A handed-off run, whose transcript has no
+/// `init` line, shows only the last two. Codex: the agent read a file of the
 /// skill's directory with a command. Text that only mentions the skill does
 /// not count.
 pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
@@ -219,8 +221,9 @@ pub fn score_mechanical(task: &Task, dirs: &RunDirs, transcript: &str) -> Mechan
 }
 
 /// True when the transcript holds a shell command that runs `ridl check`:
-/// a Claude `Bash` call or a Codex `command_execution`. `ridl checker` and
-/// `myridl check` do not count, nor does text that only mentions it.
+/// a Claude `Bash` call or a Codex `command_execution`. `ridl checker`,
+/// `myridl check` and `echo "ridl check"` do not count, nor does text that
+/// only mentions it.
 pub fn ran_ridl_check_command(transcript: &str) -> bool {
     json_lines(transcript).any(|line| {
         objects(&line).into_iter().any(|map| {
@@ -237,12 +240,23 @@ pub fn ran_ridl_check_command(transcript: &str) -> bool {
     })
 }
 
+/// Whether `command` runs `ridl check`: the words appear on their own, and
+/// no `echo` or `printf` comes before them in the same simple command (the
+/// text since the last `;`, `&`, `|`, `(` or line break), where they would
+/// only be printed.
 fn runs_ridl_check(command: &str) -> bool {
     let word = |c: char| c.is_alphanumeric() || c == '-' || c == '_' || c == '.';
     command.match_indices("ridl check").any(|(at, found)| {
         let before = command[..at].chars().next_back();
         let after = command[at + found.len()..].chars().next();
-        !before.is_some_and(word) && !after.is_some_and(word)
+        let simple_command = command[..at]
+            .rsplit([';', '&', '|', '(', '\n'])
+            .next()
+            .unwrap_or_default();
+        let printed = simple_command
+            .split(|c: char| c.is_whitespace() || c == '\'' || c == '"')
+            .any(|w| w == "echo" || w == "printf");
+        !before.is_some_and(word) && !after.is_some_and(word) && !printed
     })
 }
 
@@ -297,6 +311,47 @@ mod tests {
         assert!(!ran_ridl_check_command(other));
         assert!(!ran_ridl_check_command(TEXT_ONLY));
         assert!(!ran_ridl_check_command(CLAUDE_CALL));
+    }
+
+    #[test]
+    fn a_printed_ridl_check_does_not_count() {
+        assert!(!runs_ridl_check(r#"echo "ridl check""#));
+        assert!(!runs_ridl_check(r"printf 'ridl check\n'"));
+        assert!(!runs_ridl_check(
+            r#"/bin/bash -lc 'echo "run ridl check next"'"#
+        ));
+        assert!(runs_ridl_check("echo start; ridl check ."));
+        assert!(runs_ridl_check(
+            "/bin/bash -lc 'ridl check --format json .'"
+        ));
+        assert!(runs_ridl_check("cd /r/ws && /usr/local/bin/ridl check ."));
+    }
+
+    #[test]
+    fn only_a_tool_call_record_counts_as_a_call() {
+        let result = r#"{"type":"tool_result","name":"mcp__ridl__ridl_check","content":"ok"}"#;
+        assert!(!used_ridl_check(result));
+    }
+
+    #[test]
+    fn a_call_is_refused_only_with_a_null_result_and_an_error() {
+        let no_result_no_error =
+            r#"{"type":"mcp_tool_call","tool":"ridl_check","result":null,"error":null}"#;
+        let result_and_error = r#"{"type":"mcp_tool_call","tool":"ridl_check","result":{"content":[]},"error":{"message":"x"}}"#;
+        assert!(used_ridl_check(no_result_no_error));
+        assert!(used_ridl_check(result_and_error));
+    }
+
+    #[test]
+    fn only_the_ridl_authoring_skill_counts_as_loaded() {
+        let other_skill = r#"{"type":"system","subtype":"init","skills":["pdf"]}"#;
+        assert!(!skill_was_loaded(Host::Claude, other_skill));
+        let other_call = r#"{"type":"tool_use","name":"Skill","input":{"skill":"pdf"}}"#;
+        assert!(!skill_was_loaded(Host::Claude, other_call));
+        // A Codex record that is not a command execution does not count,
+        // even when it carries a command naming the skill.
+        let not_run = r#"{"type":"file_change","command":"cat /h/skills/ridl-authoring/SKILL.md"}"#;
+        assert!(!skill_was_loaded(Host::Codex, not_run));
     }
 
     #[test]
