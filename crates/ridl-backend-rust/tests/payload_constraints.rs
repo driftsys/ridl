@@ -190,7 +190,7 @@ fn on_grid_decimals_pass_the_step_check_on_both_float_widths() {
 use ridl_rt::encoding::FlatBuffers;
 use ridl_rt::payload::{Payload, Ref, Rule, VerifyError};
 macro_rules! pin {
-    ($ty:ident, $width:expr, $off:expr) => {{
+    ($ty:ident, $width:expr, $off_grid_bytes:expr) => {{
         let err = $ty::new(25.35).unwrap_err();
         assert_eq!(err.rule, Rule::Step);
         let value = $ty::new(25.3).unwrap();
@@ -200,7 +200,7 @@ macro_rules! pin {
         assert!($ty::check(&back.get()).is_ok());
         let root = ridl_rt::flatbuffers::root(&bytes).unwrap();
         let at = ridl_rt::flatbuffers::field(&bytes, root, 0, $width).unwrap().unwrap();
-        bytes[at..at + $width].copy_from_slice(&$off);
+        bytes[at..at + $width].copy_from_slice(&$off_grid_bytes);
         assert!(matches!(<$ty as Payload<FlatBuffers>>::verify(&bytes),
             Err(VerifyError::Contract(v)) if v.rule == Rule::Step));
     }};
@@ -208,6 +208,14 @@ macro_rules! pin {
 fn main() {
     pin!(Grid32, 4, 25.35f32.to_le_bytes());
     pin!(Grid64, 8, 25.35f64.to_le_bytes());
+    // One rounding error above the binary64 nearest to 0.3: on the grid
+    // only within the rounding allowance, so a zero tolerance rejects it.
+    let sum = 0.1f64 + 0.2f64;
+    assert_ne!(sum, 0.3f64);
+    let value = Grid64::new(sum).unwrap();
+    let mut out = vec![0; <Grid64 as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = value.encode(&mut out).unwrap().bytes.to_vec();
+    assert!(<Grid64 as Payload<FlatBuffers>>::verify(&bytes).is_ok());
 }
 "#,
         ),
