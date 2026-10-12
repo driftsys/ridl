@@ -1039,11 +1039,18 @@ fn run_build_inner<E: From<std::io::Error>>(
     // emitted backend's `encodings` list does not name, once per backend the
     // build emits that can carry a codec — the Rust emit (`carries_codec`)
     // and each plugin. A schema emit's table cannot name an encoding, so it
-    // is not compared. Raised here, before the levels are applied, so that
-    // `deny` makes it an error the emit gate below reads. The deployment is
-    // the one `select_deployment` selects below; a name no source declares
-    // draws nothing here and is reported there.
+    // is not compared. A backend named by both an emit and a plugin is
+    // compared once, so its links draw one diagnostic rather than two
+    // (driftsys/ridl#859). A manifest that declares `[backend.<name>]` with
+    // an empty `encodings` list says that the backend emits no codec, and
+    // that backend is not compared either; a backend with no table at all is
+    // compared, so a build that never declared its encodings is still
+    // reported (driftsys/ridl#853). Raised here, before the levels are
+    // applied, so that `deny` makes it an error the emit gate below reads.
+    // The deployment is the one `select_deployment` selects below; a name no
+    // source declares draws nothing here and is reported there.
     if let Some(selected) = requested_or_only(&declared_deployments(&system), deployment) {
+        let mut compared: BTreeSet<&str> = BTreeSet::new();
         let tables = emits
             .iter()
             .filter(|emit| emit.carries_codec())
@@ -1054,12 +1061,32 @@ fn run_build_inner<E: From<std::io::Error>>(
                     .map(|plugin| plugin.language.as_str()),
             );
         for table in tables {
+            if !compared.insert(table) {
+                continue;
+            }
+            // `None` is a backend with no table: every link is compared, so a
+            // build that declared no encodings is reported. `Some` with an
+            // empty list is the declaration that the backend emits no codec.
+            let Some(encodings) = backends.get(table) else {
+                diagnostics.extend(link_encodings::link_encoding_not_emitted(
+                    &db,
+                    &system,
+                    selected,
+                    table,
+                    &[],
+                    &mut sources,
+                ));
+                continue;
+            };
+            if encodings.is_empty() {
+                continue;
+            }
             diagnostics.extend(link_encodings::link_encoding_not_emitted(
                 &db,
                 &system,
                 selected,
                 table,
-                backends.get(table).map_or(&[], Vec::as_slice),
+                encodings,
                 &mut sources,
             ));
         }
