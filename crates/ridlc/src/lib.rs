@@ -66,10 +66,13 @@ pub mod plugin;
 /// The write side is taken while the script is written; the read side is
 /// taken across every other `Command` this binary spawns. So a script write
 /// excludes every fork, while forks do not exclude each other and a `rustc`
-/// proof still runs beside another. Every spawn site in `src/` takes it: the
-/// plugin host itself is reached only from a test that holds the plugin
-/// tests' own mutex, and the two `rustc` proofs take it here. A test under
-/// `tests/` is a separate process and inherits nothing.
+/// proof still runs beside another.
+///
+/// All three spawn sites in `src/` take the read side: the two `rustc`
+/// proofs here, and the plugin host itself, which takes it at its own spawn
+/// under `cfg(test)` rather than at each call site, so a test that runs a
+/// plugin is covered however it is written. A test under `tests/` is a
+/// separate process and inherits nothing.
 ///
 /// This cannot be exercised on macOS, which does not raise `ETXTBSY` for a
 /// file open for writing — not even one the exec'ing process holds itself —

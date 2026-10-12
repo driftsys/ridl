@@ -286,6 +286,15 @@ pub fn run(
         )))
     })?;
 
+    // In a test build, this fork is kept out of another test's write of a
+    // script it then executes (`crate::SPAWNS`, driftsys/ridl#729). It is
+    // taken here rather than at each call site so that every test that runs
+    // a plugin is covered however it is written — a missing executable forks
+    // too, since the failure to exec is reported from the child. A release
+    // build takes nothing: `ridlc` neither writes the plugin nor forks
+    // beside itself.
+    #[cfg(test)]
+    let _spawning = crate::spawning();
     let mut child = Command::new(&plugin.executable)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
