@@ -48,12 +48,14 @@ pub trait Attached {
 ///
 /// A separate trait, not a supertrait of [`Attached`], so a port that never
 /// meets a face — a conformance fixture — is not forced to name an encoding.
-/// What is built is the trait and its forwarding implementations for `&P` and
-/// `&mut P`: no port type in this crate's workspace implements it, and the
-/// generated face is written over the FlatBuffers codec and does not read a
-/// port's encoding. A face that takes its encoding from its port, so that a
-/// port whose encoding the package does not carry is refused at the binding,
-/// is tracked as driftsys/ridl#801.
+/// It forwards through `&P` and `&mut P`, so a face reached over a borrowed
+/// port reads the same encoding. The generated face reads a port's encoding
+/// through this trait: its types and functions bound their port parameter on
+/// it and take every size through `P::Encoding`, so a port whose encoding the
+/// generated package does not carry is refused where the face is bound to it.
+/// In this crate's workspace `ridl-loopback` implements it, on its aggregate
+/// handle and on each of its six role handles. The design of the encodings a
+/// package carries is tracked as driftsys/ridl#801.
 pub trait Encoded {
     /// The encoding of the bytes this port carries.
     type Encoding: Encoding;
