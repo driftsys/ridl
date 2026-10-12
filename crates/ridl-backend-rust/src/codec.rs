@@ -2878,9 +2878,12 @@ fn count_check(owner: &str, min: u64, max: u64) -> TokenStream {
 ///
 /// A bounded collection is a plain field of the generated type, so a value
 /// longer than its declared bound is representable, and the encoder is where
-/// it is refused (driftsys/ridl#829). The check runs before the collection's
-/// elements are written, so a refused value leaves the output buffer as it
-/// was.
+/// it is refused (driftsys/ridl#829). The check runs before that collection's
+/// own elements are written. It is not a promise about the whole output
+/// buffer: a collection nested in a later field is reached after earlier
+/// fields are written, so a refused encode may leave bytes behind. Every
+/// caller of a generated `encode` discards the buffer when it returns an
+/// error.
 ///
 /// A fixed collection draws no check: its Rust type is `[T; N]`, whose length
 /// is `N` for every value, so the comparison is a constant the sender cannot
