@@ -153,6 +153,10 @@ breaking change under decision 10, to be released with the workspace in
 driftsys/ridl#801; the as-built record is
 [the `ridl-rt` design record](../design/ridl-rt.md).
 
+Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the public API
+of `ridl-rt` and the minimum Rust version of decision 10 are frozen surfaces
+from 0.10.0, checked by `just freeze-check`.
+
 **Amendment (2026-10-12) — decision 9: a violation a peer reports carries no
 type name.** `payload::Violation.type_name` becomes `Option<&'static str>`:
 `Some` when the generated code detects the violation locally, `None` when a peer
@@ -162,10 +166,6 @@ runtime cannot make a `&'static str` from received bytes. Under decision 10 the
 change is breaking: `Violation` is a struct whose fields are all public. A
 `Rule` variant is added only together with a new frame version, although `Rule`
 is `#[non_exhaustive]`. driftsys/ridl#350 item 12.
-
-Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the public API
-of `ridl-rt` and the minimum Rust version of decision 10 are frozen surfaces
-from 0.10.0, checked by `just freeze-check`.
 
 ## Context
 
@@ -1250,6 +1250,8 @@ trusted with no `unsafe` and no second verification pass.
 | `crates/ridl-rt/src/lib.rs`, `crates/ridl-rt/README.md`, `crates/ridl-rt/Cargo.toml`             | the crate documentation names the `trace` hook and no longer calls `task` the one module that links the standard library; the README and the feature comment name the hook (decision 22)                                                                                                                                         |
 | [the `ridl-rt` design record](../design/ridl-rt.md), the `payload` item list                     | `Violation.type_name` is `Option<&'static str>` (decision 9's 2026-10-12 amendment)                                                                                                                                                                                                                                              |
 | [the frame specification](../specification/frame-specification.md) §2 and §9.6                   | a violation a peer reports carries the `Rule` alone and has no type name (decision 9's 2026-10-12 amendment)                                                                                                                                                                                                                     |
+| [the `ridl-rt` by example technote](../technotes/ridl-rt-by-example.md)                          | a violation the generated code detects names its type; one a peer reports has `type_name` `None` (decision 9's 2026-10-12 amendment)                                                                                                                                                                                             |
+| `crates/ridl-rt/src/payload.rs`                                                                  | the `Violation` and `Rule` docs state that `type_name` is `Some` for a local detection and `None` for a peer report, and that a `Rule` variant is added only together with a new frame version (decision 9's 2026-10-12 amendment)                                                                                               |
 
 ## References
 
