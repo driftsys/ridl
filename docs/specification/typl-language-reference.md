@@ -5,7 +5,7 @@ units, constants, and composites, with package namespacing. typl is the root of
 the family lattice — every other profile (`ridl`, `rmdl`, `rsdl`) builds on the
 vocabulary typl declares.
 
-Version: 0.1.0 — Draft
+Version: 0.1.0
 
 > **Provenance.** This reference re-frames Language Reference §1–§11 of the RIDL
 > Language Reference as the named foundation layer (per the RIDL family concept
@@ -2371,4 +2371,4 @@ planned for v0.2: string enums (§17.1) and `uniqueItems` as an array constraint
 
 ---
 
-_End of typl Language Reference v0.1.0 — Draft._
+_End of typl Language Reference v0.1.0._

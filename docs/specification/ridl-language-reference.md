@@ -4,7 +4,7 @@
 the RIDL family: transport-neutral reactive contracts (`signal` · `event` ·
 `command` · `query` · `fixed`) over the typl vocabulary.
 
-Version: 0.2.0 — Draft
+Version: 0.2.0
 
 > **Provenance and supersession.** This document supersedes the _interaction
 > half_ of the RIDL Language Reference v0.1 (§12 Streams, §13 Interfaces, and
@@ -2462,4 +2462,4 @@ errors-as-data (no error syntax at all) and derived Stratum 2, typl vocabulary
 
 ---
 
-_End of ridl Language Reference v0.2.0 — Draft._
+_End of ridl Language Reference v0.2.0._

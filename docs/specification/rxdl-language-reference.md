@@ -7,6 +7,11 @@ and world boundaries readable keywords over ridl's kinds.
 
 Version: 0.1.0 — Draft
 
+Status: the unrestricted profile covers typl, ridl and rsdl declarations in one
+file, and no compiler accepts it yet. The model layer of that profile, the
+domain spellings and the bindings they generate wait for rmdl, so this reference
+stays a draft until rmdl is specified.
+
 > **Provenance.** rxdl replaces uxdl. ADR-0012 retired uxdl as a family member
 > on the finding that its content was ridl's and its shape was not: at every
 > boundary with the non-software world the datum and its referent come apart,
