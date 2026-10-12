@@ -2786,7 +2786,10 @@ mod backend_options_tests {
         let manifest: toml::Table = text.parse().expect("ridl-rt's manifest parses");
         let features = manifest["features"].as_table().expect("a [features] table");
         for name in ridl_core::manifest::ENCODING_NAMES {
-            assert!(features.contains_key(name), "ridl-rt has no feature `{name}`");
+            assert!(
+                features.contains_key(name),
+                "ridl-rt has no feature `{name}`"
+            );
         }
     }
 
