@@ -32,6 +32,17 @@ IR specification §6 and §7, [ADR-0005](ADR-0005-agent-enablement.md) §7,
 [ADR-0025](ADR-0025-workspace-aware-mcp-tools.md). Each statement stays as
 written; this record adds the check and the approval rule.
 
+**Amended 2026-10-12 — the wire dump holds the frame vectors.** The `wire` dump
+gains one `frame-vector <id> <hex>` line per row of the vector table of the
+frame specification §11.1, so the frame envelope and the `attach` handshake are
+checked by the dump and leave the policy-only list. The Context bullet on the
+wire dump, decision 3 and decision 6's `Wire format` row are changed in place.
+The layouts of the `unsubscribe`, `read` and `occurrence` frames, which no
+vector shows, the payload-presence rule for a `publish` under `Init` or
+`Invalid(Declared)` and for a `response` under `reply`, which no vector shows,
+and the codes no vector carries, among them the `kind` values 2 and 5 and the
+`attach` encodings 2 and 3, stay frozen by policy.
+
 ## Context
 
 Until 0.9.x, a breaking change could land in any release. 0.10.0 is the first
@@ -61,9 +72,9 @@ design in each:
   `examples/` and `evals/corpus/`; it does not include the fences of
   `docs/book/`, which a test already compiles.
 - The wire dump holds the encoding names, the `.proto` and `.fbs` lines for the
-  corpus and the catalog hash of the cabin example. It holds no frame vectors
-  and no `attach` handshake vectors, so the frame envelope and the handshake are
-  frozen by policy with no automated check until the wire dump gains them.
+  corpus, the catalog hash of the cabin example, and the test vectors of the
+  WebSocket binding (the frame specification §11.1), which cover the frame
+  envelope and the `attach` handshake.
 - The minimum of Rust 1.83 and edition 2021 applies to `ridl-rt`,
   `ridl-rt-conformance` and `ridl-loopback`. `ridl-descriptor` has its own
   minimum, Rust 1.88 and edition 2024, because `planus` 1.3.0 declares 1.88. The
@@ -131,19 +142,21 @@ design in each:
      required, the required set of each schema object that has `properties` or
      `required`, each enum value and const, and each `additionalProperties`,
      `minimum` and `format`, the wire mapping (encoding names, the `.proto` and
-     `.fbs` lines for the corpus, the catalog hash of the cabin example) and the
-     minimum Rust version and edition. The check fails when a committed dump
-     differs from a regeneration. For a surface with a row in
-     `freeze/surfaces.toml`, it also fails when a line of the dump at the row's
-     `baseline` ref is missing from the dump at `HEAD`. An added line passes. A
-     changed line is a removed line plus an added line, so it fails. The
-     accepted-sources and wire dumps read frozen copies of the packages under
-     `examples/` and `evals/corpus/`, kept under
-     `xtask/tests/freeze-fixtures/sources/` at the path of each original, and
-     the catalog hash is read from the generated-crate copy of `examples/cabin`.
-     An edit to an example or to the corpus therefore changes no dump. A copy is
-     refreshed on purpose: adding a copy adds lines, and replacing a copy so
-     that a line is removed is a break.
+     `.fbs` lines for the corpus, the catalog hash of the cabin example, the
+     test vectors of the frame specification §11.1) and the minimum Rust version
+     and edition. The check fails when a committed dump differs from a
+     regeneration. For a surface with a row in `freeze/surfaces.toml`, it also
+     fails when a line of the dump at the row's `baseline` ref is missing from
+     the dump at `HEAD`. An added line passes. A changed line is a removed line
+     plus an added line, so it fails. The accepted-sources and wire dumps read
+     frozen copies of the packages under `examples/` and `evals/corpus/`, kept
+     under `xtask/tests/freeze-fixtures/sources/` at the path of each original,
+     and the catalog hash is read from the generated-crate copy of
+     `examples/cabin`. An edit to an example or to the corpus therefore changes
+     no dump. A copy is refreshed on purpose: adding a copy adds lines, and
+     replacing a copy so that a line is removed is a break. The frame vectors
+     are read from the frame specification itself, so an edit to a vector
+     changes the dump.
 
      Some lines hold a whole set or a requiredness, so a change that adds to a
      set, or that makes a requirement looser, also removes a line and fails. A
@@ -170,11 +183,16 @@ design in each:
    surface with a `name` and a `baseline`. Without a row, a line-dump surface is
    checked only against its committed dump, `generated-crate` is checked only
    for equality with a regeneration, and `runtime-crates` is not checked. The
-   frame envelope, the `attach` handshake, the output of `ridl diff` and the
-   `ridl-diff` categories, the exit codes of every subcommand other than
-   `ridl check`, and the formats of `interfaces.lock` and `.ridl/baseline` are
-   in no dump; they are frozen by policy only. This record is the one that
-   states the status of `ridl diff` and of the `ridl-diff` categories.
+   output of `ridl diff` and the `ridl-diff` categories, the exit codes of every
+   subcommand other than `ridl check`, the formats of `interfaces.lock` and
+   `.ridl/baseline`, the layouts of the `unsubscribe`, `read` and `occurrence`
+   frames, which no test vector of the frame specification §11.1 shows, the
+   payload-presence rule of §11.1 for a `publish` under `Init` or
+   `Invalid(Declared)` and for a `response` under `reply`, which no vector
+   shows, and the codes of §4 and §9.6 that no vector carries, among them the
+   `kind` values 2 and 5 and the `attach` encodings 2 and 3, are in no dump;
+   they are frozen by policy only. This record is the one that states the status
+   of `ridl diff` and of the `ridl-diff` categories.
 
 4. **A break of a frozen surface is approved by removing its row, then adding
    the row again.** `git show <baseline>:freeze/<surface>.txt` must read a dump
@@ -216,18 +234,18 @@ design in each:
    the work that switches each gate on, and a gate is on when its surface has a
    row there.
 
-   | Surface                 | Row names in `surfaces.toml`                                                                | Switched on by                       | Baseline   |
-   | ----------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------ | ---------- |
-   | Language                | `keywords`, `accepted-sources`                                                              | the language lane                    |            |
-   | Manifest                | `manifest`                                                                                  | the language lane                    |            |
-   | Diagnostics and lints   | `diagnostics`                                                                               | the language lane                    |            |
-   | CLI                     | `cli`                                                                                       | the developer-experience lane        |            |
-   | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                                   | the codegen lane                     |            |
-   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                                    | the wire and runtime lane            |            |
-   | Codegen plugin protocol | `codegen-protocol`                                                                          | the codegen lane                     |            |
-   | MCP tools               | `mcp`                                                                                       | the release and policy lane, at once | `3c3301df` |
-   | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash; frames are policy only now | the wire and runtime lane            |            |
-   | Minimum Rust version    | `msrv`                                                                                      | the wire and runtime lane            |            |
+   | Surface                 | Row names in `surfaces.toml`                                                   | Switched on by                       | Baseline   |
+   | ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------ | ---------- |
+   | Language                | `keywords`, `accepted-sources`                                                 | the language lane                    |            |
+   | Manifest                | `manifest`                                                                     | the language lane                    |            |
+   | Diagnostics and lints   | `diagnostics`                                                                  | the language lane                    |            |
+   | CLI                     | `cli`                                                                          | the developer-experience lane        |            |
+   | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                      | the codegen lane                     |            |
+   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            |            |
+   | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     |            |
+   | MCP tools               | `mcp`                                                                          | the release and policy lane, at once | `3c3301df` |
+   | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            |            |
+   | Minimum Rust version    | `msrv`                                                                         | the wire and runtime lane            |            |
 
 ## Alternatives considered
 

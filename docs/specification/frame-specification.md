@@ -6,7 +6,7 @@ kinds, stated once and independently of any transport. A **binding** carries
 this frame over one transport; a **runtime** presents what crosses through the
 ports of `ridl-rt`. This document is what both are written from.
 
-Version: 0.1.0 — Draft
+Version: 0.2.0 — Draft
 
 > **Provenance.** This document is the frame specification (driftsys/ridl#257).
 > It writes down what
@@ -32,7 +32,10 @@ Version: 0.1.0 — Draft
 > earlier AIDL binding generated per interface).
 >
 > The catalog descriptor carries the list of compatible earlier catalog hashes
-> that §6.1 names, and no runtime in this workspace reads it at `attach`.
+> that §6.1 names, and no runtime in this workspace reads it at `attach`. The
+> first WebSocket provider (driftsys/ridl#265) holds no descriptor and applies
+> the exact-match rule of §6.1, so it does not meet conformance item 1 of §12
+> until it reads one.
 
 ---
 
@@ -67,18 +70,21 @@ that (§10), and there is one binding per transport.
 
 Three layers are involved, and each is defined once:
 
-| Layer             | Defined by                                                   | What it fixes                                                                                                   |
-| ----------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| the contract      | the `.ridl` source, lowered to the IR                        | the interfaces, their numbers, the interactions, their ordinals, kinds, payload types, timing and clauses (§11) |
-| the logical frame | this document                                                | what crosses a boundary per interaction kind, and what each runtime does with it                                |
-| a binding         | one document per transport, written from this one (§10, §11) | how the frame's fields are carried over that transport, and which payload encoding the path uses                |
+| Layer             | Defined by                                                   | What it fixes                                                                                                                           |
+| ----------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| the contract      | the `.ridl` source, lowered to the IR                        | the interfaces, their numbers, the interactions, their ordinals, kinds, payload types, timing and clauses (§11)                         |
+| the logical frame | this document                                                | what crosses a boundary per interaction kind, and what each runtime does with it                                                        |
+| a binding         | one document per transport, written from this one (§10, §11) | how the frame's fields are carried over that transport, and whether the binding carries any of the three payload encodings or fixes one |
 
 The payload's encoding is not this document's either. A payload crosses as bytes
 in one of the three core encodings — FlatBuffers, proto3, `repr(C)` — and which
-encoding a path carries is the encoding matrix of
+encoding a session uses is named at `attach` (§3). A binding either carries any
+of the three, the `attach` tag naming the session's, or fixes one; the
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 2: proto3 serialized into a stream, FlatBuffers mapped or passed within
-a node. A projection record fixes what the bytes of each encoding are
+decision 2 matrix — proto3 serialized into a stream, FlatBuffers mapped or
+passed within a node — gives the default a transport offers when it carries any,
+and the one encoding when it fixes one. §11.1 carries any; §11.2 fixes
+FlatBuffers. A projection record fixes what the bytes of each encoding are
 ([ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md),
 [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md)); this
 document treats the payload as opaque and says only when it is present and what
@@ -148,12 +154,14 @@ layer down: a port is bound to one catalog, and the session under it is too. A
 boundary carrying several catalogs carries several sessions.
 
 **A session fixes the payload encoding.** Every payload that crosses the session
-is in one encoding, named at `attach` (§6.1) and never changed. The encoding is
-the one the path takes under the
+is in one encoding, named at `attach` (§6.1) and never changed. A binding either
+carries any of the three encodings, in which case the consuming program names
+one at construction and the transport offers a default taken from the
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 2 matrix, so a binding knows it before the session exists; `attach`
-carries it so that a mismatch is a refusal rather than a stream of corrupt
-payloads. The **encoding tag** values are:
+decision 2 matrix, or fixes one (§1, §10 item 3); §11.1 carries any and §11.2
+fixes FlatBuffers. `attach` carries the tag in both cases, so that a mismatch is
+a refusal rather than a stream of corrupt payloads. The **encoding tag** values
+are:
 
 | Tag | Encoding    | `Encoding::NAME` |
 | --- | ----------- | ---------------- |
@@ -183,17 +191,17 @@ set is closed: a binding carries exactly these fields, adds none, and omits none
 that the form requires. Header fields have no default: a field the form requires
 is present on every frame of that form.
 
-| Field         | Domain                                   | Present on                                     |
-| ------------- | ---------------------------------------- | ---------------------------------------------- |
-| `form`        | one of the ten forms below               | every frame                                    |
-| `interface`   | `InterfaceNo`, `u32`, never 0            | every frame but `attach` and `attached`        |
-| `ordinal`     | `Ordinal`, `u32`, never 0                | every frame but `attach` and `attached`        |
-| `kind`        | `Kind`, values 1 to 5                    | every frame but `attach` and `attached`        |
-| `envelope`    | `Envelope`: `stamp: i64`, `seq: u64`     | `publish`, `occurrence`, `request`, `response` |
-| `provenance`  | `Init`, `Live` or `Invalid(Declared)`    | `publish`                                      |
-| `correlation` | `u64`: the `seq` of the request answered | `response`                                     |
-| `outcome`     | §5.3 and §5.4                            | `response`, `attached`, `answer`               |
-| `payload`     | bytes in the session's encoding          | as §5 states per form and per kind             |
+| Field         | Domain                                                        | Present on                                     |
+| ------------- | ------------------------------------------------------------- | ---------------------------------------------- |
+| `form`        | one of the ten forms below                                    | every frame                                    |
+| `interface`   | `InterfaceNo`, `u32`, never 0                                 | every frame but `attach` and `attached`        |
+| `ordinal`     | `Ordinal`, `u32`, never 0                                     | every frame but `attach` and `attached`        |
+| `kind`        | `Kind`, values 1 to 5                                         | every frame but `attach` and `attached`        |
+| `envelope`    | `Envelope`: `stamp: i64`, `seq: u64`                          | `publish`, `occurrence`, `request`, `response` |
+| `provenance`  | `Init`, `Live` or `Invalid(Declared)`                         | `publish`                                      |
+| `correlation` | `u64`: the `seq` of the request answered                      | `response`                                     |
+| `outcome`     | §5.3 and §5.4; §9.6 for what `contract(InvalidValue)` carries | `response`, `attached`, `answer`               |
+| `payload`     | bytes in the session's encoding                               | as §5 states per form and per kind             |
 
 **The ten forms**, by plane and direction:
 
@@ -209,6 +217,18 @@ is present on every frame of that form.
 | `occurrence`  | data    | provider → consumer | one occurrence of an event (§5.2)                                            |
 | `request`     | data    | consumer → provider | one call of a command or a query (§5.3, §5.4)                                |
 | `response`    | data    | provider → consumer | the acknowledgment of a command, or the reply of a query (§5.3, §5.4)        |
+
+**The codes.** A binding that carries a field as a numeric code uses these
+values. `form`: `attach` 1, `attached` 2, `subscribe` 3, `answer` 4,
+`unsubscribe` 5, `read` 6, `publish` 7, `occurrence` 8, `request` 9, `response`
+10 — the order of the table above. `provenance`: `Init` 1, `Live` 2,
+`Invalid(Declared)` 3. `outcome`: `accepted` 1, `reply` 2,
+`contract(InvalidValue)` 3, `contract(PreconditionFailed)` 4,
+`contract(ContractBroken)` 5, `contract(UnknownInteraction)` 6, `corrupt` 7,
+`busy` 8, `refused` 9. A `refused` reason: `unknown_catalog` 1,
+`catalog_mismatch` 2, `encoding_unsupported` 3, `frame_version_unsupported` 4,
+`range` 5. The `Rule` of an `InvalidValue`: §9.6. A new value in any of these
+tables is a new frame version.
 
 **Why `kind` is on the frame at all.** Both sides hold the catalog, so either
 could look the kind up from the ordinal. It crosses because a relay, a recorder
@@ -788,6 +808,14 @@ never sent by anyone. Of the four `Contract` categories, every one may cross as
 a `response` or `answer` outcome. `Detected(_)` never crosses: it is the
 consumer's own finding about bytes it received.
 
+**What a violation carries.** `contract(InvalidValue(violation))` crosses as the
+violation's `Rule` alone; the name of the typl type whose constraint failed does
+not cross. The `Rule` codes: `Range` 1, `Step` 2, `Length` 3, `Pattern` 4,
+`Variant` 5, `Unique` 6; a new `Rule` variant is added only together with a new
+frame version, because a receiver cannot construct a variant it does not know. A
+type identifier was rejected because the catalog descriptor carries no type
+table, and the name is diagnostic, not contractual.
+
 ## 10. What a Binding Decides
 
 **A binding is written from this document alone.** A binding's author reads this
@@ -810,8 +838,10 @@ leaves one unstated is incomplete.
 2. **The header encoding.** The byte layout, field order and width of every
    header field in §4, and how the `form` is carried. `InterfaceNo` and
    `Ordinal` keep their 32-bit range or the binding refuses at `attach` (§4).
-3. **The encoding tag.** Which of the three encodings the path carries under the
-   ADR-0020 decision 2 matrix, as a value of the table in §3.
+3. **The encoding tag.** Whether the binding carries any of the three encodings,
+   the `attach` tag naming the session's, or fixes one; when it fixes one,
+   which, under the ADR-0020 decision 2 matrix, as a value of the table in §3;
+   when it carries any, which default its transport offers.
 4. **Framing.** Where one frame ends and the next begins on a stream transport;
    how a payload's length is carried; what the binding does when framing is lost
    (§9.5).
@@ -834,25 +864,165 @@ payload rules of §9, or the control-plane operations and their answers.
 ## 11. The Bindings
 
 Two bindings are named: one by the transport that carries it, and one by the
-platform whose runtimes write their own. The WebSocket transport is planned in
-this repository and is not built yet; a binder contract is not written in this
-repository.
+platform whose runtimes write their own. The WebSocket binding is specified in
+§11.1 and its transport crate is not built yet; a binder contract is not written
+in this repository.
 
 ### 11.1 WebSocket
 
-`ridl-transport-ws` is the crate that driftsys/ridl#265 builds
-([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 6): the `ridl-rt` ports over a WebSocket, the default of the
-getting-started path and what a remote server or an emulator links. It carries
-this frame; its path is "serialized into a stream", so its payload encoding is
-**proto3** (encoding tag 2). The TypeScript WebSocket package of decision 7 is
-the same binding for Deno and the browser, so the two ends of one socket may be
-a Rust runtime and a TypeScript one, which is what makes the binding document a
-contract rather than a description. Its `Done when` is that a contract reaches a
-second process over the transport, and that `ridl-loopback` runs the same tests
-with no socket — the loopback is not a binding of this frame and never becomes
-one. That crate writes the nine items of §10 for a WebSocket and adds nothing to
-the frame.
+The WebSocket binding carries this frame between a consuming runtime that opens
+a WebSocket connection and a providing runtime that accepts it.
+`ridl-transport-ws` (driftsys/ridl#265,
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 6) is its Rust crate, and the TypeScript WebSocket package of decision
+7 is the same binding for Deno and the browser, so the two ends of one
+connection may be a Rust runtime and a TypeScript one. This section is the
+binding document: it states the nine items of §10 and adds nothing to the frame.
+The binding is **version 1** and carries frame version 1.
+
+**1. The transport and the session.** One WebSocket connection carries one
+session. The client is the consumer and sends `attach` as its first message; the
+server is the provider and sends `attached` as its first message. The URL is the
+deployment's; the binding places nothing in the path, the query or a header;
+`ws://` and `wss://` are both allowed, and what `wss://` provides is the
+security the deployment relies on (§13). The session ends when either side sends
+a close frame, when the connection fails, or when the liveness check fails: the
+provider sends WebSocket pings, and either end treats no message of any kind,
+data or control, within its liveness timeout as the end of the session. The
+provider pings because a browser client cannot. A consumer that needs two
+catalogs opens two connections.
+
+**The subprotocol.** The client offers `ridl-ws-v1` in `Sec-WebSocket-Protocol`;
+a client offering several versions lists the newest first, and the server
+selects the newest it serves. When the server selects none, the client fails the
+connection; a client that can choose a close code uses 1002. On a `ridl-ws-v1`
+connection, `attach.frame_version` is 1 or the `attach` is refused
+`frame_version_unsupported`.
+
+**2. The header encoding.** Every integer is fixed-width little-endian; `stamp`
+is a two's-complement `i64`. There is no padding and no alignment, and no field
+carries the payload's length: the header is the prefix below, and on a frame
+that carries a payload, the payload is every byte after it. Every code is the
+value §4 and §9.6 give it (`form`, `provenance`, `outcome`, a refusal reason, a
+`Rule`), `kind` is the `Kind` value of §2 and `encoding` the tag of §3; this
+section restates none. Fields are in this order, and a form carries exactly the
+fields §4 gives it:
+
+| Form                               | Bytes                                                                                                                     | Header size |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| `attach`                           | `form` u8, `frame_version` u32, `encoding` u8, `hash` 32 bytes, `name_len` u8 (1 to 255), `name` UTF-8 (`name_len` bytes) | 39 + name   |
+| `attached`                         | `form` u8, `outcome` u8, `detail` u8                                                                                      | 3           |
+| `subscribe`, `unsubscribe`, `read` | `form` u8, `kind` u8, `interface` u32, `ordinal` u32                                                                      | 10          |
+| `answer`                           | the common 10, then `outcome` u8, `detail` u8                                                                             | 12          |
+| `publish`                          | the common 10, then `stamp` i64, `seq` u64, `provenance` u8                                                               | 27          |
+| `occurrence`, `request`            | the common 10, then `stamp` i64, `seq` u64                                                                                | 26          |
+| `response`                         | the common 10, then `stamp` i64, `seq` u64, `correlation` u64, `outcome` u8, `detail` u8                                  | 36          |
+
+`detail` is the `Rule` code (§9.6) with `outcome` 3, the refusal reason code
+(§4) with `outcome` 9, and 0 with every other outcome. The `name` is at least
+one byte and valid UTF-8. A consuming runtime whose unit name is longer than 255
+bytes of UTF-8 cannot attach over this binding: it reports an error when the
+session is opened and sends nothing, so no refusal reason exists for that case.
+A value outside its table is a protocol violation (item 4). `InterfaceNo` and
+`Ordinal` keep their 32-bit range, so §4's range check at `attach` always passes
+on this binding.
+
+**Whether a frame carries a payload** is decided by its header, never by whether
+bytes follow the header: by its `form`, by the `provenance` of a `publish` and
+by the `outcome` of a `response`. From §5: an `occurrence` and a `request`
+always carry one; a `publish` carries one under `Live` (a signal's publication,
+and every `publish` of a `fixed`) and none under `Init` or `Invalid(Declared)`;
+a `response` carries one under `reply` and none under any other outcome;
+`attach`, `attached`, `subscribe`, `answer`, `unsubscribe` and `read` never
+carry one. `kind` does not change the answer. A payload that is present may be
+zero bytes long — a proto3 value whose fields all hold their defaults encodes to
+no bytes — and is handed to the generated binding as it is.
+
+**The sizes.** The envelope is 16 bytes. The largest data-plane header without
+its envelope is 20 bytes (`response`), so a data-plane message is at most 36
+bytes plus the payload bound. The largest header of any message is the `attach`
+at 39 + 255 = 294 bytes; it carries no payload, so a receiver's message size
+limit admits at least 294 bytes. The codegen model carries the data-plane
+numbers as the `websocket` row, binding version `"1"`, `frame_header_max_bytes`
+20, `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is
+derived from this layout: the layout is frozen through the vectors below, and
+the row is a derived value, corrected in a patch release if it is wrong
+([ADR-0029](../decisions/ADR-0029-stability-policy.md) decision 2).
+
+**3. The encoding tag.** The binding fixes no encoding: a session uses the
+encoding its `attach` names, and a provider that does not serve it refuses
+`encoding_unsupported`. The default a program gets when it names none is the
+transport's, proto3, and the construction can name another.
+
+**4. Framing.** One frame is one WebSocket message with the binary opcode;
+WebSocket fragmentation is below this binding. A text message is closed with
+1003. A message the receiver cannot read — shorter than its header, a
+control-plane message other than `attach` that is longer than its header, a code
+outside its table, `interface` or `ordinal` 0, a message before `attach`, a
+second `attach`, a `name_len` that does not match the message, a `name` that is
+empty or not valid UTF-8, a first provider-to-consumer message that is not
+`attached` — is a protocol violation: the receiver records the frame (§9.5) and
+closes with 1002, and the session ends as §3 states. A `publish` or a `response`
+whose header says it carries no payload and which has bytes after its header is
+discarded and recorded (§9.5). A frame whose header says it carries a payload is
+never answered or discarded for the payload's length: the payload, zero bytes
+included, goes to `Payload::verify`, and a payload that fails to decode follows
+§9 — a `request`'s is answered `corrupt` (§5.3). So the `request` of §9.5 whose
+payload is absent does not occur on this binding. A message above the receiver's
+configured size limit, which admits at least 294 bytes, is closed with 1009.
+Either side ends the session on purpose with 1000, the provider with 1001 when
+it shuts down; after `attached(refused)` the provider closes with 1000, and the
+reason is in the frame. The binding defines no close code of its own.
+
+**5. The caller's identity** for §7 is the connection. It does not survive a
+reconnect: a reconnect is a new session, its counters start over, and the calls
+of the old session were reported `Transport::Down` when it ended. The binding
+never retransmits a `request`: the transport is reliable and ordered, so a
+message is lost only when the connection fails, which ends the session. Every
+call has an outcome, because every call has a response bound
+([ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decision 4):
+the `response`, `Undelivered` or `Timeout` at the bound (§8), or `Down` at the
+session's end (§3).
+
+**6. Retention.** The provider keeps a settled response until the request's
+bound has passed, as §7 states; no call is without a bound, so the binding
+states no further retention.
+
+**7. Grouping.** None. The frames of one commit cross as separate messages, and
+a runtime over this binding does not present `CoherentSignals`.
+
+**8. Mapped and framed.** Everything is framed; nothing is mapped.
+
+**9. The rate-floor answer** is §8's: a call faster than the member's `min` may
+be refused at admission and answered `busy`. The binding adds nothing.
+
+**Later versions.** An addition to the frame — a form, a field, a code — is a
+new frame version carried by a new binding version, offered beside this one in
+the subprotocol list. Version 1's layout, codes and vectors are never edited.
+Streams (ridl §12, driftsys/ridl#336) arrive this way.
+
+**Test vectors.** Each line is one complete message in hexadecimal, spaces for
+reading only; `xtask` reads this table into the `wire` freeze dump by its `Id`
+column, which is stable and never renamed. The stamp in every data-plane vector
+is `0x0123456789AB` microseconds (and `0x0123456789AC` on the responses), chosen
+to show the byte order; the hash in `attach` is the bytes `00` to `1f`; the unit
+name is `veh.cabin`. `xtask` also reads the payload a `Vector` cell names as
+`` payload `<hex>` `` and fails a row whose bytes after the header differ from
+it, or from no bytes when the cell names none; it decides from the header
+whether a frame carries a payload, by the rule "Whether a frame carries a
+payload" above.
+
+| Id                   | Vector                                                          | Hex                                                                                                     |
+| -------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `attach-1`           | `attach` frame 1, FlatBuffers, `veh.cabin`                      | `01 01000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 09 7665682e636162696e` |
+| `attached-accepted`  | `attached` accepted                                             | `02 01 00`                                                                                              |
+| `attached-mismatch`  | `attached` refused `catalog_mismatch`                           | `02 09 02`                                                                                              |
+| `subscribe-signal`   | `subscribe` signal, interface 1, ordinal 2                      | `03 01 01000000 02000000`                                                                               |
+| `answer-accepted`    | `answer` accepted, signal, interface 1, ordinal 2               | `04 01 01000000 02000000 01 00`                                                                         |
+| `publish-live`       | `publish` `Live`, seq 7, payload `ff01`                         | `07 01 01000000 02000000 ab89674523010000 0700000000000000 02 ff01`                                     |
+| `request-command`    | `request` command, interface 1, ordinal 3, seq 1, payload `01`  | `09 03 01000000 03000000 ab89674523010000 0100000000000000 01`                                          |
+| `response-accepted`  | `response` command accepted, correlation 1, provider seq 1      | `0a 03 01000000 03000000 ac89674523010000 0100000000000000 0100000000000000 01 00`                      |
+| `response-violation` | `response` query `contract(InvalidValue(Range))`, correlation 2 | `0a 04 01000000 04000000 ac89674523010000 0200000000000000 0200000000000000 03 01`                      |
 
 ### 11.2 Binder on Android
 
@@ -939,8 +1109,10 @@ so that each catches one way of being wrong.
 
 Each item is left out on purpose, with the record that takes it.
 
-- **Streams.** `<T>` on a call's parameter or return (ridl §12) has no frame:
-  `ridl-rt` 0.1 leaves streams out, and they have no story yet.
+- **Streams.** `<T>` on a call's parameter or return (ridl §12) has no frame in
+  version 1: `ridl-rt` 0.1 leaves streams out (driftsys/ridl#336). They arrive
+  as frame version 2, negotiated as §11.1 "Later versions" states, so that a
+  version 1 peer is unchanged.
 - **The family.** Which of ridl §3.2's five boundaries an interaction sits on is
   not on the frame, because `ridl-rt` 0.1 carries no `Family` and the IR has no
   family field yet; it returns as a `Member` field, a breaking change under
@@ -980,7 +1152,7 @@ Each item is left out on purpose, with the record that takes it.
   3, 5, 6, 7 and 14 (the last, `busy` as a `response` outcome,
   driftsys/ridl#510);
   [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decisions
-  3, 10 and 17
+  3, 4 (every call has a response bound, §11.1 item 5), 10 and 17
 - Vocabulary: [the `ridl-rt` design record](../design/ridl-rt.md), and
   `crates/ridl-rt/src/` — `contract.rs`, `sample.rs`, `port.rs`, `error.rs`,
   `payload.rs`, `encoding.rs`
