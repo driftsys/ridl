@@ -2093,20 +2093,22 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
                 }
                 None => String::new(),
             };
+            // Each consequence is a bare clause, as `and_list` takes them;
+            // the one conjunction is added to the joined result.
             let mut consequences = Vec::new();
             if let Some(taken_by) = &taken_by {
-                consequences.push(format!("and `{taken_by}` has taken it in this edit"));
+                consequences.push(format!("`{taken_by}` has taken it in this edit"));
             }
             if !shifted.is_empty() {
                 consequences.push(format!(
-                    "and {} slid into a wire identity that is not its own",
+                    "{} slid into a wire identity that is not its own",
                     quoted_list(&shifted)
                 ));
             }
             let consequence = if consequences.is_empty() {
                 "which a later member could take".to_string()
             } else {
-                and_list(&consequences)
+                format!("and {}", and_list(&consequences))
             };
             format!(
                 "`{name}` is gone{in_shape} but the published baseline declares it at ordinal \

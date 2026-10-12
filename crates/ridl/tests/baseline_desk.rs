@@ -3177,3 +3177,47 @@ struct Report {
         "three names read as a list, not as a chain of `and`:\n{block}",
     );
 }
+
+/// (driftsys/ridl#590) A removal whose ordinal is taken *and* whose siblings
+/// slid reads as one sentence with one conjunction. Each consequence is a
+/// bare clause and `and_list` adds the conjunction once, so a clause that
+/// carried its own would read "and X and and Y".
+#[test]
+fn check_joins_both_consequences_of_a_removal_with_one_conjunction() {
+    let source = "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  gone: DoorState
+  a: DoorState
+  b: DoorState
+}
+";
+    let dir = TempDir::new("removal-both-consequences");
+    let root = package_workspace(&dir, source);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    // `gone` goes, `fresh` takes its ordinal, and `a` and `b` swap.
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type DoorState: integer [0..1]
+struct Report {
+  fresh: DoorState
+  b: DoorState
+  a: DoorState
+}
+",
+    );
+
+    let (_, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    let block = ridl_407_block(&stderr, "gone");
+    assert!(
+        block.contains("`fresh` has taken it in this edit") && block.contains("slid into"),
+        "the fixture must reach both consequences:\n{block}",
+    );
+    assert!(
+        !block.contains(" and and "),
+        "one conjunction, not two:\n{block}",
+    );
+}

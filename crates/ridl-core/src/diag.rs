@@ -917,15 +917,17 @@ diag_codes! {
         /// source→IR function (ADR-0008 decisions 9 and 13). For a struct
         /// field or union arm the desk reads the verdict `ridl diff` gates
         /// on, so the two agree by construction (driftsys/ridl#533): one
-        /// warning per change the diff reports as breaking **that moves an
-        /// ordinal**. A change that moves none draws nothing here, however
-        /// the gate judges it — an in-place field type or constraint change
-        /// is breaking and silent (driftsys/ridl#590). The ones that move an
-        /// ordinal are a member
+        /// warning per change the diff reports as breaking **that concerns
+        /// an ordinal**. A breaking change that leaves every ordinal where it
+        /// is and takes none away draws nothing here — an in-place field type
+        /// or constraint change is breaking and silent (driftsys/ridl#590).
+        /// The ones that draw a warning are a member
         /// inserted above a live one or into a retired slot; a member
         /// removed, with or without a tombstone, because `ridl diff` matches
         /// a composite member by name and does not yet read the body's
-        /// `reserved` entries; a member whose ordinal moved in an edit that
+        /// `reserved` entries — a tombstoned removal moves no ordinal, and
+        /// the warning repeats the gate rather than disagree with it; a
+        /// member whose ordinal moved in an edit that
         /// added or removed none, by a reorder or by a `reserved` entry
         /// added, moved or removed above it; and a member appended beside
         /// any of those, which the diff reports as breaking for that
