@@ -78,28 +78,34 @@ error[MANI-009]: invalid `[defaults].timing` in the package manifest: expected a
 1 │ // Attribute allow-list diagnostics (general form §4.3): FORM-106, FORM-107,
   │ ^
 
-error[FORM-107]: attribute `persist` not valid on command
-   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:13:5
-   │
-13 │     persist
-   │     ^^^^^^^
-
-error[FORM-107]: attribute `persist` not valid on command
+error[FORM-107]: attribute `tier` not valid on command
    ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:14:5
    │
-14 │     persist
-   │     ^^^^^^^
+14 │     tier = PLATFORM
+   │     ^^^^^^^^^^^^^^^
 
-error[FORM-108]: duplicate attribute key `persist`
-   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:14:5
+error[FORM-107]: attribute `tier` not valid on command
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:15:5
    │
-14 │     persist
+15 │     tier = PLATFORM
+   │     ^^^^^^^^^^^^^^^
+
+error[FORM-108]: duplicate attribute key `tier`
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:15:5
+   │
+15 │     tier = PLATFORM
+   │     ^^^^^^^^^^^^^^^
+
+error[FORM-106]: unknown attribute key `persist`
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:20:5
+   │
+20 │     persist
    │     ^^^^^^^
 
 error[FORM-106]: unknown attribute key `frobnicate`
-   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:19:5
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:21:5
    │
-19 │     frobnicate = 3
+21 │     frobnicate = 3
    │     ^^^^^^^^^^^^^^
 
 error[RIDL-301]: `require` not valid on signal — contracts belong to `command` and `query`

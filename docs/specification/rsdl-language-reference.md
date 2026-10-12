@@ -779,15 +779,20 @@ still reported.
   added, removed or made `external` — changes every link derived from the old
   placement and leaves the contract untouched. `ridl diff` lists it under its
   own heading, **placement changed**, with no verdict: neither compatible nor
-  breaking. A changed `depth`, `slots` or `budget`, on the deployment or on a
-  placement line, is not listed: `ridl diff` reads neither `Deployment.sizing`
-  nor `Placement.sizing`, because a sizing value changes no link and no
-  contract.
+  breaking. A changed `labels`, `deprecated` or backend key on the deployment,
+  on a machine or on a placement line is listed under the same heading, as a
+  before-and-after line. A changed `depth`, `slots` or `budget`, on the
+  deployment or on a placement line, is not listed: the attribute registry
+  records the three sizing keys as not reported, with the reason that a sizing
+  value changes no link and no contract, and `ridl diff` reads neither
+  `Deployment.sizing` nor `Placement.sizing`.
 - A change to the closure or to a component's lines — a component added to or
   removed from the system, an `offers` or `requires` line added or removed,
-  `instances` changed, a component made `external` — is listed under a second
-  heading, **composition changed**, likewise with no verdict, because it changes
-  the derived links and not the contract.
+  `instances` changed, a component made `external`, a `labels`, `deprecated`,
+  `tier` or backend key changed on the system, on a component, on a distribution
+  or on one of their lines — is listed under a second heading, **composition
+  changed**, likewise with no verdict, because it changes the derived links and
+  not the contract.
 - Which of these changes are breaking, and for whom, is decided by the stability
   policy ([IR specification](ir-specification.md)), not here.
 

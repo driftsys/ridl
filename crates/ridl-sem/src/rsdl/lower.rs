@@ -21,7 +21,9 @@ use ridl_ir::v2;
 
 use super::closure::{Closure, ComponentId, InterfaceId};
 use super::placement::{DeploymentPlacement, Placement};
-use super::{BackendKey, CheckedSystem, DeploymentDecl, DistributionDecl, Sizing, WrittenValue};
+use super::{
+    BackendKey, CheckedSystem, DeploymentDecl, DistributionDecl, Sizing, Tier, WrittenValue,
+};
 
 /// Lowers `system` to the IR's `System` message, or returns `None` when the
 /// workspace declares no `system` or an error in the closure blocks lowering
@@ -56,6 +58,7 @@ pub fn lower_system(system: &CheckedSystem, packages: &[&v2::Package]) -> Option
         links: decl.links.clone(),
         see: decl.see.clone(),
         since: decl.doc.since.clone(),
+        deprecated: decl.attrs.deprecated.clone(),
     })
 }
 
@@ -228,6 +231,7 @@ impl<'a> Lowering<'a> {
                     links: decl.map(|decl| decl.links.clone()).unwrap_or_default(),
                     see: decl.map(|decl| decl.see.clone()).unwrap_or_default(),
                     since: decl.map(|decl| decl.doc.since.clone()).unwrap_or_default(),
+                    deprecated: decl.and_then(|decl| decl.attrs.deprecated.clone()),
                 }
             })
             .collect()
@@ -263,6 +267,7 @@ impl<'a> Lowering<'a> {
                 links: machine.links.clone(),
                 see: machine.see.clone(),
                 since: machine.doc.since.clone(),
+                deprecated: machine.attrs.deprecated.clone(),
             })
             .collect();
 
@@ -334,6 +339,7 @@ impl<'a> Lowering<'a> {
             see: decl.see.clone(),
             since: decl.doc.since.clone(),
             sizing: sizing(decl.sizing),
+            deprecated: decl.attrs.deprecated.clone(),
         }
     }
 
@@ -532,6 +538,12 @@ impl<'a> Lowering<'a> {
                     links: decl.links.clone(),
                     see: decl.see.clone(),
                     since: decl.doc.since.clone(),
+                    tier: match decl.tier {
+                        Some(Tier::Platform) => v2::Tier::Platform as i32,
+                        Some(Tier::Application) => v2::Tier::Application as i32,
+                        None => v2::Tier::Unspecified as i32,
+                    },
+                    deprecated: decl.attrs.deprecated.clone(),
                 }
             })
             .collect()
@@ -1871,6 +1883,32 @@ mod tests {
         assert_eq!(all.labels, ["QM"]);
         assert_eq!(all.attributes[0].namespace, "deb");
         assert!(all.depends_on.is_empty());
+    }
+
+    /// `tier` and `deprecated` reach the system artifact, so that `ridl diff`
+    /// can report a change to either (rsdl §14).
+    #[test]
+    fn a_distribution_lowers_its_tier_and_its_deprecation() {
+        let closure = "package veh.topology\n\
+                       component Lane { offers veh.adas.lane }\n\
+                       system Vehicle { Lane }\n\
+                       deployment Desk for Vehicle { machine Top { Lane } }\n";
+        let distribution = "package veh.topology\n\
+                            distribution All [ tier = PLATFORM, deprecated = \"x\" ] {\n\
+                            \x20 Lane\n\
+                            }\n";
+        let (checked, lowered) = lower_topology(&[
+            ("veh/topology/x.rsdl", closure),
+            ("veh/topology/y.rsdl", distribution),
+        ]);
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        let system = lowered.expect("the closure lowers");
+        assert_eq!(
+            system.distributions[0].tier,
+            v2::Tier::Platform as i32,
+            "the tier reaches the artifact"
+        );
+        assert_eq!(system.distributions[0].deprecated.as_deref(), Some("x"));
     }
 
     /// A `deployment` with no `for` clause is FORM-101, a parse error the rsdl
