@@ -247,7 +247,7 @@ design in each:
    | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     |            |
    | MCP tools               | `mcp`                                                                          | the release and policy lane, at once | `3c3301df` |
    | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            |            |
-   | Minimum Rust version    | `msrv`                                                                         | the wire and runtime lane            |            |
+   | Minimum Rust version    | `msrv`                                                                         | the wire and runtime lane            | `7e83024d` |
 
 ## Alternatives considered
 
