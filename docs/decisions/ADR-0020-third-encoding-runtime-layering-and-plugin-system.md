@@ -410,8 +410,10 @@ as its public contract.
    then one blank line; the plugin protocol does not check it. The in-tree
    helpers are
    `ridl_ir::codegen::{generated_marker, GENERATED_MARKER_PREFIX,
-   comment_preamble, normalise_header}`.
-   The as-built record is
+   comment_preamble, normalise_header}`,
+   and, on the loader's side, `ridl_core`'s `header_control_character`, which
+   refuses a header file holding a control character as MANI-011 before
+   `normalise_header` sees it. The as-built record is
    [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md) section 2.
 
    **Amendment (2026-10-07) — the request reader ignores unknown keys.**
