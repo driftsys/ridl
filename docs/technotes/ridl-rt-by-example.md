@@ -629,8 +629,7 @@ an error is decided by the generated dispatch, before or around this call.
 
 **Arguments are taken by reference.** This is not a style choice. The dispatch
 must still hold a query's arguments _after_ the provider returns, because
-`ensure result >= 0` is evaluated then, and the generated payload types
-implement neither `Copy` nor `Clone`. Passing by value would move the argument
+`ensure result >= 0` is evaluated then. Passing by value would move the argument
 into the provider and leave nothing to evaluate `ensure` against. Note the
 asymmetry with the client side of step 5, which takes its argument by value —
 the client encodes it immediately and needs it no further.

@@ -1136,8 +1136,7 @@ fn provider(iface_name: &str, commands: &[Call], queries: &[Call]) -> TokenStrea
     let doc = format!(
         "What an application implements to serve interface `{iface_name}`'s \
          calls.\n\nAn argument is taken by reference because `serve` reads \
-         it again when it evaluates a query's `ensure` clauses, and the \
-         generated payload types implement neither `Copy` nor `Clone`."
+         it again when it evaluates a query's `ensure` clauses."
     );
     quote! {
         #[doc = #doc]

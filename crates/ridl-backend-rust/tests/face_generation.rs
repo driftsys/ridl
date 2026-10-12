@@ -1100,6 +1100,12 @@ fn the_provider_trait_carries_the_settled_method_signatures() {
         d.contains("fnaverage(&mutself,window:&super::Window)->super::Average;"),
         "the query provider method returns its declared reply",
     );
+    // The by-reference choice stands on `serve` reading the argument again;
+    // the generated payload types do derive `Clone` (driftsys/ridl#486).
+    assert!(
+        !dense(&face()).contains("implementneither`Copy`nor`Clone`"),
+        "the Provider doc does not claim the payload types have no Copy and no Clone",
+    );
 }
 
 #[test]

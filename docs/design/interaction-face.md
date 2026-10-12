@@ -390,10 +390,12 @@ runtime's finding, and carries no acceptance value.
   the interface declares one. **A method takes its argument by reference**
   (`fn set_level(&mut self, level: &Level)`), because the internal step reads
   the argument again when it evaluates a query's `ensure` clause after the
-  provider returns, and the generated payload types implement neither `Copy` nor
-  `Clone`. A command method returns nothing — a command has no failure the
-  application reports (ridl §6.1) — and a query method returns its declared
-  reply type.
+  provider returns. The generated doc once gave a second reason, that the
+  payload types implement neither `Copy` nor `Clone`; that stopped being true
+  when the payload types took their derive set, and the choice stands on the
+  first reason alone (driftsys/ridl#486). A command method returns nothing — a
+  command has no failure the application reports (ridl §6.1) — and a query
+  method returns its declared reply type.
 - **`serve`** — the next section.
 
 ## `serve`, the internal step, and the settlement table
