@@ -405,7 +405,7 @@ pub(crate) fn leaf_of_name<'a>(name: &str, home: &'a Package, ctx: &Ctx<'a>) -> 
 }
 
 /// A bare primitive at a field position, as the proto backend projects it
-/// (`proto_primitive`): an integer is `int64`, a float `double`. A bare
+/// (`proto_primitive`): an integer is `sint64`, a float `double`. A bare
 /// `string` or `bytes` carries no length bound, and the FlatBuffers
 /// projection answers `None` for a whole type that holds one, so neither has
 /// a leaf. The compiler keeps both out of a field position (TYPL-208); a map

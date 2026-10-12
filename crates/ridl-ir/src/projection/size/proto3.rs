@@ -1376,7 +1376,7 @@ mod tests {
             SizeState::Absent(AbsentCause::RefusedMember),
             "a named float key"
         );
-        // A bare `integer` key is `int64`: entry (1 + 10) + (1 + 5) = 17; 2 * (1 + 1 + 17).
+        // A bare `integer` key is `sint64`: entry (1 + 10) + (1 + 5) = 17; 2 * (1 + 1 + 17).
         assert_eq!(state_in("IntegerKeyed", &ctx), SizeState::Bounded(38));
         assert_eq!(
             state_in("FloatKeyed", &ctx),
