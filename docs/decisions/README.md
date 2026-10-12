@@ -103,7 +103,10 @@ other entry below is Accepted.
   1's target list so a language backend need not live in this workspace.
   Decision 2's conflict with ADR-0016 decision 10 over the `service` block is
   resolved by ADR-0018 decision 18: decision 2 holds with its scope made
-  explicit, and decision 10 holds unqualified.
+  explicit, and decision 10 holds unqualified. Amended 2026-10-12: decision 8
+  has a language backend emit a constructor that checks a type's range, step and
+  length bounds, which a wire backend does not, and settles open item 1 with
+  ADR-0018 decision 15.
 
 - **ADR-0014 — IR encodings.** Canonical protobuf JSON replaces the `serde`
   rendering on every surface — artifacts, baselines, and goldens — because the

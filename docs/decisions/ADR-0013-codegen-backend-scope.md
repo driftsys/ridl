@@ -8,7 +8,15 @@ workspace grows, in the way ADR-0009 binds the gate and ADR-0010 binds the CLI
 contract.
 
 Decision 2's ceiling is settled for wire backends. **Whether the same ceiling
-binds the language backends is open** — see Open item 1.
+binds the language backends was open** — see Open item 1, settled by the
+amendment of 2026-10-12 below.
+
+**Amendment (2026-10-12).** Open item 1 is settled in two halves. The
+interaction-face half was answered by
+[ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 15. The
+validator half is answered by decision 8 below: a language backend emits a
+constructor that checks a type's range, step and length bounds, and a wire
+backend does not.
 
 **Amendment (2026-08-08).** A proto3 backend now exists —
 `crates/ridl-backend-proto`, built by roadmap story E9.8 — so "nothing here is
@@ -256,6 +264,43 @@ language layer at `int64`/`float64`.
    value, and in some cases fixes more than one with distinct meanings. That is
    typl §17 open question 8, narrowed to that case by this amendment.
 
+8. **Amendment (2026-10-12) — a language backend emits a constructor that checks
+   a type's bounds; a wire backend does not.** A named type that carries a
+   range, a step, a length bound or a pattern (typl §5.1 to §5.5) is emitted by
+   a language backend as a nominal type (typl §5.7) whose value can be built
+   only through a constructor that checks the type's range, step and length
+   bounds, and reports a violation instead of building the value. The
+   constructor checks a pattern too where the backend offers it; a backend may
+   make the pattern check optional, because it needs a regular-expression engine
+   in the consumer's build. A second constructor that does not check is emitted
+   for the decoder, over a value the payload validator has already checked, and
+   for other code that has already checked the value. A wire backend emits
+   neither: decision 2's ceiling holds for it, and a schema cannot reject a
+   value at construction.
+
+   The ground is decision 1: a general-purpose language can represent a
+   constraint, so a language backend emits it. The type then carries its typl
+   contract into the consumer's code, where a value outside the contract is
+   refused when it is built rather than when it is encoded or received.
+
+   **As built.** `ridl-backend-rust` emits `new`, which checks, and
+   `new_unchecked`, which does not. `new` always checks the range, step and
+   length bounds; it checks a pattern on a string backing only when the
+   generated crate's `validate-pattern` feature is on
+   ([Generated code](../book/generated-code.md)). `ridl-backend-ts` does not yet
+   emit a checking constructor: it records the constraint in the type's doc
+   comment only (driftsys/ridl#923).
+
+   **`ridl diff` is unchanged.** This decision does not change how `ridl diff`
+   classifies a constraint change (`constraint_changed`); that classification
+   and its reasons are `ridl-diff`'s. Whether a widened constraint is compatible
+   for a consumer that receives the value, and not only for one that builds it,
+   is open as driftsys/ridl#926, and driftsys/ridl#925 reports that a lowered
+   minimum that moves a step grid is classified compatible.
+   `a_narrowed_range_exits_one_and_a_widened_range_exits_zero` in
+   `crates/ridl/tests/diff_cli.rs` runs the built `ridl` binary on one case, a
+   narrowed and a widened integer maximum.
+
 ## Alternatives considered
 
 | Candidate                                                    | Verdict  | Reason                                                                                                                                                                                                                                 |
@@ -286,8 +331,12 @@ language layer at `int64`/`float64`.
   gRPC needs work this ADR places outside the backend.
 - **Negative — decision 3 is work on shipped code.** Both existing backends gain
   an emit and the snapshot tests that cover them.
-- **Neutral — the ceiling may not describe the language backends.** See Open
-  item 1.
+- **Negative — decision 8 is work on a shipped backend.** `ridl-backend-ts`
+  emits no checking constructor yet, so a TypeScript consumer can build a value
+  outside its type's bounds until driftsys/ridl#923 is done.
+- **Neutral — how far the ceiling describes the language backends is settled.**
+  Open item 1: ADR-0018 decision 15 for the interaction face, decision 8 for the
+  constraint-checking constructor.
 - **Positive — the first sentinel-emitting backend implements a rule instead of
   inventing one** (decision 7). The choice of value, the obligation not to leak
   it, and the failure mode when the range is full are settled before any target
@@ -309,6 +358,12 @@ language layer at `int64`/`float64`.
    last-value, provenance, and asynchronous calls, which is why those backends
    already do. Recorded as open because it was not settled when this ADR was
    drafted.
+
+   _Settled (2026-10-12)._ In two halves. For the interaction face,
+   [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 15
+   applies the ceiling to the language backends in a first phase and restores
+   the face in a second phase on the grounds of decision 1. For constraint
+   checks, the ceiling does not bind the language backends: decision 8.
 2. **Where a `ServiceStore` lives if it is built.** The candidates are the
    `ridl-engine` specification (the `ridl-rt` runtime specification as this
    record first named it) and the reflection interface of ridl open question 7.

@@ -436,6 +436,36 @@ fn source_dir_vs_source_dir_breaking_exits_one() {
     );
 }
 
+/// `ridl diff` over two sources that differ only in a range's maximum: the
+/// narrowed range is a breaking `constraint_changed` row and exits 1, and the
+/// widened range is a compatible row and exits 0. Each assertion names the
+/// row's own tag, so the rendered tag is checked, not only the headline.
+#[test]
+fn a_narrowed_range_exits_one_and_a_widened_range_exits_zero() {
+    const WIDE: &str = "package veh.cluster\n\n/// Vehicle speed.\ntype Speed: integer [0..250]\n";
+    const NARROW: &str =
+        "package veh.cluster\n\n/// Vehicle speed.\ntype Speed: integer [0..200]\n";
+    let dir = TempDir::new("range");
+    let wide = dir.write("wide.typl", WIDE);
+    let narrow = dir.write("narrow.typl", NARROW);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), wide.as_os_str(), narrow.as_os_str()]);
+    assert_eq!(code, 1, "a narrowed range exits 1, stderr:\n{stderr}");
+    assert!(stdout.starts_with("breaking"), "stdout:\n{stdout}");
+    assert!(
+        stdout.contains("[breaking] constraint_changed veh.cluster/Speed"),
+        "stdout:\n{stdout}"
+    );
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), narrow.as_os_str(), wide.as_os_str()]);
+    assert_eq!(code, 0, "a widened range exits 0, stderr:\n{stderr}");
+    assert!(stdout.starts_with("compatible"), "stdout:\n{stdout}");
+    assert!(
+        stdout.contains("[compatible] constraint_changed veh.cluster/Speed"),
+        "stdout:\n{stdout}"
+    );
+}
+
 /// A compatible source change (an appended interaction) exits 0.
 #[test]
 fn source_dir_vs_source_dir_compatible_exits_zero() {
