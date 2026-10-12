@@ -166,13 +166,13 @@ pub fn enum_set_scalar(width: i32) -> Scalar {
 }
 
 /// The proto3 scalar for a bare primitive at a field position: an integer
-/// with no declared width is `int64`, a float `double`; a tag the IR does
-/// not define is `string`.
+/// with no declared width is `sint64`, the same as a named scalar over
+/// `integer`, a float `double`; a tag the IR does not define is `string`.
 #[must_use]
 pub fn primitive(primitive: i32) -> Scalar {
     match v2::PrimitiveType::try_from(primitive) {
         Ok(v2::PrimitiveType::Boolean) => Scalar::Bool,
-        Ok(v2::PrimitiveType::Integer) => Scalar::Int64,
+        Ok(v2::PrimitiveType::Integer) => Scalar::Sint64,
         Ok(v2::PrimitiveType::Float) => Scalar::Double,
         Ok(v2::PrimitiveType::Bytes) => Scalar::Bytes,
         _ => Scalar::String,
@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn a_bare_primitive_has_its_own_table() {
         assert_eq!(primitive(PrimitiveType::Boolean as i32).as_str(), "bool");
-        assert_eq!(primitive(PrimitiveType::Integer as i32).as_str(), "int64");
+        assert_eq!(primitive(PrimitiveType::Integer as i32).as_str(), "sint64");
         assert_eq!(primitive(PrimitiveType::Float as i32).as_str(), "double");
         assert_eq!(primitive(PrimitiveType::Bytes as i32).as_str(), "bytes");
         assert_eq!(primitive(PrimitiveType::String as i32).as_str(), "string");

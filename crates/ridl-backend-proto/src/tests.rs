@@ -168,7 +168,7 @@ fn a_struct_emits_a_message_numbered_by_typl_ordinals() {
         generated.proto_source.contains(
             "message SensorReading {\n  \
          double current_speed = 1;\n  \
-         int64 sensor_id = 2;\n  \
+         sint64 sensor_id = 2;\n  \
          reserved 3;\n}"
         ),
         "got:\n{}",
@@ -1405,6 +1405,20 @@ fn an_optional_tuple_field_of_array_or_map_type_is_refused() {
         "got: {}",
         error.message
     );
+}
+
+#[test]
+fn a_bare_integer_field_projects_to_sint64() {
+    // A named scalar over `integer` is `sint64`; the bare spelling must agree
+    // (ADR-0013 decision 4, typl Appendix D).
+    let package = struct_package("S", "a", 1, int64_type());
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.proto_source.contains("sint64 a = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
 }
 
 // ==========================================================================

@@ -784,7 +784,7 @@ mod tests {
 
     #[test]
     fn every_primitive_is_a_leaf_or_unsizable() {
-        // The scalar is the proto backend's (`proto_primitive`): `int64` for
+        // The scalar is the proto backend's (`proto_primitive`): `sint64` for
         // a bare integer, `double` for a bare float.
         assert!(matches!(
             leaf_of_primitive(PrimitiveType::Boolean as i32),
@@ -792,7 +792,7 @@ mod tests {
         ));
         assert!(matches!(
             leaf_of_primitive(PrimitiveType::Integer as i32),
-            Some(Leaf::Scalar(Scalar::Int64))
+            Some(Leaf::Scalar(Scalar::Sint64))
         ));
         assert!(matches!(
             leaf_of_primitive(PrimitiveType::Float as i32),
