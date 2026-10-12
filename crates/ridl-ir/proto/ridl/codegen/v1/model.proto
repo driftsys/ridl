@@ -704,6 +704,12 @@ message CommandShape {
   // command shape, not on Interaction, because Interaction's oneof is named
   // shape.
   Shape shape = 5;
+  // The induced argument struct, when the call's parameters are not exactly
+  // one named type: an index into `Model.tuples`. Exactly one of `request`
+  // and `request_tuple` is present for a call this toolchain lowers. The
+  // struct has one field per declared parameter, and no field when the call
+  // declares none.
+  optional TupleRef request_tuple = 6;
 }
 
 message QueryShape {
@@ -727,6 +733,14 @@ message QueryShape {
   // stream, or a scalar a proto3 leaf bounds; `ABSENT_CAUSE_NO_BOUND` for a
   // reply that is a scalar no proto3 leaf bounds.
   PayloadSizes reply_sizes = 7;
+  // As for a command.
+  optional TupleRef request_tuple = 8;
+  // The induced reply struct, when the reply is a tuple or the query
+  // declares no return type: an index into `Model.tuples`. A query that
+  // declares no return type induces a struct with no field. A fallible
+  // `T | E` reply induces nothing — it is a sum, and neither `reply_payload`
+  // nor this field is present for it.
+  optional TupleRef reply_tuple = 9;
 }
 
 message FixedShape {
@@ -940,6 +954,10 @@ message FbRoot {
   uint32 declaration = 1;
   // `projection::root_table`.
   FbRootKind root = 2;
+  // Set when the root is an induced tuple rather than a declaration: an
+  // index into `Model.tuples`. `declaration` is written as 0 and must be
+  // ignored when this is present.
+  optional uint32 tuple = 3;
   oneof bound {
     // `projection::max_size` over the scope.
     uint32 max_size = 10;

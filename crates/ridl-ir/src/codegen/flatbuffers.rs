@@ -699,6 +699,7 @@ fn roots(scope: Scope<'_>) -> Vec<v1::FbRoot> {
             Some(v1::FbRoot {
                 declaration: index as u32,
                 root: kind as i32,
+                tuple: None,
                 bound: Some(bound),
             })
         })
