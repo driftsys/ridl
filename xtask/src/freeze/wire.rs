@@ -1015,8 +1015,9 @@ mod tests {
         ]);
         assert!(frame_vectors(&split).is_err(), "a blank line inside");
         // The line after the header row is a separator row.
-        let no_separator =
-            "### 11.1 WebSocket\n\n| Id | Vector | Hex |\n| `ok` | x | `02 01 00` |\n";
+        // Without the check, the first row would be read as the separator
+        // and the second accepted.
+        let no_separator = "### 11.1 WebSocket\n\n| Id | Vector | Hex |\n| `ok` | x | `02 01 00` |\n| `ok2` | x | `02 09 02` |\n";
         assert!(frame_vectors(no_separator).is_err(), "no separator row");
     }
 
