@@ -1047,7 +1047,7 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
         outcome,
         Err(ridl_rt::error::CallError::Contract(
             ridl_rt::error::Contract::InvalidValue(ridl_rt::payload::Violation {
-                type_name: "Level",
+                type_name: Some("Level"),
                 rule: ridl_rt::payload::Rule::Range,
             })
         )),
@@ -2742,7 +2742,7 @@ fn generated_new_refuses_a_value_above_the_range() {
     assert_eq!(
         generated::Level::new(200).err(),
         Some(Violation {
-            type_name: "Level",
+            type_name: Some("Level"),
             rule: Rule::Range,
         })
     );
@@ -2754,7 +2754,7 @@ fn generated_new_refuses_a_value_below_the_range() {
     assert_eq!(
         generated::Level::new(-1).err(),
         Some(Violation {
-            type_name: "Level",
+            type_name: Some("Level"),
             rule: Rule::Range,
         })
     );
@@ -2783,7 +2783,7 @@ fn generated_try_from_delegates_to_new() {
     assert_eq!(
         generated::Level::try_from(200).err(),
         Some(Violation {
-            type_name: "Level",
+            type_name: Some("Level"),
             rule: Rule::Range,
         })
     );

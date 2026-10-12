@@ -25,13 +25,13 @@ impl DoorId {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "DoorId",
+                type_name: ::core::option::Option::Some("DoorId"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 7 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "DoorId",
+                type_name: ::core::option::Option::Some("DoorId"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -90,19 +90,19 @@ impl Percent {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Percent",
+                type_name: ::core::option::Option::Some("Percent"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Percent",
+                type_name: ::core::option::Option::Some("Percent"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 100.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Percent",
+                type_name: ::core::option::Option::Some("Percent"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -217,7 +217,7 @@ impl Percent {
             };
             if __step_invalid {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Percent",
+                    type_name: ::core::option::Option::Some("Percent"),
                     rule: ::ridl_rt::payload::Rule::Step,
                 });
             }
@@ -275,13 +275,13 @@ impl Odometer {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Odometer",
+                type_name: ::core::option::Option::Some("Odometer"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 4294967295 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Odometer",
+                type_name: ::core::option::Option::Some("Odometer"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -333,7 +333,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for LockState {
             1 => ::core::result::Result::Ok(Self::Locked),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "LockState",
+                    type_name: ::core::option::Option::Some("LockState"),
                     rule: ::ridl_rt::payload::Rule::Variant,
                 })
             }
@@ -383,7 +383,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for DoorFault {
             1 => ::core::result::Result::Ok(Self::Unpowered),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "DoorFault",
+                    type_name: ::core::option::Option::Some("DoorFault"),
                     rule: ::ridl_rt::payload::Rule::Variant,
                 })
             }
@@ -1286,7 +1286,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for DoorFault {
             1 => ::core::result::Result::Ok(Self::NoPower),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "DoorFault",
+                    type_name: ::core::option::Option::Some("DoorFault"),
                     rule: ::ridl_rt::payload::Rule::Variant,
                 })
             }

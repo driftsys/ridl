@@ -19,7 +19,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for WarningFlags {
         const DECLARED_MASK: ::core::primitive::i64 = 15;
         if value & !DECLARED_MASK != 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "WarningFlags",
+                type_name: ::core::option::Option::Some("WarningFlags"),
                 rule: ::ridl_rt::payload::Rule::Variant,
             });
         }

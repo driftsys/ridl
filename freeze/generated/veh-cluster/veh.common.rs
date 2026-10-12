@@ -25,19 +25,19 @@ impl Speed {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 250.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -152,7 +152,7 @@ impl Speed {
             };
             if __step_invalid {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Speed",
+                    type_name: ::core::option::Option::Some("Speed"),
                     rule: ::ridl_rt::payload::Rule::Step,
                 });
             }
@@ -214,19 +214,19 @@ impl Temperature {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Temperature",
+                type_name: ::core::option::Option::Some("Temperature"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < -40.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Temperature",
+                type_name: ::core::option::Option::Some("Temperature"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 125.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Temperature",
+                type_name: ::core::option::Option::Some("Temperature"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -341,7 +341,7 @@ impl Temperature {
             };
             if __step_invalid {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Temperature",
+                    type_name: ::core::option::Option::Some("Temperature"),
                     rule: ::ridl_rt::payload::Rule::Step,
                 });
             }
@@ -403,19 +403,19 @@ impl RPM {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "RPM",
+                type_name: ::core::option::Option::Some("RPM"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "RPM",
+                type_name: ::core::option::Option::Some("RPM"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 8000.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "RPM",
+                type_name: ::core::option::Option::Some("RPM"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -530,7 +530,7 @@ impl RPM {
             };
             if __step_invalid {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "RPM",
+                    type_name: ::core::option::Option::Some("RPM"),
                     rule: ::ridl_rt::payload::Rule::Step,
                 });
             }
@@ -592,19 +592,19 @@ impl Ratio {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Ratio",
+                type_name: ::core::option::Option::Some("Ratio"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Ratio",
+                type_name: ::core::option::Option::Some("Ratio"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 100.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Ratio",
+                type_name: ::core::option::Option::Some("Ratio"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -719,7 +719,7 @@ impl Ratio {
             };
             if __step_invalid {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Ratio",
+                    type_name: ::core::option::Option::Some("Ratio"),
                     rule: ::ridl_rt::payload::Rule::Step,
                 });
             }
@@ -777,13 +777,13 @@ impl Counter {
         let value = *value;
         if value < 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Counter",
+                type_name: ::core::option::Option::Some("Counter"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 65535 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Counter",
+                type_name: ::core::option::Option::Some("Counter"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -841,19 +841,19 @@ impl Gain {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Gain",
+                type_name: ::core::option::Option::Some("Gain"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Gain",
+                type_name: ::core::option::Option::Some("Gain"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 1.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Gain",
+                type_name: ::core::option::Option::Some("Gain"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -968,7 +968,7 @@ impl Gain {
             };
             if __step_invalid {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Gain",
+                    type_name: ::core::option::Option::Some("Gain"),
                     rule: ::ridl_rt::payload::Rule::Step,
                 });
             }
@@ -1029,7 +1029,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for GearPosition {
             3 => ::core::result::Result::Ok(Self::Neutral),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "GearPosition",
+                    type_name: ::core::option::Option::Some("GearPosition"),
                     rule: ::ridl_rt::payload::Rule::Variant,
                 })
             }
@@ -1066,7 +1066,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for Warning {
             3 => ::core::result::Result::Ok(Self::Seatbelt),
             _ => {
                 ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Warning",
+                    type_name: ::core::option::Option::Some("Warning"),
                     rule: ::ridl_rt::payload::Rule::Variant,
                 })
             }
@@ -1100,7 +1100,7 @@ impl ::core::convert::TryFrom<::core::primitive::i64> for WarningFlags {
         const DECLARED_MASK: ::core::primitive::i64 = 15;
         if value & !DECLARED_MASK != 0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "WarningFlags",
+                type_name: ::core::option::Option::Some("WarningFlags"),
                 rule: ::ridl_rt::payload::Rule::Variant,
             });
         }
@@ -2811,13 +2811,13 @@ pub(crate) fn __ridl_fb_verify_DriverProfile(
             let __value = ::core::primitive::i64::from(__raw);
             if __value < 0 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "DriverProfile",
+                    type_name: ::core::option::Option::Some("DriverProfile"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
             if __value > 6 {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "DriverProfile",
+                    type_name: ::core::option::Option::Some("DriverProfile"),
                     rule: ::ridl_rt::payload::Rule::Range,
                 });
             }
@@ -3210,7 +3210,7 @@ pub(crate) fn __ridl_fb_verify_SensorBounds(
             if __v.len != 8usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "SensorBounds",
+                        type_name: ::core::option::Option::Some("SensorBounds"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -3240,7 +3240,7 @@ pub(crate) fn __ridl_fb_verify_SensorBounds(
             if __v.len < 1usize || __v.len > 16usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "SensorBounds",
+                        type_name: ::core::option::Option::Some("SensorBounds"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -3270,7 +3270,7 @@ pub(crate) fn __ridl_fb_verify_SensorBounds(
             if __v.len > 32usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "SensorBounds",
+                        type_name: ::core::option::Option::Some("SensorBounds"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -3337,7 +3337,7 @@ pub(crate) fn __ridl_fb_verify_SensorBounds(
                     if __previous_key == __key {
                         return ::core::result::Result::Err(
                             ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                                type_name: "SensorBounds",
+                                type_name: ::core::option::Option::Some("SensorBounds"),
                                 rule: ::ridl_rt::payload::Rule::Unique,
                             }),
                         );
@@ -4212,13 +4212,13 @@ pub(crate) fn __ridl_fb_verify_RawWheelFrame(
                 let __value = &buf[__v.first..__v.first + __v.len];
                 if (__value.len() as ::core::primitive::u64) < 8 {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: "RawWheelFrame",
+                        type_name: ::core::option::Option::Some("RawWheelFrame"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     });
                 }
                 if (__value.len() as ::core::primitive::u64) > 8 {
                     return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: "RawWheelFrame",
+                        type_name: ::core::option::Option::Some("RawWheelFrame"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     });
                 }

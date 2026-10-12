@@ -27,19 +27,19 @@ impl Speed {
         let value = *value;
         if !value.is_finite() {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value < 0.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 250.0 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Speed",
+                type_name: ::core::option::Option::Some("Speed"),
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
@@ -154,7 +154,7 @@ impl Speed {
             };
             if __step_invalid {
                 return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                    type_name: "Speed",
+                    type_name: ::core::option::Option::Some("Speed"),
                     rule: ::ridl_rt::payload::Rule::Step,
                 });
             }
@@ -483,7 +483,7 @@ pub(crate) fn __ridl_fb_verify_Samples(
             if __v.len != 8usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "Samples",
+                        type_name: ::core::option::Option::Some("Samples"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -513,7 +513,7 @@ pub(crate) fn __ridl_fb_verify_Samples(
             if __v.len < 2usize || __v.len > 8usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "Samples",
+                        type_name: ::core::option::Option::Some("Samples"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );

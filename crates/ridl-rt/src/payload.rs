@@ -249,13 +249,20 @@ pub enum Malformed {
 /// A value that breaks a typl constraint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Violation {
-    /// The name of the typl type whose constraint failed.
-    pub type_name: &'static str,
+    /// The name of the typl type whose constraint failed: `Some` when the
+    /// generated code detected the violation locally, `None` when a peer
+    /// reported it, because a frame carries the [`Rule`] alone (the frame
+    /// specification §9.6).
+    pub type_name: Option<&'static str>,
     /// The kind of constraint that failed.
     pub rule: Rule,
 }
 
 /// The kind of typl constraint a [`Violation`] breaks.
+///
+/// A variant is added only together with a new frame version, because a
+/// receiver cannot construct a variant it does not know (the frame
+/// specification §9.6); the enum stays `#[non_exhaustive]`.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rule {

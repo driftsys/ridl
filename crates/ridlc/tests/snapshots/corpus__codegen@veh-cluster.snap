@@ -5415,10 +5415,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "labels": [],
             "reservation": {
               "proto3": {
-                "unsized": "softwareVersion.payload: ridl.std.Version"
+                "bytes": "0"
               },
               "flatbuffers": {
-                "bytes": "186"
+                "bytes": "0"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -5478,10 +5478,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "labels": [],
             "reservation": {
               "proto3": {
-                "unsized": "capabilities.payload: array of ridl.std.Label"
+                "bytes": "0"
               },
               "flatbuffers": {
-                "unsized": "capabilities.payload: array of ridl.std.Label"
+                "bytes": "0"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6247,10 +6247,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "labels": [],
             "reservation": {
               "proto3": {
-                "unsized": "tickBounds.payload: array of tuple"
+                "bytes": "0"
               },
               "flatbuffers": {
-                "unsized": "tickBounds.payload: array of tuple"
+                "bytes": "0"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8002,10 +8002,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "labels": [],
             "reservation": {
               "proto3": {
-                "unsized": "unitSerial.payload: ridl.std.Label"
+                "bytes": "0"
               },
               "flatbuffers": {
-                "bytes": "314"
+                "bytes": "0"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8065,10 +8065,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "labels": [],
             "reservation": {
               "proto3": {
-                "unsized": "supportedModes.payload: array of ridl.std.Label"
+                "bytes": "0"
               },
               "flatbuffers": {
-                "unsized": "supportedModes.payload: array of ridl.std.Label"
+                "bytes": "0"
               }
             },
             "family": "FAMILY_DISPATCH",
