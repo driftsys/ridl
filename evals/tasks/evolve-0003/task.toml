@@ -1,0 +1,8 @@
+id = "evolve-0003"
+kind = "evolve"
+title = "Let the telemetry component read a new horn count compatibly"
+
+[expect]
+compiles = true
+lints = []
+diff = "compatible"

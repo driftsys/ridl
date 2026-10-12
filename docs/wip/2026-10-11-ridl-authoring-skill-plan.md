@@ -2398,8 +2398,12 @@ and 7; `docs/specification/typl-language-reference.md`;
       errors as data (the result union); packages, imports and visibility;
       evolution of a type; common mistakes (a table: mistake, correct form,
       code). Each section opens with a link to its heading in the typl
-      reference. Each example is a whole file with its own `package`
-      (`skill.typl.<topic>`), or a fragment marked `,ignore`.
+      reference, written as a book URL
+      (`https://driftsys.github.io/ridl/<page>.html#<anchor>`): the skill gate
+      rejects a relative `../../docs/` link, because it does not resolve where
+      the skill is installed (maintainer ruling, 2026-10-12). Each example is a
+      whole file with its own `package` (`skill.typl.<topic>`), or a fragment
+      marked `,ignore`.
 - [ ] **Step 3: `SKILL.md`.** Fill "The model in one minute" (five lines and the
       lattice), "The verify loop" (spec D-2: `ridl_check`, then `ridl_explain`,
       then `ridl_diff` for an edit to a published contract; the lookup tools

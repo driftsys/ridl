@@ -215,6 +215,12 @@ or provider-side enforcement describes a specification, not this workspace: the
 one runtime here is `ridl-loopback`, which runs in process and is not reachable
 from anything the CLI emits. Write it so a reader cannot mistake the two.
 
+The fences in `skills/ridl-authoring/` follow the same rules and are compiled by
+the test `skill_examples_compile`, as one workspace separate from the book.
+`crates/ridl/tests/skill_gates.rs` also checks that every diagnostic code the
+skill cites is listed in `freeze/diagnostics.txt`, and that each section of a
+reference file links an existing heading of a language reference.
+
 ## Recipes
 
 Run `just --list` for the full set. The common ones:

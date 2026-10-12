@@ -22,12 +22,15 @@ for `vss`, and 6,000 in total; expected warnings are preserved.
 The
 [task format](../docs/decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md)
 uses one directory per stable task ID, with `task.toml`, `prompt.md` and
-`rubric.md`. The manifest records a `review`, `evolve` or `design` task and its
-compilation, lint or compatibility expectations. The prompt states the
-designer's request without rubric hints. The rubric has numbered, one-sentence
-items marked **must**, **should** or **must not**. Adding a task requires an
-independent review and approval of the task set; review rubrics are written
-before candidate checks run on the corpus.
+`rubric.md`. A task may also hold `start/`, a workspace the agent starts from; a
+design task without it starts from an empty directory, and a review or evolve
+task names exactly one of a `corpus` workspace and `start/`. The manifest
+records a `review`, `evolve` or `design` task and its compilation, lint or
+compatibility expectations. The prompt states the designer's request without
+rubric hints. The rubric has numbered, one-sentence items marked **must**,
+**should** or **must not**. Adding a task requires an independent review and
+approval of the task set; review rubrics are written before candidate checks run
+on the corpus.
 
 The
 [calibration procedure](../docs/design/design-lints.md#the-corpus-and-the-calibration)
@@ -77,3 +80,79 @@ fall in that task's workspace and match a rubric item.
 `calibration/expected-counts.toml` pins the per-workspace counts of the shipped
 lints; the test `design_lint_counts_on_the_corpus_are_pinned` compares them with
 `ridl check` and prints the actual table on a mismatch.
+
+## Running the eval tasks
+
+`cargo xtask eval` runs each task on Claude Code and on Codex, with and without
+the `ridl-authoring` skill from `skills/`, scores each run, and writes the
+results:
+
+```sh
+cargo xtask eval [--task <id>]... [--host claude|codex]... [--runs <n>] \
+  [--skill with|without|both] [--out <dir>] [--append] [--claude-handoff] \
+  [--timeout <seconds>]
+```
+
+With no option, every task runs once on both hosts, with and without the skill.
+Each run starts in a new directory under the system temporary directory, outside
+any git repository, with a new host home that holds only what the eval puts
+there (for Codex: its configuration, the lent login and, on a "with" run, the
+skill), so no user skill, rule, memory, hook or `AGENTS.md` reaches the agent.
+The directory is removed when the run's result is written. A run is scored
+mechanically (`ridl check` reports no error, the design lints match
+`expect.lints`, an evolve task's `ridl diff` verdict matches `expect.diff`, and
+the agent checked its work with the `ridl_check` MCP tool or a shell
+`ridl check`); a run that passes is then judged against its rubric by the other
+host's model. `runner.toml` pins the model of each host.
+
+A run that cannot be scored is recorded with a `setup_error` and no score, and
+the batch goes on: a "with" run that shows no evidence of loading the skill, or
+a host that could not be started, exited with an error and wrote no transcript,
+or ran past `--timeout` (1800 seconds by default; the same limit bounds the wait
+for a handed-off run and each judgement). Such a run is left out of the pass
+rates and the rubric means of both sides, and `summary.md` lists it.
+
+Each host signs in with its own CLI login, and both are needed, because the
+judge of a run on one host is the other host:
+
+- Codex uses the stored login that `codex login` writes, `auth.json` in
+  `$CODEX_HOME` or in `~/.codex`. Each Codex run gets a copy of that file only,
+  and a token that the run refreshed is copied back.
+- Claude reads `CLAUDE_CODE_OAUTH_TOKEN`, which `claude setup-token` prints, or
+  `ANTHROPIC_API_KEY`.
+
+A host command inherits only `PATH`, `HOME`, `TMPDIR` and `LANG` from the eval's
+environment, plus `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` for Claude,
+and the eval sets the host home (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`). No other
+variable reaches it, so a setting such as `ANTHROPIC_MODEL` in the operator's
+shell does not change a result.
+
+The Claude agent runs with `--permission-mode bypassPermissions` and no OS
+sandbox: it can run any command as the user, inside or outside its temporary
+workspace. This is an accepted risk of the eval, which runs the pinned model on
+the eval's own prompts. Codex runs in its `workspace-write` sandbox.
+
+With `--claude-handoff`, no Claude agent run or judgement starts a `claude`
+command (only `claude --version` runs, to record the host version), and no
+Claude token is needed. For each Claude agent run and each Claude judgement, the
+eval writes a `*.request.toml` file in the run's directory, prints its path
+after `eval: handoff:`, and waits. The request holds the working directory, the
+arguments, the environment and the prompt; the operator runs the prompt with an
+agent of their own, writes its output to the request's `output` path, and then
+creates the file its `done` path names. The result of a handed-off run or
+judgement records `handoff = true` and `model = "handoff"` (`judge_model` for a
+judgement), because the pinned model did not necessarily run.
+
+The results go to `--out`, by default `evals/results/<YYYY-MM-DD>/`: one
+`<task>/<host>-<with|without>-<n>.toml` per run, the run's transcript under
+`transcripts/` (not committed), and `summary.md` with the pass rates, the rubric
+means and the release gate for each host. The summary and the gate read every
+result in the directory, so the eval refuses an `--out` that already holds
+results; `--append` adds the new runs to them on purpose.
+
+`cargo xtask eval sample --from <dir> [--size <n>]` writes
+`<dir>/judge-check/labels.toml`, a deterministic sample of the judged runs,
+taken in turn from each host and skill arm, for the maintainer to label, and
+`cargo xtask eval agreement <labels.toml>` writes `agreement.md` next to it and
+exits 1 when the judge agrees with the labels on fewer than 80% of the rubric
+items.

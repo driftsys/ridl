@@ -200,6 +200,8 @@ fn vsix_packaging_passes_the_target_and_output_arguments() {
     let dir = TestDir::new();
     dir.write("justfile", &std::fs::read(repo().join("justfile")).unwrap());
     dir.write("THIRD-PARTY-NOTICES.txt", b"fixture notices\n");
+    // The recipe copies the skill into the extension before packaging.
+    dir.write("skills/ridl-authoring/SKILL.md", b"fixture skill\n");
     // Exercise the real recipe without installing npm dependencies or packaging
     // a binary. The acceptance recipe checks the actual VSIX separately.
     // Each fake tool fails outside editors/vscode and logs what it was asked to
