@@ -1,8 +1,13 @@
 //! The wire mapping: the encoding names the manifest accepts, the proto3 and
-//! FlatBuffers schemas that `ridl build` writes for the corpus, and the catalog
-//! hash of the cabin example. The corpus and the cabin example are read from
-//! frozen copies, so an edit to `examples/` or to `evals/corpus/` does not
-//! change the dump.
+//! FlatBuffers schemas that `ridl build` writes for the corpus, the catalog
+//! hash of the cabin example, and the test vectors of the WebSocket binding.
+//! The corpus and the cabin example are read from frozen copies, so an edit to
+//! `examples/` or to `evals/corpus/` does not change the dump.
+//!
+//! The vectors are read from the frame specification itself
+//! (`docs/specification/frame-specification.md` §11.1), because that table is
+//! their source and no encoder exists; each is checked against the binding's
+//! header layout before it becomes a line.
 
 use super::bin;
 use ridl_core::manifest::ENCODING_NAMES;
@@ -218,6 +223,188 @@ fn catalog_hashes(root: &Path, ridl: &Path, scratch: &Path) -> Result<Vec<String
     Ok(lines)
 }
 
+/// The frame specification, whose §11.1 vector table the dump reads.
+const FRAME_SPEC: &str = "docs/specification/frame-specification.md";
+
+/// The cells of one Markdown table row, trimmed; `None` for a line that is
+/// not a row.
+fn cells(line: &str) -> Option<Vec<&str>> {
+    let inner = line.trim().strip_prefix('|')?.strip_suffix('|')?;
+    Some(inner.split('|').map(str::trim).collect())
+}
+
+/// The text of a cell that is exactly one code span.
+fn code_span(cell: &str) -> Option<&str> {
+    cell.strip_prefix('`')?
+        .strip_suffix('`')
+        .filter(|text| !text.contains('`'))
+}
+
+/// Lowercase hexadecimal with no spaces, as bytes.
+fn parse_hex(text: &str) -> Result<Vec<u8>, String> {
+    if !text.len().is_multiple_of(2) {
+        return Err(format!("`{text}` has an odd number of digits"));
+    }
+    if !text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return Err(format!("`{text}` is not lowercase hexadecimal"));
+    }
+    (0..text.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&text[i..i + 2], 16).map_err(|e| e.to_string()))
+        .collect()
+}
+
+/// `frame-vector <id> <hex>` for each row of the test-vector table of the
+/// frame specification §11.1: the table under `### 11.1 WebSocket` whose
+/// columns are `Id`, `Vector` and `Hex`. The table is the vectors' source;
+/// no encoder exists. A row whose bytes [`check_vector`] rejects, a
+/// malformed row, a duplicate `Id` and a missing or empty table are errors.
+fn frame_vectors(spec: &str) -> Result<Vec<String>, String> {
+    let (_, section) = spec
+        .split_once("### 11.1 WebSocket\n")
+        .ok_or("the frame specification has no `### 11.1 WebSocket` section")?;
+    let section = section
+        .split_once("\n### ")
+        .map_or(section, |(head, _)| head);
+    let mut lines = section.lines();
+    lines
+        .by_ref()
+        .find(|line| cells(line).as_deref() == Some(&["Id", "Vector", "Hex"][..]))
+        .ok_or("§11.1 has no table with the columns `Id`, `Vector` and `Hex`")?;
+    lines.next();
+    let mut ids = std::collections::BTreeSet::new();
+    let mut out = Vec::new();
+    for line in lines.take_while(|line| line.trim_start().starts_with('|')) {
+        let row = cells(line).ok_or_else(|| format!("a malformed vector row: {line}"))?;
+        let [id, _, hex] = row.as_slice() else {
+            return Err(format!("a vector row without three cells: {line}"));
+        };
+        let id = code_span(id)
+            .filter(|id| {
+                !id.is_empty()
+                    && id
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            })
+            .ok_or_else(|| format!("the `Id` cell is not one code span of [a-z0-9-]: {line}"))?;
+        if !ids.insert(id) {
+            return Err(format!("{id}: the `Id` is used twice"));
+        }
+        let hex = code_span(hex)
+            .ok_or_else(|| format!("{id}: the `Hex` cell is not one code span"))?
+            .replace(' ', "");
+        let bytes = parse_hex(&hex).map_err(|e| format!("{id}: {e}"))?;
+        check_vector(&bytes).map_err(|e| format!("{id}: {e}"))?;
+        out.push(format!("frame-vector {id} {hex}"));
+    }
+    if out.is_empty() {
+        return Err("the §11.1 vector table has no row".to_string());
+    }
+    Ok(out)
+}
+
+/// A little-endian `u32` at `bytes[at..at + 4]`.
+fn u32_le(bytes: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
+}
+
+/// `value` is in `range`, or an error naming `field`.
+fn check_in(value: u8, range: std::ops::RangeInclusive<u8>, field: &str) -> Result<(), String> {
+    if range.contains(&value) {
+        Ok(())
+    } else {
+        Err(format!("{field} {value} is outside {range:?}"))
+    }
+}
+
+/// An `outcome` code and its `detail`: the `Rule` code with outcome 3, the
+/// refusal reason with outcome 9, and 0 with every other outcome (frame
+/// specification §4, §9.6, §11.1 item 2).
+fn check_outcome(outcome: u8, detail: u8) -> Result<(), String> {
+    check_in(outcome, 1..=9, "outcome")?;
+    match outcome {
+        3 => check_in(detail, 1..=6, "the `Rule` detail"),
+        9 => check_in(detail, 1..=5, "the refusal detail"),
+        _ if detail == 0 => Ok(()),
+        _ => Err(format!(
+            "detail {detail} with outcome {outcome}, which takes 0"
+        )),
+    }
+}
+
+/// An `attach`: `form` 1, `frame_version` u32 = 1, `encoding` 1 to 3, a
+/// 32-byte hash, `name_len` u8 of at least 1, and exactly `name_len` bytes
+/// of UTF-8 — 39 bytes plus the name.
+fn check_attach(bytes: &[u8]) -> Result<(), String> {
+    if bytes.len() < 39 {
+        return Err(format!(
+            "{} bytes, below the 39-byte `attach` header",
+            bytes.len()
+        ));
+    }
+    if u32_le(bytes, 1) != 1 {
+        return Err(format!("frame_version {} is not 1", u32_le(bytes, 1)));
+    }
+    check_in(bytes[5], 1..=3, "encoding")?;
+    let name_len = usize::from(bytes[38]);
+    if name_len == 0 {
+        return Err("the `attach` name is empty".to_string());
+    }
+    if bytes.len() != 39 + name_len {
+        return Err(format!(
+            "name_len {name_len} does not match the {} name bytes",
+            bytes.len() - 39
+        ));
+    }
+    std::str::from_utf8(&bytes[39..])
+        .map(|_| ())
+        .map_err(|e| format!("the `attach` name is not UTF-8: {e}"))
+}
+
+/// The bytes of one vector against the layout of the frame specification
+/// §11.1 item 2: the header size of its form, whether the form carries a
+/// payload, and every code against its table.
+fn check_vector(bytes: &[u8]) -> Result<(), String> {
+    let form = *bytes.first().ok_or("the vector is empty")?;
+    let (header, payload) = match form {
+        1 => return check_attach(bytes),
+        2 => (3, false),
+        3 | 5 | 6 => (10, false),
+        4 => (12, false),
+        7 => (27, true),
+        8 | 9 => (26, true),
+        10 => (36, true),
+        other => return Err(format!("form {other} is outside 1..=10")),
+    };
+    if bytes.len() < header || (!payload && bytes.len() != header) {
+        return Err(format!(
+            "{} bytes, but form {form} is a {header}-byte header{}",
+            bytes.len(),
+            if payload {
+                " plus a payload"
+            } else {
+                " and no payload"
+            }
+        ));
+    }
+    if form == 2 {
+        return check_outcome(bytes[1], bytes[2]);
+    }
+    check_in(bytes[1], 1..=5, "kind")?;
+    if u32_le(bytes, 2) == 0 {
+        return Err("interface 0".to_string());
+    }
+    if u32_le(bytes, 6) == 0 {
+        return Err("ordinal 0".to_string());
+    }
+    match form {
+        4 => check_outcome(bytes[10], bytes[11]),
+        7 => check_in(bytes[26], 1..=3, "provenance"),
+        10 => check_outcome(bytes[34], bytes[35]),
+        _ => Ok(()),
+    }
+}
+
 pub fn dump(root: &Path) -> Result<Vec<String>, String> {
     let ridl = bin::binary(root, "ridl")?;
     let scratch = Scratch::new()?;
@@ -236,6 +423,9 @@ pub fn dump(root: &Path) -> Result<Vec<String>, String> {
         }
     }
     lines.extend(catalog_hashes(root, &ridl, &scratch.0)?);
+    let spec = std::fs::read_to_string(root.join(FRAME_SPEC))
+        .map_err(|e| format!("cannot read {FRAME_SPEC}: {e}"))?;
+    lines.extend(frame_vectors(&spec)?);
     Ok(lines)
 }
 
@@ -266,6 +456,14 @@ mod tests {
         );
         assert!(lines.iter().any(|l| l.starts_with("proto ")));
         assert!(lines.iter().any(|l| l.starts_with("fbs ")));
+        assert_eq!(
+            lines
+                .iter()
+                .filter(|l| l.starts_with("frame-vector "))
+                .count(),
+            9,
+            "{lines:?}"
+        );
     }
 
     #[test]
@@ -343,5 +541,151 @@ mod tests {
             schema_emits(help, "proto3"),
             vec![("proto".to_string(), "proto".to_string())]
         );
+    }
+
+    /// A frame specification that holds only a §11.1 vector table with `rows`.
+    fn spec_with(rows: &[&str]) -> String {
+        format!(
+            "## 11. The Bindings\n\n### 11.1 WebSocket\n\nText.\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n{}\n\n### 11.2 Binder on Android\n\n| Id | Vector | Hex |\n| --- | --- | --- |\n| `ignored` | not read | `ff` |\n",
+            rows.join("\n")
+        )
+    }
+
+    fn root() -> &'static Path {
+        Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
+    }
+
+    #[test]
+    fn the_frame_specification_holds_the_nine_vectors() {
+        let text = std::fs::read_to_string(root().join(FRAME_SPEC)).unwrap();
+        assert_eq!(
+            frame_vectors(&text).unwrap(),
+            vec![
+                "frame-vector attach-1 010100000001000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f097665682e636162696e",
+                "frame-vector attached-accepted 020100",
+                "frame-vector attached-mismatch 020902",
+                "frame-vector subscribe-signal 03010100000002000000",
+                "frame-vector answer-accepted 040101000000020000000100",
+                "frame-vector publish-live 07010100000002000000ab89674523010000070000000000000002ff01",
+                "frame-vector request-command 09030100000003000000ab89674523010000010000000000000001",
+                "frame-vector response-accepted 0a030100000003000000ac89674523010000010000000000000001000000000000000100",
+                "frame-vector response-violation 0a040100000004000000ac89674523010000020000000000000002000000000000000301",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_vector_line_drops_the_spaces_of_its_hex_cell() {
+        let text = spec_with(&["| `ok` | `attached` accepted | `02 01 00` |"]);
+        assert_eq!(
+            frame_vectors(&text).unwrap(),
+            vec!["frame-vector ok 020100"]
+        );
+    }
+
+    #[test]
+    fn a_vector_whose_length_disagrees_with_its_form_fails() {
+        for (hex, why) in [
+            ("02 01", "attached is 3 bytes"),
+            ("03 01 01000000 02000000 ff", "subscribe carries no payload"),
+            (
+                "07 01 01000000 02000000 ab89674523010000 0700000000000000",
+                "publish is 27 bytes at least",
+            ),
+            (
+                "0a 03 01000000 03000000 ac89674523010000 0100000000000000 0100000000000000 01",
+                "response is 36 bytes at least",
+            ),
+        ] {
+            let text = spec_with(&[&format!("| `short` | x | `{hex}` |")]);
+            let err = frame_vectors(&text).expect_err(why);
+            assert!(err.contains("short"), "{why}: {err}");
+        }
+    }
+
+    #[test]
+    fn a_code_outside_its_table_fails() {
+        for (hex, why) in [
+            ("0b", "form 11"),
+            ("02 0a 00", "outcome 10"),
+            ("02 01 01", "detail must be 0 with accepted"),
+            ("02 03 07", "Rule code 7"),
+            ("02 09 06", "refusal reason 6"),
+            ("03 06 01000000 02000000", "kind 6"),
+            ("03 01 00000000 02000000", "interface 0"),
+            ("03 01 01000000 00000000", "ordinal 0"),
+            (
+                "07 01 01000000 02000000 ab89674523010000 0700000000000000 04",
+                "provenance 4",
+            ),
+        ] {
+            let text = spec_with(&[&format!("| `bad` | x | `{hex}` |")]);
+            let err = frame_vectors(&text).expect_err(why);
+            assert!(err.contains("bad"), "{why}: {err}");
+        }
+    }
+
+    #[test]
+    fn an_attach_with_a_bad_name_fails() {
+        let head =
+            "01 01000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
+        for (tail, why) in [
+            ("09 7665682e636162", "name_len 9 with 7 name bytes"),
+            ("00", "an empty name"),
+            ("02 ff fe", "a name that is not UTF-8"),
+        ] {
+            let text = spec_with(&[&format!("| `att` | x | `{head} {tail}` |")]);
+            let err = frame_vectors(&text).expect_err(why);
+            assert!(err.contains("name"), "{why}: {err}");
+        }
+        let wrong_version =
+            "01 02000000 01 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 01 61";
+        assert!(frame_vectors(&spec_with(&[&format!("| `v` | x | `{wrong_version}` |")])).is_err());
+        let wrong_encoding =
+            "01 01000000 04 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f 01 61";
+        assert!(
+            frame_vectors(&spec_with(&[&format!("| `e` | x | `{wrong_encoding}` |")])).is_err()
+        );
+    }
+
+    #[test]
+    fn a_malformed_vector_row_fails() {
+        for (row, why) in [
+            ("| `odd` | x | `02 01 0` |", "an odd digit count"),
+            ("| `upper` | x | `02 01 0A` |", "an uppercase digit"),
+            (
+                "| `plain` | x | 02 01 00 |",
+                "a Hex cell that is not a code span",
+            ),
+            (
+                "| plain-id | x | `02 01 00` |",
+                "an Id cell that is not a code span",
+            ),
+            ("| `Bad_Id` | x | `02 01 00` |", "an Id outside [a-z0-9-]"),
+            ("| `two` | `02 01 00` |", "a row of two cells"),
+        ] {
+            assert!(frame_vectors(&spec_with(&[row])).is_err(), "{why}");
+        }
+        let twice = spec_with(&["| `same` | x | `02 01 00` |", "| `same` | x | `02 09 02` |"]);
+        let err = frame_vectors(&twice).expect_err("a duplicate Id");
+        assert!(err.contains("same"), "{err}");
+    }
+
+    #[test]
+    fn a_missing_vector_table_fails() {
+        assert!(
+            frame_vectors("## 11. The Bindings\n").is_err(),
+            "no §11.1 heading"
+        );
+        assert!(
+            frame_vectors("### 11.1 WebSocket\n\nNo table.\n\n### 11.2 Binder\n").is_err(),
+            "no table"
+        );
+        assert!(
+            frame_vectors(&spec_with(&[])).is_err(),
+            "a table with no row"
+        );
+        let renamed = spec_with(&["| `ok` | x | `02 01 00` |"]).replacen("| Id |", "| Name |", 1);
+        assert!(frame_vectors(&renamed).is_err(), "a renamed column");
     }
 }
