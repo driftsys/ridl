@@ -200,18 +200,18 @@ design in each:
    the work that switches each gate on, and a gate is on when its surface has a
    row there.
 
-   | Surface                 | Row names in `surfaces.toml`                                                                | Switched on by                       | Baseline                                                                                        |
-   | ----------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------- |
-   | Language                | `keywords`, `accepted-sources`                                                              | the language lane                    |                                                                                                 |
-   | Manifest                | `manifest`                                                                                  | the language lane                    |                                                                                                 |
-   | Diagnostics and lints   | `diagnostics`                                                                               | the language lane                    |                                                                                                 |
-   | CLI                     | `cli`                                                                                       | the developer-experience lane        |                                                                                                 |
-   | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                                   | the codegen lane                     |                                                                                                 |
-   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                                    | the wire and runtime lane            |                                                                                                 |
-   | Codegen plugin protocol | `codegen-protocol`                                                                          | the codegen lane                     |                                                                                                 |
-   | MCP tools               | `mcp`                                                                                       | the release and policy lane, at once | row removed for the `oneOf` path change; re-added with the merge commit of #875 as its baseline |
-   | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash; frames are policy only now | the wire and runtime lane            |                                                                                                 |
-   | Minimum Rust version    | `msrv`                                                                                      | the wire and runtime lane            |                                                                                                 |
+   | Surface                 | Row names in `surfaces.toml`                                                                | Switched on by                       | Baseline   |
+   | ----------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------ | ---------- |
+   | Language                | `keywords`, `accepted-sources`                                                              | the language lane                    |            |
+   | Manifest                | `manifest`                                                                                  | the language lane                    |            |
+   | Diagnostics and lints   | `diagnostics`                                                                               | the language lane                    |            |
+   | CLI                     | `cli`                                                                                       | the developer-experience lane        |            |
+   | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                                   | the codegen lane                     |            |
+   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                                    | the wire and runtime lane            |            |
+   | Codegen plugin protocol | `codegen-protocol`                                                                          | the codegen lane                     |            |
+   | MCP tools               | `mcp`                                                                                       | the release and policy lane, at once | `3c3301df` |
+   | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash; frames are policy only now | the wire and runtime lane            |            |
+   | Minimum Rust version    | `msrv`                                                                                      | the wire and runtime lane            |            |
 
 ## Alternatives considered
 
