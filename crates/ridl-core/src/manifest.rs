@@ -88,6 +88,10 @@ pub struct Manifest {
 /// `ridl-rt` spells them. `[backend.<name>] encodings` accepts only these.
 pub const ENCODING_NAMES: [&str; 3] = ["flatbuffers", "proto3", "repr-c"];
 
+/// The key of a `[backend.<name>]` table that lists encodings, and the key of
+/// the backend request option that carries the same list.
+pub const ENCODINGS_KEY: &str = "encodings";
+
 /// One `[backend.<name>]` table (ADR-0002 §4). The table is the same for every
 /// backend name; whether a backend honours it is the backend's concern.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -493,7 +497,7 @@ shape_visitor!(
             if key == TOML_DATETIME_KEY {
                 return datetime(map);
             }
-            if key == "encodings" {
+            if key == ENCODINGS_KEY {
                 table.encodings = Some(map.next_value()?);
             } else {
                 map.next_value::<serde::de::IgnoredAny>()?;
@@ -549,7 +553,10 @@ fn collect_backends(
             DiagCode::MANI_015,
             file_id,
             span.clone(),
-            format!("`backend` must be a table of `[backend.<name>]` tables; {KNOWN_ENCODINGS}"),
+            format!(
+                "`backend` must be a table of `[backend.<name>]` tables; {}",
+                known_encodings()
+            ),
         ));
         return (backends, Some(span));
     };
@@ -560,7 +567,7 @@ fn collect_backends(
                 DiagCode::MANI_015,
                 file_id,
                 table_span,
-                format!("`[backend.{name}]` must be a table; {KNOWN_ENCODINGS}"),
+                format!("`[backend.{name}]` must be a table; {}", known_encodings()),
             ));
             continue;
         };
@@ -575,7 +582,8 @@ fn collect_backends(
                         file_id,
                         encodings_span,
                         format!(
-                            "`[backend.{name}] encodings` must be an array of encoding names; {KNOWN_ENCODINGS}"
+                            "`[backend.{name}] encodings` must be an array of encoding names; {}",
+                            known_encodings()
                         ),
                     )),
                     Shape::Right(elements) => {
@@ -583,11 +591,15 @@ fn collect_backends(
                             let range = element.span();
                             let message = match element.get_ref().as_str() {
                                 Some(value) if !ENCODING_NAMES.contains(&value) => Some(format!(
-                                    "unknown encoding `{value}` in `[backend.{name}] encodings`; {KNOWN_ENCODINGS}"
+                                    "unknown encoding `{value}` in `[backend.{name}] encodings`; {}",
+                                    known_encodings()
                                 )),
-                                Some(value) if entry.encodings.iter().any(|(seen, _)| seen == value) => {
+                                Some(value)
+                                    if entry.encodings.iter().any(|(seen, _)| seen == value) =>
+                                {
                                     Some(format!(
-                                        "encoding `{value}` is named twice in `[backend.{name}] encodings`; {KNOWN_ENCODINGS}"
+                                        "encoding `{value}` is named twice in `[backend.{name}] encodings`; {}",
+                                        known_encodings()
                                     ))
                                 }
                                 Some(value) => {
@@ -595,8 +607,9 @@ fn collect_backends(
                                     None
                                 }
                                 None => Some(format!(
-                                    "`[backend.{name}] encodings` holds `{}`, which is not a string; {KNOWN_ENCODINGS}",
-                                    element.get_ref()
+                                    "`[backend.{name}] encodings` holds `{}`, which is not a string; {}",
+                                    element.get_ref(),
+                                    known_encodings()
                                 )),
                             };
                             if let Some(message) = message {
@@ -612,7 +625,10 @@ fn collect_backends(
     (backends, Some(span))
 }
 
-const KNOWN_ENCODINGS: &str = "known encodings: flatbuffers, proto3, repr-c";
+/// The suffix of every MANI-015 message about `[backend.<name>]`.
+fn known_encodings() -> String {
+    format!("known encodings: {}", ENCODING_NAMES.join(", "))
+}
 
 /// Collects the `[imports]` table into the public `name -> URL` map, flagging
 /// any value that is not a valid import URL (MANI-007). A flagged import is
@@ -718,7 +734,7 @@ pub const KNOWN_KEYS: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     ("codegen", &[("header-file", "string")]),
-    (BACKEND_SECTION, &[("encodings", "array<string>")]),
+    (BACKEND_SECTION, &[(ENCODINGS_KEY, "array<string>")]),
 ];
 
 /// The allowed keys of `section` in [`KNOWN_KEYS`]; empty for an unlisted one.
@@ -1490,6 +1506,28 @@ version = \"1.0.0\"
             message.ends_with("; known encodings: flatbuffers, proto3, repr-c"),
             "{message}"
         );
+    }
+
+    /// Every MANI-015 message about `[backend.<name>]` ends with the list of
+    /// known encodings built from `ENCODING_NAMES`, at each of the sites that
+    /// writes one.
+    #[test]
+    fn every_backend_message_ends_with_the_known_encodings() {
+        let suffix = format!("; known encodings: {}", ENCODING_NAMES.join(", "));
+        let cases = [
+            format!("backend = 1\n{PACKAGE_HEAD}"),
+            format!("{PACKAGE_HEAD}[backend]\nrust = 1\n"),
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = \"flatbuffers\"\n"),
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"nope\"]\n"),
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"proto3\", \"proto3\"]\n"),
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [1]\n"),
+        ];
+        for text in cases {
+            let (_, diags) = parse(&text);
+            assert_eq!(codes(&diags), vec!["MANI-015"], "{text}");
+            let message = &diags[0].message;
+            assert!(message.ends_with(&suffix), "{message}");
+        }
     }
 
     /// An invalid element is dropped and the elements around it are kept, in
