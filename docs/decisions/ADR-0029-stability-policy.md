@@ -9,6 +9,16 @@ to a frozen surface and every contributor, and it is the one record that owns
 stability: the earlier records that state a stability rule link here and do not
 restate it.
 
+**Amended 2026-10-12 — decisions 1 and 5, the minimum covers `ridl-loopback` and
+`ridl-descriptor`.** The minimum of Rust 1.83 and edition 2021 now applies to
+`ridl-loopback` as well, and `ridl-descriptor` has its own minimum, Rust 1.88,
+because its dependency `planus` is pinned to 1.3.0, which declares 1.88.
+`just compat-check` builds the packaged manifests of both crates at those
+versions. The generated crate is checked at 1.83 as the crate emitted for the
+`veh-cluster` corpus with every cargo feature on, and as the crate emitted for
+`examples/cabin` with its `std` feature on, because it does not build on 1.83
+with the default features off.
+
 Written from the release 0.10 design (2026-10-11), whose decisions R-2, R-8 and
 R-9 Sebastien took in the brainstorming session of the same day. The design's
 section 4.2 describes the check as first imagined; decision 3 below describes it
@@ -78,25 +88,27 @@ design in each:
 1. **Ten surfaces are frozen from 0.10.0.** A change that removes or alters what
    a user depends on in one of them is a break.
 
-   | Surface                 | What a user depends on                                                                                                                  |
-   | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-   | Language                | typl, ridl and rsdl syntax and keywords; the set of sources that compile without an error                                               |
-   | Manifest                | `ridl.toml` keys and their value types, `interfaces.lock`, `.ridl/baseline`                                                             |
-   | Diagnostics and lints   | diagnostic codes, lint names, lint default levels                                                                                       |
-   | CLI                     | subcommands, flags, exit codes, the `--format json` and `--format sarif` output shapes                                                  |
-   | Generated Rust crate    | the domain types and the interaction face (`Client`, `Provider`, `Publisher`, `Event`, `serve`, `Bind`)                                 |
-   | Runtime crates          | the public API of `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback` and `ridl-descriptor`, and their cargo feature names                |
-   | Codegen plugin protocol | `ridl.ir.v2` and `ridl.codegen.v1`, the request and response of a plugin                                                                |
-   | MCP tools               | tool names, input schemas and output schemas                                                                                            |
-   | Wire format             | the frame envelope, the `attach` handshake, the inputs of the catalog hash, the emitted `.proto` and `.fbs` mapping, the encoding names |
-   | Minimum Rust version    | Rust 1.83 and edition 2021 for `ridl-rt` and `ridl-rt-conformance`; the generated crate compiles with them (`just compat-check`)        |
+   | Surface                 | What a user depends on                                                                                                                                   |
+   | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | Language                | typl, ridl and rsdl syntax and keywords; the set of sources that compile without an error                                                                |
+   | Manifest                | `ridl.toml` keys and their value types, `interfaces.lock`, `.ridl/baseline`                                                                              |
+   | Diagnostics and lints   | diagnostic codes, lint names, lint default levels                                                                                                        |
+   | CLI                     | subcommands, flags, exit codes, the `--format json` and `--format sarif` output shapes                                                                   |
+   | Generated Rust crate    | the domain types and the interaction face (`Client`, `Provider`, `Publisher`, `Event`, `serve`, `Bind`)                                                  |
+   | Runtime crates          | the public API of `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback` and `ridl-descriptor`, and their cargo feature names                                 |
+   | Codegen plugin protocol | `ridl.ir.v2` and `ridl.codegen.v1`, the request and response of a plugin                                                                                 |
+   | MCP tools               | tool names, input schemas and output schemas                                                                                                             |
+   | Wire format             | the frame envelope, the `attach` handshake, the inputs of the catalog hash, the emitted `.proto` and `.fbs` mapping, the encoding names                  |
+   | Minimum Rust version    | Rust 1.83 and edition 2021 for `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback`; Rust 1.88 and edition 2024 for `ridl-descriptor` (`just compat-check`) |
 
    The frozen minimum of the last row is Rust 1.83 and edition 2021 for
-   `ridl-rt` and `ridl-rt-conformance`, checked by the `msrv` dump. The
-   generated crate compiles as edition 2021 with that Rust version, checked by
-   `just compat-check`. The `msrv` dump also records the edition of
-   `ridl-loopback` and `ridl-descriptor`, so a change of their edition fails the
-   check, but the minimum of Rust 1.83 and edition 2021 does not apply to them.
+   `ridl-rt`, `ridl-rt-conformance` and `ridl-loopback`, and Rust 1.88 with
+   edition 2024 for `ridl-descriptor`, because `planus` 1.3.0 declares 1.88. The
+   `msrv` dump checks the edition and the `rust-version` of each crate. The
+   generated crate compiles as edition 2021 with Rust 1.83 with every cargo
+   feature on. `just compat-check` checks the crate emitted for the
+   `veh-cluster` corpus with every feature on, and the crate emitted for
+   `examples/cabin` with its `std` feature on.
 
    The formats of `interfaces.lock` and `.ridl/baseline` are frozen by policy
    and checked by no tool. Of the exit codes, the check records only those of
@@ -205,12 +217,15 @@ design in each:
      same two steps.
 
 5. **The minimum supported Rust version is a frozen surface.** Raising the
-   `rust-version` of `ridl-rt` or `ridl-rt-conformance`, or dropping edition
-   2021 for them, is a break, and the `msrv` dump checks both crates. The
-   generated crate must compile as edition 2021 with that Rust version, which
-   `just compat-check` checks. The `msrv` dump also records the edition of
-   `ridl-loopback` and `ridl-descriptor`, so a change of their edition fails the
-   check, but the minimum does not apply to them. This restates ADR-0021
+   `rust-version` of `ridl-rt`, `ridl-rt-conformance` or `ridl-loopback`, or
+   dropping edition 2021 for them, is a break. Raising the `rust-version` of
+   `ridl-descriptor` above 1.88, or changing its edition, is a break. The `msrv`
+   dump checks all four crates. The generated crate must compile as edition 2021
+   with Rust 1.83 with every cargo feature on. `just compat-check` checks the
+   crate emitted for the `veh-cluster` corpus with every feature on, and the
+   crate emitted for `examples/cabin` with its `std` feature on. With the
+   default features off it does not compile on 1.83 (driftsys/ridl#874), and
+   `just compat-check` does not check that combination. This restates ADR-0021
    decision 10 as a frozen surface and adds the `msrv` check.
 
 6. **The gate table says which gate covers which surface.** The `baseline`
