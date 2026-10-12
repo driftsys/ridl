@@ -276,9 +276,10 @@ wasm-check:
 # apart from the appended tables, must build with the minimum toolchain, with
 # the `suite!` test compiled.
 #
-# The crate emitted for the veh-cluster corpus is built the same way as the
-# cabin crate, with every cargo feature on. With the default features off it
-# does not build on the minimum (driftsys/ridl#874), so that cell is not here.
+# The crate emitted for the veh-cluster corpus is built with cargo, not with
+# rustc as the cabin crate is, and with every cargo feature on. With the default
+# features off it does not build on the minimum (driftsys/ridl#874), so that
+# cell is not here.
 #
 # ADR-0029 owns the policy; the minimums are frozen by its decisions 1 and 5.
 #
@@ -288,7 +289,8 @@ wasm-check:
 # unchanged apart from the appended tables, in three feature sets: the
 # defaults, none, and only `dedup`. The unit tests and the integration tests
 # lower, round_trip and verify run with the defaults; codec_agreement (it
-# needs a dev-dependency the package drops), golden_hash (it reads a file
+# needs a dev-dependency the package drops, and it reads a corpus snapshot
+# under crates/ridl/, outside the package), golden_hash (it reads a file
 # outside the package) and the doctests do not run at that version, and the
 # pin runs all of them in the workspace.
 #
@@ -296,7 +298,9 @@ wasm-check:
 # with the pin's cargo and CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback,
 # so that a dependency release with a higher minimum is not selected; the
 # sources are fetched with the cargo of the crate's minimum, and the build is
-# offline and locked. cargo 1.83 does not see the index and the sources that
+# offline and locked. Each of these two cells uses its own empty CARGO_HOME
+# under target/compat-check, so that a warm cache (the CI cache of
+# ~/.cargo) cannot hide a fetch done with the wrong cargo. cargo 1.83 does not see the index and the sources that
 # the pin's cargo downloads (cargo 1.85 renamed their directories), so a fetch
 # by the pin left a build at 1.83 without its dependencies on a cold
 # CARGO_HOME.
@@ -395,9 +399,11 @@ compat-check: toolchain-check
     # a dependency outside it would be looked up on the registry, where this
     # version is not published yet. `cargo metadata` reads the dependency
     # tables in every form (`ridl-x.workspace = true`, `[dependencies.ridl-x]`,
-    # a target table); a workspace crate is one with a `path`. A
-    # dev-dependency is not counted: the packaged manifest drops a
-    # dev-dependency that has no version.
+    # a target table); a workspace crate is one with a `path`. No
+    # dev-dependency is counted, versioned or not: a dev-dependency does not
+    # reach a user of the published crate, so its absence from the packaged set
+    # does not break the build this recipe runs. A dev-dependency that a
+    # packaged test needs is handled where that test is set up.
     unpackaged_deps() {
         cargo metadata --no-deps --format-version 1 \
             | jq -r --arg set "$1" '
@@ -507,23 +513,36 @@ compat-check: toolchain-check
         "$cabin/generated/lib.rs" -o "$cabin/libveh_cabin.rmeta"
 
     # The integration tests that build standalone run at ridl-descriptor's
-    # minimum; two do not: codec_agreement needs ridl-backend-rust, the
-    # dev-dependency the package drops, and golden_hash reads a corpus
-    # snapshot under crates/ridl/, outside the package. The pin runs both in
-    # the workspace. If the package names ridl-backend-rust, or tests/ gains a
-    # file, the list below is stale.
-    descriptor_tests="codec_agreement golden_hash lower round_trip verify"
+    # minimum; two do not. codec_agreement needs ridl-backend-rust, the
+    # dev-dependency the package drops, and it also reads a corpus snapshot
+    # under crates/ridl/, outside the package. golden_hash reads a corpus
+    # snapshot under crates/ridl/ too. The pin runs both in the workspace.
+    # `descriptor_tests` is the list of the other three, and the only list:
+    # the --test arguments below are derived from it. The packaged manifest
+    # names every test target in a [[test]] table; if those names differ from
+    # the two skipped tests plus this list, the list is stale.
+    descriptor_tests="lower round_trip verify"
+    descriptor_skipped="codec_agreement golden_hash"
+    found_tests="$(awk '
+        /^\[\[test\]\]$/ { in_test = 1; next }
+        /^\[/ { in_test = 0 }
+        in_test && /^name = / { gsub(/^name = "|"$/, ""); print }
+    ' "$pkg_descriptor/Cargo.toml" | sort | tr '\n' ' ' | sed 's/ $//')"
+    expected_tests="$(printf '%s\n' $descriptor_skipped $descriptor_tests | sort | tr '\n' ' ' | sed 's/ $//')"
+    if [ "$found_tests" != "$expected_tests" ]; then
+        echo "compat-check: the packaged ridl-descriptor test targets are \"$found_tests\", not" >&2
+        echo "compat-check: \"$expected_tests\"; update the tests this recipe runs." >&2
+        exit 1
+    fi
     if grep -q 'ridl-backend-rust' "$pkg_descriptor/Cargo.toml"; then
-        echo "compat-check: the packaged ridl-descriptor now names ridl-backend-rust; run" >&2
-        echo "compat-check: its codec_agreement test at $descriptor_minimum too." >&2
+        echo "compat-check: the packaged ridl-descriptor now names ridl-backend-rust, which" >&2
+        echo "compat-check: codec_agreement needs; it also reads a corpus snapshot under" >&2
+        echo "compat-check: crates/ridl/, outside the package, so it cannot run standalone" >&2
+        echo "compat-check: until that file is packaged as well." >&2
         exit 1
     fi
-    found_tests="$(cd "$pkg_descriptor/tests" && ls -- *.rs | sed 's/\.rs$//' | tr '\n' ' ' | sed 's/ $//')"
-    if [ "$found_tests" != "$descriptor_tests" ]; then
-        echo "compat-check: the packaged ridl-descriptor tests are \"$found_tests\", not" >&2
-        echo "compat-check: \"$descriptor_tests\"; update the tests this recipe runs." >&2
-        exit 1
-    fi
+    test_args=""
+    for t in $descriptor_tests; do test_args="$test_args --test $t"; done
     append_tables "$pkg_descriptor/Cargo.toml" "ridl-ir=$pkg_ir"
     # The lockfile is resolved with the pin's cargo, which knows the
     # rust-version-aware fallback (cargo 1.84 and later), so that a dependency
@@ -534,9 +553,19 @@ compat-check: toolchain-check
     # cargo before 1.85 does not see what a later cargo downloaded. Resolving
     # the lockfile (which reads the index) and fetching are the two network
     # uses of this cell; the build is offline and locked.
-    CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
+    #
+    # The cell has its own CARGO_HOME, emptied with the rest of
+    # target/compat-check, so that it always runs cold. With a shared, warm
+    # CARGO_HOME a fetch made with the wrong cargo (cargo 1.85 renamed the
+    # registry directories) would still find the sources a later cargo
+    # downloaded, and the mistake would show only on a machine with a cold
+    # cache. Toolchains come from RUSTUP_HOME, not CARGO_HOME, and the rustup
+    # proxies on PATH are unchanged, so `cargo +version` still resolves.
+    descriptor_home="$PWD/target/compat-check/cargo-home-descriptor"
+    CARGO_HOME="$descriptor_home" CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
         cargo "+$pin" generate-lockfile --manifest-path "$pkg_descriptor/Cargo.toml"
-    cargo "+$descriptor_minimum" fetch --locked --manifest-path "$pkg_descriptor/Cargo.toml"
+    CARGO_HOME="$descriptor_home" \
+        cargo "+$descriptor_minimum" fetch --locked --manifest-path "$pkg_descriptor/Cargo.toml"
 
     export CARGO_TARGET_DIR="$PWD/target/compat-check/build"
 
@@ -582,7 +611,9 @@ compat-check: toolchain-check
     # resolver, fetched with the minimum's cargo (cargo 1.83 does not see the
     # index and sources that the pin's cargo downloads), then built offline
     # and locked. There is no `--no-default-features` cell: that build fails
-    # at the minimum (driftsys/ridl#874).
+    # at the minimum (driftsys/ridl#874). The cell has its own CARGO_HOME, for
+    # the reason given for ridl-descriptor above.
+    corpus_home="$PWD/target/compat-check/cargo-home-corpus"
     corpus="$PWD/target/compat-check/veh-cluster"
     mkdir -p "$corpus"
     "$ridl_bin" build crates/ridlc/tests/corpus/veh-cluster --emit rust --out-dir "$corpus/generated"
@@ -598,11 +629,12 @@ compat-check: toolchain-check
         exit 1
     fi
     append_tables "$corpus/generated/Cargo.toml" "ridl-rt=$pkg"
-    CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
+    CARGO_HOME="$corpus_home" CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
         cargo "+$pin" generate-lockfile --manifest-path "$corpus/generated/Cargo.toml"
-    cargo "+$minimum" fetch --locked --manifest-path "$corpus/generated/Cargo.toml"
+    CARGO_HOME="$corpus_home" \
+        cargo "+$minimum" fetch --locked --manifest-path "$corpus/generated/Cargo.toml"
     echo "compat-check: $minimum, edition 2021 (the emitted veh-cluster crate, all features)"
-    cargo "+$minimum" build --all-features --offline --locked --manifest-path "$corpus/generated/Cargo.toml"
+    CARGO_HOME="$corpus_home" cargo "+$minimum" build --all-features --offline --locked --manifest-path "$corpus/generated/Cargo.toml"
 
     # Edition 2024 requires rust-version >= 1.85 (cargo refuses to parse the
     # manifest otherwise); the pin already satisfies that, so this run's
@@ -631,12 +663,13 @@ compat-check: toolchain-check
     # standalone (see the list above) run with the defaults; the doctests do
     # not run at this version.
     echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, default features)"
-    cargo "+$descriptor_minimum" test --offline --locked --lib \
-        --test lower --test round_trip --test verify --manifest-path "$pkg_descriptor/Cargo.toml"
+    # shellcheck disable=SC2086 # test_args is a list of words
+    CARGO_HOME="$descriptor_home" cargo "+$descriptor_minimum" test --offline --locked --lib \
+        $test_args --manifest-path "$pkg_descriptor/Cargo.toml"
     echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, no default features)"
-    cargo "+$descriptor_minimum" build --offline --locked --no-default-features --manifest-path "$pkg_descriptor/Cargo.toml"
+    CARGO_HOME="$descriptor_home" cargo "+$descriptor_minimum" build --offline --locked --no-default-features --manifest-path "$pkg_descriptor/Cargo.toml"
     echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, dedup only)"
-    cargo "+$descriptor_minimum" build --offline --locked --no-default-features --features dedup --manifest-path "$pkg_descriptor/Cargo.toml"
+    CARGO_HOME="$descriptor_home" cargo "+$descriptor_minimum" build --offline --locked --no-default-features --features dedup --manifest-path "$pkg_descriptor/Cargo.toml"
 
 # Generate the cabin example's crate and run the program that links it.
 #

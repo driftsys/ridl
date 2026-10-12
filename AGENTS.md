@@ -173,10 +173,12 @@ member; rsdl is the apex.
                          ridl-loopback at that rust-version, build the packaged
                          ridl-ir and ridl-descriptor at the rust-version in
                          crates/ridl-descriptor/Cargo.toml, and check the crate
-                         ridl build emits for examples/cabin and for the
-                         veh-cluster corpus (every feature on) as edition 2021
-                         with the ridl-rt rust-version, the first cell of the
-                         codegen build matrix (ADR-0021 decision 10)
+                         ridl build emits for examples/cabin (built with
+                         rustc, with only the std feature on) and for the
+                         veh-cluster corpus (built with cargo, every feature
+                         on) as edition 2021 with the ridl-rt rust-version,
+                         the first cell of the codegen build matrix (ADR-0021
+                         decision 10)
     just demo            generate examples/cabin's crate with ridl build and run
                          the program that links it — each round trip's value
                          is matched, and a missing one or a non-zero exit
