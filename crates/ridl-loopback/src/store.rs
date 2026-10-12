@@ -332,7 +332,7 @@ impl Store {
             if mark.generation >= current {
                 continue;
             }
-            let changes = self
+            let mut changes = self
                 .signals
                 .iter()
                 .filter(|((iface, _), entry)| {
@@ -343,12 +343,11 @@ impl Store {
                     ord: *ord,
                     seq: entry.envelope.seq,
                 });
-            let staging: Vec<Changed> = changes.collect();
-            if staging.len() > out.len() - written {
+            if changes.clone().count() > out.len() - written {
                 return written;
             }
-            for change in &staging {
-                out[written] = *change;
+            for change in changes.by_ref() {
+                out[written] = change;
                 written += 1;
             }
             mark.generation = current;
