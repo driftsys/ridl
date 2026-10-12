@@ -1,5 +1,5 @@
 //! `port::Encoded`: a port type states the encoding of the bytes it carries,
-//! and a mutable borrow of a port carries the same encoding.
+//! and a shared or mutable borrow of a port carries the same encoding.
 
 #![forbid(unsafe_code)]
 
@@ -25,4 +25,19 @@ fn a_mut_borrow_carries_the_ports_encoding() {
     let mut port = P;
     assert_eq!(name(&port), "flatbuffers");
     assert_eq!(name(&&mut port), "flatbuffers");
+}
+
+#[test]
+fn a_shared_borrow_carries_the_ports_encoding() {
+    let port = P;
+    assert_eq!(name(&&port), "flatbuffers");
+}
+
+/// Compiles only when `Q::Encoding` is the same type as `E`.
+fn same_encoding<Q: Encoded<Encoding = E>, E: Encoding>() {}
+
+#[test]
+fn borrows_have_the_same_encoding_type_as_the_port() {
+    same_encoding::<&P, FlatBuffers>();
+    same_encoding::<&mut P, FlatBuffers>();
 }

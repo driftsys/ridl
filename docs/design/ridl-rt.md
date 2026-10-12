@@ -610,8 +610,8 @@ coupled its two ends are, and the construction of the port can override it — t
 library takes no position on the default. It is a separate trait, not a
 supertrait of `Attached`, so a port that never meets a face, such as a
 conformance fixture, is not forced to name an encoding; it is implemented for
-`&mut P` like every port trait. In this version no port type in this repository
-implements it, and the generated face does not yet require it.
+`&P` and `&mut P`. In this version no port type in this repository implements
+it, and the generated face does not yet require it.
 
 `Watermark`'s generation counter field is named `generation`, not `gen`: `gen`
 is a reserved keyword in the 2024 edition, so the field name the crate's earlier

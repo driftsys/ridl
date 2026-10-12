@@ -713,6 +713,10 @@ impl<P: Attached + ?Sized> Attached for &mut P {
     }
 }
 
+impl<P: Encoded + ?Sized> Encoded for &P {
+    type Encoding = P::Encoding;
+}
+
 impl<P: Encoded + ?Sized> Encoded for &mut P {
     type Encoding = P::Encoding;
 }
