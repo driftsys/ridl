@@ -533,9 +533,11 @@ message Interaction {
   // Absent for a fixed, and for a call with no declared bound.
   Timing timing = 7;
   // The memory a call table reserves for the member, per wire encoding: the
-  // sum of the sizes of its payloads. A signal, an event and a fixed member
-  // have one payload, a command has its request, and a query has its request
-  // and then its reply.
+  // sum of the sizes of its payloads. A signal and an event have one payload,
+  // a command has its request, and a query has its request and then its
+  // reply. A fixed member counts no payload and is always `bytes` 0, whatever
+  // its payload: a fixed value is provisioned and never in flight, which is
+  // the same number the runtime's size table carries for it.
   Reservation reservation = 8;
   // The family of the interaction (ADR-0012 decision 6), copied from the IR.
   // A plugin that does not read it sees the core kind.
@@ -638,8 +640,8 @@ message ReservationState {
     //   state is not bounded. `<role>` is `payload`, `request` or `reply`.
     //   `<payload>` is the payload's type reference when it is one named
     //   type, and otherwise what the shape is: the kind word `primitive`,
-    //   `inline scalar`, `tuple`, `map`, `stream`, `array of <element>`,
-    //   `no type` or `no payload`; the parameter list `(a, b)` of a request
+    //   `inline scalar`, `tuple`, `map`, `stream`, `array of <element>` or
+    //   `no type`; the parameter list `(a, b)` of a request
     //   whose parameters are not exactly one named type — zero parameters,
     //   several parameters, or one parameter that is an array, a tuple, a
     //   map, a stream, an inline scalar, a primitive or untyped;
