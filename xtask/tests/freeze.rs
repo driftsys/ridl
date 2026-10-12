@@ -214,9 +214,48 @@ fn check_fails_on_an_unknown_name_in_required() {
 #[test]
 fn update_rejects_the_release_flag() {
     let repo = Repo::new("update-release");
-    let output = repo.run_with("update", &["--release"], None);
+    let fixture = repo.dir.join("fixture-lines.txt");
+    std::fs::write(&fixture, "a\n").unwrap();
+    let output = repo.run_with("update", &["--release"], Some(("fixture", &fixture)));
     assert!(!output.status.success());
-    assert!(stderr(&output).contains("--release"), "{}", stderr(&output));
+    let err = stderr(&output);
+    assert!(err.contains("--release applies to `check` only"), "{err}");
+    let dumps: Vec<_> = std::fs::read_dir(repo.dir.join("freeze"))
+        .into_iter()
+        .flatten()
+        .map(|entry| entry.unwrap().file_name())
+        .filter(|name| name.to_string_lossy().ends_with(".txt"))
+        .collect();
+    assert!(dumps.is_empty(), "update wrote dumps: {dumps:?}");
+}
+
+#[test]
+fn release_check_fails_on_a_required_api_surface_without_a_row() {
+    let repo = Repo::new("required-api-release");
+    repo.write("freeze/surfaces.toml", "required = [\"runtime-crates\"]\n");
+    repo.commit();
+    let output = Command::new(env!("CARGO_BIN_EXE_xtask"))
+        .args([
+            "freeze",
+            "check",
+            "--release",
+            "--fixtures-only",
+            "--api-semver",
+            "runtime-crates",
+        ])
+        .arg("--root")
+        .arg(&repo.dir)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_WORK_TREE")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("surface `runtime-crates` is required but has no row"),
+        "{err}"
+    );
 }
 
 #[test]

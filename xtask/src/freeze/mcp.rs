@@ -295,6 +295,7 @@ mod tests {
         let line = "t input /properties/n/properties/m string";
         assert!(lines.iter().any(|l| l == line), "{lines:?}");
         assert!(!lines.iter().any(|l| l.contains("/oneOf/")), "{lines:?}");
+        assert!(!lines.iter().any(|l| l.contains("/anyOf")), "{lines:?}");
     }
 
     #[test]
