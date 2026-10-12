@@ -33,7 +33,8 @@ documents in [`../archive/`](../archive/).
   the boundary between a provider's runtime and a consumer's runtime per
   interaction kind — ordinal, kind, envelope, provenance, correlation, payload —
   in `ridl-rt`'s vocabulary; the invalid-payload behaviour; the rule that a
-  binding is written from it alone; the WebSocket binding (E11.9) by name, and,
+  binding is written from it alone; the WebSocket binding's own document (§11.1:
+  the session, the header layout, the close codes and the test vectors), and,
   for Binder on Android, the rule that a runtime binds the ports over its own
   binder contract, with no Binder layout specified (§11.2, which reverses the
   lane P driver's decision D-P5). Specified, not built: no runtime here speaks

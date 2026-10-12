@@ -172,10 +172,16 @@ member; rsdl is the apex.
                          ridl-rt-conformance crates as edition
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
                          and as edition 2024 with the rust-toolchain.toml pin,
-                         check both crates' LICENSE files, and check the crate ridl build
-                         emits for examples/cabin as edition 2021 with the
-                         rust-version, the first cell of the codegen build
-                         matrix (ADR-0021 decision 10)
+                         check both crates' LICENSE files, build the packaged
+                         ridl-loopback at that rust-version, build the packaged
+                         ridl-ir and ridl-descriptor at the rust-version in
+                         crates/ridl-descriptor/Cargo.toml, and check the crate
+                         ridl build emits for examples/cabin (built with
+                         rustc, with only the std feature on) and for the
+                         veh-cluster corpus (built with cargo, every feature
+                         on) as edition 2021 with the ridl-rt rust-version,
+                         the first cell of the codegen build matrix (ADR-0021
+                         decision 10)
     just demo            generate examples/cabin's crate with ridl build and run
                          the program that links it — each round trip's value
                          is matched, and a missing one or a non-zero exit

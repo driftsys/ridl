@@ -1588,6 +1588,118 @@ fn rename_introducing_a_duplicate_is_rejected() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// Writes a three-member workspace with packages `a`, `b` and `c`, one
+/// `lib.typl` each with the given text, and returns the three file URIs.
+fn write_abc_workspace(dir: &TempDir, a: &str, b: &str, c: &str) -> (lt::Uri, lt::Uri, lt::Uri) {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"a\", \"b\", \"c\"]\n",
+    );
+    let mut uris = Vec::new();
+    for (name, text) in [("a", a), ("b", b), ("c", c)] {
+        std::fs::create_dir_all(dir.path().join(name)).expect("create the member directory");
+        dir.write(
+            &format!("{name}/ridl.toml"),
+            &format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
+        );
+        uris.push(uri_of(&dir.write(&format!("{name}/lib.typl"), text)));
+    }
+    let c_uri = uris.pop().expect("three URIs");
+    let b_uri = uris.pop().expect("three URIs");
+    let a_uri = uris.pop().expect("three URIs");
+    (a_uri, b_uri, c_uri)
+}
+
+/// Asserts that a rename response is an error whose message reports that the
+/// new name is already bound.
+fn assert_rejected_as_already_bound(response: &Response) {
+    match &response.response_result {
+        Err(error) => assert!(
+            error.message.contains("already names"),
+            "the rejection reports the existing binding: {error:?}",
+        ),
+        Ok(value) => panic!("the rename was expected to be rejected, but it succeeded: {value}"),
+    }
+}
+
+/// (issue #842) Renaming `a.Speed` to `Velocity` is rejected when package `a`
+/// itself imports `b.Velocity`: the import already binds `Velocity` in the
+/// declaring package, so the renamed declaration would collide with it.
+#[test]
+fn rename_onto_a_name_the_declaring_package_imports_is_rejected() {
+    let dir = TempDir::new("rename-import-declaring");
+    let (a, _b, _c) = write_abc_workspace(
+        &dir,
+        "package a\nimport b.Velocity\ntype Speed: km/h\nstruct Limits { cap: Velocity, measured: Speed }\n",
+        "package b\ntype Velocity: km/h\n",
+        "package c\n",
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    // `type Speed` on line 2: `Speed` spans 5..10.
+    let response = rename_raw(&client, 10, a, pos(2, 7), "Velocity");
+    assert_rejected_as_already_bound(&response);
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (issue #842) Renaming `a.Speed` to `Velocity` is rejected when a third
+/// package `c` imports both `a.Speed` and `b.Velocity`: the rewritten import
+/// `a.Velocity` would bind the same local name as `b.Velocity`.
+#[test]
+fn rename_onto_a_name_an_importing_package_imports_is_rejected() {
+    let dir = TempDir::new("rename-import-importing");
+    let (a, _b, _c) = write_abc_workspace(
+        &dir,
+        "package a\ntype Speed: km/h\n",
+        "package b\ntype Velocity: km/h\n",
+        "package c\nimport a.Speed\nimport b.Velocity\nstruct Cabin { primary: Speed, secondary: Velocity }\n",
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    // `type Speed` on line 1: `Speed` spans 5..10.
+    let response = rename_raw(&client, 10, a, pos(1, 7), "Velocity");
+    assert_rejected_as_already_bound(&response);
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Guard for issue #842: when package `c` imports the target under an alias
+/// (`import a.Speed as Pace`), the alias binds the local name, so renaming
+/// `a.Speed` to `Velocity` does not collide with `c`'s `import b.Velocity`
+/// and succeeds.
+#[test]
+fn rename_with_an_aliased_import_of_the_target_is_not_a_collision() {
+    let dir = TempDir::new("rename-import-aliased");
+    let (a, _b, c) = write_abc_workspace(
+        &dir,
+        "package a\ntype Speed: km/h\n",
+        "package b\ntype Velocity: km/h\n",
+        "package c\nimport a.Speed as Pace\nimport b.Velocity\nstruct Cabin { primary: Pace, secondary: Velocity }\n",
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    let edit = rename_at(&client, 10, a.clone(), pos(1, 7), "Velocity");
+
+    let a_edits = edits_for(&edit, &a);
+    assert_eq!(a_edits.len(), 1, "the declaration only: {a_edits:?}");
+    // In c, only the imported-name segment of `import a.Speed as Pace` on
+    // line 1 is rewritten: `Speed` spans 9..14.
+    let c_edits = edits_for(&edit, &c);
+    assert_eq!(c_edits.len(), 1, "only the import segment: {c_edits:?}");
+    assert_eq!(
+        c_edits[0].range,
+        range((1, 9), (1, 14)),
+        "the import segment"
+    );
+    assert_eq!(c_edits[0].new_text, "Velocity");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// (i) Renaming a type to a name that violates the CamelCase convention (R7)
 /// is rejected.
 #[test]

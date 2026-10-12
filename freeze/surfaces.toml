@@ -14,3 +14,7 @@ required = ["mcp"]
 # Without a row, a line-dump surface is only checked against its committed
 # dump, `generated-crate` is only checked for equality with a regeneration, and
 # `runtime-crates` is not checked.
+
+[[surface]]
+name = "mcp"
+baseline = "3c3301dff1a5c2b9d13c6192c9f84f71d85c88c2"

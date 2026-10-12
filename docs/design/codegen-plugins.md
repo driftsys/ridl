@@ -575,9 +575,11 @@ workspace's system; a workspace has at most one system.
 
 ### Bindings, and what is not built
 
-The `bindings` list is empty today. The emitter writes one entry per row of the
-table of known bindings, in name order, and the table has no row because no
-binding's frame layout is specified (driftsys/ridl#265).
+The `bindings` list holds the `websocket` row (binding version 1, data-plane
+frame header at most 20 bytes, envelope 16 bytes), from
+[the frame specification](../specification/frame-specification.md) §11.1. The
+emitter writes one entry per row of the table of known bindings
+(`crates/ridl-ir/src/codegen/bindings.rs`), in name order.
 
 The overhead of a binding is not part of any payload size. A plugin that sizes a
 socket message adds the frame header and the envelope of the binding the message
@@ -603,15 +605,13 @@ shows that the request carries every input those two layouts need. The layout
 rule belongs to the test plugin: it is stated in the plugin's module comment,
 and neither the toolchain nor the request prescribes it.
 
-Two things the cabin fixture does not show are tested apart from it. The fixture
-states `null` for every socket message's maximum size, because the table of
-binding overheads has no row. A second test adds a `websocket` row to cabin's
-request with a frame header of 14 bytes and an envelope of 2 bytes, values that
-belong to the test and to no binding document, and checks that `Cabin.warning`'s
-maximum size is 14 + 2 + 8 = 24. Declared sizing values are not in the
-`examples/cabin` source; another test in the same file builds a workspace in a
-temporary directory that declares `depth`, `slots` and `budget` and checks that
-each declared value reaches the request with the declared source.
+The fixture states the socket message sizes the `websocket` row gives: 20 + 16 +
+8 = 44 bytes for `Cabin.warning`, whose proto3 bound is 8, and `null` for the
+members that have no proto3 bound. A second test checks the same sum on its own.
+Declared sizing values are not in the `examples/cabin` source; another test in
+the same file builds a workspace in a temporary directory that declares `depth`,
+`slots` and `budget` and checks that each declared value reaches the request
+with the declared source.
 
 ## 8. What a plugin author reads
 

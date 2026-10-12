@@ -998,7 +998,14 @@ fn the_cabin_deployment_section_is_rendered_end_to_end() {
         ]
       }
     ],
-    "bindings": []
+    "bindings": [
+      {
+        "name": "websocket",
+        "version": "1",
+        "frameHeaderMaxBytes": 20,
+        "envelopeBytes": 16
+      }
+    ]
   },
   "generatedMarker": "",
   "header": ""
