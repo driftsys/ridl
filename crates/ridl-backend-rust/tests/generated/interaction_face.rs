@@ -332,13 +332,13 @@ impl Tag {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
         if (value.chars().count() as ::core::primitive::u64) < 1 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Tag",
+                type_name: ::core::option::Option::Some("Tag"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
         if (value.chars().count() as ::core::primitive::u64) > 16 {
             return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                type_name: "Tag",
+                type_name: ::core::option::Option::Some("Tag"),
                 rule: ::ridl_rt::payload::Rule::Length,
             });
         }
@@ -1451,7 +1451,7 @@ pub(crate) fn __ridl_fb_encode_Log(
             if __c.len() < 2usize || __c.len() > 8usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "Log",
+                        type_name: ::core::option::Option::Some("Log"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -1492,7 +1492,7 @@ pub(crate) fn __ridl_fb_verify_Log(
             if __v.len < 2usize || __v.len > 8usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "Log",
+                        type_name: ::core::option::Option::Some("Log"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -1722,7 +1722,7 @@ pub(crate) fn __ridl_fb_encode_Tally(
             if __c.len() > 3usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "Tally",
+                        type_name: ::core::option::Option::Some("Tally"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -1783,7 +1783,7 @@ pub(crate) fn __ridl_fb_verify_Tally(
             if __v.len > 3usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "Tally",
+                        type_name: ::core::option::Option::Some("Tally"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -1846,7 +1846,7 @@ pub(crate) fn __ridl_fb_verify_Tally(
                     if __previous_key == __key {
                         return ::core::result::Result::Err(
                             ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
-                                type_name: "Tally",
+                                type_name: ::core::option::Option::Some("Tally"),
                                 rule: ::ridl_rt::payload::Rule::Unique,
                             }),
                         );

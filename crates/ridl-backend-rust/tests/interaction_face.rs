@@ -3763,13 +3763,13 @@ fn a_second_codec_is_read_from_the_port_type() {
 
 /// The violation the generated `encode` reports for an over-long `Log`.
 const LOG_LENGTH: ridl_rt::payload::Violation = ridl_rt::payload::Violation {
-    type_name: "Log",
+    type_name: Some("Log"),
     rule: ridl_rt::payload::Rule::Length,
 };
 
 /// The violation the generated `encode` reports for an over-long `Tally`.
 const TALLY_LENGTH: ridl_rt::payload::Violation = ridl_rt::payload::Violation {
-    type_name: "Tally",
+    type_name: Some("Tally"),
     rule: ridl_rt::payload::Rule::Length,
 };
 

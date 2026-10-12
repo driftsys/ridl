@@ -1288,7 +1288,7 @@ pub(crate) fn __ridl_fb_encode_FaultPage(
             if __c.len() > 64usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "FaultPage",
+                        type_name: ::core::option::Option::Some("FaultPage"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );

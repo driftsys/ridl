@@ -3113,7 +3113,7 @@ pub(crate) fn __ridl_fb_encode_SensorBounds(
             if __c.is_empty() || __c.len() > 16usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "SensorBounds",
+                        type_name: ::core::option::Option::Some("SensorBounds"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
@@ -3136,7 +3136,7 @@ pub(crate) fn __ridl_fb_encode_SensorBounds(
             if __c.len() > 32usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
-                        type_name: "SensorBounds",
+                        type_name: ::core::option::Option::Some("SensorBounds"),
                         rule: ::ridl_rt::payload::Rule::Length,
                     }),
                 );
