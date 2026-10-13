@@ -53,7 +53,8 @@ use lsp_types::request::Request as _;
 use ridl_core::TimingDefaults;
 use ridl_core::db::{InputFile, RidlDatabase, parse_file};
 use ridl_core::diag::{
-    DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
+    DiagCode, Diagnostic, FileId, LineCol, Severity, SourceMap, Span, house_style_message,
+    line_col, remap_diagnostics,
 };
 use ridl_core::lint::{LintScopes, apply_lint_levels};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
@@ -235,6 +236,10 @@ struct QuickFix {
 struct Batch {
     diagnostics: BTreeMap<String, Vec<lt::Diagnostic>>,
     fixes: HashMap<String, Vec<QuickFix>>,
+    /// The Errors in a file of a remote unit, one line each
+    /// ([`remote_notice_line`]), which are not published and join the
+    /// window message of [`ServerState::remote_notice`] instead.
+    remote_errors: Vec<String>,
 }
 
 /// The server's whole state: the salsa database with the one loaded
@@ -280,17 +285,23 @@ struct ServerState {
     /// The load-time loader findings per path, converted once; dropped per
     /// file when its buffer diverges from the loaded text (see module docs).
     loader_diagnostics: BTreeMap<String, Vec<lt::Diagnostic>>,
+    /// The remote units the load read, by name and directory.
+    remote_units: Vec<(String, PathBuf)>,
     /// The directories a remote unit is read from — each loaded unit's
     /// directory and the cache root ([`ridlc::remote_dirs`]). A remote unit
     /// is a read-only dependency: it is checked so that the consumer's
     /// references resolve, and no diagnostic is published for a file under
     /// one of these, not even a loader finding at a unit that did not load.
     remote_dirs: Vec<PathBuf>,
-    /// The detached Errors of the load — a remote unit that is pinned but not
-    /// cached (MANI-104), or not pinned (MANI-103) — as one message, shown
-    /// once by the next [`ServerState::publish_all`]. A detached span has no
-    /// file to publish under, so `convert_loader_diagnostics` drops it.
-    remote_notice: Option<String>,
+    /// The Errors the load left that no publish carries, one line each: the
+    /// detached ones — a remote unit that is pinned but not cached
+    /// (MANI-104), or not pinned (MANI-103) — and those in a file under a
+    /// remote directory. `Some` after a load, until the next
+    /// [`ServerState::publish_all`] joins the analysis's remote Errors to
+    /// them and shows the lot as one window message: once per load, not on
+    /// every edit, because `ridl check` fails on the same Errors and the
+    /// editor must not look clean beside a failing check.
+    remote_notice: Option<Vec<String>>,
     /// Paths whose buffer text diverged from the loaded text.
     edited: HashSet<String>,
     /// Paths the last publish sent a non-empty list for — the set that gets
@@ -321,6 +332,7 @@ impl ServerState {
             overlays: HashMap::new(),
             line_indexes: HashMap::new(),
             loader_diagnostics: BTreeMap::new(),
+            remote_units: Vec::new(),
             remote_dirs: Vec::new(),
             remote_notice: None,
             edited: HashSet::new(),
@@ -398,23 +410,25 @@ impl ServerState {
             }
         }
         self.remote_dirs = ridlc::remote_dirs(&remote_units, &cache);
-        // A detached Error has no file to publish under, so it is kept as a
-        // notice instead; `convert_loader_diagnostics` would drop it.
+        self.remote_units = remote_units
+            .into_iter()
+            .map(|(name, unit)| (name, unit.dir))
+            .collect();
+        // A detached Error has no file to publish under, and one in a remote
+        // file is not published either, so both go to the notice;
+        // `convert_loader_diagnostics` would drop the first and
+        // `publish_all` skips the second.
         let notice: Vec<String> = diagnostics
             .iter()
             .filter(|diagnostic| {
                 diagnostic.severity == Severity::Error
-                    && sources.path(diagnostic.primary.file).is_none()
+                    && sources
+                        .path(diagnostic.primary.file)
+                        .is_none_or(|path| self.is_remote_path(path))
             })
-            .map(|diagnostic| {
-                if diagnostic.code == DiagCode::NONE {
-                    diagnostic.message.clone()
-                } else {
-                    format!("`{}`: {}", diagnostic.code.as_str(), diagnostic.message)
-                }
-            })
+            .map(|diagnostic| remote_notice_line(diagnostic, &sources, &self.remote_units))
             .collect();
-        self.remote_notice = (!notice.is_empty()).then(|| notice.join("\n"));
+        self.remote_notice = Some(notice);
         // `analyze` never sees the loader's findings, so their levels are
         // applied here, once, before the conversion (ADR-0024
         // decision 6). A manifest's MANI-010 is itself a lint, and its file is in
@@ -849,28 +863,41 @@ impl ServerState {
         // never published.
         apply_lint_levels(&mut all, &sources, &self.lints);
         // A remote unit's packages were checked so that the consumer's
-        // references resolve; nothing is published for their files.
+        // references resolve; nothing is published for their files. Their
+        // Errors go to the window message instead.
+        let mut remote_errors = Vec::new();
         all.retain(|diagnostic| {
-            sources
+            let remote = sources
                 .path(diagnostic.primary.file)
-                .is_none_or(|path| !self.is_remote_path(path))
+                .is_some_and(|path| self.is_remote_path(path));
+            if remote && diagnostic.severity == Severity::Error {
+                remote_errors.push(remote_notice_line(diagnostic, &sources, &self.remote_units));
+            }
+            !remote
         });
-        batch(all, &table)
+        let mut out = batch(all, &table);
+        out.remote_errors = remote_errors;
+        out
     }
 
     /// Recomputes the diagnostics for every package, merges the still-valid
     /// loader findings, and publishes: one notification per path with
     /// findings, plus an explicit empty list for every path that had
-    /// findings before and is clean now. A notice the load left
-    /// ([`ServerState::remote_notice`]) is shown first, once.
+    /// findings before and is clean now. On the first publish after a load,
+    /// the remote Errors ([`ServerState::remote_notice`], plus the
+    /// analysis's) are shown as one window message before the publishes.
     fn publish_all(&mut self, connection: &Connection) -> Result<(), Error> {
-        if let Some(notice) = self.remote_notice.take() {
-            show_message(connection, lt::MessageType::ERROR, notice)?;
-        }
         let Batch {
             mut diagnostics,
             fixes,
+            remote_errors,
         } = self.analyze();
+        if let Some(mut notice) = self.remote_notice.take() {
+            notice.extend(remote_errors);
+            if !notice.is_empty() {
+                show_message(connection, lt::MessageType::ERROR, notice.join("\n"))?;
+            }
+        }
         for (path, loader) in &self.loader_diagnostics {
             if self.edited.contains(path) || self.is_remote_path(path) {
                 continue;
@@ -1342,6 +1369,39 @@ impl ServerState {
 /// the load started from and the reason it failed.
 fn load_error_key(manifest_dir: &Path, err: &io::Error) -> String {
     format!("{}: {err}", manifest_dir.display())
+}
+
+/// One line of the remote-unit window message for `diagnostic`, an Error no
+/// publish carries: for a spanned one, the file path, the 1-based line and
+/// column, the code and the message, with the unit named when the loader has
+/// not named it already; for a detached one, the code and the message.
+fn remote_notice_line(
+    diagnostic: &Diagnostic,
+    sources: &SourceMap,
+    units: &[(String, PathBuf)],
+) -> String {
+    let code = if diagnostic.code == DiagCode::NONE {
+        String::new()
+    } else {
+        format!("[{}]", diagnostic.code.as_str())
+    };
+    let message = &diagnostic.message;
+    let Some(path) = sources.path(diagnostic.primary.file) else {
+        return format!("error{code}: {message}");
+    };
+    let LineCol { line, column } = line_col(
+        sources.text(diagnostic.primary.file).unwrap_or_default(),
+        diagnostic.primary.range.start(),
+    );
+    let unit = units
+        .iter()
+        .find(|(_, dir)| Path::new(path).starts_with(dir))
+        .map(|(name, _)| name.as_str());
+    let prefix = match unit {
+        Some(name) if !message.starts_with("remote unit `") => format!("remote unit `{name}`: "),
+        _ => String::new(),
+    };
+    format!("{path}:{line}:{column}: error{code}: {prefix}{message}")
 }
 
 /// Sends a `window/showMessage` notification: the client shows `message` to

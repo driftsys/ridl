@@ -1607,7 +1607,7 @@ fn lsp_publishes_no_loader_finding_for_a_remote_file() {
     stub.reset_hits();
     let root = member.parent().unwrap();
     let session = LspSession::start_in_with_home(root, Some(root), Some(dir.path()));
-    let (publishes, _) = session.shutdown_collecting();
+    let (publishes, shown) = session.shutdown_collecting();
     let published = published_lists(&publishes);
     assert!(
         published
@@ -1615,11 +1615,67 @@ fn lsp_publishes_no_loader_finding_for_a_remote_file() {
             .all(|(uri, _)| !uri.contains(".ridl/cache")),
         "no loader finding is published for a remote file: {published:?}"
     );
+    assert_eq!(
+        shown.len(),
+        1,
+        "the finding is shown as a message: {shown:?}"
+    );
+    let message = shown[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("MANI-014")
+            && message.contains("remote unit `veh.common`")
+            && message.contains(".ridl/cache"),
+        "{message}"
+    );
     let (_, app) = published
         .iter()
         .find(|(uri, _)| uri.ends_with("app.ridl"))
         .expect("the member's untimed signal is published");
     assert!(app.iter().any(|d| d["code"] == "RIDL-100"), "{app:?}");
+    assert_eq!(stub.hits(), 0, "the language server never fetches");
+}
+
+/// A remote unit's spanned Error — the one that fails `ridl check` — is not
+/// published under a cache URI; it is shown once in the window message, with
+/// the unit, the file path in the cache, the line, the code and the message.
+#[test]
+fn lsp_shows_a_remote_units_spanned_error_in_the_message() {
+    use remote_support::{BROKEN_UNIT, Stub, consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("lsp-remote-error");
+    let stub = Stub::serving(unit_tar(BROKEN_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("TYPL-104"), "{stderr}");
+    stub.reset_hits();
+    let mut session = LspSession::start_in_with_home(&root, Some(&root), Some(dir.path()));
+    // A second publish round: the message is shown once per load.
+    session.notify(
+        "textDocument/didOpen",
+        json!({"textDocument": {
+            "uri": file_uri(&root.join("app.ridl")),
+            "languageId": "ridl",
+            "version": 1,
+            "text": std::fs::read_to_string(root.join("app.ridl")).unwrap(),
+        }}),
+    );
+    let (publishes, shown) = session.shutdown_collecting();
+    let published = published_lists(&publishes);
+    assert!(
+        published
+            .iter()
+            .all(|(uri, _)| !uri.contains(".ridl/cache")),
+        "{published:?}"
+    );
+    assert_eq!(shown.len(), 1, "the error is shown once: {shown:?}");
+    let message = shown[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("remote unit `veh.common`")
+            && message.contains("TYPL-104")
+            && message.contains(".ridl/cache")
+            && message.contains("common.typl:3:"),
+        "{message}"
+    );
     assert_eq!(stub.hits(), 0, "the language server never fetches");
 }
 
