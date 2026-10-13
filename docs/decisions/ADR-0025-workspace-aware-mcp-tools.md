@@ -40,6 +40,10 @@ lints): a ninth tool, `ridl_metrics`, is added under decision 9, and the package
 dependency edges that decision 8 counts are now computed in `ridlc::deps`, which
 `ridl_metrics` reads. `ridl_dependencies` still reports the complete graph.
 
+Amended 2026-10-13 by [ADR-0002](ADR-0002-module-system.md) "Remote units"
+(driftsys/ridl#48): the tools read remote units from the cache; decision 6 is
+edited in place.
+
 Amended 2026-10-09 (driftsys/ridl#770): decision 7 accepts an overlay path that
 ends in `.rxdl` or `.rmdl`. In a package directory the loader reports such an
 overlay with the warning RIDL-417 (`unsupported-source-file`), as it reports the
@@ -110,9 +114,13 @@ pasted-source form.
    lockfile round trip or the baseline (the list is in the crate README). Path
    mode applies the project's `[lints]` levels, as ADR-0024 decision 8 requires.
 6. **The tools are read-only and offline** (design D-6). No tool writes a file,
-   and no tool fetches a remote import; a remote import produces the same Info
-   diagnostic as `ridl check`. A test compares the fixture tree's files, sizes
-   and modification times before and after a call of each tool.
+   and no tool fetches a remote import. Amended 2026-10-13 (driftsys/ridl#48):
+   the tools read the remote units of `[imports]` from the cache, as
+   `ridl check --frozen` does, and report MANI-103 for a URL with no `ridl.lock`
+   entry, MANI-104 for a pin the cache does not hold, and the remote unit's
+   Errors; the Info diagnostic a remote import once produced is gone. A test
+   compares the fixture tree's files, sizes and modification times before and
+   after a call of each tool.
 7. **Unsaved text is applied inside the `ridl-core` loader, not after it**
    (design §5.1). `ridl_core::load_workspace_with` takes
    `Overlay { path, text }` values; `ridlc::compile_workspace_with` runs the

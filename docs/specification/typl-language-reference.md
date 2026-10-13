@@ -1300,7 +1300,8 @@ A link resolves in the scope of the file that holds it, with the rules of a type
 reference (§3): a bare name is looked up locally, then among the imported names,
 then in `ridl.std`. A qualified `pkg.Name` names any package the current package
 can depend on (ADR-0002 §5) without an import; a remote package of `[imports]`
-is not loaded by the compiler, so a link into one does not resolve. One more
+is reachable where an `import` of it resolves — the package's own `[imports]`
+or, for a workspace member, the workspace `[imports]` pin its unit. One more
 segment names a member of the declaration: a field, enum value, enumset bit,
 union arm or interaction (`[Gear.PARK]`, `[CruiseControl.setLever]`). When a
 name could be a package path or a declaration followed by a member, the link

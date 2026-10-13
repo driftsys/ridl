@@ -3,9 +3,13 @@
 //! then the earlier hashes a consumer built against still works with, back to
 //! the last breaking change.
 
+mod remote_support;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+use remote_support::{COMMON_UNIT, Stub, unit_tar};
 
 /// A unique directory under the system temp dir, removed on drop.
 struct TempDir(PathBuf);
@@ -1228,63 +1232,73 @@ fn a_baseline_with_no_history_file_is_not_loaded_by_a_build() {
 
 /// A workspace that names `[imports]` gets a note that a unit's list covers
 /// the workspace's own packages only, when there is a history to carry. The
-/// frozen build fails on the missing lockfile entry, offline, after the note.
+/// remote unit is generated but gets no catalog of its own.
 #[test]
 fn a_workspace_with_imports_gets_a_note_beside_the_list() {
     let dir = TempDir::new("build-imports-note");
     let out = TempDir::new("build-imports-note-out");
+    let home = TempDir::new("build-imports-note-home");
     let root = set_source(&dir, BASE);
     publish(&root);
-    let frozen_build = |out: &Path| {
-        let (code, _, stderr) = ridl(&[
-            "build".as_ref(),
-            root.as_os_str(),
-            "--out-dir".as_ref(),
-            out.as_os_str(),
-            "--emit".as_ref(),
-            "catalog".as_ref(),
-            "--frozen".as_ref(),
-        ]);
-        (code, stderr)
-    };
-    let (code, stderr) = frozen_build(out.path());
+    let (code, stderr) = frozen_catalog_build(&root, out.path(), home.path());
     assert_eq!(code, 0, "no imports, no failure: {stderr}");
     assert!(
         !stderr.contains("[imports]"),
         "no note without imports: {stderr}"
     );
-    dir.write(
-        "ridl.toml",
-        &format!(
-            "{MANIFEST}\n[imports]\n\"other.dep\" = \"https://registry.example.com/other/dep@v1.0.0\"\n"
-        ),
-    );
-    let (code, stderr) = frozen_build(out.path());
-    assert_eq!(
-        code, 1,
-        "the missing lockfile entry fails the build: {stderr}"
-    );
+    let _stub = pin_remote_unit(&dir, &root, home.path());
+    let (code, stderr) = frozen_catalog_build(&root, out.path(), home.path());
+    assert_eq!(code, 0, "the unit is read from the cache: {stderr}");
     assert!(
         stderr.contains("note: the workspace names `[imports]`"),
         "the note is printed: {stderr}"
     );
+    assert!(
+        out.path().join(format!("{UNIT}.catalog.binfb")).is_file(),
+        "the workspace's own unit gets a catalog"
+    );
+    assert!(
+        !out.path().join("veh.common.catalog.binfb").exists(),
+        "the remote unit gets none"
+    );
 }
 
-const IMPORTS: &str =
-    "\n[imports]\n\"other.dep\" = \"https://registry.example.com/other/dep@v1.0.0\"\n";
+/// Pins `veh.common` to a local stub in the manifest of `root`, beside the
+/// fixture's `[package]`, and fetches the unit once with a non-frozen
+/// `ridl check` whose cache is `home/.ridl/cache`, so that a frozen build
+/// after it reads the cache. The stub is returned so that it outlives the
+/// test's builds.
+fn pin_remote_unit(dir: &TempDir, root: &Path, home: &Path) -> Stub {
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    dir.write(
+        "ridl.toml",
+        &format!(
+            "{MANIFEST}\n[imports]\n\"veh.common\" = \"{}\"\n",
+            stub.url()
+        ),
+    );
+    let (code, _, stderr) = remote_support::ridl(root, home, &["check"]);
+    assert_eq!(code, 0, "the unit is fetched and pinned: {stderr}");
+    assert_eq!(stub.hits(), 1, "one fetch");
+    stub
+}
 
-/// Runs a frozen `ridl build --emit catalog` on `root`, returning
-/// `(exit_code, stderr)`.
-fn frozen_catalog_build(root: &Path, out: &Path) -> (i32, String) {
-    let (code, _, stderr) = ridl(&[
-        "build".as_ref(),
-        root.as_os_str(),
-        "--out-dir".as_ref(),
-        out.as_os_str(),
-        "--emit".as_ref(),
-        "catalog".as_ref(),
-        "--frozen".as_ref(),
-    ]);
+/// Runs a frozen `ridl build --emit catalog` on `root`, with the cache under
+/// `home`, returning `(exit_code, stderr)`.
+fn frozen_catalog_build(root: &Path, out: &Path, home: &Path) -> (i32, String) {
+    let (code, _, stderr) = remote_support::ridl(
+        root,
+        home,
+        &[
+            "build",
+            root.to_str().unwrap(),
+            "--out-dir",
+            out.to_str().unwrap(),
+            "--emit",
+            "catalog",
+            "--frozen",
+        ],
+    );
     (code, stderr)
 }
 
@@ -1294,30 +1308,33 @@ fn frozen_catalog_build(root: &Path, out: &Path) -> (i32, String) {
 fn a_workspace_with_imports_and_an_unloadable_baseline_gets_no_note() {
     let dir = TempDir::new("build-imports-bad-baseline");
     let out = TempDir::new("build-imports-bad-baseline-out");
+    let home = TempDir::new("build-imports-bad-baseline-home");
     let root = set_source(&dir, BASE);
     publish(&root);
+    let _stub = pin_remote_unit(&dir, &root, home.path());
     std::fs::write(baseline_dir(&root).join(format!("{UNIT}.ir.json")), "{")
         .expect("damage the snapshot");
-    dir.write("ridl.toml", &format!("{MANIFEST}{IMPORTS}"));
-    let (code, stderr) = frozen_catalog_build(&root, out.path());
+    let (code, stderr) = frozen_catalog_build(&root, out.path(), home.path());
     assert_eq!(code, 2, "the baseline fails the build: {stderr}");
     assert!(!stderr.contains("note: the workspace names"), "{stderr}");
 }
 
 /// A unit with no published package gets no list, so no list is computed and
-/// there is no note.
+/// there is no note. The pinned URL has no `ridl.lock` entry, so the frozen
+/// build fails on MANI-103, offline, with no note either way.
 #[test]
 fn a_workspace_with_imports_and_no_list_gets_no_note() {
     let dir = TempDir::new("build-imports-no-list");
     let out = TempDir::new("build-imports-no-list-out");
+    let home = TempDir::new("build-imports-no-list-home");
     let root = set_source(&dir, BASE);
     publish(&root);
     dir.write(
         "ridl.toml",
-        &format!("[package]\nname = \"veh.other\"\nversion = \"1.0.0\"\n{IMPORTS}"),
+        "[package]\nname = \"veh.other\"\nversion = \"1.0.0\"\n\n[imports]\n\"other.dep\" = \"https://registry.example.com/other/dep@v1.0.0\"\n",
     );
     dir.write("cluster.ridl", &BASE.replace("veh.cluster", "veh.other"));
-    let (code, stderr) = frozen_catalog_build(&root, out.path());
+    let (code, stderr) = frozen_catalog_build(&root, out.path(), home.path());
     assert_eq!(
         code, 1,
         "the missing lockfile entry fails the build: {stderr}"
@@ -1424,6 +1441,7 @@ fn a_build_lists_nothing_when_the_chain_head_does_not_match_the_snapshots() {
 fn a_build_with_imports_and_an_empty_list_still_gets_the_note() {
     let dir = TempDir::new("imports-empty-list");
     let out = TempDir::new("imports-empty-list-out");
+    let home = TempDir::new("imports-empty-list-home");
     let root = set_source(&dir, BASE);
     publish(&root);
     std::fs::write(
@@ -1431,10 +1449,11 @@ fn a_build_with_imports_and_an_empty_list_still_gets_the_note() {
         format!("{}\n", "ab".repeat(32)),
     )
     .expect("overwrite the published history");
-    dir.write("ridl.toml", &format!("{MANIFEST}{IMPORTS}"));
+    let _stub = pin_remote_unit(&dir, &root, home.path());
 
-    let (_, stderr) = frozen_catalog_build(&root, out.path());
+    let (code, stderr) = frozen_catalog_build(&root, out.path(), home.path());
 
+    assert_eq!(code, 0, "{stderr}");
     assert!(
         stderr.contains("note: the workspace names `[imports]`"),
         "the empty list is explained: {stderr}"

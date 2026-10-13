@@ -138,11 +138,7 @@ fn add_types(pkg: &Package, ty: &FieldType, types: &mut BTreeSet<String>) {
 
 pub(crate) fn check(ctx: &Ctx<'_>) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
-    let mut packages: Vec<_> = ctx
-        .checked
-        .iter()
-        .filter(|p| p.ir.name != "ridl.std")
-        .collect();
+    let mut packages: Vec<_> = ctx.subjects().collect();
     packages.sort_by(|a, b| a.ir.name.cmp(&b.ir.name));
     for checked in packages {
         let pkg = &checked.ir;

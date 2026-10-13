@@ -16,8 +16,7 @@
 //! This module sits behind the `fetch` feature: it pulls `ureq` for the network
 //! and drives the `fetch`-gated [`Cache`].
 
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use rowan::TextRange;
@@ -25,6 +24,9 @@ use rowan::TextRange;
 use crate::cache::Cache;
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
 use crate::lock::{LockEntry, Lockfile};
+use crate::tree_hash::{TreeHashError, tree_hash};
+use crate::workspace::ImportUnion;
+pub use crate::workspace::MaterializedUnit;
 
 /// A remote fetch failure: the human-readable reason. It carries no source span
 /// because it concerns a URL, not a byte range.
@@ -103,18 +105,24 @@ impl From<bool> for Frozen {
     }
 }
 
-/// Materializes every remote import into the cache and returns the resolved
-/// `(url, unpacked-package-directory)` pairs, the regenerated [`Lockfile`], and
-/// any diagnostics.
+/// Materializes every remote import into the cache and returns the verified
+/// [`MaterializedUnit`]s, the regenerated [`Lockfile`], and any diagnostics.
 ///
-/// For each URL, in sorted order:
+/// For each URL, in sorted order (a URL named by two keys is materialized
+/// once):
 ///
 /// - If the lockfile pins a hash and that hash is already unpacked in the
-///   cache, the cache hit is used and no fetch happens — the regenerated
-///   lockfile keeps the pin.
+///   cache, the cache hit is used and no fetch happens. The pinned `tree` is
+///   then verified against the unpacked tree (`MANI-107` on a mismatch or a
+///   file that is not a regular file). An entry with no `tree` gets one
+///   computed and pinned under [`Frozen::No`], and is `MANI-108` under
+///   [`Frozen::Yes`].
 /// - Otherwise, under [`Frozen::No`], the artifact is fetched and cached. If the
 ///   lockfile pinned a different hash, the fetch is a `MANI-102` mismatch and
-///   the import is dropped; otherwise the newly computed hash is pinned.
+///   the import is dropped. If the entry pins a `tree`, the unpacked tree is
+///   verified against it as for a cache hit (`MANI-107` on a mismatch) and the
+///   pinned value is kept; an entry with no `tree` gets the newly computed
+///   `tree` pinned. The `sha256` is the newly computed one.
 /// - Under [`Frozen::Yes`] nothing is ever fetched: a URL with no lockfile entry
 ///   is `MANI-103`, and a pinned URL that is not in the cache is `MANI-104`.
 ///
@@ -122,22 +130,16 @@ impl From<bool> for Frozen {
 /// Every diagnostic is detached ([`FileId::DETACHED`]): it names the URL rather
 /// than a source span, so the caller renders it as a bare coded message.
 pub fn materialize_imports(
-    imports: &BTreeMap<String, String>,
+    imports: &ImportUnion,
     lock: Option<&Lockfile>,
     cache: &Cache,
     frozen: Frozen,
-) -> (Vec<(String, PathBuf)>, Lockfile, Vec<Diagnostic>) {
-    let mut resolved = Vec::new();
+) -> (Vec<MaterializedUnit>, Lockfile, Vec<Diagnostic>) {
+    let mut units = Vec::new();
     let mut regenerated = Lockfile::default();
     let mut diagnostics = Vec::new();
 
-    // Iterate by URL so the run is deterministic even when two logical names
-    // alias the same URL; a URL is materialized once.
-    let mut urls: Vec<&String> = imports.values().collect();
-    urls.sort();
-    urls.dedup();
-
-    for url in urls {
+    for url in imports.keys() {
         if !is_fetchable_url(url) {
             diagnostics.push(detached(
                 DiagCode::MANI_101,
@@ -145,88 +147,194 @@ pub fn materialize_imports(
             ));
             continue;
         }
-
-        let pinned = lock
-            .and_then(|lock| lock.entries.get(url))
-            .map(|entry| entry.sha256.clone());
-
-        // A cache hit against the pinned hash skips the fetch entirely — the
-        // one path that must never touch the network (proven by the request
-        // counter in the tests).
-        if let Some(sha) = &pinned
-            && let Some(path) = cache.lookup(url, sha)
+        let pinned = lock.and_then(|lock| lock.entries.get(url));
+        if let Some((entry, unit)) =
+            from_cache_or_fetch(url, pinned, cache, frozen, &mut diagnostics)
         {
-            regenerated.entries.insert(
-                url.clone(),
-                LockEntry {
-                    sha256: sha.clone(),
-                },
-            );
-            resolved.push((url.clone(), path));
-            continue;
-        }
-
-        match frozen {
-            Frozen::Yes => match pinned {
-                None => diagnostics.push(detached(
-                    DiagCode::MANI_103,
-                    format!("`--frozen`: no lockfile entry for `{url}`"),
-                )),
-                Some(_) => diagnostics.push(detached(
-                    DiagCode::MANI_104,
-                    format!("`--frozen`: `{url}` is pinned but not in the cache"),
-                )),
-            },
-            Frozen::No => {
-                let bytes = match fetch(url) {
-                    Ok(bytes) => bytes,
-                    Err(err) => {
-                        diagnostics.push(detached(
-                            DiagCode::MANI_101,
-                            format!("failed to fetch `{url}`: {}", err.message),
-                        ));
-                        continue;
-                    }
-                };
-                // Store before verifying against the pin: the cache is
-                // content-addressed, so a mismatched artifact lands at its own
-                // hash, never in the pinned entry's directory — it can never be
-                // served as the pin. The mismatch below then drops it.
-                let (sha, path) = match cache.store(url, &bytes) {
-                    Ok(stored) => stored,
-                    Err(err) => {
-                        diagnostics.push(detached(
-                            DiagCode::MANI_101,
-                            format!("failed to cache `{url}`: {err}"),
-                        ));
-                        continue;
-                    }
-                };
-                if let Some(expected) = &pinned
-                    && expected != &sha
-                {
-                    diagnostics.push(detached(
-                        DiagCode::MANI_102,
-                        format!(
-                            "hash mismatch for `{url}`: the lockfile pins `{expected}` but the fetched content hashes to `{sha}`"
-                        ),
-                    ));
-                    continue;
-                }
-                regenerated
-                    .entries
-                    .insert(url.clone(), LockEntry { sha256: sha });
-                resolved.push((url.clone(), path));
-            }
+            regenerated.entries.insert(url.clone(), entry);
+            units.push(unit);
         }
     }
+    (units, regenerated, diagnostics)
+}
 
-    (resolved, regenerated, diagnostics)
+/// The cache-or-fetch step for one URL: the verified unit and the lock entry
+/// to write, or `None` after a diagnostic was pushed. The rules are those of
+/// [`materialize_imports`].
+fn from_cache_or_fetch(
+    url: &str,
+    pinned: Option<&LockEntry>,
+    cache: &Cache,
+    frozen: Frozen,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<(LockEntry, MaterializedUnit)> {
+    // A cache hit against the pinned hash skips the fetch entirely, the one
+    // path that must never touch the network (proven by the request counter in
+    // the tests).
+    if let Some(entry) = pinned
+        && let Some(dir) = cache.lookup(url, &entry.sha256)
+    {
+        let tree = match &entry.tree {
+            Some(tree) => {
+                verify_tree(url, &dir, tree, diagnostics)?;
+                tree.clone()
+            }
+            None => match frozen {
+                Frozen::Yes => {
+                    diagnostics.push(detached(
+                        DiagCode::MANI_108,
+                        format!(
+                            "the `ridl.lock` entry for `{url}` has no `tree` hash; run `ridl check` without `--frozen` to add it"
+                        ),
+                    ));
+                    return None;
+                }
+                Frozen::No => hash_tree(url, &dir, diagnostics)?,
+            },
+        };
+        return Some(pinned_unit(url, entry.sha256.clone(), dir, tree));
+    }
+
+    match frozen {
+        Frozen::Yes => {
+            diagnostics.push(match pinned {
+                None => detached(
+                    DiagCode::MANI_103,
+                    format!(
+                        "no `ridl.lock` entry for `{url}`; run `ridl check` without `--frozen` to fetch and pin it"
+                    ),
+                ),
+                Some(_) => detached(
+                    DiagCode::MANI_104,
+                    format!(
+                        "`{url}` is pinned in `ridl.lock` but not in the cache; run `ridl check` without `--frozen` to fetch it"
+                    ),
+                ),
+            });
+            None
+        }
+        Frozen::No => {
+            let bytes = match fetch(url) {
+                Ok(bytes) => bytes,
+                Err(err) => {
+                    diagnostics.push(detached(
+                        DiagCode::MANI_101,
+                        format!("failed to fetch `{url}`: {}", err.message),
+                    ));
+                    return None;
+                }
+            };
+            // Store before verifying against the pin: the cache is
+            // content-addressed, so a mismatched artifact lands at its own
+            // hash, never in the pinned entry's directory. It can never be
+            // served as the pin; the mismatch below then drops it.
+            let (sha, dir) = match cache.store(url, &bytes) {
+                Ok(stored) => stored,
+                Err(err) => {
+                    diagnostics.push(detached(
+                        DiagCode::MANI_101,
+                        format!("failed to cache `{url}`: {err}"),
+                    ));
+                    return None;
+                }
+            };
+            if let Some(entry) = pinned
+                && entry.sha256 != sha
+            {
+                diagnostics.push(detached(
+                    DiagCode::MANI_102,
+                    format!(
+                        "hash mismatch for `{url}`: the lockfile pins `{}` but the fetched content hashes to `{sha}`",
+                        entry.sha256
+                    ),
+                ));
+                return None;
+            }
+            // A pinned `tree` is verified after a fetch as after a cache hit:
+            // the artifact is the pinned one, but the pin says what its
+            // unpacked tree must be.
+            let tree = match pinned.and_then(|entry| entry.tree.as_deref()) {
+                Some(expected) => {
+                    verify_tree(url, &dir, expected, diagnostics)?;
+                    expected.to_string()
+                }
+                None => hash_tree(url, &dir, diagnostics)?,
+            };
+            Some(pinned_unit(url, sha, dir, tree))
+        }
+    }
+}
+
+/// The lock entry and the unit for a verified `dir`.
+fn pinned_unit(
+    url: &str,
+    sha256: String,
+    dir: PathBuf,
+    tree: String,
+) -> (LockEntry, MaterializedUnit) {
+    (
+        LockEntry {
+            sha256,
+            tree: Some(tree.clone()),
+        },
+        MaterializedUnit {
+            url: url.to_string(),
+            dir,
+            tree,
+        },
+    )
+}
+
+/// The `tree` hash of `dir`, or `None` after a MANI-107 that names the
+/// non-regular file or the read failure.
+fn hash_tree(url: &str, dir: &Path, diagnostics: &mut Vec<Diagnostic>) -> Option<String> {
+    match tree_hash(dir) {
+        Ok(tree) => Some(tree),
+        Err(TreeHashError::NotRegular(path)) => {
+            diagnostics.push(detached(
+                DiagCode::MANI_107,
+                format!(
+                    "`{}` in the tree of `{url}` is not a regular file; a remote unit holds regular files only",
+                    path.display()
+                ),
+            ));
+            None
+        }
+        Err(err) => {
+            diagnostics.push(detached(
+                DiagCode::MANI_107,
+                format!("cannot hash the tree of `{url}`: {err}"),
+            ));
+            None
+        }
+    }
+}
+
+/// `Some(())` when `dir` hashes to `expected`; `None` after a MANI-107.
+fn verify_tree(
+    url: &str,
+    dir: &Path,
+    expected: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<()> {
+    let actual = hash_tree(url, dir, diagnostics)?;
+    if actual == expected {
+        return Some(());
+    }
+    diagnostics.push(detached(
+        DiagCode::MANI_107,
+        format!(
+            "the tree of `{}` does not match the `tree` hash `ridl.lock` pins for `{url}`",
+            dir.display()
+        ),
+    ));
+    None
 }
 
 /// Builds a detached error [`Diagnostic`] for a URL-scoped problem: no source
-/// span, since a fetch or lockfile problem has no meaningful byte range.
-fn detached(code: DiagCode, message: String) -> Diagnostic {
+/// span, since a fetch, lockfile or remote-unit problem has no meaningful
+/// byte range. The loader raises MANI-105 and MANI-106 through it.
+pub(crate) fn detached(code: DiagCode, message: String) -> Diagnostic {
     Diagnostic {
         code,
         severity: Severity::Error,
@@ -242,9 +350,9 @@ fn detached(code: DiagCode, message: String) -> Diagnostic {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
     use std::io::{BufRead as _, BufReader, Write as _};
     use std::net::{TcpListener, TcpStream};
-    use std::path::Path;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::thread::JoinHandle;
@@ -452,8 +560,8 @@ mod tests {
         }
     }
 
-    fn imports_of(url: &str) -> BTreeMap<String, String> {
-        BTreeMap::from([("remote.pkg".to_string(), url.to_string())])
+    fn imports_of(url: &str) -> ImportUnion {
+        BTreeMap::from([(url.to_string(), BTreeSet::from(["remote.pkg".to_string()]))])
     }
 
     /// `fetch` returns the served body over the local stub — one request.
@@ -510,8 +618,8 @@ mod tests {
         assert_eq!(stub.hits(), 1, "the artifact is fetched exactly once");
 
         assert_eq!(resolved.len(), 1);
-        let (resolved_url, path) = &resolved[0];
-        assert_eq!(resolved_url, stub.url());
+        assert_eq!(resolved[0].url, stub.url());
+        let path = &resolved[0].dir;
         let unpacked = std::fs::read_to_string(path.join("remote.typl"))
             .expect("the .typl file is unpacked into the cache");
         assert_eq!(unpacked, source);
@@ -564,6 +672,7 @@ mod tests {
             stub.url().to_string(),
             LockEntry {
                 sha256: "0".repeat(64),
+                tree: None,
             },
         );
 
@@ -629,6 +738,7 @@ mod tests {
             stub.url().to_string(),
             LockEntry {
                 sha256: "a".repeat(64),
+                tree: None,
             },
         );
 
@@ -645,11 +755,152 @@ mod tests {
     fn an_invalid_url_is_mani_101_without_fetching() {
         let dir = TempDir::new("bad-url");
         let cache = cache(&dir);
-        let imports = BTreeMap::from([("bad.dep".to_string(), "not-a-url".to_string())]);
+        let imports = BTreeMap::from([(
+            "not-a-url".to_string(),
+            BTreeSet::from(["bad.dep".to_string()]),
+        )]);
 
         let (resolved, _, diags) = materialize_imports(&imports, None, &cache, Frozen::No);
         assert_eq!(codes(&diags), vec!["MANI-101"]);
         assert!(resolved.is_empty());
+    }
+
+    /// A fetch pins both hashes: the tar's `sha256` and the unpacked `tree`,
+    /// and the returned unit carries the same `tree`.
+    #[test]
+    fn a_fetch_pins_the_tree_hash() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("tree-pin");
+        let cache = cache(&dir);
+        let (units, lock, diags) =
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No);
+        assert!(diags.is_empty(), "{diags:?}");
+        let entry = &lock.entries[stub.url()];
+        let expected = crate::tree_hash::tree_hash(&units[0].dir).unwrap();
+        assert_eq!(entry.tree.as_deref(), Some(expected.as_str()));
+        assert_eq!(units[0].tree, expected);
+    }
+
+    /// A cache hit whose lock entry has no `tree` (a lockfile written before
+    /// the hash existed) adds it on a non-frozen run, without a fetch.
+    #[test]
+    fn a_cache_hit_adds_a_missing_tree_without_fetching() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("tree-add");
+        let cache = cache(&dir);
+        let (_, lock, _) = materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No);
+        let mut old = lock.clone();
+        old.entries.get_mut(stub.url()).unwrap().tree = None;
+        stub.reset_hits();
+        let (_, regenerated, diags) =
+            materialize_imports(&imports_of(stub.url()), Some(&old), &cache, Frozen::No);
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(stub.hits(), 0, "the cache hit makes no request");
+        assert_eq!(regenerated, lock, "the tree hash is added back");
+    }
+
+    /// Under `--frozen`, a lock entry with no `tree` is MANI-108.
+    #[test]
+    fn frozen_entry_without_tree_is_mani_108() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("frozen-108");
+        let cache = cache(&dir);
+        let (_, lock, _) = materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No);
+        let mut old = lock;
+        old.entries.get_mut(stub.url()).unwrap().tree = None;
+        let (units, _, diags) =
+            materialize_imports(&imports_of(stub.url()), Some(&old), &cache, Frozen::Yes);
+        assert_eq!(codes(&diags), vec!["MANI-108"]);
+        assert!(units.is_empty());
+    }
+
+    /// A cache entry whose tree does not hash to the pinned `tree` is
+    /// MANI-107, frozen or not, and the unit is not returned.
+    #[test]
+    fn a_tree_mismatch_is_mani_107() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("tree-107");
+        let cache = cache(&dir);
+        let (units, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No);
+        std::fs::write(units[0].dir.join("extra.typl"), b"package remote.pkg\n").unwrap();
+        for frozen in [Frozen::Yes, Frozen::No] {
+            let (units, _, diags) =
+                materialize_imports(&imports_of(stub.url()), Some(&lock), &cache, frozen);
+            assert_eq!(codes(&diags), vec!["MANI-107"], "{frozen:?}");
+            assert!(units.is_empty());
+        }
+    }
+
+    /// A fresh fetch is verified against a pinned `tree` as a cache hit is:
+    /// when the unpacked tree does not hash to the pin, the fetch is
+    /// MANI-107 and the unit is not returned.
+    #[test]
+    fn a_fetch_into_an_empty_cache_verifies_the_pinned_tree() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("tree-fetch-107");
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache(&dir), Frozen::No);
+        let mut pinned = lock;
+        pinned.entries.get_mut(stub.url()).unwrap().tree = Some("0".repeat(64));
+        let fresh = TempDir::new("tree-fetch-107-fresh");
+        stub.reset_hits();
+        let (units, _, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            Some(&pinned),
+            &cache(&fresh),
+            Frozen::No,
+        );
+        assert_eq!(stub.hits(), 1, "the empty cache is a miss");
+        assert_eq!(codes(&diags), vec!["MANI-107"]);
+        assert!(units.is_empty());
+    }
+
+    /// A fresh fetch whose unpacked tree hashes to the pinned `tree` draws no
+    /// diagnostic, returns the unit with the pinned value, and leaves the lock
+    /// entry as it was.
+    #[test]
+    fn a_fetch_into_an_empty_cache_accepts_the_matching_pinned_tree() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("tree-fetch-ok");
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache(&dir), Frozen::No);
+        let pinned_tree = lock.entries[stub.url()].tree.clone().unwrap();
+        let fresh = TempDir::new("tree-fetch-ok-fresh");
+        stub.reset_hits();
+        let (units, regenerated, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            Some(&lock),
+            &cache(&fresh),
+            Frozen::No,
+        );
+        assert_eq!(stub.hits(), 1, "the empty cache is a miss");
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(units.len(), 1);
+        assert_eq!(units[0].tree, pinned_tree);
+        assert_eq!(regenerated, lock);
+    }
+
+    /// A symbolic link in a cache entry is MANI-107 naming the link; the
+    /// unit is not returned.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_in_the_tree_is_mani_107_naming_it() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("tree-link");
+        let cache = cache(&dir);
+        let (units, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No);
+        std::os::unix::fs::symlink("remote.typl", units[0].dir.join("link.typl")).unwrap();
+        let (units, _, diags) =
+            materialize_imports(&imports_of(stub.url()), Some(&lock), &cache, Frozen::Yes);
+        assert_eq!(codes(&diags), vec!["MANI-107"]);
+        assert!(
+            diags[0].message.contains("link.typl"),
+            "{}",
+            diags[0].message
+        );
+        assert!(units.is_empty());
     }
 
     fn codes(diags: &[Diagnostic]) -> Vec<&str> {

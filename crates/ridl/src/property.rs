@@ -222,11 +222,14 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
     let names = Names::of(&output);
     // `checked` and `resolutions` are filled in one loop and are the same
     // length; `zip` therefore pairs each package with its own resolved name
-    // view, which a lookup by package name could not do (see `Home`).
+    // view, which a lookup by package name could not do (see `Home`). A
+    // remote unit's clauses are its owner's to sample, so its packages are
+    // left out, after the pairing so that the two lists stay aligned.
     let reports: Vec<PackageReport> = output
         .checked
         .iter()
         .zip(&output.resolutions)
+        .filter(|(checked, _)| !ridlc::is_remote(&checked.ir, &output.remote_units))
         .map(|(checked, resolution)| {
             run_package(
                 &Home {

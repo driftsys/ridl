@@ -42,11 +42,11 @@ pub struct InterfaceMetrics {
 }
 
 /// Reports every workspace package and declared interface without thresholds.
+/// A package of a remote unit is not a workspace package: it has no row, and
+/// a reference into one contributes to no row, as an external qualifier does.
 pub fn metrics(snap: &Snapshot, _input: &MetricsInput) -> Result<MetricsOutput, ToolError> {
-    let edges = workspace_package_edges(&package_edges(
-        &snap.output.checked,
-        snap.output.system.as_ref(),
-    ));
+    let consumer = snap.consumer_packages();
+    let edges = workspace_package_edges(&package_edges(consumer, snap.output.system.as_ref()));
     let mut incoming: BTreeMap<&str, usize> = BTreeMap::new();
     for targets in edges.values() {
         for target in targets {
@@ -69,7 +69,7 @@ pub fn metrics(snap: &Snapshot, _input: &MetricsInput) -> Result<MetricsOutput, 
         })
         .collect();
     let mut interfaces = Vec::new();
-    for checked in &snap.output.checked {
+    for checked in consumer {
         let pkg = &checked.ir;
         if pkg.name == "ridl.std" {
             continue;
@@ -177,6 +177,87 @@ mod tests {
                 {"name":"fx.a", "fanIn":1, "fanOut":0, "instability":0.0, "dependsOn":[]},
                 {"name":"fx.a.sub", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]},
                 {"name":"fx.b", "fanIn":0, "fanOut":1, "instability":1.0, "dependsOn":["fx.a"]}
+            ])
+        );
+    }
+
+    /// A package of a remote unit is not a package of the metrics
+    /// (ADR-0002, "Remote units"): it has no row, and no row counts it.
+    /// `fx.b` is marked as a remote unit on the snapshot, as the loader
+    /// marks one it read from the cache.
+    #[test]
+    fn metrics_leaves_out_a_remote_package() {
+        let path = fixture("ws");
+        let mut snap = snapshot(&path, &[]).unwrap();
+        snap.output.remote_units.insert(
+            "fx.b".to_string(),
+            ridl_core::MaterializedUnit {
+                url: "https://registry.example.com/fx/b@v1".to_string(),
+                dir: snap.root.join("b"),
+                tree: "0".repeat(64),
+            },
+        );
+        let result = value(&snap, &path);
+        assert_eq!(
+            result["packages"],
+            json!([
+                {"name":"fx.a", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]},
+                {"name":"fx.a.sub", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]}
+            ])
+        );
+        assert!(
+            result["interfaces"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|iface| !iface["name"].as_str().unwrap().starts_with("fx.b.")),
+            "{:?}",
+            result["interfaces"]
+        );
+    }
+
+    /// A consumer package that references a remote package counts no edge to
+    /// it: the remote target adds no fan-out and no `dependsOn` entry to the
+    /// consumer's row, and has no row of its own. `fx.b` is marked as a
+    /// remote unit and moved after the consumer's packages, as the loader
+    /// orders them; `fx.a.sub` imports it and `fx.a`.
+    #[test]
+    fn metrics_counts_no_edge_to_a_remote_package() {
+        let path = fixture("ws");
+        let file = format!("{path}/a/sub/sub.ridl");
+        let source = "package fx.a.sub\nimport fx.a.Reading\nimport fx.b.Level\nstruct Sample {\n  reading: Reading\n  window: Level\n}\n".to_string();
+        let mut snap = snapshot(&path, &[OverlayInput { path: file, source }]).unwrap();
+        let deps = dependencies(
+            &snap,
+            &DependenciesInput {
+                path: path.clone(),
+                overlays: None,
+                package: Some("fx.a.sub".to_string()),
+            },
+        )
+        .unwrap();
+        assert_eq!(deps.packages[0].depends_on, ["fx.a", "fx.b"]);
+        let at = snap
+            .output
+            .checked
+            .iter()
+            .position(|checked| checked.ir.name == "fx.b")
+            .unwrap();
+        let remote = snap.output.checked.remove(at);
+        snap.output.checked.push(remote);
+        snap.output.remote_units.insert(
+            "fx.b".to_string(),
+            ridl_core::MaterializedUnit {
+                url: "https://registry.example.com/fx/b@v1".to_string(),
+                dir: snap.root.join("b"),
+                tree: "0".repeat(64),
+            },
+        );
+        assert_eq!(
+            value(&snap, &path)["packages"],
+            json!([
+                {"name":"fx.a", "fanIn":1, "fanOut":0, "instability":0.0, "dependsOn":[]},
+                {"name":"fx.a.sub", "fanIn":0, "fanOut":1, "instability":1.0, "dependsOn":["fx.a"]}
             ])
         );
     }

@@ -13,10 +13,13 @@
 //! and writes nothing, whichever unit it is in (plan decision PD-6).
 //!
 //! The command compiles first, through [`ridlc::compile_workspace`] — no
-//! network and no `ridl.lock` round trip — and reads each unit's directory
-//! and its lock as loaded from a second [`load_workspace`] over the same
-//! tree: `ridlc`'s output carries the checked IR and the diagnostics but no
-//! package handle, and the two loads read the same files in the same order.
+//! network and no `ridl.lock` round trip; a remote unit is read from the
+//! cache so the consumer's imports resolve, and its packages are then left
+//! out, because its `interfaces.lock` is its owner's — and reads each unit's
+//! directory and its lock as loaded from a second [`load_workspace`] over
+//! the same tree: `ridlc`'s output carries the checked IR and the
+//! diagnostics but no package handle, and the two loads read the same files
+//! in the same order.
 //! One line per change goes to stdout — `allocated Name N`,
 //! `renamed Old New N`, `retired Name N` — prefixed with the unit
 //! directory relative to `PATH` over more than one unit (plan decision
@@ -98,6 +101,7 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
         &mut output.diagnostics,
         &output.sources,
         output.report_scope.as_deref(),
+        &ridlc::remote_dirs(&output.remote_units, &ridl_core::Cache::user_default()),
     );
     // `ridl lock` applies no `[lints]` levels (ADR-0024 decision 8), so a lint
     // that is `allow` by default is left out of what it renders.
@@ -111,9 +115,12 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
         return ExitCode::FAILURE;
     }
 
+    // A remote unit's `interfaces.lock` is its owner's: the command neither
+    // allocates in it nor writes it, so its packages are left out here.
     let irs: Vec<v2::Package> = output
         .checked
         .into_iter()
+        .filter(|checked| !ridlc::is_remote(&checked.ir, &output.remote_units))
         .map(|checked| checked.ir)
         .collect();
     let mut units = match locked_units(path, irs, output.report_scope.as_deref()) {

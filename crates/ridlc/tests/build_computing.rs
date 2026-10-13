@@ -1,6 +1,7 @@
 //! `run_build_computing` computes the earlier catalogs from the build's own
 //! compile: the function is called once, with the build's checked packages,
-//! and never for a compile with an error diagnostic.
+//! and never for a compile with an error diagnostic — a remote unit that
+//! does not materialize included.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -80,8 +81,33 @@ fn an_error_of_the_function_is_the_error_of_the_build() {
     assert_eq!(error.to_string(), "the baseline cannot be read");
 }
 
+/// A frozen build of `root`, so that a pinned `[imports]` URL with no
+/// `ridl.lock` is MANI-103 without a fetch.
+fn frozen_build(
+    root: &Path,
+    compute: &mut ridlc::CompatibleCatalogsFn<'_>,
+) -> std::io::Result<ridlc::CliRun> {
+    let out = tempfile::tempdir().expect("a temp dir");
+    ridlc::run_build_computing(
+        root,
+        out.path(),
+        &[Emit::Catalog],
+        &[],
+        Duration::from_secs(10),
+        Frozen::Yes,
+        ApplyLints::No,
+        None,
+        Some(compute),
+    )
+}
+
+/// The remote units are materialized by the load, before the function is
+/// called: a package whose `[imports]` cannot be materialized has an error
+/// diagnostic, so the function is not called. The `names_imports` flag of a
+/// build whose units load is pinned against the `ridl` binary, in
+/// `crates/ridl/tests/catalog_chain.rs`.
 #[test]
-fn a_workspace_that_names_imports_is_reported_to_the_function() {
+fn a_package_whose_imports_do_not_materialize_never_calls_it() {
     let root = workspace(SOURCE);
     std::fs::write(
         root.path().join("ridl.toml"),
@@ -89,15 +115,24 @@ fn a_workspace_that_names_imports_is_reported_to_the_function() {
     )
     .expect("the manifest is written");
     let mut flags = Vec::new();
-    let _ = build(root.path(), &mut |_, _, names_imports| {
+    let run = frozen_build(root.path(), &mut |_, _, names_imports| {
         flags.push(names_imports);
         Ok(BTreeMap::new())
-    });
-    assert_eq!(flags, vec![true]);
+    })
+    .expect("the build runs");
+    assert!(
+        run.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code.as_str() == "MANI-103"),
+        "{:?}",
+        run.diagnostics
+    );
+    assert_eq!(flags, Vec::<bool>::new());
 }
 
+/// The same for `[imports]` named by a workspace root.
 #[test]
-fn imports_named_by_the_workspace_root_are_reported_to_the_function() {
+fn a_root_whose_imports_do_not_materialize_never_calls_it() {
     let root = tempfile::tempdir().expect("a temp dir");
     std::fs::write(
         root.path().join("ridl.toml"),
@@ -113,11 +148,19 @@ fn imports_named_by_the_workspace_root_are_reported_to_the_function() {
     .expect("the member manifest is written");
     std::fs::write(member.join("demo.typl"), SOURCE).expect("the source is written");
     let mut flags = Vec::new();
-    let _ = build(root.path(), &mut |_, _, names_imports| {
+    let run = frozen_build(root.path(), &mut |_, _, names_imports| {
         flags.push(names_imports);
         Ok(BTreeMap::new())
-    });
-    assert_eq!(flags, vec![true]);
+    })
+    .expect("the build runs");
+    assert!(
+        run.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code.as_str() == "MANI-103"),
+        "{:?}",
+        run.diagnostics
+    );
+    assert_eq!(flags, Vec::<bool>::new());
 }
 
 const GIVEN_HASH: &str = "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=";

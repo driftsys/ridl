@@ -56,7 +56,7 @@ pub(crate) fn check(ctx: &Ctx<'_>) -> Vec<Diagnostic> {
                 .push(span);
         }
     };
-    for checked in ctx.checked.iter().filter(|p| p.ir.name != "ridl.std") {
+    for checked in ctx.subjects() {
         let pkg = &checked.ir;
         for decl in &pkg.decls {
             if let Some(decl::Kind::StructDef(def)) = &decl.kind {

@@ -93,8 +93,8 @@ pub(crate) fn compatible_catalogs(
     }
     if names_imports && !compatible.is_empty() {
         eprintln!(
-            "note: the workspace names `[imports]`, whose packages the compatible catalogs are not \
-             computed over: a unit's list covers the workspace's own packages only"
+            "note: the workspace names `[imports]`; a remote unit's catalog is published by its \
+             owner, so a unit's list covers the workspace's own packages only"
         );
     }
     Ok(compatible)

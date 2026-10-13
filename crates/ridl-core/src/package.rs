@@ -25,13 +25,13 @@ use crate::interface_lock::InterfaceLock;
 use crate::manifest::TimingDefaults;
 
 /// Where a package's sources come from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PackageOrigin {
     /// Loaded from the local filesystem: a workspace member, a standalone
     /// package, or a single-file synthetic package.
     WorkspaceMember,
-    /// Fetched from a remote URL.
-    Remote,
+    /// Fetched from a remote URL, or read from the cache entry for it.
+    Remote { url: String },
     /// The embedded `ridl.std` (ADR-0007 decision 15).
     Std,
 }

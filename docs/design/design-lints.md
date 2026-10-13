@@ -33,7 +33,10 @@ once ([`sites.rs`](../../crates/ridlc/src/design_lints/sites.rs)), which maps a
 declaration, a struct field, an interaction member and a parameter to its source
 span from the current syntax trees, then runs the three checks in a fixed order
 (units, shapes, cohesion) and returns their diagnostics at the catalogue
-severity.
+severity. The checks examine the consumer's packages only: a package of a remote
+unit (ADR-0002 §5, "Remote units") is never the subject of a check, so it draws
+no design lint of its own; it stays a target, so the unit of a remote type is
+read at a consumer's site and can draw a finding there.
 
 Two callers run it:
 
@@ -94,13 +97,16 @@ fan-out metric they used remain, for `ridl_metrics`.
 ## The dependency graph
 
 [`deps.rs`](../../crates/ridlc/src/deps.rs) computes the package edges once.
-`package_edges` returns, for each workspace package, the package qualifiers of a
+`package_edges` returns, for each checked package, the package qualifiers of a
 walk over its IR references (the IR records no imports, so an import that no
 declaration uses gives no edge), and the rsdl edges of `component_requires` and
-the system's member lines; a qualifier that names no workspace package is kept
-as written. `ridl_dependencies` reports that complete graph.
-`workspace_package_edges` keeps only edges whose target is a workspace package;
-`ridl_metrics` computes fan-in, fan-out, instability and `dependsOn` from it.
+the system's member lines; a qualifier that names no checked package is kept as
+written. `ridl_dependencies` reports that complete graph, with a package of a
+remote unit the cache holds as a node. `workspace_package_edges` keeps only
+edges whose target is a package of the graph; `ridl_metrics` runs both over the
+consumer's packages only (`Snapshot::consumer_packages`), so a package of a
+remote unit has no row and a reference into one contributes to no row, as an
+external qualifier does.
 
 ## The corpus and the calibration
 
