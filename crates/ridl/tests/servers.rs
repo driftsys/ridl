@@ -5,6 +5,8 @@
 //! through an in-memory connection instead, which cannot show that the
 //! subcommand wires the stdio transport at all.
 
+mod remote_support;
+
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdout, Command as StdCommand, ExitStatus, Stdio};
@@ -54,8 +56,17 @@ const THREE_KINDS_TYPL: &str = "package p\ntype Tag : string\ntype Bad : integer
 /// client. The child is killed when the returned service is cancelled or
 /// dropped.
 async fn connect() -> RunningService<RoleClient, ()> {
+    connect_with_home(None).await
+}
+
+/// [`connect`] with `HOME` set to `home` when one is given, so the server's
+/// cache is `home/.ridl/cache`.
+async fn connect_with_home(home: Option<&Path>) -> RunningService<RoleClient, ()> {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ridl"));
     command.arg("mcp");
+    if let Some(home) = home {
+        command.env("HOME", home);
+    }
     let transport = TokioChildProcess::new(command).expect("spawn ridl mcp");
     ().serve(transport).await.expect("MCP initialize handshake")
 }
@@ -769,9 +780,18 @@ fn spawn_lsp(args: &[&str]) -> Child {
 /// [`spawn_lsp`] with the server's current directory set to `cwd` when one
 /// is given.
 fn spawn_lsp_in(args: &[&str], cwd: Option<&Path>) -> Child {
+    spawn_lsp_in_with_home(args, cwd, None)
+}
+
+/// [`spawn_lsp_in`] with `HOME` set to `home` when one is given, so the
+/// server's cache is `home/.ridl/cache`.
+fn spawn_lsp_in_with_home(args: &[&str], cwd: Option<&Path>, home: Option<&Path>) -> Child {
     let mut command = StdCommand::new(env!("CARGO_BIN_EXE_ridl"));
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
+    }
+    if let Some(home) = home {
+        command.env("HOME", home);
     }
     command
         .arg("lsp")
@@ -1115,7 +1135,12 @@ impl LspSession {
 
     /// [`LspSession::start`] with the server running from `cwd`.
     fn start_in(root: &Path, cwd: Option<&Path>) -> LspSession {
-        let mut child = spawn_lsp_in(&[], cwd);
+        LspSession::start_in_with_home(root, cwd, None)
+    }
+
+    /// [`LspSession::start_in`] with `HOME` set to `home` when one is given.
+    fn start_in_with_home(root: &Path, cwd: Option<&Path>, home: Option<&Path>) -> LspSession {
+        let mut child = spawn_lsp_in_with_home(&[], cwd, home);
         let mut stdin = child.stdin.take().expect("piped stdin");
         let messages = read_messages(child.stdout.take().expect("piped stdout"));
         let initialize = RequestId::from(1);
@@ -1153,7 +1178,13 @@ impl LspSession {
     /// publish an earlier message caused precedes the `shutdown` response.
     /// Then sends `exit` and asserts the server exits 0. The request id is 2:
     /// `initialize` was 1, and no other request is sent in between.
-    fn shutdown_collecting_publishes(mut self) -> Vec<serde_json::Value> {
+    fn shutdown_collecting_publishes(self) -> Vec<serde_json::Value> {
+        self.shutdown_collecting().0
+    }
+
+    /// [`LspSession::shutdown_collecting_publishes`], also returning every
+    /// `window/showMessage` the server sent, in the same order.
+    fn shutdown_collecting(mut self) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
         let shutdown = RequestId::from(2);
         Message::Request(Request::new(
             shutdown.clone(),
@@ -1163,6 +1194,7 @@ impl LspSession {
         .write(&mut self.stdin)
         .expect("write shutdown");
         let mut publishes = Vec::new();
+        let mut shown = Vec::new();
         let deadline = Instant::now() + TIMEOUT;
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
@@ -1178,6 +1210,11 @@ impl LspSession {
                 {
                     publishes.push(notification.params);
                 }
+                Ok(Message::Notification(notification))
+                    if notification.method == "window/showMessage" =>
+                {
+                    shown.push(notification.params);
+                }
                 Ok(_) => {}
                 Err(err) => panic!("no response to shutdown within {TIMEOUT:?}: {err}"),
             }
@@ -1186,7 +1223,7 @@ impl LspSession {
         drop(self.stdin);
         let status = wait_for_exit(&mut self.child, "ridl lsp");
         assert_eq!(status.code(), Some(0), "a clean shutdown exits 0");
-        publishes
+        (publishes, shown)
     }
 }
 
@@ -1280,6 +1317,310 @@ fn lsp_new_file_uses_member_levels() {
         vec![("RIDL-100".to_string(), 3)],
         "{for_new_file:#?}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Remote units: both servers read the cache and never fetch
+// ---------------------------------------------------------------------------
+
+/// The consumer of `remote_support::consumer` with its signal untimed:
+/// RIDL-100 (`missing-timing`), the consumer's own Warning.
+const UNTIMED_CONSUMER: &str = "package app\n\nimport veh.common.Speed\n\n/// The dashboard.\ninterface Dash {\n  /// The speed.\n  signal speed: Speed\n}\n";
+
+/// The `(uri, diagnostics)` pairs of every publish, in order.
+fn published_lists(publishes: &[serde_json::Value]) -> Vec<(String, Vec<serde_json::Value>)> {
+    publishes
+        .iter()
+        .map(|params| {
+            (
+                params["uri"].as_str().expect("a uri").to_string(),
+                params["diagnostics"]
+                    .as_array()
+                    .expect("a diagnostics array")
+                    .clone(),
+            )
+        })
+        .collect()
+}
+
+/// `ridl mcp` resolves a cached remote unit and never fetches: the lookup
+/// lands in the cache, a hit count of zero on the stub, and no `ridl.lock`
+/// write.
+#[tokio::test]
+async fn mcp_reads_the_cache_and_never_fetches() {
+    use remote_support::{COMMON_UNIT, Stub, consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("mcp");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    let lock_before = std::fs::read_to_string(root.join("ridl.lock")).unwrap();
+    stub.reset_hits();
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect_with_home(Some(dir.path())).await;
+        let result = call_workspace_tool(
+            &client,
+            "ridl_resolve",
+            json!({"path": root.to_str().unwrap(), "name": "veh.common.Speed"}),
+        )
+        .await;
+        assert_ne!(result.is_error, Some(true), "{result:?}");
+        let text = tool_text(&result);
+        assert!(
+            text.contains(".ridl/cache") && text.contains("common.typl"),
+            "the declaration is read from the cache: {text}"
+        );
+        let check = call_workspace_tool(
+            &client,
+            "ridl_check",
+            json!({"path": root.to_str().unwrap()}),
+        )
+        .await;
+        let diagnostics = check.structured_content.unwrap()["diagnostics"].clone();
+        assert_eq!(
+            diagnostics.as_array().unwrap().len(),
+            0,
+            "the import resolves: {diagnostics}"
+        );
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("mcp remote timeout");
+    assert_eq!(stub.hits(), 0, "the MCP server never fetches");
+    assert_eq!(
+        std::fs::read_to_string(root.join("ridl.lock")).unwrap(),
+        lock_before
+    );
+}
+
+/// Without a cache entry, `ridl_check` reports MANI-104 whose message names
+/// `ridl check` as the fix, and still never fetches.
+#[tokio::test]
+async fn mcp_reports_a_cache_miss_as_mani_104() {
+    use remote_support::{COMMON_UNIT, Stub, consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("mcp-miss");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    let lock_before = std::fs::read_to_string(root.join("ridl.lock")).unwrap();
+    std::fs::remove_dir_all(dir.path().join(".ridl")).unwrap();
+    stub.reset_hits();
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect_with_home(Some(dir.path())).await;
+        let check = call_workspace_tool(
+            &client,
+            "ridl_check",
+            json!({"path": root.to_str().unwrap()}),
+        )
+        .await;
+        let diagnostics = check.structured_content.unwrap()["diagnostics"].clone();
+        let text = diagnostics.to_string();
+        assert!(
+            text.contains("MANI-104") && text.contains("run `ridl check`"),
+            "{text}"
+        );
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("mcp miss timeout");
+    assert_eq!(stub.hits(), 0, "the MCP server never fetches");
+    assert_eq!(
+        std::fs::read_to_string(root.join("ridl.lock")).unwrap(),
+        lock_before
+    );
+}
+
+/// `ridl_check` on a path inside a workspace member reports the member's
+/// diagnostics and a remote unit's spanned Error, which no member scope
+/// hides, while a sibling member's error stays out of the report.
+#[tokio::test]
+async fn mcp_member_scope_keeps_a_remote_units_spanned_error() {
+    use remote_support::{BROKEN_UNIT, Stub, member_consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("mcp-member");
+    let stub = Stub::serving(unit_tar(BROKEN_UNIT));
+    let member = member_consumer(&dir, stub.url());
+    dir.write(
+        "ws/ridl.toml",
+        &format!(
+            "[workspace]\nmembers = [\"app\", \"other\"]\n\n[imports]\n\"veh.common\" = \"{}\"\n",
+            stub.url()
+        ),
+    );
+    dir.write(
+        "ws/other/ridl.toml",
+        "[package]\nname = \"other\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "ws/other/other.typl",
+        "package other\n\ntype Bad : integer [10..5]\n",
+    );
+    // The fetch: exit 1, because the unit's range is TYPL-104.
+    let (code, _, stderr) = ridl(&member, dir.path(), &["check"]);
+    assert_eq!(code, 1, "{stderr}");
+    stub.reset_hits();
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect_with_home(Some(dir.path())).await;
+        let check = call_workspace_tool(
+            &client,
+            "ridl_check",
+            json!({"path": member.to_str().unwrap()}),
+        )
+        .await;
+        let diagnostics = check.structured_content.unwrap()["diagnostics"].clone();
+        let text = diagnostics.to_string();
+        assert!(
+            text.contains("TYPL-104") && text.contains("remote unit `veh.common`"),
+            "the remote unit's error is reported: {text}"
+        );
+        assert!(
+            !text.contains("other.typl"),
+            "the sibling member's error is outside the scope: {text}"
+        );
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("mcp member timeout");
+    assert_eq!(stub.hits(), 0, "the MCP server never fetches");
+}
+
+/// `ridl lsp` publishes the consumer's diagnostics with the remote import
+/// resolved, publishes nothing for a file of the remote unit, shows no
+/// message, and never fetches.
+#[test]
+fn lsp_resolves_a_cached_remote_unit_and_publishes_nothing_for_it() {
+    use remote_support::{Stub, WARNING_UNIT, consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("lsp");
+    let stub = Stub::serving(unit_tar(WARNING_UNIT));
+    let root = consumer(&dir, stub.url());
+    dir.write("app/app.ridl", UNTIMED_CONSUMER);
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    stub.reset_hits();
+    let session = LspSession::start_in_with_home(&root, Some(&root), Some(dir.path()));
+    let (publishes, shown) = session.shutdown_collecting();
+    let published = published_lists(&publishes);
+    assert!(
+        published
+            .iter()
+            .all(|(uri, _)| !uri.contains(".ridl/cache")),
+        "no diagnostic is published for a remote file: {published:?}"
+    );
+    let (_, app) = published
+        .iter()
+        .find(|(uri, _)| uri.ends_with("app.ridl"))
+        .expect("the consumer's untimed signal is published");
+    let codes: Vec<&str> = app.iter().map(|d| d["code"].as_str().unwrap()).collect();
+    assert_eq!(codes, ["RIDL-100"], "the import resolves: {app:?}");
+    assert!(shown.is_empty(), "no notice on a cache hit: {shown:?}");
+    assert_eq!(stub.hits(), 0, "the language server never fetches");
+}
+
+/// Without a cache entry, `ridl lsp` shows MANI-104 once as a window
+/// message naming `ridl check`, publishes the consumer's unresolved import
+/// under its own file, and never fetches.
+#[test]
+fn lsp_shows_a_cache_miss_once_as_a_message() {
+    use remote_support::{COMMON_UNIT, Stub, consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("lsp-miss");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    let lock_before = std::fs::read_to_string(root.join("ridl.lock")).unwrap();
+    std::fs::remove_dir_all(dir.path().join(".ridl")).unwrap();
+    stub.reset_hits();
+    let mut session = LspSession::start_in_with_home(&root, Some(&root), Some(dir.path()));
+    // A second publish round: the notice is shown once, not on every one.
+    session.notify(
+        "textDocument/didOpen",
+        json!({"textDocument": {
+            "uri": file_uri(&root.join("app.ridl")),
+            "languageId": "ridl",
+            "version": 1,
+            "text": std::fs::read_to_string(root.join("app.ridl")).unwrap(),
+        }}),
+    );
+    let (publishes, shown) = session.shutdown_collecting();
+    assert_eq!(shown.len(), 1, "the notice is shown once: {shown:?}");
+    let message = shown[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("MANI-104") && message.contains("run `ridl check`"),
+        "{message}"
+    );
+    assert_eq!(shown[0]["type"], 1, "an error message: {shown:?}");
+    let published = published_lists(&publishes);
+    assert!(
+        published
+            .iter()
+            .all(|(uri, _)| !uri.contains(".ridl/cache")),
+        "{published:?}"
+    );
+    let (_, app) = published
+        .iter()
+        .find(|(uri, _)| uri.ends_with("app.ridl"))
+        .expect("the consumer's unresolved import is published");
+    assert!(
+        app.iter()
+            .any(|d| d["message"].as_str().unwrap().contains("unresolved import")),
+        "{app:?}"
+    );
+    assert_eq!(stub.hits(), 0, "the language server never fetches");
+    assert_eq!(
+        std::fs::read_to_string(root.join("ridl.lock")).unwrap(),
+        lock_before
+    );
+}
+
+/// A loader finding spanned at a remote file is not published either: a
+/// member and the remote unit both declare `veh.common`, which is MANI-014
+/// at the remote manifest under the cache; the member's own untimed signal
+/// is still published.
+#[test]
+fn lsp_publishes_no_loader_finding_for_a_remote_file() {
+    use remote_support::{COMMON_UNIT, Stub, member_consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("lsp-loader");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let member = member_consumer(&dir, stub.url());
+    dir.write(
+        "ws/ridl.toml",
+        &format!(
+            "[workspace]\nmembers = [\"app\", \"common\"]\n\n[imports]\n\"veh.common\" = \"{}\"\n",
+            stub.url()
+        ),
+    );
+    dir.write(
+        "ws/common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "ws/common/common.typl",
+        "package veh.common\n\ntype Local : integer [0..1]\n",
+    );
+    dir.write("ws/app/app.ridl", UNTIMED_CONSUMER);
+    let (code, _, stderr) = ridl(&member, dir.path(), &["check"]);
+    assert_eq!(code, 1, "{stderr}");
+    assert!(
+        stderr.contains("MANI-014") && stderr.contains(".ridl/cache"),
+        "{stderr}"
+    );
+    stub.reset_hits();
+    let root = member.parent().unwrap();
+    let session = LspSession::start_in_with_home(root, Some(root), Some(dir.path()));
+    let (publishes, _) = session.shutdown_collecting();
+    let published = published_lists(&publishes);
+    assert!(
+        published
+            .iter()
+            .all(|(uri, _)| !uri.contains(".ridl/cache")),
+        "no loader finding is published for a remote file: {published:?}"
+    );
+    let (_, app) = published
+        .iter()
+        .find(|(uri, _)| uri.ends_with("app.ridl"))
+        .expect("the member's untimed signal is published");
+    assert!(app.iter().any(|d| d["code"] == "RIDL-100"), "{app:?}");
+    assert_eq!(stub.hits(), 0, "the language server never fetches");
 }
 
 // ---------------------------------------------------------------------------

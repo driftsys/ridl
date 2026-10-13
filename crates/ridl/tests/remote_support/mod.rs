@@ -131,6 +131,24 @@ pub fn consumer(dir: &TempDir, url: &str) -> PathBuf {
     dir.path().join("app")
 }
 
+/// A workspace `ws` whose root pins `veh.common` to `url`, with one member
+/// `app` that imports `veh.common.Speed`. Returns the member directory.
+pub fn member_consumer(dir: &TempDir, url: &str) -> PathBuf {
+    dir.write(
+        "ws/ridl.toml",
+        &format!("[workspace]\nmembers = [\"app\"]\n\n[imports]\n\"veh.common\" = \"{url}\"\n"),
+    );
+    dir.write(
+        "ws/app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "ws/app/app.ridl",
+        "package app\nimport veh.common.Speed\ntype Fast: Speed\n",
+    );
+    dir.path().join("ws/app")
+}
+
 /// A local HTTP stub over `std::net::TcpListener`, serving a fixed body for
 /// every request and counting the requests it receives — no real network is
 /// ever used. The request counter is what proves a cache hit skips the

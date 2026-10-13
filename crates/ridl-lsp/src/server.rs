@@ -57,7 +57,10 @@ use ridl_core::diag::{
 };
 use ridl_core::lint::{LintScopes, apply_lint_levels};
 use ridl_core::package::{Package, PackageOrigin, Workspace};
-use ridl_core::{LoadedWorkspace, find_root, load_workspace, profile_of_path, std_package};
+use ridl_core::{
+    Cache, Frozen, LoadedWorkspace, RemoteAccess, find_root, load_workspace_with_remotes,
+    profile_of_path, std_package,
+};
 use ridl_sem::{
     CheckedWorkspace, check_package, check_workspace, resolve_package, unclaimed_backend_keys,
 };
@@ -277,6 +280,17 @@ struct ServerState {
     /// The load-time loader findings per path, converted once; dropped per
     /// file when its buffer diverges from the loaded text (see module docs).
     loader_diagnostics: BTreeMap<String, Vec<lt::Diagnostic>>,
+    /// The directories a remote unit is read from — each loaded unit's
+    /// directory and the cache root ([`ridlc::remote_dirs`]). A remote unit
+    /// is a read-only dependency: it is checked so that the consumer's
+    /// references resolve, and no diagnostic is published for a file under
+    /// one of these, not even a loader finding at a unit that did not load.
+    remote_dirs: Vec<PathBuf>,
+    /// The detached Errors of the load — a remote unit that is pinned but not
+    /// cached (MANI-104), or not pinned (MANI-103) — as one message, shown
+    /// once by the next [`ServerState::publish_all`]. A detached span has no
+    /// file to publish under, so `convert_loader_diagnostics` drops it.
+    remote_notice: Option<String>,
     /// Paths whose buffer text diverged from the loaded text.
     edited: HashSet<String>,
     /// Paths the last publish sent a non-empty list for — the set that gets
@@ -307,6 +321,8 @@ impl ServerState {
             overlays: HashMap::new(),
             line_indexes: HashMap::new(),
             loader_diagnostics: BTreeMap::new(),
+            remote_dirs: Vec::new(),
+            remote_notice: None,
             edited: HashSet::new(),
             published: HashSet::new(),
             fixes: HashMap::new(),
@@ -326,9 +342,15 @@ impl ServerState {
     /// opened before its `ridl.toml` existed) moves its buffer onto the
     /// loaded input and stops being an overlay, so the file is analyzed once,
     /// as a member of its package.
+    ///
+    /// The remote units of the manifest's `[imports]` are read from the
+    /// cache under [`Frozen::Yes`]: the server never fetches and never
+    /// writes `ridl.lock`. A pin the cache does not hold is MANI-104, kept
+    /// as [`ServerState::remote_notice`].
     fn load(&mut self, dir: &Path) -> io::Result<()> {
+        let cache = Cache::user_default();
         // `report_scope` is not used: the server publishes the diagnostics of
-        // every loaded file.
+        // every loaded file of the consumer.
         let LoadedWorkspace {
             workspace,
             mut diagnostics,
@@ -340,8 +362,20 @@ impl ServerState {
             codegen_header: _,
             backends: _,
             imports: _,
-            remote_units: _,
-        } = load_workspace(&mut self.db, dir)?;
+            remote_units,
+        } = load_workspace_with_remotes(
+            &mut self.db,
+            dir,
+            &[],
+            RemoteAccess {
+                frozen: Frozen::Yes,
+                cache: &cache,
+            },
+        )
+        .map_err(|error| match error {
+            ridl_core::LoadError::Io(e) => e,
+            _ => unreachable!("no overlay error is possible without overlays"),
+        })?;
         if workspace.packages(&self.db).is_empty()
             && let Some(root) = find_root(dir)
         {
@@ -363,6 +397,24 @@ impl ServerState {
                     .insert(file.path(&self.db).clone(), *package);
             }
         }
+        self.remote_dirs = ridlc::remote_dirs(&remote_units, &cache);
+        // A detached Error has no file to publish under, so it is kept as a
+        // notice instead; `convert_loader_diagnostics` would drop it.
+        let notice: Vec<String> = diagnostics
+            .iter()
+            .filter(|diagnostic| {
+                diagnostic.severity == Severity::Error
+                    && sources.path(diagnostic.primary.file).is_none()
+            })
+            .map(|diagnostic| {
+                if diagnostic.code == DiagCode::NONE {
+                    diagnostic.message.clone()
+                } else {
+                    format!("`{}`: {}", diagnostic.code.as_str(), diagnostic.message)
+                }
+            })
+            .collect();
+        self.remote_notice = (!notice.is_empty()).then(|| notice.join("\n"));
         // `analyze` never sees the loader's findings, so their levels are
         // applied here, once, before the conversion (ADR-0024
         // decision 6). A manifest's MANI-010 is itself a lint, and its file is in
@@ -796,20 +848,31 @@ impl ServerState {
         // decision 6). `allow` removes a diagnostic before conversion, so it is
         // never published.
         apply_lint_levels(&mut all, &sources, &self.lints);
+        // A remote unit's packages were checked so that the consumer's
+        // references resolve; nothing is published for their files.
+        all.retain(|diagnostic| {
+            sources
+                .path(diagnostic.primary.file)
+                .is_none_or(|path| !self.is_remote_path(path))
+        });
         batch(all, &table)
     }
 
     /// Recomputes the diagnostics for every package, merges the still-valid
     /// loader findings, and publishes: one notification per path with
     /// findings, plus an explicit empty list for every path that had
-    /// findings before and is clean now.
+    /// findings before and is clean now. A notice the load left
+    /// ([`ServerState::remote_notice`]) is shown first, once.
     fn publish_all(&mut self, connection: &Connection) -> Result<(), Error> {
+        if let Some(notice) = self.remote_notice.take() {
+            show_message(connection, lt::MessageType::ERROR, notice)?;
+        }
         let Batch {
             mut diagnostics,
             fixes,
         } = self.analyze();
         for (path, loader) in &self.loader_diagnostics {
-            if self.edited.contains(path) {
+            if self.edited.contains(path) || self.is_remote_path(path) {
                 continue;
             }
             let entry = diagnostics.entry(path.clone()).or_default();
@@ -826,6 +889,12 @@ impl ServerState {
         self.published = current;
         self.fixes = fixes;
         Ok(())
+    }
+
+    /// Whether `path` is under a directory a remote unit is read from.
+    fn is_remote_path(&self, path: &str) -> bool {
+        let path = Path::new(path);
+        self.remote_dirs.iter().any(|dir| path.starts_with(dir))
     }
 
     /// The quick fixes whose diagnostic touches the requested range.

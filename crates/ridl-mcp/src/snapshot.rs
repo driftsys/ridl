@@ -335,8 +335,17 @@ pub(crate) mod tests {
         .unwrap()
         .unwrap()
         .unwrap();
-        // The tools load no remote unit, so the import under the pinned key
-        // is the resolver's uncoded error naming the unit's URL.
+        // The tools read the cache and never fetch: a URL with no `ridl.lock`
+        // entry is MANI-103, with the fix named, and the import under the
+        // pinned key binds nothing, so it is the resolver's uncoded error
+        // naming the unit's URL.
+        assert!(
+            snap.output.diagnostics.iter().any(|d| {
+                d.code.as_str() == "MANI-103" && d.message.contains("run `ridl check`")
+            }),
+            "{:?}",
+            snap.output.diagnostics
+        );
         assert!(
             snap.output.diagnostics.iter().any(|d| {
                 d.severity == ridl_core::Severity::Error

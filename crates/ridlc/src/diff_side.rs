@@ -208,8 +208,16 @@ pub fn load_diff_side(
             sources: output.sources,
         });
     }
+    // A remote unit is not part of the consumer's contract: a change in a
+    // dependency is the dependency's diff, so its packages are left out of
+    // the side. They were loaded so that the consumer's imports resolve.
     Ok(DiffSide {
-        packages: output.checked.into_iter().map(|c| c.ir).collect(),
+        packages: output
+            .checked
+            .into_iter()
+            .filter(|c| !crate::is_remote(&c.ir, &output.remote_units))
+            .map(|c| c.ir)
+            .collect(),
         system: output.system,
     })
 }

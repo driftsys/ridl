@@ -219,24 +219,6 @@ fn an_old_lock_is_mani_108_frozen_and_repaired_otherwise() {
     );
 }
 
-/// A workspace `ws` whose root pins `veh.common` to `url`, with one member
-/// `app` that imports `veh.common.Speed`. Returns the member directory.
-fn member_consumer(dir: &TempDir, url: &str) -> std::path::PathBuf {
-    dir.write(
-        "ws/ridl.toml",
-        &format!("[workspace]\nmembers = [\"app\"]\n\n[imports]\n\"veh.common\" = \"{url}\"\n"),
-    );
-    dir.write(
-        "ws/app/ridl.toml",
-        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
-    );
-    dir.write(
-        "ws/app/app.ridl",
-        "package app\nimport veh.common.Speed\ntype Fast: Speed\n",
-    );
-    dir.path().join("ws/app")
-}
-
 /// A `ridl check` run from inside a workspace member still reports a remote
 /// unit's spanned error, which no member scope hides.
 #[test]
@@ -300,4 +282,197 @@ fn a_member_entry_still_sees_mani_014_on_the_remote_manifest() {
         stderr.contains("MANI-014") && stderr.contains(".ridl/cache"),
         "{stderr}"
     );
+}
+
+/// `ridl baseline` publishes the consumer's snapshots only: the remote
+/// package gets no `.ir.json` under `.ridl/baseline`.
+#[test]
+fn baseline_publishes_the_consumers_packages_only() {
+    let dir = TempDir::new("baseline");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    let (code, _, stderr) = ridl(&root, dir.path(), &["lock"]);
+    assert_eq!(code, 0, "{stderr}");
+    stub.reset_hits();
+    let (code, _, stderr) = ridl(&root, dir.path(), &["baseline"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stub.hits(), 0, "`ridl baseline` reads the cache");
+    let published: Vec<String> = std::fs::read_dir(root.join(".ridl/baseline"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        published.iter().any(|f| f == "app.ir.json"),
+        "{published:?}"
+    );
+    assert!(
+        !published.iter().any(|f| f.starts_with("veh.common")),
+        "{published:?}"
+    );
+}
+
+/// `ridl lock` allocates numbers in the consumer's units only, reading the
+/// remote unit from the cache without a fetch; the remote unit's
+/// `interfaces.lock` is its owner's, so nothing under the cache is written.
+#[test]
+fn lock_writes_the_consumers_units_only() {
+    let dir = TempDir::new("lock");
+    let stub = Stub::serving(unit_tar(&[
+        COMMON_UNIT[0],
+        (
+            "common.ridl",
+            "package veh.common\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n\ninterface Probe {\n  signal s: Speed @10ms\n}\n",
+        ),
+    ]));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    stub.reset_hits();
+    let (code, stdout, stderr) = ridl(&root, dir.path(), &["lock"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stub.hits(), 0, "`ridl lock` never fetches");
+    assert!(stdout.contains("allocated Dash"), "{stdout}");
+    assert!(!stdout.contains("Probe"), "{stdout}");
+    assert!(root.join("interfaces.lock").is_file());
+    let cache = dir.path().join(".ridl/cache");
+    let mut stack = vec![cache];
+    let mut visited = 0;
+    while let Some(next) = stack.pop() {
+        for entry in std::fs::read_dir(&next).unwrap() {
+            let path = entry.unwrap().path();
+            visited += 1;
+            assert_ne!(
+                path.file_name().unwrap(),
+                "interfaces.lock",
+                "the cache is never written"
+            );
+            if path.is_dir() {
+                stack.push(path);
+            }
+        }
+    }
+    assert!(visited > 0, "the cache holds the unit's tree");
+}
+
+/// `ridl test` samples the consumer's clauses only: a clause of the remote
+/// unit that faults on every sample does not fail the run.
+#[test]
+fn test_runs_the_consumers_packages_only() {
+    let dir = TempDir::new("test");
+    // The clause faults on every sample (division by zero), the `ridl test`
+    // exit-1 cell of ADR-0010 decision 1; the clause form follows
+    // `crates/ridl/tests/property_cli.rs`.
+    let stub = Stub::serving(unit_tar(&[
+        COMMON_UNIT[0],
+        (
+            "common.ridl",
+            "package veh.common\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n\ninterface Probe {\n  command half(s: Speed) [\n    require 100.0 / (s - s) > 0.0\n  ] @[..50ms]\n}\n",
+        ),
+    ]));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    stub.reset_hits();
+    let (code, stdout, stderr) = ridl(&root, dir.path(), &["test"]);
+    assert_eq!(
+        code, 0,
+        "the faulting clause of the remote unit is not sampled: {stdout}{stderr}"
+    );
+    assert_eq!(stub.hits(), 0, "`ridl test` never fetches");
+    assert!(stdout.contains("package app"), "{stdout}");
+    assert!(!stdout.contains("veh.common"), "{stdout}");
+}
+
+/// `ridl diff` over two source trees compares the consumer's packages only:
+/// a dependency whose type changed between the two sides is not the
+/// consumer's breaking change.
+#[test]
+fn diff_compares_the_consumers_packages_only() {
+    let dir = TempDir::new("diff");
+    let old_stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let new_stub = Stub::serving(unit_tar(&[
+        COMMON_UNIT[0],
+        (
+            "common.typl",
+            "package veh.common\n\ntype Speed : m/s [0.0..70.0 step 0.5]\n",
+        ),
+    ]));
+    let old = consumer(&dir, old_stub.url());
+    let new = TempDir::new("diff-new");
+    let new_root = consumer(&new, new_stub.url());
+    for root in [&old, &new_root] {
+        let (code, _, stderr) = ridl(root, dir.path(), &["check"]);
+        assert_eq!(code, 0, "{stderr}");
+    }
+    let (code, stdout, stderr) = ridl(
+        &old,
+        dir.path(),
+        &[
+            "diff",
+            "--format",
+            "json",
+            old.to_str().unwrap(),
+            new_root.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, 0, "the consumer did not change: {stderr}");
+    assert!(stdout.contains("\"identical\""), "{stdout}");
+    assert!(!stdout.contains("veh.common"), "{stdout}");
+
+    // The positive half: the same change in the consumer's own type is its
+    // breaking change.
+    new.write(
+        "app/app.ridl",
+        "package app\n\nimport veh.common.Speed\n\n/// The dashboard.\ninterface Dash {\n  /// The speed.\n  signal speed: Speed @20ms\n}\n",
+    );
+    let (code, stdout, _) = ridl(
+        &old,
+        dir.path(),
+        &[
+            "diff",
+            "--format",
+            "json",
+            old.to_str().unwrap(),
+            new_root.to_str().unwrap(),
+        ],
+    );
+    assert_ne!(code, 0, "the consumer's own change is reported: {stdout}");
+    assert!(stdout.contains("app"), "{stdout}");
+}
+
+/// The note `ridl build` prints beside a compatible list says a remote
+/// unit's catalog is its owner's.
+#[test]
+fn the_catalog_note_names_the_owner() {
+    let dir = TempDir::new("note");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    let out = TempDir::new("note-out");
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    for _ in 0..2 {
+        let (code, _, stderr) = ridl(&root, dir.path(), &["lock"]);
+        assert_eq!(code, 0, "{stderr}");
+        let (code, _, stderr) = ridl(&root, dir.path(), &["baseline"]);
+        assert_eq!(code, 0, "{stderr}");
+    }
+    let (code, _, stderr) = ridl(
+        &root,
+        dir.path(),
+        &[
+            "build",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+            "--emit",
+            "catalog",
+        ],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    assert!(
+        stderr.contains("note: the workspace names `[imports]`"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("published by its owner"), "{stderr}");
 }

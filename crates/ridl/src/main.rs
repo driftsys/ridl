@@ -1474,9 +1474,12 @@ fn desk_check(
         return Ok(());
     }
     let report_scope = output.report_scope;
+    // The baseline holds the consumer's packages only (`run_baseline`), so
+    // the desk compares the same set: a remote unit is its owner's contract.
     let current: Vec<ridl_ir::v2::Package> = output
         .checked
         .into_iter()
+        .filter(|checked| !ridlc::is_remote(&checked.ir, &output.remote_units))
         .map(|checked| checked.ir)
         .collect();
 
