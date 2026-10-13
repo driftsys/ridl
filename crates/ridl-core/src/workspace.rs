@@ -3993,6 +3993,7 @@ service:veh.common.climate 2
             ("below", Some("cluster/ridl.toml")),
             ("deep", Some("a/b/ridl.toml")),
             ("hidden", None),
+            ("dot-inside-the-name", Some("a.b/ridl.toml")),
             ("manifest-is-a-directory", None),
             #[cfg(unix)]
             ("symlinked-directory", None),
@@ -4017,6 +4018,9 @@ service:veh.common.climate 2
                 }
                 "hidden" => {
                     dir.write(".cache/ridl.toml", nested);
+                }
+                "dot-inside-the-name" => {
+                    dir.write("a.b/ridl.toml", nested);
                 }
                 "manifest-is-a-directory" => {
                     dir.write("sub/ridl.toml/x.txt", "");
