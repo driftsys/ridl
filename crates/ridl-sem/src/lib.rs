@@ -32,8 +32,8 @@ pub use check::{
     CheckedPackage, ConstValue, UnitNumbering, check_package, const_value, unit_numbering,
 };
 pub use resolve::{
-    LinkError, LinkTarget, Resolution, Symbol, SymbolKind, doc_link_members, resolve_doc_link,
-    resolve_package,
+    LinkError, LinkTarget, Resolution, Symbol, SymbolKind, declared_symbols, doc_link_members,
+    resolve_doc_link, resolve_package,
 };
 pub use rsdl::{CheckedSystem, check_system, lower_system, unclaimed_backend_keys};
 pub use workspace::{CheckedWorkspace, check_workspace};

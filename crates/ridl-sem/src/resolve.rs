@@ -674,11 +674,9 @@ fn collect_used_names(db: &dyn salsa::Database, files: &[InputFile]) -> HashSet<
 /// Every declaration in `package`, first wins, as bare-name symbols. Used for
 /// `ridl.std` and for looking up an imported symbol in its defining package;
 /// duplicate diagnostics for `package` are raised when `package` is resolved
-/// in its own right, not here.
-pub(crate) fn declared_symbols(
-    db: &dyn salsa::Database,
-    package: Package,
-) -> HashMap<String, Symbol> {
+/// in its own right, not here. Language server completion reads it to offer
+/// the declarations that a qualified reference binds.
+pub fn declared_symbols(db: &dyn salsa::Database, package: Package) -> HashMap<String, Symbol> {
     let package_name = package.name(db).clone();
     let mut symbols: HashMap<String, Symbol> = HashMap::new();
     for file in package.files(db) {

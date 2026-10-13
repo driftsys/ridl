@@ -64,8 +64,8 @@ use lsp_types as lt;
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace, package_of, service_catalog};
 use ridl_sem::{
-    ConstValue, LinkTarget, Symbol, SymbolKind, check_system, const_value, doc_link_members,
-    resolve_doc_link, resolve_package,
+    ConstValue, LinkTarget, Symbol, SymbolKind, check_system, const_value, declared_symbols,
+    doc_link_members, resolve_doc_link, resolve_package,
 };
 use ridl_syntax::ast::{AstNode, Import, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
@@ -234,7 +234,6 @@ pub fn rsdl_completion(
             items.extend(qualified_interface_items(
                 db,
                 ws,
-                std,
                 packages,
                 pkg.name(db),
                 &resolution.symbols,
@@ -315,7 +314,6 @@ pub fn rsdl_completion(
 fn qualified_interface_items(
     db: &dyn salsa::Database,
     ws: Workspace,
-    std: Package,
     packages: &[Package],
     from: &str,
     visible: &HashMap<String, Symbol>,
@@ -331,11 +329,8 @@ fn qualified_interface_items(
         if package_of(db, ws, package_name.clone()) != Some(*package) {
             continue;
         }
-        let resolution = resolve_package(db, ws, *package, std);
-        for symbol in resolution.symbols.values() {
-            // A name the package imports belongs to the package that declares it.
-            if symbol.package != *package_name
-                || symbol.kind != SymbolKind::Interface
+        for symbol in declared_symbols(db, *package).values() {
+            if symbol.kind != SymbolKind::Interface
                 || (symbol.internal && package_name != from)
                 || seen.contains(&(symbol.package.as_str(), symbol.name.as_str()))
             {

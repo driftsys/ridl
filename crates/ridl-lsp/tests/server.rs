@@ -4032,13 +4032,19 @@ fn rsdl_requires_completion_offers_qualified_interfaces() {
         "adas/hidden.ridl",
         "package veh.adas\n\ninternal interface Hidden {\n\x20 signal on: Flag @[100ms..1s]\n}\n",
     );
+    // A package that imports one of its own interfaces under an alias binds
+    // that interface under two names.
+    dir.write(
+        "adas/selfalias.ridl",
+        "package veh.adas\n\nimport veh.adas.CruiseControl as SelfAlias\n",
+    );
     dir.write(
         "topology/own.ridl",
         "package veh.topology\n\ninterface Own {\n\x20 signal on: boolean @[1s..10s]\n}\n",
     );
     dir.write(
         "extra/telemetry.ridl",
-        "package veh.extra\n\ninterface Telemetry {\n\x20 signal up: boolean @[1s..10s]\n}\n",
+        "package veh.extra\n\ninterface Telemetry {\n\x20 signal up: boolean @[1s..10s]\n}\n\ninterface Own {\n\x20 signal up: boolean @[1s..10s]\n}\n",
     );
     let (client, server) = start(uri_of(dir.path()));
 
@@ -4056,7 +4062,12 @@ fn rsdl_requires_completion_offers_qualified_interfaces() {
     let got = labels(&items);
     // An interface of a package the file does not import, and one of an
     // imported package that is not imported by name.
-    for label in ["veh.extra.Telemetry", "veh.adas.CruiseControl"] {
+    // Interfaces with the same name in two packages are told apart by package.
+    for label in [
+        "veh.extra.Telemetry",
+        "veh.adas.CruiseControl",
+        "veh.extra.Own",
+    ] {
         assert!(got.contains(&label), "`{label}` is offered: {got:?}");
         assert_eq!(
             kind_of(&items, label),
@@ -4074,11 +4085,18 @@ fn rsdl_requires_completion_offers_qualified_interfaces() {
         assert!(got.contains(&bare), "`{bare}` is offered: {got:?}");
         assert!(!got.contains(&qualified), "no `{qualified}`: {got:?}");
     }
-    // No internal interface of another package, no interface of a buffer
-    // outside the workspace, no package qualifying an interface it only
-    // imports, no interface of `ridl.std`.
+    // An interface bound under two names is offered once.
+    let once = got
+        .iter()
+        .filter(|label| **label == "veh.adas.CruiseControl")
+        .count();
+    assert_eq!(once, 1, "{got:?}");
+    // No internal interface of another package, no declaration that is not an
+    // interface, no interface of a buffer outside the workspace, no package
+    // qualifying an interface it only imports, no interface of `ridl.std`.
     for label in [
         "veh.adas.Hidden",
+        "veh.adas.Flag",
         "Hidden",
         "veh.loose.Loose",
         "veh.topology.LaneAssist",
