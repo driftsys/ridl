@@ -162,8 +162,20 @@ at epic close) and cites these decisions by number.
     attribute, because the layout belongs to the separate `#[repr(C)]` struct of
     that record's decision 1 and the generated codec between the two.
     `#[repr(transparent)]` on a scalar newtype stands, because it constrains
-    nothing. Removing the attribute from the domain types is roadmap story
+    nothing. Removing the attribute from the domain types was roadmap story
     E11.12's, with the `repr(C)` backend that replaces it.
+
+    **Amendment (2026-10-12) — the removal has landed, ahead of that backend.**
+    The Rust backend no longer emits `#[repr(C)]` for a `fixed_layout` struct;
+    `emit_struct` emits no layout attribute at all, and
+    `a_fixed_layout_struct_carries_no_layout_attribute` pins it. The sequencing
+    above tied the removal to the backend that replaces the attribute, which is
+    not built. It is taken earlier because
+    [ADR-0029](ADR-0029-stability-policy.md) freezes the generated crate: the
+    attribute is part of that surface, so removing it after the surface's row is
+    added would be a break of a frozen surface, where removing it before costs
+    nothing. The layout struct of ADR-0020 decision 1 is unaffected — it is a
+    separate generated type and carries its own attribute when it is built.
 
 14. **Release, tagging, and publishing are maintainer acts.** The E1 milestone
     is the v0.1 preview, but the agent does not run `just release`, push tags,

@@ -1122,7 +1122,6 @@ impl ::core::default::Default for WarningFlags {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq)]
-#[repr(C)]
 pub struct SpeedLimitPayload {
     /// # Rules
     ///
@@ -1192,7 +1191,6 @@ impl ::core::default::Default for SensorResult {
     }
 }
 #[derive(Debug, Clone, PartialEq)]
-#[repr(C)]
 pub struct SensorReading {
     /// # Rules
     ///

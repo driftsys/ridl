@@ -584,7 +584,7 @@ pub trait ScannableSignals: SignalReader {
     fn generation(&self, iface: InterfaceNo) -> u64;
     fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize;
 }
-pub struct Watermark { pub iface: InterfaceNo, pub generation: u64, pub seq: u64 }
+pub struct Watermark { pub iface: InterfaceNo, pub generation: u64 }
 pub struct Changed { pub iface: InterfaceNo, pub ord: Ordinal, pub seq: u64 }
 
 /// Extension: reads of several signals of one interface from one publication.
@@ -600,6 +600,10 @@ pub trait Wakeable {
 }
 pub enum Interest { Outcome(Correlation), Slot, Event(InterfaceNo), Claim(InterfaceNo) }
 ```
+
+`Watermark` has no sequence number; see
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10's
+2026-10-12 amendment. `Changed::seq` carries each signal's own.
 
 `Encoded` (since 2026-10-10) states the payload encoding of the bytes a port
 carries. One session has one encoding (the frame specification's rule), so a
@@ -968,9 +972,10 @@ is a breaking change (ADR-0021 decision 10); streams have no story yet.
 ([ADR-0007](../decisions/ADR-0007-e1-execution.md) decision 14's 2026-09-21
 amendment, [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
 decision 10); the release mechanics, including that the tag is a maintainer act,
-are ADR-0007 decision 14. What counts as a breaking 0.x change, and the crate's
-still-open API questions, are
-[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10.
+are ADR-0007 decision 14. What counts as a breaking 0.x change is
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10;
+its 2026-10-12 amendment records that the API questions of
+[driftsys/ridl#350](https://github.com/driftsys/ridl/issues/350) are settled.
 
 ## References
 

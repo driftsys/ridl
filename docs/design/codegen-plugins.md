@@ -127,9 +127,13 @@ the same generated impls as the IR and the model (`request_to_json`,
 `ridl_ir::codegen`). The request's `model` is the same JSON value as the
 `--emit codegen-model` artifact, one indentation level deeper, so the two are
 equal as JSON but not byte for byte; a plugin author's fixture is therefore a
-file `ridlc` wrote, wrapped. The reader keeps the IR's nesting ceiling of 1,000
-JSON levels; the deepest request the front end admits nests to 265 (the model's
-264 plus one for the field), and a plugin's parser must provision that much.
+file `ridlc` wrote, wrapped. `--emit codegen-request` writes the whole request
+through the same renderer, to `<base>.codegen-request.json`, so the wrapper
+itself is a file `ridlc` wrote too; it accepts options where the model emit
+refuses them, because `options` is a field of what it writes
+(driftsys/ridl#725). The reader keeps the IR's nesting ceiling of 1,000 JSON
+levels; the deepest request the front end admits nests to 265 (the model's 264
+plus one for the field), and a plugin's parser must provision that much.
 `request_from_json` ignores an unknown key at every nesting level of the
 request, so a plugin built on `ridl-ir` keeps reading the requests of a later
 `ridl` that adds a field. It still rejects an unknown enum name, because that
@@ -203,6 +207,7 @@ let backend: Box<dyn codegen::Backend + '_> = match emit {
     Emit::Proto => Box::new(ridl_backend_proto::Backend::new(raw)),
     Emit::Flatbuffers => Box::new(ridl_backend_flatbuffers::Backend::new(raw)),
     Emit::CodegenModel => Box::new(codegen::ModelBackend),
+    Emit::CodegenRequest => Box::new(codegen::RequestBackend),
     Emit::Catalog => /* the catalog descriptor, written directly, no request */,
     Emit::IrJson | Emit::IrText | Emit::IrBinary => /* a direct IR dump, no request */,
 };

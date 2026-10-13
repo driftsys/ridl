@@ -1660,11 +1660,6 @@ fn emit_struct(
     let name = ident(declared(decl.name.as_ref()));
     let attrs = decl_attrs(ctx, decl, derived);
     let vis = vis_tokens(decl.visibility);
-    let repr = if sd.fixed_layout {
-        quote! { #[repr(C)] }
-    } else {
-        quote! {}
-    };
 
     let fields = sd
         .slots
@@ -1678,7 +1673,6 @@ fn emit_struct(
 
     quote! {
         #attrs
-        #repr
         #vis struct #name {
             #(#fields),*
         }

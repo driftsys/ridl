@@ -5,10 +5,10 @@ the steering note did not fix is listed in section 15 with its confirmation or
 its revision.
 
 Satisfies: driftsys/ridl#801. Implements decisions A1, A2, A3, A4 and A5 of
-`docs/wip/2026-10-06-ws-and-payload-formats-steering.md` (section 2), which are
-fixed and not reopened here. Source prompt:
-`docs/wip/ws-and-payload-formats-handoff.md`, "Decided by Sebastien before this
-session".
+`docs/archive/2026-10-06-ws-and-payload-formats-steering.md` (section 2), which
+are fixed and not reopened here. Source prompt:
+`docs/archive/ws-and-payload-formats-handoff.md`, "Decided by Sebastien before
+this session".
 
 ## 1. Intent
 
@@ -804,7 +804,7 @@ Checked on 2026-10-10 against origin/main (376aa927):
 | Lane G3, PR #800                               | `docs/book/lints.md` (one RIDL-417 row), `ridl-core` `diag.rs`                                                                                             | The lint task adds one RSDL-807 row and one catalogue entry; a textual merge. No ordering constraint.                                                                                                           |
 | Lane G5 (gates)                                | `justfile` `gate-parity` member list                                                                                                                       | This stage adds no `build` member; no constraint.                                                                                                                                                               |
 | #754 observation (`feat/754-propagation-hook`) | merged (#766, #769); both worktrees are ancestors of main                                                                                                  | None; the face this stage parameterises is the one on main.                                                                                                                                                     |
-| PR #803 (steering note)                        | `docs/ROADMAP.md`, two wip files                                                                                                                           | This spec cites the steering note at its wip path; no file overlap.                                                                                                                                             |
+| PR #803 (steering note)                        | `docs/ROADMAP.md`, two files now archived                                                                                                                  | This spec cites the steering note at its wip path; no file overlap.                                                                                                                                             |
 | Stale branch `docs/e17-0-layout-inputs-design` | ADR-0018, ADR-0020 text                                                                                                                                    | Its content is on main (lane S); not rebased; ignored.                                                                                                                                                          |
 
 No open work touches `crates/ridl-rt`, `crates/ridl-backend-rust`,

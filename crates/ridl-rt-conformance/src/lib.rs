@@ -268,6 +268,7 @@ macro_rules! suite {
             scannable::a_commit_of_only_touches_on_unpublished_channels_changes_no_generation,
             scannable::scan_reports_the_changes_since_a_mark_and_moves_it_forward,
             scannable::scan_writes_an_interface_changes_all_together_or_not_at_all,
+            scannable::scan_stops_at_the_first_interface_that_does_not_fit,
         );
     };
     (@coherent $factory:ty) => {

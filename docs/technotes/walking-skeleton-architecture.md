@@ -169,13 +169,13 @@ here. This list is not a standing count of every crate the workspace holds — s
   `Generated { rust_source }`. Rust is built as a `quote` token stream and
   formatted with `prettyplease`: it emits the codecs that the request's
   `encodings` option names, and the domain types only when the option is absent
-  or empty; named scalar types become `#[repr(transparent)]` newtypes, and
-  structs whose IR `fixed_layout` flag holds become `#[repr(C)]`. The
-  interaction face it emits reads its encoding from its port: each generated
-  type and function bounds its port parameter on `ridl_rt::port::Encoded` and
-  takes every size through `P::Encoding`, so the face names no encoding itself.
-  Codegen is total — failures return `GenerateError`, never panic. E2's
-  `interact.rs` and the extern-C header are gone:
+  or empty; named scalar types become `#[repr(transparent)]` newtypes, and a
+  domain struct carries no layout attribute. The interaction face it emits reads
+  its encoding from its port: each generated type and function bounds its port
+  parameter on `ridl_rt::port::Encoded` and takes every size through
+  `P::Encoding`, so the face names no encoding itself. Codegen is total —
+  failures return `GenerateError`, never panic. E2's `interact.rs` and the
+  extern-C header are gone:
   [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
   decisions 15 and 6 retract the interaction layer, restoring it in a second
   phase as a client and a server over `ridl-rt`, and drop C as a target.

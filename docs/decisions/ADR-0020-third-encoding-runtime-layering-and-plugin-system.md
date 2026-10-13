@@ -83,11 +83,26 @@ gains `Buffer`; `port` gains `Encoded`; a generated package enables one
 `ridl-rt` feature per named encoding. The request carries the `encodings`
 option. The record stays Proposed.
 
+**Amended 2026-10-13 — open items 7 to 9.** Three open items are added: the
+place of FlatBuffers among the encodings once proto3 exists, JSON at the edges
+of JavaScript applications, and a `ridl-rt` consumer of the catalog. No decision
+changes.
+
 **Amended 2026-10-12 — decision 6, the WebSocket transport carries the session's
 encoding.** The `ridl-transport-ws` row said "proto3-framed". The frame
 specification §11.1, version 0.2.0, fixes no encoding for the WebSocket binding:
 a session carries the encoding its `attach` names, and the transport offers
 proto3 when the program names none. The row is changed in place.
+
+**Amended 2026-10-12 — decision 3, the `#[repr(C)]` removal landed ahead of the
+backend it was sequenced with.** The decision tied the removal to roadmap story
+E11.12, the `repr(C)` backend that replaces the attribute, which is not built.
+It is taken now instead, because [ADR-0029](ADR-0029-stability-policy.md)
+freezes the generated crate and the attribute is part of that surface: removing
+it before the surface's row is added to `freeze/surfaces.toml` costs nothing,
+and removing it after would be a break of a frozen surface. The amendment is
+written into decision 3 in place; what that decision says about the layout
+belonging to decision 1's separate struct is unchanged.
 
 ## Context
 
@@ -203,6 +218,14 @@ as its public contract.
    attribute outlived its only stated purpose. This decision retires it too:
    ADR-0007 decision 13 carries the amendment, and the removal lands with
    roadmap story E11.12, the backend that replaces it.
+
+   **Amendment (2026-10-12) — the removal has landed, ahead of that backend.**
+   `emit_struct` emits no layout attribute. The removal was sequenced with the
+   backend that replaces the attribute, which is not built; it is taken earlier
+   because [ADR-0029](ADR-0029-stability-policy.md) freezes the generated crate,
+   and a break of that surface is far cheaper before its row is added to
+   `freeze/surfaces.toml` than after. What this decision says about the layout
+   belonging to decision 1's separate struct is unchanged.
 
 4. **The `repr(C)` projection rules belong in a projection record, written when
    the backend is.** The rules — the fixed-capacity layout of a bounded string,
@@ -587,6 +610,29 @@ as its public contract.
    against a hash over the IR the pair was generated from — or whether
    publication together is the only thing that carries it. The TypeScript
    backend settles it.
+7. **FlatBuffers' place among the three encodings.** After the proto3 codec
+   lands (roadmap story E11.8), measure proto3 against FlatBuffers on real
+   payloads: encode time, decode time, encoded size, on a native target and on
+   `wasm32`. FlatBuffers is a deprecation candidate if it never wins on in-place
+   reads of large messages. Item 1 is part of the same measurement.
+8. **JSON at the edges of JavaScript applications.** The TypeScript design
+   (roadmap story E12.1) settles: whether the generated types are plain data, so
+   that `JSON.stringify` works on them, with a `fromJSON` that re-runs the typl
+   constraint checks through the wasm constructor; whether JSON, in the form of
+   the protobuf JSON mapping, becomes a fourth payload encoding; the mapping of
+   64-bit integers by their typl range (`number` when the range fits within
+   ±2^53, `bigint` otherwise, written as decimal strings in JSON per the
+   protobuf JSON mapping; whether `JSON.rawJSON` source-text access is usable);
+   and `bytes` as `Uint8Array` in memory with base64 only at the JSON edge
+   (whether native `toBase64` and `fromBase64` are available), with large binary
+   data kept out of JSON.
+9. **A `ridl-rt` consumer of the catalog.** `ridl-descriptor` reads and verifies
+   the catalog descriptor, but `ridl-rt` does not consume it. A session checks
+   its peer by the compiled-in `CATALOG` hash, and a tool that renders a live
+   signal links the generated package. A tool with no generated code needs a
+   reflective decoder as well, and none exists for any encoding. When one is
+   wanted, its design chooses between a `catalog` feature of `ridl-rt` and a
+   separate crate, starting from the feature.
 
 ## Documents amended
 

@@ -919,19 +919,20 @@ ridl build --emit rust --out-dir out
 `ridl build` compiles a workspace and writes one artifact per package for each
 emit target, except that `catalog` writes one per unit and none for a unit that
 declares no interface and no service with an inline body.
-Nine emit targets exist today:
+Ten emit targets exist today:
 
-| `--emit`        | Output                    | Contents                                                                     |
-| --------------- | ------------------------- | ---------------------------------------------------------------------------- |
-| `rust`          | `<package>.rs`            | idiomatic Rust source (the default)                                          |
-| `ir-json`       | `<package>.ir.json`       | the lowered IR v2 as exact-decimal JSON                                      |
-| `ir-text`       | `<package>.ir.txtpb`      | the lowered IR v2 as prototext                                               |
-| `ir-binary`     | `<package>.ir.binpb`      | the lowered IR v2 as protobuf binary                                         |
-| `typescript`    | `<package>.ts`            | idiomatic TypeScript source                                                  |
-| `proto`         | `<package>.proto`         | the proto3 schema — types and the ordinals                                   |
-| `flatbuffers`   | `<package>.fbs`           | the FlatBuffers schema — types and the ordinals                              |
-| `codegen-model` | `<package>.codegen.json`  | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON     |
-| `catalog`       | `<unit>.catalog.binfb`    | the catalog descriptor an engine reads — interfaces, numbers, members, sizes |
+| `--emit`          | Output                           | Contents                                                                      |
+| ----------------- | -------------------------------- | ----------------------------------------------------------------------------- |
+| `rust`            | `<package>.rs`                   | idiomatic Rust source (the default)                                           |
+| `ir-json`         | `<package>.ir.json`              | the lowered IR v2 as exact-decimal JSON                                       |
+| `ir-text`         | `<package>.ir.txtpb`             | the lowered IR v2 as prototext                                                |
+| `ir-binary`       | `<package>.ir.binpb`             | the lowered IR v2 as protobuf binary                                          |
+| `typescript`      | `<package>.ts`                   | idiomatic TypeScript source                                                   |
+| `proto`           | `<package>.proto`                | the proto3 schema — types and the ordinals                                    |
+| `flatbuffers`     | `<package>.fbs`                  | the FlatBuffers schema — types and the ordinals                               |
+| `codegen-model`   | `<package>.codegen.json`         | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON      |
+| `codegen-request` | `<package>.codegen-request.json` | the whole codegen request a build hands a backend, as canonical protobuf JSON |
+| `catalog`         | `<unit>.catalog.binfb`           | the catalog descriptor an engine reads — interfaces, numbers, members, sizes  |
 
 One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by

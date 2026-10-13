@@ -643,6 +643,20 @@ pub enum Emit {
     /// code emit reads, `ridl.std` included, and `ridl baseline` publishes
     /// only `.ir.json` artifacts.
     CodegenModel,
+    /// The whole codegen request a build hands a backend, as canonical
+    /// protobuf JSON, written to `<base>.codegen-request.json`.
+    ///
+    /// The artifact a plugin author debugs against: the request their plugin
+    /// would receive for this package, without running the plugin. Its
+    /// `model` field is the value [`Emit::CodegenModel`] writes, so the two
+    /// emits state one fact.
+    ///
+    /// Its options come from `[backend.codegen-request]`, and unlike the
+    /// model backend it accepts them rather than refusing them: `options` is
+    /// a field of the request, and an emit that refused options could never
+    /// write a request with any. It is classified with the code emits for
+    /// the same reason [`Emit::CodegenModel`] is.
+    CodegenRequest,
     /// The catalog descriptor an engine reads, written to
     /// `<unit>.catalog.binfb` for every unit that declares an interface or a
     /// service with an inline body: a FlatBuffers file of the unit's
@@ -703,6 +717,7 @@ impl Emit {
             | Emit::Proto
             | Emit::Flatbuffers
             | Emit::CodegenModel
+            | Emit::CodegenRequest
             // `Catalog` is classed as a code emit although it goes through no
             // backend: a code emit keeps `ridl.std` in the `others` that
             // `run_build` passes, so the descriptor's catalog hash covers a
@@ -735,6 +750,7 @@ impl Emit {
             | Emit::Proto
             | Emit::Flatbuffers
             | Emit::CodegenModel
+            | Emit::CodegenRequest
             | Emit::Catalog => None,
             Emit::IrJson => Some(".system.json"),
             Emit::IrText => Some(".system.txtpb"),
@@ -757,7 +773,9 @@ impl Emit {
     /// descriptor, which takes no option. An in-tree backend's table is named
     /// after its language; the codegen model's is named `codegen-model`,
     /// after its `--emit` value, although the backend itself reports the
-    /// language `model`.
+    /// language `model`. The codegen request's table is named
+    /// `codegen-request` under the same rule, and its backend reports the
+    /// language `request`.
     pub(crate) fn backend_table(self) -> Option<&'static str> {
         // The same discipline as `ir_dump_suffix`: a new emit must be
         // classified here, or this crate's test targets do not build.
@@ -771,6 +789,7 @@ impl Emit {
             Emit::Proto => Some("proto"),
             Emit::Flatbuffers => Some("flatbuffers"),
             Emit::CodegenModel => Some("codegen-model"),
+            Emit::CodegenRequest => Some("codegen-request"),
             Emit::Catalog | Emit::IrJson | Emit::IrText | Emit::IrBinary => None,
         }
     }
@@ -778,9 +797,11 @@ impl Emit {
     /// Whether this emit's backend can carry a payload codec, which is what
     /// RSDL-807 compares a deployment's links against. Only the Rust backend
     /// reads an `encodings` list today: a schema emit (`proto`,
-    /// `flatbuffers`) is independent of the codecs a package carries, and the
-    /// TypeScript and codegen-model backends refuse the option, so a warning
-    /// naming their table would ask for a key the table cannot hold. The
+    /// `flatbuffers`) is independent of the codecs a package carries, the
+    /// TypeScript and codegen-model backends refuse the option, and the
+    /// codegen-request backend writes its options into the request rather
+    /// than emitting a codec from them, so a warning naming their table
+    /// would ask for a key the table cannot act on. The
     /// TypeScript emit joins this arm when its backend emits a codec.
     pub(crate) fn carries_codec(self) -> bool {
         #[deny(
@@ -793,6 +814,7 @@ impl Emit {
             | Emit::Proto
             | Emit::Flatbuffers
             | Emit::CodegenModel
+            | Emit::CodegenRequest
             | Emit::Catalog
             | Emit::IrJson
             | Emit::IrText
@@ -1712,6 +1734,14 @@ fn refuse_overwrite(
 /// the `regex` version the workspace's `Cargo.lock` resolves, which is the
 /// version the checker links.
 ///
+/// The manifest declares edition 2021 and no `rust-version`. Edition 2021 is
+/// the edition ADR-0029 decision 5 promises the generated crate compiles as
+/// with Rust 1.83, and cargo before 1.85 cannot read a manifest that declares
+/// edition 2024. No `rust-version` is declared because the crate does not
+/// build on Rust 1.83 with its default features off (driftsys/ridl#874), so
+/// the value would claim more than holds. The backend's compile proofs build
+/// the emitted source as edition 2024 as well.
+///
 /// The `ridl-rt = "0.9"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
@@ -1732,7 +1762,7 @@ fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String]) -> 
         r#"{preamble}[package]
 name = "{crate_name}"
 version = "0.0.0"
-edition = "2024"
+edition = "2021"
 
 [features]
 default = ["validate-pattern", "std"]
@@ -2462,7 +2492,8 @@ fn write_catalogs(
 /// codec when the package's `[backend.rust] encodings` names a codec, and
 /// the domain types only otherwise; TypeScript, proto3 and FlatBuffers are
 /// their own crates' `Backend`; `codegen-model` is [`codegen::ModelBackend`],
-/// the model written back. The Rust backend reads the request and never the raw IR, as
+/// the model written back, and `codegen-request` is
+/// [`codegen::RequestBackend`], the request itself written back. The Rust backend reads the request and never the raw IR, as
 /// `codegen-model` does and as a plugin must; the other three still read the
 /// raw IR, so each is constructed with a [`codegen::RawIr`] — the package and
 /// `others`, the caller's full package list ([`run_build`]), which proto3 and
@@ -2547,6 +2578,7 @@ fn write_emits(
             Emit::Proto => Box::new(ridl_backend_proto::Backend::new(raw)),
             Emit::Flatbuffers => Box::new(ridl_backend_flatbuffers::Backend::new(raw)),
             Emit::CodegenModel => Box::new(codegen::ModelBackend),
+            Emit::CodegenRequest => Box::new(codegen::RequestBackend),
             // Written once per build by `write_catalogs`, not per package.
             Emit::Catalog => continue,
             Emit::IrJson => match ridl_ir::v2::to_json_pretty(ir) {
@@ -2686,6 +2718,7 @@ fn write_system_emits(
             | Emit::Proto
             | Emit::Flatbuffers
             | Emit::CodegenModel
+            | Emit::CodegenRequest
             | Emit::Catalog => continue,
             Emit::IrJson => ridl_ir::v2::system_to_json_pretty(system).map(String::into_bytes),
             Emit::IrText => ridl_ir::v2::system_to_text_format(system).map(String::into_bytes),
@@ -2902,6 +2935,10 @@ mod emit_table_tests {
         assert_eq!(Emit::Proto.backend_table(), Some("proto"));
         assert_eq!(Emit::Flatbuffers.backend_table(), Some("flatbuffers"));
         assert_eq!(Emit::CodegenModel.backend_table(), Some("codegen-model"));
+        assert_eq!(
+            Emit::CodegenRequest.backend_table(),
+            Some("codegen-request")
+        );
         for emit in [Emit::Catalog, Emit::IrJson, Emit::IrText, Emit::IrBinary] {
             assert_eq!(emit.backend_table(), None, "{emit:?}");
         }
@@ -2917,6 +2954,7 @@ mod emit_table_tests {
             Emit::Proto,
             Emit::Flatbuffers,
             Emit::CodegenModel,
+            Emit::CodegenRequest,
             Emit::Catalog,
             Emit::IrJson,
             Emit::IrText,

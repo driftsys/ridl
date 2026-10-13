@@ -280,7 +280,11 @@ wasm-check:
 # The crate emitted for the veh-cluster corpus is built with cargo, not with
 # rustc as the cabin crate is, and with every cargo feature on. With the default
 # features off it does not build on the minimum (driftsys/ridl#874), so that
-# cell is not here.
+# cell is not here. The recipe reads the edition from the emitted veh-cluster
+# manifest and fails when it is not 2021 (the cabin cell compiles with rustc
+# and does not read its manifest): `ridl build` writes edition 2021, so a Rust 1.83
+# user builds the emitted crate without editing its manifest (ADR-0029
+# decision 5).
 #
 # ADR-0029 owns the policy; the minimums are frozen by its decisions 1 and 5.
 #
@@ -297,7 +301,8 @@ wasm-check:
 #
 # The lockfiles of ridl-descriptor and of the veh-cluster crate are resolved
 # with the pin's cargo and CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback,
-# so that a dependency release with a higher minimum is not selected; the
+# so that a dependency release with a higher minimum is not selected, and the
+# recipe fails unless cargo reports that it resolved for the crate's minimum; the
 # sources are fetched with the cargo of the crate's minimum, and the build is
 # offline and locked. Each of these two cells uses its own empty CARGO_HOME
 # under target/compat-check, so that a warm cache (the CI cache of
@@ -570,9 +575,28 @@ compat-check: toolchain-check
     # downloaded, and the mistake would show only on a machine with a cold
     # cache. Toolchains come from RUSTUP_HOME, not CARGO_HOME, and the rustup
     # proxies on PATH are unchanged, so `cargo +version` still resolves.
+    #
+    # resolve_for <cargo home> <manifest> <rust version> <label> resolves the
+    # lockfile with the pin's cargo and the fallback resolver, and fails
+    # unless cargo reports that it resolved for <rust version>: a lost
+    # rust-version line or a lost fallback setting makes cargo name the pin or
+    # no version. cargo's output is printed in both cases, its error included.
+    resolve_for() {
+        local report
+        if ! report="$(CARGO_HOME="$1" CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
+            cargo "+$pin" generate-lockfile --manifest-path "$2" 2>&1)"; then
+            printf '%s\n' "$report" >&2
+            echo "compat-check: could not resolve the $4 lockfile." >&2
+            exit 1
+        fi
+        printf '%s\n' "$report"
+        if ! grep -qF "latest Rust $3 compatible version" <<<"$report"; then
+            echo "compat-check: the $4 lockfile was not resolved for Rust $3." >&2
+            exit 1
+        fi
+    }
     descriptor_home="$PWD/target/compat-check/cargo-home-descriptor"
-    CARGO_HOME="$descriptor_home" CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
-        cargo "+$pin" generate-lockfile --manifest-path "$pkg_descriptor/Cargo.toml"
+    resolve_for "$descriptor_home" "$pkg_descriptor/Cargo.toml" "$descriptor_minimum" ridl-descriptor
     CARGO_HOME="$descriptor_home" \
         cargo "+$descriptor_minimum" fetch --locked --manifest-path "$pkg_descriptor/Cargo.toml"
 
@@ -613,8 +637,10 @@ compat-check: toolchain-check
 
     # The crate `ridl build` emits for the veh-cluster corpus, as edition 2021
     # at the minimum with every feature on, so the regex dependency of
-    # `validate-pattern` is built too. The emitted manifest sets edition 2024
-    # and no rust-version; both are rewritten here. ridl-rt is the packaged
+    # `validate-pattern` is built too. The emitted manifest sets edition 2021
+    # and no rust-version; the edition is checked, not rewritten, and a
+    # rust-version line is added after it, so that the fallback resolver
+    # below resolves for the minimum. ridl-rt is the packaged
     # copy. The lockfile is resolved and the sources are fetched as for
     # ridl-descriptor: resolved with the pin's cargo and the fallback
     # resolver, fetched with the minimum's cargo (cargo 1.83 does not see the
@@ -626,20 +652,27 @@ compat-check: toolchain-check
     corpus="$PWD/target/compat-check/veh-cluster"
     mkdir -p "$corpus"
     "$ridl_bin" build crates/ridlc/tests/corpus/veh-cluster --emit rust --out-dir "$corpus/generated"
+    if ! grep -qxF 'edition = "2021"' "$corpus/generated/Cargo.toml"; then
+        echo "compat-check: the emitted veh-cluster manifest must set edition = \"2021\"" >&2
+        echo "compat-check: (ADR-0029 decision 5); the manifest ridl build wrote does not." >&2
+        exit 1
+    fi
+    if grep -q '^[[:space:]]*rust-version' "$corpus/generated/Cargo.toml"; then
+        echo "compat-check: the emitted veh-cluster manifest now declares a rust-version;" >&2
+        echo "compat-check: check it instead of adding one here." >&2
+        exit 1
+    fi
     awk -v minimum="$minimum" '
-        /^edition = "2024"$/ { print "edition = \"2021\""; print "rust-version = \"" minimum "\""; next }
         { print }
+        /^edition = "2021"$/ { print "rust-version = \"" minimum "\"" }
     ' "$corpus/generated/Cargo.toml" > "$corpus/Cargo.toml.new"
     mv "$corpus/Cargo.toml.new" "$corpus/generated/Cargo.toml"
-    if ! grep -qxF 'edition = "2021"' "$corpus/generated/Cargo.toml" \
-        || ! grep -qxF "rust-version = \"$minimum\"" "$corpus/generated/Cargo.toml"; then
-        echo "compat-check: could not set edition 2021 and rust-version $minimum in the emitted" >&2
-        echo "compat-check: veh-cluster manifest; its edition line no longer has the form this recipe edits." >&2
+    if ! grep -qxF "rust-version = \"$minimum\"" "$corpus/generated/Cargo.toml"; then
+        echo "compat-check: could not add rust-version $minimum to the emitted veh-cluster manifest." >&2
         exit 1
     fi
     append_tables "$corpus/generated/Cargo.toml" "ridl-rt=$pkg"
-    CARGO_HOME="$corpus_home" CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback \
-        cargo "+$pin" generate-lockfile --manifest-path "$corpus/generated/Cargo.toml"
+    resolve_for "$corpus_home" "$corpus/generated/Cargo.toml" "$minimum" veh-cluster
     CARGO_HOME="$corpus_home" \
         cargo "+$minimum" fetch --locked --manifest-path "$corpus/generated/Cargo.toml"
     echo "compat-check: $minimum, edition 2021 (the emitted veh-cluster crate, all features)"
@@ -710,6 +743,10 @@ compat-check: toolchain-check
 # A lint that is not on the list then fails the run as a new defect in the
 # emitter, and a listed lint that no longer fires fails through
 # `unfulfilled_lint_expectations`, so the list cannot go stale.
+#
+# Both generated crates are linted as the edition their emitted manifest
+# declares, 2021; no gate runs clippy on them as edition 2024, which a user
+# reaches only by copying the emitted source into an edition 2024 crate.
 #
 # The crate emitted for the veh-cluster corpus is linted too, with its default
 # features and with them off, under `-D warnings` with no command-line

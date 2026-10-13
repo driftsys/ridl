@@ -439,6 +439,10 @@ pub trait ScannableSignals: SignalReader {
 }
 
 /// How far a consumer has scanned one interface.
+///
+/// A mark records the interface and the generation last scanned, with no
+/// sequence number. Each [`Changed`] entry
+/// carries its own signal's sequence number.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Watermark {
     /// The interface.
@@ -446,8 +450,6 @@ pub struct Watermark {
     /// The generation last scanned. Named `generation`, not `gen`, because
     /// `gen` is a reserved keyword in the 2024 edition.
     pub generation: u64,
-    /// The sequence number last scanned.
-    pub seq: u64,
 }
 
 /// A signal that changed since a [`Watermark`].

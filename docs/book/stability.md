@@ -31,7 +31,22 @@ effect now; release 0.10.0 is not published yet.
 - **The minimum Rust version.** Rust 1.83 and edition 2021 for `ridl-rt`,
   `ridl-rt-conformance` and `ridl-loopback`, and Rust 1.88 and edition 2024 for
   `ridl-descriptor`. The generated crate compiles as edition 2021 with Rust 1.83
-  with every cargo feature on. A 0.10.x release does not raise a minimum.
+  with every cargo feature on, and `ridl build` writes `edition = "2021"` in its
+  manifest, so cargo 1.83 reads that manifest as written. With both its `std`
+  and its `validate-pattern` features off it does not build on Rust 1.83
+  (driftsys/ridl#874). A
+  0.10.x release does not raise a minimum.
+
+The minimum covers the crates RIDL publishes and emits, not later releases of
+their dependencies. A dependency, such as `regex`, can publish a release that
+requires a later Rust, and cargo 1.83 selects the newest release without reading
+its `rust-version`. To build with Rust 1.83, resolve dependencies with a
+resolver that reads `rust-version`: set `rust-version = "1.83"` in your own
+package, and resolve with cargo 1.84 or later with
+`CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback` set, or build from a
+lockfile resolved that way. `just compat-check` resolves the lockfile of the
+crate it emits for its test corpus this way before it builds that crate with
+Rust 1.83.
 
 ## What may change in 0.10.x
 
@@ -69,7 +84,9 @@ and `occurrence` frames, which no test vector of the frame specification §11.1
 shows, the payload-presence rule of §11.1 for a `publish` under `Init` or
 `Invalid(Declared)` and for a `response` under `reply`, which no vector shows,
 and the codes of §4 and §9.6 that no vector carries, among them the `kind`
-values 2 and 5 and the `attach` encodings 2 and 3. A contributor who
+values 2 and 5 and the `attach` encodings 2 and 3, and the `ridl-ir` items
+that `ridl-descriptor` re-exports or takes in its signatures
+([#934](https://github.com/driftsys/ridl/issues/934)). A contributor who
 must change a frozen surface follows the steps in `CONTRIBUTING.md`, "Changing a
 frozen surface". The full policy, with the gate that checks each surface and the
 rules for approving a break, is

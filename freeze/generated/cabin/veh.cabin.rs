@@ -302,7 +302,6 @@ impl ::core::default::Default for Health {
 }
 /// Raised when a subsystem leaves `OK`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(C)]
 pub struct Warning {
     /// The warning code, as a percentage of full scale.
     ///

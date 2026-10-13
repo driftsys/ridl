@@ -589,3 +589,33 @@ provenance. Nothing here is normative — the current references live in
   that no port implements `Encoded` and that the face reads it in later work.
   The plan's Task 7 is the standing instruction for that rewrite, which waits
   for a separate pull request.
+- **2026-10-12-ws-binding-design.md**, **2026-10-12-ws-binding-plan.md** and
+  **2026-10-11-lane-w-plan.md** — the WebSocket binding of the frame
+  specification (rulings R-W-7 to R-W-19, the plan's R-P-1 to R-P-10) and the
+  wire and runtime plan that preceded it (R-W-1 and R-W-2: the minimum Rust
+  versions of `ridl-loopback` and `ridl-descriptor`; R-W-3: `ridl-ir` has no
+  `rust-version` of its own; R-W-4: the generated crate does not build at the
+  minimum with default features off, driftsys/ridl#874); archived verbatim. The
+  as-built rules are in
+  [the frame specification](../specification/frame-specification.md) §11.1 and
+  [ADR-0029](../decisions/ADR-0029-stability-policy.md); the reasoning and the
+  alternatives are in
+  [the binding rationale technote](../technotes/websocket-binding-rationale.md).
+  The archived files link to sibling working files that stay in
+  [`../wip/`](../wip/).
+- **2026-10-06-ws-and-payload-formats-steering.md** and
+  **ws-and-payload-formats-handoff.md** — the steering note and its session
+  prompt for the WebSocket transport and the payload formats, archived verbatim.
+  The note's decisions A (on-request encodings), I (the encoding comes from the
+  port type) and B (the WebSocket binding fixes no encoding) are built: see
+  [ADR-0002](../decisions/ADR-0002-module-system.md),
+  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md),
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md),
+  [the interaction face](../design/interaction-face.md),
+  [the frame specification](../specification/frame-specification.md) §11.1 and
+  [the binding rationale technote](../technotes/websocket-binding-rationale.md).
+  Decision H (header and envelope sizes) is superseded by the binding design.
+  Decision D (the `prost` oracle) and the `repr(C)` questions live on
+  driftsys/ridl#264 and #317; the open measurement, JSON and catalog-reader
+  questions are items 7 to 9 of ADR-0020's open list. Its `docs/wip/` paths are
+  historic.

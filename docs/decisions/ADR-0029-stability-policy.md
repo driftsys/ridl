@@ -47,6 +47,16 @@ vector shows, the payload-presence rule for a `publish` under `Init` or
 and the codes no vector carries, among them the `kind` values 2 and 5 and the
 `attach` encodings 2 and 3, stay frozen by policy.
 
+**Amended 2026-10-12 — decisions 1 and 5, the emitted manifest declares edition
+2021.** `ridl build` writes `edition = "2021"` in the manifest of the generated
+crate, where it wrote edition 2024, which cargo before 1.85 cannot read, so a
+Rust 1.83 user no longer edits that manifest. `just compat-check` reads the
+edition of the manifest it emits for the `veh-cluster` corpus and fails when it
+is not 2021, where it rewrote edition 2024 to 2021 before (driftsys/ridl#881).
+Decision 5 also says how a Rust 1.83 user resolves dependencies. The Context
+bullet on the minimum, decision 1's paragraph under the table and decision 5 are
+changed in place.
+
 ## Context
 
 Until 0.9.x, a breaking change could land in any release. 0.10.0 is the first
@@ -83,7 +93,8 @@ design in each:
   `ridl-rt-conformance` and `ridl-loopback`. `ridl-descriptor` has its own
   minimum, Rust 1.88 and edition 2024, because `planus` 1.3.0 declares 1.88. The
   generated crate compiles as edition 2021 with Rust 1.83 with every cargo
-  feature on. `just compat-check` checks this for the crate emitted for the
+  feature on, and its emitted manifest declares edition 2021 and no
+  `rust-version`. `just compat-check` checks this for the crate emitted for the
   `veh-cluster` corpus with every feature on, and for the crate emitted for
   `examples/cabin` with its `std` feature on; `just freeze-check` does not.
 
@@ -110,9 +121,10 @@ design in each:
    edition 2024 for `ridl-descriptor`, because `planus` 1.3.0 declares 1.88. The
    `msrv` dump checks the edition and the `rust-version` of each crate. The
    generated crate compiles as edition 2021 with Rust 1.83 with every cargo
-   feature on. `just compat-check` checks the crate emitted for the
-   `veh-cluster` corpus with every feature on, and the crate emitted for
-   `examples/cabin` with its `std` feature on.
+   feature on, and its emitted manifest declares edition 2021.
+   `just compat-check` checks the crate emitted for the `veh-cluster` corpus
+   with every feature on, and the crate emitted for `examples/cabin` with its
+   `std` feature on.
 
    The formats of `interfaces.lock` and `.ridl/baseline` are frozen by policy
    and checked by no tool. Of the exit codes, the check records only those of
@@ -175,9 +187,12 @@ design in each:
      compared with `cargo semver-checks`, because a line dump cannot classify a
      Rust API change correctly, for example a new required method on a public
      trait. The runtime crates are compared with the same crates at the baseline
-     ref. The generated crates are committed under `freeze/generated/` from the
-     frozen fixtures named in the Context, and each is compared with the same
-     crate in the baseline's `freeze/generated/`. The check first runs
+     ref. Each crate's own items are compared; the `ridl-ir` items that
+     `ridl-descriptor` re-exports or takes in its signatures are not, so a break
+     in them is frozen by policy only until driftsys/ridl#934 is fixed. The
+     generated crates are committed under `freeze/generated/` from the frozen
+     fixtures named in the Context, and each is compared with the same crate in
+     the baseline's `freeze/generated/`. The check first runs
      `cargo fetch --locked` once with the network allowed, then runs the
      comparison offline and with the release type `minor`. Ten lints of
      `cargo semver-checks` that require a major version but report only a
@@ -227,31 +242,42 @@ design in each:
    dump checks all four crates and fails on any change of a value, a lower
    `rust-version` included, so such a change also needs the approval of
    decision 4. The generated crate must compile as edition 2021 with Rust 1.83
-   with every cargo feature on. `just compat-check` checks the crate emitted for
-   the `veh-cluster` corpus with every feature on, and the crate emitted for
-   `examples/cabin` with its `std` feature on. With the default features off it
-   does not compile on 1.83 (driftsys/ridl#874), and `just compat-check` does
-   not check that combination. This restates ADR-0021 decision 10 as a frozen
-   surface and adds the `msrv` check.
+   with every cargo feature on, and `ridl build` writes `edition = "2021"` in
+   its manifest, so a Rust 1.83 user builds it without editing the manifest. The
+   manifest declares no `rust-version`, because the crate does not build on 1.83
+   with its default features off. `just compat-check` checks the crate emitted
+   for the `veh-cluster` corpus with every feature on, and fails when its
+   emitted manifest does not declare edition 2021, and checks the crate emitted
+   for `examples/cabin` with its `std` feature on. With the default features off
+   the generated crate does not compile on 1.83 (driftsys/ridl#874), and
+   `just compat-check` does not check that combination. The minimum covers the
+   crates RIDL publishes and emits, not later releases of their dependencies: a
+   release of a dependency, such as `regex`, can require a later Rust. A Rust
+   1.83 user therefore resolves dependencies with a resolver that reads
+   `rust-version` — cargo 1.84 or later with
+   `CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback` and a `rust-version` of
+   1.83 on the user's own package, or a lockfile resolved that way — and
+   `just compat-check` resolves its lockfiles the same way. This restates
+   ADR-0021 decision 10 as a frozen surface and adds the `msrv` check.
 
 6. **The gate table says which gate covers which surface.** The `baseline`
-   column is empty on the day this record is accepted. `freeze/surfaces.toml` is
-   the authoritative record of every baseline; this table lists the coverage and
-   the work that switches each gate on, and a gate is on when its surface has a
-   row there.
+   column was empty on the day this record was accepted. A blank cell means that
+   the surface has no row yet. `freeze/surfaces.toml` is the authoritative
+   record of every baseline; this table lists the coverage and the work that
+   switches each gate on, and a gate is on when its surface has a row there.
 
-   | Surface                 | Row names in `surfaces.toml`                                                   | Switched on by                       | Baseline   |
-   | ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------ | ---------- |
-   | Language                | `keywords`, `accepted-sources`                                                 | the language lane                    |            |
-   | Manifest                | `manifest`                                                                     | the language lane                    |            |
-   | Diagnostics and lints   | `diagnostics`                                                                  | the language lane                    |            |
-   | CLI                     | `cli`                                                                          | the developer-experience lane        |            |
-   | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                      | the codegen lane                     |            |
-   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            |            |
-   | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     | `a3a0ac21` |
-   | MCP tools               | `mcp`                                                                          | the release and policy lane, at once | `3c3301df` |
-   | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            | `e6620b0e` |
-   | Minimum Rust version    | `msrv`                                                                         | the wire and runtime lane            | `7e83024d` |
+   | Surface                 | Row names in `surfaces.toml`                                                   | Switched on by                       | Baseline               |
+   | ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------ | ---------------------- |
+   | Language                | `keywords`, `accepted-sources`                                                 | the language lane                    | `ecc2eb0c`, `d4729323` |
+   | Manifest                | `manifest`                                                                     | the language lane                    |                        |
+   | Diagnostics and lints   | `diagnostics`                                                                  | the language lane                    | `2a6a94a8`             |
+   | CLI                     | `cli`                                                                          | the developer-experience lane        |                        |
+   | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                      | the codegen lane                     | `2e3a3c9c`             |
+   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            | `69d23ab7`             |
+   | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     | `a3a0ac21`             |
+   | MCP tools               | `mcp`                                                                          | the release and policy lane, at once | `3c3301df`             |
+   | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            | `e6620b0e`             |
+   | Minimum Rust version    | `msrv`                                                                         | the wire and runtime lane            | `7e83024d`             |
 
 ## Alternatives considered
 

@@ -1735,7 +1735,6 @@ impl ::core::default::Default for LeverCmd {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(C)]
 pub struct FaultReport {
     /// # Rules
     ///

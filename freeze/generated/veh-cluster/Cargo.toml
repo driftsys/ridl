@@ -3,7 +3,7 @@
 [package]
 name = "ridl_generated"
 version = "0.0.0"
-edition = "2024"
+edition = "2021"
 
 [features]
 default = ["validate-pattern", "std"]

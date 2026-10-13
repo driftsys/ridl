@@ -44,8 +44,8 @@ because code outside the crate can build it as a struct literal: `CatalogRef`,
 crate uses as a value or a pattern, so a field added to any of them breaks that
 code.
 
-The open API questions are tracked at
-<https://github.com/driftsys/ridl/issues/350>.
+The API questions that the reviews of 0.1 raised are settled; the issue that
+tracked them is <https://github.com/driftsys/ridl/issues/350>.
 
 `ridl-rt` supports Rust 1.83 or newer (`rust-version = "1.83"`). Raising that
 minimum is a breaking change, shipped in a 0.x minor release like any other.
