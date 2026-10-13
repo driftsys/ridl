@@ -109,9 +109,9 @@ pub fn run(path: &Path) -> ExitCode {
 }
 
 /// Runs `ridl vendor --check` over the manifest root that governs `path`
-/// (ADR-0010: it compares and never writes). The workspace is loaded without its remote
-/// units, so nothing is fetched and no cache is read; `ridl.lock` is read
-/// and never rewritten. The load's own diagnostics (a manifest that does
+/// (ADR-0002 section 7: it compares and never writes). The workspace is
+/// loaded without its remote units, so nothing is fetched and no cache is
+/// read; `ridl.lock` is read and never rewritten. The load's own diagnostics (a manifest that does
 /// not parse, for one) are rendered with those of [`check_vendor`], and
 /// any Error among them is exit 1: a broken manifest gives no import set to
 /// compare with, so it cannot be reported as a clean `vendor/`.

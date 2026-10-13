@@ -37,14 +37,12 @@ const REPLACED_PREFIX: &str = ".replaced-";
 
 /// The directory `vendor/<key>/` for an `[imports]` key, or `None` when the
 /// key is not one ordinary directory name. An empty key, a hidden key (one
-/// that starts with a dot, which includes `.` and `..`), a key holding a path
-/// separator, and an absolute key never name a vendored unit: joining them
-/// would reach outside `vendor/` or collide with the staging entries.
+/// that starts with a dot, which includes `.` and `..`), and a key holding a
+/// path separator (which an absolute key always does) never name a vendored
+/// unit: joining them would reach outside `vendor/` or collide with the
+/// staging entries.
 pub(crate) fn vendor_key_dir(vendor: &Path, key: &str) -> Option<PathBuf> {
-    let ordinary = !key.is_empty()
-        && !key.starts_with('.')
-        && !key.contains(['/', '\\', '\0'])
-        && !Path::new(key).is_absolute();
+    let ordinary = !key.is_empty() && !key.starts_with('.') && !key.contains(['/', '\\', '\0']);
     ordinary.then(|| vendor.join(key))
 }
 
@@ -568,6 +566,34 @@ mod tests {
         assert!(hidden_entries(&root.join("vendor")).is_empty());
     }
 
+    /// A key that holds a path separator is never written, even when the
+    /// directory it would reach exists: key `a/b` must not create or change
+    /// anything under `vendor/a/`, which key `a` already holds.
+    #[test]
+    fn a_key_with_a_separator_is_never_written() {
+        let fixture = TempDir::new("write-separator-key");
+        let a = unit(&fixture.path().join("src/a"), &[("a.typl", "package a\n")]);
+        let b = unit(&fixture.path().join("src/b"), &[("b.typl", "package b\n")]);
+        let root = root_in(&fixture);
+        write_vendor(&root, &BTreeMap::from([("a".to_string(), a.clone())])).unwrap();
+        let units = BTreeMap::from([("a".to_string(), a.clone()), ("a/b".to_string(), b)]);
+        let report = write_vendor(&root, &units).unwrap();
+        assert_eq!(
+            report,
+            VendorWrite {
+                unchanged: vec!["a".to_string()],
+                ..VendorWrite::default()
+            }
+        );
+        let names: Vec<_> = fs::read_dir(root.join("vendor/a"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect();
+        assert_eq!(names, ["a.typl"]);
+        assert_eq!(tree_hash(&root.join("vendor/a")).unwrap(), a.tree);
+        assert!(hidden_entries(&root.join("vendor")).is_empty());
+    }
+
     /// A key of `..` names no directory in `vendor/`, so `--check` hashes
     /// nothing for it and reports the unit as absent.
     #[test]
@@ -579,6 +605,35 @@ mod tests {
         let url = "https://r.example.com/up@v1";
         let diags = check_vendor(&root, &union(url, ".."), Some(&lock_for(url, "0000")));
         assert_eq!(codes(&diags), ["MANI-109"], "{diags:?}");
+    }
+
+    /// A symbolic link in `vendor/`, to a directory or to a file, is not a
+    /// stray: `--check` uses the entry's own file type, as the write sweep
+    /// does, so a run of `ridl vendor` is followed by a clean `--check`.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_in_vendor_is_never_a_stray() {
+        let fixture = TempDir::new("check-symlink-stray");
+        let root = fixture.path().join("root");
+        let unit = unit(&root.join("vendor/a"), &[("a.typl", "package a\n")]);
+        fs::create_dir_all(fixture.path().join("elsewhere")).unwrap();
+        fs::write(fixture.path().join("elsewhere.txt"), "file").unwrap();
+        std::os::unix::fs::symlink(
+            fixture.path().join("elsewhere"),
+            root.join("vendor/dirlink"),
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(
+            fixture.path().join("elsewhere.txt"),
+            root.join("vendor/filelink"),
+        )
+        .unwrap();
+        let diags = check_vendor(
+            &root,
+            &union(&unit.url, "a"),
+            Some(&lock_for(&unit.url, &unit.tree)),
+        );
+        assert!(diags.is_empty(), "{diags:?}");
     }
 
     /// With nothing to vendor and no `vendor/`, no directory is created.

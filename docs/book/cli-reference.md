@@ -2222,8 +2222,9 @@ runs from. It then does three things:
    staging directory and renamed into place under its `[imports]` key, with the
    bytes of its files unchanged. Every directory directly under `vendor/` whose
    name is no `[imports]` key is removed, whether or not `ridl vendor` wrote it,
-   so `vendor/` holds nothing but remote units; a file, a symbolic link and a
-   hidden entry (a name that starts with `.`) are left alone. Nothing in
+   so that, after a run, no directory other than a remote unit's remains among
+   the non-hidden entries of `vendor/`; a file, a symbolic link and a hidden
+   entry (a name that starts with `.`) are left alone. Nothing in
    `vendor/` changes when the run has an error.
 
 Each changed unit prints one line, `vendored <key>` or `removed <key>`; a run
@@ -2232,8 +2233,9 @@ own `vendor/` directory is copied with the unit, because it is part of the tree
 hash, and is skipped when the unit is read.
 
 The `tree` hash is computed over the bytes of each file, so a checkout that
-converts line endings changes every vendored file and makes it `MANI-107`. Mark
-the directory as binary in `.gitattributes` with the line `vendor/** -text`.
+converts line endings changes the bytes of a vendored file and makes its unit
+`MANI-107`. Mark the directory `-text` in `.gitattributes` with the line
+`vendor/** -text`, which stops line-ending conversion.
 
 ```sh
 ridl vendor
