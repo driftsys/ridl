@@ -623,8 +623,18 @@ distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
 
     /// `naming_offset` offers a reference to a target only in the slots and
     /// forms that can name the target, and at the offset of the naming part.
+    /// The test checks every kind of target against every class of reference
+    /// that the fixture holds.
     #[test]
     fn naming_offset_resolves_only_where_a_target_can_be_named() {
+        /// The part of a reference that names a target.
+        #[derive(Debug, Clone, Copy, PartialEq)]
+        enum Part {
+            Start,
+            End,
+        }
+        use Part::{End, Start};
+
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
         let ws = Workspace::new(&db, fixture(&db), BTreeMap::new());
@@ -639,48 +649,170 @@ distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
         };
         let declared =
             |reference: &Reference| matches!(reference.form, ReferenceForm::Declared { .. });
-        let at = |(reference, slot): (&Reference, Slot<'_>), target: &Target| {
-            naming_offset(target, reference, slot)
-        };
+        let service =
+            |reference: &Reference| matches!(reference.form, ReferenceForm::Service { .. });
+        let instance =
+            |reference: &Reference| matches!(reference.form, ReferenceForm::Instance { .. });
+        let member = |placement: bool, slot: Slot<'_>| matches!(slot, Slot::Member { placement: p, .. } if p == placement);
 
-        let declared_interface = Target::Interface(InterfaceId::Declared {
-            package: "veh.adas".to_string(),
-            name: "CruiseControl".to_string(),
-        });
-        let member_line =
-            find(&|reference, slot| matches!(slot, Slot::Member { .. }) && declared(reference));
-        let for_reference = find(&|_, slot| matches!(slot, Slot::For { .. }));
-        let requires_line = find(&|_, slot| matches!(slot, Slot::Requires { .. }));
-        assert_eq!(at(member_line, &declared_interface), None);
-        assert_eq!(at(for_reference, &declared_interface), None);
-        assert_eq!(
-            at(requires_line, &declared_interface),
-            Some(requires_line.0.site.range.start())
-        );
-
-        let component = Target::Component(0);
-        let offers_line = find(&|_, slot| matches!(slot, Slot::Offers { .. }));
-        assert_eq!(at(offers_line, &component), None);
-        assert_eq!(
-            at(member_line, &component),
-            Some(member_line.0.site.range.start())
-        );
-
-        let instance = Target::Instance {
-            component: 0,
-            instance: 0,
-        };
-        let placement = find(&|reference, slot| {
-            matches!(
-                slot,
-                Slot::Member {
-                    placement: true,
-                    ..
-                }
-            ) && matches!(reference.form, ReferenceForm::Instance { .. })
-        });
-        assert_eq!(at(placement, &instance), Some(placement.0.site.range.end()));
-        assert_eq!(at(member_line, &instance), None);
-        assert_eq!(at(for_reference, &instance), None);
+        // The classes of reference, in the order of the columns below.
+        let classes = [
+            (
+                "member line, declared form",
+                find(&|r, slot| member(false, slot) && declared(r)),
+            ),
+            (
+                "member line, service form",
+                find(&|r, slot| member(false, slot) && service(r)),
+            ),
+            (
+                "member line, instance form",
+                find(&|r, slot| member(false, slot) && instance(r)),
+            ),
+            (
+                "placement line, declared form",
+                find(&|r, slot| member(true, slot) && declared(r)),
+            ),
+            (
+                "placement line, service form",
+                find(&|r, slot| member(true, slot) && service(r)),
+            ),
+            (
+                "placement line, instance form",
+                find(&|r, slot| member(true, slot) && instance(r)),
+            ),
+            (
+                "offers line",
+                find(&|_, slot| matches!(slot, Slot::Offers { .. })),
+            ),
+            (
+                "requires line, declared form",
+                find(&|r, slot| matches!(slot, Slot::Requires { .. }) && declared(r)),
+            ),
+            (
+                "requires line, service form",
+                find(&|r, slot| matches!(slot, Slot::Requires { .. }) && service(r)),
+            ),
+            (
+                "for reference",
+                find(&|_, slot| matches!(slot, Slot::For { .. })),
+            ),
+        ];
+        let service_name = "veh.diag.access".to_string();
+        // Each target with the expected part for each class above.
+        let table: [(Target, [Option<Part>; 10]); 6] = [
+            (
+                Target::System(0),
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(Start),
+                ],
+            ),
+            (
+                Target::Component(0),
+                [
+                    Some(Start),
+                    None,
+                    None,
+                    Some(Start),
+                    None,
+                    Some(Start),
+                    None,
+                    None,
+                    None,
+                    None,
+                ],
+            ),
+            (
+                Target::Instance {
+                    component: 0,
+                    instance: 0,
+                },
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(End),
+                    None,
+                    None,
+                    None,
+                    None,
+                ],
+            ),
+            (
+                Target::Service(service_name.clone()),
+                [
+                    None,
+                    Some(Start),
+                    None,
+                    None,
+                    Some(Start),
+                    None,
+                    Some(Start),
+                    Some(Start),
+                    Some(Start),
+                    None,
+                ],
+            ),
+            (
+                Target::Interface(InterfaceId::Inline {
+                    service: service_name,
+                }),
+                [
+                    None,
+                    Some(Start),
+                    None,
+                    None,
+                    Some(Start),
+                    None,
+                    Some(Start),
+                    Some(Start),
+                    Some(Start),
+                    None,
+                ],
+            ),
+            (
+                Target::Interface(InterfaceId::Declared {
+                    package: "veh.adas".to_string(),
+                    name: "CruiseControl".to_string(),
+                }),
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(Start),
+                    Some(Start),
+                    None,
+                ],
+            ),
+        ];
+        for (target, expected) in &table {
+            for ((class, (reference, slot)), expected) in classes.iter().zip(expected) {
+                let range = reference.site.range;
+                let expected = expected.map(|part| match part {
+                    Start => range.start(),
+                    End => range.end(),
+                });
+                assert_eq!(
+                    naming_offset(target, reference, *slot),
+                    expected,
+                    "{target:?} on a {class}"
+                );
+            }
+        }
     }
 }
