@@ -4075,6 +4075,90 @@ fn a_zero_parameter_command_induces_an_empty_argument_struct() {
     assert!(induced.fields.is_empty());
 }
 
+/// A parameter's doc reaches the field of the induced argument struct, so
+/// the generated struct documents its fields (ADR-0028).
+#[test]
+fn a_parameter_doc_reaches_the_induced_field() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "documented",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                v2::Param {
+                    name: "first".to_string(),
+                    r#type: Some(named("Pair")),
+                    doc: "The first one.".to_string(),
+                    ..Default::default()
+                },
+                v2::Param {
+                    name: "second".to_string(),
+                    r#type: Some(named("Pair")),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let induced = model
+        .tuples
+        .iter()
+        .find(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsDocumentedParams")
+        })
+        .expect("the induced argument struct");
+    assert_eq!(induced.fields[0].doc, "The first one.");
+    assert_eq!(induced.fields[1].doc, "");
+}
+
+/// The doc reaches the field of the argument struct only. A tuple written
+/// inside a parameter is a type of its own, and its fields carry no doc, as
+/// the IR has none for them.
+#[test]
+fn a_tuple_inside_a_documented_parameter_keeps_undocumented_fields() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "withSpan",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                v2::Param {
+                    name: "span".to_string(),
+                    r#type: Some(v2::FieldType {
+                        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                            fields: vec![v2::TupleField {
+                                name: "lo".to_string(),
+                                r#type: Some(named("Pair")),
+                            }],
+                        })),
+                        ..Default::default()
+                    }),
+                    doc: "The span.".to_string(),
+                    ..Default::default()
+                },
+                v2::Param {
+                    name: "other".to_string(),
+                    r#type: Some(named("Pair")),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let by_name = |wanted: &str| {
+        model
+            .tuples
+            .iter()
+            .find(|tuple| tuple.name.as_ref().is_some_and(|name| name.rust == wanted))
+            .unwrap_or_else(|| panic!("the induced tuple {wanted}"))
+    };
+    assert_eq!(by_name("CallsWithSpanParams").fields[0].doc, "The span.");
+    assert_eq!(by_name("CallsWithSpanSpan").fields[0].doc, "");
+}
+
 /// A query's request follows the same rule as a command's: the `none` query
 /// of the fixture declares no parameter, so it induces an empty struct.
 #[test]

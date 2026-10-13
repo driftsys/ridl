@@ -254,7 +254,34 @@ struct TupleEntry<'a> {
     rust: String,
     wire: String,
     named: bool,
+    /// What each field is documented with, in declaration order. Empty for
+    /// every tuple but an induced argument struct, whose fields stand for the
+    /// parameters of a call.
+    docs: Vec<FieldDoc>,
     lowered: Option<v1::InducedTuple>,
+}
+
+/// What a parameter documents, carried onto the field induced from it. A
+/// tuple field carries no doc in the IR, so an induced argument struct would
+/// otherwise document none of its fields, while a generated item renders the
+/// doc its source item has (ADR-0028).
+#[derive(Clone, Default)]
+struct FieldDoc {
+    doc: String,
+    links: Vec<v1::DocLink>,
+    see: Vec<v1::DocLink>,
+    since: Vec<String>,
+}
+
+impl FieldDoc {
+    fn of_param(param: &v2::Param) -> Self {
+        Self {
+            doc: param.doc.clone(),
+            links: doc_links(&param.links),
+            see: doc_links(&param.see),
+            since: param.since.clone(),
+        }
+    }
 }
 
 struct Lowering<'a> {
@@ -650,6 +677,7 @@ impl<'a> Lowering<'a> {
             rust: at.rust.clone(),
             wire: at.wire.clone(),
             named: at.named,
+            docs: Vec::new(),
             lowered: None,
         });
         index as u32
@@ -669,6 +697,7 @@ impl<'a> Lowering<'a> {
             let home = self.tuples[index].home;
             let path = self.tuples[index].path.clone();
             let named = self.tuples[index].named;
+            let docs = self.tuples[index].docs.clone();
             let (rust, wire) = (
                 self.tuples[index].rust.clone(),
                 self.tuples[index].wire.clone(),
@@ -679,19 +708,22 @@ impl<'a> Lowering<'a> {
                 .enumerate()
                 .map(|(position, field)| {
                     let at = path.tuple_field(&field.name, position + 1);
+                    // A tuple field carries no doc in the IR; the one an
+                    // induced argument struct has comes from the parameter at
+                    // the same position, which `docs` holds.
+                    let documented = docs.get(position).cloned().unwrap_or_default();
                     v1::Field {
                         name: Some(spellings(&field.name)),
                         r#type: field.r#type.as_ref().map(|ty| self.type_at(home, ty, &at)),
                         declared_init: None,
                         init: Some(self.inits.tuple_field(home, field)),
-                        doc: String::new(),
+                        doc: documented.doc,
                         labels: Vec::new(),
                         deprecated: None,
-                        // A tuple field carries no doc in the IR, and
-                        // `rules::rules` has no item for it.
-                        links: Vec::new(),
-                        see: Vec::new(),
-                        since: Vec::new(),
+                        links: documented.links,
+                        see: documented.see,
+                        since: documented.since,
+                        // `rules::rules` has no item for a tuple field.
                         rules: Vec::new(),
                     }
                 })
@@ -1075,9 +1107,12 @@ impl<'a> Lowering<'a> {
         // Rust name `<Interface><Interaction>Params`.
         let at = Path::interaction(interface, slot, visibility, owner, member, Vec::new())
             .step("Params");
-        Some(v1::TupleRef {
-            index: self.tuple_ref(home, &tuple, &at),
-        })
+        let index = self.tuple_ref(home, &tuple, &at);
+        // The struct's fields stand for the parameters, in declaration order,
+        // so each one is documented with the parameter it was induced from
+        // (ADR-0028).
+        self.tuples[index as usize].docs = params.iter().map(FieldDoc::of_param).collect();
+        Some(v1::TupleRef { index })
     }
 
     #[allow(clippy::too_many_arguments)]
