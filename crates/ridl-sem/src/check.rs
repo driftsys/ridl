@@ -13425,6 +13425,132 @@ interface I {\n\
         assert_eq!(codes(&bound), Vec::<&str>::new(), "{:?}", bound.diagnostics);
     }
 
+    /// A path that `const MAX: lib.b.Torque` of a remote package writes is
+    /// read in that package's view, so it finds `lib.b` through the pin of
+    /// `lib.a`'s own `[imports]`, not through the pins of the checked
+    /// package. `app` pins only `lib.a`, so a lookup in the checked
+    /// package's view would not find `lib.b`, `MAX` would have no named type,
+    /// and `const FAST: Speed = MAX` would draw nothing instead of the
+    /// nominal-identity error TYPL-108.
+    #[test]
+    fn typl_108_through_a_qualified_type_in_a_remote_packages_view() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let b = remote_package(
+            &db,
+            "lib.b",
+            REMOTE_URL_B,
+            "package lib.b\ntype Torque: integer [0..10]\n",
+            &[],
+        );
+        let a = remote_package(
+            &db,
+            "lib.a",
+            REMOTE_URL,
+            "package lib.a\nconst MAX: lib.b.Torque = 5\n",
+            &[("lib.b", REMOTE_URL_B)],
+        );
+        let app = member_with_imports(
+            &db,
+            "package app\nimport lib.a.MAX\ntype Speed: integer [0..10]\nconst FAST: Speed = MAX\n",
+            &[("lib.a", REMOTE_URL)],
+        );
+        let ws = Workspace::new(&db, vec![app, a, b], BTreeMap::new());
+        let checked = without_missing_docs(check_package(&db, ws, app, std));
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-108"],
+            "{:?}",
+            checked.diagnostics
+        );
+        assert!(
+            checked.diagnostics[0].message.contains("lib.b.Torque"),
+            "{}",
+            checked.diagnostics[0].message
+        );
+    }
+
+    /// A qualifier that names no loaded package at all is the ordinary
+    /// unknown type name, TYPL-011, not the error a hidden package draws.
+    #[test]
+    fn a_qualifier_that_names_no_loaded_package_is_typl_011() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = member_with_imports(&db, "package app\nstruct S {\n  x: ext.Foo\n}\n", &[]);
+        let ws = Workspace::new(&db, vec![app], BTreeMap::new());
+        let checked = without_missing_docs(check_package(&db, ws, app, std));
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-011"],
+            "{:?}",
+            checked.diagnostics
+        );
+        assert_eq!(messages(&checked), vec!["unknown type name `ext.Foo`"]);
+    }
+
+    /// `app` pins `lib` to one unit and `lib.b` to another, so the longest
+    /// key wins for `lib.b`. The only loaded package named `lib.b` belongs to
+    /// the first unit, so the pinned unit holds no such package: a qualified
+    /// reference draws the error naming the second URL, not the not-pinned
+    /// message and not a binding to the package of the other unit.
+    #[test]
+    fn a_qualified_reference_uses_the_longest_pinned_key_and_its_unit() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let other_unit = remote_package(
+            &db,
+            "lib.b",
+            REMOTE_URL,
+            "package lib.b\ntype T: integer [0..10]\n",
+            &[],
+        );
+        let app = member_with_imports(
+            &db,
+            "package app\nstruct S {\n  x: lib.b.T\n}\n",
+            &[("lib", REMOTE_URL), ("lib.b", REMOTE_URL_B)],
+        );
+        let ws = Workspace::new(&db, vec![app, other_unit], BTreeMap::new());
+        let checked = without_missing_docs(check_package(&db, ws, app, std));
+        // The error has no diagnostic code, as every unresolved import has none.
+        assert_eq!(codes(&checked), vec![""], "{:?}", checked.diagnostics);
+        let expected = format!(
+            "unresolved reference `lib.b.T`: `lib.b` is not a package of the remote unit at `{REMOTE_URL_B}`"
+        );
+        assert_eq!(messages(&checked), vec![expected.as_str()]);
+    }
+
+    /// The same longest-key rule applies to a doc link: `[lib.b.T]` does not
+    /// resolve to the package of the unit pinned by the shorter key.
+    #[test]
+    fn a_doc_link_uses_the_longest_pinned_key_and_its_unit() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let other_unit = remote_package(
+            &db,
+            "lib.b",
+            REMOTE_URL,
+            "package lib.b\ntype T: integer [0..10]\n",
+            &[],
+        );
+        let app = member_with_imports(
+            &db,
+            "package app\n/// See [lib.b.T].\nstruct S {\n  a: boolean\n}\n",
+            &[("lib", REMOTE_URL), ("lib.b", REMOTE_URL_B)],
+        );
+        let ws = Workspace::new(&db, vec![app, other_unit], BTreeMap::new());
+        let checked = without_missing_docs(check_package(&db, ws, app, std));
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-401"],
+            "{:?}",
+            checked.diagnostics
+        );
+        assert_eq!(
+            messages(&checked),
+            vec!["doc link `lib.b.T` does not resolve to a declaration"]
+        );
+    }
+
     // The ridl §11 ordinal assignment over the Appendix A interface — 1-based,
     // declaration order, one sequence across all kinds, the reserved tombstone
     // counted at #6 — is asserted on the lowered IR by

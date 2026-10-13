@@ -119,8 +119,10 @@ impl From<bool> for Frozen {
 ///   [`Frozen::Yes`].
 /// - Otherwise, under [`Frozen::No`], the artifact is fetched and cached. If the
 ///   lockfile pinned a different hash, the fetch is a `MANI-102` mismatch and
-///   the import is dropped; otherwise the newly computed `sha256` and `tree`
-///   are pinned.
+///   the import is dropped. If the entry pins a `tree`, the unpacked tree is
+///   verified against it as for a cache hit (`MANI-107` on a mismatch) and the
+///   pinned value is kept; an entry with no `tree` gets the newly computed
+///   `tree` pinned. The `sha256` is the newly computed one.
 /// - Under [`Frozen::Yes`] nothing is ever fetched: a URL with no lockfile entry
 ///   is `MANI-103`, and a pinned URL that is not in the cache is `MANI-104`.
 ///
@@ -852,6 +854,31 @@ mod tests {
         assert_eq!(stub.hits(), 1, "the empty cache is a miss");
         assert_eq!(codes(&diags), vec!["MANI-107"]);
         assert!(units.is_empty());
+    }
+
+    /// A fresh fetch whose unpacked tree hashes to the pinned `tree` draws no
+    /// diagnostic, returns the unit with the pinned value, and leaves the lock
+    /// entry as it was.
+    #[test]
+    fn a_fetch_into_an_empty_cache_accepts_the_matching_pinned_tree() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("tree-fetch-ok");
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache(&dir), Frozen::No);
+        let pinned_tree = lock.entries[stub.url()].tree.clone().unwrap();
+        let fresh = TempDir::new("tree-fetch-ok-fresh");
+        stub.reset_hits();
+        let (units, regenerated, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            Some(&lock),
+            &cache(&fresh),
+            Frozen::No,
+        );
+        assert_eq!(stub.hits(), 1, "the empty cache is a miss");
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(units.len(), 1);
+        assert_eq!(units[0].tree, pinned_tree);
+        assert_eq!(regenerated, lock);
     }
 
     /// A symbolic link in a cache entry is MANI-107 naming the link; the

@@ -216,6 +216,52 @@ mod tests {
         );
     }
 
+    /// A consumer package that references a remote package counts no edge to
+    /// it: the remote target adds no fan-out and no `dependsOn` entry to the
+    /// consumer's row, and has no row of its own. `fx.b` is marked as a
+    /// remote unit and moved after the consumer's packages, as the loader
+    /// orders them; `fx.a.sub` imports it and `fx.a`.
+    #[test]
+    fn metrics_counts_no_edge_to_a_remote_package() {
+        let path = fixture("ws");
+        let file = format!("{path}/a/sub/sub.ridl");
+        let source = "package fx.a.sub\nimport fx.a.Reading\nimport fx.b.Level\nstruct Sample {\n  reading: Reading\n  window: Level\n}\n".to_string();
+        let mut snap = snapshot(&path, &[OverlayInput { path: file, source }]).unwrap();
+        let deps = dependencies(
+            &snap,
+            &DependenciesInput {
+                path: path.clone(),
+                overlays: None,
+                package: Some("fx.a.sub".to_string()),
+            },
+        )
+        .unwrap();
+        assert_eq!(deps.packages[0].depends_on, ["fx.a", "fx.b"]);
+        let at = snap
+            .output
+            .checked
+            .iter()
+            .position(|checked| checked.ir.name == "fx.b")
+            .unwrap();
+        let remote = snap.output.checked.remove(at);
+        snap.output.checked.push(remote);
+        snap.output.remote_units.insert(
+            "fx.b".to_string(),
+            ridl_core::MaterializedUnit {
+                url: "https://registry.example.com/fx/b@v1".to_string(),
+                dir: snap.root.join("b"),
+                tree: "0".repeat(64),
+            },
+        );
+        assert_eq!(
+            value(&snap, &path)["packages"],
+            json!([
+                {"name":"fx.a", "fanIn":1, "fanOut":0, "instability":0.0, "dependsOn":[]},
+                {"name":"fx.a.sub", "fanIn":0, "fanOut":1, "instability":1.0, "dependsOn":["fx.a"]}
+            ])
+        );
+    }
+
     #[tokio::test]
     async fn metrics_reports_cohesion_groups() {
         let copy = TempWorkspace::copy("ws");
