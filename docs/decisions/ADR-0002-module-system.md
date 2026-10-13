@@ -28,6 +28,12 @@ tree (MANI-013).
 Amended 2026-10-10 by driftsys/ridl#801: §4 gains the `[backend.<name>]` tables,
 with the `encodings` key, and the codes MANI-015 and MANI-016.
 
+Amended 2026-10-13 by the remote units design (driftsys/ridl#48, PR 1): §5
+states how a remote unit is read and checked (a flat, explicit dependency list;
+a fetched artifact is a unit; a remote unit is a read-only dependency), and §7
+gains the `tree` hash of the unpacked tree beside the `sha256` of the fetched
+artifact, with MANI-105 to MANI-108.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -353,6 +359,36 @@ member can pin a specific dependency version without rewriting the whole
 workspace, while the workspace `[imports]` provides the shared default for
 everything else.
 
+**Remote units** (amended 2026-10-13, driftsys/ridl#48). The consumer's
+`[imports]` — the union of the root manifest's table and every member's — lists
+every remote unit the build needs, indirect ones included. A remote unit's own
+`[imports]` are read only to check that the consumer names each key; a key the
+consumer does not name is MANI-106 (Error), and when the two URLs for a key
+differ the consumer's URL is used, with no diagnostic. When two members pin one
+key to different URLs, both URLs are materialized and read; the second unit is
+not loaded and draws MANI-014.
+
+A fetched artifact is a unit (§1): its top level holds a `[package]` `ridl.toml`
+whose `name` equals the `[imports]` key that names its URL. Otherwise — no
+manifest at the top, a `[workspace]` manifest, or another name — the unit is
+MANI-105 (Error) and is not loaded; when two keys name one URL, the key that is
+not the name is MANI-105 and binds nothing. The ordinary rules apply to a remote
+unit unchanged: MANI-014, the directory-equals-package rule, and the
+cross-package cycle check across the boundary between the consumer and the unit.
+
+A remote unit is a read-only dependency. Its Errors are reported with the unit
+name and the file path, and fail the command; its Warnings and Infos are dropped
+before any `[lints]` level is applied, and the consumer's `[lints]` do not apply
+to it. Its packages are given to the code backends and generated like a
+member's; no IR snapshot, catalog, `interfaces.lock`, property run or diff side
+is produced for it, and `ridl fmt` never touches it. `internal` declarations of
+a remote unit are not visible to the consumer. Step 1 of the order above sees
+members only: a remote package is reached through the key that pins it, so a
+sibling member's pin is never visible. The steps above are the order for a
+member. A package of a remote unit resolves an import through its own unit
+first, then through its own `[imports]` only; the workspace root's `[imports]`
+(step 3) apply to workspace members only.
+
 ### 6. Cycles
 
 Cycles within a package are permitted. Cycles across packages are a hard error.
@@ -375,6 +411,22 @@ strictly under `ridlc --frozen` for CI.
 
 The local cache lives at `~/.ridl/cache`, indexed by URL and content hash. A
 cached entry is never re-fetched as long as the hash on record matches.
+
+**The `tree` hash** (amended 2026-10-13, driftsys/ridl#48). Each `ridl.lock`
+entry pins two hashes: `sha256`, over the fetched artifact, and `tree`, over the
+unpacked tree. The `tree` hash is defined once, in `ridl-core`: the input is
+every regular file under the unit's directory, in ascending byte order of its
+relative path written with `/` separators; for each file the hash is fed the
+path bytes, one NUL byte, the file length as a little-endian u64, and the file
+bytes; a symbolic link or any other non-regular file is an error (MANI-107,
+naming the file) and no tree that holds one is loaded; the result is the SHA-256
+in lowercase hex. A fetch computes `tree` after unpacking; a cache hit is
+verified against it (MANI-107 on a mismatch). An entry written before this
+amendment has no `tree`: the next run without `--frozen` adds it, and a run with
+`--frozen` raises MANI-108. `ridl lsp` and `ridl mcp` never fetch: they read the
+cache as a frozen run does, and a miss is MANI-103 or MANI-104 whose message
+names `ridl check` as the fix. The tar format (ADR-0007 decision 12) stays
+provisional.
 
 **Rationale.** This is the model from ADR-0001, with the only refinement being
 placement: one lockfile per workspace (not per member) so that

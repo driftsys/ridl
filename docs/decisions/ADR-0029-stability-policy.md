@@ -32,6 +32,10 @@ IR specification §6 and §7, [ADR-0005](ADR-0005-agent-enablement.md) §7,
 [ADR-0025](ADR-0025-workspace-aware-mcp-tools.md). Each statement stays as
 written; this record adds the check and the approval rule.
 
+**Amended 2026-10-13 (driftsys/ridl#48) — the Manifest row gains `ridl.lock`.**
+The `manifest` dump lists the keys of a `ridl.lock` entry (`sha256` and `tree`)
+beside the `ridl.toml` keys, so a removed or retyped lock key is a break.
+
 **Amended 2026-10-12 — the wire dump holds the frame vectors.** The `wire` dump
 gains one `frame-vector <id> <hex>` line per row of the vector table of the
 frame specification §11.1, so the frame envelope and the `attach` handshake are
@@ -91,7 +95,7 @@ design in each:
    | Surface                 | What a user depends on                                                                                                                                   |
    | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
    | Language                | typl, ridl and rsdl syntax and keywords; the set of sources that compile without an error                                                                |
-   | Manifest                | `ridl.toml` keys and their value types, `interfaces.lock`, `.ridl/baseline`                                                                              |
+   | Manifest                | `ridl.toml` keys and their value types, `ridl.lock` entries and their keys, `interfaces.lock`, `.ridl/baseline`                                          |
    | Diagnostics and lints   | diagnostic codes, lint names, lint default levels                                                                                                        |
    | CLI                     | subcommands, flags, exit codes, the `--format json` and `--format sarif` output shapes                                                                   |
    | Generated Rust crate    | the domain types and the interaction face (`Client`, `Provider`, `Publisher`, `Event`, `serve`, `Bind`)                                                  |
