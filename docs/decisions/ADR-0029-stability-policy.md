@@ -257,10 +257,10 @@ design in each:
    ADR-0021 decision 10 as a frozen surface and adds the `msrv` check.
 
 6. **The gate table says which gate covers which surface.** The `baseline`
-   column is empty on the day this record is accepted. `freeze/surfaces.toml` is
-   the authoritative record of every baseline; this table lists the coverage and
-   the work that switches each gate on, and a gate is on when its surface has a
-   row there.
+   column was empty on the day this record was accepted. A blank cell means that
+   the surface has no row yet. `freeze/surfaces.toml` is the authoritative
+   record of every baseline; this table lists the coverage and the work that
+   switches each gate on, and a gate is on when its surface has a row there.
 
    | Surface                 | Row names in `surfaces.toml`                                                   | Switched on by                       | Baseline               |
    | ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------ | ---------------------- |

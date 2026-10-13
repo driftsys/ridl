@@ -18,7 +18,7 @@ required = [
 # git ref its dump is compared against:
 #
 #   [[surface]]
-#   name = "keywords"
+#   name = "example"
 #   baseline = "v0.10.0"
 #
 # Without a row, a line-dump surface is only checked against its committed
