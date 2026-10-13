@@ -40,8 +40,9 @@ const REPLACED_PREFIX: &str = ".replaced-";
 /// - Any other unit is copied byte for byte from its `dir` into
 ///   `vendor/.staging-<key>-<pid>/`, and the copy is checked against the
 ///   unit's `tree`. Then the old `vendor/<key>/`, if any, is renamed to
-///   `vendor/.replaced-<key>-<pid>/`, the copy is renamed to
-///   `vendor/<key>/`, and the old tree is removed.
+///   `vendor/.replaced-<key>-<pid>`, the copy is renamed to
+///   `vendor/<key>/`, and the old entry is removed. A regular file at
+///   `vendor/<key>` is replaced the same way as an old tree.
 /// - The directory of every key not in `units` is removed. An entry that is
 ///   not a directory, and a hidden directory, is left alone.
 ///
@@ -91,7 +92,12 @@ pub fn write_vendor(
                 let _ = fs::remove_dir_all(&staging);
                 return Err(err);
             }
-            fs::remove_dir_all(&replaced)?;
+            // A regular file at the key path is replaced like an old tree.
+            if replaced.is_dir() {
+                fs::remove_dir_all(&replaced)?;
+            } else {
+                fs::remove_file(&replaced)?;
+            }
         } else {
             fs::rename(&staging, &dest)?;
         }
@@ -359,6 +365,21 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
         assert!(err.to_string().contains("u@v2"), "{err}");
         assert_eq!(tree_hash(&root.join("vendor/a")).unwrap(), old.tree);
+        assert!(hidden_entries(&root.join("vendor")).is_empty());
+    }
+
+    /// A regular file at a key path is replaced by the unit's tree, and no
+    /// `.replaced-*` entry is left.
+    #[test]
+    fn a_file_at_a_key_path_is_replaced() {
+        let fixture = TempDir::new("file-at-key");
+        let a = unit(&fixture.path().join("src/a"), &[("a.typl", "package a\n")]);
+        let root = root_in(&fixture);
+        fs::create_dir_all(root.join("vendor")).unwrap();
+        fs::write(root.join("vendor/a"), "not a directory").unwrap();
+        let report = write_vendor(&root, &BTreeMap::from([("a".to_string(), a.clone())])).unwrap();
+        assert_eq!(report.written, ["a"]);
+        assert_eq!(tree_hash(&root.join("vendor/a")).unwrap(), a.tree);
         assert!(hidden_entries(&root.join("vendor")).is_empty());
     }
 

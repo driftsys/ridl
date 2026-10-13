@@ -372,3 +372,39 @@ fn vendor_writes_at_the_workspace_root() {
     );
     assert!(!dir.path().join("ws/app/vendor").exists());
 }
+
+/// When a run removes the directory of a unit no longer imported, the
+/// MANI-018 the load drew for that directory is not printed, while the
+/// MANI-018 of a stray source file left in `vendor/` is.
+#[test]
+fn vendor_reports_a_stray_file_but_not_a_removed_directory() {
+    let dir = TempDir::new("vendor-stray");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    assert_eq!(ridl(&root, dir.path(), &["vendor"]).0, 0);
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("app/app.ridl", "package app\n");
+    dir.write("app/vendor/stray.typl", "package stray\n");
+    let (code, stdout, stderr) = ridl(&root, dir.path(), &["vendor"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stdout, "removed veh.common\n");
+    assert_eq!(stderr.matches("warning[MANI-018]").count(), 1, "{stderr}");
+    assert!(stderr.contains("stray.typl"), "{stderr}");
+    assert!(!stderr.contains("common.typl"), "{stderr}");
+}
+
+/// A path with no `ridl.toml` at or above it exits 2 and writes nothing.
+#[test]
+fn vendor_without_a_manifest_exits_2() {
+    let dir = TempDir::new("vendor-no-manifest");
+    std::fs::create_dir_all(dir.path().join("empty")).unwrap();
+    let empty = dir.path().join("empty");
+    let (code, stdout, stderr) = ridl(&empty, dir.path(), &["vendor"]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(stderr.contains("no `ridl.toml`"), "{stderr}");
+    assert_eq!(stdout, "");
+    assert!(!empty.join("vendor").exists());
+}
