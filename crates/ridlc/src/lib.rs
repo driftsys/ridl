@@ -448,6 +448,23 @@ pub fn compile_workspace_with(
     entry: &Path,
     overlays: &[ridl_core::Overlay],
 ) -> Result<WorkspaceOutput, ridl_core::LoadError> {
+    compile_workspace_with_access(
+        db,
+        entry,
+        overlays,
+        RemoteAccess::new(Frozen::Yes, &Cache::user_default()),
+    )
+}
+
+/// [`compile_workspace_with`] with the remote access the caller chooses:
+/// `ridl vendor` passes [`RemoteAccess::refresh`], which reads the cache,
+/// fetches what it does not hold, and rewrites `ridl.lock`.
+pub fn compile_workspace_with_access(
+    db: &mut RidlDatabase,
+    entry: &Path,
+    overlays: &[ridl_core::Overlay],
+    access: RemoteAccess<'_>,
+) -> Result<WorkspaceOutput, ridl_core::LoadError> {
     let Compiled {
         workspace,
         std,
@@ -461,12 +478,7 @@ pub fn compile_workspace_with(
         report_scope,
         remote_units,
         ..
-    } = load_and_check(
-        db,
-        entry,
-        overlays,
-        RemoteAccess::new(Frozen::Yes, &Cache::user_default()),
-    )?;
+    } = load_and_check(db, entry, overlays, access)?;
     // System lowering resolves references into the standard package.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();

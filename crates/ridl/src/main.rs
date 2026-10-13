@@ -50,6 +50,7 @@ mod catalogs;
 mod lock;
 mod property;
 mod scaffold;
+mod vendor;
 
 use clap::{Parser, Subcommand};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span, render};
@@ -260,6 +261,17 @@ enum Command {
         /// The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote.
         path: PathBuf,
     },
+    /// Copy every remote unit of the workspace's `[imports]` into `vendor/`
+    /// at the manifest root, so a `--frozen` build needs no network and no
+    /// cache. Exit 0 when `vendor/` was written or there was nothing to
+    /// change, 1 on a diagnostic error (nothing written), 2 on a missing or
+    /// unreadable path, a fetch failure, or an I/O failure.
+    Vendor {
+        /// A unit directory, a workspace root, or a file; the manifest root
+        /// above it is the one vendored.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
 }
 
 /// The subcommands of `ridl lock`.
@@ -371,6 +383,7 @@ fn main() -> ExitCode {
         Command::Lsp { .. } => run_lsp(),
         Command::Mcp => run_mcp(),
         Command::Describe { path } => run_describe(&path),
+        Command::Vendor { path } => vendor::run(&path),
         Command::Init {
             path,
             workspace,
