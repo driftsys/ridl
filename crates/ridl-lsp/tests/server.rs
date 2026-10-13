@@ -4017,6 +4017,106 @@ fn rsdl_completion_qualifies_across_packages() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// After `requires`, completion also offers `pkg.Name` for every interface of
+/// a package of the workspace that the package does not see by a bare name
+/// (rsdl reference §4), on the rule the checker binds a qualified interface
+/// by: an interface the package already sees is offered bare only, an
+/// `internal` interface of another package is not offered, and neither is an
+/// interface of a package the checker does not find in the workspace (an open
+/// buffer outside it).
+#[test]
+fn rsdl_requires_completion_offers_qualified_interfaces() {
+    let dir = TempDir::new("rsdl-requires-qualified");
+    let (_contracts, system, _extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    dir.write(
+        "adas/hidden.ridl",
+        "package veh.adas\n\ninternal interface Hidden {\n\x20 signal on: Flag @[100ms..1s]\n}\n",
+    );
+    dir.write(
+        "topology/own.ridl",
+        "package veh.topology\n\ninterface Own {\n\x20 signal on: boolean @[1s..10s]\n}\n",
+    );
+    dir.write(
+        "extra/telemetry.ridl",
+        "package veh.extra\n\ninterface Telemetry {\n\x20 signal up: boolean @[1s..10s]\n}\n",
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    // A buffer outside the workspace is a package the checker does not find.
+    let stray = path_to_uri("/ridl-lsp-nowhere/loose.ridl").expect("an absolute synthetic path");
+    did_open(
+        &client,
+        &stray,
+        "package veh.loose\n\ninterface Loose {\n\x20 signal on: boolean @[1s..10s]\n}\n",
+    );
+
+    let text = RSDL_COMPLETION;
+    did_open(&client, &system, text);
+    let items = complete_at(&client, 10, system.clone(), pos_after(text, "requires ", 0));
+    let got = labels(&items);
+    // An interface of a package the file does not import, and one of an
+    // imported package that is not imported by name.
+    for label in ["veh.extra.Telemetry", "veh.adas.CruiseControl"] {
+        assert!(got.contains(&label), "`{label}` is offered: {got:?}");
+        assert_eq!(
+            kind_of(&items, label),
+            Some(lt::CompletionItemKind::INTERFACE)
+        );
+        let item = items.iter().find(|item| item.label == label);
+        assert_eq!(item.and_then(|item| item.detail.as_deref()), Some(label));
+    }
+    // An imported interface, and one of the file's own package, are offered
+    // bare, not twice.
+    for (bare, qualified) in [
+        ("LaneAssist", "veh.adas.LaneAssist"),
+        ("Own", "veh.topology.Own"),
+    ] {
+        assert!(got.contains(&bare), "`{bare}` is offered: {got:?}");
+        assert!(!got.contains(&qualified), "no `{qualified}`: {got:?}");
+    }
+    // No internal interface of another package, no interface of a buffer
+    // outside the workspace, no package qualifying an interface it only
+    // imports, no interface of `ridl.std`.
+    for label in [
+        "veh.adas.Hidden",
+        "Hidden",
+        "veh.loose.Loose",
+        "veh.topology.LaneAssist",
+        "veh.extra.CruiseControl",
+    ] {
+        assert!(!got.contains(&label), "`{label}` is not offered: {got:?}");
+    }
+    assert!(
+        !got.iter().any(|label| label.starts_with("ridl.std.")),
+        "{got:?}"
+    );
+    let mut sorted_labels = got.clone();
+    sorted_labels.sort_unstable();
+    assert_eq!(got, sorted_labels, "the items are sorted");
+    sorted_labels.dedup();
+    assert_eq!(got.len(), sorted_labels.len(), "no label twice: {got:?}");
+
+    // A partly written qualified reference matches the item and is replaced
+    // whole.
+    let partial = text.replace("requires LaneAssist", "requires veh.ex");
+    did_open(&client, &system, &partial);
+    let start = pos_in(&partial, "requires veh.ex", 0, 9);
+    let cursor = pos_after(&partial, "requires veh.ex", 0);
+    let items = complete_at(&client, 11, system.clone(), cursor);
+    let item = items
+        .iter()
+        .find(|item| item.label == "veh.extra.Telemetry")
+        .unwrap_or_else(|| panic!("the interface is offered: {:?}", labels(&items)));
+    let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit else {
+        panic!("the item carries a text edit: {item:?}");
+    };
+    assert_eq!(edit.range, lt::Range::new(start, cursor));
+    assert_eq!(edit.new_text, "veh.extra.Telemetry");
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// Completion on an `import` line in an `.rsdl` file offers the components and
 /// the systems of the package whose path precedes the cursor, with the kinds
 /// and details the other rsdl slots use, besides its typl and ridl

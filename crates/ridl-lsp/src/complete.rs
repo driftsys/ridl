@@ -37,7 +37,8 @@
 //! - at the start of a component line → `offers` and `requires`; in a
 //!   deployment body → `machine`;
 //! - after `offers` → every service of the catalog; after `requires` → the
-//!   interfaces the package sees and the services with an inline shape;
+//!   interfaces the package sees, the interfaces of the other packages of the
+//!   workspace by their qualified names, and the services with an inline shape;
 //! - on a member line of a `system` or a `distribution` → the components and
 //!   the services no component offers (RSDL-504); on the placement line of a
 //!   `machine`, the declared instances `Name.inst` too;
@@ -45,7 +46,10 @@
 //!
 //! A component or a system of the file's own package is offered by its bare
 //! name, one of another package by its qualified name; an interface after
-//! `requires` by the name the package sees it under. When the part already
+//! `requires` by the name the package sees it under, or by its qualified name
+//! when the package does not see it. An `internal` interface of another
+//! package, and an interface of a package outside the workspace, are not
+//! offered, because the checker does not bind them. When the part already
 //! written qualifies the reference with the package that declares a
 //! bare-named item, the item is matched and written by its qualified name.
 //! Inside a plain comment nothing is offered: it is prose.
@@ -54,13 +58,13 @@
 //! identifier the cursor is completing, not from a well-formed tree — the same
 //! discipline the resolver and navigation use.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use lsp_types as lt;
 use ridl_core::db::InputFile;
-use ridl_core::package::{Package, Workspace, service_catalog};
+use ridl_core::package::{Package, Workspace, package_of, service_catalog};
 use ridl_sem::{
-    ConstValue, LinkTarget, SymbolKind, check_system, const_value, doc_link_members,
+    ConstValue, LinkTarget, Symbol, SymbolKind, check_system, const_value, doc_link_members,
     resolve_doc_link, resolve_package,
 };
 use ridl_syntax::ast::{AstNode, Import, SourceFile};
@@ -227,6 +231,14 @@ pub fn rsdl_completion(
                     )
                 })
                 .collect();
+            items.extend(qualified_interface_items(
+                db,
+                ws,
+                std,
+                packages,
+                pkg.name(db),
+                &resolution.symbols,
+            ));
             items.extend(service_items(db, ws, std, |_, entry| entry.inline));
             items
         }
@@ -291,6 +303,53 @@ pub fn rsdl_completion(
         }
     };
     (sorted(items), replaced)
+}
+
+/// The interfaces that a `requires` reference written in the package `from`
+/// binds by a qualified name `pkg.Name` but that `visible`, the package's
+/// resolved names, does not hold: the interface of a package of the workspace,
+/// not `internal` unless declared in `from`, as the checker binds it (rsdl
+/// reference §4). `ridl.std` and a package outside the workspace, such as an
+/// open buffer with no manifest, are not found by the checker, so they offer
+/// nothing.
+fn qualified_interface_items(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    packages: &[Package],
+    from: &str,
+    visible: &HashMap<String, Symbol>,
+) -> Vec<lt::CompletionItem> {
+    let seen: HashSet<(&str, &str)> = visible
+        .values()
+        .filter(|symbol| symbol.kind == SymbolKind::Interface)
+        .map(|symbol| (symbol.package.as_str(), symbol.name.as_str()))
+        .collect();
+    let mut items = Vec::new();
+    for package in packages {
+        let package_name = package.name(db);
+        if package_of(db, ws, package_name.clone()) != Some(*package) {
+            continue;
+        }
+        let resolution = resolve_package(db, ws, *package, std);
+        for symbol in resolution.symbols.values() {
+            // A name the package imports belongs to the package that declares it.
+            if symbol.package != *package_name
+                || symbol.kind != SymbolKind::Interface
+                || (symbol.internal && package_name != from)
+                || seen.contains(&(symbol.package.as_str(), symbol.name.as_str()))
+            {
+                continue;
+            }
+            let qualified = format!("{package_name}.{}", symbol.name);
+            items.push(item(
+                &qualified,
+                lt::CompletionItemKind::INTERFACE,
+                qualified.clone(),
+            ));
+        }
+    }
+    items
 }
 
 /// The services of the workspace catalog that `keep` accepts.
