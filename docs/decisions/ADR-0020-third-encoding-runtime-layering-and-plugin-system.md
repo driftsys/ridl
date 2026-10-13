@@ -83,6 +83,11 @@ gains `Buffer`; `port` gains `Encoded`; a generated package enables one
 `ridl-rt` feature per named encoding. The request carries the `encodings`
 option. The record stays Proposed.
 
+**Amended 2026-10-13 — open items 7 to 9.** Three open items are added: the
+place of FlatBuffers among the encodings once proto3 exists, JSON at the edges
+of JavaScript applications, and a `ridl-rt` consumer of the catalog. No decision
+changes.
+
 **Amended 2026-10-12 — decision 6, the WebSocket transport carries the session's
 encoding.** The `ridl-transport-ws` row said "proto3-framed". The frame
 specification §11.1, version 0.2.0, fixes no encoding for the WebSocket binding:
@@ -605,7 +610,6 @@ as its public contract.
    against a hash over the IR the pair was generated from — or whether
    publication together is the only thing that carries it. The TypeScript
    backend settles it.
-
 7. **FlatBuffers' place among the three encodings.** After the proto3 codec
    lands (roadmap story E11.8), measure proto3 against FlatBuffers on real
    payloads: encode time, decode time, encoded size, on a native target and on
@@ -622,10 +626,11 @@ as its public contract.
    and `bytes` as `Uint8Array` in memory with base64 only at the JSON edge
    (whether native `toBase64` and `fromBase64` are available), with large binary
    data kept out of JSON.
-9. **A catalog reader in the runtime.** None exists. A session checks its peer
-   by the compiled-in `CATALOG` hash, and a tool that renders a live signal
-   links the generated package. A tool with no generated code needs a reflective
-   decoder as well as a reader, and neither exists for any encoding. When one is
+9. **A `ridl-rt` consumer of the catalog.** `ridl-descriptor` reads and verifies
+   the catalog descriptor, but `ridl-rt` does not consume it. A session checks
+   its peer by the compiled-in `CATALOG` hash, and a tool that renders a live
+   signal links the generated package. A tool with no generated code needs a
+   reflective decoder as well, and none exists for any encoding. When one is
    wanted, its design chooses between a `catalog` feature of `ridl-rt` and a
    separate crate, starting from the feature.
 

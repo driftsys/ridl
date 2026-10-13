@@ -156,7 +156,7 @@ each (all in Task A2 unless stated):
 | A1   | A  | `docs/specification/frame-specification.md`                                                                                                                                                                                                                                                                                                                                                                             |
 | A2   | A  | `xtask/src/freeze/wire.rs`, `freeze/wire.txt`, `freeze/README.md`, `CONTRIBUTING.md`, `docs/decisions/ADR-0029-stability-policy.md`, `docs/book/stability.md`                                                                                                                                                                                                                                                           |
 | A3   | A  | `crates/ridl-ir/src/codegen/bindings.rs`, `crates/ridl-ir/src/codegen/deployment.rs`, `crates/ridlc/tests/layout.rs`, `crates/ridlc/tests/fixtures/cabin-layout.json`, `crates/ridlc/tests/codegen_model.rs`, `docs/design/codegen-plugins.md`, `docs/book/codegen-plugins.md`, `docs/book/writing-a-port.md`, `docs/technotes/walking-skeleton-architecture.md`                                                        |
-| A4   | A  | `docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md`, `docs/design/catalog-descriptor.md`, `docs/specification/ridl-family-overview.md`, `docs/ROADMAP.md`, `docs/wip/2026-10-06-ws-and-payload-formats-steering.md`                                                                                                                                                                          |
+| A4   | A  | `docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md`, `docs/design/catalog-descriptor.md`, `docs/specification/ridl-family-overview.md`, `docs/ROADMAP.md`, `docs/archive/2026-10-06-ws-and-payload-formats-steering.md`                                                                                                                                                                      |
 | A5   | A  | none (verify, push, pull request, issue comment texts)                                                                                                                                                                                                                                                                                                                                                                  |
 | B1   | B  | `crates/ridl-rt/src/payload.rs`, `crates/ridl-rt/src/sample.rs`, `crates/ridl-rt/tests/payload.rs`, `crates/ridl-rt/tests/read_sample.rs`, `crates/ridl-rt/examples/read_sample.rs`, `docs/design/ridl-rt.md`, `docs/decisions/ADR-0021-ridl-rt-0.1-api-and-release.md`, `docs/specification/frame-specification.md`, `docs/technotes/ridl-rt-by-example.md`                                                            |
 | B2   | B  | `crates/ridl-backend-rust/src/lib.rs`, `crates/ridl-backend-rust/src/codec.rs`, `crates/ridl-backend-rust/src/tests.rs`, `crates/ridl-backend-rust/src/snapshots/*.snap`, `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs`, `crates/ridl-backend-rust/tests/interaction_face.rs`, `crates/ridl-backend-rust/tests/generated/interaction_face.rs`, `crates/ridlc/tests/snapshots/*.snap`, `freeze/generated/**` |
@@ -997,7 +997,7 @@ git rev-parse HEAD   # record as BASE_A0
 - Modify: `docs/design/catalog-descriptor.md:277-279`
 - Modify: `docs/specification/ridl-family-overview.md:48`
 - Modify: `docs/ROADMAP.md:249-251`
-- Modify: `docs/wip/2026-10-06-ws-and-payload-formats-steering.md` ("H.
+- Modify: `docs/archive/2026-10-06-ws-and-payload-formats-steering.md` ("H.
   Recorded, not asked")
 
 **Interfaces:** none; text only.
@@ -1039,7 +1039,7 @@ git rev-parse HEAD   # record as BASE_A0
 - [ ] **Step 2: Format and check**
 
   Run:
-  `prim fmt docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md docs/design/catalog-descriptor.md docs/specification/ridl-family-overview.md docs/ROADMAP.md docs/wip/2026-10-06-ws-and-payload-formats-steering.md`,
+  `prim fmt docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md docs/design/catalog-descriptor.md docs/specification/ridl-family-overview.md docs/ROADMAP.md docs/archive/2026-10-06-ws-and-payload-formats-steering.md`,
   then the same file list with `prim lint`. Expected: exit 0.
 
   Run:
@@ -1055,7 +1055,7 @@ git rev-parse HEAD   # record as BASE_A0
 - [ ] **Step 4: Commit**
 
   ```bash
-  git add docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md docs/design/catalog-descriptor.md docs/specification/ridl-family-overview.md docs/ROADMAP.md docs/wip/2026-10-06-ws-and-payload-formats-steering.md
+  git add docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md docs/design/catalog-descriptor.md docs/specification/ridl-family-overview.md docs/ROADMAP.md docs/archive/2026-10-06-ws-and-payload-formats-steering.md
   git commit -m "docs(adr): record the WebSocket binding in ADR-0020 and the records that cite it
 
   ADR-0020 decision 6 no longer fixes proto3 for the WebSocket transport. The
