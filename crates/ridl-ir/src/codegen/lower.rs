@@ -934,9 +934,10 @@ impl<'a> Lowering<'a> {
                     owner,
                     decl.name.as_str(),
                 );
+                let request_induced = params_as_tuple(&command.params);
                 let request_sizes = self.sizes(
                     home,
-                    &PayloadShape::Params(&command.params),
+                    &request_shape(&command.params, request_induced.as_ref()),
                     single_param_type(&command.params),
                 );
                 let clauses = self.clauses(home, &command.contracts, &command.params, None);
@@ -998,14 +999,21 @@ impl<'a> Lowering<'a> {
                     .step("Reply");
                     self.reply(home, ret, &at)
                 });
+                let request_induced = params_as_tuple(&query.params);
                 let request_sizes = self.sizes(
                     home,
-                    &PayloadShape::Params(&query.params),
+                    &request_shape(&query.params, request_induced.as_ref()),
                     single_param_type(&query.params),
                 );
-                let reply_sizes = query.return_type.as_ref().map_or_else(absent_sizes, |ret| {
-                    self.sizes(home, &PayloadShape::Return(ret), reply_named)
-                });
+                let reply_induced = match reply_named {
+                    Some(_) => None,
+                    None => reply_as_tuple(query.return_type.as_ref()),
+                };
+                let reply_sizes = match (&reply_induced, query.return_type.as_ref()) {
+                    (Some(tuple), _) => self.sizes(home, &PayloadShape::Tuple(tuple), None),
+                    (None, Some(ret)) => self.sizes(home, &PayloadShape::Return(ret), reply_named),
+                    (None, None) => absent_sizes(),
+                };
                 let payloads = vec![
                     (
                         "request",
@@ -1713,6 +1721,18 @@ fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
             _ => None,
         },
         _ => None,
+    }
+}
+
+/// What a call's request is sized as: the induced argument struct when the
+/// call has one, otherwise the single named parameter.
+fn request_shape<'a>(
+    params: &'a [v2::Param],
+    induced: Option<&'a v2::TupleType>,
+) -> PayloadShape<'a> {
+    match induced {
+        Some(tuple) if single_param_type(params).is_none() => PayloadShape::Tuple(tuple),
+        _ => PayloadShape::Params(params),
     }
 }
 

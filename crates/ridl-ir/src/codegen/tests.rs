@@ -1641,13 +1641,20 @@ fn undefined() -> v1::size_state::State {
 }
 
 #[test]
-fn a_two_parameter_command_has_an_undefined_request_size() {
+fn a_two_parameter_command_states_a_request_size() {
     let model = lower(&call_package(), &[]);
     let v1::interaction::Shape::Command(command) = call_shape(&model, 0) else {
         panic!("a command");
     };
-    assert_eq!(state(&command.request_sizes, true), &undefined());
-    assert_eq!(state(&command.request_sizes, false), &undefined());
+    for proto3 in [true, false] {
+        assert!(
+            matches!(
+                state(&command.request_sizes, proto3),
+                v1::size_state::State::Bounded(_)
+            ),
+            "the induced argument struct is sized like any other message"
+        );
+    }
 }
 
 #[test]
@@ -1665,13 +1672,17 @@ fn a_one_parameter_command_request_sizes_equal_its_payload_sizes() {
 }
 
 #[test]
-fn a_zero_parameter_query_request_is_undefined() {
+fn a_zero_parameter_query_states_a_request_size() {
     let model = lower(&call_package(), &[]);
     let v1::interaction::Shape::Query(query) = call_shape(&model, 2) else {
         panic!("a query");
     };
-    assert_eq!(state(&query.request_sizes, true), &undefined());
-    assert_eq!(state(&query.request_sizes, false), &undefined());
+    for proto3 in [true, false] {
+        assert!(matches!(
+            state(&query.request_sizes, proto3),
+            v1::size_state::State::Bounded(_)
+        ));
+    }
     assert_eq!(
         query.reply_sizes,
         query.reply_payload.as_ref().and_then(|p| p.sizes.clone()),
@@ -1726,21 +1737,6 @@ fn an_unbounded_query_reply_keeps_the_replys_own_attribution() {
         state(&query.reply_sizes, false),
         &v1::size_state::State::Unbounded(expected.clone())
     );
-}
-
-#[test]
-fn a_query_with_no_return_type_spells_its_reply_as_a_unit() {
-    // The request is bounded, so the reservation walks past it and names the
-    // reply: that is the only place the reply's text is visible. A reply text
-    // spelled any other way fails here.
-    let model = lower(&bare_package(), &[]);
-    let quiet = live_member(interface_named(&model, "Bare"), "quiet");
-    for proto3 in [true, false] {
-        assert_eq!(
-            reserved(&quiet.reservation, proto3),
-            &unsized_by("quiet.reply: ()")
-        );
-    }
 }
 
 #[test]
@@ -2097,38 +2093,25 @@ fn bare_package() -> v2::Package {
 }
 
 #[test]
-fn a_query_with_no_return_type_has_undefined_reply_sizes() {
+fn a_query_with_no_return_type_states_a_reply_size() {
     let model = lower(&bare_package(), &[]);
     let blank = live_member(interface_named(&model, "Bare"), "blank");
     let Some(v1::interaction::Shape::Query(query)) = blank.shape.as_ref() else {
         panic!("a query");
     };
-    let expected = v1::PayloadSizes {
-        proto3: Some(v1::SizeState {
-            state: Some(v1::size_state::State::Absent(v1::SizeAbsent {
-                cause: 1,
-                detail: None,
-            })),
-        }),
-        flatbuffers: Some(v1::SizeState {
-            state: Some(v1::size_state::State::Absent(v1::SizeAbsent {
-                cause: 1,
-                detail: None,
-            })),
-        }),
-    };
-    assert_eq!(query.reply_sizes, Some(expected));
-    // Neither payload is bounded: the first one, the request, is named.
+    // The reply is an induced empty struct, and so is the request.
     for proto3 in [true, false] {
-        assert_eq!(
+        assert!(matches!(
+            state(&query.reply_sizes, proto3),
+            v1::size_state::State::Bounded(_)
+        ));
+        assert!(matches!(
             reserved(&blank.reservation, proto3),
-            &unsized_by("blank.request: ()")
-        );
+            v1::reservation_state::State::Bytes(_)
+        ));
     }
 }
 
-/// (driftsys/ridl#852) A fixed member reserves nothing whatever its payload,
-/// a missing payload included, so it is never unsized.
 #[test]
 fn a_fixed_member_with_no_payload_reserves_nothing() {
     let model = lower(&bare_package(), &[]);
@@ -2312,17 +2295,14 @@ fn an_unsized_reply_states_the_kind_of_its_type() {
 }
 
 #[test]
-fn a_multi_parameter_request_names_every_parameter() {
-    // The request of a call with several parameters has no encoding, and the
-    // reservation spells the whole parameter list: a join that dropped a
-    // name, or kept only the first, fails here.
+fn a_multi_parameter_request_reserves_a_number() {
     let model = lower(&call_package(), &[]);
     let two = live_member(interface_named(&model, "Calls"), "two");
     for proto3 in [true, false] {
-        assert_eq!(
+        assert!(matches!(
             reserved(&two.reservation, proto3),
-            &unsized_by("two.request: (a, b)")
-        );
+            v1::reservation_state::State::Bytes(_)
+        ));
     }
 }
 

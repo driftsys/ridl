@@ -1121,10 +1121,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "readFaults.request: ()"
+                "bytes": "6"
               },
               "flatbuffers": {
-                "unsized": "readFaults.request: ()"
+                "bytes": "76"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -1176,14 +1176,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
@@ -1204,10 +1200,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "inlineOfService": 0,
       "tableBudget": {
         "proto3": {
-          "unsized": "readFaults"
+          "bytes": "6"
         },
         "flatbuffers": {
-          "unsized": "readFaults"
+          "bytes": "76"
         }
       },
       "links": [],

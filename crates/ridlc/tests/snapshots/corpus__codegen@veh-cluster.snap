@@ -6118,10 +6118,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "readTicks.request: ()"
+                "bytes": "6"
               },
               "flatbuffers": {
-                "unsized": "readTicks.request: ()"
+                "bytes": "77"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6173,14 +6173,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
@@ -6325,10 +6321,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "readSpan.request: ()"
+                "bytes": "12"
               },
               "flatbuffers": {
-                "unsized": "readSpan.request: ()"
+                "bytes": "88"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6356,26 +6352,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 12
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 55
                 }
               },
               "requestTuple": {
@@ -6434,10 +6422,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       ],
       "tableBudget": {
         "proto3": {
-          "unsized": "readTicks"
+          "bytes": "38"
         },
         "flatbuffers": {
-          "unsized": "readTicks"
+          "bytes": "307"
         }
       },
       "links": [],
@@ -7682,10 +7670,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "getBounds.request: ()"
+                "bytes": "10"
               },
               "flatbuffers": {
-                "unsized": "getBounds.request: ()"
+                "bytes": "92"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7746,26 +7734,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               ],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 10
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 59
                 }
               },
               "requestTuple": {
@@ -7944,10 +7924,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "getClimate.request: ()"
+                "bytes": "16"
               },
               "flatbuffers": {
-                "unsized": "getClimate.request: ()"
+                "bytes": "102"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7999,14 +7979,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
@@ -8045,10 +8021,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "getCabinTemp.request: ()"
+                "bytes": "5"
               },
               "flatbuffers": {
-                "unsized": "getCabinTemp.request: ()"
+                "bytes": "79"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8100,14 +8076,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
@@ -8525,10 +8497,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "scaledFan.request: ()"
+                "bytes": "6"
               },
               "flatbuffers": {
-                "unsized": "scaledFan.request: ()"
+                "bytes": "76"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8597,14 +8569,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               ],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
