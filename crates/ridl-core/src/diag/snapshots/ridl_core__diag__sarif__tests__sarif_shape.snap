@@ -1536,6 +1536,25 @@ expression: log
               }
             },
             {
+              "id": "MANI-017",
+              "shortDescription": {
+                "text": "a workspace member is `vendor` or a path under it"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-018",
+              "name": "vendor-source-not-loaded",
+              "shortDescription": {
+                "text": "a source file under the root's `vendor/` is not loaded"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1556,7 +1575,7 @@ expression: log
             {
               "id": "MANI-103",
               "shortDescription": {
-                "text": "`--frozen`: no lockfile entry for a remote import"
+                "text": "`--frozen` or `ridl vendor --check`: no lockfile entry for a remote import"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1601,7 +1620,25 @@ expression: log
             {
               "id": "MANI-108",
               "shortDescription": {
-                "text": "`--frozen`: a `ridl.lock` entry has no `tree` hash"
+                "text": "`--frozen` or `ridl vendor --check`: a `ridl.lock` entry has no `tree` hash"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-109",
+              "shortDescription": {
+                "text": "an imported unit has no directory in `vendor/`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-110",
+              "shortDescription": {
+                "text": "`vendor/` holds a directory that no `[imports]` key names"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1683,7 +1720,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 165,
+          "ruleIndex": 167,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

@@ -30,7 +30,8 @@ pub enum PackageOrigin {
     /// Loaded from the local filesystem: a workspace member, a standalone
     /// package, or a single-file synthetic package.
     WorkspaceMember,
-    /// Fetched from a remote URL, or read from the cache entry for it.
+    /// Fetched from a remote URL, or read from the vendored directory or
+    /// the cache entry for it.
     Remote { url: String },
     /// The embedded `ridl.std` (ADR-0007 decision 15).
     Std,

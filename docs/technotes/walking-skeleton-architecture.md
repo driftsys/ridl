@@ -209,27 +209,27 @@ here. This list is not a standing count of every crate the workspace holds — s
   `compile` runs a single file end to end; `compile_workspace` runs the loaded
   package model (file, package directory, or workspace root) and is the library
   face the language server drives; it reads the remote units of the manifest's
-  `[imports]` from the cache and never fetches or writes `ridl.lock`.
-  `run_check` and `run_build` add the remote-unit round trip: each remote unit
-  is read from the cache or fetched, checked against its `tree` hash, loaded as
-  a read-only dependency, and pinned in `ridl.lock` (`--frozen` never fetches).
-  The packages of a remote unit reach the code backends and are generated, but
-  no snapshot, catalog or lock entry includes them. `run_build` also writes the
-  selected artifacts: `<base>.rs`, `<base>.h`, `<base>.ir.json`,
-  `<base>.ir.txtpb`, `<base>.ir.binpb`, and `<base>.ts`. The binary exposes
-  `ridlc check` and `ridlc build`. E2 widened `WorkspaceOutput` with the
-  checker's `resolutions` and the lowered `std_ir`, so a workflow crate does not
-  have to restate the compiler's load-and-resolve loop (ADR-0008 decision 15).
-  Both backends are ordinary dependencies here: `ridlc build --emit` offers
-  `rust`, the three IR encodings of ADR-0014 decision 4 (`ir-json`, `ir-text`,
-  `ir-binary`), `typescript` and `proto`, so the second backend over one IR is
-  reachable from the command line and not only from the corpus runner's
-  snapshots. The two language emits are independent — each backend generates
-  from the same IR on its own, and one that cannot render a package skips only
-  its own artifact. `select_deployment` chooses the deployment that every
-  codegen request of a build carries (`--deployment NAME` on `build`), and
-  `tests/layout.rs` holds a test plugin that computes `examples/cabin`'s memory
-  and socket layouts from that request alone.
+  `[imports]` from `vendor/` at the manifest root, then the cache, and never
+  fetches or writes `ridl.lock`. `run_check` and `run_build` add the remote-unit
+  round trip: each remote unit is read from `vendor/` or the cache, or fetched,
+  checked against its `tree` hash, loaded as a read-only dependency, and pinned
+  in `ridl.lock` (`--frozen` never fetches). The packages of a remote unit reach
+  the code backends and are generated, but no snapshot, catalog or lock entry
+  includes them. `run_build` also writes the selected artifacts: `<base>.rs`,
+  `<base>.h`, `<base>.ir.json`, `<base>.ir.txtpb`, `<base>.ir.binpb`, and
+  `<base>.ts`. The binary exposes `ridlc check` and `ridlc build`. E2 widened
+  `WorkspaceOutput` with the checker's `resolutions` and the lowered `std_ir`,
+  so a workflow crate does not have to restate the compiler's load-and-resolve
+  loop (ADR-0008 decision 15). Both backends are ordinary dependencies here:
+  `ridlc build --emit` offers `rust`, the three IR encodings of ADR-0014
+  decision 4 (`ir-json`, `ir-text`, `ir-binary`), `typescript` and `proto`, so
+  the second backend over one IR is reachable from the command line and not only
+  from the corpus runner's snapshots. The two language emits are independent —
+  each backend generates from the same IR on its own, and one that cannot render
+  a package skips only its own artifact. `select_deployment` chooses the
+  deployment that every codegen request of a build carries (`--deployment NAME`
+  on `build`), and `tests/layout.rs` holds a test plugin that computes
+  `examples/cabin`'s memory and socket layouts from that request alone.
 
   `check_design_lints` (`src/design_lints/`) is the last diagnostic pass of the
   workspace check. It reads every checked package at once and reports the design
@@ -240,19 +240,21 @@ here. This list is not a standing count of every crate the workspace holds — s
 
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl baseline`,
   `ridl build`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`, `ridl lsp`,
-  `ridl mcp`, `ridl describe`, and `ridl init` and `ridl new` (the scaffolding
-  in `src/scaffold.rs`), driving the `ridlc` command drivers, the `ridl-fmt`
-  engine, the `ridl-diff` engine, the `ridl-lsp`/`ridl-mcp` libraries, and the
-  `ridl-descriptor` verifier and JSON view (the plumbing/porcelain split of
-  concept note §8.1). Everything E2 added to the CLI landed here rather than in
-  `ridlc`, because `ridlc` stays a pure source→IR function — the minimal ISO
-  26262 tool-qualification boundary (ADR-0008 decision 9). `ridl baseline`
-  publishes one `<pkg-name>.ir.json` per package and one `<unit>.catalogs` file
-  per unit with an interface into `.ridl/baseline/`; `ridl build` reads those
-  files to write each unit's list of compatible catalogs into its descriptor and
-  codegen model (`catalogs.rs`); `ridl check --baseline` is the desk-time
-  ordinal-drift check over the snapshots; `property.rs` is the `ridl test`
-  runner, which spends the range strategies on the contract plane.
+  `ridl mcp`, `ridl describe`, `ridl vendor` (in `src/vendor.rs`; the writer and
+  the drift check are `write_vendor` and `check_vendor` in `ridl-core::vendor`),
+  and `ridl init` and `ridl new` (the scaffolding in `src/scaffold.rs`), driving
+  the `ridlc` command drivers, the `ridl-fmt` engine, the `ridl-diff` engine,
+  the `ridl-lsp`/`ridl-mcp` libraries, and the `ridl-descriptor` verifier and
+  JSON view (the plumbing/porcelain split of concept note §8.1). Everything E2
+  added to the CLI landed here rather than in `ridlc`, because `ridlc` stays a
+  pure source→IR function — the minimal ISO 26262 tool-qualification boundary
+  (ADR-0008 decision 9). `ridl baseline` publishes one `<pkg-name>.ir.json` per
+  package and one `<unit>.catalogs` file per unit with an interface into
+  `.ridl/baseline/`; `ridl build` reads those files to write each unit's list of
+  compatible catalogs into its descriptor and codegen model (`catalogs.rs`);
+  `ridl check --baseline` is the desk-time ordinal-drift check over the
+  snapshots; `property.rs` is the `ridl test` runner, which spends the range
+  strategies on the contract plane.
 
 - **`crates/ridl-fmt`** — the `ridl fmt` engine: CST-based and trivia-aware
   (comments are preserved and re-anchored), total (input with parse errors is

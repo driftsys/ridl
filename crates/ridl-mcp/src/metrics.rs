@@ -184,7 +184,7 @@ mod tests {
     /// A package of a remote unit is not a package of the metrics
     /// (ADR-0002, "Remote units"): it has no row, and no row counts it.
     /// `fx.b` is marked as a remote unit on the snapshot, as the loader
-    /// marks one it read from the cache.
+    /// marks one it read from `vendor/` or the cache.
     #[test]
     fn metrics_leaves_out_a_remote_package() {
         let path = fixture("ws");

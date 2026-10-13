@@ -34,6 +34,12 @@ a fetched artifact is a unit; a remote unit is a read-only dependency), and §7
 gains the `tree` hash of the unpacked tree beside the `sha256` of the fetched
 artifact, with MANI-105 to MANI-108.
 
+Amended 2026-10-13 by the remote units design (driftsys/ridl#48, PR 2): §4 and
+the Positive consequence say that an air-gapped build is `ridl vendor`; §7 gains
+`vendor/`, its read order and `ridl vendor --check`, with MANI-017, MANI-018,
+MANI-109 and MANI-110, and states that `ridl lsp` and `ridl mcp` read `vendor/`
+before the cache; the vendor directory open question is resolved.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -326,8 +332,9 @@ used slash-prefixed aliases (`veh-common/Speed`), which leaked manifest concerns
 into source code and conflicted with the `package` naming convention. Aliasing
 on logical package names instead means imports in `.ridl` files look identical
 whether the package is local, a workspace sibling, or a remote URL — only the
-manifest changes. This is also what makes air-gapping work as a pure manifest
-rewrite.
+manifest changes. An air-gapped build is `ridl vendor` (§7); rewriting the
+manifest to point at a mirror is still possible, because only the manifest
+changes.
 
 **No manifest inside a unit** (amended 2026-10-09). A `ridl.toml` in a
 subdirectory of a unit's tree raises MANI-013 (Error), and the loader does not
@@ -429,9 +436,56 @@ unpacked tree against it, as a cache hit does (MANI-107 on a mismatch); a fetch
 against an entry with no `tree` computes it after unpacking and pins it. An
 entry written before this amendment has no `tree`: the next run without
 `--frozen` adds it, and a run with `--frozen` raises MANI-108. `ridl lsp` and
-`ridl mcp` never fetch: they read the cache as a frozen run does, and a miss is
-MANI-103 or MANI-104 whose message names `ridl check` as the fix. The tar format
-(ADR-0007 decision 12) stays provisional.
+`ridl mcp` never fetch: they read `vendor/` and then the cache as a frozen run
+does (the next paragraph gives the order), and a miss is MANI-103, whose message
+names `ridl check` as the fix, or MANI-104, whose message names `ridl check` and
+`ridl vendor`. The tar format (ADR-0007 decision 12) stays provisional.
+
+**The vendor directory** (amended 2026-10-13, driftsys/ridl#48).
+`<manifest root>/vendor/` — beside `ridl.toml` and `ridl.lock`; the workspace
+root in workspace mode — holds the source tree of each remote unit under its
+`[imports]` key, written by `ridl vendor`. For each URL of the consumer's
+`[imports]` the loader takes the first of: `vendor/<key>/` when that directory
+exists and `ridl.lock` pins a `tree` for the URL (the tree must match,
+MANI-107); the cache entry for the pin; outside `--frozen`, a fetch. Where
+`ridl.lock` pins no `tree` for the URL, the cache or the fetch is used first so
+that a pin exists, and a vendored directory is then verified against that pin
+and read in place of the cache entry. This order holds for `ridl check`,
+`ridl build`, `ridl baseline`, `ridl lock`, `ridl test`, `ridl diff`, `ridl lsp`
+and `ridl mcp`; `ridl vendor` itself reads the cache, never `vendor/`. The name
+`vendor` is reserved at the manifest root only: a `members` entry that is
+`vendor` or a path under it is MANI-017 (Error), a source file under a
+standalone root's `vendor/` outside a directory that an `[imports]` key names is
+MANI-018 (Warning, `vendor-source-not-loaded`) and is not loaded, and a deeper
+directory named `vendor` is an ordinary source package. A unit's own `vendor/`
+directory is copied with the unit, because it is part of the tree hash, and is
+skipped when the unit is read. `ridl vendor [PATH]` brings the directory to
+exactly the imported set — each unit written whole into a staging directory and
+renamed into place; every directory directly under `vendor/` that no `[imports]`
+key names removed, whether or not `ridl vendor` wrote it, while files, symbolic
+links and hidden entries are left; `vendor/` left untouched when the run has an
+error, while `ridl.lock` may still be updated as any non-frozen load updates it
+— and reads the cache, never `vendor/`, so a changed URL replaces the directory.
+`ridl vendor --check [PATH]` compares the directory with the imports and the
+lock without network or writes: MANI-109 (Error) for an imported unit with no
+directory, MANI-110 (Error) for a directory no key names, MANI-107 for a tree
+that does not match, and MANI-103 or MANI-108 for a unit whose lock entry is
+missing or has no `tree`, because such a directory cannot be verified.
+`ridl.lock` and `vendor/` are part of the frozen manifest surface from 0.10.0
+([ADR-0029](ADR-0029-stability-policy.md)).
+
+Alternatives considered: a vendor directory holding the tar files, or both tars
+and trees (a review would show a binary file, and two copies can drift);
+replacing `sha256` with the tree hash, or a second pin file under `vendor/` (the
+first loses the verification of a download before it is unpacked, the second can
+disagree with `ridl.lock`); a hidden `.ridl/vendor/` (no loader change, but not
+the convention users expect); a `vendor` reserved at every depth, or detected by
+content (the first takes a package segment from every unit, the second makes the
+meaning of a directory depend on its contents); a `--frozen` mode for
+`ridl vendor` (no stated need), and no `--check` (CI would have no way to check
+`vendor/` without a full compile); and leaving `ridl.lock` and `vendor/`
+unfrozen (a 0.10.x release could then break a repository that vendored under
+0.10.0).
 
 **Rationale.** This is the model from ADR-0001, with the only refinement being
 placement: one lockfile per workspace (not per member) so that
@@ -475,7 +529,9 @@ against the RIDL source.
   answerable from the import statement alone.
 - Single lockfile per workspace gives coherent diamond resolution across all
   members of a monorepo.
-- Air-gap is a manifest rewrite, not a vendoring exercise.
+- Air-gap is `ridl vendor`: the vendored trees are verified against `ridl.lock`
+  and read before the cache. Rewriting the manifest to point at a mirror stays
+  possible.
 - Standalone-package and workspace shapes use the same file format, reducing
   tool and documentation overhead.
 - The codegen mapping is one-to-one to every supported backend, which preserves
@@ -518,10 +574,11 @@ The following are deferred to subsequent ADRs.
 - **Cache eviction and integrity verification policies.** The cache is
   content-addressed and effectively immutable, but disk pressure, corrupted
   entries, and CI-environment cache seeding all need a defined story.
-- **Vendor directory as an alternative to a remote URL cache** for fully offline
-  or qualified environments where `~/.ridl/cache` is not acceptable. Not
-  strictly needed given the URL-rewrite air-gap path, but may simplify some
-  certification arguments.
+- **Vendor directory as an alternative to a remote URL cache** (**Resolved
+  2026-10-13**, §7, driftsys/ridl#48) for fully offline or qualified
+  environments where `~/.ridl/cache` is not acceptable. Not strictly needed
+  given the URL-rewrite air-gap path, but may simplify some certification
+  arguments.
 
 ## References
 

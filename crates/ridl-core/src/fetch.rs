@@ -3,11 +3,13 @@
 //!
 //! [`fetch`] downloads one artifact over HTTP with `ureq` (synchronous, minimal
 //! — ADR-0004 §9). [`materialize_imports`] drives the whole resolution: for
-//! every remote import URL it reuses a cache hit when the lockfile-pinned hash
-//! is already unpacked, fetches and caches otherwise, and regenerates the
-//! lockfile from the hashes it resolved. Under [`Frozen::Yes`] it never fetches
-//! and fails on any import that is missing from the lockfile or absent from the
-//! cache (ADR-0002 §7).
+//! every remote import URL it serves a vendored tree under
+//! `<manifest root>/vendor/` when the lockfile pins its `tree`, else reuses a
+//! cache hit when the lockfile-pinned hash is already unpacked, fetches and
+//! caches otherwise, and regenerates the lockfile from the hashes it resolved.
+//! Under [`Frozen::Yes`] it never fetches and fails on any import that is
+//! missing from the lockfile or absent from both `vendor/` and the cache
+//! (ADR-0002 §7).
 //!
 //! The fetched artifact is an uncompressed tar archive of one package directory
 //! (ADR-0007 decision 12, provisional until the registry spec is written);
@@ -25,6 +27,7 @@ use crate::cache::Cache;
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
 use crate::lock::{LockEntry, Lockfile};
 use crate::tree_hash::{TreeHashError, tree_hash};
+use crate::vendor::vendor_key_dir;
 use crate::workspace::ImportUnion;
 pub use crate::workspace::MaterializedUnit;
 
@@ -105,12 +108,21 @@ impl From<bool> for Frozen {
     }
 }
 
-/// Materializes every remote import into the cache and returns the verified
-/// [`MaterializedUnit`]s, the regenerated [`Lockfile`], and any diagnostics.
+/// Materializes every remote import from `vendor/` or the cache and returns
+/// the verified [`MaterializedUnit`]s, the regenerated [`Lockfile`], and any
+/// diagnostics.
 ///
 /// For each URL, in sorted order (a URL named by two keys is materialized
 /// once):
 ///
+/// - If `vendor` is given, holds a directory named by a key of the URL, and
+///   the lockfile pins a `tree` for the URL, the vendored directory is
+///   verified against that `tree` and serves the unit: no cache lookup and
+///   no fetch, frozen or not (`MANI-107` naming `ridl vendor` on a mismatch,
+///   and the cache is not consulted instead). The lock entry is kept as it
+///   is. Without a pinned `tree`, the steps below run first so that a pin
+///   exists, and the vendored directory is then verified against it and
+///   serves the unit in place of the cache entry.
 /// - If the lockfile pins a hash and that hash is already unpacked in the
 ///   cache, the cache hit is used and no fetch happens. The pinned `tree` is
 ///   then verified against the unpacked tree (`MANI-107` on a mismatch or a
@@ -124,7 +136,8 @@ impl From<bool> for Frozen {
 ///   pinned value is kept; an entry with no `tree` gets the newly computed
 ///   `tree` pinned. The `sha256` is the newly computed one.
 /// - Under [`Frozen::Yes`] nothing is ever fetched: a URL with no lockfile entry
-///   is `MANI-103`, and a pinned URL that is not in the cache is `MANI-104`.
+///   is `MANI-103`, and a pinned URL that is not in the cache is `MANI-104`,
+///   whose message names `ridl check` and `ridl vendor` as the fix.
 ///
 /// A URL that is not a fetchable `http(s)` URL is a `MANI-101` fetch failure.
 /// Every diagnostic is detached ([`FileId::DETACHED`]): it names the URL rather
@@ -134,12 +147,13 @@ pub fn materialize_imports(
     lock: Option<&Lockfile>,
     cache: &Cache,
     frozen: Frozen,
+    vendor: Option<&Path>,
 ) -> (Vec<MaterializedUnit>, Lockfile, Vec<Diagnostic>) {
     let mut units = Vec::new();
     let mut regenerated = Lockfile::default();
     let mut diagnostics = Vec::new();
 
-    for url in imports.keys() {
+    for (url, keys) in imports {
         if !is_fetchable_url(url) {
             diagnostics.push(detached(
                 DiagCode::MANI_101,
@@ -147,10 +161,55 @@ pub fn materialize_imports(
             ));
             continue;
         }
+        let vendored = vendor.and_then(|vendor| {
+            keys.iter()
+                .filter_map(|key| vendor_key_dir(vendor, key))
+                .find(|dir| dir.is_dir())
+        });
         let pinned = lock.and_then(|lock| lock.entries.get(url));
-        if let Some((entry, unit)) =
-            from_cache_or_fetch(url, pinned, cache, frozen, &mut diagnostics)
-        {
+        // A vendored tree with a pinned `tree` is verified and used as it
+        // is, with no cache and no fetch: the air-gapped build. Without a
+        // usable pin, the cache-or-fetch step runs first so that the pin
+        // exists, and the vendored tree is then verified against it.
+        let resolved = match (&vendored, pinned.and_then(|entry| entry.tree.as_deref())) {
+            (Some(dir), Some(tree)) => {
+                verify_tree(url, dir, tree, TreeOrigin::Vendor, &mut diagnostics).map(|()| {
+                    (
+                        LockEntry {
+                            sha256: pinned
+                                .expect("a pinned tree implies a lock entry")
+                                .sha256
+                                .clone(),
+                            tree: Some(tree.to_string()),
+                        },
+                        MaterializedUnit {
+                            url: url.clone(),
+                            dir: dir.clone(),
+                            tree: tree.to_string(),
+                        },
+                    )
+                })
+            }
+            _ => from_cache_or_fetch(url, pinned, cache, frozen, &mut diagnostics).and_then(
+                |(entry, unit)| match &vendored {
+                    Some(dir) => {
+                        verify_tree(url, dir, &unit.tree, TreeOrigin::Vendor, &mut diagnostics).map(
+                            |()| {
+                                (
+                                    entry,
+                                    MaterializedUnit {
+                                        dir: dir.clone(),
+                                        ..unit
+                                    },
+                                )
+                            },
+                        )
+                    }
+                    None => Some((entry, unit)),
+                },
+            ),
+        };
+        if let Some((entry, unit)) = resolved {
             regenerated.entries.insert(url.clone(), entry);
             units.push(unit);
         }
@@ -176,7 +235,7 @@ fn from_cache_or_fetch(
     {
         let tree = match &entry.tree {
             Some(tree) => {
-                verify_tree(url, &dir, tree, diagnostics)?;
+                verify_tree(url, &dir, tree, TreeOrigin::Cache, diagnostics)?;
                 tree.clone()
             }
             None => match frozen {
@@ -207,7 +266,7 @@ fn from_cache_or_fetch(
                 Some(_) => detached(
                     DiagCode::MANI_104,
                     format!(
-                        "`{url}` is pinned in `ridl.lock` but not in the cache; run `ridl check` without `--frozen` to fetch it"
+                        "`{url}` is pinned in `ridl.lock` but not in the cache; run `ridl check` without `--frozen` to fetch it, or `ridl vendor` to vendor it"
                     ),
                 ),
             });
@@ -255,7 +314,7 @@ fn from_cache_or_fetch(
             // unpacked tree must be.
             let tree = match pinned.and_then(|entry| entry.tree.as_deref()) {
                 Some(expected) => {
-                    verify_tree(url, &dir, expected, diagnostics)?;
+                    verify_tree(url, &dir, expected, TreeOrigin::Cache, diagnostics)?;
                     expected.to_string()
                 }
                 None => hash_tree(url, &dir, diagnostics)?,
@@ -310,24 +369,44 @@ fn hash_tree(url: &str, dir: &Path, diagnostics: &mut Vec<Diagnostic>) -> Option
     }
 }
 
-/// `Some(())` when `dir` hashes to `expected`; `None` after a MANI-107.
-fn verify_tree(
+/// Where a tree [`verify_tree`] checks was read from. It chooses the wording
+/// of the MANI-107 message and the fix it names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TreeOrigin {
+    /// A cache entry (`<cache root>/<url hash>/<sha256>/`).
+    Cache,
+    /// A vendored directory (`<manifest root>/vendor/<key>/`), which
+    /// `ridl vendor` rewrites.
+    Vendor,
+}
+
+/// `Some(())` when `dir` hashes to `expected`; `None` after a MANI-107 that
+/// names the non-regular file, the read failure, or the mismatch. For a
+/// mismatch of [`TreeOrigin::Vendor`] the message names `ridl vendor` as the
+/// fix. The one compare of a tree against a pinned `tree`, whichever
+/// directory the unit is read from.
+pub(crate) fn verify_tree(
     url: &str,
     dir: &Path,
     expected: &str,
+    origin: TreeOrigin,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<()> {
     let actual = hash_tree(url, dir, diagnostics)?;
     if actual == expected {
         return Some(());
     }
-    diagnostics.push(detached(
-        DiagCode::MANI_107,
-        format!(
+    let message = match origin {
+        TreeOrigin::Cache => format!(
             "the tree of `{}` does not match the `tree` hash `ridl.lock` pins for `{url}`",
             dir.display()
         ),
-    ));
+        TreeOrigin::Vendor => format!(
+            "the vendored tree `{}` does not match the `tree` hash `ridl.lock` pins for `{url}`; run `ridl vendor` to rewrite it",
+            dir.display()
+        ),
+    };
+    diagnostics.push(detached(DiagCode::MANI_107, message));
     None
 }
 
@@ -613,7 +692,7 @@ mod tests {
         let cache = cache(&dir);
         let imports = imports_of(stub.url());
 
-        let (resolved, lock, diags) = materialize_imports(&imports, None, &cache, Frozen::No);
+        let (resolved, lock, diags) = materialize_imports(&imports, None, &cache, Frozen::No, None);
         assert!(diags.is_empty(), "a clean fetch, no diagnostics: {diags:?}");
         assert_eq!(stub.hits(), 1, "the artifact is fetched exactly once");
 
@@ -638,7 +717,7 @@ mod tests {
         let imports = imports_of(stub.url());
 
         // First run fetches once and produces the lockfile.
-        let (_, lock, diags) = materialize_imports(&imports, None, &cache, Frozen::No);
+        let (_, lock, diags) = materialize_imports(&imports, None, &cache, Frozen::No, None);
         assert!(diags.is_empty());
         assert_eq!(stub.hits(), 1, "the first run fetches once");
 
@@ -646,7 +725,7 @@ mod tests {
         // pinned hash is already unpacked, so no request is made.
         stub.reset_hits();
         let (resolved, lock2, diags2) =
-            materialize_imports(&imports, Some(&lock), &cache, Frozen::No);
+            materialize_imports(&imports, Some(&lock), &cache, Frozen::No, None);
         assert!(diags2.is_empty());
         assert_eq!(stub.hits(), 0, "a cache hit makes no request");
         assert_eq!(
@@ -677,7 +756,7 @@ mod tests {
         );
 
         let (resolved, regenerated, diags) =
-            materialize_imports(&imports, Some(&lock), &cache, Frozen::No);
+            materialize_imports(&imports, Some(&lock), &cache, Frozen::No, None);
         assert_eq!(stub.hits(), 1, "the mismatch is found only after fetching");
         assert_eq!(codes(&diags), vec!["MANI-102"]);
         assert!(resolved.is_empty(), "a mismatched import does not resolve");
@@ -697,10 +776,11 @@ mod tests {
         let imports = imports_of(stub.url());
 
         // Populate the cache and the lockfile with a non-frozen run.
-        let (_, lock, _) = materialize_imports(&imports, None, &cache, Frozen::No);
+        let (_, lock, _) = materialize_imports(&imports, None, &cache, Frozen::No, None);
         stub.reset_hits();
 
-        let (resolved, _, diags) = materialize_imports(&imports, Some(&lock), &cache, Frozen::Yes);
+        let (resolved, _, diags) =
+            materialize_imports(&imports, Some(&lock), &cache, Frozen::Yes, None);
         assert!(
             diags.is_empty(),
             "a cached pin resolves cleanly under --frozen"
@@ -718,7 +798,7 @@ mod tests {
         let cache = cache(&dir);
         let imports = imports_of(stub.url());
 
-        let (resolved, _, diags) = materialize_imports(&imports, None, &cache, Frozen::Yes);
+        let (resolved, _, diags) = materialize_imports(&imports, None, &cache, Frozen::Yes, None);
         assert_eq!(codes(&diags), vec!["MANI-103"]);
         assert_eq!(stub.hits(), 0, "--frozen never fetches");
         assert!(resolved.is_empty());
@@ -742,8 +822,14 @@ mod tests {
             },
         );
 
-        let (resolved, _, diags) = materialize_imports(&imports, Some(&lock), &cache, Frozen::Yes);
+        let (resolved, _, diags) =
+            materialize_imports(&imports, Some(&lock), &cache, Frozen::Yes, None);
         assert_eq!(codes(&diags), vec!["MANI-104"]);
+        assert!(
+            diags[0].message.contains("`ridl check`") && diags[0].message.contains("`ridl vendor`"),
+            "the message names both fixes: {}",
+            diags[0].message
+        );
         assert_eq!(stub.hits(), 0, "--frozen never fetches");
         assert!(resolved.is_empty());
     }
@@ -760,7 +846,7 @@ mod tests {
             BTreeSet::from(["bad.dep".to_string()]),
         )]);
 
-        let (resolved, _, diags) = materialize_imports(&imports, None, &cache, Frozen::No);
+        let (resolved, _, diags) = materialize_imports(&imports, None, &cache, Frozen::No, None);
         assert_eq!(codes(&diags), vec!["MANI-101"]);
         assert!(resolved.is_empty());
     }
@@ -773,7 +859,7 @@ mod tests {
         let dir = TempDir::new("tree-pin");
         let cache = cache(&dir);
         let (units, lock, diags) =
-            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No);
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No, None);
         assert!(diags.is_empty(), "{diags:?}");
         let entry = &lock.entries[stub.url()];
         let expected = crate::tree_hash::tree_hash(&units[0].dir).unwrap();
@@ -788,12 +874,18 @@ mod tests {
         let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
         let dir = TempDir::new("tree-add");
         let cache = cache(&dir);
-        let (_, lock, _) = materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No);
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No, None);
         let mut old = lock.clone();
         old.entries.get_mut(stub.url()).unwrap().tree = None;
         stub.reset_hits();
-        let (_, regenerated, diags) =
-            materialize_imports(&imports_of(stub.url()), Some(&old), &cache, Frozen::No);
+        let (_, regenerated, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            Some(&old),
+            &cache,
+            Frozen::No,
+            None,
+        );
         assert!(diags.is_empty(), "{diags:?}");
         assert_eq!(stub.hits(), 0, "the cache hit makes no request");
         assert_eq!(regenerated, lock, "the tree hash is added back");
@@ -805,11 +897,17 @@ mod tests {
         let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
         let dir = TempDir::new("frozen-108");
         let cache = cache(&dir);
-        let (_, lock, _) = materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No);
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No, None);
         let mut old = lock;
         old.entries.get_mut(stub.url()).unwrap().tree = None;
-        let (units, _, diags) =
-            materialize_imports(&imports_of(stub.url()), Some(&old), &cache, Frozen::Yes);
+        let (units, _, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            Some(&old),
+            &cache,
+            Frozen::Yes,
+            None,
+        );
         assert_eq!(codes(&diags), vec!["MANI-108"]);
         assert!(units.is_empty());
     }
@@ -822,11 +920,11 @@ mod tests {
         let dir = TempDir::new("tree-107");
         let cache = cache(&dir);
         let (units, lock, _) =
-            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No);
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No, None);
         std::fs::write(units[0].dir.join("extra.typl"), b"package remote.pkg\n").unwrap();
         for frozen in [Frozen::Yes, Frozen::No] {
             let (units, _, diags) =
-                materialize_imports(&imports_of(stub.url()), Some(&lock), &cache, frozen);
+                materialize_imports(&imports_of(stub.url()), Some(&lock), &cache, frozen, None);
             assert_eq!(codes(&diags), vec!["MANI-107"], "{frozen:?}");
             assert!(units.is_empty());
         }
@@ -839,8 +937,13 @@ mod tests {
     fn a_fetch_into_an_empty_cache_verifies_the_pinned_tree() {
         let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
         let dir = TempDir::new("tree-fetch-107");
-        let (_, lock, _) =
-            materialize_imports(&imports_of(stub.url()), None, &cache(&dir), Frozen::No);
+        let (_, lock, _) = materialize_imports(
+            &imports_of(stub.url()),
+            None,
+            &cache(&dir),
+            Frozen::No,
+            None,
+        );
         let mut pinned = lock;
         pinned.entries.get_mut(stub.url()).unwrap().tree = Some("0".repeat(64));
         let fresh = TempDir::new("tree-fetch-107-fresh");
@@ -850,6 +953,7 @@ mod tests {
             Some(&pinned),
             &cache(&fresh),
             Frozen::No,
+            None,
         );
         assert_eq!(stub.hits(), 1, "the empty cache is a miss");
         assert_eq!(codes(&diags), vec!["MANI-107"]);
@@ -863,8 +967,13 @@ mod tests {
     fn a_fetch_into_an_empty_cache_accepts_the_matching_pinned_tree() {
         let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
         let dir = TempDir::new("tree-fetch-ok");
-        let (_, lock, _) =
-            materialize_imports(&imports_of(stub.url()), None, &cache(&dir), Frozen::No);
+        let (_, lock, _) = materialize_imports(
+            &imports_of(stub.url()),
+            None,
+            &cache(&dir),
+            Frozen::No,
+            None,
+        );
         let pinned_tree = lock.entries[stub.url()].tree.clone().unwrap();
         let fresh = TempDir::new("tree-fetch-ok-fresh");
         stub.reset_hits();
@@ -873,6 +982,7 @@ mod tests {
             Some(&lock),
             &cache(&fresh),
             Frozen::No,
+            None,
         );
         assert_eq!(stub.hits(), 1, "the empty cache is a miss");
         assert!(diags.is_empty(), "{diags:?}");
@@ -890,10 +1000,15 @@ mod tests {
         let dir = TempDir::new("tree-link");
         let cache = cache(&dir);
         let (units, lock, _) =
-            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No);
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No, None);
         std::os::unix::fs::symlink("remote.typl", units[0].dir.join("link.typl")).unwrap();
-        let (units, _, diags) =
-            materialize_imports(&imports_of(stub.url()), Some(&lock), &cache, Frozen::Yes);
+        let (units, _, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            Some(&lock),
+            &cache,
+            Frozen::Yes,
+            None,
+        );
         assert_eq!(codes(&diags), vec!["MANI-107"]);
         assert!(
             diags[0].message.contains("link.typl"),
@@ -901,6 +1016,219 @@ mod tests {
             diags[0].message
         );
         assert!(units.is_empty());
+    }
+
+    /// Writes `files` as `vendor/<key>/` and returns the vendor directory.
+    fn vendored(dir: &TempDir, key: &str, files: &[(&str, &[u8])]) -> PathBuf {
+        let vendor = dir.path().join("vendor");
+        for (name, bytes) in files {
+            let path = vendor.join(key).join(name);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, bytes).unwrap();
+        }
+        vendor
+    }
+
+    /// With a pinned `tree`, a matching `vendor/<key>/` serves the unit:
+    /// no cache, no fetch, frozen or not.
+    #[test]
+    fn a_matching_vendor_tree_serves_the_unit_without_cache_or_fetch() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("vendor-hit");
+        let cache = cache(&dir);
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No, None);
+        let vendor = vendored(
+            &dir,
+            "remote.pkg",
+            &[("remote.typl", b"package remote.pkg\n")],
+        );
+        std::fs::remove_dir_all(&cache.root).unwrap();
+        stub.reset_hits();
+        for frozen in [Frozen::Yes, Frozen::No] {
+            let (units, regenerated, diags) = materialize_imports(
+                &imports_of(stub.url()),
+                Some(&lock),
+                &cache,
+                frozen,
+                Some(&vendor),
+            );
+            assert!(diags.is_empty(), "{frozen:?}: {diags:?}");
+            assert_eq!(units[0].dir, vendor.join("remote.pkg"));
+            assert_eq!(regenerated, lock);
+        }
+        assert_eq!(stub.hits(), 0);
+    }
+
+    /// A vendored tree that does not hash to the pinned `tree` is MANI-107
+    /// naming `ridl vendor`, and the cache is not consulted instead.
+    #[test]
+    fn a_stale_vendor_tree_is_mani_107() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("vendor-stale");
+        let cache = cache(&dir);
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No, None);
+        let vendor = vendored(
+            &dir,
+            "remote.pkg",
+            &[("remote.typl", b"package remote.pkg\r\n")],
+        );
+        // With the cache gone, a fall-through to the cache would be
+        // MANI-104, not MANI-107.
+        std::fs::remove_dir_all(&cache.root).unwrap();
+        let (units, _, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            Some(&lock),
+            &cache,
+            Frozen::Yes,
+            Some(&vendor),
+        );
+        assert_eq!(codes(&diags), vec!["MANI-107"]);
+        assert!(
+            diags[0].message.contains("ridl vendor"),
+            "{}",
+            diags[0].message
+        );
+        assert!(units.is_empty());
+    }
+
+    /// A vendored tree with no lock entry: frozen is MANI-103; not frozen
+    /// fetches, pins, then verifies the vendored tree against the new pin
+    /// and serves it.
+    #[test]
+    fn a_vendor_tree_without_a_pin_is_fetched_then_verified() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("vendor-unpinned");
+        let cache = cache(&dir);
+        let vendor = vendored(
+            &dir,
+            "remote.pkg",
+            &[("remote.typl", b"package remote.pkg\n")],
+        );
+        let (units, _, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            None,
+            &cache,
+            Frozen::Yes,
+            Some(&vendor),
+        );
+        assert_eq!(codes(&diags), vec!["MANI-103"]);
+        assert!(units.is_empty());
+        let (units, lock, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            None,
+            &cache,
+            Frozen::No,
+            Some(&vendor),
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(stub.hits(), 1);
+        assert_eq!(units[0].dir, vendor.join("remote.pkg"));
+        assert!(lock.entries[stub.url()].tree.is_some());
+    }
+
+    /// A vendored tree with no lock entry whose bytes differ from the
+    /// fetched tree: the fetch pins a `tree`, the vendored tree is verified
+    /// against it, and the mismatch is MANI-107 naming `ridl vendor`; the
+    /// unit is not served from either place.
+    #[test]
+    fn a_stale_vendor_tree_without_a_pin_is_mani_107_after_the_fetch() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("vendor-unpinned-stale");
+        let cache = cache(&dir);
+        let vendor = vendored(
+            &dir,
+            "remote.pkg",
+            &[("remote.typl", b"package remote.pkg\r\n")],
+        );
+        let (units, _, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            None,
+            &cache,
+            Frozen::No,
+            Some(&vendor),
+        );
+        assert_eq!(stub.hits(), 1, "the pin comes from a fetch");
+        assert_eq!(codes(&diags), vec!["MANI-107"]);
+        assert!(
+            diags[0].message.contains("ridl vendor"),
+            "{}",
+            diags[0].message
+        );
+        assert!(units.is_empty());
+    }
+
+    /// A symbolic link in `vendor/<key>/` is MANI-107 naming the link.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_in_the_vendor_tree_is_mani_107() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("vendor-link");
+        let cache = cache(&dir);
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No, None);
+        let vendor = vendored(
+            &dir,
+            "remote.pkg",
+            &[("remote.typl", b"package remote.pkg\n")],
+        );
+        std::os::unix::fs::symlink("remote.typl", vendor.join("remote.pkg/alias.typl")).unwrap();
+        let (units, _, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            Some(&lock),
+            &cache,
+            Frozen::Yes,
+            Some(&vendor),
+        );
+        assert_eq!(codes(&diags), vec!["MANI-107"]);
+        assert!(diags[0].message.contains("alias.typl"));
+        assert!(units.is_empty());
+    }
+
+    /// A key that is not one directory name never reaches `vendor/`: a key
+    /// of `..` would verify the directory above `vendor/` and, on a match,
+    /// read it as the unit. The unit is read from the cache instead, which
+    /// this frozen run does not hold: MANI-104.
+    #[test]
+    fn a_key_outside_vendor_is_never_read() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("vendor-bad-key");
+        let cache = cache(&dir);
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No, None);
+        std::fs::remove_dir_all(&cache.root).unwrap();
+        let imports: ImportUnion =
+            BTreeMap::from([(stub.url().to_string(), BTreeSet::from(["..".to_string()]))]);
+        let vendor = dir.path().join("vendor");
+        std::fs::create_dir_all(&vendor).unwrap();
+        let (units, _, diags) =
+            materialize_imports(&imports, Some(&lock), &cache, Frozen::Yes, Some(&vendor));
+        assert_eq!(codes(&diags), vec!["MANI-104"], "{diags:?}");
+        assert!(units.is_empty());
+    }
+
+    /// With two keys for one URL the vendor directory of either key serves.
+    #[test]
+    fn any_key_directory_serves_a_url_named_twice() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("vendor-two-keys");
+        let cache = cache(&dir);
+        let imports: ImportUnion = BTreeMap::from([(
+            stub.url().to_string(),
+            BTreeSet::from(["remote.alias".to_string(), "remote.pkg".to_string()]),
+        )]);
+        let (_, lock, _) = materialize_imports(&imports, None, &cache, Frozen::No, None);
+        let vendor = vendored(
+            &dir,
+            "remote.pkg",
+            &[("remote.typl", b"package remote.pkg\n")],
+        );
+        std::fs::remove_dir_all(&cache.root).unwrap();
+        let (units, _, diags) =
+            materialize_imports(&imports, Some(&lock), &cache, Frozen::Yes, Some(&vendor));
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(units[0].dir, vendor.join("remote.pkg"));
     }
 
     fn codes(diags: &[Diagnostic]) -> Vec<&str> {

@@ -149,6 +149,15 @@ pub fn member_consumer(dir: &TempDir, url: &str) -> PathBuf {
     dir.path().join("ws/app")
 }
 
+/// Writes the `COMMON_UNIT` files as `<root>/vendor/veh.common/`.
+pub fn vendor_common(root: &Path) {
+    for (name, text) in COMMON_UNIT {
+        let path = root.join("vendor/veh.common").join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+}
+
 /// A local HTTP stub over `std::net::TcpListener`, serving a fixed body for
 /// every request and counting the requests it receives — no real network is
 /// ever used. The request counter is what proves a cache hit skips the

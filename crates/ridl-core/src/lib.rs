@@ -28,6 +28,8 @@ pub mod package;
 pub mod std_lib;
 #[cfg(feature = "fetch")]
 pub mod tree_hash;
+#[cfg(feature = "fetch")]
+pub mod vendor;
 #[cfg(feature = "fs")]
 pub mod workspace;
 
@@ -51,10 +53,12 @@ pub use package::{
 pub use std_lib::std_package;
 #[cfg(feature = "fetch")]
 pub use tree_hash::{TreeHashError, tree_hash};
+#[cfg(feature = "fetch")]
+pub use vendor::{VendorWrite, check_vendor, write_vendor};
 #[cfg(feature = "fs")]
 pub use workspace::{
-    ImportUnion, LoadError, LoadedWorkspace, MaterializedUnit, Overlay, find_root, load_workspace,
-    load_workspace_with,
+    ImportUnion, LoadError, LoadedWorkspace, MaterializedUnit, Overlay, VENDOR_DIR, find_root,
+    load_workspace, load_workspace_with,
 };
 #[cfg(feature = "fetch")]
-pub use workspace::{RemoteAccess, load_workspace_with_remotes};
+pub use workspace::{RemoteAccess, VendorRead, load_workspace_with_remotes};

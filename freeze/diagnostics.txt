@@ -27,6 +27,8 @@ MANI-013 error
 MANI-014 error
 MANI-015 error
 MANI-016 error
+MANI-017 error
+MANI-018 warning lint=vendor-source-not-loaded default=warn
 MANI-101 error
 MANI-102 error
 MANI-103 error
@@ -35,6 +37,8 @@ MANI-105 error
 MANI-106 error
 MANI-107 error
 MANI-108 error
+MANI-109 error
+MANI-110 error
 RIDL-100 warning lint=missing-timing default=warn
 RIDL-101 error
 RIDL-102 error

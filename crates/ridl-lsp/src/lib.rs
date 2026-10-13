@@ -17,7 +17,8 @@
 //! buffers and defeat salsa incrementality (new inputs mean a full
 //! recompute). The server therefore loads the workspace **once**
 //! (`load_workspace_with_remotes`, which reads the remote units of the
-//! manifest's `[imports]` from the cache and never fetches), holds the
+//! manifest's `[imports]` from `vendor/`, then the cache, and never
+//! fetches), holds the
 //! `Workspace` handle plus a map of file path → `InputFile`, and on
 //! `didOpen`/`didChange` drives `set_text` on the existing input — the editor
 //! buffer overlays the disk state. The load runs at `initialize` from the

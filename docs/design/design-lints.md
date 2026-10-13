@@ -102,8 +102,8 @@ walk over its IR references (the IR records no imports, so an import that no
 declaration uses gives no edge), and the rsdl edges of `component_requires` and
 the system's member lines; a qualifier that names no checked package is kept as
 written. `ridl_dependencies` reports that complete graph, with a package of a
-remote unit the cache holds as a node. `workspace_package_edges` keeps only
-edges whose target is a package of the graph; `ridl_metrics` runs both over the
+remote unit the load read as a node. `workspace_package_edges` keeps only edges
+whose target is a package of the graph; `ridl_metrics` runs both over the
 consumer's packages only (`Snapshot::consumer_packages`), so a package of a
 remote unit has no row and a reference into one contributes to no row, as an
 external qualifier does.

@@ -50,6 +50,7 @@ mod catalogs;
 mod lock;
 mod property;
 mod scaffold;
+mod vendor;
 
 use clap::{Parser, Subcommand};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span, render};
@@ -260,6 +261,27 @@ enum Command {
         /// The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote.
         path: PathBuf,
     },
+    /// Copy every remote unit of the workspace's `[imports]` into `vendor/`
+    /// at the manifest root, so a `--frozen` build needs no network and no
+    /// cache. Every directory in `vendor/` that no `[imports]` key names is
+    /// removed; files and hidden entries are left. Exit 0 when `vendor/` was
+    /// written or there was nothing to change, 1 on a diagnostic error
+    /// (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a
+    /// missing or unreadable path, a fetch failure, or an I/O failure. With
+    /// `--check`, compare `vendor/` with the imports and `ridl.lock` instead,
+    /// writing nothing.
+    Vendor {
+        /// A unit directory, a workspace root, or a file; the manifest root
+        /// above it is the one vendored.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Compare `vendor/` with `[imports]` and `ridl.lock` instead of
+        /// writing: no network, no write. Exit 0 when `vendor/` matches, 1
+        /// on drift or another diagnostic error, 2 on a missing or
+        /// unreadable path.
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 /// The subcommands of `ridl lock`.
@@ -371,6 +393,13 @@ fn main() -> ExitCode {
         Command::Lsp { .. } => run_lsp(),
         Command::Mcp => run_mcp(),
         Command::Describe { path } => run_describe(&path),
+        Command::Vendor { path, check } => {
+            if check {
+                vendor::run_check(&path)
+            } else {
+                vendor::run(&path)
+            }
+        }
         Command::Init {
             path,
             workspace,
@@ -2800,6 +2829,33 @@ fn index_root(entry: &Path) -> PathBuf {
         .unwrap_or_else(|| entry.to_path_buf())
 }
 
+/// Whether `path` is `<manifest root>/vendor/` or lies under it: an ancestor
+/// of its canonical form is a manifest root's `vendor/`
+/// ([`is_manifest_root_vendor`]). A path that cannot be canonicalized (it
+/// does not exist) is not under `vendor/`; the caller reports it as
+/// unreadable.
+fn is_under_vendor(path: &Path) -> bool {
+    let Ok(canonical) = path.canonicalize() else {
+        return false;
+    };
+    canonical.ancestors().any(is_manifest_root_vendor)
+}
+
+/// Whether the canonical directory `dir` is the `vendor/` of a manifest
+/// root, which holds the remote units `ridl vendor` writes and which no
+/// source walk of this binary enters: `dir` is named `vendor`, and the
+/// directory above it is its own manifest root ([`ridl_core::find_root`]
+/// returns it), which is a standalone package or a workspace root, never a
+/// member. This is the rule the loader applies. A `vendor/` deeper in a
+/// unit's tree, or at the top of a member, is an ordinary directory.
+fn is_manifest_root_vendor(dir: &Path) -> bool {
+    dir.file_name()
+        .is_some_and(|name| name == ridl_core::VENDOR_DIR)
+        && dir
+            .parent()
+            .is_some_and(|root| ridl_core::find_root(root).as_deref() == Some(root))
+}
+
 /// A span pointing at no file at all.
 fn detached_span() -> Span {
     Span {
@@ -2929,12 +2985,24 @@ fn finish(run: std::io::Result<CliRun>) -> ExitCode {
 /// A file with parse errors is never rewritten (a formatter must not eat broken
 /// code); its diagnostics render to stderr and the run exits 1. In `--check`
 /// mode nothing is written and a file that would change also exits 1.
+///
+/// `<manifest root>/vendor/` holds the remote units `ridl vendor` writes,
+/// which belong to their own units: the walk from `path` skips the `vendor/`
+/// of every manifest root it meets, and a `path` that is such a `vendor/` or
+/// lies under it is refused with exit 2.
 fn run_fmt(path: &Path, check: bool) -> ExitCode {
     let mut sources = SourceMap::new();
     let mut diagnostics = Vec::new();
     let mut any_would_change = false;
     let mut any_broken = false;
 
+    if is_under_vendor(path) {
+        eprintln!(
+            "error: `{}` is under `vendor/`, which `ridl fmt` never formats: a vendored unit is its owner's",
+            path.display()
+        );
+        return ExitCode::from(2);
+    }
     let files = match collect_source_files(path) {
         Ok(files) => files,
         Err((dir, err)) => {
@@ -2981,7 +3049,10 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
 }
 
 /// Every `.typl`, `.ridl` and `.rsdl` file under `path`: `path` itself when it
-/// is a file, otherwise a recursive walk that skips hidden directories.
+/// is a file, otherwise a recursive walk that skips hidden directories and
+/// the `vendor/` of every manifest root it meets ([`is_manifest_root_vendor`],
+/// tested on the canonical form of the directory), so that a walk that
+/// starts above a manifest root skips that root's `vendor/` too.
 ///
 /// A directory the walk cannot read — `path` itself, when it does not exist
 /// or is not readable, or a subdirectory the walk descends into — is an error
@@ -3004,7 +3075,13 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
                     .file_name()
                     .and_then(|name| name.to_str())
                     .is_some_and(|name| name.starts_with('.'));
-                if !hidden {
+                let skipped = child
+                    .file_name()
+                    .is_some_and(|name| name == ridl_core::VENDOR_DIR)
+                    && child
+                        .canonicalize()
+                        .is_ok_and(|dir| is_manifest_root_vendor(&dir));
+                if !hidden && !skipped {
                     stack.push(child);
                 }
             } else if child

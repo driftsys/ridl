@@ -26,8 +26,8 @@
 //! a `.typl` file, a package directory, or a workspace root ([`ridl_core::load_workspace`])
 //! — returning the per-package IR and the merged, render-ready diagnostics
 //! (load + parse + resolve + check). It is the library face the language server
-//! drives; it reads the remote units of the manifest's `[imports]` from the
-//! cache and never fetches or writes `ridl.lock`.
+//! drives; it reads the remote units of the manifest's `[imports]` from
+//! `vendor/`, then the cache, and never fetches or writes `ridl.lock`.
 //!
 //! [`run_check`] and [`run_build`] are the stable command drivers shared by the
 //! `ridlc` plumbing binary and the `ridl` porcelain facade (concept note §8.1):
@@ -420,12 +420,12 @@ pub fn std_ir() -> ridl_ir::v2::Package {
 ///
 /// `entry` is a `.typl` file (single-file mode), a package directory, or a
 /// workspace root — whatever [`ridl_core::load_workspace`] accepts. The
-/// remote units of the manifest's `[imports]` are read from the cache under
-/// [`Frozen::Yes`]: nothing is fetched and `ridl.lock` is never written, so
-/// the language server can drive this on every edit without touching the
-/// filesystem beyond the load. A pin the cache does not hold is MANI-104;
-/// the command drivers ([`run_check`], [`run_build`]) are the ones that
-/// fetch.
+/// remote units of the manifest's `[imports]` are read from `vendor/`, then
+/// the cache, under [`Frozen::Yes`]: nothing is fetched and `ridl.lock` is
+/// never written, so the language server can drive this on every edit
+/// without touching the filesystem beyond the load. A pin neither holds is
+/// MANI-104; the command drivers ([`run_check`], [`run_build`]) are the ones
+/// that fetch.
 ///
 /// `Err` is reserved for a filesystem failure while loading (the entry does not
 /// exist, or a file cannot be read); every content problem is a [`Diagnostic`].
@@ -448,6 +448,23 @@ pub fn compile_workspace_with(
     entry: &Path,
     overlays: &[ridl_core::Overlay],
 ) -> Result<WorkspaceOutput, ridl_core::LoadError> {
+    compile_workspace_with_access(
+        db,
+        entry,
+        overlays,
+        RemoteAccess::new(Frozen::Yes, &Cache::user_default()),
+    )
+}
+
+/// [`compile_workspace_with`] with the remote access the caller chooses:
+/// `ridl vendor` passes [`RemoteAccess::refresh`], which reads the cache,
+/// fetches what it does not hold, and rewrites `ridl.lock`.
+pub fn compile_workspace_with_access(
+    db: &mut RidlDatabase,
+    entry: &Path,
+    overlays: &[ridl_core::Overlay],
+    access: RemoteAccess<'_>,
+) -> Result<WorkspaceOutput, ridl_core::LoadError> {
     let Compiled {
         workspace,
         std,
@@ -461,15 +478,7 @@ pub fn compile_workspace_with(
         report_scope,
         remote_units,
         ..
-    } = load_and_check(
-        db,
-        entry,
-        overlays,
-        RemoteAccess {
-            frozen: Frozen::Yes,
-            cache: &Cache::user_default(),
-        },
-    )?;
+    } = load_and_check(db, entry, overlays, access)?;
     // System lowering resolves references into the standard package.
     let std_ir = check_package(&*db, workspace, std, std).ir;
     let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
@@ -533,17 +542,21 @@ fn in_report_scope(
 }
 
 /// The directories a remote unit is read from, for
-/// [`retain_in_report_scope`]: the directory of each loaded remote unit, and
-/// the root of `cache`, which holds the tree of a unit that was materialized
-/// but not loaded — one whose manifest drew MANI-014, spanned at that
-/// manifest, is in no entry of `remote_units`.
+/// [`retain_in_report_scope`]: the directory of each loaded remote unit, the
+/// `vendor/` directory of the manifest root governing `entry`
+/// ([`ridl_core::VENDOR_DIR`]; none in single-file mode), and the root of
+/// `cache`. The last two hold the tree of a unit that was materialized but
+/// not loaded — one whose manifest drew MANI-014, spanned at that manifest,
+/// is in no entry of `remote_units`.
 pub fn remote_dirs(
     remote_units: &BTreeMap<String, MaterializedUnit>,
     cache: &Cache,
+    entry: &Path,
 ) -> Vec<PathBuf> {
     remote_units
         .values()
         .map(|unit| unit.dir.clone())
+        .chain(manifest_root_of(entry).map(|root| root.join(ridl_core::VENDOR_DIR)))
         .chain(std::iter::once(cache.root.clone()))
         .collect()
 }
@@ -881,23 +894,15 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
         report_scope,
         remote_units,
         ..
-    } = load_and_check(
-        &mut db,
-        entry,
-        &[],
-        RemoteAccess {
-            frozen,
-            cache: &cache,
-        },
-    )
-    .map_err(load_io_error)?;
+    } = load_and_check(&mut db, entry, &[], RemoteAccess::new(frozen, &cache))
+        .map_err(load_io_error)?;
     // An entry inside a member reports on the member only (ADR-0024 decision
     // 9, as ADR-0026 amends it).
     retain_in_report_scope(
         &mut diagnostics,
         &sources,
         report_scope.as_deref(),
-        &remote_dirs(&remote_units, &cache),
+        &remote_dirs(&remote_units, &cache, entry),
     );
     apply_lint_levels(&mut diagnostics, &sources, &lints);
     Ok(CliRun {
@@ -1103,16 +1108,8 @@ fn run_build_inner<E: From<std::io::Error>>(
         root_package,
         remote_units,
         ..
-    } = load_and_check(
-        &mut db,
-        entry,
-        &[],
-        RemoteAccess {
-            frozen,
-            cache: &cache,
-        },
-    )
-    .map_err(|err| E::from(load_io_error(err)))?;
+    } = load_and_check(&mut db, entry, &[], RemoteAccess::new(frozen, &cache))
+        .map_err(|err| E::from(load_io_error(err)))?;
     // The backends read names only; the spans served the loader's diagnostics.
     let backends: BTreeMap<String, Vec<String>> = backends
         .into_iter()
@@ -1156,7 +1153,7 @@ fn run_build_inner<E: From<std::io::Error>>(
     // 9, as ADR-0026 amends it). The diagnostics of the other members are
     // kept aside: an error there still blocks every artifact below, because
     // the build writes the whole workspace.
-    let remote_dirs = remote_dirs(&remote_units, &cache);
+    let remote_dirs = remote_dirs(&remote_units, &cache, entry);
     let mut outside_scope: Vec<Diagnostic> = diagnostics
         .iter()
         .filter(|diagnostic| {

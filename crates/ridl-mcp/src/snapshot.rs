@@ -63,7 +63,11 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
         &mut output.diagnostics,
         &output.sources,
         output.report_scope.as_deref(),
-        &ridlc::remote_dirs(&output.remote_units, &ridl_core::Cache::user_default()),
+        &ridlc::remote_dirs(
+            &output.remote_units,
+            &ridl_core::Cache::user_default(),
+            entry,
+        ),
     );
     let root = if entry.is_file() {
         entry.parent().and_then(ridl_core::find_root)
@@ -355,10 +359,10 @@ pub(crate) mod tests {
         .unwrap()
         .unwrap()
         .unwrap();
-        // The tools read the cache and never fetch: a URL with no `ridl.lock`
-        // entry is MANI-103, with the fix named, and the import under the
-        // pinned key binds nothing, so it is the resolver's uncoded error
-        // naming the unit's URL.
+        // The tools read `vendor/` and then the cache, and never fetch: a URL
+        // with no `ridl.lock` entry is MANI-103, with the fix named, and the
+        // import under the pinned key binds nothing, so it is the resolver's
+        // uncoded error naming the unit's URL.
         assert!(
             snap.output.diagnostics.iter().any(|d| {
                 d.code.as_str() == "MANI-103" && d.message.contains("run `ridl check`")

@@ -69,12 +69,16 @@ except for CLI operations that need the network, the `ridl.lock` write or the
 baseline:
 
 - the fetch and the `ridl.lock` write: the tools read a remote unit of the
-  `[imports]` from the cache, as `ridl check --frozen` does, so a URL with no
-  `ridl.lock` entry is MANI-103 and a pin the cache does not hold is MANI-104,
-  each with a message that names `ridl check` as the fix, and an entry written
-  before the `tree` hash existed is MANI-108; MANI-102, the hash mismatch of a
-  fetch, is never reported, and MANI-101 only for a URL in `[imports]` that is
-  not a fetchable `http(s)` URL, which needs no fetch to see;
+  `[imports]` as `ridl check --frozen` does, from `vendor/<key>/` at the
+  manifest root when `ridl.lock` pins a `tree` for the URL and that directory
+  exists, and from the cache otherwise. A URL with no `ridl.lock` entry is
+  MANI-103, with a message that names `ridl check` as the fix; a pin that
+  neither `vendor/` nor the cache holds is MANI-104, with a message that names
+  `ridl check` and `ridl vendor`; a vendored tree that does not match its `tree`
+  is MANI-107; and an entry written before the `tree` hash existed is MANI-108;
+  MANI-102, the hash mismatch of a fetch, is never reported, and MANI-101 only
+  for a URL in `[imports]` that is not a fetchable `http(s)` URL, which needs no
+  fetch to see;
 - the check against `.ridl/baseline`: RIDL-407 and the rename hint on RIDL-409.
   Use `ridl_diff` with `old: "<root>/.ridl/baseline"` and `new: "<root>"` to
   compare the baseline explicitly.
@@ -161,9 +165,9 @@ listing the available packages. This tool reports the graph; it does not lint
 cycles or unused imports. Required named interfaces add dependencies from each
 declared component's package to the interface's catalog. The system's package
 also depends on the packages of its declared member components. A package of a
-remote unit that the cache holds is listed as a node like a member package. The
+remote unit that the load read is listed as a node like a member package. The
 graph keeps qualifiers that name unresolved packages, or remote packages the
-cache does not hold, outside the workspace. When the loaded workspace contains
+load did not read, outside the workspace. When the loaded workspace contains
 `.rsdl` files and no system was lowered, the workspace carries the same
 no-system note as `ridl_references`.
 

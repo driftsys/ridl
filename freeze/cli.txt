@@ -201,6 +201,15 @@ ridl test -h switch
 ridl test arg 1 <PATH> optional
 ridl test arg 1 default .
 ridl test requires
+ridl vendor
+ridl vendor --check optional
+ridl vendor --check switch
+ridl vendor --help optional
+ridl vendor --help switch
+ridl vendor -h switch
+ridl vendor arg 1 <PATH> optional
+ridl vendor arg 1 default .
+ridl vendor requires
 ridlc --help optional
 ridlc --help switch
 ridlc --version optional

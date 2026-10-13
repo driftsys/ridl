@@ -44,6 +44,9 @@ Amended 2026-10-13 by [ADR-0002](ADR-0002-module-system.md) "Remote units"
 (driftsys/ridl#48): the tools read remote units from the cache; decision 6 is
 edited in place.
 
+Amended 2026-10-13 (driftsys/ridl#48, PR 2): the tools read `vendor/` at the
+manifest root before the cache; decision 6 is edited in place.
+
 Amended 2026-10-09 (driftsys/ridl#770): decision 7 accepts an overlay path that
 ends in `.rxdl` or `.rmdl`. In a package directory the loader reports such an
 overlay with the warning RIDL-417 (`unsupported-source-file`), as it reports the
@@ -115,9 +118,11 @@ pasted-source form.
    mode applies the project's `[lints]` levels, as ADR-0024 decision 8 requires.
 6. **The tools are read-only and offline** (design D-6). No tool writes a file,
    and no tool fetches a remote import. Amended 2026-10-13 (driftsys/ridl#48):
-   the tools read the remote units of `[imports]` from the cache, as
-   `ridl check --frozen` does, and report MANI-103 for a URL with no `ridl.lock`
-   entry, MANI-104 for a pin the cache does not hold, and the remote unit's
+   the tools read the remote units of `[imports]` as `ridl check --frozen` does,
+   from `vendor/<key>/` when `ridl.lock` pins a `tree` for the URL and that
+   directory exists, and from the cache otherwise, and report MANI-103 for a URL
+   with no `ridl.lock` entry, MANI-104 for a pin that neither holds, MANI-107
+   for a vendored tree that does not match its `tree`, and the remote unit's
    Errors; the Info diagnostic a remote import once produced is gone. A test
    compares the fixture tree's files, sizes and modification times before and
    after a call of each tool.

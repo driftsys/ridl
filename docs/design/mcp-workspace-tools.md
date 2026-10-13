@@ -245,12 +245,16 @@ baseline: a failed fetch (MANI-101 when the fetch itself fails, MANI-102 on a
 hash mismatch), and the desk check against `.ridl/baseline` (RIDL-407 and the
 rename hint on RIDL-409). `ridl_diff` with `old: "<root>/.ridl/baseline"` and
 `new: "<root>"` gives the same information. The tools read a remote unit of the
-`[imports]` from the cache, as `ridl check --frozen` does, and never fetch: a
-URL with no `ridl.lock` entry is MANI-103 and a pin the cache does not hold is
-MANI-104, each with a message that names `ridl check` as the fix, and an entry
-written before the `tree` hash existed is MANI-108. MANI-101 is still reported
-for a URL in `[imports]` that is not a fetchable `http(s)` URL, which the
-materializer sees before it asks the cache. The crate README states this list.
+`[imports]` as `ridl check --frozen` does, and never fetch: from `vendor/<key>/`
+at the manifest root when `ridl.lock` pins a `tree` for the URL and that
+directory exists, and from the cache otherwise. A URL with no `ridl.lock` entry
+is MANI-103, with a message that names `ridl check` as the fix; a pin that
+neither `vendor/` nor the cache holds is MANI-104, with a message that names
+`ridl check` and `ridl vendor`; a vendored tree that does not match its `tree`
+is MANI-107; and an entry written before the `tree` hash existed is MANI-108.
+MANI-101 is still reported for a URL in `[imports]` that is not a fetchable
+`http(s)` URL, which the materializer sees before it asks the cache. The crate
+README states this list.
 
 ## 7. The tool surface as a contract
 
