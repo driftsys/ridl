@@ -1516,6 +1516,48 @@ fn lsp_resolves_a_cached_remote_unit_and_publishes_nothing_for_it() {
     assert_eq!(stub.hits(), 0, "the language server never fetches");
 }
 
+/// The consumer's `[lints]` do not apply to the remote unit in the language
+/// server either: with `missing-timing` at `deny` and the cache under the
+/// consumer's directory (a path the consumer's `[lints]` scope is a prefix
+/// of), the unit's untimed signal is dropped before the level applies, so
+/// no window message shows it as an error; the consumer's own untimed
+/// signal is published as an error.
+#[test]
+fn lsp_drops_a_remote_warning_before_the_consumers_lint_levels_apply() {
+    use remote_support::{Stub, WARNING_UNIT, consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("lsp-lints");
+    let stub = Stub::serving(unit_tar(WARNING_UNIT));
+    let root = consumer(&dir, stub.url());
+    dir.write(
+        "app/ridl.toml",
+        &format!(
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{}\"\n\n[lints]\nmissing-timing = \"deny\"\n",
+            stub.url()
+        ),
+    );
+    dir.write("app/app.ridl", UNTIMED_CONSUMER);
+    // `HOME` at the consumer's root: the cache is `app/.ridl/cache`.
+    let (code, _, stderr) = ridl(&root, &root, &["check"]);
+    assert_eq!(code, 1, "{stderr}");
+    stub.reset_hits();
+    let session = LspSession::start_in_with_home(&root, Some(&root), Some(&root));
+    let (publishes, shown) = session.shutdown_collecting();
+    assert!(shown.is_empty(), "no remote error is shown: {shown:?}");
+    let published = published_lists(&publishes);
+    let (_, app) = published
+        .iter()
+        .find(|(uri, _)| uri.ends_with("app.ridl"))
+        .expect("the consumer's untimed signal is published");
+    assert_eq!(
+        app.iter()
+            .map(|d| (d["code"].as_str().unwrap(), d["severity"].as_u64().unwrap()))
+            .collect::<Vec<_>>(),
+        [("RIDL-100", 1)],
+        "the consumer's own instance is an error: {app:?}"
+    );
+    assert_eq!(stub.hits(), 0, "the language server never fetches");
+}
+
 /// Without a cache entry, `ridl lsp` shows MANI-104 once as a window
 /// message naming `ridl check`, publishes the consumer's unresolved import
 /// under its own file, and never fetches.

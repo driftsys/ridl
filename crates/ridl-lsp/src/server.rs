@@ -857,14 +857,12 @@ impl ServerState {
                 &mut sources,
             ));
         }
-        // The `[lints]` levels, resolved through the paths this source map
-        // recorded for every file, including an overlay's (ADR-0024
-        // decision 6). `allow` removes a diagnostic before conversion, so it is
-        // never published.
-        apply_lint_levels(&mut all, &sources, &self.lints);
         // A remote unit's packages were checked so that the consumer's
         // references resolve; nothing is published for their files. Their
-        // Errors go to the window message instead.
+        // Errors go to the window message instead, and their Warnings and
+        // Infos are dropped here, before the consumer's `[lints]` levels
+        // apply (ADR-0002 §5, "Remote units"), as `ridlc` drops them: a
+        // `deny` of the consumer must not raise a remote Warning.
         let mut remote_errors = Vec::new();
         all.retain(|diagnostic| {
             let remote = sources
@@ -875,6 +873,11 @@ impl ServerState {
             }
             !remote
         });
+        // The `[lints]` levels, resolved through the paths this source map
+        // recorded for every file, including an overlay's (ADR-0024
+        // decision 6). `allow` removes a diagnostic before conversion, so it is
+        // never published.
+        apply_lint_levels(&mut all, &sources, &self.lints);
         let mut out = batch(all, &table);
         out.remote_errors = remote_errors;
         out
