@@ -16,9 +16,10 @@
 //! file on each call. Driving it on every keystroke would miss unsaved editor
 //! buffers and defeat salsa incrementality (new inputs mean a full
 //! recompute). The server therefore loads the workspace **once**
-//! (`load_workspace`), holds the `Workspace` handle plus a map of file path →
-//! `InputFile`, and on `didOpen`/`didChange` drives `set_text` on the
-//! existing input — the editor buffer overlays the disk state. The load runs
+//! (`load_workspace_with_remotes`, which reads the remote units of the
+//! manifest's `[imports]` from the cache and never fetches), holds the
+//! `Workspace` handle plus a map of file path → `InputFile`, and on
+//! `didOpen`/`didChange` drives `set_text` on the existing input — the editor buffer overlays the disk state. The load runs
 //! at `initialize` from the client's root folder; when the client sent no
 //! root or that load fails, it runs at the first `didOpen` of a file that has
 //! a `ridl.toml` at or above it. A file opened from outside the loaded
