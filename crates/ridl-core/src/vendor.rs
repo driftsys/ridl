@@ -9,7 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::diag::{DiagCode, Diagnostic};
 use crate::fetch::{TreeOrigin, detached, verify_tree};
@@ -35,10 +35,23 @@ const STAGING_PREFIX: &str = ".staging-";
 /// copy is renamed into its place.
 const REPLACED_PREFIX: &str = ".replaced-";
 
+/// The directory `vendor/<key>/` for an `[imports]` key, or `None` when the
+/// key is not one ordinary directory name. An empty key, a hidden key (one
+/// that starts with a dot, which includes `.` and `..`), a key holding a path
+/// separator, and an absolute key never name a vendored unit: joining them
+/// would reach outside `vendor/` or collide with the staging entries.
+pub(crate) fn vendor_key_dir(vendor: &Path, key: &str) -> Option<PathBuf> {
+    let ordinary = !key.is_empty()
+        && !key.starts_with('.')
+        && !key.contains(['/', '\\', '\0'])
+        && !Path::new(key).is_absolute();
+    ordinary.then(|| vendor.join(key))
+}
+
 /// Brings `<root>/vendor/` to exactly `units`, keyed by `[imports]` key.
 ///
-/// - A `.staging-*` or `.replaced-*` directory, which only an interrupted
-///   run leaves, is removed first. No other hidden entry is touched.
+/// - A `.staging-*` or `.replaced-*` entry, a directory or a file, which
+///   only an interrupted run leaves, is removed first. No other hidden entry is touched.
 /// - A unit whose `vendor/<key>/` already hashes to its `tree` is left as it
 ///   is.
 /// - Any other unit is copied byte for byte from its `dir` into
@@ -57,6 +70,9 @@ const REPLACED_PREFIX: &str = ".replaced-";
 /// or that does not match its `tree`, is an error that leaves
 /// `vendor/<key>/` as it was and removes the staging directory.
 ///
+/// A key that is not one ordinary directory name ([`vendor_key_dir`]) is
+/// skipped: it names no place in `vendor/`.
+///
 /// With no unit and no `vendor/`, nothing is created.
 pub fn write_vendor(
     root: &Path,
@@ -72,13 +88,20 @@ pub fn write_vendor(
         let entry = entry?;
         let name = entry.file_name().to_string_lossy().into_owned();
         let leftover = name.starts_with(STAGING_PREFIX) || name.starts_with(REPLACED_PREFIX);
-        if leftover && entry.file_type()?.is_dir() {
-            fs::remove_dir_all(entry.path())?;
+        if leftover {
+            if entry.file_type()?.is_dir() {
+                fs::remove_dir_all(entry.path())?;
+            } else {
+                fs::remove_file(entry.path())?;
+            }
         }
     }
     let pid = std::process::id();
     for (key, unit) in units {
-        let dest = vendor.join(key);
+        // A key that is not one directory name has no place in `vendor/`.
+        let Some(dest) = vendor_key_dir(&vendor, key) else {
+            continue;
+        };
         if dest.is_dir() && tree_hash(&dest).is_ok_and(|tree| tree == unit.tree) {
             report.unchanged.push(key.clone());
             continue;
@@ -155,7 +178,7 @@ pub fn check_vendor(
     for (url, keys) in imports {
         let dirs: Vec<_> = keys
             .iter()
-            .map(|key| vendor.join(key))
+            .filter_map(|key| vendor_key_dir(&vendor, key))
             .filter(|dir| dir.is_dir())
             .collect();
         if dirs.is_empty() {
@@ -436,6 +459,21 @@ mod tests {
         assert_eq!(hidden_entries(&root.join("vendor")), [".keep"]);
     }
 
+    /// A `.staging-*` or `.replaced-*` entry that is a regular file is removed
+    /// too, and another hidden file is left alone.
+    #[test]
+    fn a_stale_file_with_a_staging_name_is_cleared() {
+        let fixture = TempDir::new("staging-file");
+        let root = root_in(&fixture);
+        let vendor = root.join("vendor");
+        fs::create_dir_all(&vendor).unwrap();
+        for name in [".staging-a-999", ".replaced-a-999", ".keep"] {
+            fs::write(vendor.join(name), "x").unwrap();
+        }
+        write_vendor(&root, &BTreeMap::new()).unwrap();
+        assert_eq!(hidden_entries(&vendor), [".keep"]);
+    }
+
     /// A unit whose `vendor/<key>/` is absent, as a run stopped between the
     /// two renames leaves it, is written again from its `dir`.
     #[test]
@@ -490,6 +528,57 @@ mod tests {
         assert_eq!(report.written, ["a"]);
         assert_eq!(tree_hash(&root.join("vendor/a")).unwrap(), a.tree);
         assert!(hidden_entries(&root.join("vendor")).is_empty());
+    }
+
+    /// Only one ordinary directory name is a vendor key.
+    #[test]
+    fn only_an_ordinary_name_is_a_vendor_key() {
+        let vendor = Path::new("root/vendor");
+        for key in [
+            "",
+            ".",
+            "..",
+            "../up",
+            "a/b",
+            "a\\b",
+            "/abs",
+            ".staging-a",
+            "a\0b",
+        ] {
+            assert_eq!(vendor_key_dir(vendor, key), None, "{key:?}");
+        }
+        assert_eq!(
+            vendor_key_dir(vendor, "veh.common"),
+            Some(vendor.join("veh.common"))
+        );
+    }
+
+    /// A key of `..` is never written: `vendor/..` is the manifest root, and
+    /// the write must leave it alone.
+    #[test]
+    fn a_key_outside_vendor_is_never_written() {
+        let fixture = TempDir::new("write-bad-key");
+        let a = unit(&fixture.path().join("src/a"), &[("a.typl", "package a\n")]);
+        let root = root_in(&fixture);
+        fs::create_dir_all(root.join("vendor")).unwrap();
+        fs::write(root.join("sentinel"), "kept").unwrap();
+        let report = write_vendor(&root, &BTreeMap::from([("..".to_string(), a)])).unwrap();
+        assert_eq!(report, VendorWrite::default());
+        assert_eq!(fs::read_to_string(root.join("sentinel")).unwrap(), "kept");
+        assert!(hidden_entries(&root.join("vendor")).is_empty());
+    }
+
+    /// A key of `..` names no directory in `vendor/`, so `--check` hashes
+    /// nothing for it and reports the unit as absent.
+    #[test]
+    fn a_key_outside_vendor_is_never_hashed() {
+        let fixture = TempDir::new("check-bad-key");
+        let root = fixture.path().join("root");
+        fs::create_dir_all(root.join("vendor")).unwrap();
+        fs::write(root.join("outside.typl"), "package outside\n").unwrap();
+        let url = "https://r.example.com/up@v1";
+        let diags = check_vendor(&root, &union(url, ".."), Some(&lock_for(url, "0000")));
+        assert_eq!(codes(&diags), ["MANI-109"], "{diags:?}");
     }
 
     /// With nothing to vendor and no `vendor/`, no directory is created.

@@ -27,6 +27,7 @@ use crate::cache::Cache;
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
 use crate::lock::{LockEntry, Lockfile};
 use crate::tree_hash::{TreeHashError, tree_hash};
+use crate::vendor::vendor_key_dir;
 use crate::workspace::ImportUnion;
 pub use crate::workspace::MaterializedUnit;
 
@@ -162,7 +163,7 @@ pub fn materialize_imports(
         }
         let vendored = vendor.and_then(|vendor| {
             keys.iter()
-                .map(|key| vendor.join(key))
+                .filter_map(|key| vendor_key_dir(vendor, key))
                 .find(|dir| dir.is_dir())
         });
         let pinned = lock.and_then(|lock| lock.entries.get(url));
@@ -1182,6 +1183,28 @@ mod tests {
         );
         assert_eq!(codes(&diags), vec!["MANI-107"]);
         assert!(diags[0].message.contains("alias.typl"));
+        assert!(units.is_empty());
+    }
+
+    /// A key that is not one directory name never reaches `vendor/`: a key
+    /// of `..` would verify the directory above `vendor/` and, on a match,
+    /// read it as the unit. The unit is read from the cache instead, which
+    /// this frozen run does not hold: MANI-104.
+    #[test]
+    fn a_key_outside_vendor_is_never_read() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("vendor-bad-key");
+        let cache = cache(&dir);
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache, Frozen::No, None);
+        std::fs::remove_dir_all(&cache.root).unwrap();
+        let imports: ImportUnion =
+            BTreeMap::from([(stub.url().to_string(), BTreeSet::from(["..".to_string()]))]);
+        let vendor = dir.path().join("vendor");
+        std::fs::create_dir_all(&vendor).unwrap();
+        let (units, _, diags) =
+            materialize_imports(&imports, Some(&lock), &cache, Frozen::Yes, Some(&vendor));
+        assert_eq!(codes(&diags), vec!["MANI-104"], "{diags:?}");
         assert!(units.is_empty());
     }
 
