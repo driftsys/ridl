@@ -442,9 +442,9 @@ fn load_inner(
 /// cycle), and its name does not start with a dot. The loader's tree walk and
 /// [`find_nested_manifest`] both decide with this function.
 fn walk_enters(entry: &fs::DirEntry) -> io::Result<bool> {
-    Ok(entry.path().is_dir()
-        && !entry.file_type()?.is_symlink()
-        && !entry.file_name().to_string_lossy().starts_with('.'))
+    // `DirEntry::file_type` does not follow a link, so a symbolic link to a
+    // directory is not `is_dir` here.
+    Ok(entry.file_type()?.is_dir() && !entry.file_name().to_string_lossy().starts_with('.'))
 }
 
 /// The manifest that MANI-013 reports for the directory `subdirectory` of a
@@ -3994,8 +3994,12 @@ service:veh.common.climate 2
             ("deep", Some("a/b/ridl.toml")),
             ("hidden", None),
             ("manifest-is-a-directory", None),
+            #[cfg(unix)]
             ("symlinked-directory", None),
         ];
+        // A unit outside the tree under test, reached only through a link.
+        let outside = TempDir::new("agree-outside");
+        outside.write("ridl.toml", nested);
         for (label, expected) in trees {
             let dir = TempDir::new(&format!("agree-{label}"));
             dir.write("ridl.toml", package);
@@ -4017,22 +4021,10 @@ service:veh.common.climate 2
                 "manifest-is-a-directory" => {
                     dir.write("sub/ridl.toml/x.txt", "");
                 }
+                #[cfg(unix)]
                 "symlinked-directory" => {
-                    let outside = TempDir::new("agree-outside");
-                    outside.write("ridl.toml", nested);
-                    #[cfg(unix)]
                     std::os::unix::fs::symlink(outside.path(), dir.path().join("link"))
                         .expect("create the symbolic link");
-                    let found = find_nested_manifest(dir.path()).expect("the tree is readable");
-                    assert_eq!(found, None, "{label}");
-                    let mut db = RidlDatabase::default();
-                    let loaded = load_workspace(&mut db, dir.path()).expect("the unit loads");
-                    assert!(
-                        !codes(&loaded.diagnostics).contains(&"MANI-013"),
-                        "{label}: {:?}",
-                        codes(&loaded.diagnostics)
-                    );
-                    continue;
                 }
                 other => unreachable!("{other}"),
             }
