@@ -619,3 +619,14 @@ provenance. Nothing here is normative — the current references live in
   driftsys/ridl#264 and #317; the open measurement, JSON and catalog-reader
   questions are items 7 to 9 of ADR-0020's open list. Its `docs/wip/` paths are
   historic.
+- **2026-10-12-ridl-vendor-design.md** and **2026-10-12-ridl-vendor-plan.md** —
+  the design of remote units and `ridl vendor` (driftsys/ridl#48: the read path
+  of part 1, decisions V-1 to V-9, the `vendor/` reservation and the command of
+  part 2) and the plan that built it, archived verbatim. The plan's rulings R-1
+  to R-54 are also in the pull request bodies of #941 and #950. The as-built
+  rules are in [ADR-0002](../decisions/ADR-0002-module-system.md) §7,
+  [ADR-0010](../decisions/ADR-0010-cli-conventions.md),
+  [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md),
+  [ADR-0029](../decisions/ADR-0029-stability-policy.md) and
+  [the CLI reference](../book/cli-reference.md). The `manifest` and `cli` freeze
+  rows landed in #954.
