@@ -372,7 +372,7 @@ fn hash_tree(url: &str, dir: &Path, diagnostics: &mut Vec<Diagnostic>) -> Option
 /// Where a tree [`verify_tree`] checks was read from. It chooses the wording
 /// of the MANI-107 message and the fix it names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TreeOrigin {
+pub(crate) enum TreeOrigin {
     /// A cache entry (`<cache root>/<url hash>/<sha256>/`).
     Cache,
     /// A vendored directory (`<manifest root>/vendor/<key>/`), which
@@ -385,7 +385,7 @@ pub enum TreeOrigin {
 /// mismatch of [`TreeOrigin::Vendor`] the message names `ridl vendor` as the
 /// fix. The one compare of a tree against a pinned `tree`, whichever
 /// directory the unit is read from.
-pub fn verify_tree(
+pub(crate) fn verify_tree(
     url: &str,
     dir: &Path,
     expected: &str,

@@ -23,7 +23,10 @@ pub fn dump(_root: &Path) -> Result<Vec<String>, String> {
     for (key, value_type) in ridl_core::lock::LOCK_KEYS {
         lines.push(format!("ridl.lock.{key} {value_type}"));
     }
-    lines.push("vendor <manifest root>/vendor/<key>/".to_string());
+    lines.push(format!(
+        "vendor <manifest root>/{}/<key>/",
+        ridl_core::VENDOR_DIR
+    ));
     Ok(lines)
 }
 
