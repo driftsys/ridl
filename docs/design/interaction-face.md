@@ -161,6 +161,18 @@ face to skip. The rule is stated here once: the book's
 [generated code](../book/generated-code.md) chapter and
 [the CLI reference](../book/cli-reference.md) link to it.
 
+The request of a call is always a named type: the single declared named
+parameter, or the argument struct the lowering induces for every other parameter
+list, zero parameters included; a tuple reply and a query with no return type
+induce a reply struct. The rule is held by
+[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) (amendment of
+2026-10-13) and the names by
+[ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md).
+`descriptors::single_param_type`, `query_param_type` and `query_reply_type` are
+the one place the backend asks what a call sends. They read the name the
+lowering wrote, and the backend never builds one. A fallible `T | E` reply, an
+untyped position and a stream are still refused (driftsys/ridl#943).
+
 `src/face.rs` emits, per named interface that is not `internal` and has at least
 one member the face covers, one `pub mod` named after the interface. Its
 consumer side is:

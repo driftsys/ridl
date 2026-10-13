@@ -97,6 +97,16 @@ descriptor. In their place, the package module holds a
 `__RIDL_NO_FACE_<NAME>` constant whose documentation names the interface and
 the reason; the [CLI reference](cli-reference.md#ridl-build) lists the cases.
 
+A call always sends one named type. A command or query with exactly one
+parameter of a named type sends that type. Any other parameter list gets an
+argument struct that the compiler names `<Interface><Call>Params`, with one
+field per parameter in declaration order, each carrying the parameter's
+documentation. A call with no parameter sends the same kind of struct with no
+field. A query whose reply is a tuple, or that declares no return type, gets a
+reply struct named `<Interface><Call>Reply` in the same way. These structs are
+generated types of the package module, and the face methods take and return
+them like any other payload.
+
 The face opens no socket and holds no runtime. Each `Client`, `Publisher` and
 `serve` runs over a _port_ that the application passes in, and a port comes from
 a runtime. The one runtime in this repository is `ridl-loopback`, which connects
