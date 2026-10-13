@@ -101,6 +101,26 @@ pub fn lookup_snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot
     Ok(snap)
 }
 impl Snapshot {
+    /// The consumer's checked packages: `output.checked` without the
+    /// packages of the remote units, which the loader appends after the
+    /// consumer's (ADR-0002 §5, "Remote units").
+    pub fn consumer_packages(&self) -> &[ridl_sem::CheckedPackage] {
+        let remote_units = &self.output.remote_units;
+        let consumer = self
+            .output
+            .checked
+            .iter()
+            .take_while(|checked| !ridlc::is_remote(&checked.ir, remote_units))
+            .count();
+        debug_assert!(
+            self.output.checked[consumer..]
+                .iter()
+                .all(|checked| ridlc::is_remote(&checked.ir, remote_units)),
+            "the remote units' packages follow the consumer's"
+        );
+        &self.output.checked[..consumer]
+    }
+
     pub fn status(&self) -> WorkspaceStatus {
         WorkspaceStatus {
             root: self.root.to_string_lossy().into_owned(),

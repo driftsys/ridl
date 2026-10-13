@@ -42,11 +42,11 @@ pub struct InterfaceMetrics {
 }
 
 /// Reports every workspace package and declared interface without thresholds.
+/// A package of a remote unit is not a workspace package: it has no row, and
+/// a reference into one contributes to no row, as an external qualifier does.
 pub fn metrics(snap: &Snapshot, _input: &MetricsInput) -> Result<MetricsOutput, ToolError> {
-    let edges = workspace_package_edges(&package_edges(
-        &snap.output.checked,
-        snap.output.system.as_ref(),
-    ));
+    let consumer = snap.consumer_packages();
+    let edges = workspace_package_edges(&package_edges(consumer, snap.output.system.as_ref()));
     let mut incoming: BTreeMap<&str, usize> = BTreeMap::new();
     for targets in edges.values() {
         for target in targets {
@@ -69,7 +69,7 @@ pub fn metrics(snap: &Snapshot, _input: &MetricsInput) -> Result<MetricsOutput, 
         })
         .collect();
     let mut interfaces = Vec::new();
-    for checked in &snap.output.checked {
+    for checked in consumer {
         let pkg = &checked.ir;
         if pkg.name == "ridl.std" {
             continue;
@@ -178,6 +178,41 @@ mod tests {
                 {"name":"fx.a.sub", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]},
                 {"name":"fx.b", "fanIn":0, "fanOut":1, "instability":1.0, "dependsOn":["fx.a"]}
             ])
+        );
+    }
+
+    /// A package of a remote unit is not a package of the metrics
+    /// (ADR-0002, "Remote units"): it has no row, and no row counts it.
+    /// `fx.b` is marked as a remote unit on the snapshot, as the loader
+    /// marks one it read from the cache.
+    #[test]
+    fn metrics_leaves_out_a_remote_package() {
+        let path = fixture("ws");
+        let mut snap = snapshot(&path, &[]).unwrap();
+        snap.output.remote_units.insert(
+            "fx.b".to_string(),
+            ridl_core::MaterializedUnit {
+                url: "https://registry.example.com/fx/b@v1".to_string(),
+                dir: snap.root.join("b"),
+                tree: "0".repeat(64),
+            },
+        );
+        let result = value(&snap, &path);
+        assert_eq!(
+            result["packages"],
+            json!([
+                {"name":"fx.a", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]},
+                {"name":"fx.a.sub", "fanIn":0, "fanOut":0, "instability":null, "dependsOn":[]}
+            ])
+        );
+        assert!(
+            result["interfaces"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|iface| !iface["name"].as_str().unwrap().starts_with("fx.b.")),
+            "{:?}",
+            result["interfaces"]
         );
     }
 

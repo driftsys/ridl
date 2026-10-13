@@ -170,8 +170,11 @@ no-system note as `ridl_references`.
 Input: `path`. Result: `{packages, interfaces, workspace}`. Each package has
 `name`, `fanIn`, `fanOut`, `instability` and sorted `dependsOn`. Dependencies
 use the same references and rsdl component uses as `ridl_dependencies`, filtered
-to workspace targets. External qualifiers and `ridl.std` do not contribute.
-Instability is `fanOut / (fanIn + fanOut)`, or `null` when both counts are zero.
+to workspace targets. External qualifiers and `ridl.std` do not contribute, and
+neither does a package of a remote unit: the tool reports the workspace's own
+packages and interfaces only, so a remote package has no entry and a reference
+into one adds to no count (`ridl_dependencies` keeps it as a node). Instability
+is `fanOut / (fanIn + fanOut)`, or `null` when both counts are zero.
 
 Each declared interface has its canonical `name`, total `members` count and
 `groups` of members connected by directly shared named types. Primitives and
