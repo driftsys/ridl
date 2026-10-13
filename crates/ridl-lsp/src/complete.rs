@@ -26,9 +26,12 @@
 //! `documentation`, rendered as hover renders it but without the signature
 //! or the Contract list, to keep the item short (ADR-0026).
 //!
-//! In an `.rsdl` file the doc comment and `import` contexts are the same, and
-//! the other contexts are the rsdl slots (rsdl reference §3, §4), each offering
-//! what the checker would bind there:
+//! In an `.rsdl` file the doc comment context is the same. The `import` context
+//! also offers the components and the systems the named package declares, which
+//! an rsdl file can import (rsdl reference §2, §4); it offers no distribution
+//! or deployment, because no reference names one. The other contexts are the
+//! rsdl slots (rsdl reference §3, §4), each offering what the checker would
+//! bind there:
 //!
 //! - at the top level → the four rsdl declaration keywords;
 //! - at the start of a component line → `offers` and `requires`; in a
@@ -181,10 +184,14 @@ pub fn rsdl_completion(
         return (Vec::new(), None);
     }
     if cursor.in_import() {
-        return (
-            import_completions(db, ws, std, packages, &source, offset),
-            None,
-        );
+        let mut items = import_completions(db, ws, std, packages, &source, offset);
+        items.extend(rsdl_import_items(db, ws, std, &source, offset));
+        // The package shares one namespace across its typl, ridl and rsdl
+        // declarations, so a label repeats only in a workspace that already
+        // reports the clash.
+        let mut seen = HashSet::new();
+        items.retain(|item| seen.insert(item.label.clone()));
+        return (sorted(items), None);
     }
     let Some(slot) = rsdl_slot(&cursor, offset) else {
         return (Vec::new(), None);
@@ -695,6 +702,39 @@ fn import_completions(
         items.extend(public_symbol_items(db, ws, std, *target));
     }
     sorted(items)
+}
+
+/// The rsdl components and systems of the package that the import path before
+/// the cursor names, for an import in an `.rsdl` file. A distribution and a
+/// deployment are not offered: no reference names one (rsdl reference §4). An
+/// rsdl declaration takes no `internal` modifier, so none is filtered out.
+fn rsdl_import_items(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    source: &SourceFile,
+    offset: TextSize,
+) -> Vec<lt::CompletionItem> {
+    let Some(prefix) = import_path_prefix(source, offset) else {
+        return Vec::new();
+    };
+    let system = check_system(db, ws, std);
+    let mut items = Vec::new();
+    for decl in system
+        .components
+        .iter()
+        .filter(|decl| decl.package == prefix)
+    {
+        let name = &decl.name.name;
+        let detail = format!("component {}.{name}", decl.package);
+        items.push(item(name, lt::CompletionItemKind::CLASS, detail));
+    }
+    for decl in system.systems.iter().filter(|decl| decl.package == prefix) {
+        let name = &decl.name.name;
+        let detail = format!("system {}.{name}", decl.package);
+        items.push(item(name, lt::CompletionItemKind::MODULE, detail));
+    }
+    items
 }
 
 /// The regex constants in scope, for a `match` pattern position.

@@ -4017,6 +4017,92 @@ fn rsdl_completion_qualifies_across_packages() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// Completion on an `import` line in an `.rsdl` file offers the components and
+/// the systems of the package whose path precedes the cursor, with the kinds
+/// and details the other rsdl slots use, besides its typl and ridl
+/// declarations. A distribution and a deployment are not offered: no
+/// reference names one. No label is offered twice.
+#[test]
+fn rsdl_import_completion_offers_components_and_systems() {
+    let dir = TempDir::new("rsdl-import-completion");
+    let (_contracts, _system, extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.extra\nimport veh.topology.\n";
+    did_open(&client, &extra, text);
+    let items = complete_at(&client, 10, extra.clone(), pos(1, 19));
+    let got = labels(&items);
+    for name in ["Cruise", "Lane", "Panel", "Vehicle", "Speed"] {
+        assert!(got.contains(&name), "{name} is offered: {got:?}");
+    }
+    for name in ["Adas", "Production"] {
+        assert!(!got.contains(&name), "{name} is not offered: {got:?}");
+    }
+    let detail_of = |label: &str| {
+        items
+            .iter()
+            .find(|item| item.label == label)
+            .and_then(|item| item.detail.as_deref())
+    };
+    assert_eq!(
+        kind_of(&items, "Cruise"),
+        Some(lt::CompletionItemKind::CLASS)
+    );
+    assert_eq!(detail_of("Cruise"), Some("component veh.topology.Cruise"));
+    assert_eq!(
+        kind_of(&items, "Vehicle"),
+        Some(lt::CompletionItemKind::MODULE),
+    );
+    assert_eq!(detail_of("Vehicle"), Some("system veh.topology.Vehicle"));
+    let mut sorted_labels = got.clone();
+    sorted_labels.sort_unstable();
+    assert_eq!(got, sorted_labels, "the items are sorted");
+    sorted_labels.dedup();
+    assert_eq!(got.len(), sorted_labels.len(), "no label twice: {got:?}");
+
+    // A package with no rsdl declaration offers nothing of the kind.
+    let text = "package veh.extra\nimport veh.adas.\n";
+    did_open(&client, &extra, text);
+    let items = complete_at(&client, 11, extra.clone(), pos(1, 16));
+    let got = labels(&items);
+    assert!(got.contains(&"Flag"), "{got:?}");
+    assert!(
+        !got.contains(&"Cruise") && !got.contains(&"Vehicle"),
+        "{got:?}"
+    );
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The same import position in a `.typl` or a `.ridl` file does not offer
+/// rsdl declarations: those files cannot import them.
+#[test]
+fn import_completion_outside_rsdl_offers_no_rsdl_declaration() {
+    let dir = TempDir::new("rsdl-import-completion-other");
+    let (_contracts, _system, _extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    let text = "package veh.extra\nimport veh.topology.\n";
+    let ridl = uri_of(&dir.write("extra/other.ridl", text));
+    let typl = uri_of(&dir.write("extra/other.typl", text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    for (id, uri) in [(10, ridl), (11, typl)] {
+        did_open(&client, &uri, text);
+        let items = complete_at(&client, id, uri, pos(1, 19));
+        let got = labels(&items);
+        assert!(
+            got.contains(&"Speed"),
+            "the typl symbol is offered: {got:?}"
+        );
+        for name in ["Cruise", "Lane", "Panel", "Vehicle"] {
+            assert!(!got.contains(&name), "{name} is not offered: {got:?}");
+        }
+    }
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// Rename in an `.rsdl` file: a system from its declaration and from the
 /// `for` reference; renaming to the same name; the refusals, each with its
 /// reason. A name that a declaration of an affected package holds, or that an
