@@ -408,6 +408,26 @@ impl ::core::default::Default for Tally {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ValveSetBothParams {
+    pub level: Level,
+    pub window: Window,
+}
+impl ::core::default::Default for ValveSetBothParams {
+    fn default() -> Self {
+        ValveSetBothParams {
+            level: <Level as ::core::default::Default>::default(),
+            window: <Window as ::core::default::Default>::default(),
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ValveStatusParams {}
+impl ::core::default::Default for ValveStatusParams {
+    fn default() -> Self {
+        ValveStatusParams {}
+    }
+}
 /// A `Temperature` value in FlatBuffers bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
@@ -1971,6 +1991,310 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Tally {
         __ridl_fb_decode_Tally(__view.buf, __view.table)
     }
 }
+/// A `ValveSetBothParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct ValveSetBothParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for ValveSetBothParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> ValveSetBothParamsFbView<'a> {
+    /// Reads `ValveSetBothParams`'s `level` field in place.
+    pub fn level(&self) -> Level {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 1usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Level::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u8(self.buf, __p).unwrap_or(0u8),
+                    ),
+                )
+            }
+            _ => Level::new_unchecked(0i64),
+        }
+    }
+    /// Reads `ValveSetBothParams`'s `window` field in place.
+    pub fn window(&self) -> Window {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Window::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u32(self.buf, __p).unwrap_or(0u32),
+                    ),
+                )
+            }
+            _ => Window::new_unchecked(0i64),
+        }
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_ValveSetBothParams(
+    value: &ValveSetBothParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 2usize];
+    let mut __n = 0usize;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: {
+            let __s = value.level;
+            ::ridl_rt::flatbuffers::Field::U8(__s.get() as ::core::primitive::u8)
+        },
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 1u16,
+        offset: 8u16,
+        value: {
+            let __s = value.window;
+            ::ridl_rt::flatbuffers::Field::U32(__s.get() as ::core::primitive::u32)
+        },
+    };
+    __n += 1;
+    builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_ValveSetBothParams(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Level::check(&(::core::primitive::i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            1u16,
+            4usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_u32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Window::check(&(::core::primitive::i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_ValveSetBothParams(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ValveSetBothParams {
+    ValveSetBothParams {
+        level: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Level::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                    ),
+                )
+            }
+            _ => Level::new_unchecked(0i64),
+        },
+        window: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Window::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u32(buf, __p).unwrap_or(0u32),
+                    ),
+                )
+            }
+            _ => Window::new_unchecked(0i64),
+        },
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for ValveSetBothParams {
+    /// The largest FlatBuffers buffer any legal `ValveSetBothParams` encodes to: 56 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 56usize;
+    type Buffer = [::core::primitive::u8; 56usize];
+    const BUFFER: Self::Buffer = [0u8; 56usize];
+    type View<'a> = ValveSetBothParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ValveSetBothParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_ValveSetBothParams(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ValveSetBothParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ValveSetBothParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_ValveSetBothParams(buf, table)?;
+        ::core::result::Result::Ok(ValveSetBothParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_ValveSetBothParams(__view.buf, __view.table)
+    }
+}
+/// A `ValveStatusParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct ValveStatusParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for ValveStatusParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> ValveStatusParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_ValveStatusParams(
+    _value: &ValveStatusParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_ValveStatusParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_ValveStatusParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ValveStatusParams {
+    ValveStatusParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for ValveStatusParams {
+    /// The largest FlatBuffers buffer any legal `ValveStatusParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = ValveStatusParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ValveStatusParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_ValveStatusParams(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ValveStatusParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ValveStatusParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_ValveStatusParams(buf, table)?;
+        ::core::result::Result::Ok(ValveStatusParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_ValveStatusParams(__view.buf, __view.table)
+    }
+}
 /**Descriptor for interface `Cabin`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
 
 Its size table in FlatBuffers is `<Cabin as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
@@ -1979,8 +2303,8 @@ impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            176, 181, 7, 34, 175, 19, 214, 70, 39, 239, 103, 167, 142, 179, 179, 163,
-            102, 3, 136, 23, 54, 36, 144, 179, 174, 247, 215, 43, 192, 38, 196, 227,
+            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
+            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
@@ -2197,8 +2521,8 @@ impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            176, 181, 7, 34, 175, 19, 214, 70, 39, 239, 103, 167, 142, 179, 179, 163,
-            102, 3, 136, 23, 54, 36, 144, 179, 174, 247, 215, 43, 192, 38, 196, 227,
+            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
+            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
@@ -2264,8 +2588,8 @@ impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            176, 181, 7, 34, 175, 19, 214, 70, 39, 239, 103, 167, 142, 179, 179, 163,
-            102, 3, 136, 23, 54, 36, 144, 179, 174, 247, 215, 43, 192, 38, 196, 227,
+            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
+            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -2343,8 +2667,8 @@ impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            176, 181, 7, 34, 175, 19, 214, 70, 39, 239, 103, 167, 142, 179, 179, 163,
-            102, 3, 136, 23, 54, 36, 144, 179, 174, 247, 215, 43, 192, 38, 196, 227,
+            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
+            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
@@ -2384,6 +2708,39 @@ impl ::ridl_rt::contract::Interface for Valve {
                 },
             ],
         },
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(3),
+            kind: ::ridl_rt::contract::Kind::Command,
+            name: "setBoth",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "ValveSetBothParams",
+                },
+            ],
+        },
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(4),
+            kind: ::ridl_rt::contract::Kind::Query,
+            name: "status",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(3000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "ValveStatusParams",
+                },
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Health",
+                },
+            ],
+        },
     ];
 }
 impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Valve {
@@ -2397,6 +2754,15 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Valve {
             + <Average as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE as ::core::primitive::u64,
+        <ValveSetBothParams as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+        <ValveStatusParams as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64
+            + <Health as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE as ::core::primitive::u64,
     ];
     const MAX_BUFFER_SIZE: ::core::primitive::usize = {
         let sizes = [
@@ -2407,6 +2773,15 @@ impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Valve {
                 ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE,
             <Average as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <ValveSetBothParams as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <ValveStatusParams as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <Health as ::ridl_rt::payload::Payload<
                 ::ridl_rt::encoding::FlatBuffers,
             >>::MAX_SIZE,
         ];
@@ -2467,6 +2842,39 @@ impl ::ridl_rt::contract::Query for ValvePressure {
         ::core::result::Result::Ok(())
     }
 }
+#[doc(hidden)]
+pub struct ValveSetBoth;
+impl ::ridl_rt::contract::Interaction for ValveSetBoth {
+    type Iface = Valve;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Valve as ::ridl_rt::contract::Interface>::MEMBERS[2];
+    const ROW: ::core::primitive::usize = 2;
+}
+impl ::ridl_rt::contract::Command for ValveSetBoth {
+    type Args = ValveSetBothParams;
+    fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+}
+#[doc(hidden)]
+pub struct ValveStatus;
+impl ::ridl_rt::contract::Interaction for ValveStatus {
+    type Iface = Valve;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Valve as ::ridl_rt::contract::Interface>::MEMBERS[3];
+    const ROW: ::core::primitive::usize = 3;
+}
+impl ::ridl_rt::contract::Query for ValveStatus {
+    type Args = ValveStatusParams;
+    type Reply = Health;
+    fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+    fn ensure(
+        _args: &Self::Args,
+        _reply: &Self::Reply,
+    ) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+}
 /**Descriptor for interface `Wiper`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
 
 Its size table in FlatBuffers is `<Wiper as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
@@ -2475,8 +2883,8 @@ impl ::ridl_rt::contract::Interface for Wiper {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            176, 181, 7, 34, 175, 19, 214, 70, 39, 239, 103, 167, 142, 179, 179, 163,
-            102, 3, 136, 23, 54, 36, 144, 179, 174, 247, 215, 43, 192, 38, 196, 227,
+            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
+            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(5);
@@ -2564,8 +2972,8 @@ impl ::ridl_rt::contract::Interface for Zone {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            176, 181, 7, 34, 175, 19, 214, 70, 39, 239, 103, 167, 142, 179, 179, 163,
-            102, 3, 136, 23, 54, 36, 144, 179, 174, 247, 215, 43, 192, 38, 196, 227,
+            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
+            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(6);
@@ -2727,8 +3135,8 @@ impl ::ridl_rt::contract::Interface for ZoneLog {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            176, 181, 7, 34, 175, 19, 214, 70, 39, 239, 103, 167, 142, 179, 179, 163,
-            102, 3, 136, 23, 54, 36, 144, 179, 174, 247, 215, 43, 192, 38, 196, 227,
+            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
+            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(7);
@@ -5239,7 +5647,11 @@ pub mod valve {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct OpenCorrelation(pub ::ridl_rt::port::Correlation);
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub(crate) struct SetBothCorrelation(pub ::ridl_rt::port::Correlation);
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct PressureCorrelation(pub ::ridl_rt::port::Correlation);
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub(crate) struct StatusCorrelation(pub ::ridl_rt::port::Correlation);
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
         let expected = <super::Valve as ::ridl_rt::contract::Interface>::CATALOG;
@@ -5264,8 +5676,11 @@ pub mod valve {
     where
         super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         /**Sends command `open` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
 
@@ -5292,6 +5707,43 @@ The call's bound is the member's `max`, measured from the port's clock when this
                 Err(error) => OpenPhase::Failed(error),
             };
             OpenCall {
+                port: &mut self.port,
+                phase,
+                deadline,
+            }
+        }
+        /// A call with two parameters: its argument type is induced.
+        ///
+        /**Sends command `setBoth` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+
+The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Rules
+        ///
+        /// - response within 1000000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `level`
+        ///   - range 0 ..= 100
+        /// - `window`
+        ///   - range 0 ..= 100000
+        pub fn set_both(
+            &mut self,
+            args: super::ValveSetBothParams,
+        ) -> SetBothCall<'_, P> {
+            let __arg = args;
+            let deadline = <super::ValveSetBoth as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match send_set_both(&mut self.port, &__arg) {
+                Ok(correlation) => SetBothPhase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => SetBothPhase::Unsent(__arg),
+                Err(error) => SetBothPhase::Failed(error),
+            };
+            SetBothCall {
                 port: &mut self.port,
                 phase,
                 deadline,
@@ -5327,6 +5779,33 @@ The call's bound is the member's `max`, measured from the port's clock when this
                 deadline,
             }
         }
+        /// A call with none: its argument type is an induced struct with no field.
+        ///
+        /**Sends query `status` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+
+The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Rules
+        ///
+        /// - response within 3000000 us
+        pub fn status(&mut self, args: super::ValveStatusParams) -> StatusCall<'_, P> {
+            let __arg = args;
+            let deadline = <super::ValveStatus as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match send_status(&mut self.port, &__arg) {
+                Ok(correlation) => StatusPhase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => StatusPhase::Unsent(__arg),
+                Err(error) => StatusPhase::Failed(error),
+            };
+            StatusCall {
+                port: &mut self.port,
+                phase,
+                deadline,
+            }
+        }
     }
     impl<
         P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
@@ -5335,8 +5814,11 @@ The call's bound is the member's `max`, measured from the port's clock when this
     where
         super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Port = P;
         /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
@@ -5374,8 +5856,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     where
         super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         fn expired(&self) -> bool {
             self.deadline.is_some_and(|deadline| self.port.now() > deadline)
@@ -5392,8 +5877,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     where
         super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Output = ::core::result::Result<(), ::ridl_rt::error::ClientError>;
         fn poll(
@@ -5476,6 +5964,141 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
     }
+    ///The future of command `setBoth`, returned by `Client::set_both`. It resolves to the delivery acknowledgment: `Ok(())`, or the outcome the provider settled; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; and to the port's own expired outcome when the call was sent and its bound passed. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits for its outcome calls `Caller::forget` on the call; a future that has taken its outcome has already done so. Polling it again after it resolved panics.
+    #[must_use = "the command was sent, or waits for a slot; its outcome is taken only when the future is polled"]
+    pub struct SetBothCall<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+        phase: SetBothPhase,
+        deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+    }
+    enum SetBothPhase {
+        Unsent(super::ValveSetBothParams),
+        Waiting(SetBothCorrelation),
+        Failed(::ridl_rt::port::SendError),
+        Done,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > SetBothCall<'_, P>
+    where
+        super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        fn expired(&self) -> bool {
+            self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+        }
+        #[cfg(feature = "std")]
+        fn sent(&self) -> bool {
+            matches!(self.phase, SetBothPhase::Waiting(_))
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for SetBothCall<'_, P>
+    where
+        super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Output = ::core::result::Result<(), ::ridl_rt::error::ClientError>;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            loop {
+                match ::core::mem::replace(&mut this.phase, SetBothPhase::Done) {
+                    SetBothPhase::Done => panic!("`SetBothCall` polled after completion"),
+                    SetBothPhase::Failed(error) => {
+                        return ::core::task::Poll::Ready(
+                            Err(::ridl_rt::error::ClientError::Send(error)),
+                        );
+                    }
+                    SetBothPhase::Unsent(__arg) => {
+                        if this.expired() {
+                            return ::core::task::Poll::Ready(
+                                Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ),
+                            );
+                        }
+                        this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                        match send_set_both(&mut *this.port, &__arg) {
+                            Ok(correlation) => {
+                                this.phase = SetBothPhase::Waiting(correlation);
+                            }
+                            Err(::ridl_rt::port::SendError::Busy) => {
+                                this.phase = SetBothPhase::Unsent(__arg);
+                                return ::core::task::Poll::Pending;
+                            }
+                            Err(error) => {
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Send(error)),
+                                );
+                            }
+                        }
+                    }
+                    SetBothPhase::Waiting(correlation) => {
+                        this.port
+                            .wake_on(
+                                ::ridl_rt::port::Interest::Outcome(correlation.0),
+                                cx.waker(),
+                            );
+                        let outcome = match poll_set_both_ack(
+                            &mut *this.port,
+                            correlation,
+                        ) {
+                            Some(outcome) => {
+                                outcome.map_err(::ridl_rt::error::ClientError::Call)
+                            }
+                            None => {
+                                if !this.expired() {
+                                    this.phase = SetBothPhase::Waiting(correlation);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                Err(
+                                    ::ridl_rt::error::ClientError::Call(
+                                        ::ridl_rt::error::CallError::Transport(
+                                            ::ridl_rt::error::Transport::Undelivered,
+                                        ),
+                                    ),
+                                )
+                            }
+                        };
+                        this.port.forget(correlation.0);
+                        return ::core::task::Poll::Ready(outcome);
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for SetBothCall<'_, P> {
+        fn drop(&mut self) {
+            if let SetBothPhase::Waiting(correlation) = &self.phase {
+                self.port.forget(correlation.0);
+            }
+        }
+    }
     ///The future of query `pressure`, returned by `Client::pressure`. It resolves to the decoded reply, or the outcome the provider settled; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; and to the port's own expired outcome when the call was sent and its bound passed. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits for its outcome calls `Caller::forget` on the call; a future that has taken its outcome has already done so. Polling it again after it resolved panics.
     #[must_use = "the query was sent, or waits for a slot; its outcome is taken only when the future is polled"]
     pub struct PressureCall<
@@ -5500,8 +6123,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     where
         super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         fn expired(&self) -> bool {
             self.deadline.is_some_and(|deadline| self.port.now() > deadline)
@@ -5518,8 +6144,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     where
         super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Output = ::core::result::Result<
             super::Average,
@@ -5611,6 +6240,145 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
     }
+    ///The future of query `status`, returned by `Client::status`. It resolves to the decoded reply, or the outcome the provider settled; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; and to the port's own expired outcome when the call was sent and its bound passed. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits for its outcome calls `Caller::forget` on the call; a future that has taken its outcome has already done so. Polling it again after it resolved panics.
+    #[must_use = "the query was sent, or waits for a slot; its outcome is taken only when the future is polled"]
+    pub struct StatusCall<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+        phase: StatusPhase,
+        deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+    }
+    enum StatusPhase {
+        Unsent(super::ValveStatusParams),
+        Waiting(StatusCorrelation),
+        Failed(::ridl_rt::port::SendError),
+        Done,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > StatusCall<'_, P>
+    where
+        super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        fn expired(&self) -> bool {
+            self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+        }
+        #[cfg(feature = "std")]
+        fn sent(&self) -> bool {
+            matches!(self.phase, StatusPhase::Waiting(_))
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for StatusCall<'_, P>
+    where
+        super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Output = ::core::result::Result<
+            super::Health,
+            ::ridl_rt::error::ClientError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            loop {
+                match ::core::mem::replace(&mut this.phase, StatusPhase::Done) {
+                    StatusPhase::Done => panic!("`StatusCall` polled after completion"),
+                    StatusPhase::Failed(error) => {
+                        return ::core::task::Poll::Ready(
+                            Err(::ridl_rt::error::ClientError::Send(error)),
+                        );
+                    }
+                    StatusPhase::Unsent(__arg) => {
+                        if this.expired() {
+                            return ::core::task::Poll::Ready(
+                                Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ),
+                            );
+                        }
+                        this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                        match send_status(&mut *this.port, &__arg) {
+                            Ok(correlation) => {
+                                this.phase = StatusPhase::Waiting(correlation);
+                            }
+                            Err(::ridl_rt::port::SendError::Busy) => {
+                                this.phase = StatusPhase::Unsent(__arg);
+                                return ::core::task::Poll::Pending;
+                            }
+                            Err(error) => {
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Send(error)),
+                                );
+                            }
+                        }
+                    }
+                    StatusPhase::Waiting(correlation) => {
+                        this.port
+                            .wake_on(
+                                ::ridl_rt::port::Interest::Outcome(correlation.0),
+                                cx.waker(),
+                            );
+                        let outcome = match poll_status_reply(
+                            &mut *this.port,
+                            correlation,
+                        ) {
+                            Ok(Some(outcome)) => {
+                                outcome.map_err(::ridl_rt::error::ClientError::Call)
+                            }
+                            Err(error) => Err(::ridl_rt::error::ClientError::Read(error)),
+                            Ok(None) => {
+                                if !this.expired() {
+                                    this.phase = StatusPhase::Waiting(correlation);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                Err(
+                                    ::ridl_rt::error::ClientError::Call(
+                                        ::ridl_rt::error::CallError::Transport(
+                                            ::ridl_rt::error::Transport::Timeout,
+                                        ),
+                                    ),
+                                )
+                            }
+                        };
+                        this.port.forget(correlation.0);
+                        return ::core::task::Poll::Ready(outcome);
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for StatusCall<'_, P> {
+        fn drop(&mut self) {
+            if let StatusPhase::Waiting(correlation) = &self.phase {
+                self.port.forget(correlation.0);
+            }
+        }
+    }
     pub(crate) fn send_open<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
         __port: &mut P,
         level: &super::Level,
@@ -5618,8 +6386,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     where
         super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let __arg = level;
         <super::ValveOpen as ::ridl_rt::contract::Command>::require(__arg)
@@ -5670,8 +6441,83 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     where
         super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        port.ack(correlation.0)
+    }
+    pub(crate) fn send_set_both<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
+        __port: &mut P,
+        args: &super::ValveSetBothParams,
+    ) -> ::core::result::Result<SetBothCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let __arg = args;
+        <super::ValveSetBoth as ::ridl_rt::contract::Command>::require(__arg)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut __buf = <super::ValveSetBothParams as ::ridl_rt::payload::Payload<
+            P::Encoding,
+        >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::ValveSetBothParams,
+            P::Encoding,
+        >::encode(__arg, buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `ValveSetBothParams` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `ValveSetBothParams` failed"),
+        };
+        __port
+            .command(
+                <super::Valve as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(3u32),
+                bytes,
+                ::core::option::Option::None,
+            )
+            .map(SetBothCorrelation)
+    }
+    pub(crate) fn poll_set_both_ack<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller,
+    >(
+        port: &mut P,
+        correlation: SetBothCorrelation,
+    ) -> ::core::option::Option<::core::result::Result<(), ::ridl_rt::error::CallError>>
+    where
+        super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         port.ack(correlation.0)
     }
@@ -5682,8 +6528,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     where
         super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let __arg = window;
         <super::ValvePressure as ::ridl_rt::contract::Query>::require(__arg)
@@ -5741,8 +6590,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     where
         super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         let mut __buf = <super::Average as ::ridl_rt::payload::Payload<
             P::Encoding,
@@ -5781,6 +6633,118 @@ Panics when `port` is attached to a catalog other than the one this face was gen
             }
         }
     }
+    pub(crate) fn send_status<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
+        __port: &mut P,
+        args: &super::ValveStatusParams,
+    ) -> ::core::result::Result<StatusCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let __arg = args;
+        <super::ValveStatus as ::ridl_rt::contract::Query>::require(__arg)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut __buf = <super::ValveStatusParams as ::ridl_rt::payload::Payload<
+            P::Encoding,
+        >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::ValveStatusParams,
+            P::Encoding,
+        >::encode(__arg, buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `ValveStatusParams` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `ValveStatusParams` failed"),
+        };
+        __port
+            .query(
+                <super::Valve as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(4u32),
+                bytes,
+                ::core::option::Option::None,
+            )
+            .map(StatusCorrelation)
+    }
+    pub(crate) fn poll_status_reply<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller,
+    >(
+        port: &mut P,
+        correlation: StatusCorrelation,
+    ) -> ::core::result::Result<
+        ::core::option::Option<
+            ::core::result::Result<super::Health, ::ridl_rt::error::CallError>,
+        >,
+        ::ridl_rt::port::ReadError,
+    >
+    where
+        super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let mut __buf = <super::Health as ::ridl_rt::payload::Payload<
+            P::Encoding,
+        >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        match port.reply(correlation.0, buf)? {
+            None => Ok(None),
+            Some(Err(error)) => Ok(Some(Err(error))),
+            Some(Ok(len)) => {
+                Ok(
+                    Some(
+                        match ::ridl_rt::payload::Ref::<
+                            super::Health,
+                            P::Encoding,
+                        >::verify(&buf[..len]) {
+                            Ok(checked) => Ok(checked.decode()),
+                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Contract(
+                                        ::ridl_rt::error::Contract::InvalidValue(violation),
+                                    ),
+                                )
+                            }
+                            Err(_) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Corrupt,
+                                    ),
+                                )
+                            }
+                        },
+                    ),
+                )
+            }
+        }
+    }
     /**What an application implements to serve interface `Valve`'s calls.
 
 An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
@@ -5796,6 +6760,21 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         /// - `level`
         ///   - range 0 ..= 100
         fn open(&mut self, level: &super::Level);
+        /// A call with two parameters: its argument type is induced.
+        ///
+        ///Serves command `setBoth`. It returns nothing: a command has no failure the application reports (ridl §6.1). Arguments that break their typl constraints or the `require` clauses never reach it.
+        ///
+        /// # Rules
+        ///
+        /// - response within 1000000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `level`
+        ///   - range 0 ..= 100
+        /// - `window`
+        ///   - range 0 ..= 100000
+        fn set_both(&mut self, args: &super::ValveSetBothParams);
         ///Serves query `pressure`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
         ///
         /// # Rules
@@ -5807,6 +6786,14 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         /// - `window`
         ///   - range 0 ..= 100000
         fn pressure(&mut self, window: &super::Window) -> super::Average;
+        /// A call with none: its argument type is an induced struct with no field.
+        ///
+        ///Serves query `status`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
+        ///
+        /// # Rules
+        ///
+        /// - response within 3000000 us
+        fn status(&mut self, args: &super::ValveStatusParams) -> super::Health;
     }
     pub(crate) fn dispatch<H, P>(
         h: &mut H,
@@ -5819,8 +6806,11 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         P: Provider,
         super::Valve: ::ridl_rt::contract::Sizes<H::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         if buf.len()
             < <super::Valve as ::ridl_rt::contract::Sizes<H::Encoding>>::MAX_BUFFER_SIZE
@@ -5910,6 +6900,61 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                                             Ok(()) => {
                                                 let accepted = h.settle(claim.id, Ok(&[]));
                                                 p.open(&__arg);
+                                                accepted
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            ::ridl_rt::contract::Ordinal(3u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::ValveSetBothParams,
+                                    H::Encoding,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::ValveSetBoth as ::ridl_rt::contract::Command>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                let accepted = h.settle(claim.id, Ok(&[]));
+                                                p.set_both(&__arg);
                                                 accepted
                                             }
                                         }
@@ -6019,6 +7064,109 @@ An argument is taken by reference because `serve` reads it again when it evaluat
                                     }
                                 }
                             }
+                            ::ridl_rt::contract::Ordinal(4u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::ValveStatusParams,
+                                    H::Encoding,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::ValveStatus as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                let reply = p.status(&__arg);
+                                                match <super::ValveStatus as ::ridl_rt::contract::Query>::ensure(
+                                                    &__arg,
+                                                    &reply,
+                                                ) {
+                                                    Err(()) => {
+                                                        h.settle(
+                                                            claim.id,
+                                                            Err(
+                                                                ::ridl_rt::error::CallError::Contract(
+                                                                    ::ridl_rt::error::Contract::ContractBroken,
+                                                                ),
+                                                            ),
+                                                        )
+                                                    }
+                                                    Ok(()) => {
+                                                        match ::ridl_rt::payload::Ref::<
+                                                            super::Health,
+                                                            H::Encoding,
+                                                        >::encode(&reply, buf) {
+                                                            Ok(encoded) => {
+                                                                let bytes = encoded.bytes();
+                                                                h.settle(claim.id, Ok(bytes))
+                                                            }
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Contract(__violation),
+                                                            ) => {
+                                                                h.settle(
+                                                                    claim.id,
+                                                                    Err(
+                                                                        ::ridl_rt::error::CallError::Contract(
+                                                                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                                                                        ),
+                                                                    ),
+                                                                )
+                                                            }
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Capacity {
+                                                                    needed,
+                                                                    available,
+                                                                },
+                                                            ) => {
+                                                                unreachable!(
+                                                                    "encoding `Health` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                                                                    needed, available
+                                                                )
+                                                            }
+                                                            Err(_) => unreachable!("encoding `Health` failed"),
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             _ => {
                                 h.settle(
                                     claim.id,
@@ -6054,14 +7202,22 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         P: Provider,
         super::Valve: ::ridl_rt::contract::Sizes<H::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         check_catalog(::ridl_rt::port::Attached::catalog(&h));
         let state = match h
             .serve(
                 <super::Valve as ::ridl_rt::contract::Interface>::NUMBER,
-                &[::ridl_rt::contract::Ordinal(1u32), ::ridl_rt::contract::Ordinal(2u32)],
+                &[
+                    ::ridl_rt::contract::Ordinal(1u32),
+                    ::ridl_rt::contract::Ordinal(3u32),
+                    ::ridl_rt::contract::Ordinal(2u32),
+                    ::ridl_rt::contract::Ordinal(4u32),
+                ],
             )
         {
             Ok(()) => ServeState::Serving,
@@ -6107,8 +7263,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
     where
         super::Valve: ::ridl_rt::contract::Sizes<H::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<H::Encoding>,
     {}
     impl<
         H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
@@ -6118,8 +7277,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
     where
         super::Valve: ::ridl_rt::contract::Sizes<H::Encoding>,
         super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::ValveSetBothParams: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
         super::Average: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::ValveStatusParams: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Health: ::ridl_rt::payload::Payload<H::Encoding>,
     {
         type Output = ::core::result::Result<
             ::core::convert::Infallible,
@@ -6199,8 +7361,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         where
             super::super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
             super::super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
         {
             ///Sends command `open` and waits for its outcome, as `block_on` over `Client::open`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
             ///
@@ -6218,6 +7383,46 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             ) -> ::core::result::Result<(), ::ridl_rt::error::ClientError> {
                 let __deadline = __deadline_after(self.timeout);
                 let mut __call = self.inner.open(level);
+                match ::ridl_rt::task::block_on(&mut __call, __deadline) {
+                    Some(outcome) => outcome,
+                    None if __call.sent() => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Call(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Undelivered,
+                                ),
+                            ),
+                        )
+                    }
+                    None => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Send(
+                                ::ridl_rt::port::SendError::Busy,
+                            ),
+                        )
+                    }
+                }
+            }
+            /// A call with two parameters: its argument type is induced.
+            ///
+            ///Sends command `setBoth` and waits for its outcome, as `block_on` over `Client::set_both`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Undelivered`; either way nothing is left waiting at the port.
+            ///
+            /// # Rules
+            ///
+            /// - response within 1000000 us
+            ///
+            /// # Parameters
+            ///
+            /// - `level`
+            ///   - range 0 ..= 100
+            /// - `window`
+            ///   - range 0 ..= 100000
+            pub fn set_both(
+                &mut self,
+                args: super::super::ValveSetBothParams,
+            ) -> ::core::result::Result<(), ::ridl_rt::error::ClientError> {
+                let __deadline = __deadline_after(self.timeout);
+                let mut __call = self.inner.set_both(args);
                 match ::ridl_rt::task::block_on(&mut __call, __deadline) {
                     Some(outcome) => outcome,
                     None if __call.sent() => {
@@ -6277,6 +7482,42 @@ Panics when `h` is attached to a catalog other than the one this face was genera
                     }
                 }
             }
+            /// A call with none: its argument type is an induced struct with no field.
+            ///
+            ///Sends query `status` and waits for its outcome, as `block_on` over `Client::status`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
+            ///
+            /// # Rules
+            ///
+            /// - response within 3000000 us
+            pub fn status(
+                &mut self,
+                args: super::super::ValveStatusParams,
+            ) -> ::core::result::Result<
+                super::super::Health,
+                ::ridl_rt::error::ClientError,
+            > {
+                let __deadline = __deadline_after(self.timeout);
+                let mut __call = self.inner.status(args);
+                match ::ridl_rt::task::block_on(&mut __call, __deadline) {
+                    Some(outcome) => outcome,
+                    None if __call.sent() => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Call(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Timeout,
+                                ),
+                            ),
+                        )
+                    }
+                    None => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Send(
+                                ::ridl_rt::port::SendError::Busy,
+                            ),
+                        )
+                    }
+                }
+            }
         }
         impl<
             P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
@@ -6285,8 +7526,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
         where
             super::super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
             super::super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
         {
             type Port = P;
             /**Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
@@ -6309,8 +7553,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         where
             super::super::Valve: ::ridl_rt::contract::Sizes<P::Encoding>,
             super::super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::ValveSetBothParams: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
             super::super::Average: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::ValveStatusParams: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::Health: ::ridl_rt::payload::Payload<P::Encoding>,
         {
             /// Sets the timeout every waiting method of this client is
             /// bounded by, and returns the client. A timeout shorter than a
@@ -6347,8 +7594,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             P: super::Provider,
             super::super::Valve: ::ridl_rt::contract::Sizes<H::Encoding>,
             super::super::Level: ::ridl_rt::payload::Payload<H::Encoding>,
+            super::super::ValveSetBothParams: ::ridl_rt::payload::Payload<H::Encoding>,
             super::super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
             super::super::Average: ::ridl_rt::payload::Payload<H::Encoding>,
+            super::super::ValveStatusParams: ::ridl_rt::payload::Payload<H::Encoding>,
+            super::super::Health: ::ridl_rt::payload::Payload<H::Encoding>,
         {
             let __deadline = __deadline_after(timeout);
             let mut __serve = super::serve(h, p);

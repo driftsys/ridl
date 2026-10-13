@@ -909,9 +909,15 @@ pipeline gained `generate_pipeline`, which emits the face and the descriptors
 beside the domain types and the codec, so a package built from the command line
 carries one. `generate` is unchanged and still emits neither.
 
-**Every command and query takes exactly one parameter.** Multi-parameter calls
-need induced argument structs, which the Rust backend does not emit from an
-interface. It is a follow-up.
+**A call's argument type is the declared parameter's named type, or the argument
+struct the lowering induced for it.** A call with exactly one parameter of a
+named type sends that type as it is; a call with no parameter, with several, or
+with one that is not a named type sends a struct named
+`<Interface><Member>Params`, whose fields are the parameters. A query's reply is
+read the same way: a named type as it is, and a tuple reply as the induced
+`<Interface><Member>Reply`. Three shapes are still refused, and skip the whole
+interface: a parameter or reply with no declared type, a stream in either
+position, and a fallible `T | E` reply.
 
 The clause translator is worth one extra sentence, because it fails loudly. The
 IR carries a contract clause only as canonical ridl text, not as an expression

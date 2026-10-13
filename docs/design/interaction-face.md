@@ -738,10 +738,11 @@ interfaces:
   clause and `@[..50ms]`) and one query (`average`, with a `require` and an
   `ensure` clause and `@[..200ms]`). This is the interface the round trips run
   against, through both clients. Every call declares exactly one parameter of a
-  declared named type, and every query replies with one declared named type —
-  the face emits no induced argument struct, so a call needing more than one
-  parameter is refused (`descriptors::single_param_type`), and a multi-parameter
-  call is a recorded follow-up.
+  declared named type, and every query replies with one declared named type, so
+  each sends the declared type as it is. `Valve` carries the other request
+  shapes: a call with two parameters and a call with none, each sending the
+  argument struct the lowering induced for it
+  (`descriptors::single_param_type`).
 - **`Horn`** — one signal and nothing else, existing only to make RA-19's claim
   testable in the direction described above: a minimal port cannot construct a
   `Client` unless the emitted bounds are exactly what the interface needs. It
@@ -751,7 +752,9 @@ interfaces:
 - **`Valve`** — one command and one query that declare no response bound, so
   they carry the built-in default (1 s and 3 s) and the blocking client's
   timeout on a defaulted member (F-11) is testable. The no-`max` path (F-2) is
-  covered at the `Member` level by `crates/ridl-rt/tests/call_deadline.rs`.
+  covered at the `Member` level by `crates/ridl-rt/tests/call_deadline.rs`. Two
+  further calls, `setBoth` and `status`, declare two parameters and none, so
+  each sends an induced argument struct.
 
 The fixture declares no `fixed` interaction; the descriptor emitter's `Fixed`
 path is covered instead by a hand-built-IR unit test in `src/descriptors.rs`.
@@ -1052,7 +1055,6 @@ is built.
 | ------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
 | The `repr(C)` and proto3 `Sizes<E>` tables (`flatbuffers` is built; this backend emits no other codec) | driftsys/ridl#317, driftsys/ridl#264         |
 | The narrow contract-clause translator (`src/clauses.rs`)                                               | driftsys/ridl#704                            |
-| One declared parameter per call, no induced argument struct                                            | a recorded follow-up story                   |
 | The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion         | a test over `ridl-loopback`, not yet written |
 
 **The hand-written payload row was retired on 2026-09-21**, by design note D-11

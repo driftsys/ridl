@@ -182,7 +182,7 @@ package docs.shape
 type Level : integer [0..100]
 
 interface Wide {
-  command set(first: Level, second: Level) @[..50ms]
+  command set(samples: <Level>) @[..50ms]
 }
 "#,
         ),
@@ -269,9 +269,9 @@ fn pipeline_source(label: &str, text: &str) -> String {
 }
 
 /// A link to an interface whose face module the output does not hold
-/// renders as a code span: `Wide` is skipped, because its call has two
-/// parameters, and `Provisioned` declares only a `fixed` member, which the
-/// face carries no method for. A link to `Panel`, which has a face module,
+/// renders as a code span: `Wide` is skipped, because its call takes a
+/// stream, which has no payload type, and `Provisioned` declares only a
+/// `fixed` member, which the face carries no method for. A link to `Panel`, which has a face module,
 /// is a link.
 #[test]
 fn links_to_an_interface_with_no_face_module_render_as_code_spans() {
@@ -283,9 +283,9 @@ package veh.faces
 /// A level, in percent.
 type Level: integer [0..100]
 
-/// Skipped: a call with two parameters has no face.
+/// Skipped: a call with a stream parameter has no face.
 interface Wide {
-  command set(first: Level, second: Level) @[..50ms]
+  command set(samples: <Level>) @[..50ms]
 }
 
 /// Only a fixed member, so no face module.

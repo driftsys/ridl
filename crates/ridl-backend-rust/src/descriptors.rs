@@ -147,7 +147,7 @@ fn one_interface_public(
     let mut interaction_items: Vec<TokenStream> = Vec::new();
 
     for (ordinal, interaction) in &interactions {
-        member_rows.push(member_row(*ordinal, interaction)?);
+        member_rows.push(member_row(ctx, *ordinal, interaction)?);
         interaction_items.push(interaction_item(
             ctx,
             &iface_ident,
@@ -245,7 +245,11 @@ pub(crate) fn descriptor_ident(
 }
 
 /// The `Member` row for one interaction.
-fn member_row(slot: u32, interaction: &v1::Interaction) -> Result<TokenStream, GenerateError> {
+fn member_row(
+    ctx: &Ctx,
+    slot: u32,
+    interaction: &v1::Interaction,
+) -> Result<TokenStream, GenerateError> {
     let ordinal = Literal::u32_unsuffixed(slot);
     let member = declared(interaction.name.as_ref());
     let name = member;
@@ -265,14 +269,14 @@ fn member_row(slot: u32, interaction: &v1::Interaction) -> Result<TokenStream, G
         Some(v1::interaction::Shape::Command(command)) => (
             quote! { ::ridl_rt::contract::Kind::Command },
             timing,
-            vec![payload_info(Some(single_param_payload(command, member)?))],
+            vec![payload_named(single_param_type(ctx, command, member)?)],
         ),
         Some(v1::interaction::Shape::Query(query)) => (
             quote! { ::ridl_rt::contract::Kind::Query },
             timing,
             vec![
-                payload_info(Some(query_param_payload(query, member)?)),
-                payload_info(Some(query_reply_payload(query, member)?)),
+                payload_named(query_param_type(ctx, query, member)?),
+                payload_named(query_reply_type(ctx, query, member)?),
             ],
         ),
         Some(v1::interaction::Shape::Fixed(fixed)) => (
@@ -353,7 +357,7 @@ fn interaction_item(
             }
         }
         Some(v1::interaction::Shape::Command(command)) => {
-            let arg_name = single_param_type(command, member)?;
+            let arg_name = single_param_type(ctx, command, member)?;
             let args = type_path(arg_name);
             reservations.push(reservation_row(&[max_size_path(arg_name)]));
             call_sizes.push(max_size_path(arg_name));
@@ -379,8 +383,8 @@ fn interaction_item(
             }
         }
         Some(v1::interaction::Shape::Query(query)) => {
-            let arg_name = query_param_type(query, member)?;
-            let reply_name = query_reply_type(query, member)?;
+            let arg_name = query_param_type(ctx, query, member)?;
+            let reply_name = query_reply_type(ctx, query, member)?;
             let args = type_path(arg_name);
             let reply = type_path(reply_name);
             reservations.push(reservation_row(&[
@@ -460,7 +464,13 @@ fn interaction_item(
 /// payload's size is not here but in the interface's size table, as the
 /// member's row over the codec's own `MAX_SIZE` ([`reservation_row`]).
 fn payload_info(payload: Option<&v1::Payload>) -> TokenStream {
-    let type_name = payload_reference(payload);
+    payload_named(payload_reference(payload))
+}
+
+/// [`payload_info`] for a payload already read as a type name, which is how a
+/// call's argument and reply are read: either may be an induced struct, which
+/// no `Payload` of the model names (driftsys/ridl#713).
+fn payload_named(type_name: &str) -> TokenStream {
     quote! {
         ::ridl_rt::contract::PayloadInfo {
             type_name: #type_name,
@@ -577,48 +587,39 @@ fn payload_reference(payload: Option<&v1::Payload>) -> &str {
         .unwrap_or_default()
 }
 
-/// The single declared parameter's named type. The face emits no induced
-/// argument struct, so a call with any other parameter shape is refused
-/// (driftsys/ridl#713).
-///
-/// The lowering states the request payload exactly when the call has that
-/// shape, so its absence is the refusal, and the parameters say which of the
-/// two reasons it is.
+/// The call's argument type: the single declared named parameter, or the
+/// induced argument struct the lowering named for every other parameter list,
+/// zero parameters included. Refuses only a shape no struct field can hold —
+/// a parameter with no declared type, and a stream.
 pub(crate) fn single_param_type<'a>(
+    ctx: &Ctx<'a>,
     command: &'a v1::CommandShape,
     member: &str,
 ) -> Result<&'a str, GenerateError> {
-    single_param_payload(command, member).map(|payload| payload_reference(Some(payload)))
-}
-
-/// The request payload [`single_param_type`] names, with its sizes.
-fn single_param_payload<'a>(
-    command: &'a v1::CommandShape,
-    member: &str,
-) -> Result<&'a v1::Payload, GenerateError> {
-    command
-        .request
-        .as_ref()
+    if let Some(payload) = command.request.as_ref() {
+        return Ok(payload_reference(Some(payload)));
+    }
+    induced_name(ctx, command.request_tuple.as_ref())
         .ok_or_else(|| no_single_param(&command.params, member))
 }
 
-/// [`single_param_type`] for a query, which carries the same request payload.
+/// [`single_param_type`] for a query, which carries the same request shape.
 pub(crate) fn query_param_type<'a>(
+    ctx: &Ctx<'a>,
     query: &'a v1::QueryShape,
     member: &str,
 ) -> Result<&'a str, GenerateError> {
-    query_param_payload(query, member).map(|payload| payload_reference(Some(payload)))
+    if let Some(payload) = query.request.as_ref() {
+        return Ok(payload_reference(Some(payload)));
+    }
+    induced_name(ctx, query.request_tuple.as_ref())
+        .ok_or_else(|| no_single_param(&query.params, member))
 }
 
-/// The request payload [`query_param_type`] names, with its sizes.
-fn query_param_payload<'a>(
-    query: &'a v1::QueryShape,
-    member: &str,
-) -> Result<&'a v1::Payload, GenerateError> {
-    query
-        .request
-        .as_ref()
-        .ok_or_else(|| no_single_param(&query.params, member))
+/// The Rust name of the induced tuple `reference` names, when it names one.
+fn induced_name<'a>(ctx: &Ctx<'a>, reference: Option<&v1::TupleRef>) -> Option<&'a str> {
+    let name = ctx.tuple_name(reference?.index);
+    (!name.is_empty()).then_some(name)
 }
 
 /// The model's `Catalog.package`: the name of the unit the package belongs
@@ -658,46 +659,40 @@ pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
         .collect())
 }
 
-/// Which of the two reasons a call has no request payload.
+/// Why a call has no argument type. Every parameter list induces one, so the
+/// two causes left are a parameter the struct cannot hold.
 fn no_single_param(params: &[v1::Param], member: &str) -> GenerateError {
-    if params.len() != 1 {
-        // The message reaches the skip note's doc, so it cites no issue; the
-        // induced argument struct is driftsys/ridl#713.
-        return GenerateError {
-            message: format!(
-                "interaction `{member}` must declare exactly one parameter (the face emits no \
-                 induced argument struct)"
-            ),
-        };
-    }
-    GenerateError {
-        message: format!("interaction `{member}`'s parameter must be a named type"),
-    }
+    let untyped = params.iter().any(|param| param.r#type.is_none());
+    let message = if untyped {
+        format!("interaction `{member}` declares a parameter with no type")
+    } else {
+        format!("interaction `{member}` declares a stream parameter, which has no payload type")
+    };
+    GenerateError { message }
 }
 
-/// A query's reply named type. The face replies with one declared type, so an inline
-/// fallible or non-named return is refused.
+/// A query's reply type: the declared named type, or the induced reply struct
+/// the lowering named for a tuple reply. A fallible `T | E` reply induces
+/// nothing and is refused.
 pub(crate) fn query_reply_type<'a>(
+    ctx: &Ctx<'a>,
     query: &'a v1::QueryShape,
     member: &str,
 ) -> Result<&'a str, GenerateError> {
-    query_reply_payload(query, member).map(|payload| payload_reference(Some(payload)))
-}
-
-/// The reply payload [`query_reply_type`] names, with its sizes.
-fn query_reply_payload<'a>(
-    query: &'a v1::QueryShape,
-    member: &str,
-) -> Result<&'a v1::Payload, GenerateError> {
     if let Some(payload) = query.reply_payload.as_ref() {
-        return Ok(payload);
+        return Ok(payload_reference(Some(payload)));
+    }
+    if let Some(name) = induced_name(ctx, query.reply_tuple.as_ref()) {
+        return Ok(name);
     }
     match query.reply.as_ref().and_then(|reply| reply.kind.as_ref()) {
         Some(v1::reply::Kind::Value(_)) => Err(GenerateError {
-            message: format!("query `{member}`'s reply must be a named type"),
+            message: format!("query `{member}`'s reply must be a named type or a tuple"),
         }),
         _ => Err(GenerateError {
-            message: format!("query `{member}`'s reply must be a single declared type"),
+            message: format!(
+                "query `{member}`'s reply is a fallible `T | E`, which the face does not carry"
+            ),
         }),
     }
 }

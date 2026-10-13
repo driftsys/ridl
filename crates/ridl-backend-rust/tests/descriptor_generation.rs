@@ -209,8 +209,8 @@ fn each_interaction_descriptor_has_its_row() {
         .collect();
     assert_eq!(
         descriptors.len(),
-        17,
-        "the fixture's seventeen interactions have a descriptor each: {descriptors:?}"
+        19,
+        "the fixture's nineteen interactions have a descriptor each: {descriptors:?}"
     );
 
     let checks: String = descriptors
@@ -937,5 +937,28 @@ fn an_induced_argument_struct_has_a_payload_impl() {
     assert!(
         !d.contains("PumpOneParams"),
         "a single named parameter induces no struct:\n{source}"
+    );
+}
+
+/// A two-parameter call carries a face: its descriptor's `Args` is the induced
+/// argument struct, and the interface is not skipped (driftsys/ridl#713).
+#[test]
+fn a_two_parameter_call_carries_a_face() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let face = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source;
+    let d = dense(&face);
+    assert!(
+        d.contains("typeArgs=ValveSetBothParams;"),
+        "the call's Args is the induced argument struct:\n{face}"
+    );
+    assert!(
+        d.contains("typeArgs=ValveStatusParams;"),
+        "a zero-parameter call's Args is the induced empty struct:\n{face}"
+    );
+    assert!(
+        !d.contains("__RIDL_NO_FACE_Valve"),
+        "and the interface is not skipped:\n{face}"
     );
 }

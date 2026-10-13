@@ -189,6 +189,8 @@ impl generated::cabin::Provider for TestProvider {
 
 /// The same provider serves `Valve`, the fixture's calls-only interface with
 /// no written response bound, whose reply is the same test-controlled value.
+/// `set_both` and `status` take an induced argument struct, so they pin that
+/// the generated trait names one.
 impl generated::valve::Provider for TestProvider {
     fn open(&mut self, level: &generated::Level) {
         self.set_level_calls.push(level.get());
@@ -196,6 +198,14 @@ impl generated::valve::Provider for TestProvider {
 
     fn pressure(&mut self, _window: &generated::Window) -> generated::Average {
         generated::Average::new_unchecked(self.next_average)
+    }
+
+    fn set_both(&mut self, args: &generated::ValveSetBothParams) {
+        self.set_level_calls.push(args.level.get());
+    }
+
+    fn status(&mut self, _args: &generated::ValveStatusParams) -> generated::Health {
+        generated::Health::Ok
     }
 }
 

@@ -238,7 +238,8 @@ pub(crate) fn one_interface(
     let module = module_ident(interface);
 
     // Payload type names are kept beside each member, because the face names
-    // the declared type directly (the face emits no induced argument struct).
+    // the payload type directly: the declared type, or the struct the
+    // lowering induced for a call's parameter list or tuple reply.
     let mut signals: Vec<(Member, &str)> = Vec::new();
     let mut events: Vec<(Member, &str)> = Vec::new();
     // The payload references of the events, kept beside their names because
@@ -282,8 +283,8 @@ pub(crate) fn one_interface(
             }
             Some(v1::interaction::Shape::Command(command)) => {
                 commands.push(Call {
-                    arg_type: single_param_type(command, name)?,
-                    arg: single_param_name(&command.params),
+                    arg_type: single_param_type(ctx, command, name)?,
+                    arg: call_arg_name(&command.params, command.request.is_some()),
                     member,
                     reply_type: None,
                     params: docs::parameter_lines(&command.params, links),
@@ -291,10 +292,10 @@ pub(crate) fn one_interface(
             }
             Some(v1::interaction::Shape::Query(query)) => {
                 queries.push(Call {
-                    arg_type: query_param_type(query, name)?,
-                    arg: single_param_name(&query.params),
+                    arg_type: query_param_type(ctx, query, name)?,
+                    arg: call_arg_name(&query.params, query.request.is_some()),
                     member,
-                    reply_type: Some(query_reply_type(query, name)?),
+                    reply_type: Some(query_reply_type(ctx, query, name)?),
                     params: docs::parameter_lines(&query.params, links),
                 });
             }
@@ -1449,14 +1450,21 @@ fn decode_args(type_name: &str, port: &Ident) -> TokenStream {
     }
 }
 
-/// The single declared parameter's name, in snake case.
+/// The name of a call method's one argument, in snake case: the declared
+/// parameter's own name when the call sends that parameter as it is, and
+/// `args` when it sends the induced argument struct, whose fields are the
+/// parameters (driftsys/ridl#713).
 ///
-/// [`single_param_type`] has already refused an interaction that does not
-/// declare exactly one parameter, so the fallback is unreachable; it is a
-/// value rather than a panic because codegen is total.
-fn single_param_name(params: &[v1::Param]) -> Ident {
+/// `declared` is whether the lowering stated a request payload, which it does
+/// for exactly one named parameter and for no other shape. The fallback is
+/// unreachable under it; it is a value rather than a panic because codegen is
+/// total.
+fn call_arg_name(params: &[v1::Param], declared: bool) -> Ident {
+    if !declared {
+        return ident("args");
+    }
     params.first().map_or_else(
-        || ident("value"),
+        || ident("args"),
         |param| ident(snake_of(param.name.as_ref())),
     )
 }

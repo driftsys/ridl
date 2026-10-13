@@ -4674,7 +4674,7 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 }
 /// Interface `WheelDiagnostics` carries no generated interaction descriptors.
 ///
-/// The emitter refused it: interaction `readTicks` must declare exactly one parameter (the face emits no induced argument struct)
+/// The emitter refused it: fixed `tickBounds`'s payload must be a named type
 ///
 /// The interface is `internal`, so it has no face in any case; only its descriptors are absent, for the reason above.
 ///

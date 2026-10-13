@@ -6335,10 +6335,12 @@ fn a_withheld_declaration_claims_no_view_name() {
 /// neither of the two issues that own the other gaps.
 #[test]
 fn a_skipped_interface_note_without_an_owner_names_no_issue() {
-    use crate::{GenerateError, skipped_interface_note};
+    use crate::{Ctx, GenerateError, skipped_interface_note};
     use ridl_ir::codegen::v1;
 
+    let model = v1::Model::default();
     let note = skipped_interface_note(
+        &Ctx::over(&model),
         &v1::Interface::default(),
         &GenerateError {
             message: "a refusal nobody owns".to_string(),
@@ -6398,7 +6400,7 @@ fn a_face_refused_after_linking_is_an_internal_error() {
 /// this reaches the call-shape and the unowned (`FaceGap::Other`) notes, and
 /// pins which trailer each side gets.
 mod skipped_interface_note {
-    use super::super::{GenerateError, skipped_interface_note};
+    use super::super::{Ctx, GenerateError, skipped_interface_note};
     use ridl_ir::codegen::v1;
 
     fn interface(slots: Vec<v1::InteractionSlot>, internal: bool) -> v1::Interface {
@@ -6440,7 +6442,8 @@ mod skipped_interface_note {
         let err = GenerateError {
             message: "a refusal".to_string(),
         };
-        skipped_interface_note(interface, &err).to_string()
+        let model = v1::Model::default();
+        skipped_interface_note(&Ctx::over(&model), interface, &err).to_string()
     }
 
     /// The doc lines of a note, in order.
@@ -6448,8 +6451,10 @@ mod skipped_interface_note {
         let err = GenerateError {
             message: "a refusal".to_string(),
         };
+        let model = v1::Model::default();
         let item: syn::ItemConst =
-            syn::parse2(skipped_interface_note(interface, &err)).expect("the note is a const");
+            syn::parse2(skipped_interface_note(&Ctx::over(&model), interface, &err))
+                .expect("the note is a const");
         item.attrs
             .iter()
             .filter(|attr| attr.path().is_ident("doc"))
