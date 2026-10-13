@@ -127,7 +127,7 @@ interface Timed {
   /// A response bound, with no call throttle.
   command resetFaults() @[..50ms]
 
-  /// A call throttle, with no response bound.
+  /// A call throttle and a response bound.
   query getFaultLog(): FaultPayload @[20ms..200ms]
 }
 ```
@@ -221,7 +221,7 @@ addressable as `service.member`; it is what an rsdl `component` `offers` and
 what deployment realizes. A service may instead declare one inline shape, for a
 one-off contract not worth a reusable interface — never both forms at once.
 Composing several interfaces in one service is legal only while no member name
-repeats across them (`RIDL-144`); a service name is unique across the system
+repeats across them (`RIDL-144`); a service name is unique across the workspace
 (`RIDL-140`).
 
 ```ridl
