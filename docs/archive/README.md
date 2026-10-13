@@ -592,8 +592,10 @@ provenance. Nothing here is normative — the current references live in
 - **2026-10-12-ws-binding-design.md**, **2026-10-12-ws-binding-plan.md** and
   **2026-10-11-lane-w-plan.md** — the WebSocket binding of the frame
   specification (rulings R-W-7 to R-W-19, the plan's R-P-1 to R-P-10) and the
-  wire and runtime plan that preceded it (R-W-1 to R-W-4: the minimum Rust
-  version of `ridl-loopback` and `ridl-descriptor`); archived verbatim. The
+  wire and runtime plan that preceded it (R-W-1 and R-W-2: the minimum Rust
+  versions of `ridl-loopback` and `ridl-descriptor`; R-W-3: `ridl-ir` has no
+  `rust-version` of its own; R-W-4: the generated crate does not build at the
+  minimum with default features off, driftsys/ridl#874); archived verbatim. The
   as-built rules are in
   [the frame specification](../specification/frame-specification.md) §11.1 and
   [ADR-0029](../decisions/ADR-0029-stability-policy.md); the reasoning and the

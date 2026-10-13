@@ -19,16 +19,18 @@ decision 9 (why `Violation.type_name` is an `Option`).
 From release 0.10.0 the wire surface is frozen: the byte layout of §11.1 for
 frame version 1 and binding version 1, the code tables of §4 and §9.6, and the
 test vectors. The `wire` freeze dump reads the vector table from the
-specification by its `Id` column and checks each vector's length against its
-form's header size, so an edit to a vector is a break. A wire format with a
-promise and no check is only a policy, and the promise is made before the
-transport crate exists so that a WebSocket user gets it at 0.10.0.
+specification by its `Id` column and checks each vector's length, its codes
+against their tables and its payload bytes (`xtask/src/freeze/wire.rs`), so an
+edit to a vector is a break. A wire format with a promise and no check is only a
+policy, and the promise is made before the transport crate exists so that a
+WebSocket user gets it at 0.10.0.
 
-Not frozen (ADR-0029 decision 2): the transport crate `ridl-transport-ws`, the
-TypeScript WebSocket package, the `websocket` row of the codegen model (a value
-derived from the frozen layout, so a wrong value is corrected in a patch
-release), the crate's configuration (ping interval, liveness timeout, message
-size limit), and the transport's default encoding.
+Not frozen, because they are outside the surfaces ADR-0029 decision 1 lists: the
+transport crate `ridl-transport-ws`, the TypeScript WebSocket package, the
+`websocket` row of the codegen model (a value derived from the frozen layout, so
+a wrong value is corrected in a patch release), the crate's configuration (ping
+interval, liveness timeout, message size limit), and the transport's default
+encoding.
 
 ## Decisions
 
@@ -102,10 +104,11 @@ kinds; the frame version bumps if either table needs more. `InterfaceNo` and
 untriggered.
 
 The unit name on `attach` has a `u8` length, at most 255 bytes, so the largest
-header is 39 + 255 = 294 bytes and the handshake has a fixed maximum: no message
-size limit can refuse a legitimate `attach`. A 16-bit length would remove that
-guarantee. A unit name longer than 255 bytes cannot attach; none in the corpus
-or the examples comes near.
+header has a fixed maximum, stated in
+[the frame specification](../specification/frame-specification.md) §11.1, and no
+message size limit can refuse a legitimate `attach`. A 16-bit length would
+remove that guarantee. A unit name longer than 255 bytes cannot attach; none in
+the corpus or the examples comes near.
 
 Alternatives: network byte order (the convention, but the only big-endian part
 of a message); a proto3 message as the header (ties the control plane to one
@@ -175,13 +178,13 @@ reconnects.
 
 ### The sizes
 
-The envelope is 16 bytes and the largest data-plane header without it is 20
-(`response`), so a data-plane message is at most 36 bytes plus the payload
-bound. The `attach` is not a data-plane message and enters no size sum. The
-numbers are stated in the specification and carried by the `websocket` row of
-the codegen model in the same change, so every deployment section has them
-before the transport crate exists. The test that checks the sum against a frame
-the transport writes comes with the crate (driftsys/ridl#718).
+The envelope and header sizes are stated in
+[the frame specification](../specification/frame-specification.md) §11.1. The
+`attach` is not a data-plane message and enters no size sum. The numbers are
+carried by the `websocket` row of the codegen model, added in the pull request
+that specified the binding (driftsys/ridl#890), so every deployment section has
+them before the transport crate exists. The test that checks the sum against a
+frame the transport writes comes with the crate (driftsys/ridl#718).
 
 ### Streams arrive as frame version 2 and binding version 2
 
@@ -204,12 +207,11 @@ or a new field.
 ### The vectors are frozen now
 
 The vector table in the specification is the source; no encoder exists to
-produce them. Reading the table costs about forty lines of `xtask` and catches
-an edit of a frozen vector before 0.10.0 at no cost and after it as a break.
-Waiting for the transport crate to produce vectors would check the frozen
-surface only after the release that promised it. Cost if wrong: a defect in a
-hand-written vector becomes the frozen truth until the crate's round trip finds
-it, and before 0.10.0 the fix is one line.
+produce them. Reading the table catches an edit of a frozen vector before 0.10.0
+at no cost and after it as a break. Waiting for the transport crate to produce
+vectors would check the frozen surface only after the release that promised it.
+Cost if wrong: a defect in a hand-written vector becomes the frozen truth until
+the crate's round trip finds it, and before 0.10.0 the fix is one line.
 
 ## References
 
