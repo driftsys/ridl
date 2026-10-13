@@ -460,7 +460,7 @@ fn vendor_on_a_missing_path_exits_2() {
 }
 
 /// In workspace mode `vendor/` is at the workspace root, whichever member
-/// the command runs from (V-6).
+/// the command runs from (ADR-0002).
 #[test]
 fn vendor_writes_at_the_workspace_root() {
     let dir = TempDir::new("vendor-ws");

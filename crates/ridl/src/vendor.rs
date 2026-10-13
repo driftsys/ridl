@@ -109,7 +109,7 @@ pub fn run(path: &Path) -> ExitCode {
 }
 
 /// Runs `ridl vendor --check` over the manifest root that governs `path`
-/// (spec: compare, never write). The workspace is loaded without its remote
+/// (ADR-0010: it compares and never writes). The workspace is loaded without its remote
 /// units, so nothing is fetched and no cache is read; `ridl.lock` is read
 /// and never rewritten. The load's own diagnostics (a manifest that does
 /// not parse, for one) are rendered with those of [`check_vendor`], and
