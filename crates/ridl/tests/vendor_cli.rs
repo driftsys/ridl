@@ -392,6 +392,57 @@ fn vendor_writes_nothing_on_an_error() {
     assert_eq!(lock(), pinned);
 }
 
+/// A write failure in `vendor/` exits 2 and names the directory. The test is
+/// a no-op where `chmod` does not restrict the running process (uid 0, or a
+/// process holding `CAP_DAC_OVERRIDE`), because the write it expects to fail
+/// would succeed.
+#[test]
+fn vendor_exits_2_when_vendor_is_not_writable() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Restores the permissions on scope exit, panic or not, so a failed
+    // assertion never leaves a read-only directory for `TempDir` to trip on.
+    struct Restore(std::path::PathBuf);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
+        }
+    }
+    let probe = TempDir::new("vendor-perm-probe");
+    let probed = probe.path().join("sub");
+    std::fs::create_dir_all(&probed).unwrap();
+    std::fs::set_permissions(&probed, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let denied = std::fs::write(probed.join("probe"), b"x").is_err();
+    std::fs::set_permissions(&probed, std::fs::Permissions::from_mode(0o755)).unwrap();
+    if !denied {
+        eprintln!("skipped: chmod 0o555 does not deny this process a write");
+        return;
+    }
+
+    let dir = TempDir::new("vendor-unwritable");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    assert_eq!(ridl(&root, dir.path(), &["vendor"]).0, 0);
+    // A unit with other content under the same key makes the next run replace
+    // the vendored copy, which writes inside `vendor/`.
+    let newer = Stub::serving(unit_tar(&[
+        COMMON_UNIT[0],
+        (
+            "common.typl",
+            "package veh.common\n\ntype Speed : km/h [0.0..400.0 step 0.5]\n",
+        ),
+    ]));
+    consumer(&dir, newer.url());
+    let vendor = root.join("vendor");
+    std::fs::set_permissions(&vendor, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let _restore = Restore(vendor.clone());
+    let (code, stdout, stderr) = ridl(&root, dir.path(), &["vendor"]);
+    assert_eq!(code, 2, "{stderr}");
+    assert_eq!(stdout, "");
+    assert!(stderr.contains("cannot write"), "{stderr}");
+    assert!(stderr.contains("vendor"), "{stderr}");
+}
+
 /// A missing path exits 2 before root discovery: run from inside a consumer
 /// that imports a unit, it fetches nothing, writes no `vendor/`, and prints
 /// nothing to stdout.
