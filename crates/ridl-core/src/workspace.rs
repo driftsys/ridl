@@ -3992,6 +3992,7 @@ service:veh.common.climate 2
             ("plain", None),
             ("below", Some("cluster/ridl.toml")),
             ("deep", Some("a/b/ridl.toml")),
+            ("manifest-above-a-manifest", Some("cluster/ridl.toml")),
             ("hidden", None),
             ("dot-inside-the-name", Some("a.b/ridl.toml")),
             ("manifest-is-a-directory", None),
@@ -4015,6 +4016,12 @@ service:veh.common.climate 2
                 "deep" => {
                     dir.write("a/x.ridl", "package veh.hmi.a\n");
                     dir.write("a/b/ridl.toml", nested);
+                }
+                "manifest-above-a-manifest" => {
+                    // Neither walk enters `cluster/`, so only its own
+                    // manifest is reported.
+                    dir.write("cluster/ridl.toml", nested);
+                    dir.write("cluster/inner/ridl.toml", nested);
                 }
                 "hidden" => {
                     dir.write(".cache/ridl.toml", nested);
