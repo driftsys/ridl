@@ -10,6 +10,10 @@ Since the review, #275, #367 and #377 to #382 have closed: lane E16 and E6.17
 landed on 2026-10-04, and #275 closed with E16.2. The counts below are those of
 the review date.
 
+**Changed on 2026-10-13:** #48 (E4.6) closed: remote units are read from the
+cache (#941), and `vendor/` with `ridl vendor` landed (#950). The review rows
+below still list it.
+
 **Changed on 2026-10-12:** the WebSocket row of #718 landed with the frame
 specification §11.1; the check of its sum against a frame the transport writes
 waits on #265.
