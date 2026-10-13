@@ -606,6 +606,29 @@ as its public contract.
    publication together is the only thing that carries it. The TypeScript
    backend settles it.
 
+7. **FlatBuffers' place among the three encodings.** After the proto3 codec
+   lands (roadmap story E11.8), measure proto3 against FlatBuffers on real
+   payloads: encode time, decode time, encoded size, on a native target and on
+   `wasm32`. FlatBuffers is a deprecation candidate if it never wins on in-place
+   reads of large messages. Item 1 is part of the same measurement.
+8. **JSON at the edges of JavaScript applications.** The TypeScript design
+   (roadmap story E12.1) settles: whether the generated types are plain data, so
+   that `JSON.stringify` works on them, with a `fromJSON` that re-runs the typl
+   constraint checks through the wasm constructor; whether JSON, in the form of
+   the protobuf JSON mapping, becomes a fourth payload encoding; the mapping of
+   64-bit integers by their typl range (`number` when the range fits within
+   ±2^53, `bigint` otherwise, written as decimal strings in JSON per the
+   protobuf JSON mapping; whether `JSON.rawJSON` source-text access is usable);
+   and `bytes` as `Uint8Array` in memory with base64 only at the JSON edge
+   (whether native `toBase64` and `fromBase64` are available), with large binary
+   data kept out of JSON.
+9. **A catalog reader in the runtime.** None exists. A session checks its peer
+   by the compiled-in `CATALOG` hash, and a tool that renders a live signal
+   links the generated package. A tool with no generated code needs a reflective
+   decoder as well as a reader, and neither exists for any encoding. When one is
+   wanted, its design chooses between a `catalog` feature of `ridl-rt` and a
+   separate crate, starting from the feature.
+
 ## Documents amended
 
 | Document                                                                                       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |

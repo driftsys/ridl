@@ -19,10 +19,10 @@ Read from the worktree at `0ea3d971` (`origin/main`, 2026-10-12):
 §9.5, §10, §11.1, §13); `docs/design/catalog-descriptor.md` ("The compatible
 catalogs", "No runtime reads the list"); the archived lane H design
 `docs/archive/2026-10-09-catalog-compat-design.md` (questions 3 to 5);
-`docs/wip/2026-10-06-ws-and-payload-formats-steering.md` (decisions B, F, G, H,
-I); ADR-0014 decision 15 as amended 2026-10-09 and 2026-10-10; ADR-0015 decision
-4 as amended (every call has a response bound); ADR-0020 decision 6; ADR-0021
-decisions 2 and 5; ADR-0029 (the wire surface, decisions 1 to 3 and 6);
+`docs/archive/2026-10-06-ws-and-payload-formats-steering.md` (decisions B, F, G,
+H, I); ADR-0014 decision 15 as amended 2026-10-09 and 2026-10-10; ADR-0015
+decision 4 as amended (every call has a response bound); ADR-0020 decision 6;
+ADR-0021 decisions 2 and 5; ADR-0029 (the wire surface, decisions 1 to 3 and 6);
 `crates/ridl-ir/src/codegen/bindings.rs` (`Known`, `KNOWN` empty);
 `crates/ridlc/tests/layout.rs` (the synthetic 14 + 2 row);
 `xtask/src/freeze/wire.rs` and `freeze/wire.txt`; issues #350 (items 5 and 12),
@@ -705,7 +705,7 @@ response bound, §11.1 item 5)" and "The WebSocket binding's rulings:
   the field becomes `Option<&'static str>` with the step 2 change, one line.
 - **Frame specification §2, the `Violation` row**: section 3.1 above.
 - **Steering decision H**
-  (`docs/wip/2026-10-06-ws-and-payload-formats-steering.md`, "Recorded, not
+  (`docs/archive/2026-10-06-ws-and-payload-formats-steering.md`, "Recorded, not
   asked"): a dated note that the `KNOWN` row and #718's first half move from
   #265 to the amendment pull request (R-W-16); #265 keeps the sum test.
 - **`crates/ridl-ir/src/codegen/bindings.rs`**: the `KNOWN` row (R-W-16) and the
@@ -777,7 +777,7 @@ R-W-15), and the `Violation.type_name` change is lane W step 2's (R-W-14).
   [`2026-10-11-release-0.10-lanes-plan.md`](../wip/2026-10-11-release-0.10-lanes-plan.md)
   section 4, "Lane W"
 - Steering:
-  [`2026-10-06-ws-and-payload-formats-steering.md`](../wip/2026-10-06-ws-and-payload-formats-steering.md)
+  [`2026-10-06-ws-and-payload-formats-steering.md`](2026-10-06-ws-and-payload-formats-steering.md)
   decisions B, F, G, H, I
 - Lane H: `docs/archive/2026-10-09-catalog-compat-design.md`; ADR-0014 decision
   15; `docs/design/catalog-descriptor.md`
