@@ -12,6 +12,8 @@ required = [
   "keywords",
   "accepted-sources",
   "diagnostics",
+  "manifest",
+  "cli",
 ]
 
 # Baseline rows for the freeze check. Each row names a frozen surface and the
@@ -60,3 +62,11 @@ baseline = "d4729323d6f77219fd4778a45ea9382a37e82fdc"
 [[surface]]
 name = "diagnostics"
 baseline = "2a6a94a8b6e7d67845b0737c8d1bd6977e0ea1b8"
+
+[[surface]]
+name = "manifest"
+baseline = "4edf558aa886619b0338b9808d7fcae7514b3cf1"
+
+[[surface]]
+name = "cli"
+baseline = "4edf558aa886619b0338b9808d7fcae7514b3cf1"

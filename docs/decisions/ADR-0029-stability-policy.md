@@ -276,9 +276,9 @@ design in each:
    | Surface                 | Row names in `surfaces.toml`                                                   | Switched on by                       | Baseline               |
    | ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------ | ---------------------- |
    | Language                | `keywords`, `accepted-sources`                                                 | the language lane                    | `ecc2eb0c`, `d4729323` |
-   | Manifest                | `manifest`                                                                     | the language lane                    |                        |
+   | Manifest                | `manifest`                                                                     | the language lane                    | `4edf558a`             |
    | Diagnostics and lints   | `diagnostics`                                                                  | the language lane                    | `2a6a94a8`             |
-   | CLI                     | `cli`                                                                          | the developer-experience lane        |                        |
+   | CLI                     | `cli`                                                                          | the developer-experience lane        | `4edf558a`             |
    | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                      | the codegen lane                     | `2e3a3c9c`             |
    | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            | `69d23ab7`             |
    | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     | `a3a0ac21`             |
