@@ -462,14 +462,14 @@ impl ::core::default::Default for WheelDiagnosticsReadSpanParams {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(dead_code)]
-pub(crate) struct WheelDiagnosticsReadSpan {
+pub(crate) struct WheelDiagnosticsReadSpanReply {
     pub min: RawTickCount,
     pub max: RawTickCount,
 }
 #[allow(dead_code)]
-impl ::core::default::Default for WheelDiagnosticsReadSpan {
+impl ::core::default::Default for WheelDiagnosticsReadSpanReply {
     fn default() -> Self {
-        WheelDiagnosticsReadSpan {
+        WheelDiagnosticsReadSpanReply {
             min: <RawTickCount as ::core::default::Default>::default(),
             max: <RawTickCount as ::core::default::Default>::default(),
         }
@@ -498,7 +498,7 @@ impl ::core::default::Default for VehHvacCabinGetBoundsParams {
     }
 }
 #[derive(Debug, Clone, PartialEq)]
-pub struct VehHvacCabinGetBounds {
+pub struct VehHvacCabinGetBoundsReply {
     pub min: crate::veh::common::Temperature,
     pub max: crate::veh::common::Temperature,
 }

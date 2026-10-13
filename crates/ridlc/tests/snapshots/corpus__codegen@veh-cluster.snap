@@ -4284,8 +4284,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "WheelDiagnosticsReadSpan",
-        "wire": "WheelDiagnosticsReadSpan"
+        "rust": "WheelDiagnosticsReadSpanReply",
+        "wire": "WheelDiagnosticsReadSpanReply"
       },
       "fields": [
         {
@@ -4370,7 +4370,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "interface": 2,
         "slot": 4,
         "segments": [
-          "reply"
+          "Reply"
         ]
       }
     },
@@ -4498,8 +4498,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "VehHvacCabinGetBounds",
-        "wire": "VehHvacCabinGetBounds"
+        "rust": "VehHvacCabinGetBoundsReply",
+        "wire": "VehHvacCabinGetBoundsReply"
       },
       "fields": [
         {
@@ -4584,7 +4584,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "interface": 5,
         "slot": 11,
         "segments": [
-          "reply"
+          "Reply"
         ]
       }
     },
@@ -6371,6 +6371,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "requestTuple": {
                 "index": 3
+              },
+              "replyTuple": {
+                "index": 4
               }
             }
           }
@@ -7758,6 +7761,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "requestTuple": {
                 "index": 6
+              },
+              "replyTuple": {
+                "index": 7
               }
             }
           }

@@ -4094,3 +4094,73 @@ fn a_query_request_follows_the_command_rule() {
     );
     assert!(induced.fields.is_empty());
 }
+
+/// A tuple reply induces a reply struct, one field per tuple field.
+#[test]
+fn a_tuple_reply_induces_a_reply_struct() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "bounds",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                    kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                        fields: vec![
+                            v2::TupleField {
+                                name: "min".to_string(),
+                                r#type: Some(named("Pair")),
+                            },
+                            v2::TupleField {
+                                name: "max".to_string(),
+                                r#type: Some(named("Pair")),
+                            },
+                        ],
+                    })),
+                    ..Default::default()
+                })),
+            }),
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let induced = model
+        .tuples
+        .iter()
+        .find(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsBoundsReply")
+        })
+        .expect("the induced reply struct");
+    assert_eq!(
+        model
+            .tuples
+            .iter()
+            .filter(|tuple| tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsBoundsReply"))
+            .count(),
+        1,
+        "the tuple written in the return type and the induced reply struct \
+         reach one name, so the claim is reused"
+    );
+    let fields: Vec<&str> = induced
+        .fields
+        .iter()
+        .map(|field| field.name.as_ref().expect("a name").declared.as_str())
+        .collect();
+    assert_eq!(fields, vec!["min", "max"]);
+}
+
+/// A fallible reply is a sum, not a product, so it induces nothing: the
+/// `risky` query of the fixture returns `Pair | Pair`.
+#[test]
+fn a_fallible_reply_induces_nothing() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Query(query) = call_shape(&model, 3) else {
+        panic!("the `risky` query");
+    };
+    assert!(query.reply_tuple.is_none());
+}

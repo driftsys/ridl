@@ -915,14 +915,19 @@ impl<'a> Lowering<'a> {
                 );
                 let reply_named = query_reply_type(query);
                 let reply = query.return_type.as_ref().map(|ret| {
+                    // The same path the induced reply struct takes: a tuple
+                    // written inside the return type is the tuple this arm
+                    // induces, so both reach one name and the claim is
+                    // reused rather than recorded as a collision.
                     let at = Path::interaction(
                         interface,
                         slot,
                         visibility,
                         owner,
                         decl.name.as_str(),
-                        vec!["reply".to_string()],
-                    );
+                        Vec::new(),
+                    )
+                    .step("Reply");
                     self.reply(home, ret, &at)
                 });
                 let request_sizes = self.sizes(
@@ -949,6 +954,23 @@ impl<'a> Lowering<'a> {
                     ),
                 ];
                 let reply_payload = reply_named.map(|reference| self.payload(home, reference));
+                let reply_tuple = match reply_named {
+                    Some(_) => None,
+                    None => reply_as_tuple(query.return_type.as_ref()).map(|tuple| {
+                        let at = Path::interaction(
+                            interface,
+                            slot,
+                            visibility,
+                            owner,
+                            decl.name.as_str(),
+                            Vec::new(),
+                        )
+                        .step("Reply");
+                        v1::TupleRef {
+                            index: self.tuple_ref(home, &tuple, &at),
+                        }
+                    }),
+                };
                 let clauses = self.clauses(home, &query.contracts, &query.params, reply_named);
                 (
                     v1::Kind::Query,
@@ -962,7 +984,7 @@ impl<'a> Lowering<'a> {
                         request_sizes: Some(request_sizes),
                         reply_sizes: Some(reply_sizes),
                         request_tuple,
-                        reply_tuple: None,
+                        reply_tuple,
                     }))),
                     Some(payloads),
                     query.family,
@@ -1603,6 +1625,24 @@ fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
         });
     }
     Some(v2::TupleType { fields })
+}
+
+/// The reply as a tuple, for the two product-shaped replies: a tuple reply is
+/// itself, and a query with no declared return type is the empty tuple. A
+/// fallible `T | E` reply, a named reply, and every other return form give
+/// `None` — a named reply keeps `reply_payload`, and a fallible reply is a
+/// sum this toolchain does not induce.
+fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
+    let Some(ret) = ret else {
+        return Some(v2::TupleType::default());
+    };
+    match ret.kind.as_ref()? {
+        v2::return_type::Kind::Value(ty) => match ty.kind.as_ref()? {
+            v2::field_type::Kind::Tuple(tuple) => Some(tuple.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 /// The single declared parameter's named type — the one call shape whose
