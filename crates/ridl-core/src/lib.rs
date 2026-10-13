@@ -53,8 +53,8 @@ pub use std_lib::std_package;
 pub use tree_hash::{TreeHashError, tree_hash};
 #[cfg(feature = "fs")]
 pub use workspace::{
-    ImportUnion, LoadError, LoadedWorkspace, MaterializedUnit, Overlay, find_root, load_workspace,
-    load_workspace_with,
+    ImportUnion, LoadError, LoadedWorkspace, MaterializedUnit, Overlay, VENDOR_DIR, find_root,
+    load_workspace, load_workspace_with,
 };
 #[cfg(feature = "fetch")]
 pub use workspace::{RemoteAccess, load_workspace_with_remotes};

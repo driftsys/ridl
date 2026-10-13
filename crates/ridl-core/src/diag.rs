@@ -1398,6 +1398,22 @@ diag_codes! {
         MANI_016 = "MANI-016", Error,
             "`[backend.<name>]` is set in a workspace member";
 
+        /// In workspace mode, a `members` entry names `vendor` or a path
+        /// under it. `<manifest root>/vendor/` holds the remote units
+        /// `ridl vendor` writes and is never a member (ADR-0002 §7). The
+        /// entry is not loaded.
+        MANI_017 = "MANI-017", Error,
+            "a workspace member is `vendor` or a path under it";
+
+        /// In standalone mode, a `.typl`, `.ridl` or `.rsdl` file under the
+        /// root's `vendor/` is not loaded: the directory is reserved for the
+        /// remote units `ridl vendor` writes (ADR-0002 §7). A file under
+        /// `vendor/<key>/`, for a key of the consumer's `[imports]`, belongs
+        /// to that remote unit and is not reported. One warning per other
+        /// file, in path order.
+        MANI_018 = "MANI-018", Warning,
+            "a source file under the root's `vendor/` is not loaded", lint = "vendor-source-not-loaded";
+
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
         MANI_101 = "MANI-101", Error,
@@ -2275,6 +2291,7 @@ mod tests {
             ("RSDL-807", "link-encoding-not-emitted"),
             ("MANI-005", "unknown-manifest-key"),
             ("MANI-010", "unknown-lint"),
+            ("MANI-018", "vendor-source-not-loaded"),
         ]
         .into_iter()
         .collect();
@@ -2305,10 +2322,11 @@ mod tests {
     }
 
     /// The two namespace-wide severity rules: every FORM code is an error, and
-    /// every MANI code is an error but the unknown-key and unknown-lint warnings.
+    /// every MANI code is an error but the unknown-key, unknown-lint and
+    /// vendor-source-not-loaded warnings.
     ///
     /// Neither rule enumerates codes, so neither is a shadow list — one states a
-    /// property of a whole namespace, the other adds two named exceptions.
+    /// property of a whole namespace, the other adds three named exceptions.
     /// TYPL and RIDL have no such rule: their severities are per-code, set by
     /// the reference §16 tables, and writing them out here would rebuild exactly
     /// the second list this change removed. A wrong severity on a TYPL or RIDL
@@ -2324,7 +2342,10 @@ mod tests {
             );
         }
         for entry in MANI_CATALOG {
-            let expected = if entry.code == DiagCode::MANI_005 || entry.code == DiagCode::MANI_010 {
+            let expected = if entry.code == DiagCode::MANI_005
+                || entry.code == DiagCode::MANI_010
+                || entry.code == DiagCode::MANI_018
+            {
                 Severity::Warning
             } else {
                 Severity::Error

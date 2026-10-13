@@ -352,6 +352,8 @@ are `1xx`.
 | MANI-014 | a source package is declared by two units                                                   | error    |
 | MANI-015 | `[backend.<name>] encodings` is not an array of known, distinct names                       | error    |
 | MANI-016 | `[backend.<name>]` is set in a workspace member                                             | error    |
+| MANI-017 | a workspace member is `vendor` or a path under it                                           | error    |
+| MANI-018 | a source file under the root's `vendor/` is not loaded                                      | warning  |
 | MANI-101 | remote import fetch failed                                                                  | error    |
 | MANI-102 | fetched content hash does not match the lockfile                                            | error    |
 | MANI-103 | `--frozen`: no lockfile entry for a remote import                                           | error    |

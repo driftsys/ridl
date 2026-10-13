@@ -118,6 +118,15 @@ pub struct LoadedWorkspace {
 /// two keys naming one URL fetch it once.
 pub type ImportUnion = BTreeMap<String, BTreeSet<String>>;
 
+/// The name of the directory at the manifest root that holds the remote
+/// units `ridl vendor` writes, one under `vendor/<key>/` per `[imports]`
+/// key (ADR-0002 §7). The workspace walk never loads it as a source tree:
+/// in workspace mode a `members` entry that names it, or a path under it,
+/// is MANI-017; in standalone mode a source file under it that is not inside
+/// a key-named directory is MANI-018. A directory named `vendor` deeper in a
+/// unit's tree is an ordinary source package.
+pub const VENDOR_DIR: &str = "vendor";
+
 /// One remote unit the read path found: its URL, the directory that holds its
 /// tree, and the `tree` hash the directory was verified against.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -627,6 +636,10 @@ struct TreeScope<'a> {
 /// The accumulating state of one [`load_workspace`] run.
 #[derive(Default)]
 struct Loader {
+    /// The manifest root [`Loader::load_root`] was given, in the path form
+    /// the files under it are recorded in. `<root>/vendor/` is the directory
+    /// the walk reserves ([`VENDOR_DIR`]). Empty in single-file mode.
+    root: PathBuf,
     /// The root manifest's `[package]` name, for `LoadedWorkspace::root_package`.
     root_package: Option<String>,
     /// Source package name to the unit that claimed it and that unit's
@@ -678,6 +691,7 @@ impl Loader {
     /// Loads from a directory known to contain a `ridl.toml`, in whichever
     /// mode its manifest declares.
     fn load_root(&mut self, db: &mut RidlDatabase, root: &Path) -> io::Result<()> {
+        self.root = root.to_path_buf();
         let manifest_path = root.join("ridl.toml");
         // The error names the manifest: the root may be a workspace above the
         // entry (`find_root`), so the reader cannot assume which file failed.
@@ -770,6 +784,7 @@ impl Loader {
                 self.workspace_imports = imports;
                 self.workspace_defaults = defaults;
                 self.workspace_lints = root_lints;
+                let vendor = normalize(&root.join(VENDOR_DIR));
                 for member in &members {
                     // A member listed twice in `[workspace] members` is
                     // loaded once: its later listings are skipped before
@@ -783,6 +798,20 @@ impl Loader {
                         .iter()
                         .any(|dir| normalize(dir) == normalized)
                     {
+                        continue;
+                    }
+                    // `vendor/` at the workspace root is reserved for the
+                    // remote units `ridl vendor` writes: a member there, or
+                    // under it, is MANI-017 on its entry and is not loaded.
+                    if normalized.starts_with(&vendor) {
+                        self.diagnostics.push(error(
+                            DiagCode::MANI_017,
+                            file_id,
+                            member_entry_range(&text, member),
+                            format!(
+                                "workspace member `{member}` is `vendor` or a path under it; `vendor/` at the manifest root holds the remote units `ridl vendor` writes and is never a member"
+                            ),
+                        ));
                         continue;
                     }
                     self.member_dirs.push(member_dir);
@@ -1063,6 +1092,14 @@ impl Loader {
             if dir_name.starts_with('.') {
                 continue;
             }
+            // `<root>/vendor/` is reserved for the remote units `ridl vendor`
+            // writes and is never a source tree of this unit. The walk
+            // reaches it only in standalone mode: a workspace walks its
+            // members, never its root.
+            if normalize(&subdir) == normalize(&self.root.join(VENDOR_DIR)) {
+                self.report_vendor_sources(&subdir, unit)?;
+                continue;
+            }
             let nested_manifest = subdir.join("ridl.toml");
             if nested_manifest.is_file() {
                 let nested_text = fs::read_to_string(&nested_manifest)
@@ -1096,6 +1133,69 @@ impl Loader {
                 ));
             }
             self.load_package_tree(db, &subdir, &format!("{name}.{dir_name}"), scope)?;
+        }
+        Ok(())
+    }
+
+    /// Reports MANI-018 on every `.typl`, `.ridl` and `.rsdl` file under the
+    /// root's `vendor/` that the walk does not load, in path order. A
+    /// directory `vendor/<key>/` named by a key of the consumer's `[imports]`
+    /// union holds a remote unit: it is not entered, so nothing in it is
+    /// reported or interned here. Hidden directories and symbolic links are
+    /// not entered, as in [`Loader::load_package_tree`]. The span is the
+    /// empty range of the file, interned with no text, as RIDL-417 is.
+    fn report_vendor_sources(&mut self, vendor: &Path, unit: &str) -> io::Result<()> {
+        let keys: BTreeSet<&str> = self
+            .imports
+            .values()
+            .flatten()
+            .map(String::as_str)
+            .collect();
+        let mut pending = Vec::new();
+        for entry in fs::read_dir(vendor).map_err(|e| cannot_read(vendor, e))? {
+            let entry = entry.map_err(|e| cannot_read(vendor, e))?;
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if path.is_dir() && keys.contains(name.as_str()) {
+                continue;
+            }
+            pending.push((entry, path));
+        }
+        let mut files = Vec::new();
+        while let Some((entry, path)) = pending.pop() {
+            let is_symlink = entry
+                .file_type()
+                .map_err(|e| cannot_read(&path, e))?
+                .is_symlink();
+            if path.is_dir() {
+                let hidden = entry.file_name().to_string_lossy().starts_with('.');
+                if is_symlink || hidden {
+                    continue;
+                }
+                for child in fs::read_dir(&path).map_err(|e| cannot_read(&path, e))? {
+                    let child = child.map_err(|e| cannot_read(&path, e))?;
+                    let child_path = child.path();
+                    pending.push((child, child_path));
+                }
+            } else if path
+                .extension()
+                .is_some_and(|ext| ext == "typl" || ext == "ridl" || ext == "rsdl")
+            {
+                files.push(path);
+            }
+        }
+        files.sort();
+        for path in files {
+            let file_id = self.sources.file_id(&path_string(&path), "");
+            self.diagnostics.push(warning(
+                DiagCode::MANI_018,
+                file_id,
+                byte_range(0, 0),
+                format!(
+                    "`{}` is under the manifest root's `vendor/`, which holds the remote units `ridl vendor` writes; it is not loaded as a source of unit `{unit}`",
+                    path.display()
+                ),
+            ));
         }
         Ok(())
     }
@@ -3836,6 +3936,167 @@ service:veh.common.climate 2
             .filter(|c| **c == "MANI-013")
             .count();
         assert_eq!(count, 1, "{:?}", codes(&loaded.diagnostics));
+    }
+
+    /// Whether `sources` already holds `path`. `file_id` interns on first
+    /// sight, so a probe text that comes back means the path was absent.
+    fn is_interned(sources: &mut SourceMap, path: &Path) -> bool {
+        let id = sources.file_id(&path_string(path), "\u{0}probe");
+        sources.text(id) != Some("\u{0}probe")
+    }
+
+    /// In standalone mode the walk skips `<root>/vendor/`. A source file in
+    /// it that is not under a directory named by an `[imports]` key is
+    /// MANI-018 on the file, one per file in path order, and no manifest
+    /// under `vendor/` is MANI-013.
+    #[test]
+    fn a_source_under_the_roots_vendor_is_mani_018_and_not_loaded() {
+        let fixture = TempDir::new("vendor-018");
+        fixture.write(
+            "app/ridl.toml",
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+        );
+        fixture.write("app/app.typl", "package app\n");
+        let stray = fixture.write("app/vendor/stray.typl", "package stray\n");
+        fixture.write(
+            "app/vendor/other/ridl.toml",
+            "[package]\nname = \"other\"\nversion = \"1.0.0\"\n",
+        );
+        let nested = fixture.write("app/vendor/other/sub/s.ridl", "package other.sub\n");
+        fixture.write("app/vendor/other/notes.md", "not a source\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &fixture.path().join("app")).expect("the unit loads");
+        assert_eq!(
+            codes(&loaded.diagnostics),
+            vec!["MANI-018", "MANI-018"],
+            "one per file, no MANI-013: {:?}",
+            loaded.diagnostics
+        );
+        assert!(
+            loaded
+                .diagnostics
+                .iter()
+                .all(|d| d.severity == Severity::Warning)
+        );
+        let reported: Vec<&str> = loaded
+            .diagnostics
+            .iter()
+            .map(|d| {
+                loaded
+                    .sources
+                    .path(d.primary.file)
+                    .expect("the file is interned")
+            })
+            .collect();
+        assert_eq!(reported, vec![path_string(&nested), path_string(&stray)]);
+        assert!(
+            loaded
+                .diagnostics
+                .iter()
+                .all(|d| d.primary.range == byte_range(0, 0))
+        );
+        assert!(loaded.diagnostics[0].message.contains("vendor/"));
+        let packages = loaded.workspace.packages(&db);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name(&db), "app");
+    }
+
+    /// A directory under `<root>/vendor/` named by a key of the consumer's
+    /// `[imports]` holds a remote unit: nothing in it is reported, and
+    /// nothing in it is interned by this walk.
+    #[test]
+    fn a_key_named_vendor_directory_draws_nothing() {
+        let fixture = TempDir::new("vendor-key");
+        fixture.write(
+            "app/ridl.toml",
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"https://example.com/veh-common.tar\"\n",
+        );
+        fixture.write("app/app.typl", "package app\n");
+        fixture.write(
+            "app/vendor/veh.common/ridl.toml",
+            "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+        );
+        let common = fixture.write("app/vendor/veh.common/common.typl", "package veh.common\n");
+        let sub = fixture.write(
+            "app/vendor/veh.common/sub/s.ridl",
+            "package veh.common.sub\n",
+        );
+        let mut db = RidlDatabase::default();
+        let mut loaded =
+            load_workspace(&mut db, &fixture.path().join("app")).expect("the unit loads");
+        assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+        let packages = loaded.workspace.packages(&db);
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].name(&db), "app");
+        assert!(!is_interned(&mut loaded.sources, &common));
+        assert!(!is_interned(&mut loaded.sources, &sub));
+    }
+
+    /// A directory named `vendor` deeper in the tree is an ordinary package.
+    #[test]
+    fn a_deeper_vendor_directory_is_a_package() {
+        let fixture = TempDir::new("vendor-deep");
+        fixture.write(
+            "app/ridl.toml",
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+        );
+        fixture.write("app/parts/vendor/v.typl", "package app.parts.vendor\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &fixture.path().join("app")).expect("the unit loads");
+        assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+        let names: Vec<String> = loaded
+            .workspace
+            .packages(&db)
+            .iter()
+            .map(|p| p.name(&db).clone())
+            .collect();
+        assert_eq!(names, ["app.parts.vendor"]);
+    }
+
+    /// In workspace mode a `members` entry of `vendor`, or of a path under
+    /// it, is MANI-017 on the entry and the member is not loaded; the other
+    /// members load as usual.
+    #[test]
+    fn a_vendor_member_is_mani_017() {
+        let fixture = TempDir::new("vendor-017");
+        let manifest = "[workspace]\nmembers = [\"app\", \"vendor\", \"vendor/x\"]\n";
+        fixture.write("ws/ridl.toml", manifest);
+        fixture.write(
+            "ws/app/ridl.toml",
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+        );
+        fixture.write(
+            "ws/vendor/ridl.toml",
+            "[package]\nname = \"vendor\"\nversion = \"1.0.0\"\n",
+        );
+        fixture.write(
+            "ws/vendor/x/ridl.toml",
+            "[package]\nname = \"x\"\nversion = \"1.0.0\"\n",
+        );
+        fixture.write("ws/vendor/x/x.typl", "package x\n");
+        let mut db = RidlDatabase::default();
+        let loaded =
+            load_workspace(&mut db, &fixture.path().join("ws")).expect("the workspace loads");
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-017", "MANI-017"]);
+        assert!(
+            loaded
+                .diagnostics
+                .iter()
+                .all(|d| d.severity == Severity::Error)
+        );
+        assert_eq!(
+            loaded.diagnostics[0].primary.range,
+            member_entry_range(manifest, "vendor")
+        );
+        assert_eq!(
+            loaded.diagnostics[1].primary.range,
+            member_entry_range(manifest, "vendor/x")
+        );
+        assert!(
+            loaded.workspace.packages(&db).is_empty(),
+            "no package of a vendor member loads"
+        );
+        assert_eq!(loaded.units.keys().collect::<Vec<_>>(), ["app"]);
     }
 
     #[test]

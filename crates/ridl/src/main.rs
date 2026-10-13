@@ -2542,7 +2542,9 @@ impl DeclIndex {
     /// reported here either.
     fn build(entry: &Path) -> Self {
         let mut index = Self::default();
-        for file in collect_source_files(&index_root(entry)).unwrap_or_default() {
+        let vendor = vendor_dir(entry);
+        for file in collect_source_files(&index_root(entry), vendor.as_deref()).unwrap_or_default()
+        {
             let Ok(text) = std::fs::read_to_string(&file) else {
                 continue;
             };
@@ -2800,6 +2802,41 @@ fn index_root(entry: &Path) -> PathBuf {
         .unwrap_or_else(|| entry.to_path_buf())
 }
 
+/// The `vendor/` directory of the manifest root `entry` lies under
+/// ([`ridl_core::find_root`]), which holds the remote units `ridl vendor`
+/// writes and which no source walk of this binary enters. `None` when no
+/// manifest is above `entry` (single-file mode). The path is in the form of
+/// the root, so the walk compares it canonicalized.
+fn vendor_dir(entry: &Path) -> Option<PathBuf> {
+    let dir = if entry.is_file() {
+        entry.parent()
+    } else {
+        Some(entry)
+    };
+    dir.and_then(ridl_core::find_root)
+        .map(|root| root.join(ridl_core::VENDOR_DIR))
+}
+
+/// Whether `path` is `<manifest root>/vendor/` or lies under it: an ancestor
+/// of its canonical form is named `vendor`, and the directory above that
+/// ancestor is its own manifest root ([`ridl_core::find_root`] returns it),
+/// which is a standalone package or a workspace root, never a member. A
+/// `vendor/` deeper in a unit's tree is an ordinary directory. A path that
+/// cannot be canonicalized (it does not exist) is not under `vendor/`; the
+/// caller reports it as unreadable.
+fn is_under_vendor(path: &Path) -> bool {
+    let Ok(canonical) = path.canonicalize() else {
+        return false;
+    };
+    canonical.ancestors().any(|dir| {
+        dir.file_name()
+            .is_some_and(|name| name == ridl_core::VENDOR_DIR)
+            && dir
+                .parent()
+                .is_some_and(|root| ridl_core::find_root(root).as_deref() == Some(root))
+    })
+}
+
 /// A span pointing at no file at all.
 fn detached_span() -> Span {
     Span {
@@ -2929,13 +2966,25 @@ fn finish(run: std::io::Result<CliRun>) -> ExitCode {
 /// A file with parse errors is never rewritten (a formatter must not eat broken
 /// code); its diagnostics render to stderr and the run exits 1. In `--check`
 /// mode nothing is written and a file that would change also exits 1.
+///
+/// `<manifest root>/vendor/` holds the remote units `ridl vendor` writes,
+/// which belong to their own units: the walk from `path` skips it, and a
+/// `path` that is `vendor/` or lies under it is refused with exit 2.
 fn run_fmt(path: &Path, check: bool) -> ExitCode {
     let mut sources = SourceMap::new();
     let mut diagnostics = Vec::new();
     let mut any_would_change = false;
     let mut any_broken = false;
 
-    let files = match collect_source_files(path) {
+    if is_under_vendor(path) {
+        eprintln!(
+            "error: `{}` is under `vendor/`, which `ridl fmt` never formats: a vendored unit is its owner's",
+            path.display()
+        );
+        return ExitCode::from(2);
+    }
+    let vendor = vendor_dir(path);
+    let files = match collect_source_files(path, vendor.as_deref()) {
         Ok(files) => files,
         Err((dir, err)) => {
             eprintln!("error: cannot read {}: {err}", dir.display());
@@ -2981,7 +3030,11 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
 }
 
 /// Every `.typl`, `.ridl` and `.rsdl` file under `path`: `path` itself when it
-/// is a file, otherwise a recursive walk that skips hidden directories.
+/// is a file, otherwise a recursive walk that skips hidden directories and
+/// the directory `skip` names — the manifest root's `vendor/`
+/// ([`vendor_dir`]), compared canonicalized so that the form of `path` and
+/// the form of the root do not have to agree. A `skip` that does not exist
+/// skips nothing.
 ///
 /// A directory the walk cannot read — `path` itself, when it does not exist
 /// or is not readable, or a subdirectory the walk descends into — is an error
@@ -2989,10 +3042,14 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
 /// and the underlying `io::Error`. The walk cannot tell "empty" from
 /// "absent" or "unreadable" any other way, and treating those as zero files
 /// is what let `ridl fmt` report success over a tree it never read.
-fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::Error)> {
+fn collect_source_files(
+    path: &Path,
+    skip: Option<&Path>,
+) -> Result<Vec<PathBuf>, (PathBuf, std::io::Error)> {
     if path.is_file() {
         return Ok(vec![path.to_path_buf()]);
     }
+    let skip = skip.and_then(|dir| dir.canonicalize().ok());
     let mut files = Vec::new();
     let mut stack = vec![path.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -3004,7 +3061,10 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
                     .file_name()
                     .and_then(|name| name.to_str())
                     .is_some_and(|name| name.starts_with('.'));
-                if !hidden {
+                let skipped = skip
+                    .as_deref()
+                    .is_some_and(|skip| child.canonicalize().ok().as_deref() == Some(skip));
+                if !hidden && !skipped {
                     stack.push(child);
                 }
             } else if child
