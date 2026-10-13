@@ -49,20 +49,22 @@ lists what it holds.
 
 ## Link the crate
 
-A Rust package names the generated crate by path, and names `ridl-loopback` for
-the ports. This `Cargo.toml` fragment is an illustration and is not compiled;
-the program that `just demo` builds has the same two dependencies in
-`examples/cabin/consumer/Cargo.toml`:
+A Rust package names the generated crate by path, `ridl-loopback` for the
+ports, and `ridl-rt` for the items the program uses from it. This `Cargo.toml`
+fragment is an illustration and is not compiled; the program that `just demo`
+builds has the same three dependencies in `examples/cabin/consumer/Cargo.toml`:
 
 ```toml
 [dependencies]
-veh_cabin = { path = "generated" }
+veh_cabin = { path = "generated", features = ["std"] }
 ridl-loopback = "0.10"
+ridl-rt = { version = "0.10", features = ["std"] }
 ```
 
-The generated crate depends on `ridl-rt`. A program names `ridl-rt` itself only
-when it uses an item of that crate, as the program below does. The features of
-each crate are in
+The program imports `CatalogRef`, `Interface` and `Provenance` from `ridl-rt`
+and calls `ridl_rt::task::noop_waker`, which exists only under the `std` feature
+of `ridl-rt`. The `std` feature of the generated crate is on by default and is
+named here so the dependency is explicit. The features of each crate are in
 [Cargo features](generated-code.md#cargo-features).
 
 ## Write the program
