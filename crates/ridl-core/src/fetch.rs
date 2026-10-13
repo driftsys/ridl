@@ -1127,6 +1127,37 @@ mod tests {
         assert!(lock.entries[stub.url()].tree.is_some());
     }
 
+    /// A vendored tree with no lock entry whose bytes differ from the
+    /// fetched tree: the fetch pins a `tree`, the vendored tree is verified
+    /// against it, and the mismatch is MANI-107 naming `ridl vendor`; the
+    /// unit is not served from either place.
+    #[test]
+    fn a_stale_vendor_tree_without_a_pin_is_mani_107_after_the_fetch() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("vendor-unpinned-stale");
+        let cache = cache(&dir);
+        let vendor = vendored(
+            &dir,
+            "remote.pkg",
+            &[("remote.typl", b"package remote.pkg\r\n")],
+        );
+        let (units, _, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            None,
+            &cache,
+            Frozen::No,
+            Some(&vendor),
+        );
+        assert_eq!(stub.hits(), 1, "the pin comes from a fetch");
+        assert_eq!(codes(&diags), vec!["MANI-107"]);
+        assert!(
+            diags[0].message.contains("ridl vendor"),
+            "{}",
+            diags[0].message
+        );
+        assert!(units.is_empty());
+    }
+
     /// A symbolic link in `vendor/<key>/` is MANI-107 naming the link.
     #[cfg(unix)]
     #[test]

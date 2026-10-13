@@ -4108,6 +4108,32 @@ service:veh.common.climate 2
         assert_eq!(names, ["app.parts.vendor"]);
     }
 
+    /// A `vendor/` directory at the top of a workspace member's tree is an
+    /// ordinary source package of the member: only the workspace root's
+    /// `vendor/` is reserved, and only a remote unit's own `vendor/` is
+    /// skipped.
+    #[test]
+    fn a_members_vendor_directory_is_a_package() {
+        let fixture = TempDir::new("vendor-member-sub");
+        fixture.write("ridl.toml", "[workspace]\nmembers = [\"app\"]\n");
+        fixture.write(
+            "app/ridl.toml",
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+        );
+        fixture.write("app/app.typl", "package app\n");
+        fixture.write("app/vendor/v.typl", "package app.vendor\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, fixture.path()).expect("the workspace loads");
+        assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+        let names: Vec<String> = loaded
+            .workspace
+            .packages(&db)
+            .iter()
+            .map(|p| p.name(&db).clone())
+            .collect();
+        assert_eq!(names, ["app", "app.vendor"]);
+    }
+
     /// In workspace mode a `members` entry of `vendor`, or of a path under
     /// it, is MANI-017 on the entry and the member is not loaded; the other
     /// members load as usual.
