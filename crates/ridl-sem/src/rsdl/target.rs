@@ -4,7 +4,9 @@
 //! the component's resolved lines, a member line and a `for` reference through
 //! the lookups the checker resolves them with. The language server does not
 //! resolve a name itself, so it cannot navigate to a declaration the checker
-//! would not bind.
+//! would not bind. [`reference_at`] binds the one reference under a cursor;
+//! [`references`] binds, for one target, the references whose slot and form
+//! can name a declaration of its kind, and keeps those bound to it.
 
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace, service_catalog};
@@ -83,10 +85,34 @@ pub fn reference_at(
     target_of(db, system, &lookup, reference, slot, offset)
 }
 
-/// Every reference of `system` the checker binds, with what it names. An
-/// instance reference `Name.inst` appears twice: once for the component its
-/// segments before `inst` name, and once for the instance, when the
-/// component declares it.
+/// Whether two targets name the same declaration. A service and the inline
+/// shape of that service are one declaration: both are written as the
+/// service's dotted name.
+pub fn same_declaration(a: &Target, b: &Target) -> bool {
+    fn service(target: &Target) -> Option<&str> {
+        match target {
+            Target::Service(name) | Target::Interface(InterfaceId::Inline { service: name }) => {
+                Some(name.as_str())
+            }
+            _ => None,
+        }
+    }
+    match (service(a), service(b)) {
+        (Some(a), Some(b)) => a == b,
+        (None, None) => a == b,
+        _ => false,
+    }
+}
+
+/// Every reference of `system` the checker binds to the declaration `target`
+/// names (as [`same_declaration`] compares), with the part of it that names
+/// the declaration.
+///
+/// Only a reference whose slot and form can name a declaration of the
+/// target's kind is resolved, at the one offset where that part is: the
+/// instance segment of `Name.inst` at its end, every other part at its start.
+/// The written name is not compared, because a reference written through an
+/// import alias does not spell the declared name.
 ///
 /// `system` is the result of [`check_system`](super::check_system) for `ws`
 /// and `std`.
@@ -95,29 +121,67 @@ pub fn references(
     ws: Workspace,
     std: Package,
     system: &CheckedSystem,
+    target: &Target,
 ) -> Vec<ReferenceTarget> {
     let catalog = service_catalog(db, ws, std);
     let lookup = Lookup::new(db, ws, std, system, &catalog);
     let mut found = Vec::new();
     for (reference, slot) in written_references(system) {
-        let range = reference.site.range;
-        // The start of a reference is on its first part, its end on its
-        // last part: the instance segment of an instance reference.
-        let mut offsets = vec![range.start()];
-        if matches!(reference.form, ReferenceForm::Instance { .. }) {
-            offsets.push(range.end());
-        }
-        for offset in offsets {
-            if let Some(target) = target_of(db, system, &lookup, reference, slot, offset) {
-                found.push(target);
-            }
+        let Some(offset) = naming_offset(target, reference, slot) else {
+            continue;
+        };
+        if let Some(bound) = target_of(db, system, &lookup, reference, slot, offset)
+            && same_declaration(&bound.target, target)
+        {
+            found.push(bound);
         }
     }
     found
 }
 
+/// The offset of the part of `reference`, written in `slot`, that can name a
+/// declaration of `target`'s kind, or `None` when no part can. Mirrors the
+/// slots and forms [`target_of`] binds to each kind of target.
+fn naming_offset(target: &Target, reference: &Reference, slot: Slot<'_>) -> Option<TextSize> {
+    let range = reference.site.range;
+    let start = Some(range.start());
+    match (target, slot, &reference.form) {
+        (Target::System(_), Slot::For { .. }, _) => start,
+        (Target::Component(_), Slot::Member { .. }, ReferenceForm::Declared { .. }) => start,
+        (
+            Target::Component(_),
+            Slot::Member {
+                placement: true, ..
+            },
+            ReferenceForm::Instance { .. },
+        ) => start,
+        (
+            Target::Instance { .. },
+            Slot::Member {
+                placement: true, ..
+            },
+            ReferenceForm::Instance { .. },
+        ) => Some(range.end()),
+        (
+            Target::Service(_) | Target::Interface(InterfaceId::Inline { .. }),
+            Slot::Offers { .. } | Slot::Requires { .. },
+            _,
+        ) => start,
+        (
+            Target::Service(_) | Target::Interface(InterfaceId::Inline { .. }),
+            Slot::Member { .. },
+            ReferenceForm::Service { .. },
+        ) => start,
+        (Target::Interface(InterfaceId::Declared { .. }), Slot::Requires { .. }, _) => start,
+        _ => None,
+    }
+}
+
 /// What `reference`, written in `slot`, names at `offset`, which lies inside
 /// the reference.
+///
+/// [`naming_offset`] restates which slot and form can bind each kind of
+/// target, so it must change with this function.
 fn target_of(
     db: &dyn salsa::Database,
     system: &CheckedSystem,
@@ -270,4 +334,485 @@ fn instance_ranges(
         TextRange::new(reference.site.range.start(), name.end()),
         *instance,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use ridl_core::db::RidlDatabase;
+    use ridl_core::std_package;
+
+    use super::super::tests::{ADAS, COMMON, DIAG, PRODUCTION, SYSTEM, package};
+    use super::*;
+
+    /// A package that imports two components of `veh.topology`, one through
+    /// an alias, and names them in a distribution, together with a third
+    /// component that it does not import, written as the qualified
+    /// `veh.topology.Panel`. The distribution also names an instance, which a
+    /// distribution line may not (RSDL-602 or RSDL-903), so the checker binds
+    /// that line to nothing. The component `Idle` and its instance `unused`
+    /// are named by no reference.
+    const EXTRA: &str = r#"package veh.extra
+
+import veh.topology.Cruise
+import veh.topology.Lane as Track
+
+component Idle [ instances = (unused) ] {}
+
+distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
+"#;
+
+    /// A reference site as `(file path, start, end)`, which sorts.
+    type Span = (String, u32, u32);
+
+    fn span(db: &RidlDatabase, file: InputFile, range: TextRange) -> Span {
+        (
+            file.path(db).clone(),
+            range.start().into(),
+            range.end().into(),
+        )
+    }
+
+    /// The kind of a target, for the fixture coverage check.
+    fn kind(target: &Target) -> &'static str {
+        match target {
+            Target::System(_) => "system",
+            Target::Component(_) => "component",
+            Target::Instance { .. } => "instance",
+            Target::Service(_) => "service",
+            Target::Interface(InterfaceId::Inline { .. }) => "inline",
+            Target::Interface(InterfaceId::Declared { .. }) => "declared",
+        }
+    }
+
+    /// The packages of the fixture: Appendix A's four, and `veh.extra`.
+    fn fixture(db: &RidlDatabase) -> Vec<Package> {
+        vec![
+            package(db, "veh.common", &[("veh/common/common.typl", COMMON)]),
+            package(db, "veh.adas", &[("veh/adas/adas.ridl", ADAS)]),
+            package(db, "veh.diag", &[("veh/diag/diag.ridl", DIAG)]),
+            package(
+                db,
+                "veh.topology",
+                &[
+                    ("veh/topology/system.rsdl", SYSTEM),
+                    ("veh/topology/production.rsdl", PRODUCTION),
+                ],
+            ),
+            package(db, "veh.extra", &[("veh/extra/extra.rsdl", EXTRA)]),
+        ]
+    }
+
+    /// The declaration a target names, for grading `references` without
+    /// `same_declaration`: a service and the inline shape of that service are
+    /// one declaration, and every other target is its own.
+    fn declaration(target: &Target) -> Target {
+        match target {
+            Target::Interface(InterfaceId::Inline { service }) => Target::Service(service.clone()),
+            other => other.clone(),
+        }
+    }
+
+    /// `references(.., target)` returns exactly the references `reference_at`
+    /// binds to the same declaration, for every target some reference names
+    /// and for a target none does.
+    #[test]
+    fn references_match_reference_at_for_every_target() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let ws = Workspace::new(&db, fixture(&db), BTreeMap::new());
+        let system = super::super::check_system(&db, ws, std);
+
+        // Every reference of the model, read from the declarations.
+        let mut written: Vec<&Reference> = Vec::new();
+        for decl in &system.systems {
+            written.extend(decl.members.iter().map(|line| &line.reference));
+        }
+        for decl in &system.distributions {
+            written.extend(decl.members.iter().map(|line| &line.reference));
+        }
+        for decl in &system.components {
+            written.extend(decl.offers.iter().map(|line| &line.reference));
+            written.extend(decl.requires.iter().map(|line| &line.reference));
+        }
+        for decl in &system.deployments {
+            written.extend(decl.system.iter());
+            for machine in &decl.machines {
+                written.extend(machine.members.iter().map(|line| &line.reference));
+            }
+        }
+        assert!(written.len() >= 20, "{} references", written.len());
+
+        // The oracle: what `reference_at` binds at the start and at the end
+        // of each reference, grouped by the declaration it names.
+        let mut oracle: Vec<(Target, Vec<Span>)> = Vec::new();
+        // The kind of every target `reference_at` binds, before the service
+        // and inline-shape targets of one service are merged into one group.
+        let mut kinds: Vec<&str> = Vec::new();
+        for reference in &written {
+            let range = reference.site.range;
+            for offset in [range.start(), range.end()] {
+                let Some(found) = reference_at(&db, ws, std, &system, reference.site.file, offset)
+                else {
+                    continue;
+                };
+                kinds.push(kind(&found.target));
+                let site = span(&db, found.reference.site.file, found.range);
+                match oracle
+                    .iter_mut()
+                    .find(|(target, _)| declaration(target) == declaration(&found.target))
+                {
+                    Some((_, sites)) => {
+                        if !sites.contains(&site) {
+                            sites.push(site);
+                        }
+                    }
+                    None => oracle.push((found.target, vec![site])),
+                }
+            }
+        }
+        for kind in [
+            "system",
+            "component",
+            "instance",
+            "service",
+            "inline",
+            "declared",
+        ] {
+            assert!(
+                kinds.contains(&kind),
+                "the fixture names a {kind}: {kinds:?}"
+            );
+        }
+        // The lone service `veh.diag.access` is bound as a service by a member
+        // line and as the inline shape by a `requires` line.
+        assert!(
+            oracle.iter().any(|(target, _)| matches!(
+                target,
+                Target::Service(name) | Target::Interface(InterfaceId::Inline { service: name })
+                    if name == "veh.diag.access"
+            )),
+            "{kinds:?}"
+        );
+        // The alias `Track` in `veh.extra` binds to `Lane`.
+        let lane = system
+            .components
+            .iter()
+            .position(|decl| decl.name.name == "Lane")
+            .expect("Lane is declared");
+        let (_, lane_sites) = oracle
+            .iter()
+            .find(|(target, _)| *target == Target::Component(lane))
+            .expect("Lane is referenced");
+        assert!(
+            lane_sites
+                .iter()
+                .any(|(path, _, _)| path == "veh/extra/extra.rsdl"),
+            "{lane_sites:?}"
+        );
+
+        // The instance reference of the distribution in `veh.extra` binds to
+        // nothing at either end.
+        let misplaced = system
+            .distributions
+            .iter()
+            .flat_map(|decl| &decl.members)
+            .map(|line| &line.reference)
+            .find(|reference| matches!(reference.form, ReferenceForm::Instance { .. }))
+            .expect("the distribution names an instance");
+        let misplaced_range = misplaced.site.range;
+        for offset in [misplaced_range.start(), misplaced_range.end()] {
+            assert_eq!(
+                reference_at(&db, ws, std, &system, misplaced.site.file, offset),
+                None
+            );
+        }
+        let misplaced_span = span(&db, misplaced.site.file, misplaced_range);
+        assert!(
+            oracle.iter().all(|(_, sites)| {
+                sites.iter().all(|(path, start, end)| {
+                    *path != misplaced_span.0
+                        || *end <= misplaced_span.1
+                        || *start >= misplaced_span.2
+                })
+            }),
+            "{oracle:?}"
+        );
+
+        let actual = |target: &Target| {
+            let mut actual: Vec<Span> = references(&db, ws, std, &system, target)
+                .into_iter()
+                .inspect(|found| {
+                    assert_eq!(
+                        declaration(&found.target),
+                        declaration(target),
+                        "{target:?} returned {:?}",
+                        found.target
+                    );
+                })
+                .map(|found| span(&db, found.reference.site.file, found.range))
+                .collect();
+            actual.sort();
+            actual
+        };
+        for (target, expected) in &oracle {
+            let mut expected = expected.clone();
+            expected.sort();
+            // A service and its inline shape are one declaration: the group is
+            // the same whichever of the two targets the cursor yields.
+            let queried = match target {
+                Target::Service(name)
+                | Target::Interface(InterfaceId::Inline { service: name }) => {
+                    vec![
+                        Target::Service(name.clone()),
+                        Target::Interface(InterfaceId::Inline {
+                            service: name.clone(),
+                        }),
+                    ]
+                }
+                other => vec![other.clone()],
+            };
+            for target in queried {
+                assert_eq!(actual(&target), expected, "{target:?}");
+            }
+        }
+
+        // The references of one service include no site of another service.
+        let services = ["veh.adas.cruise", "veh.adas.lane", "veh.diag.access"]
+            .map(|name| actual(&Target::Service(name.to_string())));
+        for (index, sites) in services.iter().enumerate() {
+            assert!(!sites.is_empty(), "service {index} is referenced");
+            for other in &services[index + 1..] {
+                assert!(
+                    sites.iter().all(|site| !other.contains(site)),
+                    "{sites:?} and {other:?} share a site"
+                );
+            }
+        }
+
+        // A target no reference names: the component `Idle`, its instance
+        // `unused`, which is never placed, and an interface no package
+        // declares.
+        let idle = system
+            .components
+            .iter()
+            .position(|decl| decl.name.name == "Idle")
+            .expect("Idle is declared");
+        let unreferenced = [
+            Target::Component(idle),
+            Target::Instance {
+                component: idle,
+                instance: 0,
+            },
+            Target::Interface(InterfaceId::Declared {
+                package: "veh.adas".to_string(),
+                name: "Nowhere".to_string(),
+            }),
+        ];
+        for target in unreferenced {
+            assert!(
+                oracle
+                    .iter()
+                    .all(|(named, _)| declaration(named) != declaration(&target)),
+                "{target:?}"
+            );
+            assert_eq!(actual(&target), Vec::<Span>::new(), "{target:?}");
+        }
+    }
+
+    /// `naming_offset` offers a reference to a target only in the slots and
+    /// forms that can name the target, and at the offset of the naming part.
+    /// The test checks every kind of target against every class of reference
+    /// that the fixture holds.
+    #[test]
+    fn naming_offset_resolves_only_where_a_target_can_be_named() {
+        /// The part of a reference that names a target.
+        #[derive(Debug, Clone, Copy, PartialEq)]
+        enum Part {
+            Start,
+            End,
+        }
+        use Part::{End, Start};
+
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let ws = Workspace::new(&db, fixture(&db), BTreeMap::new());
+        let system = super::super::check_system(&db, ws, std);
+        let written = written_references(&system);
+        let find = |wanted: &dyn Fn(&Reference, Slot<'_>) -> bool| {
+            written
+                .iter()
+                .find(|(reference, slot)| wanted(reference, *slot))
+                .map(|(reference, slot)| (*reference, *slot))
+                .expect("the fixture has such a reference")
+        };
+        let declared =
+            |reference: &Reference| matches!(reference.form, ReferenceForm::Declared { .. });
+        let service =
+            |reference: &Reference| matches!(reference.form, ReferenceForm::Service { .. });
+        let instance =
+            |reference: &Reference| matches!(reference.form, ReferenceForm::Instance { .. });
+        let member = |placement: bool, slot: Slot<'_>| matches!(slot, Slot::Member { placement: p, .. } if p == placement);
+
+        // The classes of reference, in the order of the columns below.
+        let classes = [
+            (
+                "member line, declared form",
+                find(&|r, slot| member(false, slot) && declared(r)),
+            ),
+            (
+                "member line, service form",
+                find(&|r, slot| member(false, slot) && service(r)),
+            ),
+            (
+                "member line, instance form",
+                find(&|r, slot| member(false, slot) && instance(r)),
+            ),
+            (
+                "placement line, declared form",
+                find(&|r, slot| member(true, slot) && declared(r)),
+            ),
+            (
+                "placement line, service form",
+                find(&|r, slot| member(true, slot) && service(r)),
+            ),
+            (
+                "placement line, instance form",
+                find(&|r, slot| member(true, slot) && instance(r)),
+            ),
+            (
+                "offers line",
+                find(&|_, slot| matches!(slot, Slot::Offers { .. })),
+            ),
+            (
+                "requires line, declared form",
+                find(&|r, slot| matches!(slot, Slot::Requires { .. }) && declared(r)),
+            ),
+            (
+                "requires line, service form",
+                find(&|r, slot| matches!(slot, Slot::Requires { .. }) && service(r)),
+            ),
+            (
+                "for reference",
+                find(&|_, slot| matches!(slot, Slot::For { .. })),
+            ),
+        ];
+        let service_name = "veh.diag.access".to_string();
+        // Each target with the expected part for each class above.
+        let table: [(Target, [Option<Part>; 10]); 6] = [
+            (
+                Target::System(0),
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(Start),
+                ],
+            ),
+            (
+                Target::Component(0),
+                [
+                    Some(Start),
+                    None,
+                    None,
+                    Some(Start),
+                    None,
+                    Some(Start),
+                    None,
+                    None,
+                    None,
+                    None,
+                ],
+            ),
+            (
+                Target::Instance {
+                    component: 0,
+                    instance: 0,
+                },
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(End),
+                    None,
+                    None,
+                    None,
+                    None,
+                ],
+            ),
+            (
+                Target::Service(service_name.clone()),
+                [
+                    None,
+                    Some(Start),
+                    None,
+                    None,
+                    Some(Start),
+                    None,
+                    Some(Start),
+                    Some(Start),
+                    Some(Start),
+                    None,
+                ],
+            ),
+            (
+                Target::Interface(InterfaceId::Inline {
+                    service: service_name,
+                }),
+                [
+                    None,
+                    Some(Start),
+                    None,
+                    None,
+                    Some(Start),
+                    None,
+                    Some(Start),
+                    Some(Start),
+                    Some(Start),
+                    None,
+                ],
+            ),
+            (
+                Target::Interface(InterfaceId::Declared {
+                    package: "veh.adas".to_string(),
+                    name: "CruiseControl".to_string(),
+                }),
+                [
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(Start),
+                    Some(Start),
+                    None,
+                ],
+            ),
+        ];
+        for (target, expected) in &table {
+            for ((class, (reference, slot)), expected) in classes.iter().zip(expected) {
+                let range = reference.site.range;
+                let expected = expected.map(|part| match part {
+                    Start => range.start(),
+                    End => range.end(),
+                });
+                assert_eq!(
+                    naming_offset(target, reference, *slot),
+                    expected,
+                    "{target:?} on a {class}"
+                );
+            }
+        }
+    }
 }

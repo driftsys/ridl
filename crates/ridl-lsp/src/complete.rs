@@ -26,15 +26,19 @@
 //! `documentation`, rendered as hover renders it but without the signature
 //! or the Contract list, to keep the item short (ADR-0026).
 //!
-//! In an `.rsdl` file the doc comment and `import` contexts are the same, and
-//! the other contexts are the rsdl slots (rsdl reference §3, §4), each offering
-//! what the checker would bind there:
+//! In an `.rsdl` file the doc comment context is the same. The `import` context
+//! also offers the components and the systems the named package declares, which
+//! an rsdl file can import (rsdl reference §2, §4); it offers no distribution
+//! or deployment, because no reference names one. The other contexts are the
+//! rsdl slots (rsdl reference §3, §4), each offering what the checker would
+//! bind there:
 //!
 //! - at the top level → the four rsdl declaration keywords;
 //! - at the start of a component line → `offers` and `requires`; in a
 //!   deployment body → `machine`;
 //! - after `offers` → every service of the catalog; after `requires` → the
-//!   interfaces the package sees and the services with an inline shape;
+//!   interfaces the package sees, the interfaces of the other packages of the
+//!   workspace by their qualified names, and the services with an inline shape;
 //! - on a member line of a `system` or a `distribution` → the components and
 //!   the services no component offers (RSDL-504); on the placement line of a
 //!   `machine`, the declared instances `Name.inst` too;
@@ -42,7 +46,10 @@
 //!
 //! A component or a system of the file's own package is offered by its bare
 //! name, one of another package by its qualified name; an interface after
-//! `requires` by the name the package sees it under. When the part already
+//! `requires` by the name the package sees it under, or by its qualified name
+//! when the package does not see it. An `internal` interface of another
+//! package, and an interface of a package outside the workspace, are not
+//! offered, because the checker does not bind them. When the part already
 //! written qualifies the reference with the package that declares a
 //! bare-named item, the item is matched and written by its qualified name.
 //! Inside a plain comment nothing is offered: it is prose.
@@ -51,14 +58,14 @@
 //! identifier the cursor is completing, not from a well-formed tree — the same
 //! discipline the resolver and navigation use.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use lsp_types as lt;
 use ridl_core::db::InputFile;
-use ridl_core::package::{Package, Workspace, service_catalog};
+use ridl_core::package::{Package, Workspace, package_of, service_catalog};
 use ridl_sem::{
-    ConstValue, LinkTarget, SymbolKind, check_system, const_value, doc_link_members,
-    resolve_doc_link, resolve_package,
+    ConstValue, LinkTarget, Symbol, SymbolKind, check_system, const_value, declared_symbols,
+    doc_link_members, resolve_doc_link, resolve_package,
 };
 use ridl_syntax::ast::{AstNode, Import, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
@@ -181,10 +188,16 @@ pub fn rsdl_completion(
         return (Vec::new(), None);
     }
     if cursor.in_import() {
-        return (
-            import_completions(db, ws, std, packages, &source, offset),
-            None,
-        );
+        let mut items = import_completions(db, ws, std, packages, &source, offset);
+        items.extend(rsdl_import_items(db, ws, std, &source, offset));
+        // The package shares one namespace across its typl, ridl and rsdl
+        // declarations, so a label repeats only in a workspace that already
+        // reports the clash. The first item of a label stays, so a typl or
+        // ridl symbol wins over an rsdl declaration, and a package name wins
+        // over both.
+        let mut seen = HashSet::new();
+        items.retain(|item| seen.insert(item.label.clone()));
+        return (sorted(items), None);
     }
     let Some(slot) = rsdl_slot(&cursor, offset) else {
         return (Vec::new(), None);
@@ -218,6 +231,12 @@ pub fn rsdl_completion(
                     )
                 })
                 .collect();
+            items.extend(qualified_interface_items(
+                db,
+                ws,
+                packages,
+                &resolution.symbols,
+            ));
             items.extend(service_items(db, ws, std, |_, entry| entry.inline));
             items
         }
@@ -282,6 +301,49 @@ pub fn rsdl_completion(
         }
     };
     (sorted(items), replaced)
+}
+
+/// The interfaces that a `requires` reference binds by a qualified name
+/// `pkg.Name` but that `visible`, the package's resolved names, does not hold:
+/// the interface of a package of the workspace that is not `internal`, as the
+/// checker binds it (rsdl reference §4). An interface of the package that
+/// holds the reference, `internal` or not, is already offered by its bare
+/// name, so `visible` holds it. `ridl.std` and a package outside the
+/// workspace, such as an open buffer with no manifest, are not found by the
+/// checker, so they offer nothing.
+fn qualified_interface_items(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    packages: &[Package],
+    visible: &HashMap<String, Symbol>,
+) -> Vec<lt::CompletionItem> {
+    let seen: HashSet<(&str, &str)> = visible
+        .values()
+        .filter(|symbol| symbol.kind == SymbolKind::Interface)
+        .map(|symbol| (symbol.package.as_str(), symbol.name.as_str()))
+        .collect();
+    let mut items = Vec::new();
+    for package in packages {
+        let package_name = package.name(db);
+        if package_of(db, ws, package_name.clone()) != Some(*package) {
+            continue;
+        }
+        for symbol in declared_symbols(db, *package).values() {
+            if symbol.kind != SymbolKind::Interface
+                || symbol.internal
+                || seen.contains(&(symbol.package.as_str(), symbol.name.as_str()))
+            {
+                continue;
+            }
+            let qualified = format!("{package_name}.{}", symbol.name);
+            items.push(item(
+                &qualified,
+                lt::CompletionItemKind::INTERFACE,
+                qualified.clone(),
+            ));
+        }
+    }
+    items
 }
 
 /// The services of the workspace catalog that `keep` accepts.
@@ -695,6 +757,39 @@ fn import_completions(
         items.extend(public_symbol_items(db, ws, std, *target));
     }
     sorted(items)
+}
+
+/// The rsdl components and systems of the package that the import path before
+/// the cursor names, for an import in an `.rsdl` file. A distribution and a
+/// deployment are not offered: no reference names one (rsdl reference §4). An
+/// rsdl declaration takes no `internal` modifier, so none is filtered out.
+fn rsdl_import_items(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    source: &SourceFile,
+    offset: TextSize,
+) -> Vec<lt::CompletionItem> {
+    let Some(prefix) = import_path_prefix(source, offset) else {
+        return Vec::new();
+    };
+    let system = check_system(db, ws, std);
+    let mut items = Vec::new();
+    for decl in system
+        .components
+        .iter()
+        .filter(|decl| decl.package == prefix)
+    {
+        let name = &decl.name.name;
+        let detail = format!("component {}.{name}", decl.package);
+        items.push(item(name, lt::CompletionItemKind::CLASS, detail));
+    }
+    for decl in system.systems.iter().filter(|decl| decl.package == prefix) {
+        let name = &decl.name.name;
+        let detail = format!("system {}.{name}", decl.package);
+        items.push(item(name, lt::CompletionItemKind::MODULE, detail));
+    }
+    items
 }
 
 /// The regex constants in scope, for a `match` pattern position.

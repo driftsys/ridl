@@ -4017,6 +4017,279 @@ fn rsdl_completion_qualifies_across_packages() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// After `requires`, completion also offers `pkg.Name` for every interface of
+/// a package of the workspace that the package does not see by a bare name
+/// (rsdl reference §4), on the rule the checker binds a qualified interface
+/// by: an interface the package already sees is offered bare only, an
+/// `internal` interface of another package is not offered, and neither is an
+/// interface of a package the checker does not find in the workspace (an open
+/// buffer outside it).
+#[test]
+fn rsdl_requires_completion_offers_qualified_interfaces() {
+    let dir = TempDir::new("rsdl-requires-qualified");
+    let (_contracts, system, _extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    dir.write(
+        "adas/hidden.ridl",
+        "package veh.adas\n\ninternal interface Hidden {\n\x20 signal on: Flag @[100ms..1s]\n}\n",
+    );
+    // A package that imports one of its own interfaces under an alias binds
+    // that interface under two names.
+    dir.write(
+        "adas/selfalias.ridl",
+        "package veh.adas\n\nimport veh.adas.CruiseControl as SelfAlias\n",
+    );
+    dir.write(
+        "topology/own.ridl",
+        "package veh.topology\n\ninterface Own {\n\x20 signal on: boolean @[1s..10s]\n}\n\ninternal interface Private {\n\x20 signal on: boolean @[1s..10s]\n}\n",
+    );
+    dir.write(
+        "extra/telemetry.ridl",
+        "package veh.extra\n\ninterface Telemetry {\n\x20 signal up: boolean @[1s..10s]\n}\n\ninterface Own {\n\x20 signal up: boolean @[1s..10s]\n}\n",
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    // A buffer outside the workspace is a package the checker does not find.
+    let stray = path_to_uri("/ridl-lsp-nowhere/loose.ridl").expect("an absolute synthetic path");
+    did_open(
+        &client,
+        &stray,
+        "package veh.loose\n\ninterface Loose {\n\x20 signal on: boolean @[1s..10s]\n}\n",
+    );
+
+    let text = RSDL_COMPLETION;
+    did_open(&client, &system, text);
+    let items = complete_at(&client, 10, system.clone(), pos_after(text, "requires ", 0));
+    let got = labels(&items);
+    // An interface of a package the file does not import, and one of an
+    // imported package that is not imported by name.
+    // Interfaces with the same name in two packages are told apart by package.
+    for label in [
+        "veh.extra.Telemetry",
+        "veh.adas.CruiseControl",
+        "veh.extra.Own",
+    ] {
+        assert!(got.contains(&label), "`{label}` is offered: {got:?}");
+        assert_eq!(
+            kind_of(&items, label),
+            Some(lt::CompletionItemKind::INTERFACE)
+        );
+        let item = items.iter().find(|item| item.label == label);
+        assert_eq!(item.and_then(|item| item.detail.as_deref()), Some(label));
+    }
+    // An imported interface, and one of the file's own package, `internal`
+    // or not, are offered bare, not twice.
+    for (bare, qualified) in [
+        ("LaneAssist", "veh.adas.LaneAssist"),
+        ("Own", "veh.topology.Own"),
+        ("Private", "veh.topology.Private"),
+    ] {
+        assert!(got.contains(&bare), "`{bare}` is offered: {got:?}");
+        assert!(!got.contains(&qualified), "no `{qualified}`: {got:?}");
+    }
+    // An interface bound under two names is offered once.
+    let once = got
+        .iter()
+        .filter(|label| **label == "veh.adas.CruiseControl")
+        .count();
+    assert_eq!(once, 1, "{got:?}");
+    // No internal interface of another package, no declaration that is not an
+    // interface, no interface of a buffer outside the workspace (the
+    // `package_of` guard), no package qualifying an interface it only imports.
+    for label in [
+        "veh.adas.Hidden",
+        "veh.adas.Flag",
+        "Hidden",
+        "veh.loose.Loose",
+        "veh.topology.LaneAssist",
+        "veh.extra.CruiseControl",
+    ] {
+        assert!(!got.contains(&label), "`{label}` is not offered: {got:?}");
+    }
+    let mut sorted_labels = got.clone();
+    sorted_labels.sort_unstable();
+    assert_eq!(got, sorted_labels, "the items are sorted");
+    sorted_labels.dedup();
+    assert_eq!(got.len(), sorted_labels.len(), "no label twice: {got:?}");
+
+    // A partly written qualified reference matches the item and is replaced
+    // whole.
+    let partial = text.replace("requires LaneAssist", "requires veh.ex");
+    did_open(&client, &system, &partial);
+    let start = pos_in(&partial, "requires veh.ex", 0, 9);
+    let cursor = pos_after(&partial, "requires veh.ex", 0);
+    let items = complete_at(&client, 11, system.clone(), cursor);
+    let item = items
+        .iter()
+        .find(|item| item.label == "veh.extra.Telemetry")
+        .unwrap_or_else(|| panic!("the interface is offered: {:?}", labels(&items)));
+    let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit else {
+        panic!("the item carries a text edit: {item:?}");
+    };
+    assert_eq!(edit.range, lt::Range::new(start, cursor));
+    assert_eq!(edit.new_text, "veh.extra.Telemetry");
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// After `requires`, an interface that the package imports under an alias is
+/// offered by the alias only: the alias and the qualified name name one
+/// interface, so the qualified name is not offered as well.
+#[test]
+fn rsdl_requires_completion_offers_an_aliased_interface_once() {
+    let dir = TempDir::new("rsdl-requires-alias");
+    let (_contracts, _system, extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.extra\n\
+\n\
+import veh.adas.CruiseControl as Keeper\n\
+\n\
+component Probe {\n\
+\x20 requires \n\
+}\n";
+    did_open(&client, &extra, text);
+    let items = complete_at(&client, 10, extra.clone(), pos_after(text, "requires ", 0));
+    let got = labels(&items);
+    assert!(got.contains(&"Keeper"), "`Keeper` is offered: {got:?}");
+    assert!(
+        !got.contains(&"veh.adas.CruiseControl"),
+        "no qualified name for the aliased interface: {got:?}"
+    );
+    // The other interfaces of `veh.adas` stay offered by their qualified names.
+    assert!(got.contains(&"veh.adas.LaneAssist"), "{got:?}");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Completion on an `import` line in an `.rsdl` file offers the components and
+/// the systems of the package whose path precedes the cursor, with the kinds
+/// and details the other rsdl slots use, besides its typl and ridl
+/// declarations. A distribution and a deployment are not offered: no
+/// reference names one. No label is offered twice.
+#[test]
+fn rsdl_import_completion_offers_components_and_systems() {
+    let dir = TempDir::new("rsdl-import-completion");
+    let (_contracts, _system, extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.extra\nimport veh.topology.\n";
+    did_open(&client, &extra, text);
+    let items = complete_at(&client, 10, extra.clone(), pos(1, 19));
+    let got = labels(&items);
+    for name in ["Cruise", "Lane", "Panel", "Vehicle", "Speed"] {
+        assert!(got.contains(&name), "{name} is offered: {got:?}");
+    }
+    for name in ["Adas", "Production"] {
+        assert!(!got.contains(&name), "{name} is not offered: {got:?}");
+    }
+    let detail_of = |label: &str| {
+        items
+            .iter()
+            .find(|item| item.label == label)
+            .and_then(|item| item.detail.as_deref())
+    };
+    assert_eq!(
+        kind_of(&items, "Cruise"),
+        Some(lt::CompletionItemKind::CLASS)
+    );
+    assert_eq!(detail_of("Cruise"), Some("component veh.topology.Cruise"));
+    assert_eq!(
+        kind_of(&items, "Vehicle"),
+        Some(lt::CompletionItemKind::MODULE),
+    );
+    assert_eq!(detail_of("Vehicle"), Some("system veh.topology.Vehicle"));
+    let mut sorted_labels = got.clone();
+    sorted_labels.sort_unstable();
+    assert_eq!(got, sorted_labels, "the items are sorted");
+    sorted_labels.dedup();
+    assert_eq!(got.len(), sorted_labels.len(), "no label twice: {got:?}");
+
+    // A cursor inside the last segment offers the same rsdl items.
+    let text = "package veh.extra\nimport veh.topology.Cr\n";
+    did_open(&client, &extra, text);
+    let items = complete_at(&client, 13, extra.clone(), pos(1, 21));
+    let got = labels(&items);
+    for name in ["Cruise", "Lane", "Panel", "Vehicle"] {
+        assert!(
+            got.contains(&name),
+            "{name} is offered mid-segment: {got:?}"
+        );
+    }
+
+    // A package with no rsdl declaration offers nothing of the kind.
+    let text = "package veh.extra\nimport veh.adas.\n";
+    did_open(&client, &extra, text);
+    let items = complete_at(&client, 11, extra.clone(), pos(1, 16));
+    let got = labels(&items);
+    assert!(got.contains(&"Flag"), "{got:?}");
+    assert!(
+        !got.contains(&"Cruise") && !got.contains(&"Vehicle"),
+        "{got:?}"
+    );
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A name that a typl declaration and an rsdl component of one package both
+/// hold is offered once, as the typl declaration. The checker reports such a
+/// clash (TYPL-009); completion still lists the label a single time.
+#[test]
+fn rsdl_import_completion_offers_a_clashing_label_once() {
+    let dir = TempDir::new("rsdl-import-completion-clash");
+    let (_contracts, _system, extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    dir.write(
+        "topology/clash.typl",
+        "package veh.topology\n\n/// A clash.\ntype Cruise: integer\n",
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.extra\nimport veh.topology.\n";
+    did_open(&client, &extra, text);
+    let items = complete_at(&client, 10, extra.clone(), pos(1, 19));
+    let clashing: Vec<_> = items.iter().filter(|item| item.label == "Cruise").collect();
+    assert_eq!(clashing.len(), 1, "one Cruise: {:?}", labels(&items));
+    assert_eq!(
+        clashing[0].detail.as_deref(),
+        Some("veh.topology.Cruise"),
+        "the typl declaration wins",
+    );
+    assert!(labels(&items).contains(&"Lane"), "{:?}", labels(&items));
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The same import position in a `.typl` or a `.ridl` file does not offer
+/// rsdl declarations: those files cannot import them.
+#[test]
+fn import_completion_outside_rsdl_offers_no_rsdl_declaration() {
+    let dir = TempDir::new("rsdl-import-completion-other");
+    let (_contracts, _system, _extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    let text = "package veh.extra\nimport veh.topology.\n";
+    let ridl = uri_of(&dir.write("extra/other.ridl", text));
+    let typl = uri_of(&dir.write("extra/other.typl", text));
+    let (client, server) = start(uri_of(dir.path()));
+
+    for (id, uri) in [(10, ridl), (11, typl)] {
+        did_open(&client, &uri, text);
+        let items = complete_at(&client, id, uri, pos(1, 19));
+        let got = labels(&items);
+        assert!(
+            got.contains(&"Speed"),
+            "the typl symbol is offered: {got:?}"
+        );
+        for name in ["Cruise", "Lane", "Panel", "Vehicle"] {
+            assert!(!got.contains(&name), "{name} is not offered: {got:?}");
+        }
+    }
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// Rename in an `.rsdl` file: a system from its declaration and from the
 /// `for` reference; renaming to the same name; the refusals, each with its
 /// reason. A name that a declaration of an affected package holds, or that an
