@@ -83,27 +83,31 @@ lints; the test `design_lint_counts_on_the_corpus_are_pinned` compares them with
 
 ## Running the eval tasks
 
-`cargo xtask eval` runs each task on Claude Code and on Codex, with and without
-the `ridl-authoring` skill from `skills/`, scores each run, and writes the
-results:
+`cargo xtask eval` runs each task on Claude Code, on Codex and on the GitHub
+Copilot CLI, with and without the `ridl-authoring` skill from `skills/`, scores
+each run, and writes the results:
 
 ```sh
-cargo xtask eval [--task <id>]... [--host claude|codex]... [--runs <n>] \
+cargo xtask eval [--task <id>]... [--host claude|codex|copilot]... [--runs <n>] \
   [--skill with|without|both] [--out <dir>] [--append] [--claude-handoff] \
   [--timeout <seconds>]
 ```
 
-With no option, every task runs once on both hosts, with and without the skill.
-Each run starts in a new directory under the system temporary directory, outside
-any git repository, with a new host home that holds only what the eval puts
-there (for Codex: its configuration, the lent login and, on a "with" run, the
-skill), so no user skill, rule, memory, hook or `AGENTS.md` reaches the agent.
-The directory is removed when the run's result is written. A run is scored
-mechanically (`ridl check` reports no error, the design lints match
-`expect.lints`, an evolve task's `ridl diff` verdict matches `expect.diff`, and
-the agent checked its work with the `ridl_check` MCP tool or a shell
-`ridl check`); a run that passes is then judged against its rubric by the other
-host's model. `runner.toml` pins the model of each host.
+With no option, every task runs once on Claude and Codex, with and without the
+skill; pass `--host copilot` to run it, alone or alongside the others. Each run
+starts in a new directory under the system temporary directory, outside any git
+repository, with a new host home that holds only what the eval puts there (for
+Codex: its configuration, the lent login and, on a "with" run, the skill; for
+Copilot: its MCP configuration and, on a "with" run, the skill, copied into the
+workspace instead of the host home), so no user skill, rule, memory, hook or
+`AGENTS.md` reaches the agent. The directory is removed when the run's result is
+written. A run is scored mechanically (`ridl check` reports no error, the design
+lints match `expect.lints`, an evolve task's `ridl diff` verdict matches
+`expect.diff`, and the agent checked its work with the `ridl_check` MCP tool or
+a shell `ridl check`); a run that passes is then judged against its rubric by
+the model of the other vendor: Claude and Copilot both pin an Anthropic model,
+so a run on either is judged by Codex; a Codex run is judged by Claude. Copilot
+is never a judge. `runner.toml` pins the model of each host.
 
 A run that cannot be scored is recorded with a `setup_error` and no score, and
 the batch goes on: a "with" run that shows no evidence of loading the skill, or
@@ -112,25 +116,32 @@ or ran past `--timeout` (1800 seconds by default; the same limit bounds the wait
 for a handed-off run and each judgement). Such a run is left out of the pass
 rates and the rubric means of both sides, and `summary.md` lists it.
 
-Each host signs in with its own CLI login, and both are needed, because the
-judge of a run on one host is the other host:
+Each host signs in with its own CLI login, and every host that is either
+selected or judges a selected one needs its login found before any command runs:
 
 - Codex uses the stored login that `codex login` writes, `auth.json` in
   `$CODEX_HOME` or in `~/.codex`. Each Codex run gets a copy of that file only,
   and a token that the run refreshed is copied back.
 - Claude reads `CLAUDE_CODE_OAUTH_TOKEN`, which `claude setup-token` prints, or
   `ANTHROPIC_API_KEY`.
+- Copilot uses the login `copilot login` writes; on macOS this lives in the
+  system keychain, which does not depend on `COPILOT_HOME`, so a run's fresh
+  host home needs no copied credential. No API key or token is read for it.
 
 A host command inherits only `PATH`, `HOME`, `TMPDIR` and `LANG` from the eval's
 environment, plus `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` for Claude,
-and the eval sets the host home (`CLAUDE_CONFIG_DIR` or `CODEX_HOME`). No other
-variable reaches it, so a setting such as `ANTHROPIC_MODEL` in the operator's
-shell does not change a result.
+and the eval sets the host home (`CLAUDE_CONFIG_DIR`, `CODEX_HOME` or
+`COPILOT_HOME`). No other variable reaches it, so a setting such as
+`ANTHROPIC_MODEL` in the operator's shell does not change a result.
 
 The Claude agent runs with `--permission-mode bypassPermissions` and no OS
 sandbox: it can run any command as the user, inside or outside its temporary
 workspace. This is an accepted risk of the eval, which runs the pinned model on
-the eval's own prompts. Codex runs in its `workspace-write` sandbox.
+the eval's own prompts. Codex runs in its `workspace-write` sandbox. The Copilot
+agent runs with `--allow-all-tools --allow-all-paths`, also with no OS sandbox
+and not limited to its workspace, and with `--no-custom-instructions` and
+`--disable-builtin-mcps` so only the `ridl` MCP server this eval adds reaches
+it.
 
 With `--claude-handoff`, no Claude agent run or judgement starts a `claude`
 command (only `claude --version` runs, to record the host version), and no

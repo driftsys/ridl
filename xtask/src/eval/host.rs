@@ -1,4 +1,4 @@
-//! The two agent hosts, their isolated configuration, and how a run invokes
+//! The three agent hosts, their isolated configuration, and how a run invokes
 //! them. A run gets a fresh host home, so no user skill, rule, memory or hook
 //! reaches the agent, and a workspace outside any git repository, so no
 //! `AGENTS.md` or `CLAUDE.md` above it is read.
@@ -12,6 +12,16 @@ use std::time::{Duration, Instant};
 pub enum Host {
     Claude,
     Codex,
+    Copilot,
+}
+
+/// The vendor whose model a host pins. Claude and Copilot both pin an
+/// Anthropic model, so a run on either is judged by Codex, the only Vendor::OpenAi
+/// host; a Codex run is judged by Claude.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Vendor {
+    Anthropic,
+    OpenAi,
 }
 
 impl Host {
@@ -19,23 +29,35 @@ impl Host {
         match self {
             Host::Claude => "claude",
             Host::Codex => "codex",
+            Host::Copilot => "copilot",
         }
     }
 
-    /// The host whose model judges a run on this host.
-    pub fn other(self) -> Host {
+    /// The vendor of the host's pinned model.
+    pub fn vendor(self) -> Vendor {
         match self {
-            Host::Claude => Host::Codex,
-            Host::Codex => Host::Claude,
+            Host::Claude | Host::Copilot => Vendor::Anthropic,
+            Host::Codex => Vendor::OpenAi,
         }
     }
 
-    /// The host's CLI. A test replaces it with `RIDL_EVAL_CLAUDE` or
-    /// `RIDL_EVAL_CODEX`.
+    /// The host whose model judges a run on this host: the other vendor's
+    /// host. Copilot is never a judge, since Claude already covers the
+    /// Anthropic vendor.
+    pub fn judge(self) -> Host {
+        match self.vendor() {
+            Vendor::Anthropic => Host::Codex,
+            Vendor::OpenAi => Host::Claude,
+        }
+    }
+
+    /// The host's CLI. A test replaces it with `RIDL_EVAL_CLAUDE`,
+    /// `RIDL_EVAL_CODEX` or `RIDL_EVAL_COPILOT`.
     pub fn binary(self) -> String {
         let (var, default) = match self {
             Host::Claude => ("RIDL_EVAL_CLAUDE", "claude"),
             Host::Codex => ("RIDL_EVAL_CODEX", "codex"),
+            Host::Copilot => ("RIDL_EVAL_COPILOT", "copilot"),
         };
         std::env::var(var).unwrap_or_else(|_| default.to_owned())
     }
@@ -43,7 +65,10 @@ impl Host {
     /// The variables of the eval's own environment that a run or a judgement
     /// on this host inherits. Every other variable is cleared, so a setting
     /// such as `ANTHROPIC_MODEL` or `CLAUDECODE` in the operator's shell does
-    /// not change a result. The invocation sets its host home on top.
+    /// not change a result. The invocation sets its host home on top. Copilot
+    /// signs in through its own CLI login, which on macOS reads a keychain
+    /// item that does not depend on `COPILOT_HOME`, so no credential
+    /// variable is inherited for it.
     pub fn inherited_env(self) -> &'static [&'static str] {
         match self {
             Host::Claude => &[
@@ -54,7 +79,7 @@ impl Host {
                 "CLAUDE_CODE_OAUTH_TOKEN",
                 "ANTHROPIC_API_KEY",
             ],
-            Host::Codex => &["PATH", "HOME", "TMPDIR", "LANG"],
+            Host::Codex | Host::Copilot => &["PATH", "HOME", "TMPDIR", "LANG"],
         }
     }
 
@@ -62,6 +87,7 @@ impl Host {
         match self {
             Host::Claude => &models.claude,
             Host::Codex => &models.codex,
+            Host::Copilot => &models.copilot,
         }
     }
 }
@@ -70,6 +96,7 @@ impl Host {
 pub struct Models {
     pub claude: String,
     pub codex: String,
+    pub copilot: String,
 }
 
 pub fn load_models(root: &Path) -> Result<Models, String> {
@@ -88,6 +115,7 @@ pub fn load_models(root: &Path) -> Result<Models, String> {
     Ok(Models {
         claude: model("claude")?,
         codex: model("codex")?,
+        copilot: model("copilot")?,
     })
 }
 
@@ -148,6 +176,19 @@ pub fn prepare_run(
                 copy_tree(skill, &dirs.home.join("skills/ridl-authoring"))?;
             }
         }
+        Host::Copilot => {
+            // `--disable-builtin-mcps` drops `github-mcp-server` and
+            // `githubiq`, so `ridl` is the only server this configuration
+            // adds.
+            let config = serde_json::json!({
+                "mcpServers": { "ridl": { "type": "local", "command": ridl, "args": ["mcp"], "tools": ["*"] } }
+            });
+            std::fs::write(base.join("copilot-mcp.json"), config.to_string())
+                .map_err(|e| e.to_string())?;
+            if with_skill {
+                copy_tree(skill, &dirs.workspace.join(".github/skills/ridl-authoring"))?;
+            }
+        }
     }
     Ok(dirs)
 }
@@ -168,7 +209,8 @@ pub struct Invocation {
 /// The command that runs one agent session on `prompt`, without a user.
 /// Codex runs with every permission inside its workspace
 /// (`-s workspace-write`); Claude runs with `bypassPermissions`, which is not
-/// limited to the workspace.
+/// limited to the workspace; Copilot runs with `--allow-all-tools
+/// --allow-all-paths`, also not limited to the workspace.
 pub fn agent_invocation(host: Host, model: &str, dirs: &RunDirs, prompt: &str) -> Invocation {
     let s = |v: &str| v.to_owned();
     let path = |p: &Path| p.display().to_string();
@@ -209,6 +251,30 @@ pub fn agent_invocation(host: Host, model: &str, dirs: &RunDirs, prompt: &str) -
                 s("-"),
             ],
             vec![(s("CODEX_HOME"), path(&dirs.home))],
+        ),
+        Host::Copilot => (
+            vec![
+                s("-p"),
+                s(prompt),
+                s("--model"),
+                s(model),
+                s("--allow-all-tools"),
+                s("--allow-all-paths"),
+                s("--no-ask-user"),
+                s("--no-custom-instructions"),
+                s("--no-auto-update"),
+                s("--no-color"),
+                s("--disable-builtin-mcps"),
+                s("--additional-mcp-config"),
+                format!("@{}", path(&base.join("copilot-mcp.json"))),
+                s("--output-format"),
+                s("json"),
+                s("-C"),
+                path(&dirs.workspace),
+                s("--log-dir"),
+                path(&dirs.home.join("logs")),
+            ],
+            vec![(s("COPILOT_HOME"), path(&dirs.home))],
         ),
     };
     Invocation {
@@ -501,9 +567,34 @@ mod tests {
     }
 
     #[test]
-    fn the_judge_of_a_host_is_the_other_host() {
-        assert_eq!(Host::Claude.other(), Host::Codex);
-        assert_eq!(Host::Codex.other(), Host::Claude);
+    fn copilot_runs_with_only_the_ridl_server_and_allow_all() {
+        let inv = agent_invocation(Host::Copilot, "m", &dirs(Path::new("/r")), "p");
+        assert!(inv.args.windows(2).any(|w| w == ["-p", "p"]));
+        assert!(inv.args.windows(2).any(|w| w == ["--model", "m"]));
+        assert!(inv.args.contains(&"--allow-all-tools".to_owned()));
+        assert!(inv.args.contains(&"--allow-all-paths".to_owned()));
+        assert!(inv.args.contains(&"--no-custom-instructions".to_owned()));
+        assert!(inv.args.contains(&"--disable-builtin-mcps".to_owned()));
+        assert!(
+            inv.args
+                .windows(2)
+                .any(|w| w == ["--additional-mcp-config", "@/r/copilot-mcp.json"])
+        );
+        assert!(inv.args.windows(2).any(|w| w == ["-C", "/r/ws"]));
+        assert!(
+            inv.env
+                .contains(&("COPILOT_HOME".to_owned(), "/r/home".to_owned()))
+        );
+    }
+
+    #[test]
+    fn the_judge_of_a_host_is_the_other_vendor() {
+        assert_eq!(Host::Claude.vendor(), Vendor::Anthropic);
+        assert_eq!(Host::Copilot.vendor(), Vendor::Anthropic);
+        assert_eq!(Host::Codex.vendor(), Vendor::OpenAi);
+        assert_eq!(Host::Claude.judge(), Host::Codex);
+        assert_eq!(Host::Copilot.judge(), Host::Codex);
+        assert_eq!(Host::Codex.judge(), Host::Claude);
     }
 
     fn scratch(label: &str) -> PathBuf {
@@ -575,6 +666,26 @@ mod tests {
                 .unwrap()
                 .contains("default_tools_approval_mode = \"approve\"")
         );
+        let base = scratch("copilot");
+        let copilot = prepare_run(&base, &task, Host::Copilot, true, &skill).unwrap();
+        assert!(
+            copilot
+                .workspace
+                .join(".github/skills/ridl-authoring/SKILL.md")
+                .is_file()
+        );
+        let mcp: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(base.join("copilot-mcp.json")).unwrap())
+                .unwrap();
+        assert_eq!(
+            mcp["mcpServers"]["ridl"],
+            serde_json::json!({
+                "type": "local",
+                "command": ridl_binary(),
+                "args": ["mcp"],
+                "tools": ["*"],
+            })
+        );
     }
 
     #[test]
@@ -587,6 +698,10 @@ mod tests {
         assert_eq!(std::fs::read_dir(&claude.home).unwrap().count(), 0);
         let codex = prepare_run(&scratch("codex"), &task, Host::Codex, false, &skill).unwrap();
         assert!(!codex.home.join("skills").exists());
+        let copilot =
+            prepare_run(&scratch("copilot"), &task, Host::Copilot, false, &skill).unwrap();
+        assert!(!copilot.workspace.join(".github/skills").exists());
+        assert_eq!(std::fs::read_dir(&copilot.home).unwrap().count(), 0);
     }
 
     #[test]
