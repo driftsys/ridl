@@ -116,6 +116,29 @@ fn frozen_check_reads_vendor_with_an_empty_cache() {
     );
 }
 
+/// A frozen `ridl build` and a `ridl lock`, which reads remote units as a
+/// frozen run does, both read `vendor/` with an empty cache: neither
+/// fetches nor reports MANI-104.
+#[test]
+fn frozen_build_and_lock_read_vendor_with_an_empty_cache() {
+    let dir = TempDir::new("frozen-build-vendor");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    vendor_common(&root);
+    std::fs::remove_dir_all(dir.path().join(".ridl")).unwrap();
+    stub.reset_hits();
+    let (code, _, stderr) = ridl(&root, dir.path(), &["build", "--frozen"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(!stderr.contains("MANI-104"), "{stderr}");
+    assert!(root.join("out").is_dir());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["lock"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(!stderr.contains("MANI-104"), "{stderr}");
+    assert_eq!(stub.hits(), 0);
+}
+
 /// A `ridl check` run from inside a workspace member still reports MANI-014
 /// raised against a vendored unit, which is spanned at the manifest under
 /// `vendor/`: a member and the vendored unit both declare `veh.common`.

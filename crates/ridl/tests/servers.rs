@@ -1431,6 +1431,40 @@ async fn mcp_reports_a_cache_miss_as_mani_104() {
     );
 }
 
+/// With an empty cache, `ridl_check` reads a vendored unit from `vendor/`:
+/// the import resolves, with no MANI-104 and no fetch.
+#[tokio::test]
+async fn mcp_reads_vendor_with_an_empty_cache() {
+    use remote_support::{COMMON_UNIT, Stub, consumer, ridl, unit_tar, vendor_common};
+    let dir = remote_support::TempDir::new("mcp-vendor");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    vendor_common(&root);
+    std::fs::remove_dir_all(dir.path().join(".ridl")).unwrap();
+    stub.reset_hits();
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect_with_home(Some(dir.path())).await;
+        let check = call_workspace_tool(
+            &client,
+            "ridl_check",
+            json!({"path": root.to_str().unwrap()}),
+        )
+        .await;
+        let diagnostics = check.structured_content.unwrap()["diagnostics"].clone();
+        assert_eq!(
+            diagnostics.as_array().unwrap().len(),
+            0,
+            "the import resolves from vendor/: {diagnostics}"
+        );
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("mcp vendor timeout");
+    assert_eq!(stub.hits(), 0, "the MCP server never fetches");
+}
+
 /// `ridl_check` on a path inside a workspace member reports the member's
 /// diagnostics and a remote unit's spanned Error, which no member scope
 /// hides, while a sibling member's error stays out of the report.
