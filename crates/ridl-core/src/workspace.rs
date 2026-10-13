@@ -123,8 +123,10 @@ pub type ImportUnion = BTreeMap<String, BTreeSet<String>>;
 /// key (ADR-0002 §7). The workspace walk never loads it as a source tree:
 /// in workspace mode a `members` entry that names it, or a path under it,
 /// is MANI-017; in standalone mode a source file under it that is not inside
-/// a key-named directory is MANI-018. A directory named `vendor` deeper in a
-/// unit's tree is an ordinary source package.
+/// a key-named directory is MANI-018. A remote unit's own `vendor/`, at the
+/// top of its tree, is skipped without a diagnostic when the unit is loaded.
+/// A directory named `vendor` deeper in a unit's tree is an ordinary source
+/// package.
 pub const VENDOR_DIR: &str = "vendor";
 
 /// One remote unit the read path found: its URL, the directory that holds its
@@ -1133,6 +1135,15 @@ impl Loader {
             // members, never its root.
             if normalize(&subdir) == normalize(&self.root.join(VENDOR_DIR)) {
                 self.report_vendor_sources(&subdir, unit)?;
+                continue;
+            }
+            // A remote unit's own `<unit root>/vendor/` holds the copies it
+            // vendored for its own build. The consumer supplies every
+            // dependency itself (flat, explicit imports), so those copies
+            // are not loaded and draw no diagnostic.
+            if matches!(origin, PackageOrigin::Remote { .. })
+                && normalize(&subdir) == normalize(&unit_dir.join(VENDOR_DIR))
+            {
                 continue;
             }
             let nested_manifest = subdir.join("ridl.toml");
@@ -4737,42 +4748,54 @@ service:veh.common.climate 2
             assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
         }
 
-        /// The `vendor/` reservation applies at the consumer's manifest root
-        /// only: a directory named `vendor` in a remote unit's own tree is
-        /// an ordinary source package of that unit, whether the unit is read
-        /// from the cache or from the consumer's `vendor/<key>/`.
+        /// A remote unit's own `<unit root>/vendor/` is skipped when the unit
+        /// is loaded, from the cache or from the consumer's `vendor/<key>/`:
+        /// the consumer supplies every dependency itself, so the copies a
+        /// unit vendored for its own build are not loaded and draw no
+        /// diagnostic. A deeper `vendor` directory is a source package.
         #[test]
-        fn a_remote_units_own_vendor_directory_is_a_source_package() {
+        fn a_remote_units_own_vendor_directory_is_skipped() {
             let fixture = TempDir::new("remote-own-vendor");
             let root = consumer(&fixture);
             let files = [
                 ("ridl.toml", COMMON_MANIFEST),
                 ("common.typl", "package veh.common\ntype Speed : km/h\n"),
-                ("vendor/v.typl", "package veh.common.vendor\n"),
+                // Would be an Error if loaded: the package does not match
+                // its directory.
+                ("vendor/other.dep/d.typl", "package other.dep\n"),
+                ("parts/vendor/p.typl", "package veh.common.parts.vendor\n"),
             ];
             seed(&cache(&fixture), &root, URL, &files);
             let (db, loaded) = load_frozen(&fixture, &root);
             assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
             assert_eq!(
                 package_names(&db, &loaded),
-                ["app", "veh.common", "veh.common.vendor"]
+                ["app", "veh.common", "veh.common.parts.vendor"]
             );
+            let mut loaded = loaded;
+            let cached = &loaded.remote_units["veh.common"].dir.clone();
+            assert!(!is_interned(
+                &mut loaded.sources,
+                &cached.join("vendor/other.dep/d.typl")
+            ));
             // The same unit vendored at the consumer's root, with the cache
-            // gone: `vendor/veh.common/vendor/` is still a source package.
+            // gone: `vendor/veh.common/vendor/` is skipped the same way.
             for (name, text) in &files {
                 fixture.write(&format!("app/vendor/veh.common/{name}"), text);
             }
             std::fs::remove_dir_all(cache(&fixture).root).unwrap();
-            let (db, loaded) = load_frozen(&fixture, &root);
+            let (db, mut loaded) = load_frozen(&fixture, &root);
             assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
             assert_eq!(
                 package_names(&db, &loaded),
-                ["app", "veh.common", "veh.common.vendor"]
+                ["app", "veh.common", "veh.common.parts.vendor"]
             );
-            assert_eq!(
-                loaded.remote_units["veh.common"].dir,
-                root.join("vendor").join("veh.common")
-            );
+            let vendored = root.join("vendor").join("veh.common");
+            assert_eq!(loaded.remote_units["veh.common"].dir, vendored);
+            assert!(!is_interned(
+                &mut loaded.sources,
+                &vendored.join("vendor/other.dep/d.typl")
+            ));
         }
 
         /// A remote unit that declares a consumer's source package is
