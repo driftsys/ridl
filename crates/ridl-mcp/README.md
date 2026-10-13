@@ -71,8 +71,10 @@ baseline:
 - the fetch and the `ridl.lock` write: the tools read a remote unit of the
   `[imports]` from the cache, as `ridl check --frozen` does, so a URL with no
   `ridl.lock` entry is MANI-103 and a pin the cache does not hold is MANI-104,
-  each with a message that names `ridl check` as the fix; MANI-101 and MANI-102,
-  the fetch failures, are never reported;
+  each with a message that names `ridl check` as the fix, and an entry written
+  before the `tree` hash existed is MANI-108; MANI-102, the hash mismatch of a
+  fetch, is never reported, and MANI-101 only for a recorded URL that is not a
+  fetchable `http(s)` URL, which needs no fetch to see;
 - the check against `.ridl/baseline`: RIDL-407 and the rename hint on RIDL-409.
   Use `ridl_diff` with `old: "<root>/.ridl/baseline"` and `new: "<root>"` to
   compare the baseline explicitly.
