@@ -437,27 +437,41 @@ fn load_inner(
     })
 }
 
+/// Whether the MANI-013 walk enters the directory entry `entry`: it is a real
+/// directory, not a symbolic link (following one could revisit the tree in a
+/// cycle), and its name does not start with a dot. The loader's tree walk and
+/// [`find_nested_manifest`] both decide with this function.
+fn walk_enters(entry: &fs::DirEntry) -> io::Result<bool> {
+    // `DirEntry::file_type` does not follow a link, so a symbolic link to a
+    // directory is not `is_dir` here.
+    Ok(entry.file_type()?.is_dir() && !entry.file_name().to_string_lossy().starts_with('.'))
+}
+
+/// The manifest that MANI-013 reports for the directory `subdirectory` of a
+/// unit's tree: `subdirectory/ridl.toml`, when that is a file. The loader's
+/// tree walk and [`find_nested_manifest`] both decide with this function.
+fn nested_manifest_of(subdirectory: &Path) -> Option<PathBuf> {
+    let manifest = subdirectory.join("ridl.toml");
+    manifest.is_file().then_some(manifest)
+}
+
 /// The first `ridl.toml` found in a subdirectory of `dir`, searched the way
-/// the loader searches a unit's tree for MANI-013: only real directories are
-/// entered (a symbolic link is not followed), a directory whose name starts
-/// with a dot is skipped, a manifest counts when `subdirectory/ridl.toml` is a
-/// file, and the search does not enter a directory that holds one. The
-/// manifest in `dir` itself is not looked at. Used by `ridl init` to refuse a
-/// package directory that already holds a nested manifest.
+/// the loader searches a unit's tree for MANI-013, with the same
+/// [`walk_enters`] and [`nested_manifest_of`] rules: a symbolic link and a
+/// directory whose name starts with a dot are not entered, and the search
+/// does not enter a directory that holds a manifest. The manifest in `dir`
+/// itself is not looked at. Used by `ridl init` to refuse a package directory
+/// that already holds a nested manifest.
 pub fn find_nested_manifest(dir: &Path) -> io::Result<Option<PathBuf>> {
     let mut pending = vec![dir.to_path_buf()];
     while let Some(next) = pending.pop() {
         for entry in fs::read_dir(&next)? {
             let entry = entry?;
+            if !walk_enters(&entry)? {
+                continue;
+            }
             let path = entry.path();
-            if !path.is_dir() || entry.file_type()?.is_symlink() {
-                continue;
-            }
-            if entry.file_name().to_string_lossy().starts_with('.') {
-                continue;
-            }
-            let manifest = path.join("ridl.toml");
-            if manifest.is_file() {
+            if let Some(manifest) = nested_manifest_of(&path) {
                 return Ok(Some(manifest));
             }
             pending.push(path);
@@ -1035,9 +1049,8 @@ impl Loader {
         for entry in fs::read_dir(dir).map_err(named)? {
             let entry = entry.map_err(named)?;
             let path = entry.path();
-            let is_symlink = entry.file_type().map_err(named)?.is_symlink();
             if path.is_dir() {
-                if !is_symlink {
+                if walk_enters(&entry).map_err(named)? {
                     subdirs.push(path);
                 }
             } else if path
@@ -1126,9 +1139,6 @@ impl Loader {
             else {
                 continue;
             };
-            if dir_name.starts_with('.') {
-                continue;
-            }
             // `<root>/vendor/` is reserved for the remote units `ridl vendor`
             // writes and is never a source tree of this unit. The walk
             // reaches it only in standalone mode: a workspace walks its
@@ -1146,8 +1156,7 @@ impl Loader {
             {
                 continue;
             }
-            let nested_manifest = subdir.join("ridl.toml");
-            if nested_manifest.is_file() {
+            if let Some(nested_manifest) = nested_manifest_of(&subdir) {
                 let nested_text = fs::read_to_string(&nested_manifest)
                     .map_err(|e| cannot_read(&nested_manifest, e))?;
                 let nested_id = self
@@ -3968,6 +3977,89 @@ service:veh.common.climate 2
         let packages = loaded.workspace.packages(&db);
         assert_eq!(packages.len(), 1);
         assert_eq!(packages[0].name(&db), "veh.hmi");
+    }
+
+    /// The loader and `find_nested_manifest` decide with the same rules, so
+    /// each tree gets the same answer from both: the manifest that the loader
+    /// reports as MANI-013 is the one that `ridl init` finds, and neither
+    /// reports one for a tree that holds none.
+    #[test]
+    fn the_loader_and_find_nested_manifest_agree_on_every_tree() {
+        let package = "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n";
+        let nested = "[package]\nname = \"veh.hmi.x\"\nversion = \"1.0.0\"\n";
+        // (label, relative path of the one manifest that is expected, if any)
+        let trees: &[(&str, Option<&str>)] = &[
+            ("plain", None),
+            ("below", Some("cluster/ridl.toml")),
+            ("deep", Some("a/b/ridl.toml")),
+            ("manifest-above-a-manifest", Some("cluster/ridl.toml")),
+            ("hidden", None),
+            ("dot-inside-the-name", Some("a.b/ridl.toml")),
+            ("manifest-is-a-directory", None),
+            #[cfg(unix)]
+            ("symlinked-directory", None),
+        ];
+        // A unit outside the tree under test, reached only through a link.
+        let outside = TempDir::new("agree-outside");
+        outside.write("ridl.toml", nested);
+        for (label, expected) in trees {
+            let dir = TempDir::new(&format!("agree-{label}"));
+            dir.write("ridl.toml", package);
+            dir.write("hmi.ridl", "package veh.hmi\n");
+            match *label {
+                "plain" => {
+                    dir.write("sub/x.ridl", "package veh.hmi.sub\n");
+                }
+                "below" => {
+                    dir.write("cluster/ridl.toml", nested);
+                }
+                "deep" => {
+                    dir.write("a/x.ridl", "package veh.hmi.a\n");
+                    dir.write("a/b/ridl.toml", nested);
+                }
+                "manifest-above-a-manifest" => {
+                    // Neither walk enters `cluster/`, so only its own
+                    // manifest is reported.
+                    dir.write("cluster/ridl.toml", nested);
+                    dir.write("cluster/inner/ridl.toml", nested);
+                }
+                "hidden" => {
+                    dir.write(".cache/ridl.toml", nested);
+                }
+                "dot-inside-the-name" => {
+                    dir.write("a.b/ridl.toml", nested);
+                }
+                "manifest-is-a-directory" => {
+                    dir.write("sub/ridl.toml/x.txt", "");
+                }
+                #[cfg(unix)]
+                "symlinked-directory" => {
+                    std::os::unix::fs::symlink(outside.path(), dir.path().join("link"))
+                        .expect("create the symbolic link");
+                }
+                other => unreachable!("{other}"),
+            }
+            let found = find_nested_manifest(dir.path()).expect("the tree is readable");
+            let mut db = RidlDatabase::default();
+            let loaded = load_workspace(&mut db, dir.path()).expect("the unit loads");
+            let reported: Vec<&str> = loaded
+                .diagnostics
+                .iter()
+                .filter(|d| d.code.as_str() == "MANI-013")
+                .filter_map(|d| loaded.sources.path(d.primary.file))
+                .collect();
+            let expected = expected.map(|relative| path_string(&dir.path().join(relative)));
+            assert_eq!(
+                found.as_deref().map(path_string),
+                expected,
+                "find_nested_manifest, {label}"
+            );
+            assert_eq!(
+                reported,
+                expected.iter().map(String::as_str).collect::<Vec<_>>(),
+                "the loader, {label}"
+            );
+        }
     }
 
     #[test]
