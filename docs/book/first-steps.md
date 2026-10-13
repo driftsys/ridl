@@ -108,7 +108,9 @@ and build again. Other targets, such as TypeScript and the IR, are chosen with
 ## Where to go next
 
 - To learn the language, work through [Getting started](getting-started.md).
-- To use the crate that step 5 wrote, read
+- To link the crate that step 5 wrote from a program and run it, read
+  [From a package to a running program](running-a-program.md).
+- To use the crate in every form, read
   [Using the generated Rust code](generated-code.md).
 - To describe components, wiring and deployments, read
   [Describing a system](rsdl.md).

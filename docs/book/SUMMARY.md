@@ -3,6 +3,7 @@
 - [Introduction](introduction.md)
 - [Reading guide](reading-guide.md)
 - [First steps](first-steps.md)
+- [From a package to a running program](running-a-program.md)
 - [Getting started](getting-started.md)
 - [Describing a system](rsdl.md)
 - [Using the generated Rust code](generated-code.md)
