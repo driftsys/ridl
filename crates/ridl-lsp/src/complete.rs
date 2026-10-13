@@ -188,7 +188,9 @@ pub fn rsdl_completion(
         items.extend(rsdl_import_items(db, ws, std, &source, offset));
         // The package shares one namespace across its typl, ridl and rsdl
         // declarations, so a label repeats only in a workspace that already
-        // reports the clash.
+        // reports the clash. The first item of a label stays, so a typl or
+        // ridl symbol wins over an rsdl declaration, and a package name wins
+        // over both.
         let mut seen = HashSet::new();
         items.retain(|item| seen.insert(item.label.clone()));
         return (sorted(items), None);

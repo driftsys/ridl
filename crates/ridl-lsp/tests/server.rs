@@ -4060,6 +4060,18 @@ fn rsdl_import_completion_offers_components_and_systems() {
     sorted_labels.dedup();
     assert_eq!(got.len(), sorted_labels.len(), "no label twice: {got:?}");
 
+    // A cursor inside the last segment offers the same rsdl items.
+    let text = "package veh.extra\nimport veh.topology.Cr\n";
+    did_open(&client, &extra, text);
+    let items = complete_at(&client, 13, extra.clone(), pos(1, 21));
+    let got = labels(&items);
+    for name in ["Cruise", "Lane", "Panel", "Vehicle"] {
+        assert!(
+            got.contains(&name),
+            "{name} is offered mid-segment: {got:?}"
+        );
+    }
+
     // A package with no rsdl declaration offers nothing of the kind.
     let text = "package veh.extra\nimport veh.adas.\n";
     did_open(&client, &extra, text);
@@ -4072,6 +4084,35 @@ fn rsdl_import_completion_offers_components_and_systems() {
     );
 
     shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A name that a typl declaration and an rsdl component of one package both
+/// hold is offered once, as the typl declaration. The checker reports such a
+/// clash (TYPL-009); completion still lists the label a single time.
+#[test]
+fn rsdl_import_completion_offers_a_clashing_label_once() {
+    let dir = TempDir::new("rsdl-import-completion-clash");
+    let (_contracts, _system, extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    dir.write(
+        "topology/clash.typl",
+        "package veh.topology\n\n/// A clash.\ntype Cruise: integer\n",
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.extra\nimport veh.topology.\n";
+    did_open(&client, &extra, text);
+    let items = complete_at(&client, 10, extra.clone(), pos(1, 19));
+    let clashing: Vec<_> = items.iter().filter(|item| item.label == "Cruise").collect();
+    assert_eq!(clashing.len(), 1, "one Cruise: {:?}", labels(&items));
+    assert_eq!(
+        clashing[0].detail.as_deref(),
+        Some("veh.topology.Cruise"),
+        "the typl declaration wins",
+    );
+    assert!(labels(&items).contains(&"Lane"), "{:?}", labels(&items));
+
+    shut_down(&client, 11);
     server.join().expect("thread joins").expect("clean exit");
 }
 
