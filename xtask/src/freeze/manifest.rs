@@ -1,6 +1,7 @@
 //! The manifest keys the loader accepts, with the value type of each, from
 //! `ridl_core::manifest::KNOWN_KEYS`, and the keys of `ridl.lock`, from
-//! `ridl_core::lock::LOCK_KEYS`, prefixed `ridl.lock.`.
+//! `ridl_core::lock::LOCK_KEYS`, prefixed `ridl.lock.`, and the layout of the
+//! vendor directory, written as one `vendor <path>` line.
 
 use ridl_core::manifest::KNOWN_KEYS;
 use std::path::Path;
@@ -22,6 +23,7 @@ pub fn dump(_root: &Path) -> Result<Vec<String>, String> {
     for (key, value_type) in ridl_core::lock::LOCK_KEYS {
         lines.push(format!("ridl.lock.{key} {value_type}"));
     }
+    lines.push("vendor <manifest root>/vendor/<key>/".to_string());
     Ok(lines)
 }
 
@@ -40,6 +42,7 @@ mod tests {
             "imports table<string>",
             "ridl.lock.entries.*.sha256 string",
             "ridl.lock.entries.*.tree string",
+            "vendor <manifest root>/vendor/<key>/",
         ] {
             assert!(
                 lines.iter().any(|l| l == line),

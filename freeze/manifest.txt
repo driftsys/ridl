@@ -13,5 +13,6 @@ package.name string
 package.version string
 ridl.lock.entries.*.sha256 string
 ridl.lock.entries.*.tree string
+vendor <manifest root>/vendor/<key>/
 workspace table
 workspace.members array<string>
