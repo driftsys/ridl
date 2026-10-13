@@ -149,7 +149,10 @@ workspace. When the checked-out manifest (or a package in it) has an
 `vendor/<key>/` at the manifest root when that directory exists and `ridl.lock`
 pins a `tree` for the unit's URL (see [`ridl vendor`](#ridl-vendor)); otherwise
 from `~/.ridl/cache` (ADR-0002 §7, indexed by URL and by the fetched artifact's
-SHA-256) or, on a cache miss outside `--frozen`, fetches it. It verifies the
+SHA-256) or, on a cache miss outside `--frozen`, fetches it. Where `ridl.lock`
+pins no `tree` for the unit, the cache or the fetch pins it first, and a
+vendored directory, if present, is then verified against that pin and read in
+place of the cache entry. It verifies the
 `tree` hash of the tree it read, which for a vendored tree that no longer
 matches is `MANI-107`, with a message that names `ridl vendor`; loads the unit
 as a read-only dependency; and on a clean run regenerates `ridl.lock` at the
@@ -2229,9 +2232,10 @@ ridl vendor
 ```
 
 After that, `ridl check --frozen` reads `vendor/<key>/` first, only when
-`ridl.lock` pins a `tree` for the unit; for any other unit it reads the cache. A
-vendored tree that no longer matches its `tree` hash is `MANI-107` and names
-`ridl vendor`.
+`ridl.lock` pins a `tree` for the unit. For any other unit it reads the cache
+first, which gives the pin, and a vendored directory, if present, is then
+verified against that pin and read in place of the cache entry. A vendored tree
+that no longer matches its `tree` hash is `MANI-107` and names `ridl vendor`.
 
 **`ridl vendor` exit codes.**
 
@@ -2263,7 +2267,7 @@ clean `vendor/`.
 | ---- | ------- |
 | 0 | `vendor/` matches |
 | 1 | drift (MANI-107, MANI-109 or MANI-110), a unit that `ridl.lock` does not verify (MANI-103 or MANI-108), or another diagnostic error |
-| 2 | a missing or unreadable path, or no `ridl.toml` at or above it |
+| 2 | a missing or unreadable path, no `ridl.toml` at or above it, or a bad flag |
 
 ## `ridlc`
 
