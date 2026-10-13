@@ -88,10 +88,10 @@ attribute registry and interaction family design and plan
 (`2026-10-11-attribute-registry-and-family-{design,plan}.md`) were archived on
 2026-10-13, once the registry, the fail-closed diff and the `family` and `shape`
 fields landed (#883, #892); the 2026-10-11 amendments of
-[ADR-0012](../decisions/ADR-0012-interaction-boundary-model.md) and the
-[ridl](../specification/ridl-language-reference.md) and
-[rsdl](../specification/rsdl-language-reference.md) language references are
-their durable records. The freeze check plan and its `cargo-semver-checks` spike
+[ADR-0012](../decisions/ADR-0012-interaction-boundary-model.md) and
+[the ridl language reference](../specification/ridl-language-reference.md)
+(which describes the registry and the `family` field) are their durable records.
+The freeze check plan and its `cargo-semver-checks` spike
 (`2026-10-11-freeze-check-plan.md`, `freeze-check-semver-spike.md`) were
 archived on 2026-10-13, once the check landed (#866);
 [ADR-0029](../decisions/ADR-0029-stability-policy.md),
@@ -305,10 +305,10 @@ and was not archived. The reason is stated once per file or group.
 - **2026-10-11-release-0.10-design.md** and
   **2026-10-11-release-0.10-lanes-plan.md** — the release design and its lanes
   plan. 0.10.0 is released and all eleven frozen surfaces have a row in
-  `freeze/surfaces.toml`, but the ridl-authoring skill files below still cite
-  both, and the lane briefs name work that is open: the skill (driftsys/ridl#73,
-  #74, #75 and #87) and the debt roll-ups #172, #347 and #789. Archive both with
-  the skill's own gardening.
+  `freeze/surfaces.toml`, but the ridl-authoring skill design cites the release
+  design, and the lane briefs name work that is open: the skill
+  (driftsys/ridl#73, #74, #75 and #87) and the debt roll-ups #172, #347 and
+  #789. Archive both with the skill's own gardening.
 - **2026-10-11-ridl-authoring-skill-design.md**,
   **2026-10-11-ridl-authoring-skill-plan.md** and
   **skill-ridl-authoring-outline.md** — the skill's gates, eval harness and
