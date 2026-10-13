@@ -65,10 +65,10 @@ impl Host {
     /// The variables of the eval's own environment that a run or a judgement
     /// on this host inherits. Every other variable is cleared, so a setting
     /// such as `ANTHROPIC_MODEL` or `CLAUDECODE` in the operator's shell does
-    /// not change a result. The invocation sets its host home on top. Copilot
-    /// signs in through its own CLI login, which on macOS reads a keychain
-    /// item that does not depend on `COPILOT_HOME`, so no credential
-    /// variable is inherited for it.
+    /// not change a result. The invocation sets its host home on top.
+    /// Copilot's login lives in `config.json` under its home, not in a
+    /// variable, so a run's isolated `COPILOT_HOME` needs a copy of it (see
+    /// `copy_copilot_login`); no credential variable is inherited for it.
     pub fn inherited_env(self) -> &'static [&'static str] {
         match self {
             Host::Claude => &[
@@ -487,6 +487,217 @@ impl Drop for LentLogin {
     }
 }
 
+/// The three keys of `config.json` that hold a Copilot login: the token
+/// store, the signed-in accounts, and the last one used. The rest of the
+/// file (installed plugins, trusted folders, recent model ids, settings)
+/// is never read or copied into a run's isolated home.
+const COPILOT_LOGIN_KEYS: [&str; 3] = ["copilotTokens", "loggedInUsers", "lastLoggedInUser"];
+
+/// The stored Copilot login: `RIDL_EVAL_COPILOT_LOGIN`, else `config.json`
+/// in `$COPILOT_HOME`, else in `~/.copilot`.
+pub fn copilot_login_path() -> PathBuf {
+    if let Ok(path) = std::env::var("RIDL_EVAL_COPILOT_LOGIN") {
+        return PathBuf::from(path);
+    }
+    let home = std::env::var("COPILOT_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            PathBuf::from(std::env::var("HOME").unwrap_or_default()).join(".copilot")
+        });
+    home.join("config.json")
+}
+
+/// Checks that `path` holds a Copilot login, without lending it to a run: a
+/// precondition `check_logins` runs before any command, so a run never
+/// starts only to fail once its host exits with no transcript.
+pub fn check_copilot_login(path: &Path) -> Result<(), String> {
+    read_copilot_login(path).map(|_| ())
+}
+
+/// Strips a JSONC `//` line comment from the start of each line of `text`.
+/// `config.json`'s own comments ("User settings belong in settings.json.",
+/// "This file is managed automatically.") only ever occupy a whole line, so
+/// this never touches a `//` inside a string value.
+fn strip_jsonc_comments(text: &str) -> String {
+    text.lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The three login keys of `path`'s `config.json`, parsed. Never logs a
+/// key's value: an error names only the missing key, not its content.
+fn read_copilot_login(path: &Path) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| {
+        format!(
+            "no stored Copilot login at {} ({e}); run `copilot login`",
+            path.display()
+        )
+    })?;
+    let value: serde_json::Value =
+        serde_json::from_str(&strip_jsonc_comments(&text)).map_err(|e| {
+            format!(
+                "{} is not valid JSON once its comments are stripped: {e}",
+                path.display()
+            )
+        })?;
+    let object = value
+        .as_object()
+        .ok_or_else(|| format!("{} is not a JSON object", path.display()))?;
+    let mut login = serde_json::Map::new();
+    let mut missing = Vec::new();
+    for key in COPILOT_LOGIN_KEYS {
+        match object.get(key) {
+            Some(v) => {
+                login.insert(key.to_owned(), v.clone());
+            }
+            None => missing.push(key),
+        }
+    }
+    if !missing.is_empty() {
+        return Err(format!(
+            "{} lacks {}; run `copilot login`",
+            path.display(),
+            missing.join(", ")
+        ));
+    }
+    Ok(login)
+}
+
+/// Writes `login`'s three keys to `path` as plain JSON, with mode `0600`, so
+/// a run's home holds only the Copilot login, readable by its owner alone.
+fn write_copilot_login(
+    path: &Path,
+    login: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), String> {
+    let text = serde_json::to_string(&serde_json::Value::Object(login.clone()))
+        .map_err(|e| e.to_string())?;
+    std::fs::write(path, text).map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Copies the stored Copilot login's three keys, and nothing else of the
+/// user's real Copilot home, into a run's home's `config.json`. Returns the
+/// parsed login, so a later comparison can tell whether the run refreshed
+/// it, without ever printing a key's value.
+pub fn copy_copilot_login(
+    stored: &Path,
+    home: &Path,
+) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    let login = read_copilot_login(stored)?;
+    write_copilot_login(&home.join("config.json"), &login)?;
+    Ok(login)
+}
+
+/// Copies a run's login back into the stored `config.json` when the run
+/// refreshed it, so the stored login is not left with a token a refresh
+/// revoked. The run's login is compared with `lent`, the login
+/// `copy_copilot_login` read: a copy the run did not change is never
+/// written back, so a login refreshed meanwhile by another Copilot process
+/// is kept. Only the three login keys of the stored file are replaced; the
+/// rest of it (installed plugins, trusted folders, recent model ids,
+/// settings) is left as it is. A run that deleted its `config.json`, or
+/// left it without the three keys, leaves the stored login as it is.
+pub fn return_copilot_login(
+    home: &Path,
+    stored: &Path,
+    lent: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), String> {
+    let Ok(used) = read_copilot_login(&home.join("config.json")) else {
+        return Ok(());
+    };
+    if &used == lent {
+        return Ok(());
+    }
+    let mut stored_value: serde_json::Value = match std::fs::read_to_string(stored) {
+        Ok(text) => serde_json::from_str(&strip_jsonc_comments(&text)).map_err(|e| {
+            format!(
+                "{} is not valid JSON once its comments are stripped: {e}",
+                stored.display()
+            )
+        })?,
+        Err(_) => serde_json::Value::Object(serde_json::Map::new()),
+    };
+    let object = stored_value
+        .as_object_mut()
+        .ok_or_else(|| format!("{} is not a JSON object", stored.display()))?;
+    for (key, value) in used {
+        object.insert(key, value);
+    }
+    std::fs::write(
+        stored,
+        serde_json::to_string_pretty(&stored_value).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// The stored Copilot login, lent to one run's home. Dropping it returns a
+/// refreshed login and deletes the run's copy, also when the run ended with
+/// an error or a panic.
+pub struct LentCopilotLogin {
+    home: PathBuf,
+    stored: PathBuf,
+    lent: serde_json::Map<String, serde_json::Value>,
+}
+
+impl LentCopilotLogin {
+    pub fn lend(stored: &Path, home: &Path) -> Result<LentCopilotLogin, String> {
+        Ok(LentCopilotLogin {
+            home: home.to_owned(),
+            stored: stored.to_owned(),
+            lent: copy_copilot_login(stored, home)?,
+        })
+    }
+}
+
+impl Drop for LentCopilotLogin {
+    fn drop(&mut self) {
+        if let Err(e) = return_copilot_login(&self.home, &self.stored, &self.lent) {
+            eprintln!(
+                "eval: could not return the Copilot login to {}: {e}",
+                self.stored.display()
+            );
+        }
+        let _ = std::fs::remove_file(self.home.join("config.json"));
+    }
+}
+
+/// The host-specific stored login lent to one run's home, Codex's or
+/// Copilot's. Claude needs no lent login: it signs in with a token in its
+/// environment. Dropping either variant returns it, as `LentLogin` and
+/// `LentCopilotLogin` do on their own; a variant is held only for that
+/// effect, never read.
+#[allow(dead_code)]
+pub enum Login {
+    Codex(LentLogin),
+    Copilot(LentCopilotLogin),
+}
+
+impl Login {
+    /// The login a run on `host` needs, or `None` for a host, such as
+    /// Claude, that signs in through its environment instead.
+    pub fn lend(host: Host, home: &Path) -> Result<Option<Login>, String> {
+        match host {
+            Host::Codex => Ok(Some(Login::Codex(LentLogin::lend(
+                &codex_login_path(),
+                home,
+            )?))),
+            Host::Copilot => Ok(Some(Login::Copilot(LentCopilotLogin::lend(
+                &copilot_login_path(),
+                home,
+            )?))),
+            Host::Claude => Ok(None),
+        }
+    }
+}
+
 /// A fresh directory for one run or one judgement, under the system
 /// temporary directory, so that no git repository, `AGENTS.md` or
 /// `CLAUDE.md` is above it.
@@ -769,6 +980,139 @@ mod tests {
         let missing = scratch("none").join("auth.json");
         let error = copy_login(&missing, &scratch("home")).unwrap_err();
         assert!(error.contains("codex login"), "{error}");
+    }
+
+    /// A realistic `config.json`: the two whole-line comments Copilot writes
+    /// above it, the three login keys, and other settings a run must never
+    /// read or copy.
+    fn copilot_config(login: &str) -> String {
+        format!(
+            "// User settings belong in settings.json.\n// This file is managed automatically.\n{{\n  \"installedPlugins\": [],\n  {login},\n  \"trustedFolders\": [\"/elsewhere\"]\n}}\n"
+        )
+    }
+
+    const COPILOT_LOGIN: &str = r#""copilotTokens": {"https://github.com:u": "t1"}, "loggedInUsers": [{"host": "https://github.com", "login": "u"}], "lastLoggedInUser": {"host": "https://github.com", "login": "u"}"#;
+
+    #[test]
+    fn jsonc_comments_are_stripped_only_as_whole_lines() {
+        let text = "// a comment\n{\"a\": \"not // a comment\"}\n// another\n";
+        assert_eq!(strip_jsonc_comments(text), "{\"a\": \"not // a comment\"}");
+    }
+
+    #[test]
+    fn a_copilot_run_gets_only_the_three_login_keys_with_a_private_mode() {
+        let stored_dir = scratch("copilot-stored");
+        let stored = stored_dir.join("config.json");
+        std::fs::write(&stored, copilot_config(COPILOT_LOGIN)).unwrap();
+        let home = scratch("copilot-home");
+        let lent = copy_copilot_login(&stored, &home).unwrap();
+        let keys: std::collections::BTreeSet<&str> = lent.keys().map(String::as_str).collect();
+        assert_eq!(keys, COPILOT_LOGIN_KEYS.into_iter().collect());
+        let config = home.join("config.json");
+        let written: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
+        let object = written.as_object().unwrap();
+        assert_eq!(object.len(), 3, "{object:?} holds more than the login");
+        assert!(!object.contains_key("installedPlugins"));
+        assert!(!object.contains_key("trustedFolders"));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&config).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o600, "{mode:o}");
+        }
+    }
+
+    #[test]
+    fn a_stored_config_missing_a_login_key_is_a_clear_error() {
+        let stored = scratch("copilot-stored-missing").join("config.json");
+        std::fs::write(&stored, "{\"copilotTokens\": {}, \"loggedInUsers\": []}\n").unwrap();
+        let error = copy_copilot_login(&stored, &scratch("copilot-home-missing")).unwrap_err();
+        assert!(error.contains("lastLoggedInUser"), "{error}");
+        assert!(error.contains("copilot login"), "{error}");
+        assert!(!error.contains("copilotTokens"), "{error}");
+    }
+
+    #[test]
+    fn a_missing_stored_copilot_login_names_the_login_command() {
+        let missing = scratch("copilot-none").join("config.json");
+        let error = copy_copilot_login(&missing, &scratch("copilot-home-none")).unwrap_err();
+        assert!(error.contains("copilot login"), "{error}");
+    }
+
+    #[test]
+    fn a_refreshed_copilot_login_is_merged_back_without_touching_other_settings() {
+        let stored = scratch("copilot-stored-refresh").join("config.json");
+        std::fs::write(&stored, copilot_config(COPILOT_LOGIN)).unwrap();
+        let home = scratch("copilot-home-refresh");
+        let lent = copy_copilot_login(&stored, &home).unwrap();
+        let refreshed = r#"{"copilotTokens": {"https://github.com:u": "t2"}, "loggedInUsers": [{"host": "https://github.com", "login": "u"}], "lastLoggedInUser": {"host": "https://github.com", "login": "u"}}"#;
+        std::fs::write(home.join("config.json"), refreshed).unwrap();
+        return_copilot_login(&home, &stored, &lent).unwrap();
+        let after: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&stored).unwrap()).unwrap();
+        assert_eq!(
+            after["copilotTokens"]["https://github.com:u"],
+            serde_json::json!("t2")
+        );
+        // The rest of the stored file is untouched.
+        assert_eq!(after["trustedFolders"], serde_json::json!(["/elsewhere"]));
+        assert_eq!(after["installedPlugins"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn an_unchanged_copilot_run_copy_keeps_a_login_refreshed_meanwhile() {
+        let stored = scratch("copilot-stored-unchanged").join("config.json");
+        std::fs::write(&stored, copilot_config(COPILOT_LOGIN)).unwrap();
+        let home = scratch("copilot-home-unchanged");
+        let lent = copy_copilot_login(&stored, &home).unwrap();
+        // Another Copilot process refreshes the stored login during the run.
+        let refreshed_elsewhere = r#""copilotTokens": {"https://github.com:u": "t3"}, "loggedInUsers": [{"host": "https://github.com", "login": "u"}], "lastLoggedInUser": {"host": "https://github.com", "login": "u"}"#;
+        std::fs::write(&stored, copilot_config(refreshed_elsewhere)).unwrap();
+        return_copilot_login(&home, &stored, &lent).unwrap();
+        let text = std::fs::read_to_string(&stored).unwrap();
+        let after: serde_json::Value = serde_json::from_str(&strip_jsonc_comments(&text)).unwrap();
+        assert_eq!(
+            after["copilotTokens"]["https://github.com:u"],
+            serde_json::json!("t3")
+        );
+    }
+
+    #[test]
+    fn a_deleted_copilot_run_copy_leaves_the_stored_login() {
+        let stored = scratch("copilot-stored-deleted").join("config.json");
+        std::fs::write(&stored, copilot_config(COPILOT_LOGIN)).unwrap();
+        let home = scratch("copilot-home-deleted");
+        let lent = copy_copilot_login(&stored, &home).unwrap();
+        std::fs::remove_file(home.join("config.json")).unwrap();
+        return_copilot_login(&home, &stored, &lent).unwrap();
+        let text = std::fs::read_to_string(&stored).unwrap();
+        let after: serde_json::Value = serde_json::from_str(&strip_jsonc_comments(&text)).unwrap();
+        assert_eq!(
+            after["copilotTokens"]["https://github.com:u"],
+            serde_json::json!("t1")
+        );
+    }
+
+    #[test]
+    fn a_lent_copilot_login_is_returned_and_deleted_when_the_run_panics() {
+        let stored = scratch("copilot-stored-panic").join("config.json");
+        std::fs::write(&stored, copilot_config(COPILOT_LOGIN)).unwrap();
+        let home = scratch("copilot-home-panic");
+        let run = std::panic::catch_unwind(|| {
+            let _login = LentCopilotLogin::lend(&stored, &home).unwrap();
+            let refreshed = r#"{"copilotTokens": {"https://github.com:u": "t4"}, "loggedInUsers": [{"host": "https://github.com", "login": "u"}], "lastLoggedInUser": {"host": "https://github.com", "login": "u"}}"#;
+            std::fs::write(home.join("config.json"), refreshed).unwrap();
+            panic!("the run failed");
+        });
+        assert!(run.is_err());
+        let after: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&stored).unwrap()).unwrap();
+        assert_eq!(
+            after["copilotTokens"]["https://github.com:u"],
+            serde_json::json!("t4")
+        );
+        assert!(!home.join("config.json").exists());
     }
 
     #[test]

@@ -73,9 +73,12 @@ fn copilot_data(
 
 /// True when the transcript holds a tool call whose name is `ridl_check`, or
 /// ends with `__ridl_check` (Claude names an MCP tool `mcp__<server>__<tool>`),
-/// or, for Copilot, a `tool.execution_start` event whose `toolName` or
-/// `mcpToolName` is `ridl_check`. Text that only mentions the name does not
-/// count, nor does a call refused before it reached the server.
+/// or, for Copilot, a `tool.execution_start` event whose `mcpToolName` is
+/// `ridl_check`, or whose `toolName` is `ridl_check` or ends with
+/// `-ridl_check` (Copilot namespaces an MCP tool `<server>-<tool>`, e.g.
+/// `ridl-ridl_check`; a real run carries both forms on the same event, so
+/// either one counts). Text that only mentions the name does not count, nor
+/// does a call refused before it reached the server.
 pub fn used_ridl_check(transcript: &str) -> bool {
     json_lines(transcript).any(|line| {
         objects(&line).into_iter().any(|map| {
@@ -90,10 +93,9 @@ pub fn used_ridl_check(transcript: &str) -> bool {
                 && map.get("error").is_some_and(|e| !e.is_null());
             let copilot_call = str_field(map, "type") == Some("tool.execution_start")
                 && copilot_data(map).is_some_and(|data| {
-                    ["toolName", "mcpToolName"]
-                        .iter()
-                        .filter_map(|key| str_field(data, key))
-                        .any(|n| n == "ridl_check")
+                    str_field(data, "mcpToolName") == Some("ridl_check")
+                        || str_field(data, "toolName")
+                            .is_some_and(|n| n == "ridl_check" || n.ends_with("-ridl_check"))
                 });
             (is_call && named && !refused) || copilot_call
         })
@@ -316,7 +318,7 @@ mod tests {
     const CLAUDE_SKILL_CALL: &str = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Skill","input":{"skill":"ridl-authoring"}}]}}"#;
     const CODEX_SKILL_READ: &str = r#"{"type":"item.completed","item":{"id":"i2","type":"command_execution","command":"cat /h/skills/ridl-authoring/SKILL.md","status":"completed"}}"#;
     const CODEX_TEXT_MENTION: &str = r#"{"type":"item.completed","item":{"id":"i3","type":"agent_message","text":"I would use ridl-authoring/SKILL.md if I had it"}}"#;
-    const COPILOT_CALL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c1","toolName":"ridl_check","mcpServerName":"ridl","mcpToolName":"ridl_check"}}"#;
+    const COPILOT_CALL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c1","toolName":"ridl-ridl_check","mcpServerName":"ridl","mcpConfigServerName":"ridl","mcpToolName":"ridl_check","mcpTransport":"stdio","mcpConfigSource":"user"}}"#;
     const COPILOT_SKILL_INVOKED: &str = r#"{"type":"skill.invoked","data":{"name":"ridl-authoring","path":"/r/ws/.github/skills/ridl-authoring/SKILL.md","content":"..."}}"#;
     const COPILOT_SHELL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c2","toolName":"bash","arguments":{"command":"ridl check ."}}}"#;
 
@@ -325,6 +327,16 @@ mod tests {
         assert!(used_ridl_check(CLAUDE_CALL));
         assert!(used_ridl_check(CODEX_CALL));
         assert!(used_ridl_check(COPILOT_CALL));
+    }
+
+    #[test]
+    fn a_copilot_call_is_found_by_either_its_namespaced_tool_name_or_its_mcp_tool_name() {
+        // Real Copilot output carries both on the same event; either alone
+        // is also enough.
+        let namespaced_only = r#"{"type":"tool.execution_start","data":{"toolCallId":"c3","toolName":"ridl-ridl_check","mcpServerName":"ridl"}}"#;
+        let mcp_name_only = r#"{"type":"tool.execution_start","data":{"toolCallId":"c4","toolName":"some-internal-name","mcpServerName":"ridl","mcpToolName":"ridl_check"}}"#;
+        assert!(used_ridl_check(namespaced_only));
+        assert!(used_ridl_check(mcp_name_only));
     }
 
     #[test]
