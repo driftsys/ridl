@@ -2710,6 +2710,1056 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
         __ridl_fb_decode_FanTag(__view.buf, __view.table)
     }
 }
+/// A `WheelDiagnosticsReadTicksParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+#[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsReadTicksParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl<'a> ::ridl_rt::payload::View<'a> for WheelDiagnosticsReadTicksParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl<'a> WheelDiagnosticsReadTicksParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_fb_encode_WheelDiagnosticsReadTicksParams(
+    _value: &WheelDiagnosticsReadTicksParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_fb_verify_WheelDiagnosticsReadTicksParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_fb_decode_WheelDiagnosticsReadTicksParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> WheelDiagnosticsReadTicksParams {
+    WheelDiagnosticsReadTicksParams {}
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for WheelDiagnosticsReadTicksParams {
+    /// The largest FlatBuffers buffer any legal `WheelDiagnosticsReadTicksParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = WheelDiagnosticsReadTicksParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, WheelDiagnosticsReadTicksParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_WheelDiagnosticsReadTicksParams(
+            self,
+            &mut builder,
+        )?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: WheelDiagnosticsReadTicksParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        WheelDiagnosticsReadTicksParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_WheelDiagnosticsReadTicksParams(buf, table)?;
+        ::core::result::Result::Ok(WheelDiagnosticsReadTicksParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_WheelDiagnosticsReadTicksParams(__view.buf, __view.table)
+    }
+}
+/// A `WheelDiagnosticsReadSpanParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+#[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsReadSpanParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl<'a> ::ridl_rt::payload::View<'a> for WheelDiagnosticsReadSpanParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl<'a> WheelDiagnosticsReadSpanParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_fb_encode_WheelDiagnosticsReadSpanParams(
+    _value: &WheelDiagnosticsReadSpanParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_fb_verify_WheelDiagnosticsReadSpanParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_fb_decode_WheelDiagnosticsReadSpanParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> WheelDiagnosticsReadSpanParams {
+    WheelDiagnosticsReadSpanParams {}
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for WheelDiagnosticsReadSpanParams {
+    /// The largest FlatBuffers buffer any legal `WheelDiagnosticsReadSpanParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = WheelDiagnosticsReadSpanParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, WheelDiagnosticsReadSpanParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_WheelDiagnosticsReadSpanParams(
+            self,
+            &mut builder,
+        )?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: WheelDiagnosticsReadSpanParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        WheelDiagnosticsReadSpanParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_WheelDiagnosticsReadSpanParams(buf, table)?;
+        ::core::result::Result::Ok(WheelDiagnosticsReadSpanParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_WheelDiagnosticsReadSpanParams(__view.buf, __view.table)
+    }
+}
+/// A `WheelDiagnosticsReadSpanReply` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+#[allow(dead_code)]
+pub(crate) struct WheelDiagnosticsReadSpanReplyFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl<'a> ::ridl_rt::payload::View<'a> for WheelDiagnosticsReadSpanReplyFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl<'a> WheelDiagnosticsReadSpanReplyFbView<'a> {
+    /// Reads `WheelDiagnosticsReadSpanReply`'s `min` field in place.
+    pub(crate) fn min(&self) -> RawTickCount {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 2usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                RawTickCount::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16),
+                    ),
+                )
+            }
+            _ => RawTickCount::new_unchecked(0i64),
+        }
+    }
+    /// Reads `WheelDiagnosticsReadSpanReply`'s `max` field in place.
+    pub(crate) fn max(&self) -> RawTickCount {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 2usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                RawTickCount::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(self.buf, __p).unwrap_or(0u16),
+                    ),
+                )
+            }
+            _ => RawTickCount::new_unchecked(0i64),
+        }
+    }
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_fb_encode_WheelDiagnosticsReadSpanReply(
+    value: &WheelDiagnosticsReadSpanReply,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 2usize];
+    let mut __n = 0usize;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: {
+            let __s = value.min;
+            ::ridl_rt::flatbuffers::Field::U16(__s.get() as ::core::primitive::u16)
+        },
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 1u16,
+        offset: 6u16,
+        value: {
+            let __s = value.max;
+            ::ridl_rt::flatbuffers::Field::U16(__s.get() as ::core::primitive::u16)
+        },
+    };
+    __n += 1;
+    builder.push_table(8usize, 4usize, 2u16, &__fields[..__n])
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_fb_verify_WheelDiagnosticsReadSpanReply(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            2usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        RawTickCount::check(&(::core::primitive::i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            1u16,
+            2usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_u16(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        RawTickCount::check(&(::core::primitive::i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_fb_decode_WheelDiagnosticsReadSpanReply(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> WheelDiagnosticsReadSpanReply {
+    WheelDiagnosticsReadSpanReply {
+        min: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 2usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                RawTickCount::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                    ),
+                )
+            }
+            _ => RawTickCount::new_unchecked(0i64),
+        },
+        max: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 2usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                RawTickCount::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u16(buf, __p).unwrap_or(0u16),
+                    ),
+                )
+            }
+            _ => RawTickCount::new_unchecked(0i64),
+        },
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for WheelDiagnosticsReadSpanReply {
+    /// The largest FlatBuffers buffer any legal `WheelDiagnosticsReadSpanReply` encodes to: 55 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 55usize;
+    type Buffer = [::core::primitive::u8; 55usize];
+    const BUFFER: Self::Buffer = [0u8; 55usize];
+    type View<'a> = WheelDiagnosticsReadSpanReplyFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, WheelDiagnosticsReadSpanReplyFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_WheelDiagnosticsReadSpanReply(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: WheelDiagnosticsReadSpanReplyFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        WheelDiagnosticsReadSpanReplyFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_WheelDiagnosticsReadSpanReply(buf, table)?;
+        ::core::result::Result::Ok(WheelDiagnosticsReadSpanReplyFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_WheelDiagnosticsReadSpanReply(__view.buf, __view.table)
+    }
+}
+/// A `VehHvacCabinGetBoundsParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehHvacCabinGetBoundsParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinGetBoundsParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehHvacCabinGetBoundsParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehHvacCabinGetBoundsParams(
+    _value: &VehHvacCabinGetBoundsParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehHvacCabinGetBoundsParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehHvacCabinGetBoundsParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> VehHvacCabinGetBoundsParams {
+    VehHvacCabinGetBoundsParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehHvacCabinGetBoundsParams {
+    /// The largest FlatBuffers buffer any legal `VehHvacCabinGetBoundsParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = VehHvacCabinGetBoundsParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehHvacCabinGetBoundsParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehHvacCabinGetBoundsParams(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehHvacCabinGetBoundsParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinGetBoundsParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehHvacCabinGetBoundsParams(buf, table)?;
+        ::core::result::Result::Ok(VehHvacCabinGetBoundsParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehHvacCabinGetBoundsParams(__view.buf, __view.table)
+    }
+}
+/// A `VehHvacCabinGetBoundsReply` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehHvacCabinGetBoundsReplyFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinGetBoundsReplyFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehHvacCabinGetBoundsReplyFbView<'a> {
+    /// Reads `VehHvacCabinGetBoundsReply`'s `min` field in place.
+    pub fn min(&self) -> crate::veh::common::Temperature {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                crate::veh::common::Temperature::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32),
+                    ),
+                )
+            }
+            _ => crate::veh::common::Temperature::new_unchecked(0.0f64),
+        }
+    }
+    /// Reads `VehHvacCabinGetBoundsReply`'s `max` field in place.
+    pub fn max(&self) -> crate::veh::common::Temperature {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                crate::veh::common::Temperature::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::flatbuffers::read_f32(self.buf, __p).unwrap_or(0.0f32),
+                    ),
+                )
+            }
+            _ => crate::veh::common::Temperature::new_unchecked(0.0f64),
+        }
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehHvacCabinGetBoundsReply(
+    value: &VehHvacCabinGetBoundsReply,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 2usize];
+    let mut __n = 0usize;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: {
+            let __s = value.min;
+            ::ridl_rt::flatbuffers::Field::F32(__s.get() as ::core::primitive::f32)
+        },
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 1u16,
+        offset: 8u16,
+        value: {
+            let __s = value.max;
+            ::ridl_rt::flatbuffers::Field::F32(__s.get() as ::core::primitive::f32)
+        },
+    };
+    __n += 1;
+    builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehHvacCabinGetBoundsReply(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        crate::veh::common::Temperature::check(&(::core::primitive::f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            1u16,
+            4usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_f32(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        crate::veh::common::Temperature::check(&(::core::primitive::f64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehHvacCabinGetBoundsReply(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> VehHvacCabinGetBoundsReply {
+    VehHvacCabinGetBoundsReply {
+        min: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                crate::veh::common::Temperature::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                    ),
+                )
+            }
+            _ => crate::veh::common::Temperature::new_unchecked(0.0f64),
+        },
+        max: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                crate::veh::common::Temperature::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::flatbuffers::read_f32(buf, __p).unwrap_or(0.0f32),
+                    ),
+                )
+            }
+            _ => crate::veh::common::Temperature::new_unchecked(0.0f64),
+        },
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehHvacCabinGetBoundsReply {
+    /// The largest FlatBuffers buffer any legal `VehHvacCabinGetBoundsReply` encodes to: 59 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 59usize;
+    type Buffer = [::core::primitive::u8; 59usize];
+    const BUFFER: Self::Buffer = [0u8; 59usize];
+    type View<'a> = VehHvacCabinGetBoundsReplyFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehHvacCabinGetBoundsReplyFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehHvacCabinGetBoundsReply(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehHvacCabinGetBoundsReplyFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinGetBoundsReplyFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehHvacCabinGetBoundsReply(buf, table)?;
+        ::core::result::Result::Ok(VehHvacCabinGetBoundsReplyFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehHvacCabinGetBoundsReply(__view.buf, __view.table)
+    }
+}
+/// A `VehHvacCabinGetClimateParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehHvacCabinGetClimateParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinGetClimateParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehHvacCabinGetClimateParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehHvacCabinGetClimateParams(
+    _value: &VehHvacCabinGetClimateParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehHvacCabinGetClimateParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehHvacCabinGetClimateParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> VehHvacCabinGetClimateParams {
+    VehHvacCabinGetClimateParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehHvacCabinGetClimateParams {
+    /// The largest FlatBuffers buffer any legal `VehHvacCabinGetClimateParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = VehHvacCabinGetClimateParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehHvacCabinGetClimateParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehHvacCabinGetClimateParams(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehHvacCabinGetClimateParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinGetClimateParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehHvacCabinGetClimateParams(buf, table)?;
+        ::core::result::Result::Ok(VehHvacCabinGetClimateParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehHvacCabinGetClimateParams(__view.buf, __view.table)
+    }
+}
+/// A `VehHvacCabinGetCabinTempParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehHvacCabinGetCabinTempParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinGetCabinTempParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehHvacCabinGetCabinTempParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehHvacCabinGetCabinTempParams(
+    _value: &VehHvacCabinGetCabinTempParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehHvacCabinGetCabinTempParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehHvacCabinGetCabinTempParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> VehHvacCabinGetCabinTempParams {
+    VehHvacCabinGetCabinTempParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehHvacCabinGetCabinTempParams {
+    /// The largest FlatBuffers buffer any legal `VehHvacCabinGetCabinTempParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = VehHvacCabinGetCabinTempParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehHvacCabinGetCabinTempParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehHvacCabinGetCabinTempParams(
+            self,
+            &mut builder,
+        )?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehHvacCabinGetCabinTempParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinGetCabinTempParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehHvacCabinGetCabinTempParams(buf, table)?;
+        ::core::result::Result::Ok(VehHvacCabinGetCabinTempParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehHvacCabinGetCabinTempParams(__view.buf, __view.table)
+    }
+}
+/// A `VehHvacCabinScaledFanParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehHvacCabinScaledFanParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinScaledFanParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehHvacCabinScaledFanParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehHvacCabinScaledFanParams(
+    _value: &VehHvacCabinScaledFanParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehHvacCabinScaledFanParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehHvacCabinScaledFanParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> VehHvacCabinScaledFanParams {
+    VehHvacCabinScaledFanParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehHvacCabinScaledFanParams {
+    /// The largest FlatBuffers buffer any legal `VehHvacCabinScaledFanParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = VehHvacCabinScaledFanParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehHvacCabinScaledFanParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehHvacCabinScaledFanParams(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehHvacCabinScaledFanParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinScaledFanParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehHvacCabinScaledFanParams(buf, table)?;
+        ::core::result::Result::Ok(VehHvacCabinScaledFanParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehHvacCabinScaledFanParams(__view.buf, __view.table)
+    }
+}
 /// A `RawWheelSpanSpan` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are

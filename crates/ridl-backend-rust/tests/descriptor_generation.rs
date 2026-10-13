@@ -904,3 +904,38 @@ fn a_model_without_a_catalog_refuses_the_model() {
         ["malformed codegen model: `Catalog.hash` is 0 bytes, not 32"]
     );
 }
+
+/// A tuple root gets a `Payload` implementation under the induced struct's own
+/// name, so a descriptor's reservation row, which names
+/// `<T as Payload<FlatBuffers>>::MAX_SIZE`, resolves (driftsys/ridl#713).
+#[test]
+fn an_induced_argument_struct_has_a_payload_impl() {
+    let package = ir::compile_fixture("induced_params.ridl");
+    let source = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::FlatBuffers], &[])
+        .expect("generate_pipeline")
+        .rust_source;
+    let d = dense(&source);
+    for induced in [
+        "PumpBothParams",
+        "PumpStatusParams",
+        "PumpDrainParams",
+        "PumpDrainReply",
+    ] {
+        assert!(
+            d.contains(&dense(&format!(
+                "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for {induced}"
+            ))),
+            "`{induced}` has a Payload implementation:\n{source}"
+        );
+    }
+    assert!(
+        d.contains("pubstructPumpStatusParams{}"),
+        "a call with no parameter induces a struct with no field:\n{source}"
+    );
+    // The one-parameter call keeps its declared named type, so it induces
+    // nothing to implement `Payload` for.
+    assert!(
+        !d.contains("PumpOneParams"),
+        "a single named parameter induces no struct:\n{source}"
+    );
+}
