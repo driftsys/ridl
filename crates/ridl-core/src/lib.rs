@@ -54,7 +54,7 @@ pub use std_lib::std_package;
 #[cfg(feature = "fetch")]
 pub use tree_hash::{TreeHashError, tree_hash};
 #[cfg(feature = "fetch")]
-pub use vendor::{VendorWrite, write_vendor};
+pub use vendor::{VendorWrite, check_vendor, write_vendor};
 #[cfg(feature = "fs")]
 pub use workspace::{
     ImportUnion, LoadError, LoadedWorkspace, MaterializedUnit, Overlay, VENDOR_DIR, find_root,

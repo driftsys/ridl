@@ -265,12 +265,20 @@ enum Command {
     /// at the manifest root, so a `--frozen` build needs no network and no
     /// cache. Exit 0 when `vendor/` was written or there was nothing to
     /// change, 1 on a diagnostic error (nothing written), 2 on a missing or
-    /// unreadable path, a fetch failure, or an I/O failure.
+    /// unreadable path, a fetch failure, or an I/O failure. With `--check`,
+    /// compare `vendor/` with the imports and `ridl.lock` instead, writing
+    /// nothing.
     Vendor {
         /// A unit directory, a workspace root, or a file; the manifest root
         /// above it is the one vendored.
         #[arg(default_value = ".")]
         path: PathBuf,
+        /// Compare `vendor/` with `[imports]` and `ridl.lock` instead of
+        /// writing: no network, no write. Exit 0 when `vendor/` matches, 1
+        /// on drift or another diagnostic error, 2 on a missing or
+        /// unreadable path.
+        #[arg(long)]
+        check: bool,
     },
 }
 
@@ -383,7 +391,13 @@ fn main() -> ExitCode {
         Command::Lsp { .. } => run_lsp(),
         Command::Mcp => run_mcp(),
         Command::Describe { path } => run_describe(&path),
-        Command::Vendor { path } => vendor::run(&path),
+        Command::Vendor { path, check } => {
+            if check {
+                vendor::run_check(&path)
+            } else {
+                vendor::run(&path)
+            }
+        }
         Command::Init {
             path,
             workspace,

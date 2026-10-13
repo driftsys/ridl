@@ -1575,7 +1575,7 @@ expression: log
             {
               "id": "MANI-103",
               "shortDescription": {
-                "text": "`--frozen`: no lockfile entry for a remote import"
+                "text": "`--frozen` or `ridl vendor --check`: no lockfile entry for a remote import"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1620,7 +1620,25 @@ expression: log
             {
               "id": "MANI-108",
               "shortDescription": {
-                "text": "`--frozen`: a `ridl.lock` entry has no `tree` hash"
+                "text": "`--frozen` or `ridl vendor --check`: a `ridl.lock` entry has no `tree` hash"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-109",
+              "shortDescription": {
+                "text": "an imported unit has no directory in `vendor/`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-110",
+              "shortDescription": {
+                "text": "`vendor/` holds a directory that no `[imports]` key names"
               },
               "defaultConfiguration": {
                 "level": "error"

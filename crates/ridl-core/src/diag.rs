@@ -1426,8 +1426,10 @@ diag_codes! {
 
         /// `--frozen` was requested but the lockfile has no entry for a remote
         /// import; a frozen build never regenerates the lockfile (ADR-0002 §7).
+        /// `ridl vendor --check` raises it too: with no entry, it cannot
+        /// verify the unit's directory in `vendor/`.
         MANI_103 = "MANI-103", Error,
-            "`--frozen`: no lockfile entry for a remote import";
+            "`--frozen` or `ridl vendor --check`: no lockfile entry for a remote import";
 
         /// `--frozen` was requested and a lockfile-pinned import is not present in
         /// the cache; a frozen build never fetches (ADR-0002 §7).
@@ -1454,8 +1456,20 @@ diag_codes! {
 
         /// `--frozen` was requested and the `ridl.lock` entry has no `tree`;
         /// a frozen run never rewrites the lockfile (ADR-0002 §7).
+        /// `ridl vendor --check` raises it too: with no `tree`, it cannot
+        /// verify the unit's directory in `vendor/`.
         MANI_108 = "MANI-108", Error,
-            "`--frozen`: a `ridl.lock` entry has no `tree` hash";
+            "`--frozen` or `ridl vendor --check`: a `ridl.lock` entry has no `tree` hash";
+
+        /// `ridl vendor --check`: an imported unit has no directory under
+        /// `<manifest root>/vendor/` (ADR-0002 §7).
+        MANI_109 = "MANI-109", Error,
+            "an imported unit has no directory in `vendor/`";
+
+        /// `ridl vendor --check`: `vendor/` holds a directory that no
+        /// `[imports]` key names (ADR-0002 §7).
+        MANI_110 = "MANI-110", Error,
+            "`vendor/` holds a directory that no `[imports]` key names";
     }
 }
 

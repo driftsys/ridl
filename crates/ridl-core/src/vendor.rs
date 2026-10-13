@@ -1,17 +1,21 @@
 //! The vendor directory (ADR-0002 §7): `<manifest root>/vendor/<key>/` holds
 //! the source tree of each remote unit the consumer imports, so a `--frozen`
 //! build reads it before the cache and needs no network. [`write_vendor`]
-//! brings the directory to exactly one set of units.
+//! brings the directory to exactly one set of units, and [`check_vendor`]
+//! compares it with the imports and `ridl.lock` without writing.
 //!
 //! This module sits behind the `fetch` feature: it reads the `tree` hash.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::Path;
 
+use crate::diag::{DiagCode, Diagnostic};
+use crate::fetch::{TreeOrigin, detached, verify_tree};
+use crate::lock::{LockEntry, Lockfile};
 use crate::tree_hash::tree_hash;
-use crate::workspace::{MaterializedUnit, VENDOR_DIR};
+use crate::workspace::{ImportUnion, MaterializedUnit, VENDOR_DIR};
 
 /// What [`write_vendor`] changed, each list in key order: the units it
 /// copied, the unit directories it removed, and the units whose directory
@@ -115,6 +119,97 @@ pub fn write_vendor(
     removed.sort();
     report.removed = removed;
     Ok(report)
+}
+
+/// Compares `<root>/vendor/` with the consumer's `imports` and with `lock`
+/// for `ridl vendor --check`. It reads no cache, makes no network access, and
+/// writes nothing. Each diagnostic is detached and is an Error:
+///
+/// - `MANI-109` for a URL none of whose keys names a directory in `vendor/`.
+/// - `MANI-103` for a vendored URL with no `ridl.lock` entry, and
+///   `MANI-108` for one whose entry has no `tree`: the check cannot verify
+///   the directory.
+/// - `MANI-107` for a directory named by a key of a URL whose tree does not
+///   match the pinned `tree`, or holds a file that is not a regular file.
+///   Each directory named by a key of the URL is verified.
+/// - `MANI-110` for a directory in `vendor/` whose name is no key of
+///   `imports`. A hidden directory (which only an interrupted `ridl vendor`
+///   leaves) and an entry that is not a directory are not reported, as
+///   [`write_vendor`] leaves them alone.
+///
+/// A URL draws at most one of `MANI-109`, `MANI-103` and `MANI-108`, in that
+/// order. The `MANI-110` diagnostics follow in name order.
+pub fn check_vendor(
+    root: &Path,
+    imports: &ImportUnion,
+    lock: Option<&Lockfile>,
+) -> Vec<Diagnostic> {
+    let vendor = root.join(VENDOR_DIR);
+    let mut diagnostics = Vec::new();
+    for (url, keys) in imports {
+        let dirs: Vec<_> = keys
+            .iter()
+            .map(|key| vendor.join(key))
+            .filter(|dir| dir.is_dir())
+            .collect();
+        if dirs.is_empty() {
+            diagnostics.push(detached(
+                DiagCode::MANI_109,
+                format!(
+                    "the imported unit `{}` (`{url}`) has no directory in `{}`; run `ridl vendor` to write it",
+                    keys.iter().cloned().collect::<Vec<_>>().join("`, `"),
+                    vendor.display()
+                ),
+            ));
+            continue;
+        }
+        match lock.and_then(|lock| lock.entries.get(url)) {
+            None => diagnostics.push(detached(
+                DiagCode::MANI_103,
+                format!(
+                    "no `ridl.lock` entry for `{url}`, so `{}` cannot be verified; run `ridl vendor` to pin and vendor it",
+                    dirs[0].display()
+                ),
+            )),
+            Some(LockEntry { tree: None, .. }) => diagnostics.push(detached(
+                DiagCode::MANI_108,
+                format!(
+                    "the `ridl.lock` entry for `{url}` has no `tree` hash, so `{}` cannot be verified; run `ridl vendor` to add it",
+                    dirs[0].display()
+                ),
+            )),
+            Some(LockEntry {
+                tree: Some(expected),
+                ..
+            }) => {
+                for dir in &dirs {
+                    verify_tree(url, dir, expected, TreeOrigin::Vendor, &mut diagnostics);
+                }
+            }
+        }
+    }
+    let named: BTreeSet<&String> = imports.values().flatten().collect();
+    let mut strays = Vec::new();
+    if let Ok(entries) = fs::read_dir(&vendor) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let is_dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
+            if is_dir && !name.starts_with('.') && !named.contains(&name) {
+                strays.push((name, entry.path()));
+            }
+        }
+    }
+    strays.sort();
+    for (name, path) in strays {
+        diagnostics.push(detached(
+            DiagCode::MANI_110,
+            format!(
+                "`{}` is in `vendor/` but no `[imports]` key names `{name}`; run `ridl vendor` to remove it",
+                path.display()
+            ),
+        ));
+    }
+    diagnostics
 }
 
 /// Copies the tree of `unit` to `to`, then checks the copy against the
@@ -391,5 +486,228 @@ mod tests {
         let report = write_vendor(&root, &BTreeMap::new()).unwrap();
         assert_eq!(report, VendorWrite::default());
         assert!(!root.join("vendor").exists());
+    }
+
+    fn union(url: &str, key: &str) -> ImportUnion {
+        BTreeMap::from([(url.to_string(), BTreeSet::from([key.to_string()]))])
+    }
+
+    fn lock_for(url: &str, tree: &str) -> Lockfile {
+        let mut lock = Lockfile::default();
+        lock.entries.insert(
+            url.into(),
+            LockEntry {
+                sha256: "a".repeat(64),
+                tree: Some(tree.into()),
+            },
+        );
+        lock
+    }
+
+    fn codes(diags: &[Diagnostic]) -> Vec<&str> {
+        diags.iter().map(|d| d.code.as_str()).collect()
+    }
+
+    /// A matching directory draws nothing, and the check writes nothing.
+    #[test]
+    fn a_matching_vendor_checks_clean() {
+        let fixture = TempDir::new("check-clean");
+        let root = fixture.path().join("root");
+        let unit = unit(&root.join("vendor/a"), &[("a.typl", "package a\n")]);
+        let diags = check_vendor(
+            &root,
+            &union(&unit.url, "a"),
+            Some(&lock_for(&unit.url, &unit.tree)),
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(tree_hash(&root.join("vendor/a")).unwrap(), unit.tree);
+    }
+
+    /// An imported unit with no directory is MANI-109; a directory no key
+    /// names is MANI-110; a changed tree is MANI-107; a unit with no lock
+    /// entry is MANI-103, and one whose entry has no `tree` is MANI-108.
+    /// None of the messages claims `--frozen`, and each says what to run.
+    #[test]
+    fn drift_is_one_diagnostic_per_unit() {
+        let fixture = TempDir::new("check-drift");
+        let root = fixture.path().join("root");
+        let a = unit(&root.join("vendor/a"), &[("a.typl", "package a\n")]);
+        unit(&root.join("vendor/stray"), &[("s.typl", "package stray\n")]);
+        let mut imports = union(&a.url, "a");
+        for key in ["b", "c", "d"] {
+            imports.insert(
+                format!("https://r.example.com/{key}@v1"),
+                BTreeSet::from([key.to_string()]),
+            );
+        }
+        unit(&root.join("vendor/c"), &[("c.typl", "package c\n")]);
+        unit(&root.join("vendor/d"), &[("d.typl", "package d\n")]);
+        let mut lock = lock_for(&a.url, "0000");
+        lock.entries.insert(
+            "https://r.example.com/b@v1".into(),
+            LockEntry {
+                sha256: "b".repeat(64),
+                tree: Some("1111".into()),
+            },
+        );
+        lock.entries.insert(
+            "https://r.example.com/d@v1".into(),
+            LockEntry {
+                sha256: "d".repeat(64),
+                tree: None,
+            },
+        );
+        let mut diags = check_vendor(&root, &imports, Some(&lock));
+        diags.sort_by(|x, y| x.code.as_str().cmp(y.code.as_str()));
+        assert_eq!(
+            codes(&diags),
+            ["MANI-103", "MANI-107", "MANI-108", "MANI-109", "MANI-110"]
+        );
+        assert!(diags[0].message.contains("c@v1"), "{}", diags[0].message);
+        assert!(
+            diags[1].message.contains("vendor/a") || diags[1].message.contains("vendor\\a"),
+            "{}",
+            diags[1].message
+        );
+        assert!(diags[2].message.contains("d@v1"), "{}", diags[2].message);
+        assert!(diags[3].message.contains("b@v1"), "{}", diags[3].message);
+        assert!(diags[4].message.contains("stray"), "{}", diags[4].message);
+        for diag in &diags {
+            assert!(!diag.message.contains("--frozen"), "{}", diag.message);
+            assert!(diag.message.contains("ridl vendor"), "{}", diag.message);
+            assert_eq!(diag.severity, crate::diag::Severity::Error);
+        }
+        assert!(
+            root.join("vendor/stray/s.typl").is_file(),
+            "nothing removed"
+        );
+    }
+
+    /// With no lockfile at all, a vendored unit is MANI-103: the check
+    /// cannot verify it.
+    #[test]
+    fn no_lockfile_is_mani_103() {
+        let fixture = TempDir::new("check-nolock");
+        let root = fixture.path().join("root");
+        let unit = unit(&root.join("vendor/a"), &[("a.typl", "package a\n")]);
+        let diags = check_vendor(&root, &union(&unit.url, "a"), None);
+        assert_eq!(codes(&diags), ["MANI-103"]);
+    }
+
+    /// A file rewritten with CRLF line ends is drift.
+    #[test]
+    fn a_crlf_rewrite_is_drift() {
+        let fixture = TempDir::new("check-crlf");
+        let root = fixture.path().join("root");
+        let unit = unit(&root.join("vendor/a"), &[("a.typl", "package a\n")]);
+        fs::write(root.join("vendor/a/a.typl"), "package a\r\n").unwrap();
+        let diags = check_vendor(
+            &root,
+            &union(&unit.url, "a"),
+            Some(&lock_for(&unit.url, &unit.tree)),
+        );
+        assert_eq!(codes(&diags), ["MANI-107"]);
+    }
+
+    /// With no `vendor/`, every import is MANI-109 and nothing else, and
+    /// no directory is created.
+    #[test]
+    fn a_missing_vendor_is_mani_109_for_each_import() {
+        let fixture = TempDir::new("check-missing");
+        let root = root_in(&fixture);
+        let mut imports = union("https://r.example.com/a@v1", "a");
+        imports.insert(
+            "https://r.example.com/b@v1".into(),
+            BTreeSet::from(["b".to_string()]),
+        );
+        let diags = check_vendor(&root, &imports, None);
+        assert_eq!(codes(&diags), ["MANI-109", "MANI-109"]);
+        assert!(!root.join("vendor").exists());
+    }
+
+    /// A regular file at a key path is not the unit's directory: MANI-109.
+    #[test]
+    fn a_file_at_a_key_path_is_mani_109() {
+        let fixture = TempDir::new("check-file-at-key");
+        let root = root_in(&fixture);
+        fs::create_dir_all(root.join("vendor")).unwrap();
+        fs::write(root.join("vendor/a"), "not a directory").unwrap();
+        let diags = check_vendor(&root, &union("https://r.example.com/a@v1", "a"), None);
+        assert_eq!(codes(&diags), ["MANI-109"]);
+    }
+
+    /// A hidden directory, which only an interrupted `ridl vendor` leaves,
+    /// and a file in `vendor/` are not MANI-110.
+    #[test]
+    fn hidden_directories_and_files_are_not_drift() {
+        let fixture = TempDir::new("check-hidden");
+        let root = fixture.path().join("root");
+        let unit = unit(&root.join("vendor/a"), &[("a.typl", "package a\n")]);
+        fs::create_dir_all(root.join("vendor/.staging-a-999")).unwrap();
+        fs::write(root.join("vendor/README.md"), "notes").unwrap();
+        let diags = check_vendor(
+            &root,
+            &union(&unit.url, "a"),
+            Some(&lock_for(&unit.url, &unit.tree)),
+        );
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    /// Every directory named by a key of a URL is that unit's tree: two
+    /// keys of one URL with matching directories draw nothing, and a second
+    /// directory that does not match is MANI-107 naming it, not MANI-110.
+    #[test]
+    fn each_key_directory_of_a_url_is_verified() {
+        let fixture = TempDir::new("check-two-keys");
+        let root = fixture.path().join("root");
+        let unit = unit(&root.join("vendor/a"), &[("a.typl", "package a\n")]);
+        let b = root.join("vendor/b");
+        fs::create_dir_all(&b).unwrap();
+        fs::write(b.join("a.typl"), "package a\n").unwrap();
+        let imports = BTreeMap::from([(
+            unit.url.clone(),
+            BTreeSet::from(["a".to_string(), "b".to_string()]),
+        )]);
+        let lock = lock_for(&unit.url, &unit.tree);
+        let diags = check_vendor(&root, &imports, Some(&lock));
+        assert!(diags.is_empty(), "{diags:?}");
+        fs::write(b.join("a.typl"), "package b\n").unwrap();
+        let diags = check_vendor(&root, &imports, Some(&lock));
+        assert_eq!(codes(&diags), ["MANI-107"]);
+        assert!(
+            diags[0].message.contains("vendor/b") || diags[0].message.contains("vendor\\b"),
+            "{}",
+            diags[0].message
+        );
+    }
+
+    /// A symbolic link in a vendored tree is MANI-107 naming the link.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_in_a_vendored_tree_is_mani_107() {
+        let fixture = TempDir::new("check-symlink");
+        let root = fixture.path().join("root");
+        let unit = unit(&root.join("vendor/a"), &[("a.typl", "package a\n")]);
+        std::os::unix::fs::symlink(
+            root.join("vendor/a/a.typl"),
+            root.join("vendor/a/link.typl"),
+        )
+        .unwrap();
+        let diags = check_vendor(
+            &root,
+            &union(&unit.url, "a"),
+            Some(&lock_for(&unit.url, &unit.tree)),
+        );
+        assert_eq!(codes(&diags), ["MANI-107"]);
+        assert!(
+            diags[0].message.contains("link.typl"),
+            "{}",
+            diags[0].message
+        );
+        assert!(
+            diags[0].message.contains("not a regular file"),
+            "{}",
+            diags[0].message
+        );
     }
 }

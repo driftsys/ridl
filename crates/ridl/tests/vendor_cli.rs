@@ -408,3 +408,156 @@ fn vendor_without_a_manifest_exits_2() {
     assert_eq!(stdout, "");
     assert!(!empty.join("vendor").exists());
 }
+
+/// Every file and directory under `dir`, with the bytes of each file, so a
+/// test can assert that a command wrote nothing.
+fn snapshot(dir: &std::path::Path) -> Vec<(std::path::PathBuf, Option<Vec<u8>>)> {
+    let mut entries = Vec::new();
+    let mut pending = vec![dir.to_path_buf()];
+    while let Some(next) = pending.pop() {
+        for entry in std::fs::read_dir(&next).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                entries.push((path.clone(), None));
+                pending.push(path);
+            } else {
+                let bytes = std::fs::read(&path).unwrap();
+                entries.push((path, Some(bytes)));
+            }
+        }
+    }
+    entries.sort();
+    entries
+}
+
+/// `ridl vendor --check` exits 0 with no output on a match, 1 on drift of
+/// any kind, and never fetches or writes: the consumer tree and the cache
+/// are byte for byte the same after each run.
+#[test]
+fn vendor_check_reports_drift_without_network_or_writes() {
+    let dir = TempDir::new("vendor-check");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    assert_eq!(ridl(&root, dir.path(), &["vendor"]).0, 0);
+    stub.reset_hits();
+    let before = snapshot(dir.path());
+    let (code, stdout, stderr) = ridl(&root, dir.path(), &["vendor", "--check"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stdout, "");
+    assert!(stderr.is_empty(), "a clean run prints nothing: {stderr}");
+    assert_eq!(snapshot(dir.path()), before, "--check writes nothing");
+
+    // A vendored file rewritten with CRLF line ends no longer matches.
+    std::fs::write(
+        root.join("vendor/veh.common/common.typl"),
+        COMMON_UNIT[1].1.replace('\n', "\r\n"),
+    )
+    .unwrap();
+    let before = snapshot(dir.path());
+    let (code, stdout, stderr) = ridl(&root, dir.path(), &["vendor", "--check"]);
+    assert_eq!(code, 1, "{stderr}");
+    assert_eq!(stdout, "");
+    assert!(stderr.contains("error[MANI-107]"), "{stderr}");
+    assert!(stderr.contains("vendor/veh.common"), "{stderr}");
+    assert_eq!(snapshot(dir.path()), before, "--check writes nothing");
+
+    std::fs::create_dir_all(root.join("vendor/stray")).unwrap();
+    std::fs::remove_dir_all(root.join("vendor/veh.common")).unwrap();
+    let before = snapshot(dir.path());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["vendor", "--check"]);
+    assert_eq!(code, 1, "{stderr}");
+    assert!(
+        stderr.contains("error[MANI-109]") && stderr.contains("error[MANI-110]"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("MANI-107"), "{stderr}");
+    assert_eq!(snapshot(dir.path()), before, "--check writes nothing");
+    assert_eq!(stub.hits(), 0, "--check never fetches");
+}
+
+/// A vendored unit that `ridl.lock` does not pin cannot be verified:
+/// MANI-103, exit 1, with a message that names `ridl vendor` and not
+/// `--frozen`. Nothing is fetched and no lockfile is written.
+#[test]
+fn vendor_check_on_an_unpinned_unit_is_mani_103() {
+    let dir = TempDir::new("vendor-check-unpinned");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    vendor_common(&root);
+    let (code, _, stderr) = ridl(&root, dir.path(), &["vendor", "--check"]);
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("error[MANI-103]"), "{stderr}");
+    assert!(stderr.contains("ridl vendor"), "{stderr}");
+    assert!(!stderr.contains("--frozen"), "{stderr}");
+    assert!(!root.join("ridl.lock").exists());
+    assert_eq!(stub.hits(), 0);
+}
+
+/// A manifest that does not parse is reported, and `--check` exits 1
+/// rather than reporting a clean `vendor/`.
+#[test]
+fn vendor_check_reports_a_broken_manifest() {
+    let dir = TempDir::new("vendor-check-manifest");
+    dir.write("app/ridl.toml", "[package\nname = \"app\"\n");
+    dir.write("app/app.typl", "package app\n");
+    let root = dir.path().join("app");
+    let (code, stdout, stderr) = ridl(&root, dir.path(), &["vendor", "--check"]);
+    assert_eq!(code, 1, "{stderr}");
+    assert_eq!(stdout, "");
+    assert!(stderr.contains("error[MANI-001]"), "{stderr}");
+    assert!(!root.join("vendor").exists());
+}
+
+/// A missing path exits 2 before root discovery, even when the working
+/// directory is inside a consumer whose `vendor/` would draw drift.
+#[test]
+fn vendor_check_on_a_missing_path_exits_2() {
+    let dir = TempDir::new("vendor-check-missing");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, stdout, stderr) = ridl(&root, dir.path(), &["vendor", "--check", "nowhere"]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(stderr.contains("nowhere"), "{stderr}");
+    assert!(!stderr.contains("MANI-109"), "{stderr}");
+    assert_eq!(stdout, "");
+    assert_eq!(stub.hits(), 0);
+}
+
+/// A path with no `ridl.toml` at or above it exits 2.
+#[test]
+fn vendor_check_without_a_manifest_exits_2() {
+    let dir = TempDir::new("vendor-check-no-manifest");
+    std::fs::create_dir_all(dir.path().join("empty")).unwrap();
+    let empty = dir.path().join("empty");
+    let (code, stdout, stderr) = ridl(&empty, dir.path(), &["vendor", "--check"]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(stderr.contains("no `ridl.toml`"), "{stderr}");
+    assert_eq!(stdout, "");
+}
+
+/// Run from a workspace member, `--check` compares the `vendor/` at the
+/// workspace root.
+#[test]
+fn vendor_check_reads_the_workspace_root() {
+    let dir = TempDir::new("vendor-check-ws");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    dir.write("ws/ridl.toml", "[workspace]\nmembers = [\"app\"]\n");
+    dir.write(
+        "ws/app/ridl.toml",
+        &format!(
+            "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{}\"\n",
+            stub.url()
+        ),
+    );
+    dir.write("ws/app/app.typl", "package app\n");
+    let member = dir.path().join("ws/app");
+    let (code, _, stderr) = ridl(&member, dir.path(), &["vendor"]);
+    assert_eq!(code, 0, "{stderr}");
+    let (code, _, stderr) = ridl(&member, dir.path(), &["vendor", "--check"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.is_empty(), "{stderr}");
+    std::fs::remove_dir_all(dir.path().join("ws/vendor/veh.common")).unwrap();
+    let (code, _, stderr) = ridl(&member, dir.path(), &["vendor", "--check"]);
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("error[MANI-109]"), "{stderr}");
+}

@@ -356,12 +356,14 @@ are `1xx`.
 | MANI-018 | a source file under the root's `vendor/` is not loaded                                      | warning  |
 | MANI-101 | remote import fetch failed                                                                  | error    |
 | MANI-102 | fetched content hash does not match the lockfile                                            | error    |
-| MANI-103 | `--frozen`: no lockfile entry for a remote import                                           | error    |
+| MANI-103 | `--frozen` or `ridl vendor --check`: no lockfile entry for a remote import                  | error    |
 | MANI-104 | `--frozen`: a lockfile-pinned import is not cached                                          | error    |
 | MANI-105 | a remote unit has no top-level `[package]` manifest, or its name is not the `[imports]` key | error    |
 | MANI-106 | a remote unit imports a key the consumer's `[imports]` does not name                        | error    |
 | MANI-107 | a remote unit's tree does not match the `tree` hash in `ridl.lock`                          | error    |
-| MANI-108 | `--frozen`: a `ridl.lock` entry has no `tree` hash                                          | error    |
+| MANI-108 | `--frozen` or `ridl vendor --check`: a `ridl.lock` entry has no `tree` hash                 | error    |
+| MANI-109 | an imported unit has no directory in `vendor/`                                              | error    |
+| MANI-110 | `vendor/` holds a directory that no `[imports]` key names                                   | error    |
 
 MANI-009 is the one manifest code the manifest layer does not raise: `ridl-core`
 cannot depend on `ridl-sem`, so the manifest parser stores the `[defaults]`
