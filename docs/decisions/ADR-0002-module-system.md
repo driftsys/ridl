@@ -461,15 +461,18 @@ directory named `vendor` is an ordinary source package. A unit's own `vendor/`
 directory is copied with the unit, because it is part of the tree hash, and is
 skipped when the unit is read. `ridl vendor [PATH]` brings the directory to
 exactly the imported set — each unit written whole into a staging directory and
-renamed into place, a unit no longer imported removed, nothing written when the
-run has an error — and reads the cache, never `vendor/`, so a changed URL
-replaces the directory. `ridl vendor --check [PATH]` compares the directory with
-the imports and the lock without network or writes: MANI-109 (Error) for an
-imported unit with no directory, MANI-110 (Error) for a directory no key names,
-MANI-107 for a tree that does not match, and MANI-103 or MANI-108 for a unit
-whose lock entry is missing or has no `tree`, because such a directory cannot be
-verified. `ridl.lock` and `vendor/` are part of the frozen manifest surface from
-0.10.0 ([ADR-0029](ADR-0029-stability-policy.md)).
+renamed into place; every directory directly under `vendor/` that no `[imports]`
+key names removed, whether or not `ridl vendor` wrote it, while files, symbolic
+links and hidden entries are left; `vendor/` left untouched when the run has an
+error, while `ridl.lock` may still be updated as any non-frozen load updates it
+— and reads the cache, never `vendor/`, so a changed URL replaces the directory.
+`ridl vendor --check [PATH]` compares the directory with the imports and the
+lock without network or writes: MANI-109 (Error) for an imported unit with no
+directory, MANI-110 (Error) for a directory no key names, MANI-107 for a tree
+that does not match, and MANI-103 or MANI-108 for a unit whose lock entry is
+missing or has no `tree`, because such a directory cannot be verified.
+`ridl.lock` and `vendor/` are part of the frozen manifest surface from 0.10.0
+([ADR-0029](ADR-0029-stability-policy.md)).
 
 Alternatives considered: a vendor directory holding the tar files, or both tars
 and trees (a review would show a binary file, and two copies can drift);

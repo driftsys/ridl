@@ -310,7 +310,9 @@ fn vendor_does_not_print_an_allow_by_default_lint() {
 }
 
 /// A diagnostic error — in a remote unit or in the consumer — leaves
-/// `vendor/` as it was and exits 1; a fetch failure exits 2.
+/// `vendor/` as it was and exits 1, while `ridl.lock` is rewritten to pin
+/// the unit that was fetched and verified, as a non-frozen `ridl check`
+/// rewrites it. A fetch failure exits 2 and leaves `ridl.lock` as it was.
 #[test]
 fn vendor_writes_nothing_on_an_error() {
     let dir = TempDir::new("vendor-error");
@@ -332,6 +334,9 @@ fn vendor_writes_nothing_on_an_error() {
     assert!(stderr.contains("TYPL-104"), "{stderr}");
     assert_eq!(stdout, "");
     unchanged();
+    let lock = || std::fs::read_to_string(root.join("ridl.lock")).unwrap();
+    assert!(lock().contains(broken.url()), "{}", lock());
+    assert!(!lock().contains(stub.url()), "{}", lock());
 
     // A unit that would vendor cleanly, with an error in the consumer.
     let newer = Stub::serving(unit_tar(&[
@@ -348,7 +353,9 @@ fn vendor_writes_nothing_on_an_error() {
     assert!(stderr.contains("error"), "{stderr}");
     assert_eq!(stdout, "");
     unchanged();
+    assert!(lock().contains(newer.url()), "{}", lock());
     std::fs::remove_file(root.join("bad.typl")).unwrap();
+    let pinned = lock();
 
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let dead = format!("http://{}/package.tar", listener.local_addr().unwrap());
@@ -359,6 +366,7 @@ fn vendor_writes_nothing_on_an_error() {
     assert!(stderr.contains("MANI-101"), "{stderr}");
     assert_eq!(stdout, "");
     unchanged();
+    assert_eq!(lock(), pinned);
 }
 
 /// A missing path exits 2 before root discovery: run from inside a consumer

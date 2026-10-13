@@ -1467,7 +1467,9 @@ diag_codes! {
             "an imported unit has no directory in `vendor/`";
 
         /// `ridl vendor --check`: `vendor/` holds a directory that no
-        /// `[imports]` key names (ADR-0002 §7).
+        /// `[imports]` key names (ADR-0002 §7), which `ridl vendor` removes
+        /// whether or not it wrote it. A file, a symbolic link and a hidden
+        /// entry are not reported, and `ridl vendor` leaves them alone.
         MANI_110 = "MANI-110", Error,
             "`vendor/` holds a directory that no `[imports]` key names";
     }

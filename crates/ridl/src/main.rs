@@ -263,11 +263,13 @@ enum Command {
     },
     /// Copy every remote unit of the workspace's `[imports]` into `vendor/`
     /// at the manifest root, so a `--frozen` build needs no network and no
-    /// cache. Exit 0 when `vendor/` was written or there was nothing to
-    /// change, 1 on a diagnostic error (nothing written), 2 on a missing or
-    /// unreadable path, a fetch failure, or an I/O failure. With `--check`,
-    /// compare `vendor/` with the imports and `ridl.lock` instead, writing
-    /// nothing.
+    /// cache. Every directory in `vendor/` that no `[imports]` key names is
+    /// removed; files and hidden entries are left. Exit 0 when `vendor/` was
+    /// written or there was nothing to change, 1 on a diagnostic error
+    /// (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a
+    /// missing or unreadable path, a fetch failure, or an I/O failure. With
+    /// `--check`, compare `vendor/` with the imports and `ridl.lock` instead,
+    /// writing nothing.
     Vendor {
         /// A unit directory, a workspace root, or a file; the manifest root
         /// above it is the one vendored.
