@@ -1,0 +1,9 @@
+schema: 1
+name: ridl
+description: >-
+  Agent knowledge for the RIDL language family: authoring typl types, ridl
+  interfaces and rsdl systems, and checking them with the ridl tools.
+license: MIT
+items:
+  skills:
+    - ridl-authoring

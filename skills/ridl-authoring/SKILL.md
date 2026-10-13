@@ -1,4 +1,5 @@
 ---
+schema: 1
 name: ridl-authoring
 description: >-
   Write, review and evolve RIDL-family contracts: typl types, ridl interfaces
@@ -8,8 +9,6 @@ description: >-
 metadata:
   version: "0.10.0"
 ---
-
-# Authoring RIDL
 
 ## The model in one minute
 
