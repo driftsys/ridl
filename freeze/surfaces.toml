@@ -9,13 +9,16 @@ required = [
   "codegen-protocol",
   "generated-crate",
   "runtime-crates",
+  "keywords",
+  "accepted-sources",
+  "diagnostics",
 ]
 
 # Baseline rows for the freeze check. Each row names a frozen surface and the
 # git ref its dump is compared against:
 #
 #   [[surface]]
-#   name = "keywords"
+#   name = "example"
 #   baseline = "v0.10.0"
 #
 # Without a row, a line-dump surface is only checked against its committed
@@ -45,3 +48,15 @@ baseline = "2e3a3c9c1c41fe6b749575bfb2ba9ff39f62e9f0"
 [[surface]]
 name = "runtime-crates"
 baseline = "69d23ab79ed75f59126f2f5a755f245df552dd64"
+
+[[surface]]
+name = "keywords"
+baseline = "ecc2eb0c18f3441e0b687a666eaace4bb0caa647"
+
+[[surface]]
+name = "accepted-sources"
+baseline = "d4729323d6f77219fd4778a45ea9382a37e82fdc"
+
+[[surface]]
+name = "diagnostics"
+baseline = "2a6a94a8b6e7d67845b0737c8d1bd6977e0ea1b8"

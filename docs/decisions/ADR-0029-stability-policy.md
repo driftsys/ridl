@@ -257,23 +257,23 @@ design in each:
    ADR-0021 decision 10 as a frozen surface and adds the `msrv` check.
 
 6. **The gate table says which gate covers which surface.** The `baseline`
-   column is empty on the day this record is accepted. `freeze/surfaces.toml` is
-   the authoritative record of every baseline; this table lists the coverage and
-   the work that switches each gate on, and a gate is on when its surface has a
-   row there.
+   column was empty on the day this record was accepted. A blank cell means that
+   the surface has no row yet. `freeze/surfaces.toml` is the authoritative
+   record of every baseline; this table lists the coverage and the work that
+   switches each gate on, and a gate is on when its surface has a row there.
 
-   | Surface                 | Row names in `surfaces.toml`                                                   | Switched on by                       | Baseline   |
-   | ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------ | ---------- |
-   | Language                | `keywords`, `accepted-sources`                                                 | the language lane                    |            |
-   | Manifest                | `manifest`                                                                     | the language lane                    |            |
-   | Diagnostics and lints   | `diagnostics`                                                                  | the language lane                    |            |
-   | CLI                     | `cli`                                                                          | the developer-experience lane        |            |
-   | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                      | the codegen lane                     | `2e3a3c9c` |
-   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            | `69d23ab7` |
-   | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     | `a3a0ac21` |
-   | MCP tools               | `mcp`                                                                          | the release and policy lane, at once | `3c3301df` |
-   | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            | `e6620b0e` |
-   | Minimum Rust version    | `msrv`                                                                         | the wire and runtime lane            | `7e83024d` |
+   | Surface                 | Row names in `surfaces.toml`                                                   | Switched on by                       | Baseline               |
+   | ----------------------- | ------------------------------------------------------------------------------ | ------------------------------------ | ---------------------- |
+   | Language                | `keywords`, `accepted-sources`                                                 | the language lane                    | `ecc2eb0c`, `d4729323` |
+   | Manifest                | `manifest`                                                                     | the language lane                    |                        |
+   | Diagnostics and lints   | `diagnostics`                                                                  | the language lane                    | `2a6a94a8`             |
+   | CLI                     | `cli`                                                                          | the developer-experience lane        |                        |
+   | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                      | the codegen lane                     | `2e3a3c9c`             |
+   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            | `69d23ab7`             |
+   | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     | `a3a0ac21`             |
+   | MCP tools               | `mcp`                                                                          | the release and policy lane, at once | `3c3301df`             |
+   | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            | `e6620b0e`             |
+   | Minimum Rust version    | `msrv`                                                                         | the wire and runtime lane            | `7e83024d`             |
 
 ## Alternatives considered
 
