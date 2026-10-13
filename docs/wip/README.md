@@ -83,7 +83,20 @@ both parts of #48 landed (#941 and #950); the 2026-10-13 amendments of
 [ADR-0010](../decisions/ADR-0010-cli-conventions.md),
 [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md) and
 [ADR-0029](../decisions/ADR-0029-stability-policy.md) and
-[the CLI reference](../book/cli-reference.md) are their durable records.
+[the CLI reference](../book/cli-reference.md) are their durable records. The
+attribute registry and interaction family design and plan
+(`2026-10-11-attribute-registry-and-family-{design,plan}.md`) were archived on
+2026-10-13, once the registry, the fail-closed diff and the `family` and `shape`
+fields landed (#883, #892); the 2026-10-11 amendments of
+[ADR-0012](../decisions/ADR-0012-interaction-boundary-model.md) and the
+[ridl](../specification/ridl-language-reference.md) and
+[rsdl](../specification/rsdl-language-reference.md) language references are
+their durable records. The freeze check plan and its `cargo-semver-checks` spike
+(`2026-10-11-freeze-check-plan.md`, `freeze-check-semver-spike.md`) were
+archived on 2026-10-13, once the check landed (#866);
+[ADR-0029](../decisions/ADR-0029-stability-policy.md),
+[`../../freeze/README.md`](../../freeze/README.md) and
+[the stability chapter](../book/stability.md) are their durable records.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -283,3 +296,42 @@ execution handoff and the Kotlin heads-up and release-note draft
 (`2026-10-08-catalog-per-unit-handoff.md`, `catalog-per-unit-handoff.md`), when
 the work landed and its material was gardened into ADR-0002, ADR-0014 decision
 15, ADR-0015, ADR-0022 decision 6 and the design records they name.
+
+## Files that stay after the 0.10.0 gardening pass (2026-10-13)
+
+Each file below was read against the code and the issue tracker on 2026-10-13
+and was not archived. The reason is stated once per file or group.
+
+- **2026-10-11-release-0.10-design.md** and
+  **2026-10-11-release-0.10-lanes-plan.md** — the release design and its lanes
+  plan. 0.10.0 is released and all eleven frozen surfaces have a row in
+  `freeze/surfaces.toml`, but the ridl-authoring skill files below still cite
+  both, and the lane briefs name work that is open: the skill (driftsys/ridl#73,
+  #74, #75 and #87) and the debt roll-ups #172, #347 and #789. Archive both with
+  the skill's own gardening.
+- **2026-10-11-ridl-authoring-skill-design.md**,
+  **2026-10-11-ridl-authoring-skill-plan.md** and
+  **skill-ridl-authoring-outline.md** — the skill's gates, eval harness and
+  distribution landed (#893), but `skills/ridl-authoring/` holds a skeleton, not
+  the rule and reference content, and the plan's Tasks 10 to 13 (the content,
+  the judge check, the release record, the gardening and the ADR-0005
+  amendments) are open. The plan's Task 13 is the standing instruction.
+- **2026-10-07-generated-observation-design.md** and
+  **2026-10-07-generated-observation-plan.md** — optional trace spans from the
+  generated Rust face, driftsys/ridl#754. Open; the generated crate has no
+  `__observe` module.
+- **fmt-ridl-rsdl-layout.md**, **fmt-ridl-rsdl-plan.md**,
+  **fmt-ridl-rsdl-decisions.md**, **fmt-ridl-rsdl-review.md** and
+  **fmt-ridl-rsdl-evidence/** — the formatter work landed (#638, #387 closed).
+  The layout note is still the only record of the canonical layout rules of
+  `ridl fmt` (the decisions log calls it normative) and
+  [`family-general-form.md`](family-general-form.md) refers to it, so archiving
+  it needs a durable home for those rules first. That is a decision for the
+  maintainer.
+- **2026-09-20-lane-r-driver.md**, **2026-09-21-nested-interface-design.md** and
+  **2026-10-01-portable-match-patterns-design.md** — each states in its own
+  header that it is a driver prompt or a design note that has not graduated (the
+  nested interface note into an amendment of ADR-0015, the match pattern note
+  into an amendment of the typl reference). The tracker shows #597 closed, but
+  no commit after the design implements it; the maintainer decides whether each
+  is taken, archived or superseded.
