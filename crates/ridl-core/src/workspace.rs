@@ -102,8 +102,12 @@ pub struct LoadedWorkspace {
     /// The remote units loaded, keyed by unit name (the `[package] name` of
     /// the unit's manifest, which equals the `[imports]` key). Empty when the
     /// load took no [`RemoteAccess`], in single-file mode, and for a consumer
-    /// with no `[imports]`. A unit that drew MANI-105 or MANI-014 is not
-    /// here, because its tree was not loaded.
+    /// with no `[imports]`. A unit whose tree was not loaded is not here: one
+    /// with no `[package]` manifest at the top, or whose name no key names
+    /// (MANI-105), or that claims a source package another unit declares
+    /// (MANI-014). A unit named by one key and by a second key that is not
+    /// its name is here under its name; the second key draws MANI-105 and
+    /// binds nothing.
     pub remote_units: BTreeMap<String, MaterializedUnit>,
 }
 
@@ -4708,6 +4712,81 @@ service:veh.common.climate 2
             );
             assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
             assert_eq!(loaded.remote_units["veh.common"].url, URL);
+        }
+
+        /// A workspace with no `[imports]` anywhere reads and writes no
+        /// `ridl.lock` on a load that is not frozen.
+        #[test]
+        fn a_workspace_with_no_imports_writes_no_lockfile() {
+            let fixture = TempDir::new("remote-no-imports");
+            fixture.write("ridl.toml", "[workspace]\nmembers = [\"app\"]\n");
+            fixture.write(
+                "app/ridl.toml",
+                "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+            );
+            fixture.write("app/app.ridl", "package app\n");
+            let root = fixture.path().to_path_buf();
+            let (_, loaded) = load_with(&fixture, &root, Frozen::No);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            assert!(loaded.imports.is_empty());
+            assert!(
+                !root.join("ridl.lock").exists(),
+                "no `ridl.lock` is written for a workspace with no `[imports]`"
+            );
+        }
+
+        /// A detached Error of a remote unit's read keeps its message as it
+        /// is: the unit-name prefix is for an Error that points into a file
+        /// of the unit, and a detached one already names the URL.
+        #[test]
+        fn a_detached_remote_error_is_not_prefixed() {
+            let fixture = TempDir::new("remote-detached-message");
+            let root = consumer(&fixture);
+            let cache = cache(&fixture);
+            let entry = store(&cache, URL, &[("common.typl", "package veh.common\n")]);
+            let dir = cache
+                .lookup(URL, &entry.sha256)
+                .expect("the unit is cached");
+            let mut lock = Lockfile::default();
+            lock.entries.insert(URL.to_string(), entry);
+            write_lockfile(&root.join("ridl.lock"), &lock).expect("write ridl.lock");
+            let (_, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-105"]);
+            assert_eq!(
+                loaded.diagnostics[0].message,
+                format!(
+                    "the remote unit at `{URL}` has no `ridl.toml` at the top level of its tree (`{}`)",
+                    dir.display()
+                )
+            );
+        }
+
+        /// A member whose tree does not load (a second unit claiming a
+        /// source package, MANI-014) still adds its pins to the union: the
+        /// union is a property of the manifests, not of what loaded.
+        #[test]
+        fn a_duplicate_members_pins_join_the_union() {
+            let fixture = TempDir::new("remote-duplicate-member-pins");
+            fixture.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+            fixture.write(
+                "a/ridl.toml",
+                "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+            );
+            fixture.write("a/a.ridl", "package app\n");
+            fixture.write(
+                "b/ridl.toml",
+                &format!(
+                    "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{URL}\"\n"
+                ),
+            );
+            fixture.write("b/b.ridl", "package app\n");
+            let root = fixture.path().to_path_buf();
+            let (_, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-014", "MANI-103"]);
+            assert_eq!(
+                loaded.imports,
+                BTreeMap::from([(URL.to_string(), BTreeSet::from(["veh.common".to_string()]))])
+            );
         }
 
         /// Single-file mode has no manifest and loads no remote unit.

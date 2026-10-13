@@ -1299,7 +1299,9 @@ diag_codes! {
 
     /// The manifest catalogue (ADR-0007 decision 2): the manifest `0xx` codes the
     /// `ridl.toml` parser and the package loader emit, and the
-    /// distribution `1xx` codes the import materializer emits. Listed here
+    /// distribution `1xx` codes the import materializer emits — except
+    /// `MANI-105` and `MANI-106`, which the loader raises when it reads a
+    /// materialized remote unit. Listed here
     /// even for `MANI-004`, whose emission site is the loader rather than the
     /// standalone parser, so the error index has one authoritative source.
     MANI_CATALOG {

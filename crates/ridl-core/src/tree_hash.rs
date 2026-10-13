@@ -159,18 +159,25 @@ mod tests {
     /// The hash is the SHA-256 of, per file in byte order of its `/`
     /// separated relative path: the path bytes, one NUL, the length as a
     /// little-endian u64, the bytes. Computed by hand here, so the function
-    /// is checked against the definition and not against itself.
+    /// is checked against the definition and not against itself. The order
+    /// is that of the whole path's bytes, not of its components: `-` (0x2d)
+    /// sorts before `.` (0x2e), and `.` before `/` (0x2f), so `a-b/x.typl`
+    /// comes before `a.typl`, and `a.typl` before `a/b.typl`.
     #[test]
     fn the_hash_follows_the_definition() {
         use sha2::{Digest, Sha256};
         let dir = TempDir::new("definition");
         dir.write("ridl.toml", b"[package]\nname = \"r.u\"\n");
         dir.write("sub/b.typl", b"package r.u.sub\n");
+        dir.write("a/b.typl", b"package r.u.a\n");
         dir.write("a.typl", b"package r.u\n");
+        dir.write("a-b/x.typl", b"package r.u.a_b\n");
 
         let mut hasher = Sha256::new();
         for (path, bytes) in [
+            ("a-b/x.typl", &b"package r.u.a_b\n"[..]),
             ("a.typl", &b"package r.u\n"[..]),
+            ("a/b.typl", &b"package r.u.a\n"[..]),
             ("ridl.toml", &b"[package]\nname = \"r.u\"\n"[..]),
             ("sub/b.typl", &b"package r.u.sub\n"[..]),
         ] {

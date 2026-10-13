@@ -1,7 +1,9 @@
 //! The `ridl.lock` lockfile (ADR-0002 §7).
 //!
 //! A [`Lockfile`] pins every remote import URL to the SHA-256 content hash of
-//! the artifact it resolved to. It lives at the workspace root — or the package
+//! the artifact it resolved to (`sha256`) and to the hash of the tree the
+//! artifact unpacks to (`tree`, [`crate::tree_hash`]); an entry written before
+//! the `tree` hash existed has no `tree`. It lives at the workspace root — or the package
 //! root for a standalone package — as `ridl.lock`, is regenerated on every
 //! successful resolution, and is verified strictly under `ridlc --frozen`
 //! (ADR-0002 §7). The regeneration and verification live in

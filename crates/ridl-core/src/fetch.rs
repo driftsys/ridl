@@ -248,7 +248,16 @@ fn from_cache_or_fetch(
                 ));
                 return None;
             }
-            let tree = hash_tree(url, &dir, diagnostics)?;
+            // A pinned `tree` is verified after a fetch as after a cache hit:
+            // the artifact is the pinned one, but the pin says what its
+            // unpacked tree must be.
+            let tree = match pinned.and_then(|entry| entry.tree.as_deref()) {
+                Some(expected) => {
+                    verify_tree(url, &dir, expected, diagnostics)?;
+                    expected.to_string()
+                }
+                None => hash_tree(url, &dir, diagnostics)?,
+            };
             Some(pinned_unit(url, sha, dir, tree))
         }
     }
@@ -819,6 +828,30 @@ mod tests {
             assert_eq!(codes(&diags), vec!["MANI-107"], "{frozen:?}");
             assert!(units.is_empty());
         }
+    }
+
+    /// A fresh fetch is verified against a pinned `tree` as a cache hit is:
+    /// when the unpacked tree does not hash to the pin, the fetch is
+    /// MANI-107 and the unit is not returned.
+    #[test]
+    fn a_fetch_into_an_empty_cache_verifies_the_pinned_tree() {
+        let stub = Stub::serving(make_tar("remote.typl", b"package remote.pkg\n"));
+        let dir = TempDir::new("tree-fetch-107");
+        let (_, lock, _) =
+            materialize_imports(&imports_of(stub.url()), None, &cache(&dir), Frozen::No);
+        let mut pinned = lock;
+        pinned.entries.get_mut(stub.url()).unwrap().tree = Some("0".repeat(64));
+        let fresh = TempDir::new("tree-fetch-107-fresh");
+        stub.reset_hits();
+        let (units, _, diags) = materialize_imports(
+            &imports_of(stub.url()),
+            Some(&pinned),
+            &cache(&fresh),
+            Frozen::No,
+        );
+        assert_eq!(stub.hits(), 1, "the empty cache is a miss");
+        assert_eq!(codes(&diags), vec!["MANI-107"]);
+        assert!(units.is_empty());
     }
 
     /// A symbolic link in a cache entry is MANI-107 naming the link; the
