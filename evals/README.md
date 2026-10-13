@@ -124,9 +124,10 @@ selected or judges a selected one needs its login found before any command runs:
   and a token that the run refreshed is copied back.
 - Claude reads `CLAUDE_CODE_OAUTH_TOKEN`, which `claude setup-token` prints, or
   `ANTHROPIC_API_KEY`.
-- Copilot uses the login `copilot login` writes; on macOS this lives in the
-  system keychain, which does not depend on `COPILOT_HOME`, so a run's fresh
-  host home needs no copied credential. No API key or token is read for it.
+- Copilot uses the login `copilot login` writes to `config.json` in
+  `$COPILOT_HOME` or in `~/.copilot`. Each Copilot run gets a `config.json` with
+  only the keys `copilotTokens`, `loggedInUsers` and `lastLoggedInUser`, with
+  mode 0600; nothing else of the real home is read. No API key is read for it.
 
 A host command inherits only `PATH`, `HOME`, `TMPDIR` and `LANG` from the eval's
 environment, plus `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` for Claude,
