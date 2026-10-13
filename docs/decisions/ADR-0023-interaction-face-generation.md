@@ -176,6 +176,21 @@ is a sum and is tracked on driftsys/ridl#943. The contract-clause translator of
 decision 1 is unchanged and still limits which interfaces get a face
 (driftsys/ridl#704).
 
+The induced struct is an `InducedTuple` with an `InteractionPath` origin, not a
+new kind of type, so the lowering's collision rule and the Rust backend's
+struct, codec and claim-table emitters apply to it unchanged. The codegen
+model's `CommandShape` and `QueryShape` carry it in the optional fields
+`request_tuple` and `reply_tuple`; `request` and `reply_payload` keep their
+meaning, so a reader that ignores the fields sees the earlier model. The
+`.proto` and `.fbs` printers emit the same structs as positional messages and
+tables, and an induced root is a FlatBuffers root. A call with no parameter,
+such as `readTicks()` of the `veh-cluster` corpus, took the refusal the earlier
+rule named for a parameter count; the one-parameter limit was never the only
+cause. A marker names the first refusal the emitter reaches, so an interface can
+fail on a second reason once the first is cleared: `WheelDiagnostics` still has
+a marker because a `fixed` whose payload is an array has no named type (no
+tracking issue yet).
+
 ## Context
 
 The approved M1 design (archived at
