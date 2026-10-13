@@ -45,8 +45,9 @@ use crate::expr::{self, ContractScope, ExprType};
 use crate::init;
 use crate::lint;
 use crate::resolve::{
-    Resolution, Symbol, SymbolKind, declared_name, declared_symbols, name_range,
-    qualified_segments, resolve_doc_info, resolve_package, significant_text, source_file,
+    Resolution, Symbol, SymbolKind, declared_name, declared_symbols, hidden_package_reason,
+    name_range, package_named, qualified_segments, resolve_doc_info, resolve_package,
+    significant_text, source_file,
 };
 use crate::scalar::{
     DiagKind, ExactValue, FloatRange, IntRange, derive_float_width, derive_int_width,
@@ -655,9 +656,12 @@ fn const_value_of_symbol(
     }
 }
 
-/// The package handle for a package name during constant evaluation: the
-/// embedded `ridl.std` or a workspace member (which includes the package under
-/// check — every member belongs to its own workspace).
+/// The package handle for the package of a resolved constant during
+/// constant evaluation: the embedded `ridl.std`, or the loaded package of
+/// that name — a workspace member (which includes the package under check)
+/// or a package of a remote unit. The name comes from a resolved symbol,
+/// never from source, so the import visibility was applied when the symbol
+/// resolved ([`package_named`]).
 fn const_package_handle(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -941,8 +945,12 @@ impl Checker<'_> {
         }
     }
 
-    /// The package handle for a package name: the checked package itself, the
-    /// embedded `ridl.std`, or a workspace member.
+    /// The package handle for the package of a resolved symbol, or of a
+    /// canonical IR reference: the checked package itself, the embedded
+    /// `ridl.std`, or the loaded package of that name — a workspace member
+    /// or a package of a remote unit. A package path written in source goes
+    /// through [`package_named`] instead, which applies the import
+    /// visibility of ADR-0002 §5.
     pub(crate) fn package_handle(&self, name: &str) -> Option<Package> {
         if name == self.package_name {
             return Some(self.pkg);
@@ -989,12 +997,22 @@ impl Checker<'_> {
                 PathTarget::Unresolved(written)
             }
             Some(symbol) => PathTarget::Symbol(symbol),
+            // A qualified path into a loaded package the checked package
+            // cannot see (a remote package no key of its view pins) draws
+            // the error an `import` of that package draws, not TYPL-011.
             None => {
-                self.error(
-                    DiagCode::TYPL_011,
-                    range,
-                    format!("unknown type name `{written}`"),
-                );
+                match self.hidden_package_reason(path) {
+                    Some(reason) => self.error(
+                        DiagCode::NONE,
+                        range,
+                        format!("unresolved reference `{written}`: {reason}"),
+                    ),
+                    None => self.error(
+                        DiagCode::TYPL_011,
+                        range,
+                        format!("unknown type name `{written}`"),
+                    ),
+                }
                 PathTarget::Unresolved(written)
             }
         }
@@ -1003,6 +1021,19 @@ impl Checker<'_> {
     /// Resolves a path silently against the checked package's own view.
     pub(crate) fn lookup_path(&self, path: &ast::PathType) -> Option<Symbol> {
         self.lookup_path_in(&self.resolution, path)
+    }
+
+    /// Why a qualified `path` names a loaded package the checked package
+    /// cannot see ([`hidden_package_reason`]), or `None` for a bare path and
+    /// for a package that is visible or not loaded.
+    fn hidden_package_reason(&self, path: &ast::PathType) -> Option<String> {
+        let qualified = path.qualified_name()?;
+        let mut segments = qualified_segments(&qualified);
+        if segments.len() < 2 {
+            return None;
+        }
+        segments.pop();
+        hidden_package_reason(self.db, self.ws, self.pkg, &segments.join("."))
     }
 
     /// Resolves a path silently in a given package view: a single segment is a
@@ -1024,7 +1055,10 @@ impl Checker<'_> {
         }
         let name = segments.pop().expect("length checked above");
         let package_path = segments.join(".");
-        let target = self.package_handle(&package_path)?;
+        // The path is read in `resolution`'s view, so the package it names
+        // is the one visible from that view's package (ADR-0002 §5).
+        let viewer = self.package_handle(&resolution.package)?;
+        let target = package_named(self.db, self.ws, self.std, viewer, &package_path)?;
         let symbol = declared_symbols(self.db, target).get(&name).cloned()?;
         // An `internal` declaration is visible only to its own package (typl
         // §3.3). The path is interpreted in `resolution`'s view, so the owner
@@ -13207,6 +13241,188 @@ interface I {\n\
         let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
         let checked = without_missing_docs(check_package(&db, ws, veh, std));
         assert_eq!(codes(&checked), Vec::<&str>::new());
+    }
+
+    // --- qualified references into a remote unit (ADR-0002 §5) ------------
+
+    const REMOTE_URL: &str = "https://registry.example.com/veh/common@v1";
+    const REMOTE_URL_B: &str = "https://registry.example.com/lib/b@v1";
+
+    /// A single-file package of the remote unit loaded for `url`, with its
+    /// own `[imports]`.
+    fn remote_package(
+        db: &RidlDatabase,
+        name: &str,
+        url: &str,
+        text: &str,
+        imports: &[(&str, &str)],
+    ) -> Package {
+        let file = InputFile::new(
+            db,
+            format!("cache/{}.typl", name.replace('.', "/")),
+            text.to_string(),
+        );
+        Package::new(
+            db,
+            name.to_string(),
+            name.split('.').take(2).collect::<Vec<_>>().join("."),
+            vec![file],
+            PackageOrigin::Remote {
+                url: url.to_string(),
+            },
+            imports
+                .iter()
+                .map(|(key, url)| (key.to_string(), url.to_string()))
+                .collect(),
+            TimingDefaults::default(),
+            None,
+        )
+    }
+
+    /// A workspace member `app` whose own `[imports]` is `imports`.
+    fn member_with_imports(db: &RidlDatabase, text: &str, imports: &[(&str, &str)]) -> Package {
+        Package::new(
+            db,
+            "app".to_string(),
+            "app".to_string(),
+            vec![InputFile::new(
+                db,
+                "app/app.ridl".to_string(),
+                text.to_string(),
+            )],
+            PackageOrigin::WorkspaceMember,
+            imports
+                .iter()
+                .map(|(key, url)| (key.to_string(), url.to_string()))
+                .collect(),
+            TimingDefaults::default(),
+            None,
+        )
+    }
+
+    /// The qualified reference `veh.common.Speed` applies the visibility of
+    /// an `import` (ADR-0002 §5): a member that pins nothing does not reach
+    /// a remote package loaded for a sibling's pin, and draws the error an
+    /// unpinned import draws, not TYPL-011.
+    #[test]
+    fn a_qualified_reference_does_not_reach_a_siblings_remote_package() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = remote_package(
+            &db,
+            "veh.common",
+            REMOTE_URL,
+            "package veh.common\ntype Speed: km/h\n",
+            &[],
+        );
+        let app = member_with_imports(
+            &db,
+            "package app\nstruct Fast { v: veh.common.Speed }\n",
+            &[],
+        );
+        let ws = Workspace::new(&db, vec![app, common], BTreeMap::new());
+        let checked = without_missing_docs(check_package(&db, ws, app, std));
+        let errors: Vec<_> = checked
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert_eq!(errors.len(), 1, "got: {:?}", checked.diagnostics);
+        assert_eq!(errors[0].code, DiagCode::NONE);
+        assert_eq!(
+            errors[0].message,
+            "unresolved reference `veh.common.Speed`: `veh.common` is not a workspace member and not declared in `[imports]`"
+        );
+    }
+
+    /// The same reference binds when the member's own `[imports]` pin the
+    /// unit's URL, with no import statement.
+    #[test]
+    fn a_qualified_reference_binds_through_the_members_pin() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = remote_package(
+            &db,
+            "veh.common",
+            REMOTE_URL,
+            "package veh.common\ntype Speed: km/h\n",
+            &[],
+        );
+        let app = member_with_imports(
+            &db,
+            "package app\nstruct Fast { v: veh.common.Speed }\n",
+            &[("veh.common", REMOTE_URL)],
+        );
+        let ws = Workspace::new(&db, vec![app, common], BTreeMap::new());
+        let checked = check_package(&db, ws, app, std);
+        assert_eq!(
+            codes(&checked),
+            Vec::<&str>::new(),
+            "{:?}",
+            checked.diagnostics
+        );
+        let Some(v2::decl::Kind::StructDef(def)) = &checked.ir.decls[0].kind else {
+            panic!("a struct");
+        };
+        let Some(v2::struct_member::Member::Field(field)) = &def.members[0].member else {
+            panic!("a field");
+        };
+        assert_eq!(
+            field.r#type.as_ref().unwrap().kind,
+            Some(v2::field_type::Kind::Named("veh.common.Speed".to_string()))
+        );
+    }
+
+    /// A package of one remote unit reaches a package of another remote
+    /// unit by a qualified reference only through a key of its own
+    /// `[imports]`: the consumer's pin of both units does not make one
+    /// visible to the other.
+    #[test]
+    fn a_remote_unit_does_not_reach_another_remote_unit_by_a_qualified_reference() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let b = remote_package(
+            &db,
+            "lib.b",
+            REMOTE_URL_B,
+            "package lib.b\ntype T: km/h\n",
+            &[],
+        );
+        let a = remote_package(
+            &db,
+            "lib.a",
+            REMOTE_URL,
+            "package lib.a\nstruct S { t: lib.b.T }\n",
+            &[],
+        );
+        let app = member_with_imports(
+            &db,
+            "package app\n",
+            &[("lib.a", REMOTE_URL), ("lib.b", REMOTE_URL_B)],
+        );
+        let ws = Workspace::new(&db, vec![app, a, b], BTreeMap::new());
+        let hidden = without_missing_docs(check_package(&db, ws, a, std));
+        assert_eq!(
+            hidden
+                .diagnostics
+                .iter()
+                .map(|d| d.message.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "unresolved reference `lib.b.T`: `lib.b` is not a workspace member and not declared in `[imports]`"
+            ]
+        );
+
+        let a = remote_package(
+            &db,
+            "lib.a",
+            REMOTE_URL,
+            "package lib.a\nstruct S { t: lib.b.T }\n",
+            &[("lib.b", REMOTE_URL_B)],
+        );
+        let ws = Workspace::new(&db, vec![app, a, b], BTreeMap::new());
+        let bound = check_package(&db, ws, a, std);
+        assert_eq!(codes(&bound), Vec::<&str>::new(), "{:?}", bound.diagnostics);
     }
 
     // The ridl §11 ordinal assignment over the Appendix A interface — 1-based,
