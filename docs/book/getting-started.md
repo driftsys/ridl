@@ -213,6 +213,21 @@ The package name mirrors the directory path below the workspace root, and every
 file in the directory declares that same name. A mismatch is a hard error
 (TYPL-002).
 
+A package that lives in another repository is named in an `[imports]` table of
+the root manifest, under the key its `ridl.toml` declares as its `name`:
+
+```toml
+[imports]
+"veh.common" = "https://registry.example.com/veh/common@v1.0.0"
+```
+
+`ridl check` fetches it once into `~/.ridl/cache`, pins it in `ridl.lock`, and
+from then on reads the cache; `import veh.common.Speed` then resolves as it does
+for a member. A remote unit is a read-only dependency: its errors fail the
+check, its warnings are not shown, and `ridl build` generates it beside your own
+packages. The [CLI reference](cli-reference.md#ridl-check) says what each
+command writes.
+
 You can run `ridl` from the workspace root or from inside a member. A command
 started in `veh/cluster` finds the root manifest that lists `veh/cluster`, so
 the member still sees `veh.common`, and the root's settings apply to it. The

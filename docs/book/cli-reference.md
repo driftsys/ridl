@@ -143,13 +143,16 @@ nothing.
 
 **It writes `~/.ridl/cache` and `ridl.lock`, but only when the manifest
 declares `[imports]`.** `ridl check` loads, resolves, and checks the
-workspace, then — non-frozen, and only when the checked-out manifest (or a
-package in it) has an `[imports]` table — materializes every remote import
-into `~/.ridl/cache` (ADR-0002 §7, content-addressed by URL and by the
-fetched artifact's SHA-256) and regenerates `ridl.lock` at the workspace root
-on a clean run. Every other fixture on this page has no `[imports]`, so none
-of them reach either write; over a manifest pointed at a package served from
-a local HTTP stub:
+workspace. When the checked-out manifest (or a package in it) has an
+`[imports]` table, it also materializes each remote unit: it reads the unit
+from `~/.ridl/cache` (ADR-0002 §7, indexed by URL and by the fetched
+artifact's SHA-256) or, on a cache miss outside `--frozen`, fetches it. It
+verifies the `tree` hash of the unpacked tree, loads the unit as a read-only
+dependency, and on a clean run regenerates `ridl.lock` at the workspace root
+with both hashes. A remote unit's errors fail the check, and its warnings are
+not shown. Every other fixture on this page has no `[imports]`, so none of them
+reach either write; over a manifest pointed at a package served from a local
+HTTP stub:
 
 ```sh
 ridl check && cat ridl.lock
@@ -161,14 +164,24 @@ ridl check && cat ridl.lock
 
 [entries."http://127.0.0.1:8934/remotepkg.tar"]
 sha256 = "f25092bff94094dca3eccf057a66014df4d0df9869ce81e556d08a60e34714a5"
+tree = "9c1d0b6a3e4f58a7d2c6b1e0f4a93d87b5c2e6f1a0d4b8c37e9f2a615d0c4b83"
 ```
+
+`ridl build` and `ridl baseline` materialize remote units the same way, and
+`ridl build` generates their packages beside the workspace's own. No IR dump,
+catalog, baseline snapshot or `ridl lock` entry includes a remote unit.
 
 `--frozen` verifies against the existing `ridl.lock` instead of fetching or
 regenerating it, exactly as its description says: with no `ridl.lock` on disk
 yet, `ridl check --frozen` over the same workspace fails closed (`MANI-103`,
-exit 1) rather than writing one. `ridl test` and `ridl diff`, checked against
-the same import-bearing workspace, write nothing at all — neither calls the
-materialization step this paragraph describes, only the plain compile.
+exit 1) rather than writing one. A `ridl.lock` written before the `tree` hash
+existed has no `tree`; under `--frozen` that is `MANI-108`, and a run without
+`--frozen` adds the hash.
+
+`ridl lock`, `ridl test`, `ridl diff`, `ridl lsp` and `ridl mcp` read the
+cache the way `--frozen` does: they never fetch and never write `ridl.lock`. In
+a fresh clone, run `ridl check` once first; otherwise these commands report
+`MANI-103` (no `ridl.lock` entry) or `MANI-104` (the pin is not in the cache).
 
 **Exit codes.** 0 when nothing is wrong — a clean run prints nothing at all,
 to either stream. 1 when a diagnostic is an error, for example a range whose
@@ -1891,6 +1904,11 @@ Options:
 `ridl lsp` hosts the language server: behavior lives in `crates/ridl-lsp`, and
 this subcommand only wires the stdio transport. An editor spawns it and speaks
 the Language Server Protocol over its stdin and stdout.
+
+The server never fetches. It reads the remote units of `[imports]` from the
+cache, as `ridl check --frozen` does, so run `ridl check` once in a fresh clone.
+It publishes no diagnostics for a file of a remote unit; it shows the errors of
+a remote unit once per load, in one window message.
 
 **Flags.** `--stdio` and `--clientProcessId=<PID>` are accepted and change
 nothing. The LSP specification (3.17, "Implementation Considerations")
