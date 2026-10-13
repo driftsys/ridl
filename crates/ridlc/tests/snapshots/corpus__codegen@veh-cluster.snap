@@ -4245,6 +4245,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 14,
       "interaction": {
         "interface": 2,
         "slot": 2,
@@ -4274,6 +4275,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 15,
       "interaction": {
         "interface": 2,
         "slot": 4,
@@ -4366,6 +4368,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 16,
       "interaction": {
         "interface": 2,
         "slot": 4,
@@ -4488,6 +4491,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 17,
       "interaction": {
         "interface": 5,
         "slot": 11,
@@ -4580,6 +4584,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 18,
       "interaction": {
         "interface": 5,
         "slot": 11,
@@ -4609,6 +4614,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 19,
       "interaction": {
         "interface": 5,
         "slot": 13,
@@ -4638,6 +4644,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 20,
       "interaction": {
         "interface": 5,
         "slot": 14,
@@ -4667,6 +4674,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 21,
       "interaction": {
         "interface": 5,
         "slot": 19,
@@ -9168,6 +9176,100 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         ],
         "vtableSlots": 1,
         "rootBox": 14
+      },
+      {
+        "name": "WheelDiagnosticsReadTicksParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 2
+      },
+      {
+        "name": "WheelDiagnosticsReadSpanParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 3
+      },
+      {
+        "name": "WheelDiagnosticsReadSpanReply",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 4
+      },
+      {
+        "name": "VehHvacCabinGetBoundsParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 6
+      },
+      {
+        "name": "VehHvacCabinGetBoundsReply",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 7
+      },
+      {
+        "name": "VehHvacCabinGetClimateParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 8
+      },
+      {
+        "name": "VehHvacCabinGetCabinTempParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 9
+      },
+      {
+        "name": "VehHvacCabinScaledFanParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 10
       }
     ]
   },

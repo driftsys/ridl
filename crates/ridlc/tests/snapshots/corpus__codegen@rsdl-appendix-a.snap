@@ -1082,6 +1082,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 0,
       "interaction": {
         "interface": 0,
         "slot": 0,
@@ -1256,7 +1257,14 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   },
   "flatbuffers": {
     "roots": [],
-    "tables": []
+    "tables": [
+      {
+        "name": "VehDiagAccessReadFaultsParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 0
+      }
+    ]
   },
   "foreign": [
     {

@@ -453,6 +453,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 6,
       "interaction": {
         "interface": 1,
         "slot": 1,
@@ -1343,6 +1344,12 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         ],
         "vtableSlots": 1,
         "rootBox": 5
+      },
+      {
+        "name": "TelemetryFuelLevelParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 0
       }
     ]
   },

@@ -4248,3 +4248,23 @@ fn a_fallible_reply_induces_nothing() {
     };
     assert!(query.reply_tuple.is_none());
 }
+
+/// Every named induced tuple has a FlatBuffers table, so the codec can emit
+/// its encode, verify and decode functions.
+#[test]
+fn every_named_induced_tuple_has_a_flatbuffers_table() {
+    let model = lower(&call_package(), &[]);
+    for tuple in &model.tuples {
+        let Some(name) = tuple.name.as_ref() else {
+            continue;
+        };
+        if name.rust.is_empty() {
+            continue;
+        }
+        assert!(
+            tuple.flatbuffers_table.is_some(),
+            "`{}` has no FlatBuffers table",
+            name.rust
+        );
+    }
+}

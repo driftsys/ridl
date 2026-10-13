@@ -11,7 +11,10 @@
 //!
 //! The walk order is the `.fbs` emitter's own: the declared tables in
 //! declaration order, then the induced tables in the order the walk reached
-//! them, with a repeated name collapsed to one table.
+//! them, with a repeated name collapsed to one table. The argument and reply
+//! structs induced at an interaction position are queued after the declared
+//! tables, in interaction order, because a call's payload is a named type
+//! the codec encodes like any other (driftsys/ridl#713).
 //!
 //! Two spellings of one induced name run through this walk. The `.fbs`
 //! emitter inserts `Entry` at a map position and the model's wire induced
@@ -21,6 +24,7 @@
 
 use std::collections::HashMap;
 
+use super::lower::{params_as_tuple, query_reply_type, reply_as_tuple, single_param_type};
 use super::names::joined_camel;
 use super::resolve::Scope;
 use super::unbounded;
@@ -59,11 +63,13 @@ enum Spec<'a> {
     },
     Tuple {
         tuple: Option<u32>,
-        source: &'a v2::TupleType,
+        /// Owned: an induced interaction struct is synthesized and lives in
+        /// no package, so a tuple the walk carries cannot borrow from one.
+        source: v2::TupleType,
         wire: String,
     },
     Entry {
-        map: &'a v2::MapType,
+        map: v2::MapType,
         wire: String,
     },
 }
@@ -112,6 +118,7 @@ pub(crate) fn project<'a>(
         foreign_index,
     };
     walk.declared();
+    walk.interactions();
     walk.drain();
     walk.finish()
 }
@@ -190,6 +197,26 @@ impl<'a> Walk<'a, '_> {
         }
     }
 
+    /// The induced argument and reply structs of every interaction. They are
+    /// synthesized rather than written, so they live in no package and the
+    /// walk builds each one from the same shape rule the lowering uses, under
+    /// the same wire name: the table and the model's `InducedTuple` are
+    /// joined by that name in `patch_flatbuffers`.
+    fn interactions(&mut self) {
+        let package = self.scope.package;
+        for induced in induced_interaction_tuples(package) {
+            self.queue.push(Table {
+                name: induced.wire.clone(),
+                spec: Spec::Tuple {
+                    tuple: self.tuple_index.get(&induced.wire).copied(),
+                    source: induced.tuple,
+                    wire: induced.wire,
+                },
+                home: package,
+            });
+        }
+    }
+
     fn arm_needs_box(&self, home: &'a v2::Package, reference: &str) -> bool {
         matches!(
             self.scope
@@ -204,7 +231,7 @@ impl<'a> Walk<'a, '_> {
     }
 
     /// The containers one type position induces a table for.
-    fn discover(&mut self, home: &'a v2::Package, ty: &'a v2::FieldType, hints: &Hints) {
+    fn discover(&mut self, home: &'a v2::Package, ty: &v2::FieldType, hints: &Hints) {
         match ty.kind.as_ref() {
             Some(v2::field_type::Kind::Array(array)) => {
                 if let Some(element) = array.element.as_deref() {
@@ -215,7 +242,7 @@ impl<'a> Walk<'a, '_> {
                 self.queue.push(Table {
                     name: format!("{}Entry", hints.fbs),
                     spec: Spec::Entry {
-                        map,
+                        map: (**map).clone(),
                         wire: hints.wire.clone(),
                     },
                     home,
@@ -226,7 +253,7 @@ impl<'a> Walk<'a, '_> {
                     name: hints.fbs.clone(),
                     spec: Spec::Tuple {
                         tuple: self.tuple_index.get(&hints.wire).copied(),
-                        source: tuple,
+                        source: tuple.clone(),
                         wire: hints.wire.clone(),
                     },
                     home,
@@ -668,6 +695,52 @@ impl Filler<'_, '_> {
             _ => (None, false),
         }
     }
+}
+
+/// One struct induced at an interaction position: a call's argument struct,
+/// or a query's reply struct.
+struct Induced {
+    /// The wire induced name, which is both the FlatBuffers table name and
+    /// the key the model's tuple is joined by.
+    wire: String,
+    tuple: v2::TupleType,
+}
+
+/// Every induced argument and reply struct of a package's interactions, in
+/// interaction order. The shape rule is the lowering's own — `params_as_tuple`,
+/// `reply_as_tuple` and the two named-payload tests — called here rather than
+/// restated, so the projection induces exactly the set the model carries
+/// (driftsys/ridl#713).
+fn induced_interaction_tuples(package: &v2::Package) -> Vec<Induced> {
+    let mut induced = Vec::new();
+    for shape in package.shapes() {
+        for decl in &shape.interface.interactions {
+            let prefix = format!("{}{}", joined_camel(shape.name), joined_camel(&decl.name));
+            let (params, query) = match decl.kind.as_ref() {
+                Some(v2::decl::Kind::CommandDef(command)) => (&command.params, None),
+                Some(v2::decl::Kind::QueryDef(query)) => (&query.params, Some(query)),
+                _ => continue,
+            };
+            if single_param_type(params).is_none()
+                && let Some(tuple) = params_as_tuple(params)
+            {
+                induced.push(Induced {
+                    wire: format!("{prefix}Params"),
+                    tuple,
+                });
+            }
+            if let Some(query) = query
+                && query_reply_type(query).is_none()
+                && let Some(tuple) = reply_as_tuple(query.return_type.as_ref())
+            {
+                induced.push(Induced {
+                    wire: format!("{prefix}Reply"),
+                    tuple,
+                });
+            }
+        }
+    }
+    induced
 }
 
 /// One root per declaration `root_table` names, in declaration order. The
