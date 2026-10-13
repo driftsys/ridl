@@ -223,10 +223,12 @@ the root manifest, under the key its `ridl.toml` declares as its `name`:
 
 `ridl check` fetches it once into `~/.ridl/cache`, pins it in `ridl.lock`, and
 from then on reads the cache; `import veh.common.Speed` then resolves as it does
-for a member. A remote unit is a read-only dependency: its errors fail the
-check, its warnings are not shown, and `ridl build` generates it beside your own
-packages. The [CLI reference](cli-reference.md#ridl-check) says what each
-command writes.
+for a member. `ridl vendor` copies each unit into `vendor/` beside `ridl.toml`,
+so a `ridl check --frozen` on a machine with no network and no cache still
+builds; `ridl vendor --check` verifies that directory in CI. A remote unit is a
+read-only dependency: its errors fail the check, its warnings are not shown, and
+`ridl build` generates it beside your own packages. The
+[CLI reference](cli-reference.md#ridl-check) says what each command writes.
 
 You can run `ridl` from the workspace root or from inside a member. A command
 started in `veh/cluster` finds the root manifest that lists `veh/cluster`, so

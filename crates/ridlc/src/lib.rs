@@ -26,8 +26,8 @@
 //! a `.typl` file, a package directory, or a workspace root ([`ridl_core::load_workspace`])
 //! — returning the per-package IR and the merged, render-ready diagnostics
 //! (load + parse + resolve + check). It is the library face the language server
-//! drives; it reads the remote units of the manifest's `[imports]` from the
-//! cache and never fetches or writes `ridl.lock`.
+//! drives; it reads the remote units of the manifest's `[imports]` from
+//! `vendor/`, then the cache, and never fetches or writes `ridl.lock`.
 //!
 //! [`run_check`] and [`run_build`] are the stable command drivers shared by the
 //! `ridlc` plumbing binary and the `ridl` porcelain facade (concept note §8.1):

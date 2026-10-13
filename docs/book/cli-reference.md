@@ -145,16 +145,19 @@ nothing.
 **It writes `~/.ridl/cache` and `ridl.lock`, but only when the manifest
 declares `[imports]`.** `ridl check` loads, resolves, and checks the
 workspace. When the checked-out manifest (or a package in it) has an
-`[imports]` table, it also materializes each remote unit: it reads the unit
-from `~/.ridl/cache` (ADR-0002 §7, indexed by URL and by the fetched
-artifact's SHA-256) or, on a cache miss outside `--frozen`, fetches it. It
-verifies the `tree` hash of the unpacked tree, loads the unit as a read-only
-dependency, and on a clean run regenerates `ridl.lock` at the workspace root
-with both hashes. A remote unit's errors fail the check, and its warnings are
-not shown. Every other fixture on this page has no `[imports]`, so none of them
-reach either write. The transcript below is an illustration, not a recorded
-run: the URL names a local HTTP stub, and the two hashes are placeholders that
-stand for the values a run computes.
+`[imports]` table, it also materializes each remote unit. It reads the unit from
+`vendor/<key>/` at the manifest root when that directory exists and `ridl.lock`
+pins a `tree` for the unit's URL (see [`ridl vendor`](#ridl-vendor)); otherwise
+from `~/.ridl/cache` (ADR-0002 §7, indexed by URL and by the fetched artifact's
+SHA-256) or, on a cache miss outside `--frozen`, fetches it. It verifies the
+`tree` hash of the tree it read, which for a vendored tree that no longer
+matches is `MANI-107`, with a message that names `ridl vendor`; loads the unit
+as a read-only dependency; and on a clean run regenerates `ridl.lock` at the
+workspace root with both hashes. A remote unit's errors fail the check, and its
+warnings are not shown. Every other fixture on this page has no `[imports]`, so
+none of them reach either write. The transcript below is an illustration, not a
+recorded run: the URL names a local HTTP stub, and the two hashes are
+placeholders that stand for the values a run computes.
 
 ```sh
 ridl check && cat ridl.lock
@@ -180,10 +183,11 @@ exit 1) rather than writing one. A `ridl.lock` written before the `tree` hash
 existed has no `tree`; under `--frozen` that is `MANI-108`, and a run without
 `--frozen` adds the hash.
 
-`ridl lock`, `ridl test`, `ridl diff`, `ridl lsp` and `ridl mcp` read the
-cache the way `--frozen` does: they never fetch and never write `ridl.lock`. In
-a fresh clone, run `ridl check` once first; otherwise these commands report
-`MANI-103` (no `ridl.lock` entry) or `MANI-104` (the pin is not in the cache).
+`ridl lock`, `ridl test`, `ridl diff`, `ridl lsp` and `ridl mcp` read
+`vendor/<key>/` and then the cache the way `--frozen` does: they never fetch and
+never write `ridl.lock`. In a fresh clone, run `ridl check` once first, or run
+`ridl vendor`; otherwise these commands report `MANI-103` (no `ridl.lock` entry)
+or `MANI-104` (the pin is neither in `vendor/` nor in the cache).
 A `ridl.lock` written before the `tree` hash existed gives them `MANI-108`
 too, and the same `ridl check` adds the hash.
 
@@ -1212,9 +1216,9 @@ Options:
 
 **It writes** every `.typl`/`.ridl`/`.rsdl` file under `PATH` back to itself in
 canonical form, unless `--check` is given or the file fails to parse. The walk
-skips `vendor/` at the manifest root, which holds remote units that belong to
-their own owners; a `PATH` that is that directory or lies under it is refused
-with exit 2. An `.rsdl`
+skips `vendor/` at the manifest root, which [`ridl vendor`](#ridl-vendor) fills
+with copies of remote units that belong to their own owners; a `PATH` that is
+that directory or lies under it is refused with exit 2. An `.rsdl`
 file takes the file layout (the header, one blank line between declarations).
 Systems, components, distributions, deployments and machines use canonical
 brace bodies, references and attributes. Deployments keep `for` before header
@@ -1928,8 +1932,9 @@ Options:
 this subcommand only wires the stdio transport. An editor spawns it and speaks
 the Language Server Protocol over its stdin and stdout.
 
-The server never fetches. It reads the remote units of `[imports]` from the
-cache, as `ridl check --frozen` does, so run `ridl check` once in a fresh clone.
+The server never fetches. It reads the remote units of `[imports]` from
+`vendor/` at the manifest root and then from the cache, as `ridl check --frozen`
+does, so run `ridl check` or `ridl vendor` once in a fresh clone.
 It loads the remote units once, when it loads the workspace, and does not
 reload them when `ridl.lock` changes: after a `ridl check` that fetches a unit
 or rewrites `ridl.lock`, restart the server. It publishes no diagnostics for a
@@ -2198,29 +2203,67 @@ Options:
   -h, --help   Print help
 ```
 
-Copies the tree of every remote unit that the `[imports]` of the root manifest
-and of its members name into `vendor/<key>/` at the manifest root, and removes
-the directory of a unit that is no longer imported. Each unit is read from the
-cache or fetched, never from `vendor/`, and `ridl.lock` is rewritten as a
-non-frozen `ridl check` rewrites it. Each changed unit prints one line,
-`vendored <key>` or `removed <key>`.
+`ridl vendor` makes a project build with no network and no cache. `PATH` is a
+unit directory, a workspace root or a file, and defaults to the current
+directory; the command acts on the manifest root above it, found as `ridl check`
+finds it, so `vendor/` is at the workspace root whichever member the command
+runs from. It then does three things:
+
+1. It takes the union of the `[imports]` of the root manifest and of every
+   member.
+2. It materializes each unit as `ridl check` does, from the cache or by a fetch,
+   and rewrites `ridl.lock`. It reads the cache and never `vendor/`, so a URL
+   that changed is fetched and its directory replaced.
+3. It brings `vendor/` to exactly that set. Each unit is written whole into a
+   staging directory and renamed into place under its `[imports]` key, with the
+   bytes of its files unchanged; the directory of a unit that is no longer
+   imported is removed. Nothing in `vendor/` changes when the run has an error.
+
+Each changed unit prints one line, `vendored <key>` or `removed <key>`; a run
+that changes nothing prints `vendor/ is up to date; nothing to change`. A unit's
+own `vendor/` directory is copied with the unit, because it is part of the tree
+hash, and is skipped when the unit is read.
 
 ```sh
 ridl vendor
 ```
 
-**Exit codes.** 0 when `vendor/` was written or there was nothing to change. 1
-on any diagnostic error, in a remote unit or in the workspace; `vendor/` is left
-as it was. 2 when the path does not exist, no `ridl.toml` is at or above it, a
-fetch fails (MANI-101), or writing `vendor/` fails.
+After that, `ridl check --frozen` reads `vendor/<key>/` first, only when
+`ridl.lock` pins a `tree` for the unit; for any other unit it reads the cache. A
+vendored tree that no longer matches its `tree` hash is `MANI-107` and names
+`ridl vendor`.
 
-`ridl vendor --check` compares `vendor/` with the imports and `ridl.lock` and
-writes nothing; it reads no cache and fetches nothing. It reports an imported
-unit with no directory (MANI-109), a directory that no `[imports]` key names
-(MANI-110), a tree that does not match its `tree` hash (MANI-107), and a unit
-that `ridl.lock` does not pin (MANI-103) or pins with no `tree` (MANI-108).
-Exit 0 when `vendor/` matches, 1 on any of these or another diagnostic error, 2
-when the path does not exist or no `ridl.toml` is at or above it.
+**`ridl vendor` exit codes.**
+
+| Exit | Meaning |
+| ---- | ------- |
+| 0 | `vendor/` was written, or there was nothing to change |
+| 1 | a diagnostic error, including MANI-102 to MANI-108 and a source error in a remote unit; nothing is written |
+| 2 | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure, or a fetch failure (MANI-101) |
+
+`ridl vendor` applies no `[lints]` levels, and a lint that is `allow` by default
+is left out of its output, as for `ridl lock`.
+
+**`ridl vendor --check`** compares `vendor/` with the imports and `ridl.lock`.
+It fetches nothing, reads no cache and writes nothing, so it is the check to run
+in CI. It reports one diagnostic per unit:
+
+- `MANI-109`, an imported unit with no directory in `vendor/`;
+- `MANI-110`, a directory in `vendor/` that no `[imports]` key names;
+- `MANI-107`, a vendored tree that does not match its `tree` hash;
+- `MANI-103` or `MANI-108`, a unit that `ridl.lock` does not pin or pins with no
+  `tree`, because its directory cannot be verified.
+
+A manifest that does not parse is reported too, so a broken manifest is never a
+clean `vendor/`.
+
+**`ridl vendor --check` exit codes.**
+
+| Exit | Meaning |
+| ---- | ------- |
+| 0 | `vendor/` matches |
+| 1 | drift (MANI-107, MANI-109 or MANI-110), a unit that `ridl.lock` does not verify (MANI-103 or MANI-108), or another diagnostic error |
+| 2 | a missing or unreadable path, or no `ridl.toml` at or above it |
 
 ## `ridlc`
 
@@ -2421,7 +2464,7 @@ compiler directly and want its stable, default-free flags.
 | `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
 | `ridl init` / `ridl new` | the files are written | | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written |
 | `ridl describe` | the descriptor was printed |   | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout |
-| `ridl vendor` | `vendor/` was written, or there is nothing to change; with `--check`, `vendor/` matches the imports and `ridl.lock` | a diagnostic error, in a remote unit or in the workspace; `vendor/` is left as it was; with `--check`, drift (MANI-103, MANI-107 to MANI-110) or another diagnostic error | the path does not exist or has no `ridl.toml` at or above it, a fetch failure (MANI-101), or an I/O failure writing `vendor/` |
+| `ridl vendor` | `vendor/` was written, or there is nothing to change; with `--check`, `vendor/` matches the imports and `ridl.lock` | a diagnostic error (including MANI-102 to MANI-108 and a source error in a remote unit), nothing written; with `--check`, drift (MANI-107, MANI-109, MANI-110) or a unit that `ridl.lock` does not verify (MANI-103, MANI-108) | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure writing `vendor/`, or a fetch failure (MANI-101) |
 
 This table is this repository's own taxonomy, recorded in
 [ADR-0010][adr-0010]: **0** succeeded, or the verdict is affirmative; **1** a

@@ -25,6 +25,8 @@ now carries an amendment note that states what `--version` prints today.
 
 Amended 2026-10-10: decision 1 gained a row for `ridl init` and `ridl new`.
 
+Amended 2026-10-13: decision 1 gained a row for `ridl vendor`.
+
 Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the exit codes,
 flags and output shapes of this record are a frozen surface from 0.10.0.
 `just freeze-check` checks the flags, the output shapes of `ridl check`, and the
@@ -127,6 +129,7 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    | `ridl lock merge`        | the three sides merge clean, and the result is written to OURS                                                                              | entries disagree: OURS is written with git conflict markers of MARKER_SIZE around only the disagreeing entries, and is malformed (RIDL-410) until an author resolves it                                                                                                                                               | an input cannot be read, or does not parse (OURS is left as it was); MARKER_SIZE is not a number from 1 up; an I/O failure writing OURS                                                                                                                                                         |
    | `ridl describe`          | the descriptor was printed                                                                                                                  |                                                                                                                                                                                                                                                                                                                       | a missing or unreadable path; a file that is not a catalog descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout                                                                                                                             |
    | `ridl init` / `ridl new` | the files are written                                                                                                                       |                                                                                                                                                                                                                                                                                                                       | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written (added 2026-10-10) |
+   | `ridl vendor`            | `vendor/` was written, or there was nothing to change; with `--check`, `vendor/` matches                                                    | a diagnostic error (including MANI-102 to MANI-108 and a source error in a remote unit), nothing written; with `--check`, drift (MANI-107, MANI-109, MANI-110), or a unit that `ridl.lock` does not verify (MANI-103, MANI-108)                                                                                       | a missing or unreadable path, a path with no `ridl.toml` at or above it, a bad flag, an I/O failure, or a fetch failure (MANI-101) (added 2026-10-13)                                                                                                                                           |
 
    The claim is scoped to these eight, constructed this way, on this date — not
    asserted as a property that holds by design of every subcommand a future PR
@@ -268,6 +271,24 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    `a_failed_write_removes_what_this_command_created`, which makes the workspace
    root read-only and asserts the tree unchanged. The 1 column is empty: both
    commands write files or could not answer.
+
+   **`ridl vendor` earned a row on 2026-10-13, when it was added and checked**
+   by the tests in `crates/ridl/tests/vendor_cli.rs` against the built `ridl`
+   binary. The 0 cell is `vendor_writes_the_units_and_is_idempotent` (written,
+   then nothing to change), `vendor_with_nothing_to_vendor_creates_no_directory`
+   and the first assertion of
+   `vendor_check_reports_drift_without_network_or_writes` (`--check` on a
+   matching directory, with an empty stderr). The 1 cell is
+   `vendor_writes_nothing_on_an_error` (a source error in a remote unit and an
+   error in the consumer, each leaving `vendor/` as it was), the drift
+   assertions of the `--check` test (MANI-107, MANI-109 and MANI-110),
+   `vendor_check_on_an_unpinned_unit_is_mani_103` and
+   `vendor_check_reports_a_broken_manifest`. The 2 cell is
+   `vendor_on_a_missing_path_exits_2`, `vendor_check_on_a_missing_path_exits_2`,
+   `vendor_without_a_manifest_exits_2`,
+   `vendor_check_without_a_manifest_exits_2` and the fetch-failure assertion of
+   `vendor_writes_nothing_on_an_error` (MANI-101). `ridl vendor` applies no
+   `[lints]` levels, as `ridl lock` does (ADR-0024 decision 8).
 
 2. **The clig.dev guidance that applies, quoted rather than paraphrased:**
 

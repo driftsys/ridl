@@ -69,12 +69,16 @@ except for CLI operations that need the network, the `ridl.lock` write or the
 baseline:
 
 - the fetch and the `ridl.lock` write: the tools read a remote unit of the
-  `[imports]` from the cache, as `ridl check --frozen` does, so a URL with no
-  `ridl.lock` entry is MANI-103 and a pin the cache does not hold is MANI-104,
-  each with a message that names `ridl check` as the fix, and an entry written
-  before the `tree` hash existed is MANI-108; MANI-102, the hash mismatch of a
-  fetch, is never reported, and MANI-101 only for a URL in `[imports]` that is
-  not a fetchable `http(s)` URL, which needs no fetch to see;
+  `[imports]` as `ridl check --frozen` does, from `vendor/<key>/` at the
+  manifest root when `ridl.lock` pins a `tree` for the URL and that directory
+  exists, and from the cache otherwise. A URL with no `ridl.lock` entry is
+  MANI-103, with a message that names `ridl check` as the fix; a pin that
+  neither `vendor/` nor the cache holds is MANI-104, with a message that names
+  `ridl check` and `ridl vendor`; a vendored tree that does not match its `tree`
+  is MANI-107; and an entry written before the `tree` hash existed is MANI-108;
+  MANI-102, the hash mismatch of a fetch, is never reported, and MANI-101 only
+  for a URL in `[imports]` that is not a fetchable `http(s)` URL, which needs no
+  fetch to see;
 - the check against `.ridl/baseline`: RIDL-407 and the rename hint on RIDL-409.
   Use `ridl_diff` with `old: "<root>/.ridl/baseline"` and `new: "<root>"` to
   compare the baseline explicitly.
