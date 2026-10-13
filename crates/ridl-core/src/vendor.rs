@@ -372,8 +372,9 @@ mod tests {
         );
     }
 
-    /// A unit no longer imported is removed; a hidden directory and a file
-    /// are left alone.
+    /// A unit no longer imported is removed, and so is any other directory
+    /// that no key names, whether or not `ridl vendor` wrote it; a hidden
+    /// directory, a file and a symbolic link are left alone.
     #[test]
     fn a_unit_no_longer_imported_is_removed() {
         let fixture = TempDir::new("remove");
@@ -388,12 +389,19 @@ mod tests {
         fs::write(root.join("vendor/README.md"), "kept").unwrap();
         fs::create_dir_all(root.join("vendor/.keep")).unwrap();
         fs::write(root.join("vendor/.keep/k.typl"), "kept").unwrap();
+        fs::create_dir_all(root.join("vendor/github.com/x")).unwrap();
+        fs::write(root.join("vendor/github.com/x/x.go"), "package x").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(fixture.path().join("src/b"), root.join("vendor/link")).unwrap();
         let report = write_vendor(&root, &BTreeMap::from([("a".to_string(), a)])).unwrap();
-        assert_eq!(report.removed, ["b"]);
+        assert_eq!(report.removed, ["b", "github.com"]);
         assert_eq!(report.unchanged, ["a"]);
         assert!(!root.join("vendor/b").exists());
+        assert!(!root.join("vendor/github.com").exists());
         assert!(root.join("vendor/README.md").is_file());
         assert!(root.join("vendor/.keep/k.typl").is_file());
+        #[cfg(unix)]
+        assert!(root.join("vendor/link/b.typl").is_file());
     }
 
     /// The staging and replaced-tree directories an interrupted run leaves
