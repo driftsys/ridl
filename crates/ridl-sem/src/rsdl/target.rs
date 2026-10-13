@@ -342,13 +342,18 @@ mod tests {
     use super::*;
 
     /// A package that imports two components of `veh.topology`, one through
-    /// an alias, and names them with a qualified one in a distribution.
+    /// an alias, and names them with a qualified one in a distribution. The
+    /// distribution also names an instance, which a distribution line may not
+    /// (RSDL-602 or RSDL-903), so the checker binds that line to nothing. The
+    /// component `Idle` and its instance `unused` are named by no reference.
     const EXTRA: &str = r#"package veh.extra
 
 import veh.topology.Cruise
 import veh.topology.Lane as Track
 
-distribution Spare { Cruise, Track, veh.topology.Panel }
+component Idle [ instances = (unused) ] {}
+
+distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
 "#;
 
     /// A reference site as `(file path, start, end)`, which sorts.
@@ -360,6 +365,18 @@ distribution Spare { Cruise, Track, veh.topology.Panel }
             range.start().into(),
             range.end().into(),
         )
+    }
+
+    /// The kind of a target, for the fixture coverage check.
+    fn kind(target: &Target) -> &'static str {
+        match target {
+            Target::System(_) => "system",
+            Target::Component(_) => "component",
+            Target::Instance { .. } => "instance",
+            Target::Service(_) => "service",
+            Target::Interface(InterfaceId::Inline { .. }) => "inline",
+            Target::Interface(InterfaceId::Declared { .. }) => "declared",
+        }
     }
 
     /// `references(.., target)` returns exactly the references `reference_at`
@@ -409,6 +426,9 @@ distribution Spare { Cruise, Track, veh.topology.Panel }
         // The oracle: what `reference_at` binds at the start and at the end
         // of each reference, grouped by the declaration it names.
         let mut oracle: Vec<(Target, Vec<Span>)> = Vec::new();
+        // The kind of every target `reference_at` binds, before the service
+        // and inline-shape targets of one service are merged into one group.
+        let mut kinds: Vec<&str> = Vec::new();
         for reference in &written {
             let range = reference.site.range;
             for offset in [range.start(), range.end()] {
@@ -416,6 +436,7 @@ distribution Spare { Cruise, Track, veh.topology.Panel }
                 else {
                     continue;
                 };
+                kinds.push(kind(&found.target));
                 let site = span(&db, found.reference.site.file, found.range);
                 match oracle
                     .iter_mut()
@@ -430,18 +451,14 @@ distribution Spare { Cruise, Track, veh.topology.Panel }
                 }
             }
         }
-        let kinds: Vec<&str> = oracle
-            .iter()
-            .map(|(target, _)| match target {
-                Target::System(_) => "system",
-                Target::Component(_) => "component",
-                Target::Instance { .. } => "instance",
-                Target::Service(_) => "service",
-                Target::Interface(InterfaceId::Inline { .. }) => "inline",
-                Target::Interface(InterfaceId::Declared { .. }) => "declared",
-            })
-            .collect();
-        for kind in ["system", "component", "instance", "service", "declared"] {
+        for kind in [
+            "system",
+            "component",
+            "instance",
+            "service",
+            "inline",
+            "declared",
+        ] {
             assert!(
                 kinds.contains(&kind),
                 "the fixture names a {kind}: {kinds:?}"
@@ -474,31 +491,98 @@ distribution Spare { Cruise, Track, veh.topology.Panel }
             "{lane_sites:?}"
         );
 
-        for (target, mut expected) in oracle {
-            let mut actual: Vec<Span> = references(&db, ws, std, &system, &target)
+        // The instance reference of the distribution in `veh.extra` binds to
+        // nothing at either end.
+        let misplaced = system
+            .distributions
+            .iter()
+            .flat_map(|decl| &decl.members)
+            .map(|line| &line.reference)
+            .find(|reference| matches!(reference.form, ReferenceForm::Instance { .. }))
+            .expect("the distribution names an instance");
+        let misplaced_range = misplaced.site.range;
+        for offset in [misplaced_range.start(), misplaced_range.end()] {
+            assert_eq!(
+                reference_at(&db, ws, std, &system, misplaced.site.file, offset),
+                None
+            );
+        }
+        let misplaced_span = span(&db, misplaced.site.file, misplaced_range);
+        assert!(
+            oracle.iter().all(|(_, sites)| {
+                sites.iter().all(|(path, start, end)| {
+                    *path != misplaced_span.0
+                        || *end <= misplaced_span.1
+                        || *start >= misplaced_span.2
+                })
+            }),
+            "{oracle:?}"
+        );
+
+        let actual = |target: &Target| {
+            let mut actual: Vec<Span> = references(&db, ws, std, &system, target)
                 .into_iter()
                 .inspect(|found| {
                     assert!(
-                        same_declaration(&found.target, &target),
+                        same_declaration(&found.target, target),
                         "{target:?} returned {:?}",
                         found.target
                     );
                 })
                 .map(|found| span(&db, found.reference.site.file, found.range))
                 .collect();
-            expected.sort();
             actual.sort();
-            assert_eq!(actual, expected, "{target:?}");
+            actual
+        };
+        for (target, expected) in &oracle {
+            let mut expected = expected.clone();
+            expected.sort();
+            // A service and its inline shape are one declaration: the group is
+            // the same whichever of the two targets the cursor yields.
+            let queried = match target {
+                Target::Service(name)
+                | Target::Interface(InterfaceId::Inline { service: name }) => {
+                    vec![
+                        Target::Service(name.clone()),
+                        Target::Interface(InterfaceId::Inline {
+                            service: name.clone(),
+                        }),
+                    ]
+                }
+                other => vec![other.clone()],
+            };
+            for target in queried {
+                assert_eq!(actual(&target), expected, "{target:?}");
+            }
         }
 
-        // A target no reference names: a component declared without a
-        // reference to it, and an instance never placed.
-        let spare = Target::Component(system.components.len());
-        assert_eq!(references(&db, ws, std, &system, &spare), Vec::new());
-        let unplaced = Target::Interface(InterfaceId::Declared {
-            package: "veh.adas".to_string(),
-            name: "Nowhere".to_string(),
-        });
-        assert_eq!(references(&db, ws, std, &system, &unplaced), Vec::new());
+        // A target no reference names: the component `Idle`, its instance
+        // `unused`, which is never placed, and an interface no package
+        // declares.
+        let idle = system
+            .components
+            .iter()
+            .position(|decl| decl.name.name == "Idle")
+            .expect("Idle is declared");
+        let unreferenced = [
+            Target::Component(idle),
+            Target::Instance {
+                component: idle,
+                instance: 0,
+            },
+            Target::Interface(InterfaceId::Declared {
+                package: "veh.adas".to_string(),
+                name: "Nowhere".to_string(),
+            }),
+        ];
+        for target in unreferenced {
+            assert!(
+                oracle
+                    .iter()
+                    .all(|(named, _)| !same_declaration(named, &target)),
+                "{target:?}"
+            );
+            assert_eq!(actual(&target), Vec::<Span>::new(), "{target:?}");
+        }
     }
 }
