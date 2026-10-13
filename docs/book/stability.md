@@ -10,8 +10,9 @@ effect now; release 0.10.0 is not published yet.
 
 - **The language.** The syntax and the keywords of typl, ridl and rsdl, and the
   set of sources that compile without an error.
-- **The manifest.** The keys of `ridl.toml`, their value types, and the formats
-  of `interfaces.lock` and `.ridl/baseline`.
+- **The manifest.** The keys of `ridl.toml`, their value types, the layout of
+  `vendor/` (`<manifest root>/vendor/<key>/`), and the formats of
+  `interfaces.lock` and `.ridl/baseline`.
 - **Diagnostics and lints.** The diagnostic codes, the lint names and the
   default level of each lint.
 - **The command line.** The subcommands, the flags, the exit codes, and the

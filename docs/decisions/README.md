@@ -14,6 +14,9 @@ other entry below is Accepted.
   refuses a `ridl.toml` inside a unit's tree (MANI-013). Amended 2026-10-10 by
   the on-request encodings design (driftsys/ridl#801): §4 gains the
   `[backend.<name>]` tables with the `encodings` key (MANI-015, MANI-016).
+  Amended 2026-10-13 by `ridl vendor`: §7 gains the `vendor/` directory at the
+  manifest root, its read order, and `ridl vendor` with its `--check` flag
+  (MANI-017, MANI-018, MANI-107 to MANI-110).
 - **ADR-0004 — Implementation sequencing and stack.** _Proposed._ The build
   order and technology choices (companion to the roadmap). Amended 2026-08-03:
   uxdl retires as an epic (ADR-0012), rsdl runs ahead of rmdl's runtime, rmdl

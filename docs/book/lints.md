@@ -161,7 +161,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `link-encoding-not-emitted` | RSDL-807 | warn | a link of the selected deployment carries an encoding the emitted backend's `encodings` list does not name |
 | `unknown-manifest-key` | MANI-005 | warn | unknown manifest key |
 | `unknown-lint` | MANI-010 | warn | `[lints]` entry names no lint, or its value is not a level |
-| `vendor-source-not-loaded` | MANI-018 | warn | a source file under the root's `vendor/` is not loaded |
+| `vendor-source-not-loaded` | MANI-018 | warn | in standalone mode, a source file under the root's `vendor/` is not loaded |
 
 Setting `ordinal-changed` to `allow` makes `ridl check --baseline` report
 nothing for ordinal changes, so the baseline desk check no longer warns about
