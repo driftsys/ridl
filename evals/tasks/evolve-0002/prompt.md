@@ -1,11 +1,11 @@
-Edit the workspace you are in, after copying the original aside for the diff,
-and add an index-only convenience query named paramRequestReadByIndex to
-common.ParameterProtocol. It takes targetSystem and targetComponent using the
-existing Uint8 type and paramIndex using the existing Int16 type, and returns
-the existing ParamValue type. Reject negative indices through a require
-contract. Preserve every existing interaction and its wire ordinal, every
-existing payload declaration and its fields, and all package and import
-boundaries.
+Edit the workspace you are in, after copying the original to a directory outside
+it for the diff, and add an index-only convenience query named
+paramRequestReadByIndex to common.ParameterProtocol. It takes targetSystem and
+targetComponent using the existing Uint8 type and paramIndex using the existing
+Int16 type, and returns the existing ParamValue type. Reject negative indices
+through a require contract. Preserve every existing interaction and its wire
+ordinal, every existing payload declaration and its fields, and all package and
+import boundaries.
 
 Explain how an adapter would use the pinned parameter protocol's single-value
 read procedure to implement this convenience query, including the existing
