@@ -4040,7 +4040,7 @@ fn rsdl_requires_completion_offers_qualified_interfaces() {
     );
     dir.write(
         "topology/own.ridl",
-        "package veh.topology\n\ninterface Own {\n\x20 signal on: boolean @[1s..10s]\n}\n",
+        "package veh.topology\n\ninterface Own {\n\x20 signal on: boolean @[1s..10s]\n}\n\ninternal interface Private {\n\x20 signal on: boolean @[1s..10s]\n}\n",
     );
     dir.write(
         "extra/telemetry.ridl",
@@ -4076,11 +4076,12 @@ fn rsdl_requires_completion_offers_qualified_interfaces() {
         let item = items.iter().find(|item| item.label == label);
         assert_eq!(item.and_then(|item| item.detail.as_deref()), Some(label));
     }
-    // An imported interface, and one of the file's own package, are offered
-    // bare, not twice.
+    // An imported interface, and one of the file's own package, `internal`
+    // or not, are offered bare, not twice.
     for (bare, qualified) in [
         ("LaneAssist", "veh.adas.LaneAssist"),
         ("Own", "veh.topology.Own"),
+        ("Private", "veh.topology.Private"),
     ] {
         assert!(got.contains(&bare), "`{bare}` is offered: {got:?}");
         assert!(!got.contains(&qualified), "no `{qualified}`: {got:?}");
