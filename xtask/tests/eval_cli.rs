@@ -168,6 +168,7 @@ enum Logins {
 
 fn command(fakes: &Fakes, args: &[&str], logins: Logins) -> Command {
     let stored = fakes.dir.join("auth.json");
+    let copilot_stored = fakes.dir.join("copilot-config.json");
     let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
     command
         .arg("eval")
@@ -177,12 +178,14 @@ fn command(fakes: &Fakes, args: &[&str], logins: Logins) -> Command {
         .env("RIDL_EVAL_COPILOT", &fakes.copilot)
         .env("RIDL_EVAL_RIDL", &fakes.ridl)
         .env("RIDL_EVAL_CODEX_LOGIN", &stored)
+        .env("RIDL_EVAL_COPILOT_LOGIN", &copilot_stored)
         .env("TMPDIR", fakes.dir.join("tmp"))
         .env_remove("ANTHROPIC_API_KEY")
         .env_remove("CLAUDE_CODE_OAUTH_TOKEN");
     match logins {
         Logins::Both => {
             std::fs::write(&stored, "{}").unwrap();
+            std::fs::write(&copilot_stored, COPILOT_FAKE_LOGIN).unwrap();
             command.env("CLAUDE_CODE_OAUTH_TOKEN", "fake");
         }
         Logins::CodexOnly => std::fs::write(&stored, "{}").unwrap(),
@@ -190,6 +193,10 @@ fn command(fakes: &Fakes, args: &[&str], logins: Logins) -> Command {
     }
     command
 }
+
+/// A fake stored Copilot `config.json`, holding its three login keys plus a
+/// setting a run must never read or copy.
+const COPILOT_FAKE_LOGIN: &str = r#"{"copilotTokens":{"https://github.com:u":"fake-token"},"loggedInUsers":[{"host":"https://github.com","login":"u"}],"lastLoggedInUser":{"host":"https://github.com","login":"u"},"trustedFolders":["/should-not-be-copied"]}"#;
 
 fn eval(fakes: &Fakes, args: &[&str], logins: bool) -> Output {
     let logins = if logins { Logins::Both } else { Logins::None };

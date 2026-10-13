@@ -21,10 +21,12 @@
 //!
 //! Each host signs in with its CLI's own login. Codex runs get a copy of the
 //! stored `auth.json`. Claude runs read `CLAUDE_CODE_OAUTH_TOKEN`, which
-//! `claude setup-token` prints, or `ANTHROPIC_API_KEY`. Copilot signs in
-//! through `copilot login`: on macOS its login lives in the system keychain,
-//! which does not depend on `COPILOT_HOME`, so a run's fresh host home needs
-//! no copied credential. With `--claude-handoff`, the only Claude command
+//! `claude setup-token` prints, or `ANTHROPIC_API_KEY`. Copilot runs get a
+//! copy of the three login keys of the stored `config.json`
+//! (`copilotTokens`, `loggedInUsers`, `lastLoggedInUser`; see
+//! `host::copilot_login_path`), not the whole file: the rest of it holds
+//! installed plugins, trusted folders and other settings a run must never
+//! read. With `--claude-handoff`, the only Claude command
 //! that runs is `claude --version`, which records the host version: each
 //! Claude agent run and each Claude judgement is written as a request file,
 //! and the eval waits until the operator has run it with an agent of their
@@ -161,9 +163,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     );
                     let base = host::scratch_dir(&task.id, &label)?;
                     let dirs = host::prepare_run(&base, task, host, with_skill, &skill)?;
-                    let login = (host == Host::Codex)
-                        .then(|| host::LentLogin::lend(&host::codex_login_path(), &dirs.home))
-                        .transpose()?;
+                    let login = host::Login::lend(host, &dirs.home)?;
                     let invocation =
                         host::agent_invocation(host, host.model(&models), &dirs, &prompt);
                     let handoff = options.claude_handoff && host == Host::Claude;
@@ -507,12 +507,10 @@ fn needs_login(hosts: &[Host], login: Host) -> bool {
 
 /// Every selected host is judged by another host, so a run needs the stored
 /// login of every host that is either selected or judges a selected one:
-/// Codex needs its stored login, and Claude, unless it is handed off, needs a
-/// token. Copilot signs in through its own CLI login (`copilot login`),
-/// which this check cannot verify without calling it, so no precondition is
-/// checked for it here; a missing Copilot login shows up as a setup error
-/// once its run exits with no transcript. No command runs before every
-/// needed login is found.
+/// Codex needs its stored login, Claude, unless it is handed off, needs a
+/// token, and Copilot needs its stored `config.json` login (`copilotTokens`,
+/// `loggedInUsers`, `lastLoggedInUser`; see `host::copilot_login_path`). No
+/// command runs before every needed login is found.
 fn check_logins(hosts: &[Host], claude_handoff: bool) -> Result<(), String> {
     if needs_login(hosts, Host::Codex) {
         let stored = host::codex_login_path();
@@ -530,6 +528,9 @@ fn check_logins(hosts: &[Host], claude_handoff: bool) -> Result<(), String> {
         && !set("ANTHROPIC_API_KEY")
     {
         return Err("CLAUDE_CODE_OAUTH_TOKEN is not set (run `claude setup-token`), nor ANTHROPIC_API_KEY; or pass --claude-handoff".to_owned());
+    }
+    if needs_login(hosts, Host::Copilot) {
+        host::check_copilot_login(&host::copilot_login_path())?;
     }
     Ok(())
 }
