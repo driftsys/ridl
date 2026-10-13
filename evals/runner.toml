@@ -1,7 +1,11 @@
 # The models the eval runner pins. Each result file records the model it ran
-# with. The judge of a run uses the other host's model.
+# with. The judge of a run uses the other vendor's host: Claude and Copilot
+# runs are judged by Codex, and Codex runs are judged by Claude.
 [claude]
 model = "claude-opus-5-5"
 
 [codex]
 model = "gpt-6-sol"
+
+[copilot]
+model = "claude-sonnet-5.5"

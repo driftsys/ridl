@@ -142,7 +142,8 @@ pub fn write_schema(dir: &Path) -> Result<(), String> {
 
 /// The judge runs with no MCP server, in `dir`, an empty directory with its
 /// own host home. The Claude judge has no tool; the Codex judge keeps its
-/// shell tool in a read-only sandbox (`-s read-only`).
+/// shell tool in a read-only sandbox (`-s read-only`). Copilot is never a
+/// judge: `Host::judge` never returns it.
 pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> host::Invocation {
     let s = |v: &str| v.to_owned();
     let path = |p: PathBuf| p.display().to_string();
@@ -180,6 +181,7 @@ pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> h
             ],
             vec![(s("CODEX_HOME"), path(dir.join("home")))],
         ),
+        Host::Copilot => unreachable!("Host::judge never selects Copilot as a judge"),
     };
     host::Invocation {
         program: judge.binary(),
@@ -250,11 +252,24 @@ pub fn claude_final_message(transcript: &str) -> String {
         .unwrap_or_default()
 }
 
+/// The final message of a Copilot run: the `content` of its last
+/// `assistant.message` event.
+pub fn copilot_final_message(transcript: &str) -> String {
+    transcript
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter(|v| v["type"] == "assistant.message")
+        .filter_map(|v| v["data"]["content"].as_str().map(str::to_owned))
+        .next_back()
+        .unwrap_or_default()
+}
+
 /// The final message of a run on `host`.
 pub fn final_message(host: Host, transcript: &str, dirs: &RunDirs) -> String {
     match host {
         Host::Claude => claude_final_message(transcript),
         Host::Codex => std::fs::read_to_string(&dirs.last_message).unwrap_or_default(),
+        Host::Copilot => copilot_final_message(transcript),
     }
 }
 
@@ -399,6 +414,12 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "never selects Copilot")]
+    fn copilot_is_never_invoked_as_a_judge() {
+        judge_invocation(Host::Copilot, "m", Path::new("/j"), "p");
+    }
+
+    #[test]
     fn the_claude_reply_is_its_structured_output_or_its_result() {
         let structured = r#"{"type":"result","structured_output":{"items":[]},"result":"x"}"#;
         assert_eq!(claude_reply(structured).unwrap(), r#"{"items":[]}"#);
@@ -457,6 +478,19 @@ mod tests {
             "\n"
         );
         assert_eq!(claude_final_message(t), "The answer.");
+    }
+
+    #[test]
+    fn the_final_message_of_a_copilot_run_is_its_last_assistant_message() {
+        let t = concat!(
+            r#"{"type":"assistant.message","data":{"messageId":"1","content":"first"}}"#,
+            "\n",
+            r#"{"type":"tool.execution_start","data":{"toolCallId":"a","toolName":"bash"}}"#,
+            "\n",
+            r#"{"type":"assistant.message","data":{"messageId":"2","content":"last"}}"#,
+            "\n"
+        );
+        assert_eq!(copilot_final_message(t), "last");
     }
 
     #[test]
