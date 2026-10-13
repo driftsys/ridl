@@ -2207,7 +2207,8 @@ Options:
   -h, --help   Print help
 ```
 
-`ridl vendor` makes a project build with no network and no cache. `PATH` is a
+`ridl vendor` makes a project build with no network and no cache; the
+[Remote units and `ridl vendor`](remote-units.md) chapter is the guide. `PATH` is a
 unit directory, a workspace root or a file, and defaults to the current
 directory; the command acts on the manifest root above it, found as `ridl check`
 finds it, so `vendor/` is at the workspace root whichever member the command
