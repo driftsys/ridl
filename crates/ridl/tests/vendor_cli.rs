@@ -508,6 +508,45 @@ fn vendor_check_reports_a_broken_manifest() {
     assert!(!root.join("vendor").exists());
 }
 
+/// The diagnostics of `ridl.lock` itself are rendered by `--check`: a lock
+/// file that does not parse is a warning that names the file, and the
+/// vendored unit it would have pinned is then unverifiable (MANI-103).
+#[test]
+fn vendor_check_renders_a_malformed_lockfile() {
+    let dir = TempDir::new("vendor-check-bad-lock");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    assert_eq!(ridl(&root, dir.path(), &["vendor"]).0, 0);
+    std::fs::write(root.join("ridl.lock"), "[entries\nnot toml\n").unwrap();
+    let before = snapshot(dir.path());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["vendor", "--check"]);
+    assert_eq!(code, 1, "{stderr}");
+    assert!(
+        stderr.contains("warning") && stderr.contains("is not a valid lockfile"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("ridl.lock"), "{stderr}");
+    assert!(stderr.contains("error[MANI-103]"), "{stderr}");
+    assert_eq!(snapshot(dir.path()), before, "--check writes nothing");
+}
+
+/// A Warning alone is exit 0: a source file left directly in `vendor/` is
+/// MANI-018, which `--check` prints and does not count as drift.
+#[test]
+fn vendor_check_with_only_a_warning_exits_0() {
+    let dir = TempDir::new("vendor-check-warning");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let root = consumer(&dir, stub.url());
+    assert_eq!(ridl(&root, dir.path(), &["vendor"]).0, 0);
+    dir.write("app/vendor/stray.typl", "package stray\n");
+    let (code, stdout, stderr) = ridl(&root, dir.path(), &["vendor", "--check"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(stdout, "");
+    assert!(stderr.contains("warning[MANI-018]"), "{stderr}");
+    assert!(stderr.contains("stray.typl"), "{stderr}");
+    assert!(!stderr.contains("error"), "{stderr}");
+}
+
 /// A missing path exits 2 before root discovery, even when the working
 /// directory is inside a consumer whose `vendor/` would draw drift.
 #[test]

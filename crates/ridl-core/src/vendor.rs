@@ -139,6 +139,12 @@ pub fn write_vendor(
 ///
 /// A URL draws at most one of `MANI-109`, `MANI-103` and `MANI-108`, in that
 /// order. The `MANI-110` diagnostics follow in name order.
+///
+/// The two directory tests differ on a symbolic link. A key's directory is
+/// found with [`Path::is_dir`], which follows a symbolic link, so a link to
+/// a directory at `vendor/<key>` is that key's directory. The `MANI-110`
+/// listing uses the entry's own file type, which does not follow a link, so
+/// a symbolic link in `vendor/` is never a stray.
 pub fn check_vendor(
     root: &Path,
     imports: &ImportUnion,
@@ -581,6 +587,27 @@ mod tests {
             root.join("vendor/stray/s.typl").is_file(),
             "nothing removed"
         );
+    }
+
+    /// Several directories no key names are each MANI-110, in name order
+    /// whatever order the file system lists them in.
+    #[test]
+    fn strays_are_reported_in_name_order() {
+        let fixture = TempDir::new("check-stray-order");
+        let root = fixture.path().join("root");
+        let a = unit(&root.join("vendor/a"), &[("a.typl", "package a\n")]);
+        unit(&root.join("vendor/zeta"), &[("z.typl", "package z\n")]);
+        unit(&root.join("vendor/mid"), &[("m.typl", "package m\n")]);
+        unit(&root.join("vendor/alpha"), &[("p.typl", "package p\n")]);
+        let diags = check_vendor(&root, &union(&a.url, "a"), Some(&lock_for(&a.url, &a.tree)));
+        assert_eq!(codes(&diags), ["MANI-110", "MANI-110", "MANI-110"]);
+        for (diag, name) in diags.iter().zip(["alpha", "mid", "zeta"]) {
+            assert!(
+                diag.message.contains(&format!("`{name}`")),
+                "{name}: {}",
+                diag.message
+            );
+        }
     }
 
     /// With no lockfile at all, a vendored unit is MANI-103: the check
