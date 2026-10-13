@@ -603,3 +603,19 @@ provenance. Nothing here is normative — the current references live in
   [the binding rationale technote](../technotes/websocket-binding-rationale.md).
   The archived files link to sibling working files that stay in
   [`../wip/`](../wip/).
+- **2026-10-06-ws-and-payload-formats-steering.md** and
+  **ws-and-payload-formats-handoff.md** — the steering note and its session
+  prompt for the WebSocket transport and the payload formats, archived verbatim.
+  The note's decisions A (on-request encodings), I (the encoding comes from the
+  port type) and B (the WebSocket binding fixes no encoding) are built: see
+  [ADR-0002](../decisions/ADR-0002-module-system.md),
+  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md),
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md),
+  [the interaction face](../design/interaction-face.md),
+  [the frame specification](../specification/frame-specification.md) §11.1 and
+  [the binding rationale technote](../technotes/websocket-binding-rationale.md).
+  Decision H (header and envelope sizes) is superseded by the binding design.
+  Decision D (the `prost` oracle) and the `repr(C)` questions live on
+  driftsys/ridl#264 and #317; the open measurement, JSON and catalog-reader
+  questions are items 7 to 9 of ADR-0020's open list. Its `docs/wip/` paths are
+  historic.

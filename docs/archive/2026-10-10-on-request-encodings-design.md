@@ -5,10 +5,10 @@ the steering note did not fix is listed in section 15 with its confirmation or
 its revision.
 
 Satisfies: driftsys/ridl#801. Implements decisions A1, A2, A3, A4 and A5 of
-`docs/wip/2026-10-06-ws-and-payload-formats-steering.md` (section 2), which are
-fixed and not reopened here. Source prompt:
-`docs/wip/ws-and-payload-formats-handoff.md`, "Decided by Sebastien before this
-session".
+`docs/archive/2026-10-06-ws-and-payload-formats-steering.md` (section 2), which
+are fixed and not reopened here. Source prompt:
+`docs/archive/ws-and-payload-formats-handoff.md`, "Decided by Sebastien before
+this session".
 
 ## 1. Intent
 
