@@ -203,6 +203,26 @@ pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> Si
     }
 }
 
+/// The proto3 state of an induced argument or reply struct, read from
+/// `home`: the bound of its message, with the causes [`state`] gives.
+pub(crate) fn tuple_state<'a>(home: &'a Package, tuple: &'a TupleType, ctx: &Ctx<'a>) -> SizeState {
+    let mut walk = Walk {
+        ctx,
+        memo: HashMap::new(),
+        too_deep: false,
+        #[cfg(test)]
+        bodies: 0,
+    };
+    match tuple_size(tuple, home, &mut walk, 0) {
+        Some(bytes) => match u32::try_from(bytes) {
+            Ok(bytes) => SizeState::Bounded(bytes),
+            Err(_) => SizeState::Absent(AbsentCause::Overflow),
+        },
+        None if walk.too_deep => SizeState::Absent(AbsentCause::Overflow),
+        None => SizeState::Absent(AbsentCause::RefusedMember),
+    }
+}
+
 fn field_size<'a>(
     number: u32,
     ty: &'a FieldType,

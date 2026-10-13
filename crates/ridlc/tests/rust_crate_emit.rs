@@ -1720,15 +1720,18 @@ fn a_skipped_interface_leaves_a_note_and_the_package_still_compiles() {
         .rfind("Interface `WheelDiagnostics`")
         .expect("the internal note's headline")..];
     // `WheelDiagnostics` is `internal`: it never gets a face, so its note
-    // names the lost descriptors and the refusal reason, not a face gap.
+    // names the lost descriptors and the refusal reason, not a face gap. Its
+    // refusal is its `fixed` member, whose payload is an array of a tuple and
+    // not a named type; its calls are carried by their induced argument and
+    // reply structs.
     assert!(
         internal_note.contains("carries no generated interaction descriptors"),
         "the internal interface's note names its descriptors, got:\n{internal_note}"
     );
     assert!(
-        internal_note.contains("must declare exactly one parameter")
+        internal_note.contains("fixed `tickBounds`'s payload must be a named type")
             && !internal_note.contains("driftsys/ridl"),
-        "the refusal reason names the call shape and no issue, got:\n{internal_note}"
+        "the refusal reason names the `fixed` payload and no issue, got:\n{internal_note}"
     );
     assert!(
         internal_note.contains("The interface is `internal`, so it has no face in any case"),

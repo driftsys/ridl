@@ -124,6 +124,10 @@ pub enum PayloadShape<'a> {
     Params(&'a [Param]),
     /// A query response.
     Return(&'a ReturnType),
+    /// An induced argument or reply struct: the tuple the lowering built from
+    /// a parameter list or a reply, sized as the message each encoding gives
+    /// it (driftsys/ridl#713).
+    Tuple(&'a TupleType),
 }
 
 /// The one named type a payload is, or the cause of its absent state when
@@ -143,6 +147,8 @@ fn payload_name<'a>(shape: &PayloadShape<'a>) -> Result<&'a str, AbsentCause> {
             Some(return_type::Kind::Value(ty)) => named_field(ty),
             Some(return_type::Kind::Fallible(_)) | None => Err(AbsentCause::EncodingUndefined),
         },
+        // Sized as a tuple by `size_state`, never by name.
+        PayloadShape::Tuple(_) => Err(AbsentCause::EncodingUndefined),
     }
 }
 
@@ -261,6 +267,13 @@ pub fn size_state<'a>(
     ctx: &Ctx<'a>,
     encoding: Encoding,
 ) -> SizeState {
+    if let PayloadShape::Tuple(tuple) = shape {
+        return match encoding {
+            Encoding::Proto3 => proto3::tuple_state(home, tuple, ctx),
+            Encoding::FlatBuffers => flatbuffers::tuple_state(home, tuple, ctx),
+            Encoding::ReprC => SizeState::Absent(AbsentCause::EncodingUndefined),
+        };
+    }
     type Sizer<'a> = fn(&'a Package, &str, &Ctx<'a>) -> SizeState;
     let sizer: Sizer<'a> = match encoding {
         Encoding::Proto3 => proto3::state as Sizer<'a>,

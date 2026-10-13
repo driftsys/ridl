@@ -233,15 +233,25 @@ const ALLOWED: &[Allowed] = &[
               check is a `shapes()` walk",
     },
     Allowed {
+        path: "crates/ridl-ir/src/codegen/lower.rs",
+        lines: 1,
+        why: "the root set of the FlatBuffers projection reads the codegen \
+              model's own `Model.interfaces` field, which the lowering just \
+              filled from a `shapes()` walk, to collect the induced request \
+              and reply tuples the lowering recorded on each interaction",
+    },
+    Allowed {
         path: "crates/ridl-ir/src/codegen/tests.rs",
-        lines: 3,
+        lines: 4,
         why: "one test fixture sets a package's named interfaces and reads \
               the lowered model's own `Model.interfaces` field back, to pin \
               that the model copies the interaction's family and an intent \
               command's shape; a third walks the same fixture's interfaces to \
               retype one member's payload, so that a `fixed` member with an \
               unbounded payload can be built from the fixture the budget \
-              tests already use",
+              tests already use; a fourth finds the call fixture's one named \
+              interface by name, so that a test can extend it with an \
+              interaction shape the fixture does not hold",
     },
     Allowed {
         path: "crates/ridl-ir/src/lib.rs",

@@ -2,7 +2,8 @@
 //!
 //! A **wire backend** in the sense ADR-0013 decision 1 gives the term: the
 //! target describes bytes in transit, so the emit ceiling is two tiers — the
-//! typl surface, and the interaction identity table — and nothing above them.
+//! typl surface, interaction-induced product payloads, and the interaction
+//! identity table — and nothing above them.
 //! No `service` block, no call face, no value store.
 //!
 //! Text is written directly rather than through a `FileDescriptorProto`. The
@@ -29,6 +30,7 @@
 //! resolve is refused, rather than emitted as a name `protoc` would then
 //! fail to resolve.
 
+use ridl_ir::codegen::{self, v1, wire};
 use ridl_ir::projection::proto3::{self, PROTO_MAX_FIELD_NUMBER, PROTO_RESERVED};
 use ridl_ir::v2;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -83,7 +85,21 @@ pub fn generate_with(
     package: &v2::Package,
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
-    let packages = Packages { package, others };
+    generate_model(package, others, &codegen::lower(package, others))
+}
+
+pub(crate) fn generate_model(
+    package: &v2::Package,
+    others: &[&v2::Package],
+    model: &v1::Model,
+) -> Result<Generated, GenerateError> {
+    let original_count = package.decls.len();
+    let package = wire::with_interaction_tuples(package, model, wire::Schema::Proto3)
+        .map_err(|message| GenerateError { message })?;
+    let packages = Packages {
+        package: &package,
+        others,
+    };
     let mut imports: BTreeSet<String> = BTreeSet::new();
     // One package scope spans both walks, because the identity tables are
     // package-level enums the same as the declared ones: a declared type
@@ -92,8 +108,14 @@ pub fn generate_with(
     let mut names = SymbolScope::package(&package.name);
 
     let mut body = String::new();
-    emit_messages(&mut body, packages, &mut names, &mut imports)?;
-    emit_identity_tables(&mut body, package, &mut names)?;
+    emit_messages(
+        &mut body,
+        packages,
+        &mut names,
+        &mut imports,
+        original_count,
+    )?;
+    emit_identity_tables(&mut body, &package, &mut names)?;
 
     let mut out = String::new();
     out.push_str("syntax = \"proto3\";\n\n");
@@ -233,12 +255,45 @@ fn emit_messages(
     packages: Packages,
     names: &mut SymbolScope,
     imports: &mut BTreeSet<String>,
+    original_count: usize,
 ) -> Result<(), GenerateError> {
     let mut tuples: Vec<InducedTuple> = Vec::new();
-    for decl in &packages.package.decls {
+    for (index, decl) in packages.package.decls.iter().enumerate() {
         match &decl.kind {
             Some(v2::decl::Kind::StructDef(def)) => {
-                emit_struct(out, packages, &decl.name, def, &mut tuples, names, imports)?;
+                if index < original_count {
+                    emit_struct(out, packages, &decl.name, def, &mut tuples, names, imports)?;
+                } else {
+                    names.claim(&decl.name, "an interaction tuple named by lowering")?;
+                    let tuple = v2::TupleType {
+                        fields: def
+                            .members
+                            .iter()
+                            .filter_map(|member| {
+                                let v2::struct_member::Member::Field(field) =
+                                    member.member.as_ref()?
+                                else {
+                                    return None;
+                                };
+                                Some(v2::TupleField {
+                                    name: field.name.clone(),
+                                    r#type: field.r#type.clone(),
+                                })
+                            })
+                            .collect(),
+                    };
+                    emit_induced_tuple(
+                        out,
+                        packages,
+                        &InducedTuple {
+                            name: decl.name.clone(),
+                            source: decl.name.clone(),
+                            tuple,
+                        },
+                        &mut tuples,
+                        imports,
+                    )?;
+                }
             }
             Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def, names)?,
             Some(v2::decl::Kind::UnionDef(def)) => {

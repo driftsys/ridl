@@ -1060,7 +1060,38 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     ]
   },
   "declarations": [],
-  "tuples": [],
+  "tuples": [
+    {
+      "name": {
+        "rust": "VehDiagAccessReadFaultsParams",
+        "wire": "VehDiagAccessReadFaultsParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 0,
+      "interaction": {
+        "interface": 0,
+        "slot": 0,
+        "segments": [
+          "Params"
+        ]
+      }
+    }
+  ],
   "interfaces": [
     {
       "number": 3,
@@ -1090,10 +1121,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "readFaults.request: ()"
+                "bytes": "6"
               },
               "flatbuffers": {
-                "unsized": "readFaults.request: ()"
+                "bytes": "76"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -1145,14 +1176,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
@@ -1162,6 +1189,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 "flatbuffers": {
                   "bounded": 43
                 }
+              },
+              "requestTuple": {
+                "index": 0
               }
             }
           }
@@ -1170,10 +1200,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "inlineOfService": 0,
       "tableBudget": {
         "proto3": {
-          "unsized": "readFaults"
+          "bytes": "6"
         },
         "flatbuffers": {
-          "unsized": "readFaults"
+          "bytes": "76"
         }
       },
       "links": [],
@@ -1222,8 +1252,22 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     "compatible": []
   },
   "flatbuffers": {
-    "roots": [],
-    "tables": []
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 0,
+        "maxSize": 33
+      }
+    ],
+    "tables": [
+      {
+        "name": "VehDiagAccessReadFaultsParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 0
+      }
+    ]
   },
   "foreign": [
     {

@@ -127,6 +127,44 @@ fn the_model_is_positionally_aligned_with_the_ir_it_was_lowered_from() {
     assert!(checked > 0, "the corpus must offer packages to check");
 }
 
+/// Every named induced tuple carries a FlatBuffers table, over the whole
+/// corpus.
+///
+/// The lowering induces a tuple and names it; the projection is handed those
+/// tuples and queues a table for each one it did not already reach. This is
+/// the test that keeps the two joined: a tuple the lowering names and the
+/// projection does not cover is silent otherwise — the model keeps the
+/// tuple, and only the join between them is lost. The corpus is the input
+/// because it holds the names a hand-built fixture does not: a service's
+/// dotted identity, an inline shape, a retired slot (driftsys/ridl#713).
+#[test]
+fn every_named_induced_tuple_in_the_corpus_has_a_flatbuffers_table() {
+    let mut checked = 0usize;
+    for (entry, packages) in corpus_packages() {
+        for package in &packages {
+            let others: Vec<&v2::Package> = packages.iter().collect();
+            let model = codegen::lower(package, &others);
+            for tuple in &model.tuples {
+                let Some(name) = tuple.name.as_ref() else {
+                    continue;
+                };
+                if name.rust.is_empty() {
+                    continue;
+                }
+                assert!(
+                    tuple.flatbuffers_table.is_some(),
+                    "{entry}: package {}: the induced tuple `{}` has no FlatBuffers \
+                     table",
+                    package.name,
+                    name.wire
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 0, "the corpus must offer induced tuples to check");
+}
+
 /// The model is a function of the IR and the scope: lowering twice gives the
 /// same bytes, and those bytes read back into the same model.
 #[test]
@@ -357,7 +395,7 @@ fn the_face_fixture_carries_the_whole_ipc_floor() {
                 .expect("the projection is lowered")
                 .roots
                 .iter()
-                .find(|root| root.declaration == reference.index)
+                .find(|root| root.tuple.is_none() && root.declaration == reference.index)
                 .and_then(|root| match root.bound.as_ref() {
                     Some(v1::fb_root::Bound::MaxSize(size)) => Some(*size),
                     _ => None,

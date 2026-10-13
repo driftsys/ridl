@@ -816,9 +816,10 @@ rustdoc, because the generated docs link by paths from the crate root
 type whose size the compiler cannot bound — one that reaches itself, or a
 stream — carries no codec, and gets a `__RIDL_FB_NO_CODEC_<NAME>` constant
 whose documentation names the member and the reason. An interface the face
-cannot carry — a call that does not take exactly one named parameter, a query
-whose reply is not a named type, or a contract clause outside the form the
-translator accepts — is skipped along with its descriptors, and gets a
+cannot carry — a parameter with no declared type, a stream in either
+position, a query whose reply is a fallible `T | E`, or a contract clause
+outside the form the translator accepts — is skipped along with its
+descriptors, and gets a
 `__RIDL_NO_FACE_<NAME>` constant naming the interface and the reason, and,
 when an issue tracks the limit, that issue. An `internal` interface gets no
 face in any case

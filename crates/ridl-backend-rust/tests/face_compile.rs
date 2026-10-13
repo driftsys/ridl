@@ -176,7 +176,10 @@ fn an_internal_interface_gets_no_face_through_the_pipeline() {
 }
 
 /// The skip note of a public interface whose call the face cannot carry names
-/// the call shape and what the source can change to get a face.
+/// the call shape and what the source can change to get a face. A stream
+/// parameter has no payload type, so it is one of the three shapes still
+/// refused; a parameter list of any length is carried by its induced argument
+/// struct.
 #[test]
 fn a_public_interface_with_an_uncarried_call_leaves_the_call_shape_note() {
     let source = r#"
@@ -185,7 +188,7 @@ package face.shape
 type Level : integer [0..100]
 
 interface Wide {
-  command set(first: Level, second: Level) @[..50ms]
+  command set(samples: <Level>) @[..50ms]
 }
 "#;
     let output = ridlc::compile("shape.ridl", source);
@@ -212,8 +215,8 @@ interface Wide {
 /// The skip note of a public interface whose query the face cannot carry
 /// names the call shape and what the source can change to get a face. The command case above reaches
 /// the command arm of `face_gap`'s match; this one reaches the query arm
-/// through its parameter operand (two parameters), and the next one through
-/// its reply operand.
+/// through its parameter operand (a stream), and the next one through its
+/// reply operand.
 #[test]
 fn a_public_interface_with_an_uncarried_query_leaves_the_call_shape_note() {
     let source = r#"
@@ -222,7 +225,7 @@ package face.query_shape
 type Level : integer [0..100]
 
 interface Wide {
-  query read(first: Level, second: Level): Level @[..50ms]
+  query read(samples: <Level>): Level @[..50ms]
 }
 "#;
     let output = ridlc::compile("query_shape.ridl", source);
@@ -240,9 +243,10 @@ interface Wide {
     assert!(!text.contains("driftsys/ridl"), "{text}");
 }
 
-/// A public query with one named parameter and an inline tuple reply reaches
-/// the query arm of `face_gap`'s match through its reply operand alone, so it
-/// gets the call-shape owner line, not the unowned one.
+/// A public query with one named parameter and a fallible reply reaches the
+/// query arm of `face_gap`'s match through its reply operand alone, so it gets
+/// the call-shape owner line, not the unowned one. A tuple reply is carried by
+/// its induced reply struct; a `T | E` is a sum, which induces nothing.
 #[test]
 fn a_public_query_with_an_inline_reply_leaves_the_call_shape_note() {
     let source = r#"
@@ -250,8 +254,10 @@ package face.query_reply
 
 type Level : integer [0..100]
 
+type Fault : integer [0..10]
+
 interface Wide {
-  query read(first: Level): (a: Level, b: Level) @[..50ms]
+  query read(first: Level): Level | Fault @[..50ms]
 }
 "#;
     let output = ridlc::compile("query_reply.ridl", source);

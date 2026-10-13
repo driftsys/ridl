@@ -6,8 +6,8 @@
 //! disagreement the moment either changed.
 
 use crate::codegen::fb_unbounded;
-use crate::projection::flatbuffers::{MAX_ENCODABLE, max_size, root_table};
-use crate::v2::Package;
+use crate::projection::flatbuffers::{MAX_ENCODABLE, max_size, root_table, tuple_max_size};
+use crate::v2::{Package, TupleType};
 
 use super::{AbsentCause, Ctx, SizeState, UnboundedCause};
 
@@ -40,6 +40,20 @@ pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> Si
             )
         }
         None => SizeState::Unbounded(cause_of(fb_unbounded(declaring, decl).cause)),
+    }
+}
+
+/// The state of an induced argument or reply struct, read from `home`: the
+/// projection's bound for its table, unbounded when there is none.
+pub(crate) fn tuple_state<'a>(home: &'a Package, tuple: &TupleType, ctx: &Ctx<'a>) -> SizeState {
+    let Some(packages) = ctx.packages_for(home) else {
+        return SizeState::Absent(AbsentCause::Unresolved);
+    };
+    match tuple_max_size(packages, tuple) {
+        Some(bytes) => SizeState::Bounded(
+            u32::try_from(bytes).expect("tuple_max_size refuses a bound above MAX_ENCODABLE"),
+        ),
+        None => SizeState::Unbounded(UnboundedCause::Unspecified),
     }
 }
 

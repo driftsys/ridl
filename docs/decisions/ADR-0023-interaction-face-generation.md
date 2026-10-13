@@ -163,6 +163,19 @@ encoding. `ridl-loopback` is the port side of it:
 `Loopback<E: Encoding = FlatBuffers>` and all six role handles implement
 `Encoded`. Decisions 6 and 7 carry the amendment in place; driftsys/ridl#801.
 
+**Amendment (2026-10-13), from driftsys/ridl#713 — decisions 2 and 6: the
+request of a call is always a named type.** The face's request is the single
+declared named parameter, or the induced argument struct for every other
+parameter list, zero parameters included. The reply is the declared named type,
+or the induced reply struct when the reply is a tuple or the query declares no
+return type. The lowering induces and names these structs
+([ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md), amendment of
+2026-10-13), so the Rust backend skips an interface for a call shape in three
+cases only: an untyped position, a stream, and a fallible `T | E` reply, which
+is a sum and is tracked on driftsys/ridl#943. The contract-clause translator of
+decision 1 is unchanged and still limits which interfaces get a face
+(driftsys/ridl#704).
+
 ## Context
 
 The approved M1 design (archived at

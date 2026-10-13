@@ -475,6 +475,26 @@ pub fn max_size(packages: Packages<'_>, decl: &v2::Decl) -> Option<u64> {
     }
 }
 
+/// The largest FlatBuffers buffer a tuple's own table encodes to, the bound
+/// [`max_size`] gives a declaration. `None` when no finite bound exists.
+///
+/// This is the bound of a struct induced at a position that has no
+/// declaration of its own — a call's argument struct, a query's reply struct
+/// — which is a root like any declared payload (driftsys/ridl#713).
+#[must_use]
+pub fn tuple_max_size(packages: Packages<'_>, tuple: &v2::TupleType) -> Option<u64> {
+    let mut sizer = Sizer {
+        packages,
+        visiting: Vec::new(),
+        computed: HashMap::new(),
+    };
+    let body = sizer.tuple_table_bound(packages.package, tuple)?;
+    match ROOT.checked_add(body) {
+        Some(bound) if bound <= MAX_ENCODABLE => Some(bound),
+        _ => None,
+    }
+}
+
 /// The largest buffer a FlatBuffers offset can address. Every offset in the
 /// format is 32 bits, so nothing above this is encodable, whatever the
 /// arithmetic says.

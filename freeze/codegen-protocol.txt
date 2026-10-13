@@ -70,6 +70,7 @@ ridl.codegen.v1.CommandShape.clauses = 3 repeated ridl.codegen.v1.Clause
 ridl.codegen.v1.CommandShape.params = 1 repeated ridl.codegen.v1.Param
 ridl.codegen.v1.CommandShape.request = 2 singular ridl.codegen.v1.Payload
 ridl.codegen.v1.CommandShape.request_sizes = 4 singular ridl.codegen.v1.PayloadSizes
+ridl.codegen.v1.CommandShape.request_tuple = 6 optional ridl.codegen.v1.TupleRef
 ridl.codegen.v1.CommandShape.shape = 5 singular ridl.codegen.v1.Shape
 ridl.codegen.v1.Comparison.literal = 2 singular string
 ridl.codegen.v1.Comparison.literal_class = 3 singular ridl.codegen.v1.ScalarClass
@@ -204,6 +205,7 @@ ridl.codegen.v1.FbMap.min = 2 singular uint64
 ridl.codegen.v1.FbRoot.declaration = 1 singular uint32
 ridl.codegen.v1.FbRoot.max_size = 10 singular uint32 oneof=bound
 ridl.codegen.v1.FbRoot.root = 2 singular ridl.codegen.v1.FbRootKind
+ridl.codegen.v1.FbRoot.tuple = 3 optional uint32
 ridl.codegen.v1.FbRoot.unbounded = 11 singular ridl.codegen.v1.FbUnbounded oneof=bound
 ridl.codegen.v1.FbRootKind values FB_ROOT_KIND_BOX FB_ROOT_KIND_OWN FB_ROOT_KIND_UNION_WRAPPER FB_ROOT_KIND_UNSPECIFIED
 ridl.codegen.v1.FbRootKind.FB_ROOT_KIND_BOX = 3
@@ -414,8 +416,10 @@ ridl.codegen.v1.QueryShape.params = 1 repeated ridl.codegen.v1.Param
 ridl.codegen.v1.QueryShape.reply = 3 singular ridl.codegen.v1.Reply
 ridl.codegen.v1.QueryShape.reply_payload = 4 singular ridl.codegen.v1.Payload
 ridl.codegen.v1.QueryShape.reply_sizes = 7 singular ridl.codegen.v1.PayloadSizes
+ridl.codegen.v1.QueryShape.reply_tuple = 9 optional ridl.codegen.v1.TupleRef
 ridl.codegen.v1.QueryShape.request = 2 singular ridl.codegen.v1.Payload
 ridl.codegen.v1.QueryShape.request_sizes = 6 singular ridl.codegen.v1.PayloadSizes
+ridl.codegen.v1.QueryShape.request_tuple = 8 optional ridl.codegen.v1.TupleRef
 ridl.codegen.v1.Region.catalog = 1 singular string
 ridl.codegen.v1.Region.hash = 2 singular bytes
 ridl.codegen.v1.Region.interfaces = 3 repeated ridl.codegen.v1.RegionInterface

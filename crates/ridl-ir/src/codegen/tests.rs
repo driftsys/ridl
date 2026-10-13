@@ -1586,6 +1586,26 @@ fn call_package() -> v2::Package {
     }
 }
 
+/// One public interaction declaration, for a test that extends
+/// `call_package`'s `Calls` interface with a shape the fixture does not hold.
+fn call_decl(name: &str, kind: v2::decl::Kind) -> v2::Decl {
+    v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(kind),
+        ..Default::default()
+    }
+}
+
+/// `call_package`'s `Calls` interface, to push an interaction onto.
+fn calls_interface(package: &mut v2::Package) -> &mut v2::Interface {
+    package
+        .interfaces
+        .iter_mut()
+        .find(|interface| interface.name == "Calls")
+        .expect("the Calls interface")
+}
+
 fn call_shape(model: &v1::Model, position: usize) -> &v1::interaction::Shape {
     let v1::Model { interfaces, .. } = model;
     let interface = interfaces
@@ -1621,13 +1641,20 @@ fn undefined() -> v1::size_state::State {
 }
 
 #[test]
-fn a_two_parameter_command_has_an_undefined_request_size() {
+fn a_two_parameter_command_states_a_request_size() {
     let model = lower(&call_package(), &[]);
     let v1::interaction::Shape::Command(command) = call_shape(&model, 0) else {
         panic!("a command");
     };
-    assert_eq!(state(&command.request_sizes, true), &undefined());
-    assert_eq!(state(&command.request_sizes, false), &undefined());
+    for proto3 in [true, false] {
+        assert!(
+            matches!(
+                state(&command.request_sizes, proto3),
+                v1::size_state::State::Bounded(_)
+            ),
+            "the induced argument struct is sized like any other message"
+        );
+    }
 }
 
 #[test]
@@ -1645,13 +1672,17 @@ fn a_one_parameter_command_request_sizes_equal_its_payload_sizes() {
 }
 
 #[test]
-fn a_zero_parameter_query_request_is_undefined() {
+fn a_zero_parameter_query_states_a_request_size() {
     let model = lower(&call_package(), &[]);
     let v1::interaction::Shape::Query(query) = call_shape(&model, 2) else {
         panic!("a query");
     };
-    assert_eq!(state(&query.request_sizes, true), &undefined());
-    assert_eq!(state(&query.request_sizes, false), &undefined());
+    for proto3 in [true, false] {
+        assert!(matches!(
+            state(&query.request_sizes, proto3),
+            v1::size_state::State::Bounded(_)
+        ));
+    }
     assert_eq!(
         query.reply_sizes,
         query.reply_payload.as_ref().and_then(|p| p.sizes.clone()),
@@ -1706,21 +1737,6 @@ fn an_unbounded_query_reply_keeps_the_replys_own_attribution() {
         state(&query.reply_sizes, false),
         &v1::size_state::State::Unbounded(expected.clone())
     );
-}
-
-#[test]
-fn a_query_with_no_return_type_spells_its_reply_as_a_unit() {
-    // The request is bounded, so the reservation walks past it and names the
-    // reply: that is the only place the reply's text is visible. A reply text
-    // spelled any other way fails here.
-    let model = lower(&bare_package(), &[]);
-    let quiet = live_member(interface_named(&model, "Bare"), "quiet");
-    for proto3 in [true, false] {
-        assert_eq!(
-            reserved(&quiet.reservation, proto3),
-            &unsized_by("quiet.reply: ()")
-        );
-    }
 }
 
 #[test]
@@ -2077,38 +2093,25 @@ fn bare_package() -> v2::Package {
 }
 
 #[test]
-fn a_query_with_no_return_type_has_undefined_reply_sizes() {
+fn a_query_with_no_return_type_states_a_reply_size() {
     let model = lower(&bare_package(), &[]);
     let blank = live_member(interface_named(&model, "Bare"), "blank");
     let Some(v1::interaction::Shape::Query(query)) = blank.shape.as_ref() else {
         panic!("a query");
     };
-    let expected = v1::PayloadSizes {
-        proto3: Some(v1::SizeState {
-            state: Some(v1::size_state::State::Absent(v1::SizeAbsent {
-                cause: 1,
-                detail: None,
-            })),
-        }),
-        flatbuffers: Some(v1::SizeState {
-            state: Some(v1::size_state::State::Absent(v1::SizeAbsent {
-                cause: 1,
-                detail: None,
-            })),
-        }),
-    };
-    assert_eq!(query.reply_sizes, Some(expected));
-    // Neither payload is bounded: the first one, the request, is named.
+    // The reply is an induced empty struct, and so is the request.
     for proto3 in [true, false] {
-        assert_eq!(
+        assert!(matches!(
+            state(&query.reply_sizes, proto3),
+            v1::size_state::State::Bounded(_)
+        ));
+        assert!(matches!(
             reserved(&blank.reservation, proto3),
-            &unsized_by("blank.request: ()")
-        );
+            v1::reservation_state::State::Bytes(_)
+        ));
     }
 }
 
-/// (driftsys/ridl#852) A fixed member reserves nothing whatever its payload,
-/// a missing payload included, so it is never unsized.
 #[test]
 fn a_fixed_member_with_no_payload_reserves_nothing() {
     let model = lower(&bare_package(), &[]);
@@ -2292,17 +2295,14 @@ fn an_unsized_reply_states_the_kind_of_its_type() {
 }
 
 #[test]
-fn a_multi_parameter_request_names_every_parameter() {
-    // The request of a call with several parameters has no encoding, and the
-    // reservation spells the whole parameter list: a join that dropped a
-    // name, or kept only the first, fails here.
+fn a_multi_parameter_request_reserves_a_number() {
     let model = lower(&call_package(), &[]);
     let two = live_member(interface_named(&model, "Calls"), "two");
     for proto3 in [true, false] {
-        assert_eq!(
+        assert!(matches!(
             reserved(&two.reservation, proto3),
-            &unsized_by("two.request: (a, b)")
-        );
+            v1::reservation_state::State::Bytes(_)
+        ));
     }
 }
 
@@ -3955,4 +3955,370 @@ fn foreign_declaration_carries_rules() {
     // package that declares the struct, not in the lowered package.
     let leg_field = model_fields(foreign("Leg"))[0];
     assert_eq!(texts(&leg_field.rules), ["range 0 ..= 300"]);
+}
+
+/// A tuple reached from a parameter is named from the interface and the
+/// interaction, so it is emitted rather than skipped (ADR-0016).
+#[test]
+fn a_tuple_in_a_parameter_is_named_from_its_interaction() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "withSpan",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![v2::Param {
+                name: "span".to_string(),
+                r#type: Some(v2::FieldType {
+                    kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                        fields: vec![v2::TupleField {
+                            name: "lo".to_string(),
+                            r#type: Some(named("Pair")),
+                        }],
+                    })),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let names: Vec<&str> = model
+        .tuples
+        .iter()
+        .filter_map(|tuple| tuple.name.as_ref())
+        .map(|name| name.rust.as_str())
+        .collect();
+    assert!(
+        names.contains(&"CallsWithSpanParamSpan"),
+        "the induced name is spelled from the interface and the interaction: {names:?}"
+    );
+}
+
+/// A call with two parameters induces one argument struct, with one field
+/// per parameter in declaration order (driftsys/ridl#713).
+#[test]
+fn a_two_parameter_command_induces_an_argument_struct() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Command(command) = call_shape(&model, 0) else {
+        panic!("the `two` command");
+    };
+    let reference = command
+        .request_tuple
+        .as_ref()
+        .expect("a two-parameter call induces an argument struct");
+    assert!(command.request.is_none(), "and carries no named request");
+    let induced = &model.tuples[reference.index as usize];
+    assert_eq!(
+        induced.name.as_ref().expect("a name").rust,
+        "CallsTwoParams"
+    );
+    let fields: Vec<&str> = induced
+        .fields
+        .iter()
+        .map(|field| field.name.as_ref().expect("a name").declared.as_str())
+        .collect();
+    assert_eq!(fields, vec!["a", "b"]);
+}
+
+/// A call with exactly one named parameter keeps the payload it has today
+/// and induces nothing, so no existing face renames a type.
+#[test]
+fn a_one_parameter_command_induces_nothing() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Command(command) = call_shape(&model, 1) else {
+        panic!("the `one` command");
+    };
+    assert!(command.request.is_some());
+    assert!(command.request_tuple.is_none());
+}
+
+/// A call with no parameter induces an argument struct with no field: the
+/// shape that skipped `readTicks` and `fuelLevel` before this change.
+#[test]
+fn a_zero_parameter_command_induces_an_empty_argument_struct() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "ping",
+        v2::decl::Kind::CommandDef(v2::CommandDef::default()),
+    ));
+    let model = lower(&package, &[]);
+    let induced = model
+        .tuples
+        .iter()
+        .find(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsPingParams")
+        })
+        .expect("the induced argument struct");
+    assert!(induced.fields.is_empty());
+}
+
+/// A parameter's doc reaches the field of the induced argument struct, so
+/// the generated struct documents its fields (ADR-0028).
+#[test]
+fn a_parameter_doc_reaches_the_induced_field() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "documented",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                v2::Param {
+                    name: "first".to_string(),
+                    r#type: Some(named("Pair")),
+                    doc: "The first one.".to_string(),
+                    ..Default::default()
+                },
+                v2::Param {
+                    name: "second".to_string(),
+                    r#type: Some(named("Pair")),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let induced = model
+        .tuples
+        .iter()
+        .find(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsDocumentedParams")
+        })
+        .expect("the induced argument struct");
+    assert_eq!(induced.fields[0].doc, "The first one.");
+    assert_eq!(induced.fields[1].doc, "");
+}
+
+/// The doc reaches the field of the argument struct only. A tuple written
+/// inside a parameter is a type of its own, and its fields carry no doc, as
+/// the IR has none for them.
+#[test]
+fn a_tuple_inside_a_documented_parameter_keeps_undocumented_fields() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "withSpan",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                v2::Param {
+                    name: "span".to_string(),
+                    r#type: Some(v2::FieldType {
+                        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                            fields: vec![v2::TupleField {
+                                name: "lo".to_string(),
+                                r#type: Some(named("Pair")),
+                            }],
+                        })),
+                        ..Default::default()
+                    }),
+                    doc: "The span.".to_string(),
+                    ..Default::default()
+                },
+                v2::Param {
+                    name: "other".to_string(),
+                    r#type: Some(named("Pair")),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let by_name = |wanted: &str| {
+        model
+            .tuples
+            .iter()
+            .find(|tuple| tuple.name.as_ref().is_some_and(|name| name.rust == wanted))
+            .unwrap_or_else(|| panic!("the induced tuple {wanted}"))
+    };
+    assert_eq!(by_name("CallsWithSpanParams").fields[0].doc, "The span.");
+    assert_eq!(by_name("CallsWithSpanParamSpan").fields[0].doc, "");
+}
+
+/// A query's request follows the same rule as a command's: the `none` query
+/// of the fixture declares no parameter, so it induces an empty struct.
+#[test]
+fn a_query_request_follows_the_command_rule() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Query(query) = call_shape(&model, 2) else {
+        panic!("the `none` query");
+    };
+    let reference = query
+        .request_tuple
+        .as_ref()
+        .expect("a zero-parameter query induces an argument struct");
+    let induced = &model.tuples[reference.index as usize];
+    assert_eq!(
+        induced.name.as_ref().expect("a name").rust,
+        "CallsNoneParams"
+    );
+    assert!(induced.fields.is_empty());
+}
+
+/// A tuple reply induces a reply struct, one field per tuple field.
+#[test]
+fn a_tuple_reply_induces_a_reply_struct() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "bounds",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                    kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                        fields: vec![
+                            v2::TupleField {
+                                name: "min".to_string(),
+                                r#type: Some(named("Pair")),
+                            },
+                            v2::TupleField {
+                                name: "max".to_string(),
+                                r#type: Some(named("Pair")),
+                            },
+                        ],
+                    })),
+                    ..Default::default()
+                })),
+            }),
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let induced = model
+        .tuples
+        .iter()
+        .find(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsBoundsReply")
+        })
+        .expect("the induced reply struct");
+    assert_eq!(
+        model
+            .tuples
+            .iter()
+            .filter(|tuple| tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsBoundsReply"))
+            .count(),
+        1,
+        "the tuple written in the return type and the induced reply struct \
+         reach one name, so the claim is reused"
+    );
+    let fields: Vec<&str> = induced
+        .fields
+        .iter()
+        .map(|field| field.name.as_ref().expect("a name").declared.as_str())
+        .collect();
+    assert_eq!(fields, vec!["min", "max"]);
+}
+
+/// A fallible reply is a sum, not a product, so it induces nothing: the
+/// `risky` query of the fixture returns `Pair | Pair`.
+#[test]
+fn a_fallible_reply_induces_nothing() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Query(query) = call_shape(&model, 3) else {
+        panic!("the `risky` query");
+    };
+    assert!(query.reply_tuple.is_none());
+}
+
+/// Every named induced tuple has a FlatBuffers table, so the codec can emit
+/// its encode, verify and decode functions.
+#[test]
+fn every_named_induced_tuple_has_a_flatbuffers_table() {
+    let model = lower(&call_package(), &[]);
+    for tuple in &model.tuples {
+        let Some(name) = tuple.name.as_ref() else {
+            continue;
+        };
+        if name.rust.is_empty() {
+            continue;
+        }
+        assert!(
+            tuple.flatbuffers_table.is_some(),
+            "`{}` has no FlatBuffers table",
+            name.rust
+        );
+    }
+}
+
+/// An induced argument struct crosses the wire on its own, so it is a
+/// FlatBuffers root: the Rust codec emits its `Payload` impl from the root,
+/// and every descriptor's reservation row names that impl's `MAX_SIZE`.
+#[test]
+fn an_induced_argument_struct_is_a_flatbuffers_root() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Command(command) = call_shape(&model, 0) else {
+        panic!("the `two` command");
+    };
+    let index = command
+        .request_tuple
+        .as_ref()
+        .expect("a request tuple")
+        .index;
+    let projection = model.flatbuffers.as_ref().expect("a projection");
+    assert!(
+        projection
+            .roots
+            .iter()
+            .any(|root| root.tuple == Some(index)),
+        "the induced argument struct is a root"
+    );
+}
+
+/// An induced struct holding an unbounded field has no finite bound, so its
+/// root takes the unbounded arm with the attribution of the field that is
+/// open, the way a declaration's root does.
+#[test]
+fn an_unbounded_induced_argument_struct_is_rooted_unbounded() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "label",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                v2::Param {
+                    name: "pair".to_string(),
+                    r#type: Some(named("Pair")),
+                    ..Default::default()
+                },
+                v2::Param {
+                    name: "tagged".to_string(),
+                    r#type: Some(named("Tagged")),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let index = model
+        .tuples
+        .iter()
+        .position(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsLabelParams")
+        })
+        .expect("the induced argument struct") as u32;
+    let root = model
+        .flatbuffers
+        .as_ref()
+        .expect("a projection")
+        .roots
+        .iter()
+        .find(|root| root.tuple == Some(index))
+        .expect("the induced argument struct is a root");
+    let Some(v1::fb_root::Bound::Unbounded(unbounded)) = root.bound.as_ref() else {
+        panic!("a struct holding an unbounded field has no finite bound");
+    };
+    assert_eq!(unbounded.cause, v1::FbUnboundedCause::Member as i32);
+    assert_eq!(unbounded.member.as_deref(), Some("tagged"));
 }

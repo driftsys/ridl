@@ -5,11 +5,12 @@
 //! raw IR, and this backend is ported onto the model in its own story, after
 //! the Rust backend (`docs/design/codegen-plugins.md`). Until then the
 //! backend value holds a [`RawIr`] and `generate` reads that in place of
-//! `request.model`.
+//! `request.model`, except for interaction tuples: their names and shapes
+//! are read from the requested model.
 
 use ridl_ir::codegen::{self, RawIr, v1};
 
-use crate::generate_with;
+use crate::{generate_model, generate_with};
 
 /// The proto3 backend as a [`codegen::Backend`]: one file,
 /// `<artifact_base>.proto`, from [`generate_with`]. It takes no option.
@@ -37,7 +38,11 @@ impl codegen::Backend for Backend<'_> {
             ));
         }
         let preamble = codegen::comment_preamble(&request.generated_marker, &request.header, "//");
-        match generate_with(self.raw.package, self.raw.others) {
+        let generated = match request.model.as_ref() {
+            Some(model) => generate_model(self.raw.package, self.raw.others, model),
+            None => generate_with(self.raw.package, self.raw.others),
+        };
+        match generated {
             Ok(generated) => v1::CodegenResponse {
                 files: vec![codegen::text_file(
                     format!("{}.proto", request.artifact_base),

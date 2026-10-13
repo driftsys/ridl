@@ -270,7 +270,7 @@ pub(crate) fn generate_pipeline_over(
             }
             Err(err) => {
                 face_refused_after_linking(&ctx.faced, index, interface, &err)?;
-                interface_items.push(skipped_interface_note(interface, &err));
+                interface_items.push(skipped_interface_note(&ctx, interface, &err));
             }
         }
     }
@@ -330,7 +330,11 @@ fn face_refused_after_linking(
 /// (`HTTPServer` beside `HttpServer`) leave two notes rather than one name
 /// twice (`docs/technotes/rust-backend-name-collisions.md`, X-14c). The declared name is
 /// CamelCase, so the item allows the naming lint it would otherwise draw.
-fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> TokenStream {
+fn skipped_interface_note(
+    ctx: &Ctx,
+    interface: &v1::Interface,
+    err: &GenerateError,
+) -> TokenStream {
     let iface_name = descriptors::declared_name(interface).unwrap_or_default();
     let name = format_ident!("__RIDL_NO_FACE_{}", ident(iface_name));
     let internal = face::is_internal(interface);
@@ -340,7 +344,7 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         format!(" Interface `{iface_name}` carries no generated interaction face.")
     };
     let reason = format!(" The emitter refused it: {}", err.message);
-    let owner = match face_gap(interface, err) {
+    let owner = match face_gap(ctx, interface, err) {
         _ if internal => {
             " The interface is `internal`, so it has no face in any case; only its \
              descriptors are absent, for the reason above."
@@ -348,14 +352,12 @@ fn skipped_interface_note(interface: &v1::Interface, err: &GenerateError) -> Tok
         // The owner lines say what was refused and what the source can change
         // to get a face. They cite no issue: a generated doc names none
         // (the generated-code documentation design, "Maintainer notes"). The
-        // induced argument struct of driftsys/ridl#713 removes the first
-        // call-shape gap, and the translator of driftsys/ridl#704 removes the
-        // clause gap.
+        // translator of driftsys/ridl#704 removes the clause gap.
         FaceGap::CallShape => {
-            " A call the face cannot carry — an interaction that does not declare \
-             exactly one named parameter, or a query whose reply is not a named \
-             type. Declare each command and query with one parameter of a named \
-             type, and give each query a named reply type, to get a face."
+            " A call the face cannot carry — a parameter with no declared type, \
+             a stream in either position, or a query whose reply is a fallible \
+             `T | E`. Give each parameter a declared, non-stream type, and give \
+             each query a reply that is a named type or a tuple, to get a face."
         }
         FaceGap::Clause => {
             " A contract clause outside the form the narrow translator accepts — \
@@ -428,7 +430,7 @@ enum FaceGap {
     Other,
 }
 
-fn face_gap(interface: &v1::Interface, err: &GenerateError) -> FaceGap {
+fn face_gap(ctx: &Ctx, interface: &v1::Interface, err: &GenerateError) -> FaceGap {
     if err.message.starts_with(clauses::CLAUSE_REFUSAL) {
         return FaceGap::Clause;
     }
@@ -436,13 +438,13 @@ fn face_gap(interface: &v1::Interface, err: &GenerateError) -> FaceGap {
         let member = declared(interaction.name.as_ref());
         match interaction.shape.as_ref() {
             Some(v1::interaction::Shape::Command(command)) => {
-                if descriptors::single_param_type(command, member).is_err() {
+                if descriptors::single_param_type(ctx, command, member).is_err() {
                     return FaceGap::CallShape;
                 }
             }
             Some(v1::interaction::Shape::Query(query)) => {
-                if descriptors::query_reply_type(query, member).is_err()
-                    || descriptors::query_param_type(query, member).is_err()
+                if descriptors::query_reply_type(ctx, query, member).is_err()
+                    || descriptors::query_param_type(ctx, query, member).is_err()
                 {
                     return FaceGap::CallShape;
                 }
@@ -807,7 +809,7 @@ impl<'a> Ctx<'a> {
             .as_ref()?
             .roots
             .iter()
-            .find(|root| root.declaration == index)
+            .find(|root| root.tuple.is_none() && root.declaration == index)
     }
 
     /// The declaration the model's `declarations` list holds at `index`.

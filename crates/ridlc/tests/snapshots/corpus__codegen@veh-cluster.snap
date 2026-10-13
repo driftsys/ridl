@@ -4226,8 +4226,68 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "",
-        "wire": ""
+        "rust": "WheelDiagnosticsReadTicksParams",
+        "wire": "WheelDiagnosticsReadTicksParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_INTERNAL",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 14,
+      "interaction": {
+        "interface": 2,
+        "slot": 2,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "WheelDiagnosticsReadSpanParams",
+        "wire": "WheelDiagnosticsReadSpanParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_INTERNAL",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 15,
+      "interaction": {
+        "interface": 2,
+        "slot": 4,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "WheelDiagnosticsReadSpanReply",
+        "wire": "WheelDiagnosticsReadSpanReply"
       },
       "fields": [
         {
@@ -4308,18 +4368,19 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 16,
       "interaction": {
         "interface": 2,
         "slot": 4,
         "segments": [
-          "reply"
+          "Reply"
         ]
       }
     },
     {
       "name": {
-        "rust": "",
-        "wire": ""
+        "rust": "WheelDiagnosticsTickBoundsElement",
+        "wire": "WheelDiagnosticsTickBoundsElement"
       },
       "fields": [
         {
@@ -4400,6 +4461,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 17,
       "interaction": {
         "interface": 2,
         "slot": 5,
@@ -4411,8 +4473,38 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "",
-        "wire": ""
+        "rust": "VehHvacCabinGetBoundsParams",
+        "wire": "VehHvacCabinGetBoundsParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 18,
+      "interaction": {
+        "interface": 5,
+        "slot": 11,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "VehHvacCabinGetBoundsReply",
+        "wire": "VehHvacCabinGetBoundsReply"
       },
       "fields": [
         {
@@ -4493,11 +4585,102 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
+      "flatbuffersTable": 19,
       "interaction": {
         "interface": 5,
         "slot": 11,
         "segments": [
-          "reply"
+          "Reply"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "VehHvacCabinGetClimateParams",
+        "wire": "VehHvacCabinGetClimateParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 20,
+      "interaction": {
+        "interface": 5,
+        "slot": 13,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "VehHvacCabinGetCabinTempParams",
+        "wire": "VehHvacCabinGetCabinTempParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 21,
+      "interaction": {
+        "interface": 5,
+        "slot": 14,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "VehHvacCabinScaledFanParams",
+        "wire": "VehHvacCabinScaledFanParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 22,
+      "interaction": {
+        "interface": 5,
+        "slot": 19,
+        "segments": [
+          "Params"
         ]
       }
     }
@@ -5935,10 +6118,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "readTicks.request: ()"
+                "bytes": "6"
               },
               "flatbuffers": {
-                "unsized": "readTicks.request: ()"
+                "bytes": "77"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -5990,14 +6173,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
@@ -6007,6 +6186,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 44
                 }
+              },
+              "requestTuple": {
+                "index": 2
               }
             }
           }
@@ -6139,10 +6321,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "readSpan.request: ()"
+                "bytes": "12"
               },
               "flatbuffers": {
-                "unsized": "readSpan.request: ()"
+                "bytes": "88"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6163,34 +6345,32 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": {
                   "optional": false,
                   "tuple": {
-                    "index": 2
+                    "index": 4
                   }
                 }
               },
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 12
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 55
                 }
+              },
+              "requestTuple": {
+                "index": 3
+              },
+              "replyTuple": {
+                "index": 4
               }
             }
           }
@@ -6229,7 +6409,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "element": {
                     "optional": false,
                     "tuple": {
-                      "index": 3
+                      "index": 5
                     }
                   },
                   "min": "2",
@@ -6242,10 +6422,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       ],
       "tableBudget": {
         "proto3": {
-          "unsized": "readTicks"
+          "bytes": "38"
         },
         "flatbuffers": {
-          "unsized": "readTicks"
+          "bytes": "307"
         }
       },
       "links": [],
@@ -7490,10 +7670,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "getBounds.request: ()"
+                "bytes": "10"
               },
               "flatbuffers": {
-                "unsized": "getBounds.request: ()"
+                "bytes": "92"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7528,7 +7708,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "value": {
                   "optional": false,
                   "tuple": {
-                    "index": 4
+                    "index": 7
                   }
                 }
               },
@@ -7554,27 +7734,25 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               ],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 10
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 59
                 }
+              },
+              "requestTuple": {
+                "index": 6
+              },
+              "replyTuple": {
+                "index": 7
               }
             }
           }
@@ -7746,10 +7924,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "getClimate.request: ()"
+                "bytes": "16"
               },
               "flatbuffers": {
-                "unsized": "getClimate.request: ()"
+                "bytes": "102"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7801,14 +7979,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
@@ -7818,6 +7992,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 69
                 }
+              },
+              "requestTuple": {
+                "index": 8
               }
             }
           }
@@ -7844,10 +8021,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "getCabinTemp.request: ()"
+                "bytes": "5"
               },
               "flatbuffers": {
-                "unsized": "getCabinTemp.request: ()"
+                "bytes": "79"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7899,14 +8076,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
@@ -7916,6 +8089,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 46
                 }
+              },
+              "requestTuple": {
+                "index": 9
               }
             }
           }
@@ -8321,10 +8497,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "scaledFan.request: ()"
+                "bytes": "6"
               },
               "flatbuffers": {
-                "unsized": "scaledFan.request: ()"
+                "bytes": "76"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8393,14 +8569,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               ],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 }
               },
               "replySizes": {
@@ -8410,6 +8582,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "flatbuffers": {
                   "bounded": 43
                 }
+              },
+              "requestTuple": {
+                "index": 10
               }
             }
           }
@@ -8598,6 +8773,54 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "declaration": 14,
         "root": "FB_ROOT_KIND_BOX",
         "maxSize": 186
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 2,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 3,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 4,
+        "maxSize": 55
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 6,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 7,
+        "maxSize": 59
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 8,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 9,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 10,
+        "maxSize": 33
       }
     ],
     "tables": [
@@ -8970,6 +9193,129 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         ],
         "vtableSlots": 1,
         "rootBox": 14
+      },
+      {
+        "name": "WheelDiagnosticsReadTicksParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 2
+      },
+      {
+        "name": "WheelDiagnosticsReadSpanParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 3
+      },
+      {
+        "name": "WheelDiagnosticsReadSpanReply",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 4
+      },
+      {
+        "name": "WheelDiagnosticsTickBoundsElement",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_USHORT",
+                "widthBytes": 2
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 5
+      },
+      {
+        "name": "VehHvacCabinGetBoundsParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 6
+      },
+      {
+        "name": "VehHvacCabinGetBoundsReply",
+        "slots": [
+          {
+            "id": 0,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 1
+          },
+          {
+            "id": 1,
+            "wire": {
+              "scalar": {
+                "type": "FB_SCALAR_TYPE_FLOAT",
+                "widthBytes": 4
+              }
+            },
+            "needsNullDefault": false,
+            "tuplePosition": 2
+          }
+        ],
+        "vtableSlots": 2,
+        "tuple": 7
+      },
+      {
+        "name": "VehHvacCabinGetClimateParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 8
+      },
+      {
+        "name": "VehHvacCabinGetCabinTempParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 9
+      },
+      {
+        "name": "VehHvacCabinScaledFanParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 10
       }
     ]
   },

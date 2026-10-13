@@ -208,7 +208,7 @@ type Level : integer [0..100]
 interface Cabin {
   signal XY : Level @10ms
   signal x_y : Level @10ms
-  command set(a: Level, b: Level) @[..50ms]
+  command set(samples: <Level>) @[..50ms]
 }
 ";
     let output = ridlc::compile("x08b.ridl", source);

@@ -1,5 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 375
 expression: compiled.rust
 input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 ---
@@ -397,6 +398,13 @@ impl ::core::convert::From<DoorFault> for ::core::primitive::i64 {
 impl ::core::default::Default for DoorFault {
     fn default() -> Self {
         DoorFault::Jammed
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TelemetryFuelLevelParams {}
+impl ::core::default::Default for TelemetryFuelLevelParams {
+    fn default() -> Self {
+        TelemetryFuelLevelParams {}
     }
 }
 /// A `DoorId` value in FlatBuffers bytes.
@@ -1239,11 +1247,114 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
         __ridl_fb_decode_DoorFault(__view.buf, __view.table)
     }
 }
+/// A `TelemetryFuelLevelParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct TelemetryFuelLevelParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for TelemetryFuelLevelParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> TelemetryFuelLevelParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_TelemetryFuelLevelParams(
+    _value: &TelemetryFuelLevelParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_TelemetryFuelLevelParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_TelemetryFuelLevelParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> TelemetryFuelLevelParams {
+    TelemetryFuelLevelParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for TelemetryFuelLevelParams {
+    /// The largest FlatBuffers buffer any legal `TelemetryFuelLevelParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = TelemetryFuelLevelParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, TelemetryFuelLevelParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_TelemetryFuelLevelParams(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: TelemetryFuelLevelParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        TelemetryFuelLevelParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_TelemetryFuelLevelParams(buf, table)?;
+        ::core::result::Result::Ok(TelemetryFuelLevelParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_TelemetryFuelLevelParams(__view.buf, __view.table)
+    }
+}
 /// Interface `DoorControl` carries no generated interaction face.
 ///
-/// The emitter refused it: query `readDoor`'s reply must be a single declared type
+/// The emitter refused it: query `readDoor`'s reply is a fallible `T | E`, which the face does not carry
 ///
-/// A call the face cannot carry — an interaction that does not declare exactly one named parameter, or a query whose reply is not a named type. Declare each command and query with one parameter of a named type, and give each query a named reply type, to get a face.
+/// A call the face cannot carry — a parameter with no declared type, a stream in either position, or a query whose reply is a fallible `T | E`. Give each parameter a declared, non-stream type, and give each query a reply that is a named type or a tuple, to get a face.
 ///
 /// Its descriptors are absent for the reason above: the refusal is
 /// raised by the descriptor emitter, which the face is built on. The
@@ -1252,19 +1363,1151 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault
 /// (interaction-face design rule 2).
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_NO_FACE_DoorControl: () = ();
-/// Interface `Telemetry` carries no generated interaction face.
+/**Descriptor for interface `Telemetry`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
+
+Its size table in FlatBuffers is `<Telemetry as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
+pub struct Telemetry;
+impl ::ridl_rt::contract::Interface for Telemetry {
+    const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
+        name: "fleet.contracts",
+        hash: ::ridl_rt::contract::CatalogHash([
+            18, 68, 45, 217, 28, 42, 81, 79, 153, 96, 62, 35, 51, 181, 199, 120, 252,
+            235, 10, 226, 9, 60, 126, 215, 227, 221, 87, 0, 233, 212, 235, 235,
+        ]),
+    };
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "Telemetry";
+    const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(1),
+            kind: ::ridl_rt::contract::Kind::Signal,
+            name: "distance",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::Some(::ridl_rt::sample::Duration(1000000)),
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(10000000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Odometer",
+                },
+            ],
+        },
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(2),
+            kind: ::ridl_rt::contract::Kind::Query,
+            name: "fuelLevel",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(50000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "TelemetryFuelLevelParams",
+                },
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Percent",
+                },
+            ],
+        },
+    ];
+}
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for Telemetry {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <Odometer as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64,
+        <TelemetryFuelLevelParams as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64
+            + <Percent as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = {
+        let sizes = [
+            <TelemetryFuelLevelParams as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <Percent as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+        ];
+        let mut max = 0usize;
+        let mut index = 0usize;
+        while index < sizes.len() {
+            if sizes[index] > max {
+                max = sizes[index];
+            }
+            index += 1;
+        }
+        max
+    };
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+}
+#[doc(hidden)]
+pub struct TelemetryDistance;
+impl ::ridl_rt::contract::Interaction for TelemetryDistance {
+    type Iface = Telemetry;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Telemetry as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
+}
+impl ::ridl_rt::contract::Signal for TelemetryDistance {
+    type Payload = Odometer;
+    fn init() -> Self::Payload {
+        <Odometer as ::core::default::Default>::default()
+    }
+}
+#[doc(hidden)]
+pub struct TelemetryFuelLevel;
+impl ::ridl_rt::contract::Interaction for TelemetryFuelLevel {
+    type Iface = Telemetry;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<Telemetry as ::ridl_rt::contract::Interface>::MEMBERS[1];
+    const ROW: ::core::primitive::usize = 1;
+}
+impl ::ridl_rt::contract::Query for TelemetryFuelLevel {
+    type Args = TelemetryFuelLevelParams;
+    type Reply = Percent;
+    fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+    fn ensure(
+        _args: &Self::Args,
+        reply: &Self::Reply,
+    ) -> ::core::result::Result<(), ()> {
+        if reply.0 >= 0.0 {
+            ::core::result::Result::Ok(())
+        } else {
+            ::core::result::Result::Err(())
+        }
+    }
+}
+/// Odometer readout — a second shape, so the cross-package member has more
+/// than one interface to reference.
 ///
-/// The emitter refused it: interaction `fuelLevel` must declare exactly one parameter (the face emits no induced argument struct)
-///
-/// A call the face cannot carry — an interaction that does not declare exactly one named parameter, or a query whose reply is not a named type. Declare each command and query with one parameter of a named type, and give each query a named reply type, to get a face.
-///
-/// Its descriptors are absent for the reason above: the refusal is
-/// raised by the descriptor emitter, which the face is built on. The
-/// rest of this package — its domain types, its codec, and every
-/// other interface — is unaffected, which is why the build succeeded
-/// (interaction-face design rule 2).
-#[allow(dead_code, non_upper_case_globals)]
-const __RIDL_NO_FACE_Telemetry: () = ();
+///The generated interaction face of interface `Telemetry`.
+pub mod telemetry {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub(crate) struct FuelLevelCorrelation(pub ::ridl_rt::port::Correlation);
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::Telemetry as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `Telemetry` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
+    ///The consumer face of interface `Telemetry`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
+    pub struct Client<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: P,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > Client<P>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        ///Reads signal `distance` and returns its value with the provenance, the freshness and the envelope the runtime resolved. Before the first publication, and when the channel is invalidated with no prior publication, there is no payload to check and the value is the channel's init value, under `Provenance::Init` or `Provenance::Invalid(Cause::Declared)` respectively (ridl §4.4, §4.5). A payload that fails its check is reported as `Provenance::Invalid` with the detection, and the value is the channel's init value.
+        ///
+        /// # Rules
+        ///
+        /// - interval 1000000 ..= 10000000 us
+        pub fn distance(
+            &self,
+        ) -> ::core::result::Result<
+            ::ridl_rt::sample::Sample<super::Odometer>,
+            ::ridl_rt::port::ReadError,
+        > {
+            let mut __buf = <super::Odometer as ::ridl_rt::payload::Payload<
+                P::Encoding,
+            >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
+            let raw = self
+                .port
+                .read(
+                    <super::Telemetry as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                    buf,
+                )?;
+            let (value, provenance) = match raw.provenance {
+                ::ridl_rt::sample::Provenance::Init
+                | ::ridl_rt::sample::Provenance::Invalid(
+                    ::ridl_rt::sample::Cause::Declared,
+                ) if raw.len == 0 => {
+                    (
+                        <super::TelemetryDistance as ::ridl_rt::contract::Signal>::init(),
+                        raw.provenance,
+                    )
+                }
+                _ => {
+                    match ::ridl_rt::payload::Ref::<
+                        super::Odometer,
+                        P::Encoding,
+                    >::verify(&buf[..raw.len]) {
+                        Ok(checked) => (checked.decode(), raw.provenance),
+                        Err(error) => {
+                            (
+                                <super::TelemetryDistance as ::ridl_rt::contract::Signal>::init(),
+                                ::ridl_rt::sample::Provenance::Invalid(
+                                    ::ridl_rt::sample::Cause::Detected(
+                                        match error {
+                                            ::ridl_rt::payload::VerifyError::Contract(violation) => {
+                                                ::ridl_rt::sample::Detection::InvalidValue(violation)
+                                            }
+                                            _ => ::ridl_rt::sample::Detection::Corrupt,
+                                        },
+                                    ),
+                                ),
+                            )
+                        }
+                    }
+                }
+            };
+            Ok(::ridl_rt::sample::Sample {
+                value,
+                provenance,
+                freshness: raw.freshness,
+                envelope: raw.envelope,
+            })
+        }
+        /**Sends query `fuelLevel` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+
+The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Rules
+        ///
+        /// - response within 50000 us
+        /// - ensure `result >= 0.0`
+        pub fn fuel_level(
+            &mut self,
+            args: super::TelemetryFuelLevelParams,
+        ) -> FuelLevelCall<'_, P> {
+            let __arg = args;
+            let deadline = <super::TelemetryFuelLevel as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match send_fuel_level(&mut self.port, &__arg) {
+                Ok(correlation) => FuelLevelPhase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => FuelLevelPhase::Unsent(__arg),
+                Err(error) => FuelLevelPhase::Failed(error),
+            };
+            FuelLevelCall {
+                port: &mut self.port,
+                phase,
+                deadline,
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+            + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::ridl_rt::face::Bind for Client<P>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Port = P;
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Telemetry as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Telemetry` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Client { port }
+        }
+    }
+    ///The future of query `fuelLevel`, returned by `Client::fuel_level`. It resolves to the decoded reply, or the outcome the provider settled; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; and to the port's own expired outcome when the call was sent and its bound passed. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits for its outcome calls `Caller::forget` on the call; a future that has taken its outcome has already done so. Polling it again after it resolved panics.
+    #[must_use = "the query was sent, or waits for a slot; its outcome is taken only when the future is polled"]
+    pub struct FuelLevelCall<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+        phase: FuelLevelPhase,
+        deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+    }
+    enum FuelLevelPhase {
+        Unsent(super::TelemetryFuelLevelParams),
+        Waiting(FuelLevelCorrelation),
+        Failed(::ridl_rt::port::SendError),
+        Done,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > FuelLevelCall<'_, P>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        fn expired(&self) -> bool {
+            self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+        }
+        #[cfg(feature = "std")]
+        fn sent(&self) -> bool {
+            matches!(self.phase, FuelLevelPhase::Waiting(_))
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for FuelLevelCall<'_, P>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Output = ::core::result::Result<
+            super::Percent,
+            ::ridl_rt::error::ClientError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            loop {
+                match ::core::mem::replace(&mut this.phase, FuelLevelPhase::Done) {
+                    FuelLevelPhase::Done => {
+                        panic!("`FuelLevelCall` polled after completion")
+                    }
+                    FuelLevelPhase::Failed(error) => {
+                        return ::core::task::Poll::Ready(
+                            Err(::ridl_rt::error::ClientError::Send(error)),
+                        );
+                    }
+                    FuelLevelPhase::Unsent(__arg) => {
+                        if this.expired() {
+                            return ::core::task::Poll::Ready(
+                                Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ),
+                            );
+                        }
+                        this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                        match send_fuel_level(&mut *this.port, &__arg) {
+                            Ok(correlation) => {
+                                this.phase = FuelLevelPhase::Waiting(correlation);
+                            }
+                            Err(::ridl_rt::port::SendError::Busy) => {
+                                this.phase = FuelLevelPhase::Unsent(__arg);
+                                return ::core::task::Poll::Pending;
+                            }
+                            Err(error) => {
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Send(error)),
+                                );
+                            }
+                        }
+                    }
+                    FuelLevelPhase::Waiting(correlation) => {
+                        this.port
+                            .wake_on(
+                                ::ridl_rt::port::Interest::Outcome(correlation.0),
+                                cx.waker(),
+                            );
+                        let outcome = match poll_fuel_level_reply(
+                            &mut *this.port,
+                            correlation,
+                        ) {
+                            Ok(Some(outcome)) => {
+                                outcome.map_err(::ridl_rt::error::ClientError::Call)
+                            }
+                            Err(error) => Err(::ridl_rt::error::ClientError::Read(error)),
+                            Ok(None) => {
+                                if !this.expired() {
+                                    this.phase = FuelLevelPhase::Waiting(correlation);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                Err(
+                                    ::ridl_rt::error::ClientError::Call(
+                                        ::ridl_rt::error::CallError::Transport(
+                                            ::ridl_rt::error::Transport::Timeout,
+                                        ),
+                                    ),
+                                )
+                            }
+                        };
+                        this.port.forget(correlation.0);
+                        return ::core::task::Poll::Ready(outcome);
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for FuelLevelCall<'_, P> {
+        fn drop(&mut self) {
+            if let FuelLevelPhase::Waiting(correlation) = &self.phase {
+                self.port.forget(correlation.0);
+            }
+        }
+    }
+    pub(crate) fn send_fuel_level<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
+        __port: &mut P,
+        args: &super::TelemetryFuelLevelParams,
+    ) -> ::core::result::Result<FuelLevelCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let __arg = args;
+        <super::TelemetryFuelLevel as ::ridl_rt::contract::Query>::require(__arg)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut __buf = <super::TelemetryFuelLevelParams as ::ridl_rt::payload::Payload<
+            P::Encoding,
+        >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::TelemetryFuelLevelParams,
+            P::Encoding,
+        >::encode(__arg, buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `TelemetryFuelLevelParams` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `TelemetryFuelLevelParams` failed"),
+        };
+        __port
+            .query(
+                <super::Telemetry as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(2u32),
+                bytes,
+                ::core::option::Option::None,
+            )
+            .map(FuelLevelCorrelation)
+    }
+    pub(crate) fn poll_fuel_level_reply<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller,
+    >(
+        port: &mut P,
+        correlation: FuelLevelCorrelation,
+    ) -> ::core::result::Result<
+        ::core::option::Option<
+            ::core::result::Result<super::Percent, ::ridl_rt::error::CallError>,
+        >,
+        ::ridl_rt::port::ReadError,
+    >
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let mut __buf = <super::Percent as ::ridl_rt::payload::Payload<
+            P::Encoding,
+        >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        match port.reply(correlation.0, buf)? {
+            None => Ok(None),
+            Some(Err(error)) => Ok(Some(Err(error))),
+            Some(Ok(len)) => {
+                Ok(
+                    Some(
+                        match ::ridl_rt::payload::Ref::<
+                            super::Percent,
+                            P::Encoding,
+                        >::verify(&buf[..len]) {
+                            Ok(checked) => Ok(checked.decode()),
+                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Contract(
+                                        ::ridl_rt::error::Contract::InvalidValue(violation),
+                                    ),
+                                )
+                            }
+                            Err(_) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Corrupt,
+                                    ),
+                                )
+                            }
+                        },
+                    ),
+                )
+            }
+        }
+    }
+    ///Stages the invalid state of one signal of interface `Telemetry`: one method per signal, implemented by `Publisher`. A trait rather than inherent methods so that a member of the interface may be named `invalidate<Signal>`; `prelude` brings it into scope anonymously.
+    pub trait Invalidate {
+        ///Stages the invalid state for signal `distance`, with `Cause::Declared`. It is published by `commit`.
+        fn invalidate_distance(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError>;
+    }
+    ///The provider face of interface `Telemetry`'s signals and events. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `commit` is `ridl_rt::face::Publish`'s and `invalidate_<signal>` is this module's `Invalidate`'s, all in scope through `prelude`.
+    pub struct Publisher<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> {
+        port: W,
+    }
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Publisher<W>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
+        ///Stages a new value for signal `distance`. It is published by `commit`.
+        ///
+        /// # Rules
+        ///
+        /// - interval 1000000 ..= 10000000 us
+        pub fn distance(
+            &mut self,
+            value: super::Odometer,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            let mut __buf = <super::Odometer as ::ridl_rt::payload::Payload<
+                W::Encoding,
+            >>::BUFFER;
+            let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+                &mut __buf,
+            );
+            let bytes = match ::ridl_rt::payload::Ref::<
+                super::Odometer,
+                W::Encoding,
+            >::encode(&value, buf) {
+                Ok(encoded) => encoded.bytes(),
+                Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::port::WriteError::Contract(
+                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                        ),
+                    );
+                }
+                Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                    unreachable!(
+                        "encoding `Odometer` needs {} bytes and the payload buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                        needed, available
+                    )
+                }
+                Err(_) => unreachable!("encoding `Odometer` failed"),
+            };
+            self.port
+                .set(
+                    <super::Telemetry as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                    bytes,
+                )
+        }
+    }
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Bind for Publisher<W>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
+        type Port = W;
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Telemetry as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Telemetry` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        fn new(port: W) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Publisher { port }
+        }
+    }
+    impl<
+        W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter,
+    > ::ridl_rt::face::Publish for Publisher<W>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
+        /// Publishes every staged signal change.
+        fn commit(&mut self) {
+            self.port.commit()
+        }
+    }
+    impl<W: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalWriter> Invalidate
+    for Publisher<W>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<W::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<W::Encoding>,
+    {
+        fn invalidate_distance(
+            &mut self,
+        ) -> ::core::result::Result<(), ::ridl_rt::port::WriteError> {
+            self.port
+                .invalidate(
+                    <super::Telemetry as ::ridl_rt::contract::Interface>::NUMBER,
+                    ::ridl_rt::contract::Ordinal(1u32),
+                )
+        }
+    }
+    /**What an application implements to serve interface `Telemetry`'s calls.
+
+An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
+    pub trait Provider {
+        ///Serves query `fuelLevel`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
+        ///
+        /// # Rules
+        ///
+        /// - response within 50000 us
+        /// - ensure `result >= 0.0`
+        fn fuel_level(
+            &mut self,
+            args: &super::TelemetryFuelLevelParams,
+        ) -> super::Percent;
+    }
+    pub(crate) fn dispatch<H, P>(
+        h: &mut H,
+        p: &mut P,
+        buf: &mut [u8],
+        budget: &mut usize,
+    ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler,
+        P: Provider,
+        super::Telemetry: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        if buf.len()
+            < <super::Telemetry as ::ridl_rt::contract::Sizes<
+                H::Encoding,
+            >>::MAX_BUFFER_SIZE
+        {
+            return Ok(0);
+        }
+        let mut settled = 0usize;
+        while *budget > 0 {
+            let settlement = match h.next_claim(buf) {
+                Ok(None) => break,
+                Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
+                    let settlement = h
+                        .settle(
+                            claim,
+                            Err(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                ),
+                            ),
+                        );
+                    if settlement.is_err() {
+                        return Ok(settled);
+                    }
+                    settlement
+                }
+                Err(error) => return Err(error),
+                Ok(Some(claim)) => {
+                    if claim.iface
+                        != <super::Telemetry as ::ridl_rt::contract::Interface>::NUMBER
+                    {
+                        h.settle(
+                            claim.id,
+                            Err(
+                                ::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::UnknownInteraction,
+                                ),
+                            ),
+                        )
+                    } else {
+                        match claim.ord {
+                            ::ridl_rt::contract::Ordinal(2u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::TelemetryFuelLevelParams,
+                                    H::Encoding,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::TelemetryFuelLevel as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                let reply = p.fuel_level(&__arg);
+                                                match <super::TelemetryFuelLevel as ::ridl_rt::contract::Query>::ensure(
+                                                    &__arg,
+                                                    &reply,
+                                                ) {
+                                                    Err(()) => {
+                                                        h.settle(
+                                                            claim.id,
+                                                            Err(
+                                                                ::ridl_rt::error::CallError::Contract(
+                                                                    ::ridl_rt::error::Contract::ContractBroken,
+                                                                ),
+                                                            ),
+                                                        )
+                                                    }
+                                                    Ok(()) => {
+                                                        match ::ridl_rt::payload::Ref::<
+                                                            super::Percent,
+                                                            H::Encoding,
+                                                        >::encode(&reply, buf) {
+                                                            Ok(encoded) => {
+                                                                let bytes = encoded.bytes();
+                                                                h.settle(claim.id, Ok(bytes))
+                                                            }
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Contract(__violation),
+                                                            ) => {
+                                                                h.settle(
+                                                                    claim.id,
+                                                                    Err(
+                                                                        ::ridl_rt::error::CallError::Contract(
+                                                                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                                                                        ),
+                                                                    ),
+                                                                )
+                                                            }
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Capacity {
+                                                                    needed,
+                                                                    available,
+                                                                },
+                                                            ) => {
+                                                                unreachable!(
+                                                                    "encoding `Percent` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                                                                    needed, available
+                                                                )
+                                                            }
+                                                            Err(_) => unreachable!("encoding `Percent` failed"),
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                h.settle(
+                                    claim.id,
+                                    Err(
+                                        ::ridl_rt::error::CallError::Contract(
+                                            ::ridl_rt::error::Contract::UnknownInteraction,
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            };
+            *budget -= 1;
+            if settlement.is_ok() {
+                settled += 1;
+            }
+        }
+        Ok(settled)
+    }
+    const SERVE_BUDGET: usize = 32;
+    /**Serves interface `Telemetry`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+
+# Panics
+
+Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <Telemetry as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Telemetry` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+    #[track_caller]
+    pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
+        P: Provider,
+        super::Telemetry: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        check_catalog(::ridl_rt::port::Attached::catalog(&h));
+        let state = match h
+            .serve(
+                <super::Telemetry as ::ridl_rt::contract::Interface>::NUMBER,
+                &[::ridl_rt::contract::Ordinal(2u32)],
+            )
+        {
+            Ok(()) => ServeState::Serving,
+            Err(error) => ServeState::Refused(error),
+        };
+        Serve {
+            handler: h,
+            provider: p,
+            buf: <super::Telemetry as ::ridl_rt::contract::Sizes<
+                H::Encoding,
+            >>::CLAIM_BUFFER,
+            state,
+        }
+    }
+    ///The future `serve` returns over interface `Telemetry`. It holds the handler, the provider, and the claim buffer of `<Telemetry as Sizes<H::Encoding>>::MAX_BUFFER_SIZE` bytes, in the encoding the handler port carries. It never resolves to `Ok`, and polling it again after it resolved panics.
+    #[must_use = "claims are served only while the future is polled"]
+    pub struct Serve<
+        'a,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
+        P: Provider,
+    >
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<H::Encoding>,
+    {
+        handler: H,
+        provider: &'a mut P,
+        buf: <super::Telemetry as ::ridl_rt::contract::Sizes<H::Encoding>>::ClaimBuffer,
+        state: ServeState,
+    }
+    #[derive(Clone, Copy)]
+    enum ServeState {
+        Refused(::ridl_rt::port::ServeError),
+        Serving,
+        Done,
+    }
+    /// `Unpin` whatever `H` is: nothing in the future is pinned, and a
+    /// frame loop that stores it in its own state polls it through
+    /// `Pin::new`.
+    impl<
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
+        P: Provider,
+    > ::core::marker::Unpin for Serve<'_, H, P>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<H::Encoding>,
+    {}
+    impl<
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
+        P: Provider,
+    > ::core::future::Future for Serve<'_, H, P>
+    where
+        super::Telemetry: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Odometer: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::Percent: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        type Output = ::core::result::Result<
+            ::core::convert::Infallible,
+            ::ridl_rt::error::ProviderError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            match this.state {
+                ServeState::Done => panic!("`Serve` polled after completion"),
+                ServeState::Refused(error) => {
+                    this.state = ServeState::Done;
+                    ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ProviderError::Serve(error)),
+                    )
+                }
+                ServeState::Serving => {
+                    this.handler
+                        .wake_on(
+                            ::ridl_rt::port::Interest::Claim(
+                                <super::Telemetry as ::ridl_rt::contract::Interface>::NUMBER,
+                            ),
+                            cx.waker(),
+                        );
+                    let mut budget = SERVE_BUDGET;
+                    match dispatch(
+                        &mut this.handler,
+                        &mut *this.provider,
+                        ::core::convert::AsMut::as_mut(&mut this.buf),
+                        &mut budget,
+                    ) {
+                        Ok(_) => {
+                            if budget == 0 {
+                                cx.waker().wake_by_ref();
+                            }
+                            ::core::task::Poll::Pending
+                        }
+                        Err(error) => {
+                            this.state = ServeState::Done;
+                            ::core::task::Poll::Ready(
+                                Err(::ridl_rt::error::ProviderError::Claim(error)),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    ///The traits a consumer of interface `Telemetry`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `commit`, `invalidate_<signal>`, `with_timeout`, `set_timeout` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    pub mod prelude {
+        pub use ::ridl_rt::face::Bind;
+        pub use ::ridl_rt::face::Publish;
+        pub use super::Invalidate as _;
+        #[cfg(feature = "std")]
+        pub use ::ridl_rt::face::Timeout;
+    }
+    ///The blocking face of interface `Telemetry`, under the crate's `std` feature: `Client`, and `serve` when the interface declares a command or a query, as `ridl_rt::task::block_on` over the async face's futures, each bounded by a timeout. What a call does is the future's; this module adds the thread's wait and the timeout.
+    #[cfg(feature = "std")]
+    pub mod blocking {
+        fn __deadline_after(
+            timeout: ::core::option::Option<::std::time::Duration>,
+        ) -> ::core::option::Option<::std::time::Instant> {
+            timeout.and_then(|timeout| ::std::time::Instant::now().checked_add(timeout))
+        }
+        ///The blocking consumer face of interface `Telemetry`: the async `Client` with a timeout, over the same ports. Every call is `ridl_rt::task::block_on` over the async call's future, so a call parks the calling thread until its outcome or this client's timeout. The member's `max` is measured by the future on the port's clock, and read only when the port wakes the call: a runtime that measures the bound and wakes the waiter when it passes ends the call at `max`; one that does not, `ridl-loopback` among them, leaves an unserved call waiting until this client's timeout. The timeout is `None` until `with_timeout` or `set_timeout` sets it, and with none a call returns only with its outcome, or at `max` on a runtime that wakes at it. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `with_timeout` and `set_timeout` are `ridl_rt::face::Timeout`'s, all in scope through the parent module's `prelude`.
+        pub struct Client<
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > {
+            inner: super::Client<P>,
+            timeout: ::core::option::Option<::std::time::Duration>,
+        }
+        impl<
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > Client<P>
+        where
+            super::super::Telemetry: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Odometer: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<
+                P::Encoding,
+            >,
+            super::super::Percent: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
+            ///Reads signal `distance`, as `Client::distance` does: a read never waits.
+            ///
+            /// # Rules
+            ///
+            /// - interval 1000000 ..= 10000000 us
+            pub fn distance(
+                &self,
+            ) -> ::core::result::Result<
+                ::ridl_rt::sample::Sample<super::super::Odometer>,
+                ::ridl_rt::port::ReadError,
+            > {
+                self.inner.distance()
+            }
+            ///Sends query `fuelLevel` and waits for its outcome, as `block_on` over `Client::fuel_level`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
+            ///
+            /// # Rules
+            ///
+            /// - response within 50000 us
+            /// - ensure `result >= 0.0`
+            pub fn fuel_level(
+                &mut self,
+                args: super::super::TelemetryFuelLevelParams,
+            ) -> ::core::result::Result<
+                super::super::Percent,
+                ::ridl_rt::error::ClientError,
+            > {
+                let __deadline = __deadline_after(self.timeout);
+                let mut __call = self.inner.fuel_level(args);
+                match ::ridl_rt::task::block_on(&mut __call, __deadline) {
+                    Some(outcome) => outcome,
+                    None if __call.sent() => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Call(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Timeout,
+                                ),
+                            ),
+                        )
+                    }
+                    None => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Send(
+                                ::ridl_rt::port::SendError::Busy,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        impl<
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > ::ridl_rt::face::Bind for Client<P>
+        where
+            super::super::Telemetry: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Odometer: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<
+                P::Encoding,
+            >,
+            super::super::Percent: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
+            type Port = P;
+            /**Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::Client`'s `new`. A program that must not panic makes the same comparison first, `port.catalog() == <Telemetry as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Telemetry` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+            #[track_caller]
+            fn new(port: P) -> Self {
+                Client {
+                    inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
+                    timeout: None,
+                }
+            }
+        }
+        impl<
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::SignalReader
+                + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+                + ::ridl_rt::port::Wakeable,
+        > ::ridl_rt::face::Timeout for Client<P>
+        where
+            super::super::Telemetry: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Odometer: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<
+                P::Encoding,
+            >,
+            super::super::Percent: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
+            /// Sets the timeout every waiting method of this client is
+            /// bounded by, and returns the client. A timeout shorter than a
+            /// member's `max` is accepted, and ends the call first; a longer
+            /// one ends an unserved call at `max` only on a runtime that
+            /// wakes the call when its bound passes.
+            fn with_timeout(mut self, timeout: ::std::time::Duration) -> Self {
+                self.timeout = Some(timeout);
+                self
+            }
+            /// Sets or clears the timeout every waiting method of this
+            /// client is bounded by.
+            fn set_timeout(
+                &mut self,
+                timeout: ::core::option::Option<::std::time::Duration>,
+            ) {
+                self.timeout = timeout;
+            }
+        }
+        /**Serves interface `Telemetry`'s commands and queries with `p`, over the handler port `h`, on the calling thread, until the handler port fails or `timeout` passes: it is `block_on` over `serve`. A failure is returned as `serve`'s future resolves to it; the timeout is `Ok(())`, so a loop that also does other work can call this repeatedly. With `None` it returns only on a failure. `h` is dropped when this returns.
+
+# Panics
+
+Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::serve`. A program that must not panic makes the same comparison first, `h.catalog() == <Telemetry as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Telemetry` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        pub fn serve<H, P>(
+            h: H,
+            p: &mut P,
+            timeout: ::core::option::Option<::std::time::Duration>,
+        ) -> ::core::result::Result<(), ::ridl_rt::error::ProviderError>
+        where
+            H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+                + ::ridl_rt::port::Wakeable,
+            P: super::Provider,
+            super::super::Telemetry: ::ridl_rt::contract::Sizes<H::Encoding>,
+            super::super::Odometer: ::ridl_rt::payload::Payload<H::Encoding>,
+            super::super::TelemetryFuelLevelParams: ::ridl_rt::payload::Payload<
+                H::Encoding,
+            >,
+            super::super::Percent: ::ridl_rt::payload::Payload<H::Encoding>,
+        {
+            let __deadline = __deadline_after(timeout);
+            let mut __serve = super::serve(h, p);
+            match ::ridl_rt::task::block_on(&mut __serve, __deadline) {
+                Some(Ok(never)) => match never {}
+                Some(Err(error)) => Err(error),
+                None => Ok(()),
+            }
+        }
+    }
+}
 
 
 // ===== package fleet.legacy =====

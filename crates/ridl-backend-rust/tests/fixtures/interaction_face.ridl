@@ -93,13 +93,19 @@ interface Siren {
 // ------ A calls-only interface with no written timing, for two tests ------
 //
 // Its `Client` is bound on `Caller`, `Clock` and `Wakeable` and on nothing
-// else. Neither call writes a timing annotation, so each takes the built-in
-// default response bound for its kind (ridl §9.3): 1 s for `open` and 3 s for
-// `pressure`. Named to sort after `Siren`, for the reason `Siren` gives.
+// else. No call writes a timing annotation, so each takes the built-in
+// default response bound for its kind (ridl §9.3): 1 s for a command and 3 s
+// for a query. Named to sort after `Siren`, for the reason `Siren` gives.
+// `setBoth` and `status` carry the two parameter lists that induce an
+// argument struct: two parameters, and none.
 
 interface Valve {
   command open(level: Level)
   query pressure(window: Window): Average
+  /// A call with two parameters: its argument type is induced.
+  command setBoth(level: Level, window: Window)
+  /// A call with none: its argument type is an induced struct with no field.
+  query status(): Health
 }
 
 // ------ An interface with a fixed before a signal, for the size table ------

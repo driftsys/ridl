@@ -96,9 +96,9 @@ pub(crate) fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError
 /// The owners of the views [`package_items`] emits, which the claim table
 /// (`crate::claims`) claims before the codec runs: the declarations whose
 /// root has a finite bound, by index into `Model.declarations`, and the
-/// induced tuples reachable from them, by index into `Model.tuples`. A
-/// declaration whose codec is withheld, and a tuple only it reaches, get no
-/// view, so they claim none.
+/// induced tuples reachable from them and from the tuples a root names
+/// directly, by index into `Model.tuples`. A declaration whose codec is
+/// withheld, and a tuple only it reaches, get no view, so they claim none.
 pub(crate) struct ViewOwners {
     pub(crate) declarations: Vec<u32>,
     pub(crate) tuples: Vec<u32>,
@@ -119,7 +119,11 @@ pub(crate) fn view_owners(ctx: &Ctx) -> ViewOwners {
         })
         .unwrap_or_default();
     ViewOwners {
-        declarations: roots.iter().map(|root| root.declaration).collect(),
+        declarations: roots
+            .iter()
+            .filter(|root| root.tuple.is_none())
+            .map(|root| root.declaration)
+            .collect(),
         tuples: codec.reachable_tuples(&roots),
     }
 }
@@ -604,6 +608,19 @@ fn decode_ident(owner: &str) -> Ident {
     format_ident!("__ridl_fb_decode_{}", ident(owner))
 }
 
+/// One parameter of a table function, underscored when the table has no slot
+/// and the body therefore reads nothing. A table with no slot is what an
+/// interaction with no parameter induces (driftsys/ridl#713); the generated
+/// crate is built under `-D warnings`, so an unread parameter must not be
+/// named.
+fn param_binding(name: &str, used: bool) -> Ident {
+    if used {
+        format_ident!("{}", name)
+    } else {
+        format_ident!("_{}", name)
+    }
+}
+
 /// An owner as written at a *reference* site: the declared name for a type of
 /// this package, and the dotted reference for one of another package of the
 /// same build (driftsys/ridl#467).
@@ -819,6 +836,7 @@ impl<'a> Codec<'a> {
 
     fn items(&self) -> Result<Vec<TokenStream>, GenerateError> {
         let mut roots: Vec<&v1::FbRoot> = Vec::new();
+        let mut tuple_roots: Vec<&v1::FbRoot> = Vec::new();
         let mut withheld: Vec<&v1::FbRoot> = Vec::new();
         let empty = Vec::new();
         let all = self
@@ -829,6 +847,19 @@ impl<'a> Codec<'a> {
         // `roots` list is exactly the declarations `root_table` names, in
         // declaration order.
         for root in all {
+            // A root that names a tuple has no declaration to read — its
+            // `declaration` is written as 0 and must be ignored — so it is
+            // sorted on its own, and the codec of the induced struct it
+            // names is emitted from the tuple walk below
+            // (driftsys/ridl#713). A tuple root with no finite bound gets no
+            // `Payload` implementation; the descriptor emitter refuses its
+            // interface before naming that implementation.
+            if root.tuple.is_some() {
+                if matches!(root.bound, Some(v1::fb_root::Bound::MaxSize(_))) {
+                    tuple_roots.push(root);
+                }
+                continue;
+            }
             match root.bound.as_ref() {
                 Some(v1::fb_root::Bound::MaxSize(_)) => roots.push(root),
                 // D-7's refusal, wired in per type. An `Ok` here means the
@@ -853,7 +884,12 @@ impl<'a> Codec<'a> {
                     .map(|item| allow_dead_code_if_internal(visibility, item)),
             );
         }
-        for index in self.reachable_tuples(&roots) {
+        let reachable = {
+            let mut seeds = roots.clone();
+            seeds.extend(tuple_roots.iter().copied());
+            self.reachable_tuples(&seeds)
+        };
+        for index in reachable {
             let induced = self.ctx.tuple(index).ok_or_else(|| GenerateError {
                 message: "the lowered model names a tuple it does not carry".to_string(),
             })?;
@@ -863,6 +899,16 @@ impl<'a> Codec<'a> {
                     .into_iter()
                     .map(|item| allow_dead_code_if_internal(induced.visibility, item)),
             );
+            // A tuple a root names crosses the wire on its own, so it carries
+            // the `Payload` implementation a declaration root carries: the
+            // descriptor's reservation row names its `MAX_SIZE`
+            // (driftsys/ridl#713).
+            if let Some(root) = tuple_roots.iter().find(|root| root.tuple == Some(index)) {
+                items.push(allow_dead_code_if_internal(
+                    induced.visibility,
+                    self.payload_impl(root, tuple_name(induced))?,
+                ));
+            }
         }
         Ok(items)
     }
@@ -967,6 +1013,9 @@ impl<'a> Codec<'a> {
 
     /// The induced tuples reachable from `roots`, in discovery order.
     ///
+    /// A root that names a tuple reaches that tuple itself; a root that names
+    /// a declaration reaches the tuples its fields hold.
+    ///
     /// Only a reached tuple gets functions. A tuple induced by a declaration
     /// whose codec was withheld has no caller, and emitting its functions
     /// would put dead code in a consumer's build.
@@ -976,6 +1025,20 @@ impl<'a> Codec<'a> {
         let mut queue: Vec<&'a v1::Type> = Vec::new();
 
         for root in roots {
+            if let Some(index) = root.tuple {
+                let Some(tuple) = self.ctx.tuple(index) else {
+                    continue;
+                };
+                if !tuple_name(tuple).is_empty() && seen.insert(index) {
+                    found.push(index);
+                    for field in &tuple.fields {
+                        if let Some(ty) = field.r#type.as_ref() {
+                            queue.push(ty);
+                        }
+                    }
+                }
+                continue;
+            }
             let Some(decl) = self.ctx.declaration(root.declaration) else {
                 continue;
             };
@@ -1631,13 +1694,14 @@ impl<'a> Codec<'a> {
         table: &Table,
     ) -> Result<TokenStream, GenerateError> {
         let name = encode_ident(owner);
+        let value_param = param_binding("value", !table.slots.is_empty());
         let body = self.table_encode_body(owner, table, &quote! { value })?;
         // Writes the value as a FlatBuffers table and returns its position.
         // An internal: no doc.
         Ok(quote! {
             #[allow(deprecated, non_snake_case)]
             pub(crate) fn #name(
-                value: &#ty,
+                #value_param: &#ty,
                 builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
             ) -> ::core::result::Result<
                 ::ridl_rt::flatbuffers::Pos,
@@ -1856,6 +1920,9 @@ impl<'a> Codec<'a> {
 
     fn table_verify_fn(&self, owner: &str, table: &Table) -> Result<TokenStream, GenerateError> {
         let name = verify_ident(owner);
+        let used = !table.slots.is_empty();
+        let buf_param = param_binding("buf", used);
+        let table_param = param_binding("table", used);
         let body = self.table_verify_body(owner, table)?;
         // Checks the FlatBuffers table at `table` against the declaration's
         // shape: the structure, enum discriminants, collection bounds, map key
@@ -1865,8 +1932,8 @@ impl<'a> Codec<'a> {
         Ok(quote! {
             #[allow(deprecated, non_snake_case)]
             pub(crate) fn #name(
-                buf: &[::core::primitive::u8],
-                table: ::core::primitive::usize,
+                #buf_param: &[::core::primitive::u8],
+                #table_param: ::core::primitive::usize,
             ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
                 #body
                 ::core::result::Result::Ok(())
@@ -2098,6 +2165,9 @@ impl<'a> Codec<'a> {
         table: &Table,
     ) -> Result<TokenStream, GenerateError> {
         let name = decode_ident(owner);
+        let used = !table.slots.is_empty();
+        let buf_param = param_binding("buf", used);
+        let table_param = param_binding("table", used);
         let mut fields: Vec<TokenStream> = Vec::new();
         for slot in &table.slots {
             let field = ident(&snake_case(&slot.name));
@@ -2116,7 +2186,7 @@ impl<'a> Codec<'a> {
         // (`check`), so this never re-checks and never fails.
         Ok(quote! {
             #[allow(deprecated, non_snake_case)]
-            pub(crate) fn #name(buf: &[::core::primitive::u8], table: ::core::primitive::usize) -> #ty {
+            pub(crate) fn #name(#buf_param: &[::core::primitive::u8], #table_param: ::core::primitive::usize) -> #ty {
                 #ty { #(#fields),* }
             }
         })

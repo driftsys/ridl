@@ -13,7 +13,7 @@
 //! `Package::shapes()`, a `Struct.slots[j]` from `StructDef.members[j]`, an
 //! `Interface.slots[j]` from `Interface.interactions[j]`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::clauses;
 use super::docs::{doc_links, model_rules};
@@ -94,19 +94,55 @@ pub fn lower_with(
     };
 
     // The FlatBuffers projection is its own walk over the IR, in the order the
-    // `.fbs` emitter reaches its tables; it is keyed back into the model by
-    // the wire induced names the walk above assigned.
-    let tuple_index: HashMap<String, u32> = lowering
+    // `.fbs` emitter reaches its tables. It is handed the tuples the lowering
+    // named rather than deriving them again, so that one name is built in one
+    // place and every named tuple reaches a table (driftsys/ridl#713).
+    let roots = root_tuples(&model);
+    let named: Vec<flatbuffers::NamedTuple<'_>> = lowering
         .tuples
         .iter()
         .enumerate()
         .filter(|(_, entry)| entry.named)
-        .map(|(index, entry)| (entry.wire.clone(), index as u32))
+        .map(|(index, entry)| flatbuffers::NamedTuple {
+            index: index as u32,
+            wire: entry.wire.as_str(),
+            source: &entry.source,
+            home: entry.home,
+            root: roots.contains(&(index as u32)),
+        })
         .collect();
-    let projected = flatbuffers::project(scope, &tuple_index, &lowering.foreign_at);
+    let projected = flatbuffers::project(scope, &named, &lowering.foreign_at);
     patch_flatbuffers(&mut model, &projected);
     model.flatbuffers = Some(projected.projection);
     model
+}
+
+/// The tuples that cross the wire on their own, which is what makes each one
+/// a FlatBuffers root: a call's induced argument struct and a query's induced
+/// reply struct. The model already names them on the interaction that induced
+/// them, so the set is read off the model rather than derived again.
+fn root_tuples(model: &v1::Model) -> HashSet<u32> {
+    let mut roots = HashSet::new();
+    for interface in &model.interfaces {
+        for slot in &interface.slots {
+            let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                slot.occupant.as_ref()
+            else {
+                continue;
+            };
+            match interaction.shape.as_ref() {
+                Some(v1::interaction::Shape::Command(command)) => {
+                    roots.extend(command.request_tuple.as_ref().map(|tuple| tuple.index));
+                }
+                Some(v1::interaction::Shape::Query(query)) => {
+                    roots.extend(query.request_tuple.as_ref().map(|tuple| tuple.index));
+                    roots.extend(query.reply_tuple.as_ref().map(|tuple| tuple.index));
+                }
+                _ => {}
+            }
+        }
+    }
+    roots
 }
 
 /// The path that reached one type position: where the model records the
@@ -118,8 +154,8 @@ struct Path {
     rust: String,
     wire: String,
     visibility: i32,
-    /// False where no backend has a naming rule for the origin, which is
-    /// every interaction position today.
+    /// False where no backend has a naming rule for the origin, which is a
+    /// position inside a declaration of another package.
     named: bool,
 }
 
@@ -155,14 +191,31 @@ impl Path {
         }
     }
 
-    fn interaction(interface: u32, slot: u32, visibility: i32, segments: Vec<String>) -> Self {
+    /// An interaction position. The induced name starts at the interface's
+    /// name and the interaction's, which is unique in the package because
+    /// an induced struct is emitted at the package's own scope: an interface
+    /// name is unique in a package, and an interaction name is unique in an
+    /// interface (ADR-0016).
+    ///
+    /// The owner is the declared interface name, or the owning service's
+    /// dotted name for a service's inline shape, so the Rust name composes
+    /// both transforms: `joined_camel` joins the dotted segments, and
+    /// `camel_case` removes any underscore.
+    fn interaction(
+        interface: u32,
+        slot: u32,
+        visibility: i32,
+        owner: &str,
+        member: &str,
+        segments: Vec<String>,
+    ) -> Self {
         Self {
             base: Base::Interaction(interface, slot),
             segments,
-            rust: String::new(),
-            wire: String::new(),
+            rust: format!("{}{}", camel_case(&joined_camel(owner)), camel_case(member)),
+            wire: format!("{}{}", joined_camel(owner), joined_camel(member)),
             visibility,
-            named: false,
+            named: true,
         }
     }
 
@@ -237,7 +290,34 @@ struct TupleEntry<'a> {
     rust: String,
     wire: String,
     named: bool,
+    /// What each field is documented with, in declaration order. Empty for
+    /// every tuple but an induced argument struct, whose fields stand for the
+    /// parameters of a call.
+    docs: Vec<FieldDoc>,
     lowered: Option<v1::InducedTuple>,
+}
+
+/// What a parameter documents, carried onto the field induced from it. A
+/// tuple field carries no doc in the IR, so an induced argument struct would
+/// otherwise document none of its fields, while a generated item renders the
+/// doc its source item has (ADR-0028).
+#[derive(Clone, Default)]
+struct FieldDoc {
+    doc: String,
+    links: Vec<v1::DocLink>,
+    see: Vec<v1::DocLink>,
+    since: Vec<String>,
+}
+
+impl FieldDoc {
+    fn of_param(param: &v2::Param) -> Self {
+        Self {
+            doc: param.doc.clone(),
+            links: doc_links(&param.links),
+            see: doc_links(&param.see),
+            since: param.since.clone(),
+        }
+    }
 }
 
 struct Lowering<'a> {
@@ -633,6 +713,7 @@ impl<'a> Lowering<'a> {
             rust: at.rust.clone(),
             wire: at.wire.clone(),
             named: at.named,
+            docs: Vec::new(),
             lowered: None,
         });
         index as u32
@@ -652,6 +733,7 @@ impl<'a> Lowering<'a> {
             let home = self.tuples[index].home;
             let path = self.tuples[index].path.clone();
             let named = self.tuples[index].named;
+            let docs = self.tuples[index].docs.clone();
             let (rust, wire) = (
                 self.tuples[index].rust.clone(),
                 self.tuples[index].wire.clone(),
@@ -662,19 +744,22 @@ impl<'a> Lowering<'a> {
                 .enumerate()
                 .map(|(position, field)| {
                     let at = path.tuple_field(&field.name, position + 1);
+                    // A tuple field carries no doc in the IR; the one an
+                    // induced argument struct has comes from the parameter at
+                    // the same position, which `docs` holds.
+                    let documented = docs.get(position).cloned().unwrap_or_default();
                     v1::Field {
                         name: Some(spellings(&field.name)),
                         r#type: field.r#type.as_ref().map(|ty| self.type_at(home, ty, &at)),
                         declared_init: None,
                         init: Some(self.inits.tuple_field(home, field)),
-                        doc: String::new(),
+                        doc: documented.doc,
                         labels: Vec::new(),
                         deprecated: None,
-                        // A tuple field carries no doc in the IR, and
-                        // `rules::rules` has no item for it.
-                        links: Vec::new(),
-                        see: Vec::new(),
-                        since: Vec::new(),
+                        links: documented.links,
+                        see: documented.see,
+                        since: documented.since,
+                        // `rules::rules` has no item for a tuple field.
                         rules: Vec::new(),
                     }
                 })
@@ -719,6 +804,10 @@ impl<'a> Lowering<'a> {
     ) -> v1::Interface {
         let interface = shape.interface;
         let visibility = shape.visibility();
+        let owner = match shape.service {
+            Some(service) => service.name.clone(),
+            None => interface.name.clone(),
+        };
         let mut row = 0u32;
         let slots: Vec<v1::InteractionSlot> = interface
             .interactions
@@ -744,6 +833,7 @@ impl<'a> Lowering<'a> {
                                     slot as u32,
                                     this_row,
                                     visibility,
+                                    &owner,
                                 ),
                             ))),
                         }
@@ -789,6 +879,7 @@ impl<'a> Lowering<'a> {
         slot: u32,
         row: u32,
         visibility: i32,
+        owner: &str,
     ) -> v1::Interaction {
         let (kind, timing, shape, payloads, family) = match decl.kind.as_ref() {
             Some(v2::decl::Kind::SignalDef(signal)) => {
@@ -823,12 +914,30 @@ impl<'a> Lowering<'a> {
                 )
             }
             Some(v2::decl::Kind::CommandDef(command)) => {
-                let params = self.params(home, &command.params, interface, slot, visibility);
+                let params = self.params(
+                    home,
+                    &command.params,
+                    interface,
+                    slot,
+                    visibility,
+                    owner,
+                    decl.name.as_str(),
+                );
                 let request = single_param_type(&command.params)
                     .map(|reference| self.payload(home, reference));
+                let request_tuple = self.request_tuple(
+                    home,
+                    &command.params,
+                    interface,
+                    slot,
+                    visibility,
+                    owner,
+                    decl.name.as_str(),
+                );
+                let request_induced = params_as_tuple(&command.params);
                 let request_sizes = self.sizes(
                     home,
-                    &PayloadShape::Params(&command.params),
+                    &request_shape(&command.params, request_induced.as_ref()),
                     single_param_type(&command.params),
                 );
                 let clauses = self.clauses(home, &command.contracts, &command.params, None);
@@ -846,29 +955,65 @@ impl<'a> Lowering<'a> {
                         clauses,
                         request_sizes: Some(request_sizes),
                         shape: command.shape,
+                        request_tuple,
                     })),
                     Some(payloads),
                     command.family,
                 )
             }
             Some(v2::decl::Kind::QueryDef(query)) => {
-                let params = self.params(home, &query.params, interface, slot, visibility);
+                let params = self.params(
+                    home,
+                    &query.params,
+                    interface,
+                    slot,
+                    visibility,
+                    owner,
+                    decl.name.as_str(),
+                );
                 let request =
                     single_param_type(&query.params).map(|reference| self.payload(home, reference));
+                let request_tuple = self.request_tuple(
+                    home,
+                    &query.params,
+                    interface,
+                    slot,
+                    visibility,
+                    owner,
+                    decl.name.as_str(),
+                );
                 let reply_named = query_reply_type(query);
                 let reply = query.return_type.as_ref().map(|ret| {
-                    let at =
-                        Path::interaction(interface, slot, visibility, vec!["reply".to_string()]);
+                    // The same path the induced reply struct takes: a tuple
+                    // written inside the return type is the tuple this arm
+                    // induces, so both reach one name and the claim is
+                    // reused rather than recorded as a collision.
+                    let at = Path::interaction(
+                        interface,
+                        slot,
+                        visibility,
+                        owner,
+                        decl.name.as_str(),
+                        Vec::new(),
+                    )
+                    .step("Reply");
                     self.reply(home, ret, &at)
                 });
+                let request_induced = params_as_tuple(&query.params);
                 let request_sizes = self.sizes(
                     home,
-                    &PayloadShape::Params(&query.params),
+                    &request_shape(&query.params, request_induced.as_ref()),
                     single_param_type(&query.params),
                 );
-                let reply_sizes = query.return_type.as_ref().map_or_else(absent_sizes, |ret| {
-                    self.sizes(home, &PayloadShape::Return(ret), reply_named)
-                });
+                let reply_induced = match reply_named {
+                    Some(_) => None,
+                    None => reply_as_tuple(query.return_type.as_ref()),
+                };
+                let reply_sizes = match (&reply_induced, query.return_type.as_ref()) {
+                    (Some(tuple), _) => self.sizes(home, &PayloadShape::Tuple(tuple), None),
+                    (None, Some(ret)) => self.sizes(home, &PayloadShape::Return(ret), reply_named),
+                    (None, None) => absent_sizes(),
+                };
                 let payloads = vec![
                     (
                         "request",
@@ -885,6 +1030,23 @@ impl<'a> Lowering<'a> {
                     ),
                 ];
                 let reply_payload = reply_named.map(|reference| self.payload(home, reference));
+                let reply_tuple = match reply_named {
+                    Some(_) => None,
+                    None => reply_as_tuple(query.return_type.as_ref()).map(|tuple| {
+                        let at = Path::interaction(
+                            interface,
+                            slot,
+                            visibility,
+                            owner,
+                            decl.name.as_str(),
+                            Vec::new(),
+                        )
+                        .step("Reply");
+                        v1::TupleRef {
+                            index: self.tuple_ref(home, &tuple, &at),
+                        }
+                    }),
+                };
                 let clauses = self.clauses(home, &query.contracts, &query.params, reply_named);
                 (
                     v1::Kind::Query,
@@ -897,14 +1059,22 @@ impl<'a> Lowering<'a> {
                         clauses,
                         request_sizes: Some(request_sizes),
                         reply_sizes: Some(reply_sizes),
+                        request_tuple,
+                        reply_tuple,
                     }))),
                     Some(payloads),
                     query.family,
                 )
             }
             Some(v2::decl::Kind::FixedDef(fixed)) => {
-                let at =
-                    Path::interaction(interface, slot, visibility, vec!["payload".to_string()]);
+                let at = Path::interaction(
+                    interface,
+                    slot,
+                    visibility,
+                    owner,
+                    decl.name.as_str(),
+                    vec!["payload".to_string()],
+                );
                 let payload = fixed.payload.as_ref().map(|ty| self.type_at(home, ty, &at));
                 let named = fixed
                     .payload
@@ -957,6 +1127,39 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    /// The induced argument struct for a call's parameters, written where the
+    /// parameters are not exactly one named type — that one shape is the
+    /// payload the face sends as it is, and induces nothing
+    /// (driftsys/ridl#713).
+    #[allow(clippy::too_many_arguments)]
+    fn request_tuple(
+        &mut self,
+        home: &'a v2::Package,
+        params: &[v2::Param],
+        interface: u32,
+        slot: u32,
+        visibility: i32,
+        owner: &str,
+        member: &str,
+    ) -> Option<v1::TupleRef> {
+        if single_param_type(params).is_some() {
+            return None;
+        }
+        let tuple = params_as_tuple(params)?;
+        // `Path::step` appends the role word to the segments and to both
+        // induced names at once, which gives segments `["Params"]` and the
+        // Rust name `<Interface><Interaction>Params`.
+        let at = Path::interaction(interface, slot, visibility, owner, member, Vec::new())
+            .step("Params");
+        let index = self.tuple_ref(home, &tuple, &at);
+        // The struct's fields stand for the parameters, in declaration order,
+        // so each one is documented with the parameter it was induced from
+        // (ADR-0028).
+        self.tuples[index as usize].docs = params.iter().map(FieldDoc::of_param).collect();
+        Some(v1::TupleRef { index })
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn params(
         &mut self,
         home: &'a v2::Package,
@@ -964,16 +1167,17 @@ impl<'a> Lowering<'a> {
         interface: u32,
         slot: u32,
         visibility: i32,
+        owner: &str,
+        member: &str,
     ) -> Vec<v1::Param> {
         params
             .iter()
             .map(|param| {
-                let at = Path::interaction(
-                    interface,
-                    slot,
-                    visibility,
-                    vec!["param".to_string(), param.name.clone()],
-                );
+                // The singular role distinguishes a parameter's tuple from
+                // the request wrapper, including a parameter named `params`.
+                let at = Path::interaction(interface, slot, visibility, owner, member, Vec::new())
+                    .step("Param")
+                    .field(&param.name);
                 v1::Param {
                     name: Some(spellings(&param.name)),
                     r#type: param.r#type.as_ref().map(|ty| self.type_at(home, ty, &at)),
@@ -1476,8 +1680,58 @@ fn decl_kind(decl: &v2::Decl) -> v1::DeclKind {
     }
 }
 
-/// The single declared parameter's named type — the one call shape the
-/// generated face carries today.
+/// The parameter list as a tuple: the shape of the induced argument struct,
+/// one field per declared parameter in declaration order. A parameter with no
+/// declared type, and a stream parameter, have no struct field, so a list
+/// holding either induces nothing (interaction face design, the request-shape
+/// rule).
+fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
+    let mut fields = Vec::with_capacity(params.len());
+    for param in params {
+        let ty = param.r#type.as_ref()?;
+        if matches!(ty.kind.as_ref()?, v2::field_type::Kind::Stream(_)) {
+            return None;
+        }
+        fields.push(v2::TupleField {
+            name: param.name.clone(),
+            r#type: Some(ty.clone()),
+        });
+    }
+    Some(v2::TupleType { fields })
+}
+
+/// The reply as a tuple, for the two product-shaped replies: a tuple reply is
+/// itself, and a query with no declared return type is the empty tuple. A
+/// fallible `T | E` reply, a named reply, and every other return form give
+/// `None` — a named reply keeps `reply_payload`, and a fallible reply is a
+/// sum this toolchain does not induce.
+fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
+    let Some(ret) = ret else {
+        return Some(v2::TupleType::default());
+    };
+    match ret.kind.as_ref()? {
+        v2::return_type::Kind::Value(ty) => match ty.kind.as_ref()? {
+            v2::field_type::Kind::Tuple(tuple) => Some(tuple.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// What a call's request is sized as: the induced argument struct when the
+/// call has one, otherwise the single named parameter.
+fn request_shape<'a>(
+    params: &'a [v2::Param],
+    induced: Option<&'a v2::TupleType>,
+) -> PayloadShape<'a> {
+    match induced {
+        Some(tuple) if single_param_type(params).is_none() => PayloadShape::Tuple(tuple),
+        _ => PayloadShape::Params(params),
+    }
+}
+
+/// The single declared parameter's named type — the one call shape whose
+/// payload the generated face sends as it is.
 fn single_param_type(params: &[v2::Param]) -> Option<&str> {
     let [param] = params else {
         return None;
