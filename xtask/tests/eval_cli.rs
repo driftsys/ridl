@@ -682,6 +682,12 @@ fn result(out: &Path, task: &str, label: &str) -> toml::Value {
 #[test]
 fn a_run_writes_its_mechanical_score() {
     let fakes = fakes_with(None);
+    // evolve-0001 expects the lints that the unmodified ros2 corpus draws.
+    std::fs::write(
+        fakes.dir.join("check.json"),
+        r#"[{"code":"TYPL-224","severity":"info","lint":"low-cohesion-interface","message":"m"},{"code":"TYPL-223","severity":"info","lint":"duplicate-shape","message":"m"}]"#,
+    )
+    .unwrap();
     let out = fakes.dir.join("results");
     let output = eval(
         &fakes,
@@ -1208,10 +1214,10 @@ fn design_lints_must_match_the_task() {
     let fakes = fakes_with(None);
     std::fs::write(
         fakes.dir.join("check.json"),
-        r#"[{"code":"TYPL-224","severity":"info","lint":"low-cohesion-interface","message":"m"}]"#,
+        r#"[{"code":"TYPL-224","severity":"info","lint":"low-cohesion-interface","message":"m"},{"code":"TYPL-223","severity":"info","lint":"duplicate-shape","message":"m"}]"#,
     )
     .unwrap();
-    // review-0002 expects this lint; design-0001 expects none.
+    // review-0002 expects these two lints; design-0001 expects none.
     let (_, expected) = run_one(&fakes, "review-0002", "claude");
     assert_eq!(expected["mechanical"]["lints_match"].as_bool(), Some(true));
     assert_eq!(expected["mechanical"]["passed"].as_bool(), Some(true));
