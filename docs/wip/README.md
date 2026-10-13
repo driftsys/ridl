@@ -96,7 +96,15 @@ The freeze check plan and its `cargo-semver-checks` spike
 archived on 2026-10-13, once the check landed (#866);
 [ADR-0029](../decisions/ADR-0029-stability-policy.md),
 [`../../freeze/README.md`](../../freeze/README.md) and
-[the stability chapter](../book/stability.md) are their durable records.
+[the stability chapter](../book/stability.md) are their durable records. The
+release 0.10 design and lanes plan
+(`2026-10-11-release-0.10-{design,lanes-plan}.md`) were archived on 2026-10-14,
+once 0.10.0 was released and every frozen surface had a row in
+`freeze/surfaces.toml`; [ADR-0029](../decisions/ADR-0029-stability-policy.md),
+[`../../freeze/README.md`](../../freeze/README.md) and
+[the stability chapter](../book/stability.md) are their durable records, and the
+2026-10-14 amendment of ADR-0029 records where the release departed from the
+design.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -302,13 +310,6 @@ the work landed and its material was gardened into ADR-0002, ADR-0014 decision
 Each file below was read against the code and the issue tracker on 2026-10-13
 and was not archived. The reason is stated once per file or group.
 
-- **2026-10-11-release-0.10-design.md** and
-  **2026-10-11-release-0.10-lanes-plan.md** — the release design and its lanes
-  plan. 0.10.0 is released and all eleven frozen surfaces have a row in
-  `freeze/surfaces.toml`, but the ridl-authoring skill design cites the release
-  design, and the lane briefs name work that is open: the skill
-  (driftsys/ridl#73, #74, #75 and #87) and the debt roll-ups #172, #347 and
-  #789. Archive both with the skill's own gardening.
 - **2026-10-11-ridl-authoring-skill-design.md**,
   **2026-10-11-ridl-authoring-skill-plan.md** and
   **skill-ridl-authoring-outline.md** — the skill's gates, eval harness and

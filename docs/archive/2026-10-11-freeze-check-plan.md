@@ -21,9 +21,9 @@ read from git the same way.
 `ridl-ir`'s build), the `just` gate (ADR-0009).
 
 **Spec:**
-[`2026-10-11-release-0.10-design.md`](../wip/2026-10-11-release-0.10-design.md),
+[`2026-10-11-release-0.10-design.md`](./2026-10-11-release-0.10-design.md),
 section 4. Lanes:
-[`2026-10-11-release-0.10-lanes-plan.md`](../wip/2026-10-11-release-0.10-lanes-plan.md).
+[`2026-10-11-release-0.10-lanes-plan.md`](./2026-10-11-release-0.10-lanes-plan.md).
 
 ## Deviation from the spec (approved with this plan)
 

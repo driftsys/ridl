@@ -1,8 +1,8 @@
 # The ridl-authoring skill and its evals — design
 
 **Status:** draft for review. Lane S of release 0.10
-([release design](2026-10-11-release-0.10-design.md) section 5.7, R-6); piece 1c
-of the
+([release design](../archive/2026-10-11-release-0.10-design.md) section 5.7,
+R-6); piece 1c of the
 [devex and agent tracks brief](2026-10-03-devex-and-agent-tracks-brief.md).
 
 **Satisfies:** driftsys/ridl#73 (rules file), #74 (typl skill), #75 (ridl
