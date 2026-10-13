@@ -71,15 +71,17 @@ entry.
 
 Which commands fetch and which only read matters:
 
-| Commands                                                                 | Read from `vendor/`, then the cache | Fetch on a miss | Write `ridl.lock` |
-| ------------------------------------------------------------------------ | ----------------------------------- | --------------- | ----------------- |
-| `ridl check`, `ridl build`, `ridl baseline`                              | yes                                 | yes             | yes               |
-| the same commands with `--frozen`                                        | yes                                 | no              | no                |
-| `ridl vendor`                                                            | cache only, never `vendor/`         | yes             | yes               |
-| `ridl vendor --check`                                                    | `vendor/` only                      | no              | no                |
-| `ridl test`, `ridl lock`, `ridl diff`, `ridl lsp`, `ridl mcp`            | yes                                 | no              | no                |
+| Commands                                                      | Read from `vendor/`, then the cache | Fetch on a miss | Write `ridl.lock` |
+| ------------------------------------------------------------- | ----------------------------------- | --------------- | ----------------- |
+| `ridl check`, `ridl build`                                    | yes                                 | yes             | yes               |
+| `ridl check --frozen`, `ridl build --frozen`                  | yes                                 | no              | no                |
+| `ridl baseline`                                               | yes                                 | yes             | yes               |
+| `ridl vendor`                                                 | cache only, never `vendor/`         | yes             | yes               |
+| `ridl vendor --check`                                         | `vendor/` only                      | no              | no                |
+| `ridl test`, `ridl lock`, `ridl diff`, `ridl lsp`, `ridl mcp` | yes                                 | no              | no                |
 
-A run writes `ridl.lock` when every remote unit was fetched and verified.
+The [`ridl check`](cli-reference.md#ridl-check) section of the CLI reference
+says when a run writes `ridl.lock`.
 
 ## What `ridl.lock` pins
 
@@ -114,60 +116,33 @@ $ ridl vendor
 vendored veh.common
 ```
 
-The command finds the manifest root above its `PATH`, which defaults to the
-current directory, so `vendor/` is at the workspace root whichever member you
-run it from. It then:
+The command acts on the manifest root above the directory, so `vendor/` is at
+the workspace root whichever member you run it from. It copies each remote unit
+of your `[imports]` to `vendor/<key>/` and updates `ridl.lock`. It also removes
+the directories in `vendor/` that no `[imports]` key names. The
+[`ridl vendor`](cli-reference.md#ridl-vendor) section of the CLI reference gives
+the exact rules for what the command writes, removes and leaves alone.
 
-1. takes the union of the `[imports]` of the root manifest and of every member;
-2. materializes each unit as `ridl check` does, from the cache or by a fetch,
-   and rewrites `ridl.lock`;
-3. writes each unit whole to `vendor/<key>/`, with the bytes of its files
-   unchanged.
+Commit `vendor/` together with `ridl.lock`. The `tree` hash covers the bytes of
+every file, so keep Git from converting line endings in `vendor/`; the CLI
+reference gives the `.gitattributes` line.
 
-`vendor/` then holds exactly the units your manifests import. `ridl vendor`
-removes every directory directly under `vendor/` whose name is no `[imports]`
-key, whether or not the command wrote it. It leaves a file, a symbolic link and
-a hidden entry (a name that starts with `.`) alone. A run that changes nothing
-prints `vendor/ is up to date; nothing to change`.
-
-When the run has an error, nothing in `vendor/` changes, although `ridl.lock`
-may be updated. After a change of URL, run `ridl vendor` again: the command
-reads the cache and never `vendor/`, so it fetches the new URL and replaces the
+After a change of URL in `[imports]`, run `ridl vendor` again to replace the
 directory.
-
-The `tree` hash covers the bytes of every file. A Git checkout that converts
-line endings changes those bytes and makes the unit `MANI-107`. Stop the
-conversion with a `.gitattributes` line at the repository root:
-
-```text
-vendor/** -text
-```
-
-Commit `vendor/` together with `ridl.lock`.
 
 ### Check the directory in CI
 
 `ridl vendor --check` compares `vendor/` with the imports and with `ridl.lock`.
-It fetches nothing, reads no cache and writes nothing:
+It fetches nothing and writes nothing, so it suits CI:
 
 ```console
 $ ridl vendor --check
 ```
 
-It exits 0 when `vendor/` matches. It exits 1 and reports one diagnostic per
-unit on drift:
-
-| Code       | Meaning                                                                           |
-| ---------- | --------------------------------------------------------------------------------- |
-| `MANI-109` | an imported unit has no directory in `vendor/`                                    |
-| `MANI-110` | `vendor/` holds a directory that no `[imports]` key names                         |
-| `MANI-107` | a vendored tree does not match its `tree` hash                                    |
-| `MANI-103` | `ridl.lock` has no entry for the unit, so the directory cannot be verified        |
-| `MANI-108` | the `ridl.lock` entry has no `tree`, so the directory cannot be verified          |
-
-It exits 2 when the path is missing or unreadable, or when no `ridl.toml` is
-found at or above it. A fix for any of these diagnostics is to run
-`ridl vendor` and commit the result.
+It exits 0 when `vendor/` matches. A failure reports `MANI-109`, `MANI-110`,
+`MANI-107`, `MANI-103` or `MANI-108`; the
+[CLI reference](cli-reference.md#ridl-vendor) gives the meaning of each and the
+exit codes. In each case, run `ridl vendor` and commit the result.
 
 ## Build with no network
 
