@@ -65,6 +65,10 @@ jobs:
       # across jobs — so this one job needs every tool ci.yml provisions
       # across all of them: mdbook for book-check, prim for the trailing
       # `check` recipe.
+      # `just build` runs `just freeze-check`, which runs cargo-semver-checks.
+      # It is built with `cargo install` at the version ci.yml names.
+      - name: install cargo-semver-checks
+        run: cargo install cargo-semver-checks --locked --version 0.51.0
       - name: install mdbook
         run: |
           set -o pipefail
