@@ -70,7 +70,13 @@ minimum Rust versions and the wire freeze landed;
 [the frame specification](../specification/frame-specification.md) §11.1,
 [ADR-0029](../decisions/ADR-0029-stability-policy.md) and
 [the binding rationale technote](../technotes/websocket-binding-rationale.md)
-are their durable records.
+are their durable records. The induced call payloads design and plan
+(`2026-10-13-induced-call-payloads-{design,plan}.md`) were archived on
+2026-10-13, once #713 landed; the 2026-10-13 amendments of
+[ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
+and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
+[`../design/interaction-face.md`](../design/interaction-face.md) are their
+durable records.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
