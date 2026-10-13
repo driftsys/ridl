@@ -3,7 +3,8 @@
 //!
 //! The second wire backend. The emit ceiling is two tiers — the typl surface
 //! and the interaction identity table — and nothing above them. No
-//! `rpc_service`, no reply carriers, no store.
+//! `rpc_service`, no RPC envelopes, no store. Interaction-induced product
+//! payloads are shape declarations, named by lowering.
 //!
 //! Seven rules here differ from the proto3 backend and are not interchangeable
 //! with it: a union is isolated in a wrapper table because a native union
@@ -24,6 +25,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use ridl_ir::codegen::{self, v1, wire};
 use ridl_ir::projection::flatbuffers as projection;
 use ridl_ir::v2;
 
@@ -74,7 +76,21 @@ pub fn generate_with(
     package: &v2::Package,
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
-    let packages = Packages { package, others };
+    generate_model(package, others, &codegen::lower(package, others))
+}
+
+pub(crate) fn generate_model(
+    package: &v2::Package,
+    others: &[&v2::Package],
+    model: &v1::Model,
+) -> Result<Generated, GenerateError> {
+    let original_count = package.decls.len();
+    let package = wire::with_interaction_tuples(package, model, wire::Schema::FlatBuffers)
+        .map_err(|message| GenerateError { message })?;
+    let packages = Packages {
+        package: &package,
+        others,
+    };
     let mut includes: BTreeSet<String> = BTreeSet::new();
     // One namespace scope spans both walks, because the identity tables are
     // namespace-level enums the same as the declared types: a declared type
@@ -83,11 +99,17 @@ pub fn generate_with(
     // it. Declared names are registered before any generated name, so a
     // refusal always names the declaration as the first claimant.
     let mut names = Namespace::types(&package.name);
-    claim_declared_names(&mut names, package)?;
+    claim_declared_names(&mut names, &package)?;
 
     let mut body = String::new();
-    emit_structs(&mut body, packages, &mut names, &mut includes)?;
-    emit_identity_tables(&mut body, package, &mut names)?;
+    emit_structs(
+        &mut body,
+        packages,
+        &mut names,
+        &mut includes,
+        original_count,
+    )?;
+    emit_identity_tables(&mut body, &package, &mut names)?;
 
     let mut out = String::new();
     for include in &includes {
@@ -259,12 +281,34 @@ fn emit_structs(
     packages: Packages,
     names: &mut Namespace,
     includes: &mut BTreeSet<String>,
+    original_count: usize,
 ) -> Result<(), GenerateError> {
     let mut induced: Vec<Induced> = Vec::new();
-    for decl in &packages.package.decls {
+    for (index, decl) in packages.package.decls.iter().enumerate() {
         match &decl.kind {
             Some(v2::decl::Kind::StructDef(def)) => {
-                emit_struct(out, packages, &decl.name, def, &mut induced, includes)?;
+                if index < original_count {
+                    emit_struct(out, packages, &decl.name, def, &mut induced, includes)?;
+                } else {
+                    let tuple = v2::TupleType {
+                        fields: def
+                            .members
+                            .iter()
+                            .filter_map(|member| {
+                                let v2::struct_member::Member::Field(field) =
+                                    member.member.as_ref()?
+                                else {
+                                    return None;
+                                };
+                                Some(v2::TupleField {
+                                    name: field.name.clone(),
+                                    r#type: field.r#type.clone(),
+                                })
+                            })
+                            .collect(),
+                    };
+                    emit_tuple_table(out, packages, &decl.name, &tuple, &mut induced, includes)?;
+                }
             }
             Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def)?,
             Some(v2::decl::Kind::UnionDef(def)) => {

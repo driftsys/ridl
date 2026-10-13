@@ -67,6 +67,7 @@ mod lower;
 mod names;
 mod resolve;
 mod unbounded;
+pub mod wire;
 
 pub use contract::{
     Backend, GENERATED_MARKER_PREFIX, ModelBackend, RawIr, RequestBackend, SCHEMA, check_path,

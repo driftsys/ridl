@@ -3989,7 +3989,7 @@ fn a_tuple_in_a_parameter_is_named_from_its_interaction() {
         .map(|name| name.rust.as_str())
         .collect();
     assert!(
-        names.contains(&"CallsWithSpanSpan"),
+        names.contains(&"CallsWithSpanParamSpan"),
         "the induced name is spelled from the interface and the interaction: {names:?}"
     );
 }
@@ -4136,7 +4136,7 @@ fn a_tuple_inside_a_documented_parameter_keeps_undocumented_fields() {
             .unwrap_or_else(|| panic!("the induced tuple {wanted}"))
     };
     assert_eq!(by_name("CallsWithSpanParams").fields[0].doc, "The span.");
-    assert_eq!(by_name("CallsWithSpanSpan").fields[0].doc, "");
+    assert_eq!(by_name("CallsWithSpanParamSpan").fields[0].doc, "");
 }
 
 /// A query's request follows the same rule as a command's: the `none` query

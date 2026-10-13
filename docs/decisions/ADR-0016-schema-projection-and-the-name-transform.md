@@ -226,12 +226,15 @@ call, and the reply of a query when it is a tuple or is not declared. An induced
 type of that origin is named
 `camel_case(<interface or service>) + camel_case(<interaction>) + <role>`, where
 `<role>` is `Params` for the argument struct and `Reply` for the reply struct. A
-position inside it extends that prefix by the rules a declaration path uses. The
-lowering writes the name into the IR, as it does for every induced name, and a
-backend reads it and never spells it. The name is unique at the package's own
-scope, because an interface name is unique in a package and an interaction name
-is unique in an interface; the claim table of the Rust backend still refuses a
-collision with a declaration, a view or a descriptor.
+tuple written directly in a parameter has the role `Param`, followed by the
+parameter name, so a parameter named `params` cannot take the argument struct's
+name. A position inside either type extends that prefix by the rules a
+declaration path uses. The lowering writes the name into the IR, as it does for
+every induced name, and a backend reads it and never spells it. The name is
+unique at the package's own scope, because an interface name is unique in a
+package and an interaction name is unique in an interface; the claim table of
+the Rust backend still refuses a collision with a declaration, a view or a
+descriptor.
 
 ## Context
 

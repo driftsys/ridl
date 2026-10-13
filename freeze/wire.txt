@@ -1748,6 +1748,14 @@ proto ros2/nav2msgs.proto [ManageLifecycleNodesRequest] uint32 command_value = 1
 proto ros2/nav2msgs.proto [ManageLifecycleNodesRequest] }
 proto ros2/nav2msgs.proto [ManageLifecycleNodesResponse] bool success = 1;
 proto ros2/nav2msgs.proto [ManageLifecycleNodesResponse] }
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsIsPathValidParams] bool field_3 = 3;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsIsPathValidParams] bool field_6 = 6;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsIsPathValidParams] double field_7 = 7;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsIsPathValidParams] navmsgs.Path field_1 = 1;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsIsPathValidParams] string field_4 = 4;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsIsPathValidParams] string field_5 = 5;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsIsPathValidParams] uint32 field_2 = 2;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsIsPathValidParams] }
 proto ros2/nav2msgs.proto [Nav2MsgsInteractionsOrdinal] NAV2_MSGS_INTERACTIONS_ORDINAL_ASSISTED_TELEOP = 7;
 proto ros2/nav2msgs.proto [Nav2MsgsInteractionsOrdinal] NAV2_MSGS_INTERACTIONS_ORDINAL_ASSISTED_TELEOP_FEEDBACK = 8;
 proto ros2/nav2msgs.proto [Nav2MsgsInteractionsOrdinal] NAV2_MSGS_INTERACTIONS_ORDINAL_BACK_UP = 9;
@@ -1770,6 +1778,13 @@ proto ros2/nav2msgs.proto [Nav2MsgsInteractionsOrdinal] NAV2_MSGS_INTERACTIONS_O
 proto ros2/nav2msgs.proto [Nav2MsgsInteractionsOrdinal] NAV2_MSGS_INTERACTIONS_ORDINAL_WAIT = 19;
 proto ros2/nav2msgs.proto [Nav2MsgsInteractionsOrdinal] NAV2_MSGS_INTERACTIONS_ORDINAL_WAIT_FEEDBACK = 20;
 proto ros2/nav2msgs.proto [Nav2MsgsInteractionsOrdinal] }
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsSaveMapParams] double field_5 = 5;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsSaveMapParams] double field_6 = 6;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsSaveMapParams] string field_1 = 1;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsSaveMapParams] string field_2 = 2;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsSaveMapParams] string field_3 = 3;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsSaveMapParams] string field_4 = 4;
+proto ros2/nav2msgs.proto [Nav2MsgsInteractionsSaveMapParams] }
 proto ros2/nav2msgs.proto [NavigateToPoseFeedback] builtininterfaces.Duration estimated_time_remaining = 3;
 proto ros2/nav2msgs.proto [NavigateToPoseFeedback] builtininterfaces.Duration navigation_time = 2;
 proto ros2/nav2msgs.proto [NavigateToPoseFeedback] double distance_remaining = 5;
@@ -1893,6 +1908,8 @@ proto ros2/nav2msgs.proto message LoadMapRequest {
 proto ros2/nav2msgs.proto message LoadMapResponse {
 proto ros2/nav2msgs.proto message ManageLifecycleNodesRequest {
 proto ros2/nav2msgs.proto message ManageLifecycleNodesResponse {
+proto ros2/nav2msgs.proto message Nav2MsgsInteractionsIsPathValidParams {
+proto ros2/nav2msgs.proto message Nav2MsgsInteractionsSaveMapParams {
 proto ros2/nav2msgs.proto message NavigateToPoseFeedback {
 proto ros2/nav2msgs.proto message NavigateToPoseGoal {
 proto ros2/nav2msgs.proto message NavigateToPoseResult {
@@ -1949,12 +1966,20 @@ proto ros2/navmsgs.proto [MapMetaData] geometrymsgs.Pose origin = 5;
 proto ros2/navmsgs.proto [MapMetaData] uint32 height = 4;
 proto ros2/navmsgs.proto [MapMetaData] uint32 width = 3;
 proto ros2/navmsgs.proto [MapMetaData] }
+proto ros2/navmsgs.proto [NavMsgsInteractionsGetMapParams] }
+proto ros2/navmsgs.proto [NavMsgsInteractionsGetPlanParams] double field_3 = 3;
+proto ros2/navmsgs.proto [NavMsgsInteractionsGetPlanParams] geometrymsgs.PoseStamped field_1 = 1;
+proto ros2/navmsgs.proto [NavMsgsInteractionsGetPlanParams] geometrymsgs.PoseStamped field_2 = 2;
+proto ros2/navmsgs.proto [NavMsgsInteractionsGetPlanParams] }
 proto ros2/navmsgs.proto [NavMsgsInteractionsOrdinal] NAV_MSGS_INTERACTIONS_ORDINAL_GET_MAP = 1;
 proto ros2/navmsgs.proto [NavMsgsInteractionsOrdinal] NAV_MSGS_INTERACTIONS_ORDINAL_GET_PLAN = 2;
 proto ros2/navmsgs.proto [NavMsgsInteractionsOrdinal] NAV_MSGS_INTERACTIONS_ORDINAL_LOAD_MAP = 3;
 proto ros2/navmsgs.proto [NavMsgsInteractionsOrdinal] NAV_MSGS_INTERACTIONS_ORDINAL_SET_MAP = 4;
 proto ros2/navmsgs.proto [NavMsgsInteractionsOrdinal] NAV_MSGS_INTERACTIONS_ORDINAL_UNSPECIFIED = 0;
 proto ros2/navmsgs.proto [NavMsgsInteractionsOrdinal] }
+proto ros2/navmsgs.proto [NavMsgsInteractionsSetMapParams] OccupancyGrid field_1 = 1;
+proto ros2/navmsgs.proto [NavMsgsInteractionsSetMapParams] geometrymsgs.PoseWithCovarianceStamped field_2 = 2;
+proto ros2/navmsgs.proto [NavMsgsInteractionsSetMapParams] }
 proto ros2/navmsgs.proto [OccupancyGrid] MapMetaData info = 2;
 proto ros2/navmsgs.proto [OccupancyGrid] repeated sint32 data = 3;
 proto ros2/navmsgs.proto [OccupancyGrid] stdmsgs.Header header = 1;
@@ -2008,6 +2033,9 @@ proto ros2/navmsgs.proto message GridCells {
 proto ros2/navmsgs.proto message LoadMapRequest {
 proto ros2/navmsgs.proto message LoadMapResponse {
 proto ros2/navmsgs.proto message MapMetaData {
+proto ros2/navmsgs.proto message NavMsgsInteractionsGetMapParams {
+proto ros2/navmsgs.proto message NavMsgsInteractionsGetPlanParams {
+proto ros2/navmsgs.proto message NavMsgsInteractionsSetMapParams {
 proto ros2/navmsgs.proto message OccupancyGrid {
 proto ros2/navmsgs.proto message Odometry {
 proto ros2/navmsgs.proto message Path {
@@ -2450,11 +2478,13 @@ proto ros2/stdsrvs.proto [SetBoolRequest] }
 proto ros2/stdsrvs.proto [SetBoolResponse] bool success = 1;
 proto ros2/stdsrvs.proto [SetBoolResponse] string message = 2;
 proto ros2/stdsrvs.proto [SetBoolResponse] }
+proto ros2/stdsrvs.proto [StdSrvsInteractionsEmptyParams] }
 proto ros2/stdsrvs.proto [StdSrvsInteractionsOrdinal] STD_SRVS_INTERACTIONS_ORDINAL_EMPTY = 1;
 proto ros2/stdsrvs.proto [StdSrvsInteractionsOrdinal] STD_SRVS_INTERACTIONS_ORDINAL_SET_BOOL = 2;
 proto ros2/stdsrvs.proto [StdSrvsInteractionsOrdinal] STD_SRVS_INTERACTIONS_ORDINAL_TRIGGER = 3;
 proto ros2/stdsrvs.proto [StdSrvsInteractionsOrdinal] STD_SRVS_INTERACTIONS_ORDINAL_UNSPECIFIED = 0;
 proto ros2/stdsrvs.proto [StdSrvsInteractionsOrdinal] }
+proto ros2/stdsrvs.proto [StdSrvsInteractionsTriggerParams] }
 proto ros2/stdsrvs.proto [TriggerRequest] }
 proto ros2/stdsrvs.proto [TriggerResponse] bool success = 1;
 proto ros2/stdsrvs.proto [TriggerResponse] string message = 2;
@@ -2466,6 +2496,8 @@ proto ros2/stdsrvs.proto message RosBooleanBox {
 proto ros2/stdsrvs.proto message RosStringBox {
 proto ros2/stdsrvs.proto message SetBoolRequest {
 proto ros2/stdsrvs.proto message SetBoolResponse {
+proto ros2/stdsrvs.proto message StdSrvsInteractionsEmptyParams {
+proto ros2/stdsrvs.proto message StdSrvsInteractionsTriggerParams {
 proto ros2/stdsrvs.proto message TriggerRequest {
 proto ros2/stdsrvs.proto message TriggerResponse {
 proto ros2/stdsrvs.proto package stdsrvs;

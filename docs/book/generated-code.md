@@ -106,6 +106,10 @@ field. A query whose reply is a tuple, or that declares no return type, gets a
 reply struct named `<Interface><Call>Reply` in the same way. These structs are
 generated types of the package module, and the face methods take and return
 them like any other payload.
+The wire backends emit the matching positional `.proto` messages and `.fbs`
+tables under the names assigned by lowering. When an induced payload has no
+finite FlatBuffers bound, its interface is skipped with the refusal constant
+described above rather than emitting a descriptor that names a missing codec.
 
 The face opens no socket and holds no runtime. Each `Client`, `Publisher` and
 `serve` runs over a _port_ that the application passes in, and a port comes from

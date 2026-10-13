@@ -852,8 +852,8 @@ impl<'a> Codec<'a> {
             // sorted on its own, and the codec of the induced struct it
             // names is emitted from the tuple walk below
             // (driftsys/ridl#713). A tuple root with no finite bound gets no
-            // `Payload` implementation and no note: the note names a
-            // declared type, and an induced struct is not one.
+            // `Payload` implementation; the descriptor emitter refuses its
+            // interface before naming that implementation.
             if root.tuple.is_some() {
                 if matches!(root.bound, Some(v1::fb_root::Bound::MaxSize(_))) {
                     tuple_roots.push(root);

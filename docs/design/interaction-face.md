@@ -171,7 +171,11 @@ induce a reply struct. The rule is held by
 `descriptors::single_param_type`, `query_param_type` and `query_reply_type` are
 the one place the backend asks what a call sends. They read the name the
 lowering wrote, and the backend never builds one. A fallible `T | E` reply, an
-untyped position and a stream are still refused (driftsys/ridl#943).
+untyped position and a stream are still refused (driftsys/ridl#943). An induced
+payload with no finite FlatBuffers bound is also refused before its descriptor
+is accepted: the codec cannot implement `Payload<FlatBuffers>` for it. The
+pipeline skips that interface with the same refusal marker, leaving the
+package's domain types and its other interfaces unaffected.
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
 one member the face covers, one `pub mod` named after the interface. Its

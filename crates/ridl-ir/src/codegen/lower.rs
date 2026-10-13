@@ -1173,17 +1173,11 @@ impl<'a> Lowering<'a> {
         params
             .iter()
             .map(|param| {
-                // The parameter's own name closes the induced name, so two
-                // tuple-typed parameters of one interaction are two types.
-                let at = Path::interaction(
-                    interface,
-                    slot,
-                    visibility,
-                    owner,
-                    member,
-                    vec!["param".to_string()],
-                )
-                .field(&param.name);
+                // The singular role distinguishes a parameter's tuple from
+                // the request wrapper, including a parameter named `params`.
+                let at = Path::interaction(interface, slot, visibility, owner, member, Vec::new())
+                    .step("Param")
+                    .field(&param.name);
                 v1::Param {
                     name: Some(spellings(&param.name)),
                     r#type: param.r#type.as_ref().map(|ty| self.type_at(home, ty, &at)),

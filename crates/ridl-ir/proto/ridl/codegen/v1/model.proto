@@ -428,7 +428,7 @@ message InteractionPath {
   // Index into `Interface.slots`.
   uint32 slot = 2;
   // ["Params"] and ["Reply"] for the induced argument and reply structs,
-  // ["param", "window"] for a tuple written inside a parameter, ["payload"]
+  // ["Param", "window"] for a tuple written inside a parameter, ["payload"]
   // for a fixed, then as `TuplePath`. A role word is capitalized because it
   // is also a segment of the induced name.
   repeated string segments = 3;

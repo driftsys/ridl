@@ -61,8 +61,9 @@ field, so a protocol addition is required either way.
 
 Reusing `InducedTuple` means the lowering's collision rule (`TupleCollision`,
 codegen model design note D-3), the Rust backend's claim table, and the existing
-struct, codec, defaults and derives emitters in all three backends apply to
-these types with no new code.
+struct, codec, defaults and derives emitters can be reused for these types. The
+wire printers require an adapter to supply the interaction tuples and their
+lowering-assigned names to the existing positional emitters.
 
 ### D-2: the type is created in lowering, never in a backend
 
@@ -83,7 +84,9 @@ module, so a name must be unique across the package.
 form, and `named` becomes true. The interface name is the one
 `Interface.identity` carries — the declared spelling, or the owning service's
 dotted name for an inline shape. The role word `Params` or `Reply` is the next
-segment.
+segment. A tuple written directly in a parameter instead uses `Param` and then
+the parameter name. This distinguishes the parameter named `params` from the
+request wrapper.
 
 ```text
 WheelDiagnosticsReadTicksParams
@@ -108,11 +111,16 @@ The face's request is always a named type.
 The one-named-parameter case stays the direct payload it is today. Changing it
 would rename a type in every existing face for no gain.
 
-The induced type has origin `InteractionPath` with segments `["params"]`.
+The induced type has origin `InteractionPath` with segments `["Params"]`.
+
+This is the lowering rule over the IR. The source checker still admits only
+named types and streams at a parameter position (`FORM-102` otherwise). The
+one-unnamed-type and tuple-parameter cases are therefore totality tests over IR
+supplied directly, not newly admitted source forms.
 
 ### D-5: the reply mirrors it for the two product forms
 
-A query's reply induces `<Interface><Interaction>Reply`, segments `["reply"]`,
+A query's reply induces `<Interface><Interaction>Reply`, segments `["Reply"]`,
 in two cases:
 
 - a tuple reply, such as `getBounds(): (min: Temperature, max: Temperature)`;
@@ -149,6 +157,18 @@ table only for a tuple reachable from an `FbRoot` (`Codec::reachable_tuples`),
 and an argument or reply struct is a wire root by definition.
 `InducedTuple.flatbuffers_table` already exists; the roots list is what grows.
 This is the one piece of new projection work.
+
+The `.fbs` and `.proto` printers also emit these induced product types as
+positional tables and messages. Their contract entry points read the tuples from
+`request.model`; the direct `generate_with` APIs first run lowering. Existing
+declaration emission still reads raw IR. A shared model adapter adds resolution
+entries for interaction tuples so that fields can reference nested tuples by the
+assigned name, without a backend naming them again. These product types are
+payload shapes, not RPC envelopes or faces.
+
+An induced root without a finite FlatBuffers bound has no `Payload` codec. The
+descriptor emitter refuses its interface before accepting that root's name, and
+the pipeline leaves the existing interface refusal marker.
 
 **Sizes and reservations become real.** The Rust descriptor writes a reservation
 as a `<Type as Sizes<FlatBuffers>>::MAX_SIZE` path, never a literal

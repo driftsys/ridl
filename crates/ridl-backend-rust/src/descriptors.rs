@@ -599,7 +599,7 @@ pub(crate) fn single_param_type<'a>(
     if let Some(payload) = command.request.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
-    induced_name(ctx, command.request_tuple.as_ref())
+    induced_name(ctx, command.request_tuple.as_ref())?
         .ok_or_else(|| no_single_param(&command.params, member))
 }
 
@@ -612,14 +612,37 @@ pub(crate) fn query_param_type<'a>(
     if let Some(payload) = query.request.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
-    induced_name(ctx, query.request_tuple.as_ref())
+    induced_name(ctx, query.request_tuple.as_ref())?
         .ok_or_else(|| no_single_param(&query.params, member))
 }
 
 /// The Rust name of the induced tuple `reference` names, when it names one.
-fn induced_name<'a>(ctx: &Ctx<'a>, reference: Option<&v1::TupleRef>) -> Option<&'a str> {
-    let name = ctx.tuple_name(reference?.index);
-    (!name.is_empty()).then_some(name)
+fn induced_name<'a>(
+    ctx: &Ctx<'a>,
+    reference: Option<&v1::TupleRef>,
+) -> Result<Option<&'a str>, GenerateError> {
+    let Some(reference) = reference else {
+        return Ok(None);
+    };
+    let name = ctx.tuple_name(reference.index);
+    let root = ctx.model.flatbuffers.as_ref().and_then(|projection| {
+        projection
+            .roots
+            .iter()
+            .find(|root| root.tuple == Some(reference.index))
+    });
+    if !matches!(
+        root.and_then(|root| root.bound.as_ref()),
+        Some(v1::fb_root::Bound::MaxSize(_))
+    ) {
+        return Err(GenerateError {
+            message: format!(
+                "`{}.{name}` has no finite FlatBuffers bound",
+                ctx.package_name()
+            ),
+        });
+    }
+    Ok((!name.is_empty()).then_some(name))
 }
 
 /// The model's `Catalog.package`: the name of the unit the package belongs
@@ -682,7 +705,7 @@ pub(crate) fn query_reply_type<'a>(
     if let Some(payload) = query.reply_payload.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
-    if let Some(name) = induced_name(ctx, query.reply_tuple.as_ref()) {
+    if let Some(name) = induced_name(ctx, query.reply_tuple.as_ref())? {
         return Ok(name);
     }
     match query.reply.as_ref().and_then(|reply| reply.kind.as_ref()) {
