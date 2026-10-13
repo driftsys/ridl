@@ -6,6 +6,7 @@
 - [From a package to a running program](running-a-program.md)
 - [Getting started](getting-started.md)
 - [Describing a system](rsdl.md)
+- [Remote units and `ridl vendor`](remote-units.md)
 - [Using the generated Rust code](generated-code.md)
 - [Writing a port](writing-a-port.md)
 - [The catalog descriptor](catalog-descriptor.md)
