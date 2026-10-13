@@ -115,8 +115,9 @@ fn names_the_skill_directory(command: &str) -> bool {
 /// command on its directory. A handed-off run, whose transcript has no
 /// `init` line, shows only the last two. Codex: the agent read a file of the
 /// skill's directory with a command. Copilot: a `skill.invoked` event names
-/// it or its `SKILL.md` path. Text that only mentions the skill does not
-/// count.
+/// it or its `SKILL.md` path, or a `tool.execution_start` event calls the
+/// `skill` tool on it (a real run records the second form). Text that only
+/// mentions the skill does not count.
 pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
     json_lines(transcript).any(|line| {
         objects(&line).into_iter().any(|map| match host {
@@ -153,12 +154,21 @@ pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
                     && str_field(map, "command").is_some_and(names_the_skill_directory)
             }
             Host::Copilot => {
-                str_field(map, "type") == Some("skill.invoked")
+                let invoked = str_field(map, "type") == Some("skill.invoked")
                     && copilot_data(map).is_some_and(|data| {
                         str_field(data, "name") == Some("ridl-authoring")
                             || str_field(data, "path")
                                 .is_some_and(|p| p.ends_with("ridl-authoring/SKILL.md"))
-                    })
+                    });
+                let called = str_field(map, "type") == Some("tool.execution_start")
+                    && copilot_data(map).is_some_and(|data| {
+                        str_field(data, "toolName") == Some("skill")
+                            && data
+                                .get("arguments")
+                                .and_then(|a| a.get("skill"))
+                                .is_some_and(|s| s == "ridl-authoring")
+                    });
+                invoked || called
             }
         })
     })
@@ -320,6 +330,8 @@ mod tests {
     const CODEX_TEXT_MENTION: &str = r#"{"type":"item.completed","item":{"id":"i3","type":"agent_message","text":"I would use ridl-authoring/SKILL.md if I had it"}}"#;
     const COPILOT_CALL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c1","toolName":"ridl-ridl_check","mcpServerName":"ridl","mcpConfigServerName":"ridl","mcpToolName":"ridl_check","mcpTransport":"stdio","mcpConfigSource":"user"}}"#;
     const COPILOT_SKILL_INVOKED: &str = r#"{"type":"skill.invoked","data":{"name":"ridl-authoring","path":"/r/ws/.github/skills/ridl-authoring/SKILL.md","content":"..."}}"#;
+    const COPILOT_SKILL_CALL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c3","toolName":"skill","arguments":{"skill":"ridl-authoring"}}}"#;
+    const COPILOT_OTHER_SKILL_CALL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c4","toolName":"skill","arguments":{"skill":"pdf"}}}"#;
     const COPILOT_SHELL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c2","toolName":"bash","arguments":{"command":"ridl check ."}}}"#;
 
     #[test]
@@ -416,6 +428,8 @@ mod tests {
     #[test]
     fn copilot_skill_loading_is_told_apart() {
         assert!(skill_was_loaded(Host::Copilot, COPILOT_SKILL_INVOKED));
+        assert!(skill_was_loaded(Host::Copilot, COPILOT_SKILL_CALL));
+        assert!(!skill_was_loaded(Host::Copilot, COPILOT_OTHER_SKILL_CALL));
         assert!(!skill_was_loaded(Host::Copilot, TEXT_ONLY));
         assert!(!used_ridl_check(COPILOT_SHELL));
         assert!(used_ridl_check(COPILOT_CALL));
