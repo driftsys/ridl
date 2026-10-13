@@ -4742,7 +4742,7 @@ service:veh.common.climate 2
         }
 
         /// A remote tree's Warnings are dropped and its Errors are kept with
-        /// the unit named in the message (spec 4.4).
+        /// the unit named in the message.
         #[test]
         fn a_remote_tree_keeps_errors_and_drops_warnings() {
             let fixture = TempDir::new("remote-severities");
