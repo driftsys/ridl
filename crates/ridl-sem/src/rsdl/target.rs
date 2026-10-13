@@ -4,7 +4,9 @@
 //! the component's resolved lines, a member line and a `for` reference through
 //! the lookups the checker resolves them with. The language server does not
 //! resolve a name itself, so it cannot navigate to a declaration the checker
-//! would not bind.
+//! would not bind. [`reference_at`] binds the one reference under a cursor;
+//! [`references`] binds, for one target, the references whose slot and form
+//! can name a declaration of its kind, and keeps those bound to it.
 
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace, service_catalog};
@@ -83,10 +85,32 @@ pub fn reference_at(
     target_of(db, system, &lookup, reference, slot, offset)
 }
 
-/// Every reference of `system` the checker binds, with what it names. An
-/// instance reference `Name.inst` appears twice: once for the component its
-/// segments before `inst` name, and once for the instance, when the
-/// component declares it.
+/// Whether two targets name the same declaration. A service and the inline
+/// shape of that service are one declaration: both are written as the
+/// service's dotted name.
+pub fn same_declaration(a: &Target, b: &Target) -> bool {
+    let service = |target: &Target| match target {
+        Target::Service(name) | Target::Interface(InterfaceId::Inline { service: name }) => {
+            Some(name.clone())
+        }
+        _ => None,
+    };
+    match (service(a), service(b)) {
+        (Some(a), Some(b)) => a == b,
+        (None, None) => a == b,
+        _ => false,
+    }
+}
+
+/// Every reference of `system` the checker binds to the declaration `target`
+/// names (as [`same_declaration`] compares), with the part of it that names
+/// the declaration.
+///
+/// Only a reference whose slot and form can name a declaration of the
+/// target's kind is resolved, at the one offset where that part is: the
+/// instance segment of `Name.inst` at its end, every other part at its start.
+/// The written name is not compared, because a reference written through an
+/// import alias does not spell the declared name.
 ///
 /// `system` is the result of [`check_system`](super::check_system) for `ws`
 /// and `std`.
@@ -95,25 +119,60 @@ pub fn references(
     ws: Workspace,
     std: Package,
     system: &CheckedSystem,
+    target: &Target,
 ) -> Vec<ReferenceTarget> {
     let catalog = service_catalog(db, ws, std);
     let lookup = Lookup::new(db, ws, std, system, &catalog);
     let mut found = Vec::new();
     for (reference, slot) in written_references(system) {
-        let range = reference.site.range;
-        // The start of a reference is on its first part, its end on its
-        // last part: the instance segment of an instance reference.
-        let mut offsets = vec![range.start()];
-        if matches!(reference.form, ReferenceForm::Instance { .. }) {
-            offsets.push(range.end());
-        }
-        for offset in offsets {
-            if let Some(target) = target_of(db, system, &lookup, reference, slot, offset) {
-                found.push(target);
-            }
+        let Some(offset) = naming_offset(target, reference, slot) else {
+            continue;
+        };
+        if let Some(bound) = target_of(db, system, &lookup, reference, slot, offset)
+            && same_declaration(&bound.target, target)
+        {
+            found.push(bound);
         }
     }
     found
+}
+
+/// The offset of the part of `reference`, written in `slot`, that can name a
+/// declaration of `target`'s kind, or `None` when no part can. Mirrors the
+/// slots and forms [`target_of`] binds to each kind of target.
+fn naming_offset(target: &Target, reference: &Reference, slot: Slot<'_>) -> Option<TextSize> {
+    let range = reference.site.range;
+    let start = Some(range.start());
+    match (target, slot, &reference.form) {
+        (Target::System(_), Slot::For { .. }, _) => start,
+        (Target::Component(_), Slot::Member { .. }, ReferenceForm::Declared { .. }) => start,
+        (
+            Target::Component(_),
+            Slot::Member {
+                placement: true, ..
+            },
+            ReferenceForm::Instance { .. },
+        ) => start,
+        (
+            Target::Instance { .. },
+            Slot::Member {
+                placement: true, ..
+            },
+            ReferenceForm::Instance { .. },
+        ) => Some(range.end()),
+        (
+            Target::Service(_) | Target::Interface(InterfaceId::Inline { .. }),
+            Slot::Offers { .. } | Slot::Requires { .. },
+            _,
+        ) => start,
+        (
+            Target::Service(_) | Target::Interface(InterfaceId::Inline { .. }),
+            Slot::Member { .. },
+            ReferenceForm::Service { .. },
+        ) => start,
+        (Target::Interface(InterfaceId::Declared { .. }), Slot::Requires { .. }, _) => start,
+        _ => None,
+    }
 }
 
 /// What `reference`, written in `slot`, names at `offset`, which lies inside
@@ -270,4 +329,176 @@ fn instance_ranges(
         TextRange::new(reference.site.range.start(), name.end()),
         *instance,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use ridl_core::db::RidlDatabase;
+    use ridl_core::std_package;
+
+    use super::super::tests::{ADAS, COMMON, DIAG, PRODUCTION, SYSTEM, package};
+    use super::*;
+
+    /// A package that imports two components of `veh.topology`, one through
+    /// an alias, and names them with a qualified one in a distribution.
+    const EXTRA: &str = r#"package veh.extra
+
+import veh.topology.Cruise
+import veh.topology.Lane as Track
+
+distribution Spare { Cruise, Track, veh.topology.Panel }
+"#;
+
+    /// A reference site as `(file path, start, end)`, which sorts.
+    type Span = (String, u32, u32);
+
+    fn span(db: &RidlDatabase, file: InputFile, range: TextRange) -> Span {
+        (
+            file.path(db).clone(),
+            range.start().into(),
+            range.end().into(),
+        )
+    }
+
+    /// `references(.., target)` returns exactly the references `reference_at`
+    /// binds to the same declaration, for every target some reference names
+    /// and for a target none does.
+    #[test]
+    fn references_match_reference_at_for_every_target() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let packages = vec![
+            package(&db, "veh.common", &[("veh/common/common.typl", COMMON)]),
+            package(&db, "veh.adas", &[("veh/adas/adas.ridl", ADAS)]),
+            package(&db, "veh.diag", &[("veh/diag/diag.ridl", DIAG)]),
+            package(
+                &db,
+                "veh.topology",
+                &[
+                    ("veh/topology/system.rsdl", SYSTEM),
+                    ("veh/topology/production.rsdl", PRODUCTION),
+                ],
+            ),
+            package(&db, "veh.extra", &[("veh/extra/extra.rsdl", EXTRA)]),
+        ];
+        let ws = Workspace::new(&db, packages, BTreeMap::new());
+        let system = super::super::check_system(&db, ws, std);
+
+        // Every reference of the model, read from the declarations.
+        let mut written: Vec<&Reference> = Vec::new();
+        for decl in &system.systems {
+            written.extend(decl.members.iter().map(|line| &line.reference));
+        }
+        for decl in &system.distributions {
+            written.extend(decl.members.iter().map(|line| &line.reference));
+        }
+        for decl in &system.components {
+            written.extend(decl.offers.iter().map(|line| &line.reference));
+            written.extend(decl.requires.iter().map(|line| &line.reference));
+        }
+        for decl in &system.deployments {
+            written.extend(decl.system.iter());
+            for machine in &decl.machines {
+                written.extend(machine.members.iter().map(|line| &line.reference));
+            }
+        }
+        assert!(written.len() >= 20, "{} references", written.len());
+
+        // The oracle: what `reference_at` binds at the start and at the end
+        // of each reference, grouped by the declaration it names.
+        let mut oracle: Vec<(Target, Vec<Span>)> = Vec::new();
+        for reference in &written {
+            let range = reference.site.range;
+            for offset in [range.start(), range.end()] {
+                let Some(found) = reference_at(&db, ws, std, &system, reference.site.file, offset)
+                else {
+                    continue;
+                };
+                let site = span(&db, found.reference.site.file, found.range);
+                match oracle
+                    .iter_mut()
+                    .find(|(target, _)| same_declaration(target, &found.target))
+                {
+                    Some((_, sites)) => {
+                        if !sites.contains(&site) {
+                            sites.push(site);
+                        }
+                    }
+                    None => oracle.push((found.target, vec![site])),
+                }
+            }
+        }
+        let kinds: Vec<&str> = oracle
+            .iter()
+            .map(|(target, _)| match target {
+                Target::System(_) => "system",
+                Target::Component(_) => "component",
+                Target::Instance { .. } => "instance",
+                Target::Service(_) => "service",
+                Target::Interface(InterfaceId::Inline { .. }) => "inline",
+                Target::Interface(InterfaceId::Declared { .. }) => "declared",
+            })
+            .collect();
+        for kind in ["system", "component", "instance", "service", "declared"] {
+            assert!(
+                kinds.contains(&kind),
+                "the fixture names a {kind}: {kinds:?}"
+            );
+        }
+        // The lone service `veh.diag.access` is bound as a service by a member
+        // line and as the inline shape by a `requires` line.
+        assert!(
+            oracle.iter().any(|(target, _)| matches!(
+                target,
+                Target::Service(name) | Target::Interface(InterfaceId::Inline { service: name })
+                    if name == "veh.diag.access"
+            )),
+            "{kinds:?}"
+        );
+        // The alias `Track` in `veh.extra` binds to `Lane`.
+        let lane = system
+            .components
+            .iter()
+            .position(|decl| decl.name.name == "Lane")
+            .expect("Lane is declared");
+        let (_, lane_sites) = oracle
+            .iter()
+            .find(|(target, _)| *target == Target::Component(lane))
+            .expect("Lane is referenced");
+        assert!(
+            lane_sites
+                .iter()
+                .any(|(path, _, _)| path == "veh/extra/extra.rsdl"),
+            "{lane_sites:?}"
+        );
+
+        for (target, mut expected) in oracle {
+            let mut actual: Vec<Span> = references(&db, ws, std, &system, &target)
+                .into_iter()
+                .inspect(|found| {
+                    assert!(
+                        same_declaration(&found.target, &target),
+                        "{target:?} returned {:?}",
+                        found.target
+                    );
+                })
+                .map(|found| span(&db, found.reference.site.file, found.range))
+                .collect();
+            expected.sort();
+            actual.sort();
+            assert_eq!(actual, expected, "{target:?}");
+        }
+
+        // A target no reference names: a component declared without a
+        // reference to it, and an instance never placed.
+        let spare = Target::Component(system.components.len());
+        assert_eq!(references(&db, ws, std, &system, &spare), Vec::new());
+        let unplaced = Target::Interface(InterfaceId::Declared {
+            package: "veh.adas".to_string(),
+            name: "Nowhere".to_string(),
+        });
+        assert_eq!(references(&db, ws, std, &system, &unplaced), Vec::new());
+    }
 }

@@ -31,7 +31,7 @@ pub use distribution::{DistributionDependency, DistributionFacts};
 pub use lower::{link_crossing, lower_system};
 pub use placement::{DeploymentPlacement, Placement};
 pub use resolve::ResolvedRequire;
-pub use target::{ReferenceTarget, Target, reference_at, references};
+pub use target::{ReferenceTarget, Target, reference_at, references, same_declaration};
 
 use std::collections::{BTreeSet, HashMap};
 

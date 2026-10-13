@@ -2,9 +2,9 @@
 //! (rsdl reference §4).
 //!
 //! The cursor's reference and its target come from
-//! [`ridl_sem::rsdl::reference_at`], and every bound reference with its
-//! target from [`ridl_sem::rsdl::references`]; both read the checked system
-//! model. This module does not resolve a name itself: it turns a target into
+//! [`ridl_sem::rsdl::reference_at`], and every bound reference to a target
+//! from [`ridl_sem::rsdl::references`]; both read the checked system model.
+//! This module does not resolve a name itself: it turns a target into
 //! a declaration site, into hover markdown, into the list of references to
 //! it, and into the edits that rename it. A component, an instance and the
 //! system are declared in `.rsdl` files and render from the model. An
@@ -290,23 +290,6 @@ fn target_at(
         })
 }
 
-/// Whether two targets name the same declaration. A service and the inline
-/// shape of that service are one declaration: both are written as the
-/// service's dotted name.
-fn same_declaration(a: &Target, b: &Target) -> bool {
-    let service = |target: &Target| match target {
-        Target::Service(name) | Target::Interface(InterfaceId::Inline { service: name }) => {
-            Some(name.clone())
-        }
-        _ => None,
-    };
-    match (service(a), service(b)) {
-        (Some(a), Some(b)) => a == b,
-        (None, None) => a == b,
-        _ => false,
-    }
-}
-
 /// What find-references reports for a cursor in an `.rsdl` file.
 pub enum References {
     /// A declared interface: the typl symbol, whose references the ridl
@@ -349,9 +332,8 @@ fn rsdl_references(
     system: &CheckedSystem,
     target: &Target,
 ) -> Vec<(InputFile, TextRange)> {
-    ridl_sem::rsdl::references(db, ws, std, system)
+    ridl_sem::rsdl::references(db, ws, std, system, target)
         .into_iter()
-        .filter(|found| same_declaration(&found.target, target))
         .map(|found| (found.reference.site.file, found.range))
         .collect()
 }
