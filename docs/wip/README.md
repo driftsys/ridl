@@ -76,7 +76,14 @@ are their durable records. The induced call payloads design and plan
 [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
 and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
 [`../design/interaction-face.md`](../design/interaction-face.md) are their
-durable records.
+durable records. The remote units and `ridl vendor` design and plan
+(`2026-10-12-ridl-vendor-{design,plan}.md`) were archived on 2026-10-13, once
+both parts of #48 landed (#941 and #950); the 2026-10-13 amendments of
+[ADR-0002](../decisions/ADR-0002-module-system.md),
+[ADR-0010](../decisions/ADR-0010-cli-conventions.md),
+[ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md) and
+[ADR-0029](../decisions/ADR-0029-stability-policy.md) and
+[the CLI reference](../book/cli-reference.md) are their durable records.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
