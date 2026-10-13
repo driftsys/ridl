@@ -27,6 +27,11 @@ and `@labels` and `@deprecated` stay doc tags (decision 4); the codegen model
 carries the doc links, `see` and `since` (decision 6); the codegen model carries
 the rules, and the shape of `Rule` is no longer provisional (decision 9).
 
+Amended 2026-10-13 by [ADR-0002](ADR-0002-module-system.md) "Remote units"
+(driftsys/ridl#48): the loader reads remote units, so a doc link into a remote
+package resolves under the pin rule of ADR-0002 §5 (decision 5), and a remote
+package is checked as a read-only dependency (decision 7).
+
 This record amends three records in place, in the same change:
 
 - [ADR-0002](ADR-0002-module-system.md) §4 gains root discovery (decision 10).
@@ -155,8 +160,10 @@ decision 9 recorded as a limitation.
    - A qualified `pkg.Name` names any package the current package can depend on
      under ADR-0002 §5, whether or not the file imports it, so a doc link never
      forces an import the code does not use. A remote package of `[imports]` is
-     not materialized by the loader, so a link into one does not resolve and
-     draws TYPL-401; that reach cannot be used until remote packages are loaded.
+     reachable where an `import` of it resolves: the package's own `[imports]`
+     or, for a workspace member, the workspace `[imports]` pin its unit (amended
+     2026-10-13). A link into a remote package no such pin reaches draws
+     TYPL-401.
    - One more segment names a member: a field, enum value, enumset bit, union
      arm or interaction of the named declaration.
    - When a name could be a package path or a declaration followed by a member,
@@ -214,7 +221,10 @@ decision 9 recorded as a limitation.
    MCP path mode report only the diagnostics of files under the member (ADR-0024
    decision 9, as decision 10 below replaces it), so a sibling member's
    undocumented items are not reported there; the language server reports every
-   loaded file. A remote package of `[imports]` is never checked.
+   loaded consumer file and publishes nothing for a file of a remote unit. A
+   remote package of `[imports]` is checked (amended 2026-10-13): its Errors
+   fail the run, and the language server shows them in one window message per
+   load; its Warnings and Infos are dropped before any `[lints]` level applies.
 
    `doc-comment-style` checks one direction: a project that sets it to `warn` or
    `deny` requires the house style `///`. Its fix-it rewrites the comment as
@@ -349,8 +359,9 @@ From the design's alternatives. The numbers are the decisions that reject them.
   member's error, the generated crate of a member build is named
   `ridl_generated`, and the lockfile is the root's. The CHANGELOG entry states
   this.
-- A link into a remote `[imports]` package draws TYPL-401 until the loader
-  materializes remote packages.
+- A link into a remote `[imports]` package resolves since the loader reads
+  remote units (2026-10-13), under the pin rule of ADR-0002 §5; a link no pin
+  reaches draws TYPL-401.
 - `ridl-sem` depends on `pulldown-cmark` (without default features), so the
   scanner reads CommonMark as mdBook does; `just wasm-check` still passes.
 - The language server shows the signature, the doc, a **Contract** list from

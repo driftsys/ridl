@@ -103,13 +103,15 @@ here. This list is not a standing count of every crate the workspace holds — s
 - **`crates/ridl-sem`** — the semantic passes, carved out of `ridl-core` at the
   start of E1 (ADR-0007 decision 4). `resolve` implements the ADR-0002 §5
   reference order (workspace member → the package's own `[imports]` → the
-  workspace `[imports]` → error; a package of a remote unit resolves through its
-  own unit, then its own `[imports]` only) plus cycle detection, and applies the
-  first-wins duplicate tiebreak — every later duplicate is TYPL-009 (ADR-0007
-  decision 6). `check` lowers each resolved package to IR v2, lowering only the
-  resolver's first-wins winner. Supporting modules: `scalar` (exact
-  `BigRational` arithmetic for ranges, steps, and wire-width derivation — no
-  `f32`/`f64` anywhere), `ucum` (the UCUM term grammar over a curated atom
+  workspace `[imports]` → error; a package of a remote unit resolves through
+  step 1, which sees the consumer's members and its own unit's packages, then
+  its own `[imports]`, never the workspace `[imports]`; a qualified reference
+  and a doc link apply the same visibility as an import) plus cycle detection,
+  and applies the first-wins duplicate tiebreak — every later duplicate is
+  TYPL-009 (ADR-0007 decision 6). `check` lowers each resolved package to IR v2,
+  lowering only the resolver's first-wins winner. Supporting modules: `scalar`
+  (exact `BigRational` arithmetic for ranges, steps, and wire-width derivation —
+  no `f32`/`f64` anywhere), `ucum` (the UCUM term grammar over a curated atom
   table, ADR-0007 decision 8), `init` (init-value derivation), `docs`
   (doc-comment handling), and `testgen` (proptest strategies and
   boundary/violation corpora derived from checked ranges, behind the `testgen`

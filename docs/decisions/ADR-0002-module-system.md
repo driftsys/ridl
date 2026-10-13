@@ -382,12 +382,16 @@ before any `[lints]` level is applied, and the consumer's `[lints]` do not apply
 to it. Its packages are given to the code backends and generated like a
 member's; no IR snapshot, catalog, `interfaces.lock`, property run or diff side
 is produced for it, and `ridl fmt` never touches it. `internal` declarations of
-a remote unit are not visible to the consumer. Step 1 of the order above sees
-members only: a remote package is reached through the key that pins it, so a
-sibling member's pin is never visible. The steps above are the order for a
-member. A package of a remote unit resolves an import through its own unit
-first, then through its own `[imports]` only; the workspace root's `[imports]`
-(step 3) apply to workspace members only.
+a remote unit are not visible to the consumer. A remote package is reached
+through the key that pins it: from a member, through the member's own
+`[imports]` (step 2) or the workspace `[imports]` (step 3), so a sibling
+member's pin is never visible. A package of a remote unit resolves a reference
+through step 1, which finds the consumer's workspace members and the packages of
+its own unit, then through its own `[imports]` (step 2); the workspace
+`[imports]` (step 3) apply to workspace members only, so a remote unit never
+uses a remote unit its own manifest does not declare. Step 1 finds the
+consumer's members so that the cycle check across the boundary sees both sides.
+A qualified reference and a doc link apply the same visibility as an `import`.
 
 ### 6. Cycles
 
