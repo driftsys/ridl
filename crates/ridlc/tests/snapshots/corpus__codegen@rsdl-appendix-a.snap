@@ -1256,7 +1256,14 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     "compatible": []
   },
   "flatbuffers": {
-    "roots": [],
+    "roots": [
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 0,
+        "maxSize": 33
+      }
+    ],
     "tables": [
       {
         "name": "VehDiagAccessReadFaultsParams",

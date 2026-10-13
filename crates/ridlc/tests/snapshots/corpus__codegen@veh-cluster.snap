@@ -8804,6 +8804,54 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "declaration": 14,
         "root": "FB_ROOT_KIND_BOX",
         "maxSize": 186
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 2,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 3,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 4,
+        "maxSize": 55
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 6,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 7,
+        "maxSize": 59
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 8,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 9,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 10,
+        "maxSize": 33
       }
     ],
     "tables": [

@@ -114,7 +114,10 @@ pub(crate) fn view_owners(ctx: &Ctx) -> ViewOwners {
             projection
                 .roots
                 .iter()
-                .filter(|root| matches!(root.bound, Some(v1::fb_root::Bound::MaxSize(_))))
+                .filter(|root| {
+                    root.tuple.is_none()
+                        && matches!(root.bound, Some(v1::fb_root::Bound::MaxSize(_)))
+                })
                 .collect()
         })
         .unwrap_or_default();
@@ -829,6 +832,13 @@ impl<'a> Codec<'a> {
         // `roots` list is exactly the declarations `root_table` names, in
         // declaration order.
         for root in all {
+            // A root that names a tuple has no declaration to read — its
+            // `declaration` is written as 0 and must be ignored — and the
+            // codec of an induced struct is emitted from the tuple walk
+            // below (driftsys/ridl#713).
+            if root.tuple.is_some() {
+                continue;
+            }
             match root.bound.as_ref() {
                 Some(v1::fb_root::Bound::MaxSize(_)) => roots.push(root),
                 // D-7's refusal, wired in per type. An `Ok` here means the

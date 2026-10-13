@@ -4268,3 +4268,77 @@ fn every_named_induced_tuple_has_a_flatbuffers_table() {
         );
     }
 }
+
+/// An induced argument struct crosses the wire on its own, so it is a
+/// FlatBuffers root: the Rust codec emits its `Payload` impl from the root,
+/// and every descriptor's reservation row names that impl's `MAX_SIZE`.
+#[test]
+fn an_induced_argument_struct_is_a_flatbuffers_root() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Command(command) = call_shape(&model, 0) else {
+        panic!("the `two` command");
+    };
+    let index = command
+        .request_tuple
+        .as_ref()
+        .expect("a request tuple")
+        .index;
+    let projection = model.flatbuffers.as_ref().expect("a projection");
+    assert!(
+        projection
+            .roots
+            .iter()
+            .any(|root| root.tuple == Some(index)),
+        "the induced argument struct is a root"
+    );
+}
+
+/// An induced struct holding an unbounded field has no finite bound, so its
+/// root takes the unbounded arm with the attribution of the field that is
+/// open, the way a declaration's root does.
+#[test]
+fn an_unbounded_induced_argument_struct_is_rooted_unbounded() {
+    let mut package = call_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "label",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                v2::Param {
+                    name: "pair".to_string(),
+                    r#type: Some(named("Pair")),
+                    ..Default::default()
+                },
+                v2::Param {
+                    name: "tagged".to_string(),
+                    r#type: Some(named("Tagged")),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let index = model
+        .tuples
+        .iter()
+        .position(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsLabelParams")
+        })
+        .expect("the induced argument struct") as u32;
+    let root = model
+        .flatbuffers
+        .as_ref()
+        .expect("a projection")
+        .roots
+        .iter()
+        .find(|root| root.tuple == Some(index))
+        .expect("the induced argument struct is a root");
+    let Some(v1::fb_root::Bound::Unbounded(unbounded)) = root.bound.as_ref() else {
+        panic!("a struct holding an unbounded field has no finite bound");
+    };
+    assert_eq!(unbounded.cause, v1::FbUnboundedCause::Member as i32);
+    assert_eq!(unbounded.member.as_deref(), Some("tagged"));
+}

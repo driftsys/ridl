@@ -332,6 +332,7 @@ impl<'a> Walk<'a, '_> {
             scope,
             tables,
             claimed,
+            tuple_index,
             foreign_index,
             ..
         } = self;
@@ -368,7 +369,7 @@ impl<'a> Walk<'a, '_> {
 
         Projected {
             projection: v1::FlatBuffersProjection {
-                roots: roots(scope),
+                roots: roots(scope, tuple_index),
                 tables: out,
             },
             tuple_tables,
@@ -743,18 +744,23 @@ fn induced_interaction_tuples(package: &v2::Package) -> Vec<Induced> {
     induced
 }
 
-/// One root per declaration `root_table` names, in declaration order. The
+/// One root per declaration `root_table` names, in declaration order, then
+/// one per induced argument and reply struct, in interaction order. The
 /// bound is `max_size` over the whole scope — the number the codec emits as
 /// `MAX_SIZE` — and a missing bound is attributed over the package alone,
 /// which is what the Rust backend does today (design note §9 item 7).
-fn roots(scope: Scope<'_>) -> Vec<v1::FbRoot> {
+///
+/// An induced root carries its tuple's index in `tuple`, and its
+/// `declaration` is written as 0 and must be ignored, which is the contract
+/// `FbRoot.tuple` states.
+fn roots(scope: Scope<'_>, tuple_index: &HashMap<String, u32>) -> Vec<v1::FbRoot> {
     let package = scope.package;
     let others = scope.projection_others(package);
     let packages = fb::Packages {
         package,
         others: &others,
     };
-    package
+    let mut roots: Vec<v1::FbRoot> = package
         .decls
         .iter()
         .enumerate()
@@ -776,7 +782,57 @@ fn roots(scope: Scope<'_>) -> Vec<v1::FbRoot> {
                 bound: Some(bound),
             })
         })
-        .collect()
+        .collect();
+    // An induced argument or reply struct crosses the wire on its own, so it
+    // is a root like a declared payload: its `Payload` impl is what a
+    // reservation row's `MAX_SIZE` names (driftsys/ridl#713).
+    for induced in induced_interaction_tuples(package) {
+        let Some(index) = tuple_index.get(&induced.wire).copied() else {
+            continue;
+        };
+        let bound = match fb::tuple_max_size(packages, &induced.tuple) {
+            Some(size) => v1::fb_root::Bound::MaxSize(u32::try_from(size).unwrap_or(u32::MAX)),
+            None => v1::fb_root::Bound::Unbounded(unbounded::attribute(
+                package,
+                &tuple_stand_in(&induced.wire, &induced.tuple),
+            )),
+        };
+        roots.push(v1::FbRoot {
+            // An induced struct has no declaration of its own; `tuple` is
+            // what names it.
+            declaration: 0,
+            root: v1::FbRootKind::Own as i32,
+            tuple: Some(index),
+            bound: Some(bound),
+        });
+    }
+    roots
+}
+
+/// An induced struct as the struct declaration it would be, so that the
+/// attribution of a missing bound can name the field that is unbounded. One
+/// field per tuple field, in declaration order, on consecutive ordinals.
+fn tuple_stand_in(name: &str, tuple: &v2::TupleType) -> v2::Decl {
+    v2::Decl {
+        name: name.to_string(),
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: tuple
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(position, field)| v2::StructMember {
+                    member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
+                        name: field.name.clone(),
+                        ordinal: position as u32 + 1,
+                        r#type: field.r#type.clone(),
+                        ..Default::default()
+                    }))),
+                })
+                .collect(),
+            fixed_layout: false,
+        })),
+        ..Default::default()
+    }
 }
 
 fn primitive_wire(primitive: i32) -> v1::FbWire {

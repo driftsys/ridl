@@ -357,7 +357,7 @@ fn the_face_fixture_carries_the_whole_ipc_floor() {
                 .expect("the projection is lowered")
                 .roots
                 .iter()
-                .find(|root| root.declaration == reference.index)
+                .find(|root| root.tuple.is_none() && root.declaration == reference.index)
                 .and_then(|root| match root.bound.as_ref() {
                     Some(v1::fb_root::Bound::MaxSize(size)) => Some(*size),
                     _ => None,

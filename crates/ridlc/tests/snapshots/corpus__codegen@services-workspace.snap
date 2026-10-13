@@ -1202,6 +1202,12 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "declaration": 5,
         "root": "FB_ROOT_KIND_BOX",
         "maxSize": 50
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 0,
+        "maxSize": 33
       }
     ],
     "tables": [

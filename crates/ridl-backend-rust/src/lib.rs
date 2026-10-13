@@ -807,7 +807,7 @@ impl<'a> Ctx<'a> {
             .as_ref()?
             .roots
             .iter()
-            .find(|root| root.declaration == index)
+            .find(|root| root.tuple.is_none() && root.declaration == index)
     }
 
     /// The declaration the model's `declarations` list holds at `index`.
