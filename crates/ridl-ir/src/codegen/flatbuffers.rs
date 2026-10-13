@@ -11,10 +11,16 @@
 //!
 //! The walk order is the `.fbs` emitter's own: the declared tables in
 //! declaration order, then the induced tables in the order the walk reached
-//! them, with a repeated name collapsed to one table. The argument and reply
-//! structs induced at an interaction position are queued after the declared
-//! tables, in interaction order, because a call's payload is a named type
-//! the codec encodes like any other (driftsys/ridl#713).
+//! them, with a repeated name collapsed to one table. A tuple the lowering
+//! named that the declaration walk did not reach — a call's argument or reply
+//! struct, a tuple written at a parameter, a tuple inside a fixed payload's
+//! array — is queued after that walk has run, in the order `Model.tuples`
+//! holds it, because a call's payload is a named type the codec encodes like
+//! any other (driftsys/ridl#713).
+//!
+//! The set of named tuples is the lowering's, handed to [`project`] as
+//! [`NamedTuple`]; the projection never re-derives which tuples exist or what
+//! they are called. A name is built in one place, which is the lowering.
 //!
 //! Two spellings of one induced name run through this walk. The `.fbs`
 //! emitter inserts `Entry` at a map position and the model's wire induced
@@ -22,9 +28,8 @@
 //! FlatBuffers emitter follows everywhere but there), so a table carries the
 //! emitter's name and is keyed back into the model by the model's.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use super::lower::{params_as_tuple, query_reply_type, reply_as_tuple, single_param_type};
 use super::names::joined_camel;
 use super::resolve::Scope;
 use super::unbounded;
@@ -104,31 +109,69 @@ impl Hints {
     }
 }
 
+/// One tuple the lowering lifted out of the type graph and named, as the
+/// projection needs it: the name to spell the table under, the index to key
+/// the table back into `Model.tuples`, the tuple itself, and the package the
+/// position that reached it was written in.
+///
+/// The type is declared here, where it is consumed, because it states what
+/// the projection needs rather than what the lowering happens to hold: the
+/// lowering's own tuple entry carries a path, a Rust name and a lowered form
+/// the projection has no use for.
+pub(crate) struct NamedTuple<'a> {
+    /// The index in `Model.tuples`.
+    pub index: u32,
+    /// The wire induced name, which is both the table's name and the key the
+    /// model's tuple is joined by.
+    pub wire: &'a str,
+    pub source: &'a v2::TupleType,
+    pub home: &'a v2::Package,
+    /// Whether the tuple crosses the wire on its own, which is what makes it
+    /// a FlatBuffers root. A call's argument struct and a query's reply
+    /// struct do; a tuple nested inside a parameter or inside a fixed
+    /// payload's array does not.
+    pub root: bool,
+}
+
 pub(crate) fn project<'a>(
     scope: Scope<'a>,
-    tuple_index: &HashMap<String, u32>,
+    named: &[NamedTuple<'a>],
     foreign_index: &HashMap<(String, String), u32>,
 ) -> Projected {
+    let tuple_index: HashMap<&str, u32> = named
+        .iter()
+        .map(|tuple| (tuple.wire, tuple.index))
+        .collect();
     let mut walk = Walk {
         scope,
         tables: Vec::new(),
         claimed: HashMap::new(),
+        tuple_wires: HashSet::new(),
         queue: Vec::new(),
-        tuple_index,
+        tuple_index: &tuple_index,
         foreign_index,
     };
     walk.declared();
-    walk.interactions();
     walk.drain();
-    walk.finish()
+    // Every named tuple the declaration walk did not reach, under the name
+    // the lowering gave it. Draining again fills the containers written
+    // inside one of them.
+    walk.unclaimed_tuples(named);
+    walk.drain();
+    walk.finish(named)
 }
 
 struct Walk<'a, 'i> {
     scope: Scope<'a>,
     tables: Vec<Table<'a>>,
     claimed: HashMap<String, u32>,
+    /// The wire induced name of every tuple a pushed table stands for. A
+    /// tuple reached through a map position is claimed under the emitter's
+    /// spelling, which inserts `Entry`, so the table's name alone does not
+    /// say which tuples are already covered.
+    tuple_wires: HashSet<String>,
     queue: Vec<Table<'a>>,
-    tuple_index: &'i HashMap<String, u32>,
+    tuple_index: &'i HashMap<&'i str, u32>,
     foreign_index: &'i HashMap<(String, String), u32>,
 }
 
@@ -197,22 +240,25 @@ impl<'a> Walk<'a, '_> {
         }
     }
 
-    /// The induced argument and reply structs of every interaction. They are
-    /// synthesized rather than written, so they live in no package and the
-    /// walk builds each one from the same shape rule the lowering uses, under
-    /// the same wire name: the table and the model's `InducedTuple` are
-    /// joined by that name in `patch_flatbuffers`.
-    fn interactions(&mut self) {
-        let package = self.scope.package;
-        for induced in induced_interaction_tuples(package) {
+    /// Every tuple the lowering named that no pushed table already stands
+    /// for, in the order `Model.tuples` holds it. The declaration walk
+    /// reaches a tuple written inside a declaration and names it identically,
+    /// so what is left here is the tuples reached from an interaction: a
+    /// call's argument struct, a query's reply struct, and a tuple written at
+    /// a parameter, a reply or a fixed payload (driftsys/ridl#713).
+    fn unclaimed_tuples(&mut self, named: &[NamedTuple<'a>]) {
+        for tuple in named {
+            if self.tuple_wires.contains(tuple.wire) {
+                continue;
+            }
             self.queue.push(Table {
-                name: induced.wire.clone(),
+                name: tuple.wire.to_string(),
                 spec: Spec::Tuple {
-                    tuple: self.tuple_index.get(&induced.wire).copied(),
-                    source: induced.tuple,
-                    wire: induced.wire,
+                    tuple: Some(tuple.index),
+                    source: tuple.source.clone(),
+                    wire: tuple.wire.to_string(),
                 },
-                home: package,
+                home: tuple.home,
             });
         }
     }
@@ -252,7 +298,7 @@ impl<'a> Walk<'a, '_> {
                 self.queue.push(Table {
                     name: hints.fbs.clone(),
                     spec: Spec::Tuple {
-                        tuple: self.tuple_index.get(&hints.wire).copied(),
+                        tuple: self.tuple_index.get(hints.wire.as_str()).copied(),
                         source: tuple.clone(),
                         wire: hints.wire.clone(),
                     },
@@ -266,6 +312,9 @@ impl<'a> Walk<'a, '_> {
     fn push(&mut self, table: Table<'a>) -> bool {
         if self.claimed.contains_key(&table.name) {
             return false;
+        }
+        if let Spec::Tuple { wire, .. } = &table.spec {
+            self.tuple_wires.insert(wire.clone());
         }
         self.claimed
             .insert(table.name.clone(), self.tables.len() as u32);
@@ -327,12 +376,11 @@ impl<'a> Walk<'a, '_> {
         }
     }
 
-    fn finish(self) -> Projected {
+    fn finish(self, named: &[NamedTuple<'_>]) -> Projected {
         let Walk {
             scope,
             tables,
             claimed,
-            tuple_index,
             foreign_index,
             ..
         } = self;
@@ -369,7 +417,7 @@ impl<'a> Walk<'a, '_> {
 
         Projected {
             projection: v1::FlatBuffersProjection {
-                roots: roots(scope, tuple_index),
+                roots: roots(scope, named),
                 tables: out,
             },
             tuple_tables,
@@ -698,62 +746,17 @@ impl Filler<'_, '_> {
     }
 }
 
-/// One struct induced at an interaction position: a call's argument struct,
-/// or a query's reply struct.
-struct Induced {
-    /// The wire induced name, which is both the FlatBuffers table name and
-    /// the key the model's tuple is joined by.
-    wire: String,
-    tuple: v2::TupleType,
-}
-
-/// Every induced argument and reply struct of a package's interactions, in
-/// interaction order. The shape rule is the lowering's own — `params_as_tuple`,
-/// `reply_as_tuple` and the two named-payload tests — called here rather than
-/// restated, so the projection induces exactly the set the model carries
-/// (driftsys/ridl#713).
-fn induced_interaction_tuples(package: &v2::Package) -> Vec<Induced> {
-    let mut induced = Vec::new();
-    for shape in package.shapes() {
-        for decl in &shape.interface.interactions {
-            let prefix = format!("{}{}", joined_camel(shape.name), joined_camel(&decl.name));
-            let (params, query) = match decl.kind.as_ref() {
-                Some(v2::decl::Kind::CommandDef(command)) => (&command.params, None),
-                Some(v2::decl::Kind::QueryDef(query)) => (&query.params, Some(query)),
-                _ => continue,
-            };
-            if single_param_type(params).is_none()
-                && let Some(tuple) = params_as_tuple(params)
-            {
-                induced.push(Induced {
-                    wire: format!("{prefix}Params"),
-                    tuple,
-                });
-            }
-            if let Some(query) = query
-                && query_reply_type(query).is_none()
-                && let Some(tuple) = reply_as_tuple(query.return_type.as_ref())
-            {
-                induced.push(Induced {
-                    wire: format!("{prefix}Reply"),
-                    tuple,
-                });
-            }
-        }
-    }
-    induced
-}
-
 /// One root per declaration `root_table` names, in declaration order, then
-/// one per induced argument and reply struct, in interaction order. The
-/// bound is `max_size` over the whole scope — the number the codec emits as
-/// `MAX_SIZE` — and a missing bound is attributed over the package alone,
-/// which is what the Rust backend does today (design note §9 item 7).
+/// one per named tuple that crosses the wire on its own, in the order
+/// `Model.tuples` holds it. The bound is `max_size` over the whole scope —
+/// the number the codec emits as `MAX_SIZE` — and a missing bound is
+/// attributed over the package alone, which is what the Rust backend does
+/// today (design note §9 item 7).
 ///
 /// An induced root carries its tuple's index in `tuple`, and its
 /// `declaration` is written as 0 and must be ignored, which is the contract
 /// `FbRoot.tuple` states.
-fn roots(scope: Scope<'_>, tuple_index: &HashMap<String, u32>) -> Vec<v1::FbRoot> {
+fn roots(scope: Scope<'_>, named: &[NamedTuple<'_>]) -> Vec<v1::FbRoot> {
     let package = scope.package;
     let others = scope.projection_others(package);
     let packages = fb::Packages {
@@ -786,15 +789,12 @@ fn roots(scope: Scope<'_>, tuple_index: &HashMap<String, u32>) -> Vec<v1::FbRoot
     // An induced argument or reply struct crosses the wire on its own, so it
     // is a root like a declared payload: its `Payload` impl is what a
     // reservation row's `MAX_SIZE` names (driftsys/ridl#713).
-    for induced in induced_interaction_tuples(package) {
-        let Some(index) = tuple_index.get(&induced.wire).copied() else {
-            continue;
-        };
-        let bound = match fb::tuple_max_size(packages, &induced.tuple) {
+    for tuple in named.iter().filter(|tuple| tuple.root) {
+        let bound = match fb::tuple_max_size(packages, tuple.source) {
             Some(size) => v1::fb_root::Bound::MaxSize(u32::try_from(size).unwrap_or(u32::MAX)),
             None => v1::fb_root::Bound::Unbounded(unbounded::attribute(
                 package,
-                &tuple_stand_in(&induced.wire, &induced.tuple),
+                &tuple_stand_in(tuple.wire, tuple.source),
             )),
         };
         roots.push(v1::FbRoot {
@@ -802,7 +802,7 @@ fn roots(scope: Scope<'_>, tuple_index: &HashMap<String, u32>) -> Vec<v1::FbRoot
             // what names it.
             declaration: 0,
             root: v1::FbRootKind::Own as i32,
-            tuple: Some(index),
+            tuple: Some(tuple.index),
             bound: Some(bound),
         });
     }

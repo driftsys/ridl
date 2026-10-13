@@ -13,7 +13,7 @@
 //! `Package::shapes()`, a `Struct.slots[j]` from `StructDef.members[j]`, an
 //! `Interface.slots[j]` from `Interface.interactions[j]`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::clauses;
 use super::docs::{doc_links, model_rules};
@@ -94,19 +94,55 @@ pub fn lower_with(
     };
 
     // The FlatBuffers projection is its own walk over the IR, in the order the
-    // `.fbs` emitter reaches its tables; it is keyed back into the model by
-    // the wire induced names the walk above assigned.
-    let tuple_index: HashMap<String, u32> = lowering
+    // `.fbs` emitter reaches its tables. It is handed the tuples the lowering
+    // named rather than deriving them again, so that one name is built in one
+    // place and every named tuple reaches a table (driftsys/ridl#713).
+    let roots = root_tuples(&model);
+    let named: Vec<flatbuffers::NamedTuple<'_>> = lowering
         .tuples
         .iter()
         .enumerate()
         .filter(|(_, entry)| entry.named)
-        .map(|(index, entry)| (entry.wire.clone(), index as u32))
+        .map(|(index, entry)| flatbuffers::NamedTuple {
+            index: index as u32,
+            wire: entry.wire.as_str(),
+            source: &entry.source,
+            home: entry.home,
+            root: roots.contains(&(index as u32)),
+        })
         .collect();
-    let projected = flatbuffers::project(scope, &tuple_index, &lowering.foreign_at);
+    let projected = flatbuffers::project(scope, &named, &lowering.foreign_at);
     patch_flatbuffers(&mut model, &projected);
     model.flatbuffers = Some(projected.projection);
     model
+}
+
+/// The tuples that cross the wire on their own, which is what makes each one
+/// a FlatBuffers root: a call's induced argument struct and a query's induced
+/// reply struct. The model already names them on the interaction that induced
+/// them, so the set is read off the model rather than derived again.
+fn root_tuples(model: &v1::Model) -> HashSet<u32> {
+    let mut roots = HashSet::new();
+    for interface in &model.interfaces {
+        for slot in &interface.slots {
+            let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                slot.occupant.as_ref()
+            else {
+                continue;
+            };
+            match interaction.shape.as_ref() {
+                Some(v1::interaction::Shape::Command(command)) => {
+                    roots.extend(command.request_tuple.as_ref().map(|tuple| tuple.index));
+                }
+                Some(v1::interaction::Shape::Query(query)) => {
+                    roots.extend(query.request_tuple.as_ref().map(|tuple| tuple.index));
+                    roots.extend(query.reply_tuple.as_ref().map(|tuple| tuple.index));
+                }
+                _ => {}
+            }
+        }
+    }
+    roots
 }
 
 /// The path that reached one type position: where the model records the
@@ -1647,7 +1683,7 @@ fn decl_kind(decl: &v2::Decl) -> v1::DeclKind {
 /// declared type, and a stream parameter, have no struct field, so a list
 /// holding either induces nothing (interaction face design, the request-shape
 /// rule).
-pub(crate) fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
+fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
     let mut fields = Vec::with_capacity(params.len());
     for param in params {
         let ty = param.r#type.as_ref()?;
@@ -1667,7 +1703,7 @@ pub(crate) fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
 /// fallible `T | E` reply, a named reply, and every other return form give
 /// `None` — a named reply keeps `reply_payload`, and a fallible reply is a
 /// sum this toolchain does not induce.
-pub(crate) fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
+fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
     let Some(ret) = ret else {
         return Some(v2::TupleType::default());
     };
@@ -1682,14 +1718,14 @@ pub(crate) fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleTy
 
 /// The single declared parameter's named type — the one call shape whose
 /// payload the generated face sends as it is.
-pub(crate) fn single_param_type(params: &[v2::Param]) -> Option<&str> {
+fn single_param_type(params: &[v2::Param]) -> Option<&str> {
     let [param] = params else {
         return None;
     };
     named_type(param.r#type.as_ref()?)
 }
 
-pub(crate) fn query_reply_type(query: &v2::QueryDef) -> Option<&str> {
+fn query_reply_type(query: &v2::QueryDef) -> Option<&str> {
     match query.return_type.as_ref()?.kind.as_ref()? {
         v2::return_type::Kind::Value(value) => named_type(value),
         v2::return_type::Kind::Fallible(_) => None,
