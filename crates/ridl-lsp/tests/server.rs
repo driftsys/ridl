@@ -4092,8 +4092,8 @@ fn rsdl_requires_completion_offers_qualified_interfaces() {
         .count();
     assert_eq!(once, 1, "{got:?}");
     // No internal interface of another package, no declaration that is not an
-    // interface, no interface of a buffer outside the workspace, no package
-    // qualifying an interface it only imports, no interface of `ridl.std`.
+    // interface, no interface of a buffer outside the workspace (the
+    // `package_of` guard), no package qualifying an interface it only imports.
     for label in [
         "veh.adas.Hidden",
         "veh.adas.Flag",
@@ -4104,10 +4104,6 @@ fn rsdl_requires_completion_offers_qualified_interfaces() {
     ] {
         assert!(!got.contains(&label), "`{label}` is not offered: {got:?}");
     }
-    assert!(
-        !got.iter().any(|label| label.starts_with("ridl.std.")),
-        "{got:?}"
-    );
     let mut sorted_labels = got.clone();
     sorted_labels.sort_unstable();
     assert_eq!(got, sorted_labels, "the items are sorted");
@@ -4132,6 +4128,37 @@ fn rsdl_requires_completion_offers_qualified_interfaces() {
     assert_eq!(edit.new_text, "veh.extra.Telemetry");
 
     shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// After `requires`, an interface that the package imports under an alias is
+/// offered by the alias only: the alias and the qualified name name one
+/// interface, so the qualified name is not offered as well.
+#[test]
+fn rsdl_requires_completion_offers_an_aliased_interface_once() {
+    let dir = TempDir::new("rsdl-requires-alias");
+    let (_contracts, _system, extra) = write_rsdl_workspace_with_extra(&dir, RSDL_EXTRA);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let text = "package veh.extra\n\
+\n\
+import veh.adas.CruiseControl as Keeper\n\
+\n\
+component Probe {\n\
+\x20 requires \n\
+}\n";
+    did_open(&client, &extra, text);
+    let items = complete_at(&client, 10, extra.clone(), pos_after(text, "requires ", 0));
+    let got = labels(&items);
+    assert!(got.contains(&"Keeper"), "`Keeper` is offered: {got:?}");
+    assert!(
+        !got.contains(&"veh.adas.CruiseControl"),
+        "no qualified name for the aliased interface: {got:?}"
+    );
+    // The other interfaces of `veh.adas` stay offered by their qualified names.
+    assert!(got.contains(&"veh.adas.LaneAssist"), "{got:?}");
+
+    shut_down(&client, 11);
     server.join().expect("thread joins").expect("clean exit");
 }
 

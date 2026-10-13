@@ -235,7 +235,6 @@ pub fn rsdl_completion(
                 db,
                 ws,
                 packages,
-                pkg.name(db),
                 &resolution.symbols,
             ));
             items.extend(service_items(db, ws, std, |_, entry| entry.inline));
@@ -304,18 +303,18 @@ pub fn rsdl_completion(
     (sorted(items), replaced)
 }
 
-/// The interfaces that a `requires` reference written in the package `from`
-/// binds by a qualified name `pkg.Name` but that `visible`, the package's
-/// resolved names, does not hold: the interface of a package of the workspace,
-/// not `internal` unless declared in `from`, as the checker binds it (rsdl
-/// reference §4). `ridl.std` and a package outside the workspace, such as an
-/// open buffer with no manifest, are not found by the checker, so they offer
-/// nothing.
+/// The interfaces that a `requires` reference binds by a qualified name
+/// `pkg.Name` but that `visible`, the package's resolved names, does not hold:
+/// the interface of a package of the workspace that is not `internal`, as the
+/// checker binds it (rsdl reference §4). An interface of the package that
+/// holds the reference, `internal` or not, is already offered by its bare
+/// name, so `visible` holds it. `ridl.std` and a package outside the
+/// workspace, such as an open buffer with no manifest, are not found by the
+/// checker, so they offer nothing.
 fn qualified_interface_items(
     db: &dyn salsa::Database,
     ws: Workspace,
     packages: &[Package],
-    from: &str,
     visible: &HashMap<String, Symbol>,
 ) -> Vec<lt::CompletionItem> {
     let seen: HashSet<(&str, &str)> = visible
@@ -331,7 +330,7 @@ fn qualified_interface_items(
         }
         for symbol in declared_symbols(db, *package).values() {
             if symbol.kind != SymbolKind::Interface
-                || (symbol.internal && package_name != from)
+                || symbol.internal
                 || seen.contains(&(symbol.package.as_str(), symbol.name.as_str()))
             {
                 continue;
