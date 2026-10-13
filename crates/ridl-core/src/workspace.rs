@@ -103,7 +103,8 @@ pub struct LoadedWorkspace {
     /// the unit's manifest, which equals the `[imports]` key). Empty when the
     /// load took no [`RemoteAccess`], in single-file mode, and for a consumer
     /// with no `[imports]`. A unit whose tree was not loaded is not here: one
-    /// with no `[package]` manifest at the top, or whose name no key names
+    /// with no `[package]` manifest at the top, or whose top-level manifest
+    /// does not parse, or whose name no key names
     /// (MANI-105), or that claims a source package another unit declares
     /// (MANI-014). A unit named by one key and by a second key that is not
     /// its name is here under its name; the second key draws MANI-105 and

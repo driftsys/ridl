@@ -249,8 +249,8 @@ rename hint on RIDL-409). `ridl_diff` with `old: "<root>/.ridl/baseline"` and
 URL with no `ridl.lock` entry is MANI-103 and a pin the cache does not hold is
 MANI-104, each with a message that names `ridl check` as the fix, and an entry
 written before the `tree` hash existed is MANI-108. MANI-101 is still reported
-for a recorded URL that is not a fetchable `http(s)` URL, which the materializer
-sees before it asks the cache. The crate README states this list.
+for a URL in `[imports]` that is not a fetchable `http(s)` URL, which the
+materializer sees before it asks the cache. The crate README states this list.
 
 ## 7. The tool surface as a contract
 

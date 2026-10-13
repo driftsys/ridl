@@ -35,8 +35,8 @@ span from the current syntax trees, then runs the three checks in a fixed order
 (units, shapes, cohesion) and returns their diagnostics at the catalogue
 severity. The checks examine the consumer's packages only: a package of a remote
 unit (ADR-0002 §5, "Remote units") is never the subject of a check, so it draws
-no design lint and no consumer finding depends on its declarations; it stays a
-target, so the unit of a remote type is read at a consumer's site.
+no design lint of its own; it stays a target, so the unit of a remote type is
+read at a consumer's site and can draw a finding there.
 
 Two callers run it:
 

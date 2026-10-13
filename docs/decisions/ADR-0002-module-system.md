@@ -424,13 +424,14 @@ relative path written with `/` separators; for each file the hash is fed the
 path bytes, one NUL byte, the file length as a little-endian u64, and the file
 bytes; a symbolic link or any other non-regular file is an error (MANI-107,
 naming the file) and no tree that holds one is loaded; the result is the SHA-256
-in lowercase hex. A fetch computes `tree` after unpacking; a cache hit is
-verified against it (MANI-107 on a mismatch). An entry written before this
-amendment has no `tree`: the next run without `--frozen` adds it, and a run with
-`--frozen` raises MANI-108. `ridl lsp` and `ridl mcp` never fetch: they read the
-cache as a frozen run does, and a miss is MANI-103 or MANI-104 whose message
-names `ridl check` as the fix. The tar format (ADR-0007 decision 12) stays
-provisional.
+in lowercase hex. A fetch against an entry that pins `tree` verifies the
+unpacked tree against it, as a cache hit does (MANI-107 on a mismatch); a fetch
+against an entry with no `tree` computes it after unpacking and pins it. An
+entry written before this amendment has no `tree`: the next run without
+`--frozen` adds it, and a run with `--frozen` raises MANI-108. `ridl lsp` and
+`ridl mcp` never fetch: they read the cache as a frozen run does, and a miss is
+MANI-103 or MANI-104 whose message names `ridl check` as the fix. The tar format
+(ADR-0007 decision 12) stays provisional.
 
 **Rationale.** This is the model from ADR-0001, with the only refinement being
 placement: one lockfile per workspace (not per member) so that
