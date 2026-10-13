@@ -203,13 +203,33 @@ paths.
 | name collision, still refused   | `setIt`, `setBoth`                         |
 | fallible reply, still refused   | `readDoor`                                 |
 
-The checked-in Rust output loses the `__RIDL_NO_FACE_WheelDiagnostics` and
-`__RIDL_NO_FACE_Telemetry` markers and gains a `Client`, `Provider` and
-`dispatch` for each; `__RIDL_NO_FACE_VehicleStatus` (driftsys/ridl#704, the
-contract-clause translator) and `__RIDL_NO_FACE_DoorControl` (the fallible
-reply) remain.
+The checked-in Rust output loses the `__RIDL_NO_FACE_Telemetry` marker and gains
+a `Client`, `Provider` and `dispatch` for that interface. Three markers remain:
+
+| Interface          | Refusal                                                    | Tracked by                    |
+| ------------------ | ---------------------------------------------------------- | ----------------------------- |
+| `VehicleStatus`    | a contract clause outside the narrow translator            | driftsys/ridl#704             |
+| `DoorControl`      | a fallible `T \| E` reply                                  | the induced-enum issue below  |
+| `WheelDiagnostics` | `fixed tickBounds`'s payload is an array, not a named type | the fixed-payload issue below |
+
+**`WheelDiagnostics` was expected to lose its marker and does not.** Its
+`readTicks` call was the refusal the emitter reported, and this change fixes it;
+the interface then fails on a second refusal the first one hid, from
+
+```ridl
+fixed tickBounds : [(low : RawTickCount, high : RawTickCount); 2]
+```
+
+which `descriptors::fixed_payload` refuses because a `fixed`'s payload must be
+one named type. The emitter reports the first refusal it reaches, so a marker
+names one reason and an interface may have several. Ruling R-C-14's table read
+the reported reason as the only one, and this is the correction: the change
+un-skips one interface of the four, not two.
 
 ## Out of scope
 
 - The induced enum for a fallible `T | E` reply — its own issue.
+- An induced payload for a `fixed` whose payload is an array — its own issue,
+  and the second half of un-skipping `WheelDiagnostics`. A `fixed` is
+  provisioned and never in flight, so it is the weakest of the three.
 - The contract-clause translator — driftsys/ridl#704.
