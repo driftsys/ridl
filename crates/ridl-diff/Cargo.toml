@@ -12,4 +12,4 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
-ridl-core = { path = "../ridl-core", version = "0.9.0", default-features = false }
+ridl-core = { path = "../ridl-core", version = "0.10.0", default-features = false }
