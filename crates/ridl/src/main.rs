@@ -1474,9 +1474,12 @@ fn desk_check(
         return Ok(());
     }
     let report_scope = output.report_scope;
+    // The baseline holds the consumer's packages only (`run_baseline`), so
+    // the desk compares the same set: a remote unit is its owner's contract.
     let current: Vec<ridl_ir::v2::Package> = output
         .checked
         .into_iter()
+        .filter(|checked| !ridlc::is_remote(&checked.ir, &output.remote_units))
         .map(|checked| checked.ir)
         .collect();
 
@@ -1510,7 +1513,9 @@ fn desk_check(
     }
     // An entry inside a member reports on the member only (ADR-0024 decision
     // 9, as ADR-0026 amends it).
-    ridlc::retain_in_report_scope(&mut warnings, &run.sources, report_scope.as_deref());
+    // RIDL-407 is raised on the consumer's own declarations, so no remote
+    // unit directory is passed.
+    ridlc::retain_in_report_scope(&mut warnings, &run.sources, report_scope.as_deref(), &[]);
     run.diagnostics.extend(warnings);
     rename_labels(&baseline, &current, &index, run);
     Ok(())

@@ -63,6 +63,7 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
         &mut output.diagnostics,
         &output.sources,
         output.report_scope.as_deref(),
+        &ridlc::remote_dirs(&output.remote_units, &ridl_core::Cache::user_default()),
     );
     let root = if entry.is_file() {
         entry.parent().and_then(ridl_core::find_root)
@@ -100,6 +101,26 @@ pub fn lookup_snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot
     Ok(snap)
 }
 impl Snapshot {
+    /// The consumer's checked packages: `output.checked` without the
+    /// packages of the remote units, which the loader appends after the
+    /// consumer's (ADR-0002 §5, "Remote units").
+    pub fn consumer_packages(&self) -> &[ridl_sem::CheckedPackage] {
+        let remote_units = &self.output.remote_units;
+        let consumer = self
+            .output
+            .checked
+            .iter()
+            .take_while(|checked| !ridlc::is_remote(&checked.ir, remote_units))
+            .count();
+        debug_assert!(
+            self.output.checked[consumer..]
+                .iter()
+                .all(|checked| ridlc::is_remote(&checked.ir, remote_units)),
+            "the remote units' packages follow the consumer's"
+        );
+        &self.output.checked[..consumer]
+    }
+
     pub fn status(&self) -> WorkspaceStatus {
         WorkspaceStatus {
             root: self.root.to_string_lossy().into_owned(),
@@ -303,7 +324,7 @@ pub(crate) mod tests {
         assert_eq!(snapshot.status().warnings, 1);
     }
     #[tokio::test]
-    async fn a_remote_import_is_reported_and_not_fetched() {
+    async fn a_remote_import_is_an_error_and_not_fetched() {
         let copy = TempWorkspace::copy("ws");
         let manifest = copy.0.join("b/ridl.toml");
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
@@ -334,9 +355,28 @@ pub(crate) mod tests {
         .unwrap()
         .unwrap()
         .unwrap();
-        assert!(snap.output.diagnostics.iter().any(
-            |d| d.severity == ridl_core::Severity::Info && d.message.contains("remote import")
-        ));
+        // The tools read the cache and never fetch: a URL with no `ridl.lock`
+        // entry is MANI-103, with the fix named, and the import under the
+        // pinned key binds nothing, so it is the resolver's uncoded error
+        // naming the unit's URL.
+        assert!(
+            snap.output.diagnostics.iter().any(|d| {
+                d.code.as_str() == "MANI-103" && d.message.contains("run `ridl check`")
+            }),
+            "{:?}",
+            snap.output.diagnostics
+        );
+        assert!(
+            snap.output.diagnostics.iter().any(|d| {
+                d.severity == ridl_core::Severity::Error
+                    && d.message
+                        == format!(
+                            "unresolved import: `ext` is not a package of the remote unit at `https://{address}/ext.git`"
+                        )
+            }),
+            "{:?}",
+            snap.output.diagnostics
+        );
         assert_eq!(
             listener.accept().unwrap_err().kind(),
             std::io::ErrorKind::WouldBlock,

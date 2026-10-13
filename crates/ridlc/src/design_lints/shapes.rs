@@ -20,11 +20,7 @@ enum Shape {
 }
 
 pub(crate) fn check(ctx: &Ctx<'_>) -> Vec<Diagnostic> {
-    let mut packages: Vec<_> = ctx
-        .checked
-        .iter()
-        .filter(|p| p.ir.name != "ridl.std")
-        .collect();
+    let mut packages: Vec<_> = ctx.subjects().collect();
     packages.sort_by(|a, b| a.ir.name.cmp(&b.ir.name));
     let mut first: BTreeMap<Shape, (String, Span)> = BTreeMap::new();
     let mut diagnostics = Vec::new();

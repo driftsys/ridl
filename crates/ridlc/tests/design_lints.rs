@@ -680,6 +680,19 @@ fn design_source_set_with(
     packages: &[(&str, &str)],
     amend: impl FnOnce(&mut [ridl_sem::CheckedPackage]),
 ) -> (Vec<Diagnostic>, SourceMap) {
+    design_source_set_remote(packages, &[], amend)
+}
+
+/// The URL every remote package of [`design_source_set_remote`] is loaded for.
+const REMOTE_URL: &str = "https://registry.example.com/unit@v1";
+
+/// [`design_source_set_with`], with the packages named in `remote` loaded as
+/// packages of a remote unit; every other package is a workspace member.
+fn design_source_set_remote(
+    packages: &[(&str, &str)],
+    remote: &[&str],
+    amend: impl FnOnce(&mut [ridl_sem::CheckedPackage]),
+) -> (Vec<Diagnostic>, SourceMap) {
     use ridl_core::db::InputFile;
     use ridl_core::package::{Package, PackageOrigin, Workspace};
     use std::collections::BTreeMap;
@@ -690,13 +703,26 @@ fn design_source_set_with(
         .iter()
         .map(|(name, source)| {
             let input = InputFile::new(&db, format!("{name}/source.ridl"), source.to_string());
+            let origin = if remote.contains(name) {
+                PackageOrigin::Remote {
+                    url: REMOTE_URL.to_string(),
+                }
+            } else {
+                PackageOrigin::WorkspaceMember
+            };
+            // A member reaches a remote package through its own `[imports]`.
+            let imports = remote
+                .iter()
+                .filter(|_| !remote.contains(name))
+                .map(|key| (key.to_string(), REMOTE_URL.to_string()))
+                .collect();
             Package::new(
                 &db,
                 name.to_string(),
                 name.to_string(),
                 vec![input],
-                PackageOrigin::WorkspaceMember,
-                BTreeMap::new(),
+                origin,
+                imports,
                 TimingDefaults::default(),
                 None,
             )
@@ -818,6 +844,78 @@ fn duplicate_shape_excludes_standard_declarations() {
         "package a\nstruct Second { x: float, y: float }\nenum Choice { Low = 0, High = 1 }\n";
     let (diagnostics, _) = design_source_set(&[("ridl.std", standard), ("a", user)]);
     assert!(shapes(&diagnostics).is_empty(), "{diagnostics:?}");
+}
+
+/// A remote package is never the subject of a design lint, and the result
+/// for the consumer does not depend on where the remote package's name
+/// sorts: a consumer struct whose shape only a remote struct shares draws no
+/// TYPL-224, whether the remote package sorts before or after the consumer.
+#[test]
+fn duplicate_shape_ignores_a_remote_package_whatever_its_name_order() {
+    let app = "package app\nstruct Vec3 { x: float, y: float, z: float }\n";
+    for remote in ["aaa.common", "veh.common"] {
+        let source =
+            format!("package {remote}\nstruct Point3 {{ x: float, y: float, z: float }}\n");
+        let (diagnostics, _) =
+            design_source_set_remote(&[("app", app), (remote, &source)], &[remote], |_| {});
+        assert!(
+            shapes(&diagnostics).is_empty(),
+            "remote `{remote}`: {diagnostics:?}"
+        );
+    }
+    // The positive control: the same package as a member draws the finding.
+    let (diagnostics, _) = design_source_set(&[
+        ("app", app),
+        (
+            "aaa.common",
+            "package aaa.common\nstruct Point3 { x: float, y: float, z: float }\n",
+        ),
+    ]);
+    assert_eq!(shapes(&diagnostics).len(), 1, "{diagnostics:?}");
+}
+
+/// A remote package that would draw all three design lints as a member
+/// draws none as a remote package.
+#[test]
+fn a_remote_package_draws_no_design_lint() {
+    let source = format!(
+        "{SEVEN_GROUP_TYPES}{TYPES}struct First {{ speed: Speed }}\nstruct Third {{ speed: Speed }}\nstruct Second {{ speed: SpeedMs }}\n\
+         struct Dup1 {{ x: float, y: float }}\nstruct Dup2 {{ y: float, x: float }}\n\
+         interface I {{ {SEVEN_GROUP_MEMBERS} }}\n"
+    );
+    let (as_member, _) = design_source_set(&[("a", &source)]);
+    assert_eq!(
+        as_member
+            .iter()
+            .map(|d| d.code.as_str())
+            .collect::<Vec<_>>(),
+        ["TYPL-222", "TYPL-224", "RIDL-414"],
+        "{as_member:?}"
+    );
+    let (as_remote, _) = design_source_set_remote(&[("a", &source)], &["a"], |_| {});
+    assert!(as_remote.is_empty(), "{as_remote:?}");
+}
+
+/// A remote package is still a dependency target of the checks: the unit
+/// of a remote type is read at the consumer's site, so the consumer's
+/// `m/s` field is the minority against its `km/h` fields.
+#[test]
+fn inconsistent_unit_reads_the_unit_of_a_remote_type() {
+    let common = "package veh.common\ntype Speed: km/h [0.0..250.0 step 0.5]\n";
+    let app = "package app\nimport veh.common.Speed\ntype SpeedMs: m/s [0.0..100.0 step 0.5]\n\
+               struct A { speed: Speed }\nstruct B { speed: Speed }\nstruct C { speed: SpeedMs }\n";
+    let (diagnostics, sources) = design_source_set_remote(
+        &[("app", app), ("veh.common", common)],
+        &["veh.common"],
+        |_| {},
+    );
+    let found = units(&diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert_eq!(
+        found[0].message,
+        "`speed` uses `m/s` here; elsewhere `speed` uses `km/h`"
+    );
+    assert_eq!(sources.path(found[0].primary.file), Some("app/source.ridl"));
 }
 
 #[test]

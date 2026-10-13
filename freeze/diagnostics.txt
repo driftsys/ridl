@@ -31,6 +31,10 @@ MANI-101 error
 MANI-102 error
 MANI-103 error
 MANI-104 error
+MANI-105 error
+MANI-106 error
+MANI-107 error
+MANI-108 error
 RIDL-100 warning lint=missing-timing default=warn
 RIDL-101 error
 RIDL-102 error

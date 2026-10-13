@@ -65,17 +65,23 @@ the service catalogue and rsdl system checks. Its spans use `input.typl`,
 `input.ridl` or `input.rsdl`. For a standalone file without a manifest or
 imports, source mode agrees with the CLI except for those paths and the wrapper.
 Path mode reports the same diagnostic objects as the CLI for the overlaid tree,
-except for CLI operations that need the network, lockfile round trip or
+except for CLI operations that need the network, the `ridl.lock` write or the
 baseline:
 
-- MANI-101 to MANI-104 fetch and lock failures, and lockfile read and write
-  diagnostics from `materialize_and_lock`;
+- the fetch and the `ridl.lock` write: the tools read a remote unit of the
+  `[imports]` from the cache, as `ridl check --frozen` does, so a URL with no
+  `ridl.lock` entry is MANI-103 and a pin the cache does not hold is MANI-104,
+  each with a message that names `ridl check` as the fix, and an entry written
+  before the `tree` hash existed is MANI-108; MANI-102, the hash mismatch of a
+  fetch, is never reported, and MANI-101 only for a URL in `[imports]` that is
+  not a fetchable `http(s)` URL, which needs no fetch to see;
 - the check against `.ridl/baseline`: RIDL-407 and the rename hint on RIDL-409.
   Use `ridl_diff` with `old: "<root>/.ridl/baseline"` and `new: "<root>"` to
   compare the baseline explicitly.
 
-Remote imports produce the same Info diagnostic in both faces: the import is not
-yet available. Path loading and overlay failures are tool errors.
+A cached remote unit is loaded as the CLI loads it: the consumer's import
+resolves, the unit's Errors are reported with the unit name, and its Warnings
+and Infos are dropped. Path loading and overlay failures are tool errors.
 
 ### `ridl_explain`
 
@@ -154,18 +160,23 @@ it). A `package` filter returns one package. An unknown package is a tool error
 listing the available packages. This tool reports the graph; it does not lint
 cycles or unused imports. Required named interfaces add dependencies from each
 declared component's package to the interface's catalog. The system's package
-also depends on the packages of its declared member components. The graph keeps
-qualifiers that name unresolved or remote packages outside the workspace. When
-the loaded workspace contains `.rsdl` files and no system was lowered, the
-workspace carries the same no-system note as `ridl_references`.
+also depends on the packages of its declared member components. A package of a
+remote unit that the cache holds is listed as a node like a member package. The
+graph keeps qualifiers that name unresolved packages, or remote packages the
+cache does not hold, outside the workspace. When the loaded workspace contains
+`.rsdl` files and no system was lowered, the workspace carries the same
+no-system note as `ridl_references`.
 
 ### `ridl_metrics`
 
 Input: `path`. Result: `{packages, interfaces, workspace}`. Each package has
 `name`, `fanIn`, `fanOut`, `instability` and sorted `dependsOn`. Dependencies
 use the same references and rsdl component uses as `ridl_dependencies`, filtered
-to workspace targets. External qualifiers and `ridl.std` do not contribute.
-Instability is `fanOut / (fanIn + fanOut)`, or `null` when both counts are zero.
+to workspace targets. External qualifiers and `ridl.std` do not contribute, and
+neither does a package of a remote unit: the tool reports the workspace's own
+packages and interfaces only, so a remote package has no entry and a reference
+into one adds to no count (`ridl_dependencies` keeps it as a node). Instability
+is `fanOut / (fanIn + fanOut)`, or `null` when both counts are zero.
 
 Each declared interface has its canonical `name`, total `members` count and
 `groups` of members connected by directly shared named types. Primitives and

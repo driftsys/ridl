@@ -103,12 +103,15 @@ here. This list is not a standing count of every crate the workspace holds — s
 - **`crates/ridl-sem`** — the semantic passes, carved out of `ridl-core` at the
   start of E1 (ADR-0007 decision 4). `resolve` implements the ADR-0002 §5
   reference order (workspace member → the package's own `[imports]` → the
-  workspace `[imports]` → error) plus cycle detection, and applies the
-  first-wins duplicate tiebreak — every later duplicate is TYPL-009 (ADR-0007
-  decision 6). `check` lowers each resolved package to IR v2, lowering only the
-  resolver's first-wins winner. Supporting modules: `scalar` (exact
-  `BigRational` arithmetic for ranges, steps, and wire-width derivation — no
-  `f32`/`f64` anywhere), `ucum` (the UCUM term grammar over a curated atom
+  workspace `[imports]` → error; a package of a remote unit resolves through
+  step 1, which sees the consumer's members and its own unit's packages, then
+  its own `[imports]`, never the workspace `[imports]`; a qualified reference
+  and a doc link apply the same visibility as an import) plus cycle detection,
+  and applies the first-wins duplicate tiebreak — every later duplicate is
+  TYPL-009 (ADR-0007 decision 6). `check` lowers each resolved package to IR v2,
+  lowering only the resolver's first-wins winner. Supporting modules: `scalar`
+  (exact `BigRational` arithmetic for ranges, steps, and wire-width derivation —
+  no `f32`/`f64` anywhere), `ucum` (the UCUM term grammar over a curated atom
   table, ADR-0007 decision 8), `init` (init-value derivation), `docs`
   (doc-comment handling), and `testgen` (proptest strategies and
   boundary/violation corpora derived from checked ranges, behind the `testgen`
@@ -205,9 +208,14 @@ here. This list is not a standing count of every crate the workspace holds — s
 - **`crates/ridlc`** — the pipeline as a library plus the plumbing binary.
   `compile` runs a single file end to end; `compile_workspace` runs the loaded
   package model (file, package directory, or workspace root) and is the library
-  face the language server drives; `run_check` and `run_build` add the
-  remote-import lockfile round trip (`--frozen` never fetches) and, for build,
-  write the selected artifacts: `<base>.rs`, `<base>.h`, `<base>.ir.json`,
+  face the language server drives; it reads the remote units of the manifest's
+  `[imports]` from the cache and never fetches or writes `ridl.lock`.
+  `run_check` and `run_build` add the remote-unit round trip: each remote unit
+  is read from the cache or fetched, checked against its `tree` hash, loaded as
+  a read-only dependency, and pinned in `ridl.lock` (`--frozen` never fetches).
+  The packages of a remote unit reach the code backends and are generated, but
+  no snapshot, catalog or lock entry includes them. `run_build` also writes the
+  selected artifacts: `<base>.rs`, `<base>.h`, `<base>.ir.json`,
   `<base>.ir.txtpb`, `<base>.ir.binpb`, and `<base>.ts`. The binary exposes
   `ridlc check` and `ridlc build`. E2 widened `WorkspaceOutput` with the
   checker's `resolutions` and the lowered `std_ir`, so a workflow crate does not

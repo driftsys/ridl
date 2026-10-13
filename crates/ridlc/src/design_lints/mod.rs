@@ -2,7 +2,7 @@
 
 use ridl_core::RidlDatabase;
 use ridl_core::diag::{Diagnostic, SourceMap};
-use ridl_core::package::Package;
+use ridl_core::package::{Package, PackageOrigin};
 use ridl_sem::{CheckedPackage, Resolution};
 
 mod cohesion;
@@ -28,13 +28,40 @@ pub fn check_design_lints(
     sources: &mut SourceMap,
 ) -> Vec<Diagnostic> {
     let sites = SiteIndex::new(db, packages, resolutions, sources);
-    run(&Ctx { checked, sites })
+    // A package of a remote unit is a read-only dependency (ADR-0002 §5):
+    // the checks read it as a target, for the unit of a type it declares,
+    // and never examine its own declarations.
+    let subject = packages
+        .iter()
+        .map(|package| !matches!(package.origin(db), PackageOrigin::Remote { .. }))
+        .collect();
+    run(&Ctx {
+        checked,
+        subject,
+        sites,
+    })
 }
 
 // The design checks consume the checked packages and the indexed sites.
 pub(crate) struct Ctx<'a> {
     pub checked: &'a [CheckedPackage],
+    /// Per entry of `checked`, whether the checks examine its declarations:
+    /// `false` for a package of a remote unit.
+    subject: Vec<bool>,
     pub sites: SiteIndex,
+}
+
+impl Ctx<'_> {
+    /// The packages whose declarations the checks examine: the consumer's,
+    /// without `ridl.std` and without the packages of the remote units,
+    /// which stay in `checked` as targets.
+    pub(crate) fn subjects(&self) -> impl Iterator<Item = &CheckedPackage> {
+        self.checked
+            .iter()
+            .zip(&self.subject)
+            .filter(|(checked, subject)| **subject && checked.ir.name != "ridl.std")
+            .map(|(checked, _)| checked)
+    }
 }
 
 pub(crate) fn run(ctx: &Ctx<'_>) -> Vec<Diagnostic> {

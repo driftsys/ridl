@@ -177,9 +177,10 @@ reference:
 - A qualified `pkg.Name` reaches any package that the current package can depend
   on — another member of the workspace, or a package of `[imports]` — whether or
   not the file imports it. A doc link never makes you add an import that the
-  code does not use. A remote package of `[imports]` is not read by the
-  compiler, so a link into one does not resolve yet and draws
-  `broken-doc-link`.
+  code does not use. A remote package of `[imports]` is reachable where an
+  `import` of it would resolve: the package's own `[imports]`, or the workspace
+  `[imports]` for a member, must pin its unit. A link into a remote package no
+  such pin reaches draws `broken-doc-link`.
 - One more segment names a member of the declaration: a field
   (`[CruiseState.setSpeed]`), an enum value (`[LeverCmd.UP]`), an enumset bit, a
   union arm, or an interaction (`[CruiseControl.status]`).
@@ -303,8 +304,11 @@ whole-file examples as one workspace.
 When you check from inside a workspace member, `ridl check`, `ridl build`,
 `ridl lock` and the MCP tool `ridl_check` report only the diagnostics of files
 under that member, so an undocumented item in a sibling member does not appear
-in that report. The language server reports every file it loaded. A remote
-package of `[imports]` is never checked.
+in that report. The language server reports every consumer file it loaded, and
+publishes no diagnostics for a file of a remote unit. A remote package of
+`[imports]` is checked: its errors fail the run, and the language server shows
+them in one window message per load; its warnings and infos, `missing-docs`
+included, are dropped before any `[lints]` level is applied.
 
 A project that does not want to document every item yet sets the level in its
 `ridl.toml`:

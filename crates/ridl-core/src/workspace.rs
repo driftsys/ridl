@@ -31,7 +31,7 @@
 //! and for an entry the loader cannot compile at all, the bare `.rxdl` or
 //! `.rmdl` file.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -40,10 +40,16 @@ use ridl_ir::codegen::{header_control_character, normalise_header};
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::{TextRange, TextSize};
 
+#[cfg(feature = "fetch")]
+use crate::cache::Cache;
 use crate::db::{InputFile, RidlDatabase, parse_file};
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
+#[cfg(feature = "fetch")]
+use crate::fetch::{Frozen, detached, materialize_imports};
 use crate::interface_lock;
 use crate::lint::{LintLevels, LintScopes};
+#[cfg(feature = "fetch")]
+use crate::lock::{read_lockfile, write_lockfile};
 use crate::manifest::{BackendTable, Manifest, ManifestKind, TimingDefaults, parse_manifest};
 use crate::package::{Package, PackageLock, PackageOrigin, Workspace, package_declarations};
 
@@ -89,6 +95,46 @@ pub struct LoadedWorkspace {
     /// not parse, and in single-file mode. A caller that needs it must not
     /// find the root and parse the manifest again (driftsys/ridl#760).
     pub root_package: Option<String>,
+    /// The union of the consumer's `[imports]` (ADR-0002 §5): the root
+    /// manifest's and every member's, whether or not the member's tree
+    /// loaded. Empty in single-file mode.
+    pub imports: ImportUnion,
+    /// The remote units loaded, keyed by unit name (the `[package] name` of
+    /// the unit's manifest, which equals the `[imports]` key). Empty when the
+    /// load took no [`RemoteAccess`], in single-file mode, and for a consumer
+    /// with no `[imports]`. A unit whose tree was not loaded is not here: one
+    /// with no `[package]` manifest at the top, or whose top-level manifest
+    /// does not parse, or whose name no key names
+    /// (MANI-105), or that claims a source package another unit declares
+    /// (MANI-014). A unit named by one key and by a second key that is not
+    /// its name is here under its name; the second key draws MANI-105 and
+    /// binds nothing.
+    pub remote_units: BTreeMap<String, MaterializedUnit>,
+}
+
+/// The union of a consumer's `[imports]` (ADR-0002 §5): every URL, mapped to
+/// the keys that name it across the root manifest and every member. Keyed by
+/// URL so that one key pinned to two URLs by two members keeps both URLs, and
+/// two keys naming one URL fetch it once.
+pub type ImportUnion = BTreeMap<String, BTreeSet<String>>;
+
+/// One remote unit the read path found: its URL, the directory that holds its
+/// tree, and the `tree` hash the directory was verified against.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaterializedUnit {
+    pub url: String,
+    pub dir: PathBuf,
+    pub tree: String,
+}
+
+/// How a load reaches remote units: the cache to read them from, and whether
+/// a unit the cache does not hold may be fetched.
+#[cfg(feature = "fetch")]
+#[derive(Clone, Copy)]
+pub struct RemoteAccess<'a> {
+    /// [`Frozen::Yes`] never fetches and never writes `ridl.lock`.
+    pub frozen: Frozen,
+    pub cache: &'a Cache,
 }
 
 /// Unsaved source text for a file in a loaded package directory.
@@ -217,10 +263,51 @@ pub fn load_workspace(db: &mut RidlDatabase, entry: &Path) -> io::Result<LoadedW
 }
 
 /// Loads a workspace with unsaved source text substituted before parsing.
+/// Loads no remote unit: [`LoadedWorkspace::imports`] is filled and
+/// [`LoadedWorkspace::remote_units`] stays empty.
 pub fn load_workspace_with(
     db: &mut RidlDatabase,
     entry: &Path,
     overlays: &[Overlay],
+) -> Result<LoadedWorkspace, LoadError> {
+    #[cfg(feature = "fetch")]
+    {
+        load_inner(db, entry, overlays, None)
+    }
+    #[cfg(not(feature = "fetch"))]
+    {
+        load_inner(db, entry, overlays)
+    }
+}
+
+/// [`load_workspace_with`], then every remote unit of the consumer's
+/// `[imports]` (ADR-0002 §5, §7): the union of the root's and every member's
+/// pins is materialized through [`materialize_imports`] — a cache hit against
+/// `ridl.lock`, else a fetch under [`Frozen::No`] — and each unit's tree is
+/// loaded as packages of origin [`PackageOrigin::Remote`]. Under
+/// [`Frozen::No`] and with no materialization error, `ridl.lock` at the
+/// manifest root is rewritten with both hashes; under [`Frozen::Yes`] nothing
+/// is fetched and the lockfile is never written. A remote unit's Warnings and
+/// Infos are dropped here; its Errors are kept, with the unit named in the
+/// message of each one that points into a file of the unit. Single-file mode
+/// has no manifest and loads no remote unit.
+#[cfg(feature = "fetch")]
+pub fn load_workspace_with_remotes(
+    db: &mut RidlDatabase,
+    entry: &Path,
+    overlays: &[Overlay],
+    access: RemoteAccess<'_>,
+) -> Result<LoadedWorkspace, LoadError> {
+    load_inner(db, entry, overlays, Some(access))
+}
+
+/// The load behind [`load_workspace_with`] and
+/// [`load_workspace_with_remotes`]: `access` is `Some` only for the latter.
+fn load_inner(
+    db: &mut RidlDatabase,
+    entry: &Path,
+    overlays: &[Overlay],
+    #[cfg(feature = "fetch")] access: Option<RemoteAccess<'_>>,
 ) -> Result<LoadedWorkspace, LoadError> {
     let mut loader = Loader::default();
     for overlay in overlays {
@@ -241,14 +328,17 @@ pub fn load_workspace_with(
         loader.overlays.push((key, overlay.clone(), false));
     }
 
-    if entry.is_file() {
+    let root = if entry.is_file() {
         match entry.parent().and_then(find_root) {
-            Some(root) => loader.load_root(db, &root)?,
-            None => loader.load_single_file(db, entry)?,
+            Some(root) => Some(root),
+            None => {
+                loader.load_single_file(db, entry)?;
+                None
+            }
         }
     } else if entry.is_dir() {
         match find_root(entry) {
-            Some(root) => loader.load_root(db, &root)?,
+            Some(root) => Some(root),
             None => {
                 return Err(io::Error::new(
                     io::ErrorKind::NotFound,
@@ -263,6 +353,13 @@ pub fn load_workspace_with(
             format!("`{}` does not exist", entry.display()),
         )
         .into());
+    };
+    if let Some(root) = &root {
+        loader.load_root(db, root)?;
+        #[cfg(feature = "fetch")]
+        if let Some(access) = access {
+            loader.load_remotes(db, root, access)?;
+        }
     }
 
     if let Some((_, overlay, _)) = loader.overlays.iter().find(|(_, _, consumed)| !consumed) {
@@ -289,6 +386,8 @@ pub fn load_workspace_with(
         report_scope,
         units: loader.units,
         root_package: loader.root_package,
+        imports: loader.imports,
+        remote_units: loader.remote_units,
     })
 }
 
@@ -520,6 +619,9 @@ struct TreeScope<'a> {
     defaults: &'a TimingDefaults,
     /// The unit's `interfaces.lock`, read from the manifest directory.
     lock: &'a Option<PackageLock>,
+    /// Where the unit's packages come from: a workspace member, or the URL
+    /// of a remote unit.
+    origin: &'a PackageOrigin,
 }
 
 /// The accumulating state of one [`load_workspace`] run.
@@ -564,6 +666,12 @@ struct Loader {
     /// Unit name to its manifest's file id and the range of the manifest's
     /// quoted `[package] name`, where a MANI-014 against the unit points.
     unit_name_spans: BTreeMap<String, (FileId, TextRange)>,
+    /// The union of every `[package]` manifest's `[imports]` and the
+    /// workspace root's, for [`LoadedWorkspace::imports`].
+    imports: ImportUnion,
+    /// The remote units whose tree was loaded, for
+    /// [`LoadedWorkspace::remote_units`].
+    remote_units: BTreeMap<String, MaterializedUnit>,
 }
 
 impl Loader {
@@ -642,6 +750,7 @@ impl Loader {
                     name.clone(),
                     (file_id, byte_range(name_span.start, name_span.end)),
                 );
+                self.record_imports(&imports);
                 let lock = self.read_lock(root)?;
                 let scope = TreeScope {
                     unit_dir: root,
@@ -649,6 +758,7 @@ impl Loader {
                     imports: &imports,
                     defaults: &defaults,
                     lock: &lock,
+                    origin: &PackageOrigin::WorkspaceMember,
                 };
                 self.load_package_tree(db, root, &name, &scope)?;
             }
@@ -656,6 +766,7 @@ impl Loader {
                 // ADR-0002 §5 step 3: the workspace root's `[imports]` and
                 // `[defaults]` are the shared defaults. Member maps are
                 // never merged into them.
+                self.record_imports(&imports);
                 self.workspace_imports = imports;
                 self.workspace_defaults = defaults;
                 self.workspace_lints = root_lints;
@@ -778,6 +889,9 @@ impl Loader {
                 // skips its later listings, so `first_dir` is always another
                 // directory.
                 let name_range = byte_range(name_span.start, name_span.end);
+                // The member's pins join the union whether or not its tree
+                // loads below: the union is a property of the manifests.
+                self.record_imports(&imports);
                 if let Some(first_dir) = self.units.get(&name) {
                     let first_dir = first_dir.clone();
                     self.diagnostics.push(error(
@@ -802,6 +916,7 @@ impl Loader {
                     imports: &imports,
                     defaults: &member_defaults,
                     lock: &lock,
+                    origin: &PackageOrigin::WorkspaceMember,
                 };
                 self.load_package_tree(db, &member_dir, &name, &scope)?;
             }
@@ -814,9 +929,9 @@ impl Loader {
     /// `unit_dir`), then every subdirectory as its own package named by its
     /// path — the package↔directory law's "the name mirrors the directory
     /// path relative to the manifest root" (ADR-0002 §1). `unit`, `unit_dir`,
-    /// `imports`, `defaults` and `lock` come from `scope`, which is the same
-    /// for every package of the tree. Every package in the tree carries
-    /// `imports`, the governing manifest's `[imports]`.
+    /// `imports`, `defaults`, `lock` and `origin` come from `scope`, which is
+    /// the same for every package of the tree. Every package in the tree
+    /// carries `imports`, the governing manifest's `[imports]`.
     /// Directories are visited in name order; hidden directories and
     /// symlinked directories (following them could revisit the tree in a
     /// cycle) are skipped, and a directory with its own `ridl.toml` is
@@ -843,6 +958,7 @@ impl Loader {
             imports,
             defaults,
             lock,
+            origin,
         } = *scope;
         let mut source_files = Vec::new();
         let mut unsupported_files = Vec::new();
@@ -932,7 +1048,7 @@ impl Loader {
                 name.to_string(),
                 unit.to_string(),
                 files,
-                PackageOrigin::WorkspaceMember,
+                origin.clone(),
                 imports.clone(),
                 defaults.clone(),
                 lock.clone(),
@@ -982,6 +1098,230 @@ impl Loader {
             self.load_package_tree(db, &subdir, &format!("{name}.{dir_name}"), scope)?;
         }
         Ok(())
+    }
+
+    /// Adds `imports` to the union: each URL gains the key that names it.
+    fn record_imports(&mut self, imports: &BTreeMap<String, String>) {
+        for (key, url) in imports {
+            self.imports
+                .entry(url.clone())
+                .or_default()
+                .insert(key.clone());
+        }
+    }
+
+    /// Materializes every URL of the union through [`materialize_imports`]
+    /// against `ridl.lock` at `root`, rewrites the lockfile when the run is
+    /// not frozen and drew no error, and loads each unit found. A union with
+    /// no URL reads and writes nothing.
+    #[cfg(feature = "fetch")]
+    fn load_remotes(
+        &mut self,
+        db: &mut RidlDatabase,
+        root: &Path,
+        access: RemoteAccess<'_>,
+    ) -> io::Result<()> {
+        if self.imports.is_empty() {
+            return Ok(());
+        }
+        let lock_path = root.join("ridl.lock");
+        let (lock, diagnostics) = read_lockfile(&lock_path);
+        self.diagnostics.extend(diagnostics);
+        let (units, regenerated, diagnostics) =
+            materialize_imports(&self.imports, lock.as_ref(), access.cache, access.frozen);
+        let had_error = diagnostics.iter().any(|d| d.severity == Severity::Error);
+        self.diagnostics.extend(diagnostics);
+        // A frozen run never regenerates the lockfile (ADR-0002 §7); a failed
+        // run must not overwrite the pins it could not verify.
+        if access.frozen == Frozen::No
+            && !had_error
+            && let Err(err) = write_lockfile(&lock_path, &regenerated)
+        {
+            self.diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                ..detached(
+                    DiagCode::NONE,
+                    format!("cannot write `{}`: {err}", lock_path.display()),
+                )
+            });
+        }
+        let union = self.imports.clone();
+        for unit in units {
+            self.load_remote_unit(db, &unit, &union)?;
+        }
+        Ok(())
+    }
+
+    /// Loads one materialized remote unit: its tree is read as
+    /// [`Self::read_remote_unit`] says, then every Warning and Info the read
+    /// drew is dropped — a remote unit is a read-only dependency, so its
+    /// Warnings are not the consumer's to fix — and every Error that points
+    /// into a file of the unit is
+    /// prefixed with the unit name, so a reader sees which unit the file
+    /// path belongs to. A detached Error already names the URL and is kept
+    /// as it is. Before the unit's name is known, the first key that names
+    /// its URL stands for it.
+    #[cfg(feature = "fetch")]
+    fn load_remote_unit(
+        &mut self,
+        db: &mut RidlDatabase,
+        unit: &MaterializedUnit,
+        union: &ImportUnion,
+    ) -> io::Result<()> {
+        let keys = &union[&unit.url];
+        let start = self.diagnostics.len();
+        let name = self.read_remote_unit(db, unit, keys, union)?;
+        let label = name
+            .as_deref()
+            .or_else(|| keys.first().map(String::as_str))
+            .unwrap_or_default();
+        let tail: Vec<Diagnostic> = self.diagnostics.drain(start..).collect();
+        self.diagnostics.extend(
+            tail.into_iter()
+                .filter(|d| d.severity == Severity::Error)
+                .map(|mut d| {
+                    if d.primary.file != FileId::DETACHED {
+                        d.message = format!("remote unit `{label}`: {}", d.message);
+                    }
+                    d
+                }),
+        );
+        Ok(())
+    }
+
+    /// Reads one materialized remote unit: its top-level `ridl.toml` must be
+    /// a `[package]` manifest whose `name` is one of the `keys` that name its
+    /// URL (MANI-105, detached), every key of its `[imports]` must be a key
+    /// of the consumer's union (MANI-106, detached), and its tree then loads
+    /// as [`Self::load_package_tree`] loads a member's, with the consumer's
+    /// URL for each key it imports (the consumer lists every remote unit the
+    /// build needs, so the consumer's pin wins), its own `[defaults]`, and
+    /// its own
+    /// `interfaces.lock`. The ordinary rules apply unchanged: MANI-014 when
+    /// a consumer unit or an earlier remote unit already claims a package,
+    /// and the tree is then not loaded. No lint scope is recorded for the
+    /// unit's directory. Returns the unit's name once the manifest gave one.
+    #[cfg(feature = "fetch")]
+    fn read_remote_unit(
+        &mut self,
+        db: &mut RidlDatabase,
+        unit: &MaterializedUnit,
+        keys: &BTreeSet<String>,
+        union: &ImportUnion,
+    ) -> io::Result<Option<String>> {
+        let manifest_path = unit.dir.join("ridl.toml");
+        if !manifest_path.is_file() {
+            self.diagnostics.push(detached(
+                DiagCode::MANI_105,
+                format!(
+                    "the remote unit at `{}` has no `ridl.toml` at the top level of its tree (`{}`)",
+                    unit.url,
+                    unit.dir.display()
+                ),
+            ));
+            return Ok(None);
+        }
+        let text =
+            fs::read_to_string(&manifest_path).map_err(|e| cannot_read(&manifest_path, e))?;
+        let file_id = self.sources.file_id(&path_string(&manifest_path), &text);
+        let (manifest, diags) = parse_manifest(file_id, &text);
+        self.diagnostics.extend(diags);
+        let Some(manifest) = manifest else {
+            return Ok(None);
+        };
+        let (name, name_span) = match manifest.kind {
+            ManifestKind::Workspace { .. } => {
+                self.diagnostics.push(detached(
+                    DiagCode::MANI_105,
+                    format!(
+                        "the remote unit at `{}` is a `[workspace]` manifest (`{}`); a remote unit is one `[package]` manifest and its tree",
+                        unit.url,
+                        manifest_path.display()
+                    ),
+                ));
+                return Ok(None);
+            }
+            ManifestKind::Package {
+                name, name_span, ..
+            } => (name, name_span),
+        };
+        // Every key that names the URL but is not the unit's name binds
+        // nothing; the unit still loads under its own name when some key
+        // equals it.
+        for key in keys {
+            if *key != name {
+                self.diagnostics.push(detached(
+                    DiagCode::MANI_105,
+                    format!(
+                        "the `[imports]` key `{key}` names `{}`, whose `[package] name` is `{name}` (`{}`); the key must equal the name",
+                        unit.url,
+                        manifest_path.display()
+                    ),
+                ));
+            }
+        }
+        if !keys.contains(&name) {
+            return Ok(Some(name));
+        }
+        let covered: BTreeSet<&String> = union.values().flatten().collect();
+        for (key, remote_url) in &manifest.imports {
+            if !covered.contains(key) {
+                self.diagnostics.push(detached(
+                    DiagCode::MANI_106,
+                    format!(
+                        "remote unit `{name}` imports `{key}` (`{remote_url}`), which the consumer's `[imports]` does not name; add `{key}` to the consumer's `[imports]`"
+                    ),
+                ));
+            }
+        }
+        // The consumer's URL for each key the unit imports. A key the
+        // consumer does not name was MANI-106 above and resolves nowhere.
+        let imports: BTreeMap<String, String> = manifest
+            .imports
+            .keys()
+            .filter_map(|key| {
+                union
+                    .iter()
+                    .find(|(_, keys)| keys.contains(key))
+                    .map(|(url, _)| (key.clone(), url.clone()))
+            })
+            .collect();
+        let name_range = byte_range(name_span.start, name_span.end);
+        let first_dir = self
+            .units
+            .get(&name)
+            .cloned()
+            .or_else(|| self.remote_units.get(&name).map(|unit| unit.dir.clone()));
+        if let Some(first_dir) = first_dir {
+            self.diagnostics.push(error(
+                DiagCode::MANI_014,
+                file_id,
+                name_range,
+                format!(
+                    "source package `{name}` is already declared by the unit in `{}`; the remote unit at `{}` declares it too. A source package belongs to one unit",
+                    first_dir.display(),
+                    unit.url
+                ),
+            ));
+            return Ok(Some(name));
+        }
+        self.unit_name_spans
+            .insert(name.clone(), (file_id, name_range));
+        let lock = self.read_lock(&unit.dir)?;
+        let origin = PackageOrigin::Remote {
+            url: unit.url.clone(),
+        };
+        let scope = TreeScope {
+            unit_dir: &unit.dir,
+            unit: &name,
+            imports: &imports,
+            defaults: &manifest.defaults,
+            lock: &lock,
+            origin: &origin,
+        };
+        self.load_package_tree(db, &unit.dir, &name, &scope)?;
+        self.remote_units.insert(name.clone(), unit.clone());
+        Ok(Some(name))
     }
 
     /// Loads one bare source file as a synthetic package named from its
@@ -3704,5 +4044,762 @@ service:veh.common.climate 2
             units,
             ["com.example", "com.example.hmi"].map(String::from).into()
         );
+    }
+
+    /// The remote read path: a consumer whose `[imports]` names a unit that
+    /// the cache already holds, pinned in `ridl.lock`, so a frozen load reads
+    /// it with no network.
+    #[cfg(feature = "fetch")]
+    mod remote {
+        use std::collections::BTreeSet;
+
+        use super::*;
+        use crate::cache::Cache;
+        use crate::fetch::Frozen;
+        use crate::lock::{LockEntry, Lockfile, read_lockfile, write_lockfile};
+        use crate::tree_hash::tree_hash;
+
+        /// An uncompressed tar holding `files` at the paths given, the
+        /// provisional fetch artifact (ADR-0007 decision 12). `tar` is a
+        /// dependency of the `fetch` feature, so no dev-dependency is needed.
+        fn unit_tar(files: &[(&str, &str)]) -> Vec<u8> {
+            let mut builder = tar::Builder::new(Vec::new());
+            for (name, contents) in files {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(contents.len() as u64);
+                header.set_mode(0o644);
+                header.set_cksum();
+                builder
+                    .append_data(&mut header, name, contents.as_bytes())
+                    .expect("append the file to the tar");
+            }
+            builder.into_inner().expect("finish the tar")
+        }
+
+        /// Stores `files` as the unit at `url` in `cache` and returns the
+        /// lock entry that pins both hashes.
+        fn store(cache: &Cache, url: &str, files: &[(&str, &str)]) -> LockEntry {
+            let (sha256, dir) = cache
+                .store(url, &unit_tar(files))
+                .expect("store the unit in the cache");
+            LockEntry {
+                sha256,
+                tree: Some(tree_hash(&dir).expect("hash the unpacked tree")),
+            }
+        }
+
+        /// Stores `files` as the unit at `url` in `cache` and writes a
+        /// `ridl.lock` at `root` that pins both hashes.
+        fn seed(cache: &Cache, root: &Path, url: &str, files: &[(&str, &str)]) {
+            let mut lock = Lockfile::default();
+            lock.entries
+                .insert(url.to_string(), store(cache, url, files));
+            write_lockfile(&root.join("ridl.lock"), &lock).expect("write ridl.lock");
+        }
+
+        const URL: &str = "https://registry.example.com/veh/common@v1.0.0";
+
+        const COMMON_MANIFEST: &str = "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n";
+
+        /// A standalone consumer package `app` that pins `veh.common` to
+        /// `URL`.
+        fn consumer(fixture: &TempDir) -> PathBuf {
+            fixture.write(
+                "app/ridl.toml",
+                &format!(
+                    "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{URL}\"\n"
+                ),
+            );
+            fixture.write("app/app.ridl", "package app\nimport veh.common.Speed\n");
+            fixture.path().join("app")
+        }
+
+        fn cache(fixture: &TempDir) -> Cache {
+            Cache {
+                root: fixture.path().join("cache"),
+            }
+        }
+
+        fn load_frozen(fixture: &TempDir, root: &Path) -> (RidlDatabase, LoadedWorkspace) {
+            load_with(fixture, root, Frozen::Yes)
+        }
+
+        fn load_with(
+            fixture: &TempDir,
+            root: &Path,
+            frozen: Frozen,
+        ) -> (RidlDatabase, LoadedWorkspace) {
+            let cache = cache(fixture);
+            let mut db = RidlDatabase::default();
+            let loaded = load_workspace_with_remotes(
+                &mut db,
+                root,
+                &[],
+                RemoteAccess {
+                    frozen,
+                    cache: &cache,
+                },
+            )
+            .expect("the workspace loads");
+            (db, loaded)
+        }
+
+        fn package_names(db: &RidlDatabase, loaded: &LoadedWorkspace) -> Vec<String> {
+            loaded
+                .workspace
+                .packages(db)
+                .iter()
+                .map(|p| p.name(db).clone())
+                .collect()
+        }
+
+        /// A cached unit loads as packages whose origin names the URL, under
+        /// the unit's name, with the unit recorded in `remote_units` and not
+        /// in `units`.
+        #[test]
+        fn a_remote_unit_loads_from_the_cache() {
+            let fixture = TempDir::new("remote-load");
+            let root = consumer(&fixture);
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\ntype Speed: km/h\n"),
+                    (
+                        "types/types.typl",
+                        "package veh.common.types\ntype Temp: degC\n",
+                    ),
+                ],
+            );
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            assert_eq!(
+                package_names(&db, &loaded),
+                ["app", "veh.common", "veh.common.types"]
+            );
+            for remote in &loaded.workspace.packages(&db)[1..] {
+                assert_eq!(
+                    *remote.origin(&db),
+                    PackageOrigin::Remote {
+                        url: URL.to_string()
+                    }
+                );
+                assert_eq!(remote.unit(&db), "veh.common");
+            }
+            let unit = &loaded.remote_units["veh.common"];
+            assert_eq!(unit.url, URL);
+            assert!(unit.dir.join("common.typl").is_file());
+            assert_eq!(loaded.units.keys().collect::<Vec<_>>(), ["app"]);
+            assert_eq!(
+                loaded.imports,
+                BTreeMap::from([(URL.to_string(), BTreeSet::from(["veh.common".to_string()]))])
+            );
+        }
+
+        /// A tree with no top-level `ridl.toml` is a detached MANI-105 that
+        /// names the URL and the directory, and loads nothing.
+        #[test]
+        fn a_tree_without_a_manifest_is_mani_105() {
+            let fixture = TempDir::new("remote-105-none");
+            let root = consumer(&fixture);
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[("common.typl", "package veh.common\n")],
+            );
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-105"]);
+            let diagnostic = &loaded.diagnostics[0];
+            assert_eq!(diagnostic.primary.file, FileId::DETACHED);
+            assert!(loaded.remote_units.is_empty());
+            assert!(
+                diagnostic.message.contains(URL)
+                    && diagnostic.message.contains("ridl.toml")
+                    && diagnostic
+                        .message
+                        .contains(&fixture.path().join("cache").to_string_lossy().into_owned()),
+                "{}",
+                diagnostic.message
+            );
+            assert_eq!(loaded.workspace.packages(&db).len(), 1);
+        }
+
+        /// A `[workspace]` manifest at the top is a detached MANI-105.
+        #[test]
+        fn a_workspace_manifest_is_mani_105() {
+            let fixture = TempDir::new("remote-105-ws");
+            let root = consumer(&fixture);
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[("ridl.toml", "[workspace]\nmembers = []\n")],
+            );
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-105"]);
+            assert_eq!(loaded.diagnostics[0].primary.file, FileId::DETACHED);
+            assert!(loaded.diagnostics[0].message.contains(URL));
+            assert_eq!(loaded.workspace.packages(&db).len(), 1);
+            assert!(loaded.remote_units.is_empty());
+        }
+
+        /// A name that is not the key is a detached MANI-105 whose message
+        /// names the key, the name and the URL; the unit is not loaded.
+        #[test]
+        fn a_name_that_is_not_the_key_is_mani_105() {
+            let fixture = TempDir::new("remote-105-name");
+            let root = consumer(&fixture);
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[
+                    (
+                        "ridl.toml",
+                        "[package]\nname = \"veh.other\"\nversion = \"1.0.0\"\n",
+                    ),
+                    ("other.typl", "package veh.other\n"),
+                ],
+            );
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-105"]);
+            let diagnostic = &loaded.diagnostics[0];
+            assert_eq!(diagnostic.primary.file, FileId::DETACHED);
+            let message = &diagnostic.message;
+            assert!(
+                message.contains("veh.other")
+                    && message.contains("veh.common")
+                    && message.contains(URL),
+                "{message}"
+            );
+            assert_eq!(package_names(&db, &loaded), ["app"]);
+            assert!(loaded.remote_units.is_empty());
+        }
+
+        /// Two keys for one URL: the unit loads once under its own name; the
+        /// other key is MANI-105.
+        #[test]
+        fn two_keys_for_one_url_load_the_unit_once_and_flag_the_other_key() {
+            let fixture = TempDir::new("remote-two-keys");
+            fixture.write(
+                "app/ridl.toml",
+                &format!(
+                    "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{URL}\"\n\"veh.alias\" = \"{URL}\"\n"
+                ),
+            );
+            fixture.write("app/app.ridl", "package app\n");
+            let root = fixture.path().join("app");
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\n"),
+                ],
+            );
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-105"]);
+            assert!(loaded.diagnostics[0].message.contains("veh.alias"));
+            assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
+            assert_eq!(loaded.remote_units.len(), 1);
+        }
+
+        /// A key of the remote unit's `[imports]` the consumer does not name
+        /// is a detached MANI-106 naming the key and the URL the remote unit
+        /// gave; the unit still loads.
+        #[test]
+        fn an_uncovered_import_is_mani_106() {
+            let fixture = TempDir::new("remote-106");
+            let root = consumer(&fixture);
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[
+                    (
+                        "ridl.toml",
+                        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.units\" = \"https://registry.example.com/veh/units@v2\"\n",
+                    ),
+                    ("common.typl", "package veh.common\n"),
+                ],
+            );
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-106"]);
+            let diagnostic = &loaded.diagnostics[0];
+            assert_eq!(diagnostic.primary.file, FileId::DETACHED);
+            let message = &diagnostic.message;
+            assert!(
+                message.contains("veh.units") && message.contains("veh/units@v2"),
+                "{message}"
+            );
+            assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
+            // The key the consumer does not name rides on no package.
+            assert!(loaded.workspace.packages(&db)[1].imports(&db).is_empty());
+        }
+
+        /// A remote unit's own `[imports]` key is read with the consumer's
+        /// URL for that key, on every package of the unit.
+        #[test]
+        fn a_remote_unit_reads_its_imports_through_the_consumers_urls() {
+            let fixture = TempDir::new("remote-v1");
+            const UNITS_CONSUMER: &str = "https://registry.example.com/veh/units@v1";
+            const UNITS_REMOTE: &str = "https://registry.example.com/veh/units@v2";
+            fixture.write(
+                "app/ridl.toml",
+                &format!(
+                    "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{URL}\"\n\"veh.units\" = \"{UNITS_CONSUMER}\"\n"
+                ),
+            );
+            fixture.write("app/app.ridl", "package app\n");
+            let root = fixture.path().join("app");
+            let cache = cache(&fixture);
+            let mut lock = Lockfile::default();
+            lock.entries.insert(
+                URL.into(),
+                store(
+                    &cache,
+                    URL,
+                    &[
+                        (
+                            "ridl.toml",
+                            &format!(
+                                "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.units\" = \"{UNITS_REMOTE}\"\n"
+                            ),
+                        ),
+                        ("common.typl", "package veh.common\n"),
+                        ("sub/sub.typl", "package veh.common.sub\n"),
+                    ],
+                ),
+            );
+            lock.entries.insert(
+                UNITS_CONSUMER.into(),
+                store(
+                    &cache,
+                    UNITS_CONSUMER,
+                    &[
+                        (
+                            "ridl.toml",
+                            "[package]\nname = \"veh.units\"\nversion = \"1.0.0\"\n",
+                        ),
+                        ("units.typl", "package veh.units\n"),
+                    ],
+                ),
+            );
+            write_lockfile(&root.join("ridl.lock"), &lock).expect("write ridl.lock");
+
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            assert_eq!(
+                package_names(&db, &loaded),
+                ["app", "veh.common", "veh.common.sub", "veh.units"]
+            );
+            for common in &loaded.workspace.packages(&db)[1..3] {
+                assert_eq!(
+                    common.imports(&db),
+                    &BTreeMap::from([("veh.units".to_string(), UNITS_CONSUMER.to_string())])
+                );
+            }
+            assert_eq!(loaded.remote_units.len(), 2);
+        }
+
+        /// A remote tree's Warnings are dropped and its Errors are kept with
+        /// the unit named in the message (spec 4.4).
+        #[test]
+        fn a_remote_tree_keeps_errors_and_drops_warnings() {
+            let fixture = TempDir::new("remote-severities");
+            let root = consumer(&fixture);
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[
+                    (
+                        "ridl.toml",
+                        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\nbogus = 1\n",
+                    ),
+                    ("common.typl", "package veh.wrong\n"),
+                    ("sketch.rmdl", "package veh.common\n"),
+                ],
+            );
+            let (db, loaded) = load_frozen(&fixture, &root);
+            // MANI-005 (warning) and RIDL-417 (warning) are dropped; TYPL-002
+            // (error) is kept, with its span.
+            assert_eq!(codes(&loaded.diagnostics), ["TYPL-002"]);
+            let diagnostic = &loaded.diagnostics[0];
+            assert!(
+                diagnostic.message.starts_with("remote unit `veh.common`: "),
+                "{}",
+                diagnostic.message
+            );
+            assert_ne!(diagnostic.primary.file, FileId::DETACHED);
+            assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
+        }
+
+        /// A remote unit that declares a consumer's source package is
+        /// MANI-014, as a second member would be, and its tree is not loaded.
+        #[test]
+        fn a_remote_unit_claiming_a_consumer_package_is_mani_014() {
+            let fixture = TempDir::new("remote-014");
+            fixture.write(
+                "app/ridl.toml",
+                &format!(
+                    "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{URL}\"\n"
+                ),
+            );
+            fixture.write("app/c.typl", "package veh.common\n");
+            let root = fixture.path().join("app");
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\n"),
+                ],
+            );
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-014"]);
+            assert!(loaded.diagnostics[0].message.contains(URL));
+            assert_eq!(package_names(&db, &loaded), ["veh.common"]);
+            assert_eq!(
+                *loaded.workspace.packages(&db)[0].origin(&db),
+                PackageOrigin::WorkspaceMember
+            );
+            assert!(loaded.remote_units.is_empty());
+        }
+
+        /// One key pinned to two URLs by two members: both URLs are
+        /// materialized, the first unit (URL order) loads, and the second is
+        /// MANI-014 because two units claim one source package.
+        #[test]
+        fn one_key_pinned_to_two_urls_loads_the_first_and_flags_the_second() {
+            let fixture = TempDir::new("remote-two-urls");
+            const URL_V2: &str = "https://registry.example.com/veh/common@v2.0.0";
+            fixture.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+            fixture.write(
+                "a/ridl.toml",
+                &format!(
+                    "[package]\nname = \"a\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{URL}\"\n"
+                ),
+            );
+            fixture.write("a/a.ridl", "package a\n");
+            fixture.write(
+                "b/ridl.toml",
+                &format!(
+                    "[package]\nname = \"b\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{URL_V2}\"\n"
+                ),
+            );
+            fixture.write("b/b.ridl", "package b\n");
+            let root = fixture.path().to_path_buf();
+            let cache = cache(&fixture);
+            let mut lock = Lockfile::default();
+            for url in [URL, URL_V2] {
+                lock.entries.insert(
+                    url.into(),
+                    store(
+                        &cache,
+                        url,
+                        &[
+                            ("ridl.toml", COMMON_MANIFEST),
+                            ("common.typl", "package veh.common\n"),
+                        ],
+                    ),
+                );
+            }
+            write_lockfile(&root.join("ridl.lock"), &lock).expect("write ridl.lock");
+
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-014"]);
+            assert!(loaded.diagnostics[0].message.contains(URL_V2));
+            assert_eq!(
+                loaded.imports,
+                BTreeMap::from([
+                    (URL.to_string(), BTreeSet::from(["veh.common".to_string()])),
+                    (
+                        URL_V2.to_string(),
+                        BTreeSet::from(["veh.common".to_string()])
+                    ),
+                ])
+            );
+            assert_eq!(package_names(&db, &loaded), ["a", "b", "veh.common"]);
+            assert_eq!(
+                *loaded.workspace.packages(&db)[2].origin(&db),
+                PackageOrigin::Remote {
+                    url: URL.to_string()
+                }
+            );
+            assert_eq!(loaded.remote_units["veh.common"].url, URL);
+        }
+
+        /// A frozen load with no lock entry is MANI-103 and loads no remote
+        /// unit; `ridl.lock` is not written.
+        #[test]
+        fn a_frozen_load_without_a_lock_entry_is_mani_103() {
+            let fixture = TempDir::new("remote-103");
+            let root = consumer(&fixture);
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-103"]);
+            assert!(!root.join("ridl.lock").exists());
+            assert_eq!(package_names(&db, &loaded), ["app"]);
+            assert!(loaded.remote_units.is_empty());
+        }
+
+        /// A load that is not frozen rewrites `ridl.lock` with the hashes it
+        /// resolved: an entry with no `tree` gains one from the cached tree,
+        /// with no fetch.
+        #[test]
+        fn a_load_that_is_not_frozen_rewrites_the_lockfile() {
+            let fixture = TempDir::new("remote-rewrite");
+            let root = consumer(&fixture);
+            let cache = cache(&fixture);
+            let entry = store(
+                &cache,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\n"),
+                ],
+            );
+            let mut lock = Lockfile::default();
+            lock.entries.insert(
+                URL.into(),
+                LockEntry {
+                    sha256: entry.sha256.clone(),
+                    tree: None,
+                },
+            );
+            write_lockfile(&root.join("ridl.lock"), &lock).expect("write ridl.lock");
+
+            let (db, loaded) = load_with(&fixture, &root, Frozen::No);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
+            let (rewritten, diagnostics) = read_lockfile(&root.join("ridl.lock"));
+            assert!(diagnostics.is_empty());
+            assert_eq!(
+                rewritten.expect("the lockfile is present").entries[URL],
+                entry
+            );
+        }
+
+        /// The plain loader leaves the remote units alone: `load_workspace`
+        /// fills `imports` and nothing else.
+        #[test]
+        fn load_workspace_takes_no_remote_unit() {
+            let fixture = TempDir::new("remote-plain");
+            let root = consumer(&fixture);
+            let mut db = RidlDatabase::default();
+            let loaded = load_workspace(&mut db, &root).expect("the workspace loads");
+            assert!(loaded.remote_units.is_empty());
+            assert_eq!(loaded.imports.len(), 1);
+            assert_eq!(loaded.workspace.packages(&db).len(), 1);
+        }
+
+        /// An error-free frozen load never writes `ridl.lock`: a lockfile
+        /// whose bytes differ from what a rewrite would produce (a comment
+        /// line) is left byte for byte as it was.
+        #[test]
+        fn a_frozen_load_leaves_the_lockfile_unchanged() {
+            let fixture = TempDir::new("remote-frozen-unchanged");
+            let root = consumer(&fixture);
+            let cache = cache(&fixture);
+            let entry = store(
+                &cache,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\n"),
+                ],
+            );
+            let lock_path = root.join("ridl.lock");
+            let text = format!(
+                "# kept as written\n[entries.\"{URL}\"]\nsha256 = \"{}\"\ntree = \"{}\"\n",
+                entry.sha256,
+                entry.tree.as_deref().expect("the entry has a tree")
+            );
+            fs::write(&lock_path, &text).expect("write ridl.lock");
+            let mut regenerated = Lockfile::default();
+            regenerated.entries.insert(URL.into(), entry);
+            write_lockfile(&fixture.path().join("rewritten.lock"), &regenerated)
+                .expect("write the comparison lockfile");
+            assert_ne!(
+                fs::read_to_string(fixture.path().join("rewritten.lock")).expect("read"),
+                text,
+                "a rewrite would change the bytes"
+            );
+
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
+            assert_eq!(
+                fs::read_to_string(&lock_path).expect("read ridl.lock"),
+                text
+            );
+        }
+
+        /// A load that is not frozen but draws a materialization error
+        /// (MANI-107, a cached tree that does not hash to the pinned `tree`)
+        /// leaves `ridl.lock` byte for byte as it was, and loads no remote
+        /// unit.
+        #[test]
+        fn a_load_with_a_materialization_error_leaves_the_lockfile_unchanged() {
+            let fixture = TempDir::new("remote-error-unchanged");
+            let root = consumer(&fixture);
+            let cache = cache(&fixture);
+            let entry = store(
+                &cache,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\n"),
+                ],
+            );
+            let mut lock = Lockfile::default();
+            lock.entries.insert(
+                URL.into(),
+                LockEntry {
+                    sha256: entry.sha256,
+                    tree: Some("0".repeat(64)),
+                },
+            );
+            let lock_path = root.join("ridl.lock");
+            write_lockfile(&lock_path, &lock).expect("write ridl.lock");
+            let text = fs::read_to_string(&lock_path).expect("read ridl.lock");
+
+            let (db, loaded) = load_with(&fixture, &root, Frozen::No);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-107"]);
+            assert_eq!(package_names(&db, &loaded), ["app"]);
+            assert!(loaded.remote_units.is_empty());
+            assert_eq!(
+                fs::read_to_string(&lock_path).expect("read ridl.lock"),
+                text
+            );
+        }
+
+        /// The workspace root's own `[imports]` join the union: a member with
+        /// no `[imports]` of its own still gets the unit the root pins.
+        #[test]
+        fn the_workspace_roots_imports_join_the_union() {
+            let fixture = TempDir::new("remote-root-imports");
+            fixture.write(
+                "ridl.toml",
+                &format!(
+                    "[workspace]\nmembers = [\"app\"]\n\n[imports]\n\"veh.common\" = \"{URL}\"\n"
+                ),
+            );
+            fixture.write(
+                "app/ridl.toml",
+                "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+            );
+            fixture.write("app/app.ridl", "package app\n");
+            let root = fixture.path().to_path_buf();
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\n"),
+                ],
+            );
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            assert_eq!(
+                loaded.imports,
+                BTreeMap::from([(URL.to_string(), BTreeSet::from(["veh.common".to_string()]))])
+            );
+            assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
+            assert_eq!(loaded.remote_units["veh.common"].url, URL);
+        }
+
+        /// A workspace with no `[imports]` anywhere reads and writes no
+        /// `ridl.lock` on a load that is not frozen.
+        #[test]
+        fn a_workspace_with_no_imports_writes_no_lockfile() {
+            let fixture = TempDir::new("remote-no-imports");
+            fixture.write("ridl.toml", "[workspace]\nmembers = [\"app\"]\n");
+            fixture.write(
+                "app/ridl.toml",
+                "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+            );
+            fixture.write("app/app.ridl", "package app\n");
+            let root = fixture.path().to_path_buf();
+            let (_, loaded) = load_with(&fixture, &root, Frozen::No);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            assert!(loaded.imports.is_empty());
+            assert!(
+                !root.join("ridl.lock").exists(),
+                "no `ridl.lock` is written for a workspace with no `[imports]`"
+            );
+        }
+
+        /// A detached Error of a remote unit's read keeps its message as it
+        /// is: the unit-name prefix is for an Error that points into a file
+        /// of the unit, and a detached one already names the URL.
+        #[test]
+        fn a_detached_remote_error_is_not_prefixed() {
+            let fixture = TempDir::new("remote-detached-message");
+            let root = consumer(&fixture);
+            let cache = cache(&fixture);
+            let entry = store(&cache, URL, &[("common.typl", "package veh.common\n")]);
+            let dir = cache
+                .lookup(URL, &entry.sha256)
+                .expect("the unit is cached");
+            let mut lock = Lockfile::default();
+            lock.entries.insert(URL.to_string(), entry);
+            write_lockfile(&root.join("ridl.lock"), &lock).expect("write ridl.lock");
+            let (_, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-105"]);
+            assert_eq!(
+                loaded.diagnostics[0].message,
+                format!(
+                    "the remote unit at `{URL}` has no `ridl.toml` at the top level of its tree (`{}`)",
+                    dir.display()
+                )
+            );
+        }
+
+        /// A member whose tree does not load (a second unit claiming a
+        /// source package, MANI-014) still adds its pins to the union: the
+        /// union is a property of the manifests, not of what loaded.
+        #[test]
+        fn a_duplicate_members_pins_join_the_union() {
+            let fixture = TempDir::new("remote-duplicate-member-pins");
+            fixture.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+            fixture.write(
+                "a/ridl.toml",
+                "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+            );
+            fixture.write("a/a.ridl", "package app\n");
+            fixture.write(
+                "b/ridl.toml",
+                &format!(
+                    "[package]\nname = \"app\"\nversion = \"1.0.0\"\n\n[imports]\n\"veh.common\" = \"{URL}\"\n"
+                ),
+            );
+            fixture.write("b/b.ridl", "package app\n");
+            let root = fixture.path().to_path_buf();
+            let (_, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-014", "MANI-103"]);
+            assert_eq!(
+                loaded.imports,
+                BTreeMap::from([(URL.to_string(), BTreeSet::from(["veh.common".to_string()]))])
+            );
+        }
+
+        /// Single-file mode has no manifest and loads no remote unit.
+        #[test]
+        fn single_file_mode_loads_no_remote_unit() {
+            let fixture = TempDir::new("remote-single");
+            let file = fixture.write("lone.typl", "package lone\n");
+            let (db, loaded) = load_frozen(&fixture, &file);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            assert!(loaded.imports.is_empty());
+            assert!(loaded.remote_units.is_empty());
+            assert_eq!(loaded.workspace.packages(&db).len(), 1);
+        }
     }
 }

@@ -240,13 +240,17 @@ schema change.
 
 For the same tree, path-mode `ridl_check` and `ridl check --format json` give
 the same diagnostics, each equal field for field, except for what only the
-command line reports because it needs the network, the lockfile round trip or
-the baseline: MANI-101 to MANI-104 and the lockfile read and write diagnostics
-of `materialize_and_lock`, and the desk check against `.ridl/baseline` (RIDL-407
-and the rename hint on RIDL-409). `ridl_diff` with
-`old: "<root>/.ridl/baseline"` and `new: "<root>"` gives the same information. A
-remote import resolves in neither, and both report the same Info diagnostic. The
-crate README states this list.
+command line reports because it needs the network, the `ridl.lock` write or the
+baseline: a failed fetch (MANI-101 when the fetch itself fails, MANI-102 on a
+hash mismatch), and the desk check against `.ridl/baseline` (RIDL-407 and the
+rename hint on RIDL-409). `ridl_diff` with `old: "<root>/.ridl/baseline"` and
+`new: "<root>"` gives the same information. The tools read a remote unit of the
+`[imports]` from the cache, as `ridl check --frozen` does, and never fetch: a
+URL with no `ridl.lock` entry is MANI-103 and a pin the cache does not hold is
+MANI-104, each with a message that names `ridl check` as the fix, and an entry
+written before the `tree` hash existed is MANI-108. MANI-101 is still reported
+for a URL in `[imports]` that is not a fetchable `http(s)` URL, which the
+materializer sees before it asks the cache. The crate README states this list.
 
 ## 7. The tool surface as a contract
 
