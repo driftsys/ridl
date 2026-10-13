@@ -16,7 +16,7 @@ interaction — a signal payload, an event payload, a command or query parameter
 a `fixed` value — a primitive is never written directly; name a `type`. A struct
 field is more permissive: an inline constrained primitive, such as a bounded
 `string` or a bounded `bytes`, is accepted, but a bare `string` or `bytes` with
-no constraint is `TYPL-208` everywhere, field included.
+no constraint is `TYPL-208` in a struct field.
 
 ```typl,allow=TYPL-115
 package skill.typl.primitives
