@@ -1677,6 +1677,68 @@ fn lsp_publishes_no_loader_finding_for_a_remote_file() {
     assert_eq!(stub.hits(), 0, "the language server never fetches");
 }
 
+/// The same loader finding at a vendored unit: MANI-014 at the manifest
+/// under `vendor/` is not published under that file's URI; it is shown as a
+/// message, and the server reads `vendor/` with an empty cache.
+#[test]
+fn lsp_publishes_no_loader_finding_for_a_vendored_file() {
+    use remote_support::{COMMON_UNIT, Stub, member_consumer, ridl, unit_tar, vendor_common};
+    let dir = remote_support::TempDir::new("lsp-vendored-loader");
+    let stub = Stub::serving(unit_tar(COMMON_UNIT));
+    let member = member_consumer(&dir, stub.url());
+    let root = member.parent().unwrap().to_path_buf();
+    // The first run writes `ridl.lock`; the member's own findings are not
+    // this test's subject.
+    ridl(&member, dir.path(), &["check"]);
+    assert!(root.join("ridl.lock").is_file());
+    vendor_common(&root);
+    std::fs::remove_dir_all(dir.path().join(".ridl")).unwrap();
+    dir.write(
+        "ws/ridl.toml",
+        &format!(
+            "[workspace]\nmembers = [\"app\", \"common\"]\n\n[imports]\n\"veh.common\" = \"{}\"\n",
+            stub.url()
+        ),
+    );
+    dir.write(
+        "ws/common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "ws/common/common.typl",
+        "package veh.common\n\ntype Local : integer [0..1]\n",
+    );
+    dir.write("ws/app/app.ridl", UNTIMED_CONSUMER);
+    stub.reset_hits();
+    let session = LspSession::start_in_with_home(&root, Some(&root), Some(dir.path()));
+    let (publishes, shown) = session.shutdown_collecting();
+    let published = published_lists(&publishes);
+    assert!(
+        published
+            .iter()
+            .all(|(uri, _)| !uri.contains("vendor/veh.common")),
+        "no loader finding is published for a vendored file: {published:?}"
+    );
+    assert_eq!(
+        shown.len(),
+        1,
+        "the finding is shown as a message: {shown:?}"
+    );
+    let message = shown[0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("MANI-014")
+            && message.contains("remote unit `veh.common`")
+            && message.contains("vendor/veh.common"),
+        "{message}"
+    );
+    let (_, app) = published
+        .iter()
+        .find(|(uri, _)| uri.ends_with("app.ridl"))
+        .expect("the member's untimed signal is published");
+    assert!(app.iter().any(|d| d["code"] == "RIDL-100"), "{app:?}");
+    assert_eq!(stub.hits(), 0, "the language server never fetches");
+}
+
 /// A remote unit's spanned Error — the one that fails `ridl check` — is not
 /// published under a cache URI; it is shown once in the window message, with
 /// the unit, the file path in the cache, the line, the code and the message.

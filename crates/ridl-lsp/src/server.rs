@@ -288,7 +288,8 @@ struct ServerState {
     /// The remote units the load read, by name and directory.
     remote_units: Vec<(String, PathBuf)>,
     /// The directories a remote unit is read from — each loaded unit's
-    /// directory and the cache root ([`ridlc::remote_dirs`]). A remote unit
+    /// directory, the manifest root's `vendor/` and the cache root
+    /// ([`ridlc::remote_dirs`]). A remote unit
     /// is a read-only dependency: it is checked so that the consumer's
     /// references resolve, and no diagnostic is published for a file under
     /// one of these, not even a loader finding at a unit that did not load.
@@ -355,10 +356,10 @@ impl ServerState {
     /// loaded input and stops being an overlay, so the file is analyzed once,
     /// as a member of its package.
     ///
-    /// The remote units of the manifest's `[imports]` are read from the
-    /// cache under [`Frozen::Yes`]: the server never fetches and never
-    /// writes `ridl.lock`. A pin the cache does not hold is MANI-104, kept
-    /// as [`ServerState::remote_notice`].
+    /// The remote units of the manifest's `[imports]` are read from
+    /// `vendor/`, then the cache, under [`Frozen::Yes`]: the server never
+    /// fetches and never writes `ridl.lock`. A pin neither holds is
+    /// MANI-104, kept as [`ServerState::remote_notice`].
     fn load(&mut self, dir: &Path) -> io::Result<()> {
         let cache = Cache::user_default();
         // `report_scope` is not used: the server publishes the diagnostics of
@@ -379,10 +380,7 @@ impl ServerState {
             &mut self.db,
             dir,
             &[],
-            RemoteAccess {
-                frozen: Frozen::Yes,
-                cache: &cache,
-            },
+            RemoteAccess::new(Frozen::Yes, &cache),
         )
         .map_err(|error| match error {
             ridl_core::LoadError::Io(e) => e,
@@ -409,7 +407,7 @@ impl ServerState {
                     .insert(file.path(&self.db).clone(), *package);
             }
         }
-        self.remote_dirs = ridlc::remote_dirs(&remote_units, &cache);
+        self.remote_dirs = ridlc::remote_dirs(&remote_units, &cache, dir);
         self.remote_units = remote_units
             .into_iter()
             .map(|(name, unit)| (name, unit.dir))

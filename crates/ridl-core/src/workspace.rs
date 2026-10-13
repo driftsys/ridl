@@ -136,14 +136,47 @@ pub struct MaterializedUnit {
     pub tree: String,
 }
 
-/// How a load reaches remote units: the cache to read them from, and whether
-/// a unit the cache does not hold may be fetched.
+/// Whether a load reads `<manifest root>/vendor/<key>/` before the cache
+/// ([`VENDOR_DIR`]).
+#[cfg(feature = "fetch")]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum VendorRead {
+    Read,
+    Skip,
+}
+
+/// How a load reaches remote units: whether `vendor/` is read first, the
+/// cache to read them from, and whether a unit neither holds may be fetched.
 #[cfg(feature = "fetch")]
 #[derive(Clone, Copy)]
 pub struct RemoteAccess<'a> {
     /// [`Frozen::Yes`] never fetches and never writes `ridl.lock`.
     pub frozen: Frozen,
     pub cache: &'a Cache,
+    pub vendor: VendorRead,
+}
+
+#[cfg(feature = "fetch")]
+impl<'a> RemoteAccess<'a> {
+    /// The ordinary access: `vendor/`, then the cache, then (not frozen) a
+    /// fetch.
+    pub fn new(frozen: Frozen, cache: &'a Cache) -> Self {
+        RemoteAccess {
+            frozen,
+            cache,
+            vendor: VendorRead::Read,
+        }
+    }
+
+    /// The access of `ridl vendor`: the cache, then a fetch. `vendor/` is
+    /// what that command writes, not what it reads.
+    pub fn refresh(cache: &'a Cache) -> Self {
+        RemoteAccess {
+            frozen: Frozen::No,
+            cache,
+            vendor: VendorRead::Skip,
+        }
+    }
 }
 
 /// Unsaved source text for a file in a loaded package directory.
@@ -291,9 +324,11 @@ pub fn load_workspace_with(
 
 /// [`load_workspace_with`], then every remote unit of the consumer's
 /// `[imports]` (ADR-0002 §5, §7): the union of the root's and every member's
-/// pins is materialized through [`materialize_imports`] — a cache hit against
-/// `ridl.lock`, else a fetch under [`Frozen::No`] — and each unit's tree is
-/// loaded as packages of origin [`PackageOrigin::Remote`]. Under
+/// pins is materialized through [`materialize_imports`] — a vendored tree
+/// under `<manifest root>/vendor/<key>/` whose `tree` `ridl.lock` pins, else
+/// a cache hit against `ridl.lock`, else a fetch under [`Frozen::No`]
+/// (`vendor/` is read only under [`VendorRead::Read`]) — and each unit's
+/// tree is loaded as packages of origin [`PackageOrigin::Remote`]. Under
 /// [`Frozen::No`] and with no materialization error, `ridl.lock` at the
 /// manifest root is rewritten with both hashes; under [`Frozen::Yes`] nothing
 /// is fetched and the lockfile is never written. A remote unit's Warnings and
@@ -1227,8 +1262,17 @@ impl Loader {
         let lock_path = root.join("ridl.lock");
         let (lock, diagnostics) = read_lockfile(&lock_path);
         self.diagnostics.extend(diagnostics);
-        let (units, regenerated, diagnostics) =
-            materialize_imports(&self.imports, lock.as_ref(), access.cache, access.frozen);
+        let vendor = match access.vendor {
+            VendorRead::Read => Some(root.join(VENDOR_DIR)),
+            VendorRead::Skip => None,
+        };
+        let (units, regenerated, diagnostics) = materialize_imports(
+            &self.imports,
+            lock.as_ref(),
+            access.cache,
+            access.frozen,
+            vendor.as_deref(),
+        );
         let had_error = diagnostics.iter().any(|d| d.severity == Severity::Error);
         self.diagnostics.extend(diagnostics);
         // A frozen run never regenerates the lockfile (ADR-0002 §7); a failed
@@ -4392,16 +4436,9 @@ service:veh.common.climate 2
         ) -> (RidlDatabase, LoadedWorkspace) {
             let cache = cache(fixture);
             let mut db = RidlDatabase::default();
-            let loaded = load_workspace_with_remotes(
-                &mut db,
-                root,
-                &[],
-                RemoteAccess {
-                    frozen,
-                    cache: &cache,
-                },
-            )
-            .expect("the workspace loads");
+            let loaded =
+                load_workspace_with_remotes(&mut db, root, &[], RemoteAccess::new(frozen, &cache))
+                    .expect("the workspace loads");
             (db, loaded)
         }
 
@@ -4698,6 +4735,44 @@ service:veh.common.climate 2
             );
             assert_ne!(diagnostic.primary.file, FileId::DETACHED);
             assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
+        }
+
+        /// The `vendor/` reservation applies at the consumer's manifest root
+        /// only: a directory named `vendor` in a remote unit's own tree is
+        /// an ordinary source package of that unit, whether the unit is read
+        /// from the cache or from the consumer's `vendor/<key>/`.
+        #[test]
+        fn a_remote_units_own_vendor_directory_is_a_source_package() {
+            let fixture = TempDir::new("remote-own-vendor");
+            let root = consumer(&fixture);
+            let files = [
+                ("ridl.toml", COMMON_MANIFEST),
+                ("common.typl", "package veh.common\ntype Speed : km/h\n"),
+                ("vendor/v.typl", "package veh.common.vendor\n"),
+            ];
+            seed(&cache(&fixture), &root, URL, &files);
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+            assert_eq!(
+                package_names(&db, &loaded),
+                ["app", "veh.common", "veh.common.vendor"]
+            );
+            // The same unit vendored at the consumer's root, with the cache
+            // gone: `vendor/veh.common/vendor/` is still a source package.
+            for (name, text) in &files {
+                fixture.write(&format!("app/vendor/veh.common/{name}"), text);
+            }
+            std::fs::remove_dir_all(cache(&fixture).root).unwrap();
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+            assert_eq!(
+                package_names(&db, &loaded),
+                ["app", "veh.common", "veh.common.vendor"]
+            );
+            assert_eq!(
+                loaded.remote_units["veh.common"].dir,
+                root.join("vendor").join("veh.common")
+            );
         }
 
         /// A remote unit that declares a consumer's source package is

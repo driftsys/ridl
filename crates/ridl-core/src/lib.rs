@@ -57,4 +57,4 @@ pub use workspace::{
     load_workspace, load_workspace_with,
 };
 #[cfg(feature = "fetch")]
-pub use workspace::{RemoteAccess, load_workspace_with_remotes};
+pub use workspace::{RemoteAccess, VendorRead, load_workspace_with_remotes};

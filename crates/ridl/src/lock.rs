@@ -101,7 +101,11 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
         &mut output.diagnostics,
         &output.sources,
         output.report_scope.as_deref(),
-        &ridlc::remote_dirs(&output.remote_units, &ridl_core::Cache::user_default()),
+        &ridlc::remote_dirs(
+            &output.remote_units,
+            &ridl_core::Cache::user_default(),
+            path,
+        ),
     );
     // `ridl lock` applies no `[lints]` levels (ADR-0024 decision 8), so a lint
     // that is `allow` by default is left out of what it renders.
