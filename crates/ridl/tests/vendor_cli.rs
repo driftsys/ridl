@@ -50,6 +50,39 @@ fn fmt_never_touches_vendor() {
     assert!(stderr.is_empty(), "{stderr}");
 }
 
+/// `ridl fmt .` from a directory above the manifest root, which holds no
+/// `ridl.toml`, still skips that root's `vendor/`. A `vendor/` at the top of
+/// a workspace member is an ordinary package and is formatted.
+#[test]
+fn fmt_from_a_parent_directory_never_touches_vendor() {
+    let dir = TempDir::new("fmt-vendor-parent");
+    dir.write(
+        "proj/app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("proj/app/app.typl", "package app\n");
+    let unformatted = "package   veh.common\ntype   Speed :  km/h\n";
+    dir.write(
+        "proj/app/vendor/veh.common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    let vendored = dir.write("proj/app/vendor/veh.common/common.typl", unformatted);
+    dir.write("proj/ws/ridl.toml", "[workspace]\nmembers = [\"m\"]\n");
+    dir.write(
+        "proj/ws/m/ridl.toml",
+        "[package]\nname = \"m\"\nversion = \"1.0.0\"\n",
+    );
+    let member_vendor = dir.write("proj/ws/m/vendor/v.typl", "package   m.vendor\n");
+    let parent = dir.path().join("proj");
+    let (code, _, stderr) = ridl(&parent, dir.path(), &["fmt", "."]);
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(std::fs::read_to_string(&vendored).unwrap(), unformatted);
+    assert_eq!(
+        std::fs::read_to_string(&member_vendor).unwrap(),
+        "package m.vendor\n"
+    );
+}
+
 /// A frozen `ridl check` with an empty cache reads `vendor/`: the
 /// air-gapped build. An edited vendored tree is MANI-107 naming the vendor
 /// path and `ridl vendor`.

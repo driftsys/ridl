@@ -1219,9 +1219,10 @@ Options:
 
 **It writes** every `.typl`/`.ridl`/`.rsdl` file under `PATH` back to itself in
 canonical form, unless `--check` is given or the file fails to parse. The walk
-skips `vendor/` at the manifest root, which [`ridl vendor`](#ridl-vendor) fills
-with copies of remote units that belong to their own owners; a `PATH` that is
-that directory or lies under it is refused with exit 2. An `.rsdl`
+skips `vendor/` at every manifest root it meets, including one below a `PATH`
+that has no `ridl.toml`; [`ridl vendor`](#ridl-vendor) fills that directory with
+copies of remote units that belong to their own owners. A `PATH` that is such a
+directory or lies under it is refused with exit 2. An `.rsdl`
 file takes the file layout (the header, one blank line between declarations).
 Systems, components, distributions, deployments and machines use canonical
 brace bodies, references and attributes. Deployments keep `for` before header
