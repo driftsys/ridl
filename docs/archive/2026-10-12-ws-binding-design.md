@@ -1,9 +1,9 @@
 # The WebSocket binding — design (2026-10-12)
 
 Status: **draft for review.** Lane W, step 1 of the release 0.10 lanes plan
-([`2026-10-11-release-0.10-lanes-plan.md`](../wip/2026-10-11-release-0.10-lanes-plan.md)
+([`2026-10-11-release-0.10-lanes-plan.md`](./2026-10-11-release-0.10-lanes-plan.md)
 section 4, "Lane W"), under release spec decisions R-1 and R-3
-([`2026-10-11-release-0.10-design.md`](../wip/2026-10-11-release-0.10-design.md)).
+([`2026-10-11-release-0.10-design.md`](./2026-10-11-release-0.10-design.md)).
 The maintainer delegated every decision of this lane; each ruling below records
 its reason, the alternatives considered, and its cost if wrong. Rulings are
 numbered from R-W-7, because R-W-1 to R-W-6 are taken.
@@ -772,9 +772,9 @@ R-W-15), and the `Violation.type_name` change is lane W step 2's (R-W-14).
 ## 6. Trace
 
 - Release spec R-1, R-3:
-  [`2026-10-11-release-0.10-design.md`](../wip/2026-10-11-release-0.10-design.md)
+  [`2026-10-11-release-0.10-design.md`](./2026-10-11-release-0.10-design.md)
 - Lane brief:
-  [`2026-10-11-release-0.10-lanes-plan.md`](../wip/2026-10-11-release-0.10-lanes-plan.md)
+  [`2026-10-11-release-0.10-lanes-plan.md`](./2026-10-11-release-0.10-lanes-plan.md)
   section 4, "Lane W"
 - Steering:
   [`2026-10-06-ws-and-payload-formats-steering.md`](2026-10-06-ws-and-payload-formats-steering.md)

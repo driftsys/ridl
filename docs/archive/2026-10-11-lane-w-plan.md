@@ -1,9 +1,9 @@
 # Release 0.10 — lane W plan (wire and runtime)
 
 **Brief:** section 4, "Lane W", of
-[`2026-10-11-release-0.10-lanes-plan.md`](../wip/2026-10-11-release-0.10-lanes-plan.md).
+[`2026-10-11-release-0.10-lanes-plan.md`](./2026-10-11-release-0.10-lanes-plan.md).
 **Spec:** section 5.3 of
-[`2026-10-11-release-0.10-design.md`](../wip/2026-10-11-release-0.10-design.md).
+[`2026-10-11-release-0.10-design.md`](./2026-10-11-release-0.10-design.md).
 
 Sebastien delegated every decision of this lane on 2026-10-11, the design of
 step 1 included. Each ruling is recorded in section 1 as `R-W-<n>` and in the
