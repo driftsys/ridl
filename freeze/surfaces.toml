@@ -29,39 +29,39 @@ required = [
 
 [[surface]]
 name = "mcp"
-baseline = "3c3301dff1a5c2b9d13c6192c9f84f71d85c88c2"
+baseline = "v0.10.0"
 
 [[surface]]
 name = "msrv"
-baseline = "7e83024dedb766a70c665f01607cf496a6007c42"
+baseline = "v0.10.0"
 
 [[surface]]
 name = "wire"
-baseline = "e6620b0eb0a11d2dac3d3f38ca1751d17c452acf"
+baseline = "v0.10.0"
 
 [[surface]]
 name = "codegen-protocol"
-baseline = "a3a0ac21a4b6ea55421cfd3dfbbe65ebb16bdfe8"
+baseline = "v0.10.0"
 
 [[surface]]
 name = "generated-crate"
-baseline = "2e3a3c9c1c41fe6b749575bfb2ba9ff39f62e9f0"
+baseline = "v0.10.0"
 
 [[surface]]
 name = "runtime-crates"
-baseline = "69d23ab79ed75f59126f2f5a755f245df552dd64"
+baseline = "v0.10.0"
 
 [[surface]]
 name = "keywords"
-baseline = "ecc2eb0c18f3441e0b687a666eaace4bb0caa647"
+baseline = "v0.10.0"
 
 [[surface]]
 name = "accepted-sources"
-baseline = "d4729323d6f77219fd4778a45ea9382a37e82fdc"
+baseline = "v0.10.0"
 
 [[surface]]
 name = "diagnostics"
-baseline = "2a6a94a8b6e7d67845b0737c8d1bd6977e0ea1b8"
+baseline = "v0.10.0"
 
 [[surface]]
 name = "manifest"
