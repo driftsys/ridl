@@ -115,6 +115,25 @@ pub fn parse_verdict(reply: &str, items: &[Item]) -> Result<Vec<bool>, String> {
         .collect()
 }
 
+/// The judge's one-sentence reason for each item, in rubric order, for a
+/// reply that `parse_verdict` accepted. An item with no reason gets an empty
+/// string.
+pub fn verdict_reasons(reply: &str, items: &[Item]) -> Vec<String> {
+    let value: serde_json::Value = serde_json::from_str(reply.trim()).unwrap_or_default();
+    let entries = value["items"].as_array().cloned().unwrap_or_default();
+    items
+        .iter()
+        .map(|item| {
+            entries
+                .iter()
+                .find(|e| e["n"].as_u64() == Some(u64::from(item.n)))
+                .and_then(|e| e["reason"].as_str())
+                .unwrap_or_default()
+                .to_owned()
+        })
+        .collect()
+}
+
 /// The weighted fraction of rubric items met: **must** and **must not**
 /// count 2, **should** counts 1.
 pub fn weighted_score(items: &[Item], met: &[bool]) -> f64 {
@@ -342,6 +361,13 @@ mod tests {
         let items = rubric_items(RUBRIC).unwrap();
         assert_eq!(weighted_score(&items, &[true, false, true]), 4.0 / 5.0);
         assert_eq!(weighted_score(&items, &[false, true, false]), 1.0 / 5.0);
+    }
+
+    #[test]
+    fn the_reasons_follow_the_rubric_order() {
+        let items = items_of(3);
+        let reply = r#"{"items":[{"n":2,"met":false,"reason":"b"},{"n":1,"met":true,"reason":"a"},{"n":3,"met":true}]}"#;
+        assert_eq!(verdict_reasons(reply, &items), ["a", "b", ""]);
     }
 
     #[test]
