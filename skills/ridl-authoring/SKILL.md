@@ -12,26 +12,44 @@ metadata:
 
 ## The model in one minute
 
-See [The family](https://driftsys.github.io/ridl/introduction.html#the-family):
-one platform, one grammar, one IR, four languages, one concern each.
+See [The family](https://driftsys.github.io/ridl/introduction.html#the-family).
+`typl` is vocabulary (types, ranges, units, constants), `ridl` interactions at a
+boundary, `rsdl` architecture (components, wiring, deployment); `rmdl`
+(behaviour) is specified only. The lattice: `typl ← {ridl, rmdl} ← rsdl`.
 
-- `typl` — vocabulary: types, ranges, units, constants.
-- `ridl` — interactions at every boundary: system, person, world.
-- `rmdl` — behaviour. Specified only; no implementation in this toolchain.
-- `rsdl` — architecture: components, wiring, deployment.
+## The tooling
 
-The lattice runs one way, `typl ← {ridl, rmdl} ← rsdl`.
+One `ridl` binary serves three surfaces
+([CLI reference](https://driftsys.github.io/ridl/cli-reference.html#ridl-mcp)).
 
-```typl
-package skill.intro
+- **MCP** (`ridl mcp`): read-only tools an agent calls: `ridl_check`,
+  `ridl_explain`, `ridl_diff`, `ridl_metrics`, `ridl_list_interactions`,
+  `ridl_describe_type`, `ridl_resolve`, `ridl_references`, `ridl_dependencies`.
+  Prefer them; they teach no syntax, the examples and references below do.
+- **CLI**: when no MCP is connected: `ridl check --format json`,
+  `ridl diff <old> <new>`, `ridl fmt`, `ridl new` to scaffold, `ridl help`.
+- **LSP** (`ridl lsp`): editor diagnostics; an agent does not call it.
 
-/// Cabin air temperature, in degrees Celsius.
-type Temperature : Cel [-40.0..85.0 step 0.5]
-```
+## Installing
+
+See
+[Installing the toolchain](https://driftsys.github.io/ridl/getting-started.html#installing-the-toolchain).
+If `ridl` is not on the `PATH`, tell the user, and run an installer only after
+they agree:
+
+- Linux and macOS:
+  `curl -fsSL https://raw.githubusercontent.com/driftsys/ridl/main/install.sh | bash`
+- Windows:
+  `irm https://raw.githubusercontent.com/driftsys/ridl/main/install.ps1 | iex`
+- VS Code: the "RIDL" extension bundles `ridl`, runs the language server and
+  registers `ridl mcp` for Copilot (VS Code 1.109 or newer); the command "RIDL:
+  Install ridl to PATH" puts the binary on the `PATH`.
+- Another agent host: register `ridl mcp` as a stdio server, for Claude Code
+  `claude mcp add ridl -- ridl mcp`
+  ([agent setup](https://driftsys.github.io/ridl/getting-started.html#editor-and-agent-setup)).
 
 ## The verify loop
 
-See [`ridl mcp`](https://driftsys.github.io/ridl/cli-reference.html#ridl-mcp).
 Never trust a generated source unchecked; always report the loop's result.
 
 1. Write the source, then call `ridl_check`; fix every diagnostic in order. Call
@@ -41,30 +59,22 @@ Never trust a generated source unchecked; always report the loop's result.
    copy taken after editing makes `ridl_diff` report `identical` no matter what
    changed. Diff the outside copy (`old`) against the edited workspace (`new`);
    exit 0 is required unless a break is deliberate and stated.
-3. Ground new work in what the workspace declares — call
+3. Ground new work in what the workspace declares: call
    `ridl_list_interactions`, `ridl_describe_type` and `ridl_resolve` before an
-   `import`, and `ridl_metrics` for a naming judgement (`RIDL-414`, `TYPL-222`,
-   `TYPL-224`).
-4. When a requirement has no schema expression — retry, ordering, storage,
-   enforcement beyond `@` — say so; name what the schema does and does not
-   enforce, and prose the rest.
-5. In the final message, state the `ridl_check` result and, for an edit to a
-   published contract, the `ridl_diff` verdict as printed.
-
-## Documenting types and interfaces
-
-See [House style](https://driftsys.github.io/ridl/documenting.html#house-style).
-Document what a caller must know — what a value means, where it comes from, what
-it does when it changes — not the range, unit or timing the declaration already
-states. Every exported declaration, and every member of one, takes a doc comment
-unless its parent is `internal`, as the types example below shows.
+   `import`; use `ridl_metrics` for a naming judgement (`RIDL-414`, `TYPL-222`).
+4. When a requirement has no schema expression (retry, ordering, storage), say
+   so, name what the schema does and does not enforce, and describe the rest in
+   prose.
+5. In the final message, state the `ridl_check` result and any `ridl_diff`
+   verdict.
+6. Document every exported declaration and member with what a caller must know,
+   not the range, unit or timing it already states (see
+   [House style](https://driftsys.github.io/ridl/documenting.html#house-style)).
 
 ## Basic examples
 
-A ranged unit type, a constant, a struct and an enum, each member documented
-(see
-[Your first interface](https://driftsys.github.io/ridl/getting-started.html#your-first-interface)
-for the shapes; verify each block with `ridl_check` before relying on it):
+A ranged unit type, a constant and an enum, each documented (more in
+[Your first interface](https://driftsys.github.io/ridl/getting-started.html#your-first-interface)):
 
 ```typl
 package skill.intro.types
@@ -80,14 +90,6 @@ enum DriveMode {
   NORMAL = 0
   /// Economy assist.
   ECO = 1
-}
-
-/// The state of cruise control.
-struct CruiseControlState {
-  /// Whether cruise control is engaged.
-  enabled : boolean
-  /// The requested speed.
-  targetSpeed : Speed
 }
 ```
 
@@ -115,7 +117,7 @@ interface CruiseControl {
 }
 ```
 
-A minimal component and system — the smallest rsdl closure a build accounts for:
+A minimal component and system:
 
 ```ridl
 package skill.intro.cabin
@@ -139,12 +141,10 @@ system Cabin { ClimateControl }
 
 ## Where to find the docs
 
-Read a reference first; `ridl_explain` a code instead of guessing.
+Read a reference before using a new construct; `ridl_explain` a code, never
+guess.
 
 - [typl — types and vocabulary](https://driftsys.github.io/ridl/reference/typl.html#4-primitives)
 - [ridl — system interactions](https://driftsys.github.io/ridl/reference/ridl.html#4-signal)
 - [rsdl — architecture](https://driftsys.github.io/ridl/reference/rsdl.html#32-component)
-- [Diagnostics (typl's section; ridl, rsdl carry the same one)](https://driftsys.github.io/ridl/reference/typl.html#16-diagnostics)
-- [Lints — the `[lints]` table](https://driftsys.github.io/ridl/lints.html#the-lints-table)
-- [Documenting your API](https://driftsys.github.io/ridl/documenting.html#a-documented-package)
-- [Getting started](https://driftsys.github.io/ridl/getting-started.html#what-ridl-is)
+- [Diagnostics](https://driftsys.github.io/ridl/reference/typl.html#16-diagnostics)
