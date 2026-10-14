@@ -1,6 +1,6 @@
 //! The gates that keep `skills/ridl-authoring/` consistent with the compiler:
-//! every diagnostic code it cites is in the catalogue dump, every section of a
-//! reference file links a heading of the published book, every link of every
+//! every diagnostic code it cites is in the catalogue dump, every section of
+//! `SKILL.md` links a heading of the published book, every link of every
 //! skill file resolves where the skill is installed, and the frontmatter names
 //! the skill after its directory.
 //!
@@ -289,12 +289,9 @@ fn a_page_whose_include_is_missing_has_no_source() {
 
 #[test]
 fn every_reference_section_links_an_existing_heading() {
-    let mut failures = Vec::new();
-    for name in ["typl.md", "ridl.md", "rsdl.md"] {
-        let file = skill_dir().join(name);
-        let text = std::fs::read_to_string(&file).expect("read a reference file");
-        failures.extend(section_failures(&file, &text));
-    }
+    let file = skill_dir().join("SKILL.md");
+    let text = std::fs::read_to_string(&file).expect("read SKILL.md");
+    let failures = section_failures(&file, &text);
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
