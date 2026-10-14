@@ -468,7 +468,8 @@ fn judge_run(
     table.insert("judge_model".into(), model.into());
     table.insert("handoff".into(), handoff.into());
     let reply = reply.and_then(|reply| {
-        judge::parse_verdict(&reply, &items).map(|met| (met, judge::verdict_reasons(&reply, &items)))
+        judge::parse_verdict(&reply, &items)
+            .map(|met| (met, judge::verdict_reasons(&reply, &items)))
     });
     match reply {
         Ok((met, reasons)) => {

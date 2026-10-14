@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn the_reasons_follow_the_rubric_order() {
-        let items = items_of(3);
+        let items = rubric_items(RUBRIC).unwrap();
         let reply = r#"{"items":[{"n":2,"met":false,"reason":"b"},{"n":1,"met":true,"reason":"a"},{"n":3,"met":true}]}"#;
         assert_eq!(verdict_reasons(reply, &items), ["a", "b", ""]);
     }
