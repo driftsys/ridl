@@ -106,11 +106,34 @@ impl<'a> DocParts<'a> {
 pub(crate) struct Links<'a> {
     model: &'a v1::Model,
     faced: &'a BTreeSet<u32>,
+    module: String,
 }
 
 impl<'a> Links<'a> {
     pub(crate) fn new(model: &'a v1::Model, faced: &'a BTreeSet<u32>) -> Self {
-        Links { model, faced }
+        let package = model
+            .scope
+            .as_ref()
+            .map(|scope| scope.package.as_str())
+            .unwrap_or_default();
+        let segments = package
+            .split('.')
+            .filter(|segment| !segment.is_empty())
+            .map(ident);
+        Links {
+            model,
+            faced,
+            module: spelled(quote! { crate #(:: #segments)* }),
+        }
+    }
+
+    /// The same targets, rendered from the module that holds this doc.
+    pub(crate) fn in_module(&self, module: TokenStream) -> Self {
+        Links {
+            model: self.model,
+            faced: self.faced,
+            module: spelled(module),
+        }
     }
 
     /// The rustdoc path of `target`, a canonical qualified name `pkg.Name`
@@ -278,6 +301,8 @@ pub(crate) struct DocLines {
     see: Vec<String>,
     /// One `Available since <v>.` line per `since` version.
     since: Vec<String>,
+    /// The Rust module used to resolve shortcuts in the complete comment.
+    module: String,
 }
 
 impl DocLines {
@@ -292,6 +317,7 @@ impl DocLines {
         };
         DocLines {
             body,
+            module: links.module.clone(),
             rules: parts
                 .rules
                 .iter()
@@ -345,8 +371,56 @@ impl DocLines {
             }
             lines.extend(self.since.iter().cloned());
         }
-        lines
+        shorten_links(lines, &self.module)
     }
+}
+
+/// Shortens after all sections are assembled: a reference definition in any
+/// section can override a shortcut in another. Code-span labels distinguish
+/// a resolved intra-doc target from a user reference definition without an
+/// explicit path that rustdoc would diagnose as redundant.
+fn shorten_links(lines: Vec<String>, module: &str) -> Vec<String> {
+    use pulldown_cmark::{Event, LinkType, Parser, Tag};
+
+    let mut doc = lines.join("\n");
+    let mut parser = Parser::new(&doc).into_offset_iter();
+    let mut replacements = Vec::new();
+    while let Some((event, range)) = parser.next() {
+        let definitions = parser.reference_definitions();
+        let Event::Start(Tag::Link {
+            link_type: LinkType::Inline,
+            dest_url,
+            ..
+        }) = event
+        else {
+            continue;
+        };
+        let Some((owner, name)) = dest_url.rsplit_once("::") else {
+            continue;
+        };
+        if owner != module || doc[range.clone()] != format!("[{name}]({dest_url})") {
+            continue;
+        }
+        let mut label = name.to_string();
+        if definitions.get(&label).is_some() {
+            let mut ticks = String::from("`");
+            loop {
+                label = format!("{ticks}{name}{ticks}");
+                if definitions.get(&label).is_none() {
+                    break;
+                }
+                ticks.push('`');
+            }
+        }
+        replacements.push((range, format!("[{label}]")));
+    }
+    if replacements.is_empty() {
+        return lines;
+    }
+    for (range, replacement) in replacements.into_iter().rev() {
+        doc.replace_range(range, &replacement);
+    }
+    doc.split('\n').map(str::to_string).collect()
 }
 
 /// The doc comment of one carrier with no generated sentence: the doc text,
@@ -426,8 +500,8 @@ fn linked(doc: &str, doc_links: &[v1::DocLink], links: &Links<'_>) -> String {
     text
 }
 
-/// `[<text>](<path>)` when the target is an item of this output, and a code
-/// span of the qualified target name otherwise.
+/// An explicit path for an emitted target, or a qualified code span when the
+/// target has no linkable item. Shortening waits for the complete comment.
 fn rendered_link(link: &v1::DocLink, links: &Links<'_>) -> String {
     match links.path(&link.target) {
         Some(path) => format!("[{}]({path})", link.text),
@@ -438,6 +512,25 @@ fn rendered_link(link: &v1::DocLink, links: &Links<'_>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shortening_preserves_link_text_inside_code() {
+        let lines: Vec<String> = [
+            "`[Speed](crate::veh::common::Speed)`",
+            "",
+            "```rust",
+            "[Speed](crate::veh::common::Speed)",
+            "```",
+            "",
+            "[Speed](crate::veh::common::Speed)",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+        let mut expected = lines.clone();
+        *expected.last_mut().unwrap() = "[Speed]".to_string();
+        assert_eq!(shorten_links(lines, "crate::veh::common"), expected);
+    }
 
     fn link(offset: u32, len: u32, target: &str) -> v1::DocLink {
         v1::DocLink {

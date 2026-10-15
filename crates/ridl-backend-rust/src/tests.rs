@@ -6706,17 +6706,17 @@ fn doc_block_on_enum_values_and_union_arms() {
 /// replacement that counted characters would land one byte early.
 #[test]
 fn doc_link_after_multibyte_text() {
-    let doc = "Measured in °C, see [Speed].";
+    let doc = "Measured in °C, see [veh.common.Speed].";
     let source = rust_for(vec![
         speed_decl(),
         v2::Decl {
             doc: doc.to_string(),
-            links: vec![doc_link(doc, "[Speed]", "veh.common.Speed")],
+            links: vec![doc_link(doc, "[veh.common.Speed]", "veh.common.Speed")],
             ..public_decl("Celsius", unit_type("Cel", "-40.0", "125.0", "0.5", "0.0"))
         },
     ]);
     assert!(
-        source.contains("see [Speed](crate::veh::common::Speed)."),
+        source.contains("Measured in °C, see [veh.common.Speed](crate::veh::common::Speed)."),
         "got:\n{source}"
     );
 }
@@ -6820,7 +6820,7 @@ fn doc_links_to_foreign_items_and_to_skipped_constants() {
     assert!(
         source.contains(
             "Not `veh.common.BLOB` nor `other.pkg.BLOB`, but \
-             [GREETING](crate::veh::common::GREETING),"
+             [GREETING],"
         ),
         "got:\n{source}"
     );
@@ -6889,9 +6889,9 @@ fn doc_links_to_constants_follow_how_each_is_typed() {
     );
     assert!(
         source.contains(
-            "See [OWN_SPEED](crate::veh::common::OWN_SPEED), `veh.common.OWN_BLOB`, \
+            "See [OWN_SPEED], `veh.common.OWN_BLOB`, \
              `veh.common.OTHER_SPEED`, `veh.common.MISSING` and \
-             [PATTERN](crate::veh::common::PATTERN)."
+             [PATTERN]."
         ),
         "got:\n{source}"
     );
@@ -7016,7 +7016,7 @@ fn doc_link_to_an_item_a_child_package_hides_is_a_code_span() {
         .expect("generation succeeds")
         .rust_source;
     assert!(
-        source.contains("Shown on `veh.common.gauge`, next to [Speed](crate::veh::common::Speed)."),
+        source.contains("Shown on `veh.common.gauge`, next to [Speed]."),
         "got:\n{source}"
     );
     assert!(!source.contains("__ridl_package::gauge)"), "got:\n{source}");
@@ -7108,4 +7108,23 @@ fn encoding_names_agree_with_the_manifest_table() {
     for message in [refuse(""), refuse("bogus")] {
         assert!(message.ends_with(&listed), "got: {message}");
     }
+}
+
+#[test]
+fn a_simple_foreign_link_keeps_its_explicit_module_path() {
+    let (mut local, other) = foreign_link_packages();
+    let holder = local
+        .decls
+        .iter_mut()
+        .find(|decl| decl.name == "Holder")
+        .unwrap();
+    holder.doc = "Foreign [Thing].".to_string();
+    holder.links = vec![doc_link(&holder.doc, "[Thing]", "other.pkg.Thing")];
+    let source = super::generate_with(&local, &[&other])
+        .expect("generation succeeds")
+        .rust_source;
+    assert!(
+        source.contains("Foreign [Thing](crate::other::pkg::Thing)."),
+        "{source}"
+    );
 }

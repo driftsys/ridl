@@ -783,9 +783,9 @@ compat-check: toolchain-check
 # what a renamed test or a changed filter does.
 #
 # The generated rustdoc of both crates is built with `cargo doc` and the flags
-# `-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links`, so a
-# doc link that renders as a path rustdoc cannot resolve, or that points at a
-# private item, fails the run.
+# denying broken intra-doc links, private intra-doc links and redundant
+# explicit links. An unresolved link, a private target or an explicit target
+# already resolved by its text fails the run.
 #
 # The planus check is `xtask/tests/oracle_boundary.rs`'s
 # `the_generated_crate_reaches_no_planus_crate`, which is ignored for a plain
@@ -839,7 +839,7 @@ demo:
     # link denied: the backend renders a doc link as a rustdoc path, and only
     # rustdoc can say whether that path resolves.
     for crate in veh_cabin ridl_generated; do
-        RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links" \
+        RUSTDOCFLAGS="-D rustdoc::broken_intra_doc_links -D rustdoc::private_intra_doc_links -D rustdoc::redundant_explicit_links" \
             cargo doc --locked --no-deps --manifest-path examples/cabin/Cargo.toml -p "$crate"
     done
     # The generated crate with its default features off, for a target that

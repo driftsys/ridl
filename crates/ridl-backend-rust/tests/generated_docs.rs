@@ -360,9 +360,66 @@ struct Links {
     );
     assert!(
         source.contains(
-            "Links to [SpeedLimit](crate::veh::prefix::SpeedLimit) and \
+            "Links to [SpeedLimit] and \
              [PanelTwo](crate::veh::prefix::panel_two)."
         ),
+        "{source}"
+    );
+}
+
+#[test]
+fn short_links_require_the_rust_name_in_the_docs_module() {
+    let package = ir::compile_fixture("doc_short_links.ridl");
+    let source = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("the fixture generates")
+    .rust_source;
+    for expected in [
+        "Same module [Temperature]; explicit member [Horn.active](crate::veh::docs::horn::Client::active).",
+        "Field [Temperature].",
+        "Module [Temperature].",
+        "Nested [Temperature](crate::veh::docs::Temperature).",
+        "Query parameter [Temperature](crate::veh::docs::Temperature).",
+        "Command parameter [Temperature](crate::veh::docs::Temperature).",
+    ] {
+        assert!(source.contains(expected), "missing {expected}:\n{source}");
+    }
+    for label in ["Query", "Command"] {
+        let parameter = format!("{label} parameter [Temperature](crate::veh::docs::Temperature).");
+        assert_eq!(
+            source.matches(&parameter).count(),
+            3,
+            "async client, blocking client and Provider must each carry {parameter}:\n{source}"
+        );
+    }
+}
+
+#[test]
+fn reference_definitions_cannot_redirect_generated_see_links() {
+    let source = pipeline_source(
+        "reference-links",
+        r#"
+package veh.docs
+/// A temperature.
+type Temperature: integer [0..100]
+/// A reading.
+///
+/// [temperature]: https://example.org/plain
+/// [`Temperature`]: https://example.org/code
+/// @see Temperature
+struct Reading {
+  /// A value.
+  value: Temperature
+}
+"#,
+    );
+    assert!(
+        doc_strings(&source)
+            .iter()
+            .any(|line| line == " - [``Temperature``]"),
         "{source}"
     );
 }
