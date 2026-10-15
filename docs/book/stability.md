@@ -34,9 +34,8 @@ promise covers them from the first release that contains them.
   `ridl-rt-conformance` and `ridl-loopback`, and Rust 1.88 and edition 2024 for
   `ridl-descriptor`. The generated crate compiles as edition 2021 with Rust 1.83
   with every cargo feature on, and `ridl build` writes `edition = "2021"` in its
-  manifest, so cargo 1.83 reads that manifest as written. With both its `std`
-  and its `validate-pattern` features off it does not build on Rust 1.83
-  (driftsys/ridl#874). A
+  manifest, so cargo 1.83 reads that manifest as written. From release 0.11,
+  the generated crate also builds on Rust 1.83 with default features off. A
   0.10.x release does not raise a minimum.
 
 The minimum covers the crates RIDL publishes and emits, not later releases of

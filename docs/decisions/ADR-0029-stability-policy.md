@@ -268,21 +268,21 @@ design in each:
    decision 4. The generated crate must compile as edition 2021 with Rust 1.83
    with every cargo feature on, and `ridl build` writes `edition = "2021"` in
    its manifest, so a Rust 1.83 user builds it without editing the manifest. The
-   manifest declares no `rust-version`, because the crate does not build on 1.83
-   with its default features off. `just compat-check` checks the crate emitted
-   for the `veh-cluster` corpus with every feature on, and fails when its
-   emitted manifest does not declare edition 2021, and checks the crate emitted
-   for `examples/cabin` with its `std` feature on. With the default features off
-   the generated crate does not compile on 1.83 (driftsys/ridl#874), and
-   `just compat-check` does not check that combination. The minimum covers the
-   crates RIDL publishes and emits, not later releases of their dependencies: a
-   release of a dependency, such as `regex`, can require a later Rust. A Rust
-   1.83 user therefore resolves dependencies with a resolver that reads
-   `rust-version` — cargo 1.84 or later with
-   `CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback` and a `rust-version` of
-   1.83 on the user's own package, or a lockfile resolved that way — and
-   `just compat-check` resolves its lockfiles the same way. This restates
-   ADR-0021 decision 10 as a frozen surface and adds the `msrv` check.
+   manifest declares no `rust-version`. `just compat-check` checks the crate
+   emitted for the `veh-cluster` corpus with every feature on and with default
+   features off, and fails when its emitted manifest does not declare edition
+   2021. It also checks the crate emitted for `examples/cabin` with its `std`
+   feature on. The default-features-off check was added for release 0.11 when
+   driftsys/ridl#874 was fixed; the 0.10.0 generated crate did not compile on
+   Rust 1.83 in that combination. The minimum covers the crates RIDL publishes
+   and emits, not later releases of their dependencies: a release of a
+   dependency, such as `regex`, can require a later Rust. A Rust 1.83 user
+   therefore resolves dependencies with a resolver that reads `rust-version` —
+   cargo 1.84 or later with `CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback`
+   and a `rust-version` of 1.83 on the user's own package, or a lockfile
+   resolved that way — and `just compat-check` resolves its lockfiles the same
+   way. This restates ADR-0021 decision 10 as a frozen surface and adds the
+   `msrv` check.
 
 6. **The gate table says which gate covers which surface.** The `baseline`
    column was empty on the day this record was accepted. A blank cell means that
