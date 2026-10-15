@@ -513,6 +513,25 @@ fn rendered_link(link: &v1::DocLink, links: &Links<'_>) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn shortening_preserves_link_text_inside_code() {
+        let lines: Vec<String> = [
+            "`[Speed](crate::veh::common::Speed)`",
+            "",
+            "```rust",
+            "[Speed](crate::veh::common::Speed)",
+            "```",
+            "",
+            "[Speed](crate::veh::common::Speed)",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+        let mut expected = lines.clone();
+        *expected.last_mut().unwrap() = "[Speed]".to_string();
+        assert_eq!(shorten_links(lines, "crate::veh::common"), expected);
+    }
+
     fn link(offset: u32, len: u32, target: &str) -> v1::DocLink {
         v1::DocLink {
             text: "X".to_string(),

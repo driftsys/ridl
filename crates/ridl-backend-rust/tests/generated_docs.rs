@@ -416,5 +416,10 @@ struct Reading {
 }
 "#,
     );
-    assert!(source.contains(" - [``Temperature``]"), "{source}");
+    assert!(
+        doc_strings(&source)
+            .iter()
+            .any(|line| line == " - [``Temperature``]"),
+        "{source}"
+    );
 }
