@@ -4304,9 +4304,18 @@ pub(crate) fn __ridl_fb_encode_RawWheelFrame(
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 1u16,
         offset: 8u16,
-        value: ::ridl_rt::flatbuffers::Field::Offset(
-            builder.push_vector(value.frame.as_slice(), 1usize)?,
-        ),
+        value: ::ridl_rt::flatbuffers::Field::Offset({
+            let __s = value.frame.as_slice();
+            if __s.len() != 8usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("RawWheelFrame"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            builder.push_vector(__s, 1usize)?
+        }),
     };
     __n += 1;
     builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])

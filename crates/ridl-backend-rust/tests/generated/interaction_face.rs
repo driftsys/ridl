@@ -408,6 +408,17 @@ impl ::core::default::Default for Tally {
         }
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InlinePayload {
+    /// # Rules
+    ///
+    /// - length 8
+    pub text: ::std::string::String,
+    /// # Rules
+    ///
+    /// - length 2 ..= 4
+    pub data: ::std::vec::Vec<::core::primitive::u8>,
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ValveSetBothParams {
     pub level: Level,
@@ -1991,6 +2002,253 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Tally {
         __ridl_fb_decode_Tally(__view.buf, __view.table)
     }
 }
+/// A `InlinePayload` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct InlinePayloadFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for InlinePayloadFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> InlinePayloadFbView<'a> {
+    /// Reads `InlinePayload`'s `text` field in place.
+    pub fn text(&self) -> &'a ::core::primitive::str {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        ::ridl_rt::flatbuffers::string(self.buf, __p).unwrap_or("")
+    }
+    /// Reads `InlinePayload`'s `data` field in place.
+    pub fn data(&self) -> &'a [::core::primitive::u8] {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        {
+            let __v = ::ridl_rt::flatbuffers::vector(self.buf, __p, 1usize)
+                .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                    len: 0,
+                    first: 0,
+                });
+            self.buf.get(__v.first..__v.first + __v.len).unwrap_or(&[])
+        }
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_InlinePayload(
+    value: &InlinePayload,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 2usize];
+    let mut __n = 0usize;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Offset({
+            let __s = value.text.as_str();
+            if __s.chars().count() != 8usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("InlinePayload"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            builder.push_string(__s)?
+        }),
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 1u16,
+        offset: 8u16,
+        value: ::ridl_rt::flatbuffers::Field::Offset({
+            let __s = value.data.as_slice();
+            if __s.len() < 2usize || __s.len() > 4usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("InlinePayload"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            builder.push_vector(__s, 1usize)?
+        }),
+    };
+    __n += 1;
+    builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_InlinePayload(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __s = ::ridl_rt::flatbuffers::string(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            (|| -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+                let __value = __s;
+                if (__value.chars().count() as ::core::primitive::u64) < 8 {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("InlinePayload"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    });
+                }
+                if (__value.chars().count() as ::core::primitive::u64) > 8 {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("InlinePayload"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    });
+                }
+                ::core::result::Result::Ok(())
+            })()
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            (|| -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+                let __value = &buf[__v.first..__v.first + __v.len];
+                if (__value.len() as ::core::primitive::u64) < 2 {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("InlinePayload"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    });
+                }
+                if (__value.len() as ::core::primitive::u64) > 4 {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("InlinePayload"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    });
+                }
+                ::core::result::Result::Ok(())
+            })()
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_InlinePayload(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> InlinePayload {
+    InlinePayload {
+        text: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            ::std::string::String::from(
+                ::ridl_rt::flatbuffers::string(buf, __p).unwrap_or(""),
+            )
+        },
+        data: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            {
+                let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
+                    .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                        len: 0,
+                        first: 0,
+                    });
+                buf.get(__v.first..__v.first + __v.len).unwrap_or(&[]).to_vec()
+            }
+        },
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for InlinePayload {
+    /// The largest FlatBuffers buffer any legal `InlinePayload` encodes to: 118 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 118usize;
+    type Buffer = [::core::primitive::u8; 118usize];
+    const BUFFER: Self::Buffer = [0u8; 118usize];
+    type View<'a> = InlinePayloadFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, InlinePayloadFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_InlinePayload(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: InlinePayloadFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        InlinePayloadFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_InlinePayload(buf, table)?;
+        ::core::result::Result::Ok(InlinePayloadFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_InlinePayload(__view.buf, __view.table)
+    }
+}
 /// A `ValveSetBothParams` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
@@ -2303,8 +2561,8 @@ impl ::ridl_rt::contract::Interface for Cabin {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
-            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
+            218, 186, 230, 38, 201, 167, 61, 206, 216, 120, 49, 24, 200, 138, 159, 61,
+            70, 79, 210, 123, 6, 85, 149, 148, 66, 47, 153, 161, 102, 222, 121, 217,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);
@@ -2521,8 +2779,8 @@ impl ::ridl_rt::contract::Interface for Horn {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
-            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
+            218, 186, 230, 38, 201, 167, 61, 206, 216, 120, 49, 24, 200, 138, 159, 61,
+            70, 79, 210, 123, 6, 85, 149, 148, 66, 47, 153, 161, 102, 222, 121, 217,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);
@@ -2588,8 +2846,8 @@ impl ::ridl_rt::contract::Interface for Siren {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
-            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
+            218, 186, 230, 38, 201, 167, 61, 206, 216, 120, 49, 24, 200, 138, 159, 61,
+            70, 79, 210, 123, 6, 85, 149, 148, 66, 47, 153, 161, 102, 222, 121, 217,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -2667,8 +2925,8 @@ impl ::ridl_rt::contract::Interface for Valve {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
-            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
+            218, 186, 230, 38, 201, 167, 61, 206, 216, 120, 49, 24, 200, 138, 159, 61,
+            70, 79, 210, 123, 6, 85, 149, 148, 66, 47, 153, 161, 102, 222, 121, 217,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
@@ -2883,8 +3141,8 @@ impl ::ridl_rt::contract::Interface for Wiper {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
-            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
+            218, 186, 230, 38, 201, 167, 61, 206, 216, 120, 49, 24, 200, 138, 159, 61,
+            70, 79, 210, 123, 6, 85, 149, 148, 66, 47, 153, 161, 102, 222, 121, 217,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(5);
@@ -2972,8 +3230,8 @@ impl ::ridl_rt::contract::Interface for Zone {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
-            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
+            218, 186, 230, 38, 201, 167, 61, 206, 216, 120, 49, 24, 200, 138, 159, 61,
+            70, 79, 210, 123, 6, 85, 149, 148, 66, 47, 153, 161, 102, 222, 121, 217,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(6);
@@ -3135,8 +3393,8 @@ impl ::ridl_rt::contract::Interface for ZoneLog {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "face.demo",
         hash: ::ridl_rt::contract::CatalogHash([
-            149, 245, 248, 75, 169, 78, 32, 104, 61, 172, 42, 206, 162, 136, 117, 115,
-            194, 156, 38, 28, 38, 231, 197, 74, 120, 0, 241, 161, 24, 125, 218, 116,
+            218, 186, 230, 38, 201, 167, 61, 206, 216, 120, 49, 24, 200, 138, 159, 61,
+            70, 79, 210, 123, 6, 85, 149, 148, 66, 47, 153, 161, 102, 222, 121, 217,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(7);
@@ -3328,6 +3586,104 @@ impl ::ridl_rt::contract::Interaction for ZoneLogTally {
 impl ::ridl_rt::contract::Query for ZoneLogTally {
     type Args = Window;
     type Reply = Tally;
+    fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+    fn ensure(
+        _args: &Self::Args,
+        _reply: &Self::Reply,
+    ) -> ::core::result::Result<(), ()> {
+        ::core::result::Result::Ok(())
+    }
+}
+/**Descriptor for interface `ZonePayload`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
+
+Its size table in FlatBuffers is `<ZonePayload as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
+pub struct ZonePayload;
+impl ::ridl_rt::contract::Interface for ZonePayload {
+    const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
+        name: "face.demo",
+        hash: ::ridl_rt::contract::CatalogHash([
+            218, 186, 230, 38, 201, 167, 61, 206, 216, 120, 49, 24, 200, 138, 159, 61,
+            70, 79, 210, 123, 6, 85, 149, 148, 66, 47, 153, 161, 102, 222, 121, 217,
+        ]),
+    };
+    const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(8);
+    const PROVISIONAL: ::core::primitive::bool = true;
+    const NAME: &'static ::core::primitive::str = "ZonePayload";
+    const MEMBERS: &'static [::ridl_rt::contract::Member] = &[
+        ::ridl_rt::contract::Member {
+            ordinal: ::ridl_rt::contract::Ordinal(1),
+            kind: ::ridl_rt::contract::Kind::Query,
+            name: "read",
+            timing: ::core::option::Option::Some(::ridl_rt::contract::Timing {
+                mode: ::ridl_rt::contract::TimingMode::Range,
+                min: ::core::option::Option::None,
+                max: ::core::option::Option::Some(::ridl_rt::sample::Duration(200000)),
+            }),
+            payloads: &[
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "Window",
+                },
+                ::ridl_rt::contract::PayloadInfo {
+                    type_name: "InlinePayload",
+                },
+            ],
+        },
+    ];
+}
+impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for ZonePayload {
+    const RESERVATIONS: &'static [::core::primitive::u64] = &[
+        <Window as ::ridl_rt::payload::Payload<
+            ::ridl_rt::encoding::FlatBuffers,
+        >>::MAX_SIZE as ::core::primitive::u64
+            + <InlinePayload as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE as ::core::primitive::u64,
+    ];
+    const MAX_BUFFER_SIZE: ::core::primitive::usize = {
+        let sizes = [
+            <Window as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+            <InlinePayload as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE,
+        ];
+        let mut max = 0usize;
+        let mut index = 0usize;
+        while index < sizes.len() {
+            if sizes[index] > max {
+                max = sizes[index];
+            }
+            index += 1;
+        }
+        max
+    };
+    const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = 0usize;
+    type ClaimBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    type EventBuffer = [::core::primitive::u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+    const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::MAX_BUFFER_SIZE];
+    const EVENT_BUFFER: Self::EventBuffer = [0u8; <Self as ::ridl_rt::contract::Sizes<
+        ::ridl_rt::encoding::FlatBuffers,
+    >>::EVENT_SOURCE_BUFFER_SIZE];
+}
+#[doc(hidden)]
+pub struct ZonePayloadRead;
+impl ::ridl_rt::contract::Interaction for ZonePayloadRead {
+    type Iface = ZonePayload;
+    const MEMBER: &'static ::ridl_rt::contract::Member = &<ZonePayload as ::ridl_rt::contract::Interface>::MEMBERS[0];
+    const ROW: ::core::primitive::usize = 0;
+}
+impl ::ridl_rt::contract::Query for ZonePayloadRead {
+    type Args = Window;
+    type Reply = InlinePayload;
     fn require(_args: &Self::Args) -> ::core::result::Result<(), ()> {
         ::core::result::Result::Ok(())
     }
@@ -10930,6 +11286,796 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             super::super::Log: ::ridl_rt::payload::Payload<H::Encoding>,
             super::super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
             super::super::Tally: ::ridl_rt::payload::Payload<H::Encoding>,
+        {
+            let __deadline = __deadline_after(timeout);
+            let mut __serve = super::serve(h, p);
+            match ::ridl_rt::task::block_on(&mut __serve, __deadline) {
+                Some(Ok(never)) => match never {}
+                Some(Err(error)) => Err(error),
+                None => Ok(()),
+            }
+        }
+    }
+}
+///The generated interaction face of interface `ZonePayload`.
+pub mod zone_payload {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+    pub(crate) struct ReadCorrelation(pub ::ridl_rt::port::Correlation);
+    #[track_caller]
+    fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {
+        let expected = <super::ZonePayload as ::ridl_rt::contract::Interface>::CATALOG;
+        if *found != *expected {
+            ::core::panic!(
+                "the face of interface `ZonePayload` was generated from catalog {:?}, but the port is attached to catalog {:?}",
+                expected, found
+            );
+        }
+    }
+    ///The consumer face of interface `ZonePayload`, generic over exactly the ports the interface's interactions need. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, in scope through `prelude`.
+    pub struct Client<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: P,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > Client<P>
+    where
+        super::ZonePayload: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::InlinePayload: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        /**Sends query `read` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+
+The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        ///
+        /// # Rules
+        ///
+        /// - response within 200000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `window`
+        ///   - range 0 ..= 100000
+        pub fn read(&mut self, window: super::Window) -> ReadCall<'_, P> {
+            let __arg = window;
+            let deadline = <super::ZonePayloadRead as ::ridl_rt::contract::Interaction>::MEMBER
+                .call_deadline()
+                .map(|max| ::ridl_rt::sample::Timestamp(
+                    self.port.now().0.saturating_add(max.0),
+                ));
+            let phase = match send_read(&mut self.port, &__arg) {
+                Ok(correlation) => ReadPhase::Waiting(correlation),
+                Err(::ridl_rt::port::SendError::Busy) => ReadPhase::Unsent(__arg),
+                Err(error) => ReadPhase::Failed(error),
+            };
+            ReadCall {
+                port: &mut self.port,
+                phase,
+                deadline,
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::ridl_rt::face::Bind for Client<P>
+    where
+        super::ZonePayload: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::InlinePayload: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Port = P;
+        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <ZonePayload as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `ZonePayload` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        fn new(port: P) -> Self {
+            check_catalog(::ridl_rt::port::Attached::catalog(&port));
+            Client { port }
+        }
+    }
+    ///The future of query `read`, returned by `Client::read`. It resolves to the decoded reply, or the outcome the provider settled; to `ClientError::Send` when the call was not sent, including `SendError::Busy` when no slot was free within the call's bound; and to the port's own expired outcome when the call was sent and its bound passed. Each poll registers its interest, reads the port once, and returns. Dropping the future while it waits for its outcome calls `Caller::forget` on the call; a future that has taken its outcome has already done so. Polling it again after it resolved panics.
+    #[must_use = "the query was sent, or waits for a slot; its outcome is taken only when the future is polled"]
+    pub struct ReadCall<
+        'a,
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > {
+        port: &'a mut P,
+        phase: ReadPhase,
+        deadline: ::core::option::Option<::ridl_rt::sample::Timestamp>,
+    }
+    enum ReadPhase {
+        Unsent(super::Window),
+        Waiting(ReadCorrelation),
+        Failed(::ridl_rt::port::SendError),
+        Done,
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ReadCall<'_, P>
+    where
+        super::ZonePayload: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::InlinePayload: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        fn expired(&self) -> bool {
+            self.deadline.is_some_and(|deadline| self.port.now() > deadline)
+        }
+        #[cfg(feature = "std")]
+        fn sent(&self) -> bool {
+            matches!(self.phase, ReadPhase::Waiting(_))
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::future::Future for ReadCall<'_, P>
+    where
+        super::ZonePayload: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::InlinePayload: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        type Output = ::core::result::Result<
+            super::InlinePayload,
+            ::ridl_rt::error::ClientError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            loop {
+                match ::core::mem::replace(&mut this.phase, ReadPhase::Done) {
+                    ReadPhase::Done => panic!("`ReadCall` polled after completion"),
+                    ReadPhase::Failed(error) => {
+                        return ::core::task::Poll::Ready(
+                            Err(::ridl_rt::error::ClientError::Send(error)),
+                        );
+                    }
+                    ReadPhase::Unsent(__arg) => {
+                        if this.expired() {
+                            return ::core::task::Poll::Ready(
+                                Err(
+                                    ::ridl_rt::error::ClientError::Send(
+                                        ::ridl_rt::port::SendError::Busy,
+                                    ),
+                                ),
+                            );
+                        }
+                        this.port.wake_on(::ridl_rt::port::Interest::Slot, cx.waker());
+                        match send_read(&mut *this.port, &__arg) {
+                            Ok(correlation) => {
+                                this.phase = ReadPhase::Waiting(correlation);
+                            }
+                            Err(::ridl_rt::port::SendError::Busy) => {
+                                this.phase = ReadPhase::Unsent(__arg);
+                                return ::core::task::Poll::Pending;
+                            }
+                            Err(error) => {
+                                return ::core::task::Poll::Ready(
+                                    Err(::ridl_rt::error::ClientError::Send(error)),
+                                );
+                            }
+                        }
+                    }
+                    ReadPhase::Waiting(correlation) => {
+                        this.port
+                            .wake_on(
+                                ::ridl_rt::port::Interest::Outcome(correlation.0),
+                                cx.waker(),
+                            );
+                        let outcome = match poll_read_reply(
+                            &mut *this.port,
+                            correlation,
+                        ) {
+                            Ok(Some(outcome)) => {
+                                outcome.map_err(::ridl_rt::error::ClientError::Call)
+                            }
+                            Err(error) => Err(::ridl_rt::error::ClientError::Read(error)),
+                            Ok(None) => {
+                                if !this.expired() {
+                                    this.phase = ReadPhase::Waiting(correlation);
+                                    return ::core::task::Poll::Pending;
+                                }
+                                Err(
+                                    ::ridl_rt::error::ClientError::Call(
+                                        ::ridl_rt::error::CallError::Transport(
+                                            ::ridl_rt::error::Transport::Timeout,
+                                        ),
+                                    ),
+                                )
+                            }
+                        };
+                        this.port.forget(correlation.0);
+                        return ::core::task::Poll::Ready(outcome);
+                    }
+                }
+            }
+        }
+    }
+    impl<
+        P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller + ::ridl_rt::port::Clock
+            + ::ridl_rt::port::Wakeable,
+    > ::core::ops::Drop for ReadCall<'_, P> {
+        fn drop(&mut self) {
+            if let ReadPhase::Waiting(correlation) = &self.phase {
+                self.port.forget(correlation.0);
+            }
+        }
+    }
+    pub(crate) fn send_read<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
+        __port: &mut P,
+        window: &super::Window,
+    ) -> ::core::result::Result<ReadCorrelation, ::ridl_rt::port::SendError>
+    where
+        super::ZonePayload: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::InlinePayload: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let __arg = window;
+        <super::ZonePayloadRead as ::ridl_rt::contract::Query>::require(__arg)
+            .map_err(|()| {
+                ::ridl_rt::port::SendError::Contract(
+                    ::ridl_rt::error::Contract::PreconditionFailed,
+                )
+            })?;
+        let mut __buf = <super::Window as ::ridl_rt::payload::Payload<
+            P::Encoding,
+        >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        let bytes = match ::ridl_rt::payload::Ref::<
+            super::Window,
+            P::Encoding,
+        >::encode(__arg, buf) {
+            Ok(encoded) => encoded.bytes(),
+            Err(::ridl_rt::payload::EncodeError::Contract(__violation)) => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::port::SendError::Contract(
+                        ::ridl_rt::error::Contract::InvalidValue(__violation),
+                    ),
+                );
+            }
+            Err(::ridl_rt::payload::EncodeError::Capacity { needed, available }) => {
+                unreachable!(
+                    "encoding `Window` needs {} bytes and the argument buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                    needed, available
+                )
+            }
+            Err(_) => unreachable!("encoding `Window` failed"),
+        };
+        __port
+            .query(
+                <super::ZonePayload as ::ridl_rt::contract::Interface>::NUMBER,
+                ::ridl_rt::contract::Ordinal(1u32),
+                bytes,
+                ::core::option::Option::None,
+            )
+            .map(ReadCorrelation)
+    }
+    pub(crate) fn poll_read_reply<P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller>(
+        port: &mut P,
+        correlation: ReadCorrelation,
+    ) -> ::core::result::Result<
+        ::core::option::Option<
+            ::core::result::Result<super::InlinePayload, ::ridl_rt::error::CallError>,
+        >,
+        ::ridl_rt::port::ReadError,
+    >
+    where
+        super::ZonePayload: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+        super::InlinePayload: ::ridl_rt::payload::Payload<P::Encoding>,
+    {
+        let mut __buf = <super::InlinePayload as ::ridl_rt::payload::Payload<
+            P::Encoding,
+        >>::BUFFER;
+        let buf: &mut [::core::primitive::u8] = ::core::convert::AsMut::as_mut(
+            &mut __buf,
+        );
+        match port.reply(correlation.0, buf)? {
+            None => Ok(None),
+            Some(Err(error)) => Ok(Some(Err(error))),
+            Some(Ok(len)) => {
+                Ok(
+                    Some(
+                        match ::ridl_rt::payload::Ref::<
+                            super::InlinePayload,
+                            P::Encoding,
+                        >::verify(&buf[..len]) {
+                            Ok(checked) => Ok(checked.decode()),
+                            Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Contract(
+                                        ::ridl_rt::error::Contract::InvalidValue(violation),
+                                    ),
+                                )
+                            }
+                            Err(_) => {
+                                Err(
+                                    ::ridl_rt::error::CallError::Transport(
+                                        ::ridl_rt::error::Transport::Corrupt,
+                                    ),
+                                )
+                            }
+                        },
+                    ),
+                )
+            }
+        }
+    }
+    /**What an application implements to serve interface `ZonePayload`'s calls.
+
+An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
+    pub trait Provider {
+        ///Serves query `read`. A reply that breaks an `ensure` clause is discarded by `serve`, which settles `ContractBroken` instead.
+        ///
+        /// # Rules
+        ///
+        /// - response within 200000 us
+        ///
+        /// # Parameters
+        ///
+        /// - `window`
+        ///   - range 0 ..= 100000
+        fn read(&mut self, window: &super::Window) -> super::InlinePayload;
+    }
+    pub(crate) fn dispatch<H, P>(
+        h: &mut H,
+        p: &mut P,
+        buf: &mut [u8],
+        budget: &mut usize,
+    ) -> ::core::result::Result<usize, ::ridl_rt::port::ReadError>
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler,
+        P: Provider,
+        super::ZonePayload: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::InlinePayload: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        if buf.len()
+            < <super::ZonePayload as ::ridl_rt::contract::Sizes<
+                H::Encoding,
+            >>::MAX_BUFFER_SIZE
+        {
+            return Ok(0);
+        }
+        let mut settled = 0usize;
+        while *budget > 0 {
+            let settlement = match h.next_claim(buf) {
+                Ok(None) => break,
+                Err(::ridl_rt::port::ReadError::ShortClaim { claim, .. }) => {
+                    let settlement = h
+                        .settle(
+                            claim,
+                            Err(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Corrupt,
+                                ),
+                            ),
+                        );
+                    if settlement.is_err() {
+                        return Ok(settled);
+                    }
+                    settlement
+                }
+                Err(error) => return Err(error),
+                Ok(Some(claim)) => {
+                    if claim.iface
+                        != <super::ZonePayload as ::ridl_rt::contract::Interface>::NUMBER
+                    {
+                        h.settle(
+                            claim.id,
+                            Err(
+                                ::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::UnknownInteraction,
+                                ),
+                            ),
+                        )
+                    } else {
+                        match claim.ord {
+                            ::ridl_rt::contract::Ordinal(1u32) => {
+                                let decoded = match ::ridl_rt::payload::Ref::<
+                                    super::Window,
+                                    H::Encoding,
+                                >::verify(&buf[..claim.len]) {
+                                    Ok(checked) => Ok(checked.decode()),
+                                    Err(::ridl_rt::payload::VerifyError::Structure(_)) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                    Err(
+                                        ::ridl_rt::payload::VerifyError::Contract(violation),
+                                    ) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Contract(
+                                                ::ridl_rt::error::Contract::InvalidValue(violation),
+                                            ),
+                                        )
+                                    }
+                                    Err(_) => {
+                                        Err(
+                                            ::ridl_rt::error::CallError::Transport(
+                                                ::ridl_rt::error::Transport::Corrupt,
+                                            ),
+                                        )
+                                    }
+                                };
+                                match decoded {
+                                    Err(error) => h.settle(claim.id, Err(error)),
+                                    Ok(__arg) => {
+                                        match <super::ZonePayloadRead as ::ridl_rt::contract::Query>::require(
+                                            &__arg,
+                                        ) {
+                                            Err(()) => {
+                                                h.settle(
+                                                    claim.id,
+                                                    Err(
+                                                        ::ridl_rt::error::CallError::Contract(
+                                                            ::ridl_rt::error::Contract::PreconditionFailed,
+                                                        ),
+                                                    ),
+                                                )
+                                            }
+                                            Ok(()) => {
+                                                let reply = p.read(&__arg);
+                                                match <super::ZonePayloadRead as ::ridl_rt::contract::Query>::ensure(
+                                                    &__arg,
+                                                    &reply,
+                                                ) {
+                                                    Err(()) => {
+                                                        h.settle(
+                                                            claim.id,
+                                                            Err(
+                                                                ::ridl_rt::error::CallError::Contract(
+                                                                    ::ridl_rt::error::Contract::ContractBroken,
+                                                                ),
+                                                            ),
+                                                        )
+                                                    }
+                                                    Ok(()) => {
+                                                        match ::ridl_rt::payload::Ref::<
+                                                            super::InlinePayload,
+                                                            H::Encoding,
+                                                        >::encode(&reply, buf) {
+                                                            Ok(encoded) => {
+                                                                let bytes = encoded.bytes();
+                                                                h.settle(claim.id, Ok(bytes))
+                                                            }
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Contract(__violation),
+                                                            ) => {
+                                                                h.settle(
+                                                                    claim.id,
+                                                                    Err(
+                                                                        ::ridl_rt::error::CallError::Contract(
+                                                                            ::ridl_rt::error::Contract::InvalidValue(__violation),
+                                                                        ),
+                                                                    ),
+                                                                )
+                                                            }
+                                                            Err(
+                                                                ::ridl_rt::payload::EncodeError::Capacity {
+                                                                    needed,
+                                                                    available,
+                                                                },
+                                                            ) => {
+                                                                unreachable!(
+                                                                    "encoding `InlinePayload` needs {} bytes and the dispatch buffer has {}; a legal value cannot exceed the `MAX_SIZE` of its `Payload` in the port's encoding, so the value breaks a constraint the encoder does not check or its `Payload` implementation does not honor `MAX_SIZE`",
+                                                                    needed, available
+                                                                )
+                                                            }
+                                                            Err(_) => unreachable!("encoding `InlinePayload` failed"),
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                h.settle(
+                                    claim.id,
+                                    Err(
+                                        ::ridl_rt::error::CallError::Contract(
+                                            ::ridl_rt::error::Contract::UnknownInteraction,
+                                        ),
+                                    ),
+                                )
+                            }
+                        }
+                    }
+                }
+            };
+            *budget -= 1;
+            if settlement.is_ok() {
+                settled += 1;
+            }
+        }
+        Ok(settled)
+    }
+    const SERVE_BUDGET: usize = 32;
+    /**Serves interface `ZonePayload`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+
+# Panics
+
+Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <ZonePayload as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `ZonePayload` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+    #[track_caller]
+    pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
+    where
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
+        P: Provider,
+        super::ZonePayload: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::InlinePayload: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        check_catalog(::ridl_rt::port::Attached::catalog(&h));
+        let state = match h
+            .serve(
+                <super::ZonePayload as ::ridl_rt::contract::Interface>::NUMBER,
+                &[::ridl_rt::contract::Ordinal(1u32)],
+            )
+        {
+            Ok(()) => ServeState::Serving,
+            Err(error) => ServeState::Refused(error),
+        };
+        Serve {
+            handler: h,
+            provider: p,
+            buf: <super::ZonePayload as ::ridl_rt::contract::Sizes<
+                H::Encoding,
+            >>::CLAIM_BUFFER,
+            state,
+        }
+    }
+    ///The future `serve` returns over interface `ZonePayload`. It holds the handler, the provider, and the claim buffer of `<ZonePayload as Sizes<H::Encoding>>::MAX_BUFFER_SIZE` bytes, in the encoding the handler port carries. It never resolves to `Ok`, and polling it again after it resolved panics.
+    #[must_use = "claims are served only while the future is polled"]
+    pub struct Serve<
+        'a,
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
+        P: Provider,
+    >
+    where
+        super::ZonePayload: ::ridl_rt::contract::Sizes<H::Encoding>,
+    {
+        handler: H,
+        provider: &'a mut P,
+        buf: <super::ZonePayload as ::ridl_rt::contract::Sizes<
+            H::Encoding,
+        >>::ClaimBuffer,
+        state: ServeState,
+    }
+    #[derive(Clone, Copy)]
+    enum ServeState {
+        Refused(::ridl_rt::port::ServeError),
+        Serving,
+        Done,
+    }
+    /// `Unpin` whatever `H` is: nothing in the future is pinned, and a
+    /// frame loop that stores it in its own state polls it through
+    /// `Pin::new`.
+    impl<
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
+        P: Provider,
+    > ::core::marker::Unpin for Serve<'_, H, P>
+    where
+        super::ZonePayload: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::InlinePayload: ::ridl_rt::payload::Payload<H::Encoding>,
+    {}
+    impl<
+        H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+            + ::ridl_rt::port::Wakeable,
+        P: Provider,
+    > ::core::future::Future for Serve<'_, H, P>
+    where
+        super::ZonePayload: ::ridl_rt::contract::Sizes<H::Encoding>,
+        super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
+        super::InlinePayload: ::ridl_rt::payload::Payload<H::Encoding>,
+    {
+        type Output = ::core::result::Result<
+            ::core::convert::Infallible,
+            ::ridl_rt::error::ProviderError,
+        >;
+        fn poll(
+            self: ::core::pin::Pin<&mut Self>,
+            cx: &mut ::core::task::Context<'_>,
+        ) -> ::core::task::Poll<Self::Output> {
+            let this = self.get_mut();
+            match this.state {
+                ServeState::Done => panic!("`Serve` polled after completion"),
+                ServeState::Refused(error) => {
+                    this.state = ServeState::Done;
+                    ::core::task::Poll::Ready(
+                        Err(::ridl_rt::error::ProviderError::Serve(error)),
+                    )
+                }
+                ServeState::Serving => {
+                    this.handler
+                        .wake_on(
+                            ::ridl_rt::port::Interest::Claim(
+                                <super::ZonePayload as ::ridl_rt::contract::Interface>::NUMBER,
+                            ),
+                            cx.waker(),
+                        );
+                    let mut budget = SERVE_BUDGET;
+                    match dispatch(
+                        &mut this.handler,
+                        &mut *this.provider,
+                        ::core::convert::AsMut::as_mut(&mut this.buf),
+                        &mut budget,
+                    ) {
+                        Ok(_) => {
+                            if budget == 0 {
+                                cx.waker().wake_by_ref();
+                            }
+                            ::core::task::Poll::Pending
+                        }
+                        Err(error) => {
+                            this.state = ServeState::Done;
+                            ::core::task::Poll::Ready(
+                                Err(::ridl_rt::error::ProviderError::Claim(error)),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    ///The traits a consumer of interface `ZonePayload`'s face needs in scope. Glob-import this module, `use <this interface's module>::prelude::*;`, and every method of those traits — `new`, `with_timeout`, `set_timeout` — is called as an inherent method would be. Only the `ridl-rt` traits are re-exported by name; this module's own traits are re-exported as `_`, so the preludes of two interfaces can share one scope.
+    pub mod prelude {
+        pub use ::ridl_rt::face::Bind;
+        #[cfg(feature = "std")]
+        pub use ::ridl_rt::face::Timeout;
+    }
+    ///The blocking face of interface `ZonePayload`, under the crate's `std` feature: `Client`, and `serve` when the interface declares a command or a query, as `ridl_rt::task::block_on` over the async face's futures, each bounded by a timeout. What a call does is the future's; this module adds the thread's wait and the timeout.
+    #[cfg(feature = "std")]
+    pub mod blocking {
+        fn __deadline_after(
+            timeout: ::core::option::Option<::std::time::Duration>,
+        ) -> ::core::option::Option<::std::time::Instant> {
+            timeout.and_then(|timeout| ::std::time::Instant::now().checked_add(timeout))
+        }
+        ///The blocking consumer face of interface `ZonePayload`: the async `Client` with a timeout, over the same ports. Every call is `ridl_rt::task::block_on` over the async call's future, so a call parks the calling thread until its outcome or this client's timeout. The member's `max` is measured by the future on the port's clock, and read only when the port wakes the call: a runtime that measures the bound and wakes the waiter when it passes ends the call at `max`; one that does not, `ridl-loopback` among them, leaves an unserved call waiting until this client's timeout. The timeout is `None` until `with_timeout` or `set_timeout` sets it, and with none a call returns only with its outcome, or at `max` on a runtime that wakes at it. Its member methods are inherent; `new` is `ridl_rt::face::Bind`'s, `with_timeout` and `set_timeout` are `ridl_rt::face::Timeout`'s, all in scope through the parent module's `prelude`.
+        pub struct Client<
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        > {
+            inner: super::Client<P>,
+            timeout: ::core::option::Option<::std::time::Duration>,
+        }
+        impl<
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        > Client<P>
+        where
+            super::super::ZonePayload: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::InlinePayload: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
+            ///Sends query `read` and waits for its outcome, as `block_on` over `Client::read`. At this client's timeout a call that was never sent, because no slot was free, is `ClientError::Send(SendError::Busy)`, and one that was sent is the port's expired outcome, `Transport::Timeout`; either way nothing is left waiting at the port.
+            ///
+            /// # Rules
+            ///
+            /// - response within 200000 us
+            ///
+            /// # Parameters
+            ///
+            /// - `window`
+            ///   - range 0 ..= 100000
+            pub fn read(
+                &mut self,
+                window: super::super::Window,
+            ) -> ::core::result::Result<
+                super::super::InlinePayload,
+                ::ridl_rt::error::ClientError,
+            > {
+                let __deadline = __deadline_after(self.timeout);
+                let mut __call = self.inner.read(window);
+                match ::ridl_rt::task::block_on(&mut __call, __deadline) {
+                    Some(outcome) => outcome,
+                    None if __call.sent() => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Call(
+                                ::ridl_rt::error::CallError::Transport(
+                                    ::ridl_rt::error::Transport::Timeout,
+                                ),
+                            ),
+                        )
+                    }
+                    None => {
+                        Err(
+                            ::ridl_rt::error::ClientError::Send(
+                                ::ridl_rt::port::SendError::Busy,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        impl<
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        > ::ridl_rt::face::Bind for Client<P>
+        where
+            super::super::ZonePayload: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::InlinePayload: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
+            type Port = P;
+            /**Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
+
+# Panics
+
+Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::Client`'s `new`. A program that must not panic makes the same comparison first, `port.catalog() == <ZonePayload as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `ZonePayload` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+            #[track_caller]
+            fn new(port: P) -> Self {
+                Client {
+                    inner: <super::Client<P> as ::ridl_rt::face::Bind>::new(port),
+                    timeout: None,
+                }
+            }
+        }
+        impl<
+            P: ::ridl_rt::port::Encoded + ::ridl_rt::port::Caller
+                + ::ridl_rt::port::Clock + ::ridl_rt::port::Wakeable,
+        > ::ridl_rt::face::Timeout for Client<P>
+        where
+            super::super::ZonePayload: ::ridl_rt::contract::Sizes<P::Encoding>,
+            super::super::Window: ::ridl_rt::payload::Payload<P::Encoding>,
+            super::super::InlinePayload: ::ridl_rt::payload::Payload<P::Encoding>,
+        {
+            /// Sets the timeout every waiting method of this client is
+            /// bounded by, and returns the client. A timeout shorter than a
+            /// member's `max` is accepted, and ends the call first; a longer
+            /// one ends an unserved call at `max` only on a runtime that
+            /// wakes the call when its bound passes.
+            fn with_timeout(mut self, timeout: ::std::time::Duration) -> Self {
+                self.timeout = Some(timeout);
+                self
+            }
+            /// Sets or clears the timeout every waiting method of this
+            /// client is bounded by.
+            fn set_timeout(
+                &mut self,
+                timeout: ::core::option::Option<::std::time::Duration>,
+            ) {
+                self.timeout = timeout;
+            }
+        }
+        /**Serves interface `ZonePayload`'s commands and queries with `p`, over the handler port `h`, on the calling thread, until the handler port fails or `timeout` passes: it is `block_on` over `serve`. A failure is returned as `serve`'s future resolves to it; the timeout is `Ok(())`, so a loop that also does other work can call this repeatedly. With `None` it returns only on a failure. `h` is dropped when this returns.
+
+# Panics
+
+Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::serve`. A program that must not panic makes the same comparison first, `h.catalog() == <ZonePayload as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `ZonePayload` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        #[track_caller]
+        pub fn serve<H, P>(
+            h: H,
+            p: &mut P,
+            timeout: ::core::option::Option<::std::time::Duration>,
+        ) -> ::core::result::Result<(), ::ridl_rt::error::ProviderError>
+        where
+            H: ::ridl_rt::port::Encoded + ::ridl_rt::port::Handler
+                + ::ridl_rt::port::Wakeable,
+            P: super::Provider,
+            super::super::ZonePayload: ::ridl_rt::contract::Sizes<H::Encoding>,
+            super::super::Window: ::ridl_rt::payload::Payload<H::Encoding>,
+            super::super::InlinePayload: ::ridl_rt::payload::Payload<H::Encoding>,
         {
             let __deadline = __deadline_after(timeout);
             let mut __serve = super::serve(h, p);

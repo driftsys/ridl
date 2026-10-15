@@ -1024,7 +1024,7 @@ fn pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in() {
 }
 
 /// The unnamed `string` and `bytes` arms of the codec call `as_str` and
-/// `as_slice` on the field and pass the result as it is.
+/// `as_slice` on the field, bind the result for its length check, and pass it unchanged.
 #[test]
 fn the_codec_passes_an_unnamed_string_and_bytes_field_without_a_borrow() {
     // Inline scalars are unnamed, so the codec reaches the `None` arms.
@@ -1053,11 +1053,13 @@ fn the_codec_passes_an_unnamed_string_and_bytes_field_without_a_borrow() {
         }),
     )]);
     assert!(
-        source.contains("builder.push_string(value.s.as_str())?"),
+        source.contains("let __s = value.s.as_str();")
+            && source.contains("builder.push_string(__s)?"),
         "an unnamed string field is passed as the `&str` that `as_str` returns, got:\n{source}"
     );
     assert!(
-        source.contains("builder.push_vector(value.b.as_slice(), 1usize)?"),
+        source.contains("let __s = value.b.as_slice();")
+            && source.contains("builder.push_vector(__s, 1usize)?"),
         "an unnamed bytes field is passed as the slice that `as_slice` returns, got:\n{source}"
     );
 }
@@ -1103,11 +1105,13 @@ fn the_codec_passes_a_map_entrys_string_and_bytes_without_a_borrow() {
         }),
     )]);
     assert!(
-        source.contains("builder.push_string(__e.0.as_str())?"),
+        source.contains("let __s = __e.0.as_str();")
+            && source.contains("builder.push_string(__s)?"),
         "a map key is passed as the `&str` that `as_str` returns, got:\n{source}"
     );
     assert!(
-        source.contains("builder.push_vector(__e.1.as_slice(), 1usize)?"),
+        source.contains("let __s = __e.1.as_slice();")
+            && source.contains("builder.push_vector(__s, 1usize)?"),
         "a map value is passed as the slice that `as_slice` returns, got:\n{source}"
     );
 }
@@ -1158,11 +1162,12 @@ fn the_codec_passes_a_vector_elements_string_and_bytes_without_a_borrow() {
         }),
     )]);
     assert!(
-        source.contains("builder.push_string(__e.as_str())?"),
+        source.contains("let __s = __e.as_str();") && source.contains("builder.push_string(__s)?"),
         "a vector element is passed as the `&str` that `as_str` returns, got:\n{source}"
     );
     assert!(
-        source.contains("builder.push_vector(__e.as_slice(), 1usize)?"),
+        source.contains("let __s = __e.as_slice();")
+            && source.contains("builder.push_vector(__s, 1usize)?"),
         "a vector element is passed as the slice that `as_slice` returns, got:\n{source}"
     );
 }

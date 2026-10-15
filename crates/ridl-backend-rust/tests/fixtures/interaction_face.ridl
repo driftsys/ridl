@@ -179,3 +179,14 @@ interface ZoneLog {
   query   recall(window: Window): Log @[..200ms]
   query   tally(window: Window): Tally @[..200ms]
 }
+
+// Inline bounded fields are plain public values, so provider replies must
+// enforce their bounds before writing them into the provisioned buffer.
+struct InlinePayload {
+  text : string [8..8]
+  data : bytes [2..4]
+}
+
+interface ZonePayload {
+  query read(window: Window): InlinePayload @[..200ms]
+}
