@@ -3020,3 +3020,78 @@ fn a_context_package_resolves_an_appended_field_type() {
         );
     }
 }
+
+#[test]
+fn a_lowered_stepped_minimum_that_moves_the_grid_is_breaking() {
+    for (old_min, new_min, step) in [
+        ("1.0", "0.5", "1.0"),
+        ("-0.1", "-0.2", "0.2"),
+        (
+            "1000000000000000000000000000000.1",
+            "1000000000000000000000000000000.0",
+            "0.2",
+        ),
+    ] {
+        let make = |min: &str| {
+            let mut constraint = bounds(Some(min), None);
+            constraint.step = Some(step.to_string());
+            constraint
+        };
+        let (old, new) = constraint_case(make(old_min), make(new_min));
+        assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+    }
+}
+
+#[test]
+fn a_lowered_stepped_minimum_on_the_same_grid_is_compatible() {
+    for (old_min, new_min, step) in [("1.0", "0.0", "0.5"), ("-0.1", "-0.3", "0.2")] {
+        let make = |min: &str| {
+            let mut constraint = bounds(Some(min), None);
+            constraint.step = Some(step.to_string());
+            constraint
+        };
+        let (old, new) = constraint_case(make(old_min), make(new_min));
+        assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+    }
+}
+
+#[test]
+fn a_lowered_minimum_length_is_compatible() {
+    let length = |min: u64| {
+        let mut constraint = bounds(None, None);
+        constraint.len_min = Some(min);
+        constraint.len_max = Some(20);
+        constraint
+    };
+    let (old, new) = constraint_case(length(10), length(5));
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+}
+
+#[test]
+fn removing_a_stepped_minimum_uses_zero_as_the_new_origin() {
+    for (min, verdict) in [("1.0", Verdict::Compatible), ("1.1", Verdict::Breaking)] {
+        let mut before = bounds(Some(min), None);
+        before.step = Some("0.5".to_string());
+        let mut after = before.clone();
+        after.min = None;
+        let (old, new) = constraint_case(before, after);
+        assert_row(&old, &new, Category::ConstraintChanged, verdict);
+    }
+}
+
+#[test]
+fn unreadable_or_invalid_shifted_grids_fail_closed() {
+    for (min, step) in [
+        ("1e0", "0.5"),
+        ("1.0", "0"),
+        ("1.0", "-0.5"),
+        ("1.0", "bad"),
+    ] {
+        let mut before = bounds(Some(min), None);
+        before.step = Some(step.to_string());
+        let mut after = before.clone();
+        after.min = Some("-1.0".to_string());
+        let (old, new) = constraint_case(before, after);
+        assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+    }
+}
