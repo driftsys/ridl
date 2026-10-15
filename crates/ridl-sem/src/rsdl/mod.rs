@@ -1064,6 +1064,22 @@ deployment Production for Vehicle {
         }
     }
 
+    #[test]
+    fn duplicate_predicates_point_to_the_second_expression() {
+        for predicate in ["require", "ensure"] {
+            let text =
+                format!("package p\ncomponent C [ {predicate} true, {predicate} false ] {{}}\n");
+            let system = check(&[("p", &[("p/x.rsdl", text.as_str())])]);
+            assert_eq!(codes(&system), ["FORM-107", "FORM-108"]);
+            let duplicate = &system.diagnostics[1];
+            let range = duplicate.primary.range;
+            assert_eq!(
+                &text[usize::from(range.start())..usize::from(range.end())],
+                format!("{predicate} false"),
+            );
+        }
+    }
+
     /// The flag survives RSDL-313 and the valid instance names survive RSDL-305,
     /// so a later pass reads what the author meant.
     #[test]

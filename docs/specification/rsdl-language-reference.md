@@ -409,11 +409,12 @@ its consumer and what `ridl diff` does with a change to it.
   and `instances = solo` are RSDL-305. `external` is a flag and takes no value:
   `external = true` is RSDL-313. `tier` takes exactly the two values; any other
   is RSDL-908.
-- A key not in the table is FORM-106; a key on a declaration or line its row
-  does not name is FORM-107 — `instances` on a line, `deprecated` on a line,
-  `labels` on a line, `tier` on a component; a key twice in one block is
-  FORM-108. Lines take backend keys only, except the three sizing keys a
-  placement line takes.
+- A key absent from the family attribute registry is FORM-106; a registered key
+  on a declaration or line its row does not name is FORM-107 — `instances` on a
+  line, `deprecated` on a line, `labels` on a line, `tier` on a component; a key
+  twice in one block is FORM-108. The registered predicates `require` and
+  `ensure` have no legal rsdl site and draw FORM-107. Lines take backend keys
+  only, except the three sizing keys a placement line takes.
 - **The sizing keys** `depth`, `slots` and `budget` are integer literals. A
   value the parser reads that is not an integer within the key's range, or a key
   written bare with no value, is RSDL-709, which blocks its own deployment only
