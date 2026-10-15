@@ -715,7 +715,14 @@ mod tests {
 
     #[test]
     fn added_and_removed_distributions_include_their_attributes() {
-        let old = with_distribution();
+        let mut old = with_distribution();
+        // An unchanged distribution with the same short name must not hide
+        // the changed distribution from a different package.
+        old.distributions.push(v2::Distribution {
+            name: "Adas".to_string(),
+            package: "veh.other".to_string(),
+            ..Default::default()
+        });
         let mut new = old.clone();
         let distribution = &mut new.distributions[0];
         distribution.tier = v2::Tier::Platform as i32;
@@ -723,7 +730,9 @@ mod tests {
         distribution.deprecated = Some("use Next".to_string());
         distribution.attributes = vec![backend("sign", "key", Some("release"))];
         let mut absent = old.clone();
-        absent.distributions.clear();
+        absent
+            .distributions
+            .retain(|distribution| distribution.package != "veh.topology");
         let added = diff_systems(&absent, &new);
         let expected = [
             ("veh.topology.Adas", None, Some("distribution")),

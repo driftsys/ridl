@@ -3025,6 +3025,7 @@ fn a_context_package_resolves_an_appended_field_type() {
 fn a_lowered_stepped_minimum_that_moves_the_grid_is_breaking() {
     for (old_min, new_min, step) in [
         ("1.0", "0.5", "1.0"),
+        ("1.00", "0.6", "0.25"),
         ("-0.1", "-0.2", "0.2"),
         (
             "1000000000000000000000000000000.1",
@@ -3044,7 +3045,11 @@ fn a_lowered_stepped_minimum_that_moves_the_grid_is_breaking() {
 
 #[test]
 fn a_lowered_stepped_minimum_on_the_same_grid_is_compatible() {
-    for (old_min, new_min, step) in [("1.0", "0.0", "0.5"), ("-0.1", "-0.3", "0.2")] {
+    for (old_min, new_min, step) in [
+        ("1.0", "0.0", "0.5"),
+        ("-0.1", "-0.3", "0.2"),
+        ("1.00", "0.5", "0.25"),
+    ] {
         let make = |min: &str| {
             let mut constraint = bounds(Some(min), None);
             constraint.step = Some(step.to_string());
@@ -3094,4 +3099,14 @@ fn unreadable_or_invalid_shifted_grids_fail_closed() {
         let (old, new) = constraint_case(before, after);
         assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
     }
+}
+
+#[test]
+fn removing_an_unreadable_stepped_origin_is_breaking() {
+    let mut before = bounds(Some("1e0"), None);
+    before.step = Some("0.5".to_string());
+    let mut after = before.clone();
+    after.min = None;
+    let (old, new) = constraint_case(before, after);
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
 }
