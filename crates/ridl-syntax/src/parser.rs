@@ -1590,8 +1590,9 @@ impl<'a> Parser<'a> {
                 Some(SyntaxKind::Comma) => self.bump(),
                 // A `ReservedWord` in key position goes through
                 // [`Parser::name`], which holds it in an `ErrorNode` with
-                // FORM-105 — the E1 reserved-word discipline — so the rest
-                // of the attribute (`= value`) still parses.
+                // FORM-105, so the rest of the attribute still parses.
+                // The rsdl predicate words are recognized by `attribute`
+                // instead, for semantic placement checking.
                 Some(
                     SyntaxKind::Ident
                     | SyntaxKind::RequireKw
