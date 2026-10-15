@@ -797,7 +797,9 @@ still reported.
   or on one of their lines — is listed under a second heading, **composition
   changed**, likewise with no verdict, because it changes the derived links and
   not the contract. An added or removed distribution is listed under this
-  heading, and its attributes are compared with an empty side.
+  heading, and its attributes are compared with an empty side. Membership
+  changes within paired distributions and attributes of unpaired member lines
+  are not yet compared (driftsys/ridl#974).
 - Which of these changes are breaking, and for whom, is decided by the stability
   policy ([IR specification](ir-specification.md)), not here.
 

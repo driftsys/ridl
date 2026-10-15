@@ -37,9 +37,9 @@ pub enum SystemHeading {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SystemChange {
     pub heading: SystemHeading,
-    /// A slash-separated path: a component's qualified name, then `offers`,
-    /// `requires`, `instances` or `external`; or a deployment's name, then a
-    /// machine or an instance.
+    /// A slash-separated path: a component's or distribution's qualified
+    /// name, optionally followed by a changed member or attribute; or a
+    /// deployment's name, then a machine, an instance or an attribute.
     pub path: String,
     /// The rendered old value, absent when the change is an addition.
     pub before: Option<String>,
@@ -387,6 +387,8 @@ fn compare_distribution(
         ),
         (&after.labels, after.deprecated.as_ref(), &after.attributes),
     );
+    // Unpaired distribution members and their attributes are not reported
+    // yet (driftsys/ridl#974).
     for line in &after.members {
         if let Some(before) = before
             .members
@@ -711,6 +713,28 @@ mod tests {
             ..Default::default()
         });
         system
+    }
+
+    #[test]
+    fn bare_distributions_are_reported_in_both_directions() {
+        let present = with_distribution();
+        let mut absent = present.clone();
+        absent.distributions.clear();
+        let change = SystemChange {
+            heading: SystemHeading::CompositionChanged,
+            path: "veh.topology.Adas".to_string(),
+            before: None,
+            after: Some("distribution".to_string()),
+        };
+        assert_eq!(diff_systems(&absent, &present), [change.clone()]);
+        assert_eq!(
+            diff_systems(&present, &absent),
+            [SystemChange {
+                before: change.after,
+                after: change.before,
+                ..change
+            }]
+        );
     }
 
     #[test]
