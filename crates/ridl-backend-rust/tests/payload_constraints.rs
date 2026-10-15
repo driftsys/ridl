@@ -148,22 +148,26 @@ fn expected(owner: &'static str) -> Option<EncodeError> {
 }
 fn main() {
     let mut out = vec![0; 16384];
-    let mut keys = Keys { text: vec![("é".repeat(256), Whole::new(1))], number: vec![] };
-    assert!(keys.encode(&mut out).is_ok(), "key lengths count characters");
-    keys.text.push(("x".repeat(257), Whole::new(2)));
-    assert_eq!(keys.encode(&mut out).err(), expected("Keys"));
-    let mut bytes = ByteKeys { entries: vec![(vec![1; 256], Whole::new(1))] };
+    let keys = Keys { text: vec![("".into(), Whole::new(1)), ("é".repeat(256), Whole::new(2))], number: vec![] };
+    assert!(keys.encode(&mut out).is_ok(), "empty and Unicode upper-bound keys encode");
+    let bytes = ByteKeys { entries: vec![(vec![], Whole::new(1)), (vec![1; 256], Whole::new(2))] };
     assert!(bytes.encode(&mut out).is_ok());
-    bytes.entries.push((vec![1; 257], Whole::new(2)));
-    assert_eq!(bytes.encode(&mut out).err(), expected("ByteKeys"));
-
-    let mut elements = Elements { text: vec!["é".repeat(256)], data: vec![vec![1; 256]] };
-    assert!(elements.encode(&mut out).is_ok(), "valid counts and elements encode");
-    elements.text.push("x".repeat(257));
-    assert_eq!(elements.encode(&mut out).err(), expected("Elements"));
-    elements.text[1] = "x".repeat(256);
-    elements.data.push(vec![1; 257]);
-    assert_eq!(elements.encode(&mut out).err(), expected("Elements"));
+    let elements = Elements { text: vec!["".into(), "é".repeat(256)], data: vec![vec![], vec![1; 256]] };
+    assert!(elements.encode(&mut out).is_ok(), "valid counts and both length boundaries encode");
+    for index in [0, 1] {
+        let mut invalid = keys.clone();
+        invalid.text[index].0 = "x".repeat(257);
+        assert_eq!(invalid.encode(&mut out).err(), expected("Keys"));
+        let mut invalid = bytes.clone();
+        invalid.entries[index].0 = vec![1; 257];
+        assert_eq!(invalid.encode(&mut out).err(), expected("ByteKeys"));
+        let mut invalid = elements.clone();
+        invalid.text[index] = "x".repeat(257);
+        assert_eq!(invalid.encode(&mut out).err(), expected("Elements"));
+        let mut invalid = elements.clone();
+        invalid.data[index] = vec![1; 257];
+        assert_eq!(invalid.encode(&mut out).err(), expected("Elements"));
+    }
 }
 "#,
         ),
@@ -182,32 +186,44 @@ fn expected(owner: &'static str) -> Option<EncodeError> {
 }
 fn main() {
     let mut out = vec![0; 4096];
-    let mut values = MapValues { text: vec![(1, "four".into())], data: vec![] };
-    assert!(values.encode(&mut out).is_ok());
-    for text in ["é", "abcde"] {
-        values.text[0].1 = text.into();
-        assert_eq!(values.encode(&mut out).err(), expected("MapValues"));
+    let values = MapValues { text: vec![(1, "ok".into()), (2, "four".into())], data: vec![] };
+    assert!(values.encode(&mut out).is_ok(), "both string boundaries encode");
+    for index in [0, 1] {
+        for text in ["é", "abcde"] {
+            let mut invalid = values.clone();
+            invalid.text[index].1 = text.into();
+            assert_eq!(invalid.encode(&mut out).err(), expected("MapValues"));
+        }
     }
-    values.text.clear();
-    values.data = vec![(1, vec![1; 4])];
-    assert!(values.encode(&mut out).is_ok());
-    for length in [1, 5] {
-        values.data[0].1 = vec![1; length];
-        assert_eq!(values.encode(&mut out).err(), expected("MapValues"));
+    let values = MapValues { text: vec![], data: vec![(1, vec![1; 2]), (2, vec![1; 4])] };
+    assert!(values.encode(&mut out).is_ok(), "both byte boundaries encode");
+    for index in [0, 1] {
+        for length in [1, 5] {
+            let mut invalid = values.clone();
+            invalid.data[index].1 = vec![1; length];
+            assert_eq!(invalid.encode(&mut out).err(), expected("MapValues"));
+        }
     }
     let mut optional = OptionalFields { text: None, data: None };
     assert!(optional.encode(&mut out).is_ok(), "absent fields have no length to check");
+    optional.text = Some("ok".into());
+    optional.data = Some(vec![1; 2]);
+    assert!(optional.encode(&mut out).is_ok(), "optional lower bounds are inclusive");
     optional.text = Some("four".into());
     optional.data = Some(vec![1; 4]);
     assert!(optional.encode(&mut out).is_ok());
     for text in ["é", "abcde"] {
         optional.text = Some(text.into());
+        out.fill(0x5a);
         assert_eq!(optional.encode(&mut out).err(), expected("OptionalFields"));
+        assert!(out.iter().all(|byte| *byte == 0x5a), "invalid first fields are refused before writing");
     }
     optional.text = None;
     for length in [1, 5] {
         optional.data = Some(vec![1; length]);
+        out.fill(0x5a);
         assert_eq!(optional.encode(&mut out).err(), expected("OptionalFields"));
+        assert!(out.iter().all(|byte| *byte == 0x5a), "invalid first fields are refused before writing");
     }
 }
 "#,
