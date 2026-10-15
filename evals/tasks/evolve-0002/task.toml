@@ -5,5 +5,5 @@ title = "Add indexed parameter reading compatibly"
 
 [expect]
 compiles = true
-lints = ["duplicate-shape", "inconsistent-unit", "low-cohesion-interface"]
+lints = []
 diff = "compatible"

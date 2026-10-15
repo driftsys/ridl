@@ -5,5 +5,5 @@ title = "Document geometric semantic distinctions compatibly"
 
 [expect]
 compiles = true
-lints = ["duplicate-shape", "low-cohesion-interface"]
+lints = []
 diff = "compatible"

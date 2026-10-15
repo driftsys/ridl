@@ -5,4 +5,4 @@ title = "Review parameter value representation"
 
 [expect]
 compiles = true
-lints = ["duplicate-shape", "inconsistent-unit", "low-cohesion-interface"]
+lints = []

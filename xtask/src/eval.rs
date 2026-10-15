@@ -2,9 +2,9 @@
 //! ridl-authoring skill on each host, scores each run, and writes the results
 //! under `evals/results/<date>/`.
 //!
-//! `cargo xtask eval [--task <id>]... [--host claude|codex|copilot]...
-//! [--runs <n>] [--skill with|without|both] [--out <dir>] [--append]
-//! [--claude-handoff] [--timeout <seconds>]`
+//! `cargo xtask eval [--task <id>]... [--host claude|codex]... [--runs <n>]
+//! [--skill with|without|both] [--out <dir>] [--append] [--claude-handoff]
+//! [--timeout <seconds>]`
 //!
 //! A run that cannot be scored is recorded with a `setup_error` and no
 //! score, and the batch goes on: a "with" run that shows no evidence of
@@ -21,16 +21,11 @@
 //!
 //! Each host signs in with its CLI's own login. Codex runs get a copy of the
 //! stored `auth.json`. Claude runs read `CLAUDE_CODE_OAUTH_TOKEN`, which
-//! `claude setup-token` prints, or `ANTHROPIC_API_KEY`. Copilot runs get a
-//! copy of the three login keys of the stored `config.json`
-//! (`copilotTokens`, `loggedInUsers`, `lastLoggedInUser`; see
-//! `host::copilot_login_path`), not the whole file: the rest of it holds
-//! installed plugins, trusted folders and other settings a run must never
-//! read. With `--claude-handoff`, the only Claude command
-//! that runs is `claude --version`, which records the host version: each
-//! Claude agent run and each Claude judgement is written as a request file,
-//! and the eval waits until the operator has run it with an agent of their
-//! own (see `host::execute`).
+//! `claude setup-token` prints, or `ANTHROPIC_API_KEY`. With
+//! `--claude-handoff`, the only Claude command that runs is `claude --version`,
+//! which records the host version: each Claude agent run and each Claude
+//! judgement is written as a request file, and the eval waits until the
+//! operator has run it with an agent of their own (see `host::execute`).
 
 mod host;
 mod judge;
@@ -78,7 +73,6 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
             "--host" => options.hosts.push(match value()?.as_str() {
                 "claude" => Host::Claude,
                 "codex" => Host::Codex,
-                "copilot" => Host::Copilot,
                 other => return Err(format!("unknown host: {other}")),
             }),
             "--runs" => {
@@ -133,7 +127,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let options = parse(args)?;
     let tasks = task::load_tasks(&root, &options.tasks)?;
     let models = host::load_models(&root)?;
-    check_logins(&options.hosts, options.claude_handoff)?;
+    check_logins(options.claude_handoff)?;
     let out = options
         .out
         .clone()
@@ -163,7 +157,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
                     );
                     let base = host::scratch_dir(&task.id, &label)?;
                     let dirs = host::prepare_run(&base, task, host, with_skill, &skill)?;
-                    let login = host::Login::lend(host, &dirs.home)?;
+                    let login = (host == Host::Codex)
+                        .then(|| host::LentLogin::lend(&host::codex_login_path(), &dirs.home))
+                        .transpose()?;
                     let invocation =
                         host::agent_invocation(host, host.model(&models), &dirs, &prompt);
                     let handoff = options.claude_handoff && host == Host::Claude;
@@ -415,9 +411,8 @@ fn agreement_command(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
-/// Has the other vendor's model mark the rubric of a run. A reply that
-/// cannot be read becomes an `error` entry with no score, never a partial
-/// score.
+/// Has the other host's model mark the rubric of a run. A reply that cannot
+/// be read becomes an `error` entry with no score, never a partial score.
 fn judge_run(
     task: &task::Task,
     host: Host,
@@ -427,7 +422,7 @@ fn judge_run(
     label: &str,
     options: &Options,
 ) -> Result<toml::Table, String> {
-    let judge = host.judge();
+    let judge = host.other();
     let read = |path: &Path| std::fs::read_to_string(path).map_err(|e| e.to_string());
     let rubric = read(&task.dir.join("rubric.md"))?;
     let items = judge::rubric_items(&rubric)?;
@@ -454,7 +449,6 @@ fn judge_run(
         Ok(_) => match judge {
             Host::Claude => read(&stdout).and_then(|out| judge::claude_reply(&out)),
             Host::Codex => read(&dir.join("verdict.json")),
-            Host::Copilot => unreachable!("Host::judge never selects Copilot as a judge"),
         },
     };
     std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -467,16 +461,8 @@ fn judge_run(
     };
     table.insert("judge_model".into(), model.into());
     table.insert("handoff".into(), handoff.into());
-    let reply = reply.and_then(|reply| {
-        judge::parse_verdict(&reply, &items)
-            .map(|met| (met, judge::verdict_reasons(&reply, &items)))
-    });
-    match reply {
-        Ok((met, reasons)) => {
-            table.insert(
-                "reasons".into(),
-                toml::Value::Array(reasons.into_iter().map(Into::into).collect()),
-            );
+    match reply.and_then(|reply| judge::parse_verdict(&reply, &items)) {
+        Ok(met) => {
             table.insert(
                 "met".into(),
                 toml::Value::Array(met.iter().map(|m| (*m).into()).collect()),
@@ -507,38 +493,20 @@ fn mechanical_table(mechanical: &score::Mechanical) -> toml::Table {
     table
 }
 
-/// Whether a run needs `login`'s credentials: `login` is one of `hosts`, or
-/// judges one of them.
-fn needs_login(hosts: &[Host], login: Host) -> bool {
-    hosts.iter().any(|&h| h == login || h.judge() == login)
-}
-
-/// Every selected host is judged by another host, so a run needs the stored
-/// login of every host that is either selected or judges a selected one:
-/// Codex needs its stored login, Claude, unless it is handed off, needs a
-/// token, and Copilot needs its stored `config.json` login (`copilotTokens`,
-/// `loggedInUsers`, `lastLoggedInUser`; see `host::copilot_login_path`). No
-/// command runs before every needed login is found.
-fn check_logins(hosts: &[Host], claude_handoff: bool) -> Result<(), String> {
-    if needs_login(hosts, Host::Codex) {
-        let stored = host::codex_login_path();
-        if !stored.is_file() {
-            return Err(format!(
-                "no stored Codex login at {}; run `codex login`",
-                stored.display()
-            ));
-        }
+/// The judge of each host is the other host, so every run uses both hosts:
+/// Codex needs its stored login, and Claude, unless it is handed off, needs a
+/// token. No command runs before both are found.
+fn check_logins(claude_handoff: bool) -> Result<(), String> {
+    let stored = host::codex_login_path();
+    if !stored.is_file() {
+        return Err(format!(
+            "no stored Codex login at {}; run `codex login`",
+            stored.display()
+        ));
     }
     let set = |var: &str| std::env::var(var).is_ok_and(|v| !v.is_empty());
-    if needs_login(hosts, Host::Claude)
-        && !claude_handoff
-        && !set("CLAUDE_CODE_OAUTH_TOKEN")
-        && !set("ANTHROPIC_API_KEY")
-    {
+    if !claude_handoff && !set("CLAUDE_CODE_OAUTH_TOKEN") && !set("ANTHROPIC_API_KEY") {
         return Err("CLAUDE_CODE_OAUTH_TOKEN is not set (run `claude setup-token`), nor ANTHROPIC_API_KEY; or pass --claude-handoff".to_owned());
-    }
-    if needs_login(hosts, Host::Copilot) {
-        host::check_copilot_login(&host::copilot_login_path())?;
     }
     Ok(())
 }
@@ -576,32 +544,6 @@ mod tests {
         assert_eq!(options.hosts, [Host::Codex]);
         assert_eq!(options.skill, [true]);
         assert_eq!(options.runs, 3);
-    }
-
-    #[test]
-    fn the_copilot_host_is_accepted_alone_or_with_another() {
-        let options = parse(&["--host".to_owned(), "copilot".to_owned()]).unwrap();
-        assert_eq!(options.hosts, [Host::Copilot]);
-        let args: Vec<String> = ["--host", "copilot", "--host", "codex"]
-            .map(str::to_owned)
-            .into();
-        let options = parse(&args).unwrap();
-        assert_eq!(options.hosts, [Host::Copilot, Host::Codex]);
-    }
-
-    #[test]
-    fn check_logins_needs_only_the_logins_the_selected_hosts_or_their_judges_use() {
-        // Codex is never selected, but it judges Claude and Copilot runs.
-        assert!(needs_login(&[Host::Claude], Host::Codex));
-        assert!(needs_login(&[Host::Copilot], Host::Codex));
-        // Claude is never selected, and Copilot is never a judge, so a
-        // Copilot-only selection needs no Claude token.
-        assert!(!needs_login(&[Host::Copilot], Host::Claude));
-        // Codex judges Claude, and Claude judges Codex, so either selection
-        // alone needs both logins.
-        assert!(needs_login(&[Host::Claude], Host::Claude));
-        assert!(needs_login(&[Host::Codex], Host::Claude));
-        assert!(needs_login(&[Host::Codex], Host::Codex));
     }
 
     #[test]

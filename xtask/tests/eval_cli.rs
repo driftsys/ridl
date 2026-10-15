@@ -29,15 +29,11 @@ fn script(dir: &Path, name: &str, body: &str) -> PathBuf {
 /// `auth.json` in their home, as a token refresh does; with `judge-sleep`,
 /// the fake Codex judge sleeps for 60 seconds. The fake `ridl diff` prints nothing and exits 3 unless its third and
 /// fourth arguments are the task's starting workspace and the run's workspace.
-/// The fake Copilot agent writes a `skill.invoked` event only when
-/// `.github/skills/ridl-authoring/SKILL.md` exists in its workspace; it is
-/// never a judge, so it has no `--output-schema`/`--json-schema` branch.
 /// The directory is removed when the value is dropped.
 struct Fakes {
     dir: PathBuf,
     claude: PathBuf,
     codex: PathBuf,
-    copilot: PathBuf,
     ridl: PathBuf,
 }
 
@@ -119,21 +115,6 @@ echo 'The Codex final answer.' > "$out"
 echo '{{"type":"item.completed","item":{{"type":"mcp_tool_call","server":"ridl","tool":"ridl_check"}}}}'"#
         ),
     );
-    let copilot = script(
-        &dir,
-        "copilot",
-        &format!(
-            r#"echo "copilot $*" >> '{d}/calls.log'
-[ "$1" = --version ] && {{ echo "GitHub Copilot CLI fake-1.0."; exit 0; }}
-env > '{d}/copilot-agent.env'
-[ -f ridl.toml ] || printf '[package]\n' > ridl.toml
-if [ -f .github/skills/ridl-authoring/SKILL.md ]; then
-  echo "{{\"type\":\"skill.invoked\",\"data\":{{\"name\":\"ridl-authoring\",\"path\":\"$PWD/.github/skills/ridl-authoring/SKILL.md\",\"content\":\"...\"}}}}"
-fi
-echo '{{"type":"tool.execution_start","data":{{"toolCallId":"c1","toolName":"ridl_check","mcpServerName":"ridl","mcpToolName":"ridl_check"}}}}'
-echo '{{"type":"assistant.message","data":{{"messageId":"m1","content":"The Copilot final answer."}}}}'"#
-        ),
-    );
     let ridl = script(
         &dir,
         "ridl",
@@ -153,7 +134,6 @@ esac"#
         dir,
         claude,
         codex,
-        copilot,
         ridl,
     }
 }
@@ -168,24 +148,20 @@ enum Logins {
 
 fn command(fakes: &Fakes, args: &[&str], logins: Logins) -> Command {
     let stored = fakes.dir.join("auth.json");
-    let copilot_stored = fakes.dir.join("copilot-config.json");
     let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
     command
         .arg("eval")
         .args(args)
         .env("RIDL_EVAL_CLAUDE", &fakes.claude)
         .env("RIDL_EVAL_CODEX", &fakes.codex)
-        .env("RIDL_EVAL_COPILOT", &fakes.copilot)
         .env("RIDL_EVAL_RIDL", &fakes.ridl)
         .env("RIDL_EVAL_CODEX_LOGIN", &stored)
-        .env("RIDL_EVAL_COPILOT_LOGIN", &copilot_stored)
         .env("TMPDIR", fakes.dir.join("tmp"))
         .env_remove("ANTHROPIC_API_KEY")
         .env_remove("CLAUDE_CODE_OAUTH_TOKEN");
     match logins {
         Logins::Both => {
             std::fs::write(&stored, "{}").unwrap();
-            std::fs::write(&copilot_stored, COPILOT_FAKE_LOGIN).unwrap();
             command.env("CLAUDE_CODE_OAUTH_TOKEN", "fake");
         }
         Logins::CodexOnly => std::fs::write(&stored, "{}").unwrap(),
@@ -193,10 +169,6 @@ fn command(fakes: &Fakes, args: &[&str], logins: Logins) -> Command {
     }
     command
 }
-
-/// A fake stored Copilot `config.json`, holding its three login keys plus a
-/// setting a run must never read or copy.
-const COPILOT_FAKE_LOGIN: &str = r#"{"copilotTokens":{"https://github.com:u":"fake-token"},"loggedInUsers":[{"host":"https://github.com","login":"u"}],"lastLoggedInUser":{"host":"https://github.com","login":"u"},"trustedFolders":["/should-not-be-copied"]}"#;
 
 fn eval(fakes: &Fakes, args: &[&str], logins: bool) -> Output {
     let logins = if logins { Logins::Both } else { Logins::None };
@@ -262,43 +234,6 @@ fn a_codex_run_copies_its_transcript() {
 }
 
 #[test]
-fn a_copilot_run_copies_its_transcript_and_is_judged_by_codex() {
-    let fakes = fakes_with(None);
-    let out = fakes.dir.join("results");
-    let output = eval(
-        &fakes,
-        &[
-            "--task",
-            "design-0001",
-            "--host",
-            "copilot",
-            "--skill",
-            "with",
-            "--out",
-            out.to_str().unwrap(),
-        ],
-        true,
-    );
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let transcript =
-        std::fs::read_to_string(out.join("transcripts/design-0001/copilot-with-1.jsonl")).unwrap();
-    assert!(transcript.contains("skill.invoked"));
-    assert!(transcript.contains("ridl_check"));
-    let result = result(&out, "design-0001", "copilot-with-1");
-    assert_eq!(result["mechanical"]["passed"].as_bool(), Some(true));
-    assert_eq!(result["rubric"]["judge_host"].as_str(), Some("codex"));
-    assert_eq!(
-        result["model"].as_str(),
-        Some(pinned_model("copilot").as_str())
-    );
-    assert!(fakes.calls().contains("copilot -p"), "{}", fakes.calls());
-}
-
-#[test]
 fn a_missing_codex_login_stops_the_run_before_any_host_is_called() {
     let fakes = fakes_with(None);
     let output = eval(
@@ -322,7 +257,7 @@ fn a_missing_codex_login_stops_the_run_before_any_host_is_called() {
 #[test]
 fn a_finished_run_and_its_judgement_leave_no_scratch_directory() {
     let fakes = fakes_with(None);
-    for host in ["claude", "codex", "copilot"] {
+    for host in ["claude", "codex"] {
         let out = fakes.dir.join(format!("results-{host}"));
         let output = eval(
             &fakes,
@@ -682,12 +617,6 @@ fn result(out: &Path, task: &str, label: &str) -> toml::Value {
 #[test]
 fn a_run_writes_its_mechanical_score() {
     let fakes = fakes_with(None);
-    // evolve-0001 expects the lints that the unmodified ros2 corpus draws.
-    std::fs::write(
-        fakes.dir.join("check.json"),
-        r#"[{"code":"TYPL-224","severity":"info","lint":"low-cohesion-interface","message":"m"},{"code":"TYPL-223","severity":"info","lint":"duplicate-shape","message":"m"}]"#,
-    )
-    .unwrap();
     let out = fakes.dir.join("results");
     let output = eval(
         &fakes,
@@ -803,53 +732,6 @@ fn a_with_run_whose_host_did_not_load_the_skill_is_a_setup_error() {
         );
         assert_eq!(fakes.scratch(), Vec::<PathBuf>::new());
     }
-}
-
-/// The fake Copilot agent used elsewhere prints a `skill.invoked` event only
-/// when it finds the skill file in its workspace; this one never does, so a
-/// "with" run on it shows the same setup error as the other hosts.
-#[test]
-fn a_copilot_with_run_whose_fake_shows_no_skill_evidence_is_a_setup_error() {
-    let fakes = fakes_with(None);
-    let plain_copilot = script(
-        &fakes.dir,
-        "copilot-plain",
-        &format!(
-            r#"echo "copilot $*" >> '{d}/calls.log'
-[ "$1" = --version ] && {{ echo "GitHub Copilot CLI fake-1.0."; exit 0; }}
-[ -f ridl.toml ] || printf '[package]\n' > ridl.toml
-echo '{{"type":"tool.execution_start","data":{{"toolCallId":"c1","toolName":"ridl_check","mcpServerName":"ridl","mcpToolName":"ridl_check"}}}}'
-echo '{{"type":"assistant.message","data":{{"messageId":"m1","content":"Done."}}}}'"#,
-            d = fakes.dir.display()
-        ),
-    );
-    let out = fakes.dir.join("results");
-    let args = [
-        "--task",
-        "design-0001",
-        "--host",
-        "copilot",
-        "--skill",
-        "both",
-        "--out",
-        out.to_str().unwrap(),
-    ];
-    let output = command(&fakes, &args, Logins::Both)
-        .env("RIDL_EVAL_COPILOT", &plain_copilot)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let with = result(&out, "design-0001", "copilot-with-1");
-    assert_eq!(
-        with.get("setup_error").and_then(toml::Value::as_str),
-        Some("the host did not load the skill")
-    );
-    let without = result(&out, "design-0001", "copilot-without-1");
-    assert_eq!(without["mechanical"]["passed"].as_bool(), Some(true));
 }
 
 /// Runs design-0001 on Claude without the skill, with `extra` arguments,
@@ -1214,10 +1096,10 @@ fn design_lints_must_match_the_task() {
     let fakes = fakes_with(None);
     std::fs::write(
         fakes.dir.join("check.json"),
-        r#"[{"code":"TYPL-224","severity":"info","lint":"low-cohesion-interface","message":"m"},{"code":"TYPL-223","severity":"info","lint":"duplicate-shape","message":"m"}]"#,
+        r#"[{"code":"TYPL-224","severity":"info","lint":"low-cohesion-interface","message":"m"}]"#,
     )
     .unwrap();
-    // review-0002 expects these two lints; design-0001 expects none.
+    // review-0002 expects this lint; design-0001 expects none.
     let (_, expected) = run_one(&fakes, "review-0002", "claude");
     assert_eq!(expected["mechanical"]["lints_match"].as_bool(), Some(true));
     assert_eq!(expected["mechanical"]["passed"].as_bool(), Some(true));
@@ -1341,9 +1223,8 @@ fn sample_reports_a_result_without_marks_as_an_error() {
 #[test]
 fn a_host_inherits_only_its_allowed_variables() {
     let fakes = fakes_with(None);
-    // Each host runs as the agent once and as the judge of the other one
-    // (Codex also judges Copilot, which is never itself a judge).
-    for host in ["claude", "codex", "copilot"] {
+    // Each host runs as the agent once and as the judge of the other once.
+    for host in ["claude", "codex"] {
         let out = fakes.dir.join(format!("results-{host}"));
         let output = command(
             &fakes,
@@ -1379,7 +1260,6 @@ fn a_host_inherits_only_its_allowed_variables() {
         "claude-judge.env",
         "codex-agent.env",
         "codex-judge.env",
-        "copilot-agent.env",
     ] {
         let env = read(name);
         for var in ["PATH", "HOME", "TMPDIR", "LANG"] {
@@ -1394,8 +1274,6 @@ fn a_host_inherits_only_its_allowed_variables() {
         }
         let home = if claude {
             "CLAUDE_CONFIG_DIR"
-        } else if name.starts_with("copilot") {
-            "COPILOT_HOME"
         } else {
             "CODEX_HOME"
         };

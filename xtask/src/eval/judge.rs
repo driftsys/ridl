@@ -115,25 +115,6 @@ pub fn parse_verdict(reply: &str, items: &[Item]) -> Result<Vec<bool>, String> {
         .collect()
 }
 
-/// The judge's one-sentence reason for each item, in rubric order, for a
-/// reply that `parse_verdict` accepted. An item with no reason gets an empty
-/// string.
-pub fn verdict_reasons(reply: &str, items: &[Item]) -> Vec<String> {
-    let value: serde_json::Value = serde_json::from_str(reply.trim()).unwrap_or_default();
-    let entries = value["items"].as_array().cloned().unwrap_or_default();
-    items
-        .iter()
-        .map(|item| {
-            entries
-                .iter()
-                .find(|e| e["n"].as_u64() == Some(u64::from(item.n)))
-                .and_then(|e| e["reason"].as_str())
-                .unwrap_or_default()
-                .to_owned()
-        })
-        .collect()
-}
-
 /// The weighted fraction of rubric items met: **must** and **must not**
 /// count 2, **should** counts 1.
 pub fn weighted_score(items: &[Item], met: &[bool]) -> f64 {
@@ -161,8 +142,7 @@ pub fn write_schema(dir: &Path) -> Result<(), String> {
 
 /// The judge runs with no MCP server, in `dir`, an empty directory with its
 /// own host home. The Claude judge has no tool; the Codex judge keeps its
-/// shell tool in a read-only sandbox (`-s read-only`). Copilot is never a
-/// judge: `Host::judge` never returns it.
+/// shell tool in a read-only sandbox (`-s read-only`).
 pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> host::Invocation {
     let s = |v: &str| v.to_owned();
     let path = |p: PathBuf| p.display().to_string();
@@ -200,7 +180,6 @@ pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> h
             ],
             vec![(s("CODEX_HOME"), path(dir.join("home")))],
         ),
-        Host::Copilot => unreachable!("Host::judge never selects Copilot as a judge"),
     };
     host::Invocation {
         program: judge.binary(),
@@ -271,24 +250,11 @@ pub fn claude_final_message(transcript: &str) -> String {
         .unwrap_or_default()
 }
 
-/// The final message of a Copilot run: the `content` of its last
-/// `assistant.message` event.
-pub fn copilot_final_message(transcript: &str) -> String {
-    transcript
-        .lines()
-        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-        .filter(|v| v["type"] == "assistant.message")
-        .filter_map(|v| v["data"]["content"].as_str().map(str::to_owned))
-        .next_back()
-        .unwrap_or_default()
-}
-
 /// The final message of a run on `host`.
 pub fn final_message(host: Host, transcript: &str, dirs: &RunDirs) -> String {
     match host {
         Host::Claude => claude_final_message(transcript),
         Host::Codex => std::fs::read_to_string(&dirs.last_message).unwrap_or_default(),
-        Host::Copilot => copilot_final_message(transcript),
     }
 }
 
@@ -364,13 +330,6 @@ mod tests {
     }
 
     #[test]
-    fn the_reasons_follow_the_rubric_order() {
-        let items = rubric_items(RUBRIC).unwrap();
-        let reply = r#"{"items":[{"n":2,"met":false,"reason":"b"},{"n":1,"met":true,"reason":"a"},{"n":3,"met":true}]}"#;
-        assert_eq!(verdict_reasons(reply, &items), ["a", "b", ""]);
-    }
-
-    #[test]
     fn a_verdict_must_mark_every_item_once() {
         let items = rubric_items(RUBRIC).unwrap();
         let ok = r#"{"items":[{"n":1,"met":true},{"n":2,"met":false},{"n":3,"met":true}]}"#;
@@ -440,12 +399,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "never selects Copilot")]
-    fn copilot_is_never_invoked_as_a_judge() {
-        judge_invocation(Host::Copilot, "m", Path::new("/j"), "p");
-    }
-
-    #[test]
     fn the_claude_reply_is_its_structured_output_or_its_result() {
         let structured = r#"{"type":"result","structured_output":{"items":[]},"result":"x"}"#;
         assert_eq!(claude_reply(structured).unwrap(), r#"{"items":[]}"#);
@@ -504,19 +457,6 @@ mod tests {
             "\n"
         );
         assert_eq!(claude_final_message(t), "The answer.");
-    }
-
-    #[test]
-    fn the_final_message_of_a_copilot_run_is_its_last_assistant_message() {
-        let t = concat!(
-            r#"{"type":"assistant.message","data":{"messageId":"1","content":"first"}}"#,
-            "\n",
-            r#"{"type":"tool.execution_start","data":{"toolCallId":"a","toolName":"bash"}}"#,
-            "\n",
-            r#"{"type":"assistant.message","data":{"messageId":"2","content":"last"}}"#,
-            "\n"
-        );
-        assert_eq!(copilot_final_message(t), "last");
     }
 
     #[test]

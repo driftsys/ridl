@@ -64,21 +64,10 @@ fn str_field<'a>(
     map.get(key).and_then(serde_json::Value::as_str)
 }
 
-/// The nested `data` object of a Copilot session event, if `map` is one.
-fn copilot_data(
-    map: &serde_json::Map<String, serde_json::Value>,
-) -> Option<&serde_json::Map<String, serde_json::Value>> {
-    map.get("data").and_then(serde_json::Value::as_object)
-}
-
 /// True when the transcript holds a tool call whose name is `ridl_check`, or
-/// ends with `__ridl_check` (Claude names an MCP tool `mcp__<server>__<tool>`),
-/// or, for Copilot, a `tool.execution_start` event whose `mcpToolName` is
-/// `ridl_check`, or whose `toolName` is `ridl_check` or ends with
-/// `-ridl_check` (Copilot namespaces an MCP tool `<server>-<tool>`, e.g.
-/// `ridl-ridl_check`; a real run carries both forms on the same event, so
-/// either one counts). Text that only mentions the name does not count, nor
-/// does a call refused before it reached the server.
+/// ends with `__ridl_check` (Claude names an MCP tool `mcp__<server>__<tool>`).
+/// Text that only mentions the name does not count, nor does a call refused
+/// before it reached the server.
 pub fn used_ridl_check(transcript: &str) -> bool {
     json_lines(transcript).any(|line| {
         objects(&line).into_iter().any(|map| {
@@ -91,13 +80,7 @@ pub fn used_ridl_check(transcript: &str) -> bool {
             // result; that call never reached the server.
             let refused = map.get("result").is_some_and(serde_json::Value::is_null)
                 && map.get("error").is_some_and(|e| !e.is_null());
-            let copilot_call = str_field(map, "type") == Some("tool.execution_start")
-                && copilot_data(map).is_some_and(|data| {
-                    str_field(data, "mcpToolName") == Some("ridl_check")
-                        || str_field(data, "toolName")
-                            .is_some_and(|n| n == "ridl_check" || n.ends_with("-ridl_check"))
-                });
-            (is_call && named && !refused) || copilot_call
+            is_call && named && !refused
         })
     })
 }
@@ -114,10 +97,8 @@ fn names_the_skill_directory(command: &str) -> bool {
 /// agent called the `Skill` tool on it, read its `SKILL.md`, or ran a
 /// command on its directory. A handed-off run, whose transcript has no
 /// `init` line, shows only the last two. Codex: the agent read a file of the
-/// skill's directory with a command. Copilot: a `skill.invoked` event names
-/// it or its `SKILL.md` path, or a `tool.execution_start` event calls the
-/// `skill` tool on it (a real run records the second form). Text that only
-/// mentions the skill does not count.
+/// skill's directory with a command. Text that only mentions the skill does
+/// not count.
 pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
     json_lines(transcript).any(|line| {
         objects(&line).into_iter().any(|map| match host {
@@ -152,23 +133,6 @@ pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
             Host::Codex => {
                 str_field(map, "type") == Some("command_execution")
                     && str_field(map, "command").is_some_and(names_the_skill_directory)
-            }
-            Host::Copilot => {
-                let invoked = str_field(map, "type") == Some("skill.invoked")
-                    && copilot_data(map).is_some_and(|data| {
-                        str_field(data, "name") == Some("ridl-authoring")
-                            || str_field(data, "path")
-                                .is_some_and(|p| p.ends_with("ridl-authoring/SKILL.md"))
-                    });
-                let called = str_field(map, "type") == Some("tool.execution_start")
-                    && copilot_data(map).is_some_and(|data| {
-                        str_field(data, "toolName") == Some("skill")
-                            && data
-                                .get("arguments")
-                                .and_then(|a| a.get("skill"))
-                                .is_some_and(|s| s == "ridl-authoring")
-                    });
-                invoked || called
             }
         })
     })
@@ -257,8 +221,7 @@ pub fn score_mechanical(task: &Task, dirs: &RunDirs, transcript: &str) -> Mechan
 }
 
 /// True when the transcript holds a shell command that runs `ridl check`:
-/// a Claude `Bash` call, a Codex `command_execution`, or a Copilot
-/// `tool.execution_start` event naming its `bash` tool. `ridl checker`,
+/// a Claude `Bash` call or a Codex `command_execution`. `ridl checker`,
 /// `myridl check` and `echo "ridl check"` do not count, nor does text that
 /// only mentions it.
 pub fn ran_ridl_check_command(transcript: &str) -> bool {
@@ -270,11 +233,6 @@ pub fn ran_ridl_check_command(transcript: &str) -> bool {
                     .and_then(|input| input.get("command"))
                     .and_then(serde_json::Value::as_str),
                 Some("command_execution") => str_field(map, "command"),
-                Some("tool.execution_start") => copilot_data(map)
-                    .filter(|data| str_field(data, "toolName") == Some("bash"))
-                    .and_then(|data| data.get("arguments"))
-                    .and_then(|args| args.get("command"))
-                    .and_then(serde_json::Value::as_str),
                 _ => None,
             };
             command.is_some_and(runs_ridl_check)
@@ -328,27 +286,11 @@ mod tests {
     const CLAUDE_SKILL_CALL: &str = r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Skill","input":{"skill":"ridl-authoring"}}]}}"#;
     const CODEX_SKILL_READ: &str = r#"{"type":"item.completed","item":{"id":"i2","type":"command_execution","command":"cat /h/skills/ridl-authoring/SKILL.md","status":"completed"}}"#;
     const CODEX_TEXT_MENTION: &str = r#"{"type":"item.completed","item":{"id":"i3","type":"agent_message","text":"I would use ridl-authoring/SKILL.md if I had it"}}"#;
-    const COPILOT_CALL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c1","toolName":"ridl-ridl_check","mcpServerName":"ridl","mcpConfigServerName":"ridl","mcpToolName":"ridl_check","mcpTransport":"stdio","mcpConfigSource":"user"}}"#;
-    const COPILOT_SKILL_INVOKED: &str = r#"{"type":"skill.invoked","data":{"name":"ridl-authoring","path":"/r/ws/.github/skills/ridl-authoring/SKILL.md","content":"..."}}"#;
-    const COPILOT_SKILL_CALL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c3","toolName":"skill","arguments":{"skill":"ridl-authoring"}}}"#;
-    const COPILOT_OTHER_SKILL_CALL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c4","toolName":"skill","arguments":{"skill":"pdf"}}}"#;
-    const COPILOT_SHELL: &str = r#"{"type":"tool.execution_start","data":{"toolCallId":"c2","toolName":"bash","arguments":{"command":"ridl check ."}}}"#;
 
     #[test]
     fn a_tool_call_to_ridl_check_is_found_on_each_host() {
         assert!(used_ridl_check(CLAUDE_CALL));
         assert!(used_ridl_check(CODEX_CALL));
-        assert!(used_ridl_check(COPILOT_CALL));
-    }
-
-    #[test]
-    fn a_copilot_call_is_found_by_either_its_namespaced_tool_name_or_its_mcp_tool_name() {
-        // Real Copilot output carries both on the same event; either alone
-        // is also enough.
-        let namespaced_only = r#"{"type":"tool.execution_start","data":{"toolCallId":"c3","toolName":"ridl-ridl_check","mcpServerName":"ridl"}}"#;
-        let mcp_name_only = r#"{"type":"tool.execution_start","data":{"toolCallId":"c4","toolName":"some-internal-name","mcpServerName":"ridl","mcpToolName":"ridl_check"}}"#;
-        assert!(used_ridl_check(namespaced_only));
-        assert!(used_ridl_check(mcp_name_only));
     }
 
     #[test]
@@ -366,7 +308,6 @@ mod tests {
         let other = r#"{"type":"item.completed","item":{"type":"command_execution","command":"/bin/bash -lc 'ridl checker; ridl fmt .; myridl check'"}}"#;
         assert!(ran_ridl_check_command(claude));
         assert!(ran_ridl_check_command(codex));
-        assert!(ran_ridl_check_command(COPILOT_SHELL));
         assert!(!ran_ridl_check_command(other));
         assert!(!ran_ridl_check_command(TEXT_ONLY));
         assert!(!ran_ridl_check_command(CLAUDE_CALL));
@@ -421,18 +362,6 @@ mod tests {
         // even when it carries a command naming the skill.
         let not_run = r#"{"type":"file_change","command":"cat /h/skills/ridl-authoring/SKILL.md"}"#;
         assert!(!skill_was_loaded(Host::Codex, not_run));
-        let other_copilot_skill = r#"{"type":"skill.invoked","data":{"name":"pdf","path":"/h/skills/pdf/SKILL.md","content":"..."}}"#;
-        assert!(!skill_was_loaded(Host::Copilot, other_copilot_skill));
-    }
-
-    #[test]
-    fn copilot_skill_loading_is_told_apart() {
-        assert!(skill_was_loaded(Host::Copilot, COPILOT_SKILL_INVOKED));
-        assert!(skill_was_loaded(Host::Copilot, COPILOT_SKILL_CALL));
-        assert!(!skill_was_loaded(Host::Copilot, COPILOT_OTHER_SKILL_CALL));
-        assert!(!skill_was_loaded(Host::Copilot, TEXT_ONLY));
-        assert!(!used_ridl_check(COPILOT_SHELL));
-        assert!(used_ridl_check(COPILOT_CALL));
     }
 
     #[test]

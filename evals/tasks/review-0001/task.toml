@@ -5,4 +5,4 @@ title = "Review geometric data types"
 
 [expect]
 compiles = true
-lints = ["duplicate-shape", "low-cohesion-interface"]
+lints = []
