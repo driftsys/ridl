@@ -423,10 +423,12 @@ fields are private, and `Ref::verify` and `Ref::encode` are the only functions
 that build one — each calls the generated `Payload::verify` or `Payload::encode`
 and wraps the result — so `Payload::decode` is reachable only with a proof that
 the bytes were checked or that the crate's own encoder wrote them, and code ridl
-emits needs no `unsafe` to decode. `Ref::encode` does not check the value's typl
-constraints: a value is trusted to be valid when constructed, and the receiver's
-`verify` reports one that is not. The closed encoding set and the proof-type
-design are ADR-0021 decision 7.
+emits needs no `unsafe` to decode. `Ref::encode` delegates constraint checks to
+`Payload::encode` and performs no additional verification; the
+[FlatBuffers codec record](flatbuffers-codec.md#encode-verify-decode-max_size)
+describes its sender checks. The receiver checks received constraints through
+`verify`. The closed encoding set and the proof-type design are ADR-0021
+decision 7.
 
 `Payload::View` carries what the check produced — the bytes, an accessor over
 them, or an owned parsed value — and has no `Copy` bound, because a parsed value

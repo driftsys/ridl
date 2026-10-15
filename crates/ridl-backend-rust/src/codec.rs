@@ -1820,19 +1820,37 @@ impl<'a> Codec<'a> {
                     message: "a FlatBuffers scalar is written inline, not out of line".to_string(),
                 });
             }
-            Wire::Text(named, _) => {
+            Wire::Text(named, constraint) => {
                 let text = match named {
                     Some(_) => quote! { #receiver.get() },
                     None => quote! { #receiver.as_str() },
                 };
-                quote! { builder.push_string(#text)? }
+                let check = inline_length_check(owner, named.is_none(), constraint.as_ref(), true);
+                if check.is_empty() {
+                    quote! { builder.push_string(#text)? }
+                } else {
+                    quote! {{
+                        let __s = #text;
+                        #check
+                        builder.push_string(__s)?
+                    }}
+                }
             }
-            Wire::Bytes(named, _) => {
+            Wire::Bytes(named, constraint) => {
                 let bytes = match named {
                     Some(_) => quote! { #receiver.get() },
                     None => quote! { #receiver.as_slice() },
                 };
-                quote! { builder.push_vector(#bytes, 1usize)? }
+                let check = inline_length_check(owner, named.is_none(), constraint.as_ref(), false);
+                if check.is_empty() {
+                    quote! { builder.push_vector(#bytes, 1usize)? }
+                } else {
+                    quote! {{
+                        let __s = #bytes;
+                        #check
+                        builder.push_vector(__s, 1usize)?
+                    }}
+                }
             }
             Wire::Table(name) | Wire::Union(name) => {
                 let call = encode_path(name);
@@ -2971,7 +2989,41 @@ fn count_check(owner: &str, min: u64, max: u64) -> TokenStream {
 /// check for both shapes, because the bytes it reads carry a length of their
 /// own.
 fn encode_count_check(owner: &str, min: u64, max: u64, collection: &TokenStream) -> TokenStream {
-    let condition = count_condition(&Length::collection(collection), min, max);
+    encode_length_check(owner, min, max, &Length::collection(collection))
+}
+
+/// Checks the length of an anonymous string or byte sequence before writing it.
+/// Named scalars retain their constructor checks and explicit unchecked opt-out.
+fn inline_length_check(
+    owner: &str,
+    anonymous: bool,
+    scalar: Option<&v1::Scalar>,
+    text: bool,
+) -> TokenStream {
+    let Some(constraint) = scalar
+        .filter(|_| anonymous)
+        .and_then(|sc| sc.constraint.as_ref())
+    else {
+        return TokenStream::new();
+    };
+    if constraint.len_min.is_none() && constraint.len_max.is_none() {
+        return TokenStream::new();
+    }
+    let length = if text {
+        Length::field(quote! { __s.chars().count() })
+    } else {
+        Length::collection(&quote! { __s })
+    };
+    encode_length_check(
+        owner,
+        constraint.len_min.unwrap_or(0),
+        constraint.len_max.unwrap_or(u64::MAX),
+        &length,
+    )
+}
+
+fn encode_length_check(owner: &str, min: u64, max: u64, length: &Length) -> TokenStream {
+    let condition = count_condition(length, min, max);
     quote! {
         if #condition {
             return ::core::result::Result::Err(::ridl_rt::payload::EncodeError::Contract(

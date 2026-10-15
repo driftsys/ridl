@@ -180,6 +180,14 @@ generated face did the latter until a fix at all four send sites.
 `EncodeError::Capacity` is what a buffer smaller than the value produces, with
 no panic and no truncated write.
 
+Before writing an anonymous string or byte sequence, the encoder checks its
+declared length and returns `EncodeError::Contract` with `Rule::Length` when it
+is outside the bound. String length counts Unicode characters; byte length
+counts bytes. This also covers anonymous map keys. Named scalars retain their
+constructor checks and the deliberate `new_unchecked` opt-out. As with bounded
+collections, refusal can leave earlier fields in the output buffer; callers
+discard that buffer when encoding fails.
+
 `encode` allocates only where the domain type already does. A vector of strings
 or of tables needs each element's position before the vector can be written, and
 those are exactly the shapes whose domain type is a `Vec` or a `String`, so a

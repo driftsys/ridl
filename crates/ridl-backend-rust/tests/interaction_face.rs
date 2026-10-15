@@ -4108,3 +4108,39 @@ fn a_command_argument_with_an_over_long_collection_is_a_send_failure() {
     );
     assert_eq!(provider.recorded, 0);
 }
+
+/// Invalid inline fields settle as typed contract errors, both when their
+/// encoding would fit and when it would exceed the provisioned buffer.
+#[test]
+fn inline_query_reply_lengths_settle_invalid_value_without_panicking() {
+    struct Provider(generated::InlinePayload);
+    impl generated::zone_payload::Provider for Provider {
+        fn read(&mut self, _window: &generated::Window) -> generated::InlinePayload {
+            self.0.clone()
+        }
+    }
+    for (text, data) in [
+        ("abcdefghi".to_owned(), vec![1, 2]),
+        ("x".repeat(10000), vec![1, 2]),
+        ("abcdefgh".to_owned(), vec![1; 5]),
+        ("abcdefgh".to_owned(), vec![1; 10000]),
+    ] {
+        let mut rt = loopback();
+        let handler = rt.handler();
+        let mut provider = Provider(generated::InlinePayload { text, data });
+        let mut serve = generated::zone_payload::serve(handler, &mut provider);
+        let mut client = generated::zone_payload::Client::new(&mut rt);
+        let mut call = client.read(generated::Window::new_unchecked(10));
+        assert!(poll_once(&mut call).is_pending());
+        assert!(poll_once(&mut serve).is_pending());
+        assert_eq!(
+            poll_once(&mut call),
+            Poll::Ready(Err(ClientError::Call(CallError::Contract(
+                Contract::InvalidValue(ridl_rt::payload::Violation {
+                    type_name: Some("InlinePayload"),
+                    rule: ridl_rt::payload::Rule::Length,
+                })
+            )))),
+        );
+    }
+}

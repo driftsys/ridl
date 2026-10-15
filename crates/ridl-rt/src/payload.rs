@@ -147,9 +147,9 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
 
     /// Encodes `value` into `out` with `T::encode` and returns the proof.
     ///
-    /// It does not check the value's typl constraints: a value is trusted to
-    /// be valid when constructed, and the receiver's `verify` reports a value
-    /// that is not.
+    /// Constraint checks are those performed by `T::encode`; this wrapper
+    /// performs no additional verification. Received bytes are checked by
+    /// [`Self::verify`].
     pub fn encode(value: &T, out: &'a mut [u8]) -> Result<Self, EncodeError> {
         let Encoded { bytes, view } = value.encode(out)?;
         Ok(Ref {

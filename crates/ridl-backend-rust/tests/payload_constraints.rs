@@ -42,8 +42,24 @@ fn program(main: &str) -> String {
     )
     .unwrap()
     .rust_source;
-    format!("#![allow(dead_code)]\n{source}\n{main}")
+    format!("#![allow(dead_code)]\n{source}\n{FOREIGN_TABLE}\n{main}")
 }
+
+// Receiver tests use the wire builder directly: the generated encoder now
+// refuses invalid lengths before those values can reach the verifier.
+const FOREIGN_TABLE: &str = r#"
+fn foreign_table(
+    builder: &mut ridl_rt::flatbuffers::Builder<'_>,
+    values: &[ridl_rt::flatbuffers::Field],
+) -> ridl_rt::flatbuffers::Pos {
+    let fields: Vec<_> = values.iter().enumerate().map(|(slot, value)| {
+        ridl_rt::flatbuffers::TableField {
+            slot: slot as u16, offset: (8 * (slot + 1)) as u16, value: *value,
+        }
+    }).collect();
+    builder.push_table(8 * (values.len() + 1), 8, values.len() as u16, &fields).unwrap()
+}
+"#;
 
 #[test]
 fn constructors_reject_off_grid_values_and_constrained_nan() {
@@ -88,6 +104,134 @@ fn main() {
 }
 
 #[test]
+fn encode_rejects_inline_text_and_byte_lengths_before_capacity() {
+    rustc::run_program(
+        "inline_encode_lengths",
+        &program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{EncodeError, Payload, Rule, Violation};
+fn main() {
+    let mut value = Inline { text: "abcdefgh".into(), count: 2, ratio: 0.5, data: vec![1, 2] };
+    let mut buf = vec![0; <Inline as Payload<FlatBuffers>>::MAX_SIZE];
+    let expected = Some(EncodeError::Contract(Violation {
+        type_name: Some("Inline"), rule: Rule::Length,
+    }));
+    assert!(value.encode(&mut buf).is_ok());
+    for text in ["short".to_owned(), "abcdefghi".to_owned(), "x".repeat(10000), "éééé".to_owned()] {
+        value.text = text;
+        assert_eq!(value.encode(&mut buf).err(), expected, "text bound precedes capacity");
+    }
+    value.text = "éééééééé".into();
+    assert!(value.encode(&mut buf).is_ok(), "text length counts Unicode characters");
+    for data in [vec![], vec![1], vec![1; 5], vec![1; 10000]] {
+        value.data = data;
+        assert_eq!(value.encode(&mut buf).err(), expected, "byte bound precedes capacity");
+    }
+    value.data = vec![1; 4];
+    assert!(value.encode(&mut buf).is_ok(), "the byte upper bound is inclusive");
+}
+"#,
+        ),
+    );
+}
+
+#[test]
+fn encode_checks_anonymous_map_keys_and_vector_elements() {
+    rustc::run_program(
+        "nested_inline_encode_lengths",
+        &program(
+            r#"
+use ridl_rt::payload::{EncodeError, Payload, Rule, Violation};
+fn expected(owner: &'static str) -> Option<EncodeError> {
+    Some(EncodeError::Contract(Violation { type_name: Some(owner), rule: Rule::Length }))
+}
+fn main() {
+    let mut out = vec![0; 16384];
+    let keys = Keys { text: vec![("".into(), Whole::new(1)), ("é".repeat(256), Whole::new(2))], number: vec![] };
+    assert!(keys.encode(&mut out).is_ok(), "empty and Unicode upper-bound keys encode");
+    let bytes = ByteKeys { entries: vec![(vec![], Whole::new(1)), (vec![1; 256], Whole::new(2))] };
+    assert!(bytes.encode(&mut out).is_ok());
+    let elements = Elements { text: vec!["".into(), "é".repeat(256)], data: vec![vec![], vec![1; 256]] };
+    assert!(elements.encode(&mut out).is_ok(), "valid counts and both length boundaries encode");
+    for index in [0, 1] {
+        let mut invalid = keys.clone();
+        invalid.text[index].0 = "x".repeat(257);
+        assert_eq!(invalid.encode(&mut out).err(), expected("Keys"));
+        let mut invalid = bytes.clone();
+        invalid.entries[index].0 = vec![1; 257];
+        assert_eq!(invalid.encode(&mut out).err(), expected("ByteKeys"));
+        let mut invalid = elements.clone();
+        invalid.text[index] = "x".repeat(257);
+        assert_eq!(invalid.encode(&mut out).err(), expected("Elements"));
+        let mut invalid = elements.clone();
+        invalid.data[index] = vec![1; 257];
+        assert_eq!(invalid.encode(&mut out).err(), expected("Elements"));
+    }
+}
+"#,
+        ),
+    );
+}
+
+#[test]
+fn encode_checks_anonymous_map_values_and_present_optional_fields() {
+    rustc::run_program(
+        "map_value_optional_encode_lengths",
+        &program(
+            r#"
+use ridl_rt::payload::{EncodeError, Payload, Rule, Violation};
+fn expected(owner: &'static str) -> Option<EncodeError> {
+    Some(EncodeError::Contract(Violation { type_name: Some(owner), rule: Rule::Length }))
+}
+fn main() {
+    let mut out = vec![0; 4096];
+    let values = MapValues { text: vec![(1, "ok".into()), (2, "four".into())], data: vec![] };
+    assert!(values.encode(&mut out).is_ok(), "both string boundaries encode");
+    for index in [0, 1] {
+        for text in ["é", "abcde"] {
+            let mut invalid = values.clone();
+            invalid.text[index].1 = text.into();
+            assert_eq!(invalid.encode(&mut out).err(), expected("MapValues"));
+        }
+    }
+    let values = MapValues { text: vec![], data: vec![(1, vec![1; 2]), (2, vec![1; 4])] };
+    assert!(values.encode(&mut out).is_ok(), "both byte boundaries encode");
+    for index in [0, 1] {
+        for length in [1, 5] {
+            let mut invalid = values.clone();
+            invalid.data[index].1 = vec![1; length];
+            assert_eq!(invalid.encode(&mut out).err(), expected("MapValues"));
+        }
+    }
+    let mut optional = OptionalFields { text: None, data: None };
+    assert!(optional.encode(&mut out).is_ok(), "absent fields have no length to check");
+    optional.text = Some("ok".into());
+    optional.data = Some(vec![1; 2]);
+    assert!(optional.encode(&mut out).is_ok(), "optional lower bounds are inclusive");
+    optional.text = Some("four".into());
+    optional.data = Some(vec![1; 4]);
+    assert!(optional.encode(&mut out).is_ok());
+    for text in ["é", "abcde"] {
+        optional.text = Some(text.into());
+        out.fill(0x5a);
+        assert_eq!(optional.encode(&mut out).err(), expected("OptionalFields"));
+        assert!(out.iter().all(|byte| *byte == 0x5a), "invalid first fields are refused before writing");
+    }
+    optional.text = None;
+    for length in [1, 5] {
+        optional.data = Some(vec![1; length]);
+        out.fill(0x5a);
+        assert_eq!(optional.encode(&mut out).err(), expected("OptionalFields"));
+        assert!(out.iter().all(|byte| *byte == 0x5a), "invalid first fields are refused before writing");
+    }
+}
+"#,
+        ),
+    );
+}
+
+#[test]
 fn verify_enforces_anonymous_scalar_constraints() {
     rustc::run_program(
         "inline_constraints",
@@ -97,7 +241,15 @@ use ridl_rt::encoding::FlatBuffers;
 use ridl_rt::payload::Payload;
 fn verify(value: &Inline) -> Result<(), ridl_rt::payload::VerifyError> {
     let mut buf = vec![0; 4096];
-    let bytes = value.encode(&mut buf).unwrap().bytes;
+    use ridl_rt::flatbuffers::{Builder, Field};
+    let mut builder = Builder::new(&mut buf);
+    let text = builder.push_string(&value.text).unwrap();
+    let data = builder.push_vector(&value.data, 1).unwrap();
+    let root = foreign_table(&mut builder, &[
+        Field::Offset(text), Field::I64(value.count),
+        Field::F32(value.ratio as f32), Field::Offset(data),
+    ]);
+    let bytes = builder.finish(root, 8).unwrap();
     <Inline as Payload<FlatBuffers>>::verify(bytes).map(|_| ())
 }
 fn main() {
@@ -134,7 +286,19 @@ use ridl_rt::encoding::FlatBuffers;
 use ridl_rt::payload::Payload;
 fn verify(value: &Keys) -> Result<(), ridl_rt::payload::VerifyError> {
     let mut buf = vec![0; 4096];
-    let bytes = value.encode(&mut buf).unwrap().bytes;
+    use ridl_rt::flatbuffers::{Builder, Field};
+    let mut builder = Builder::new(&mut buf);
+    let text: Vec<_> = value.text.iter().map(|(key, value)| {
+        let key = builder.push_string(key).unwrap();
+        foreign_table(&mut builder, &[Field::Offset(key), Field::I64(value.get())])
+    }).collect();
+    let text = builder.push_offset_vector(&text).unwrap();
+    let number: Vec<_> = value.number.iter().map(|(key, value)| {
+        foreign_table(&mut builder, &[Field::I64(*key), Field::I64(value.get())])
+    }).collect();
+    let number = builder.push_offset_vector(&number).unwrap();
+    let root = foreign_table(&mut builder, &[Field::Offset(text), Field::Offset(number)]);
+    let bytes = builder.finish(root, 8).unwrap();
     <Keys as Payload<FlatBuffers>>::verify(bytes).map(|_| ())
 }
 fn main() {
@@ -267,7 +431,15 @@ fn floating(value: &FloatingKeys) -> Result<(), VerifyError> {
 }
 fn bytes(value: &ByteKeys) -> Result<(), VerifyError> {
     let mut out = vec![0; 4096];
-    let bytes = value.encode(&mut out).unwrap().bytes;
+    use ridl_rt::flatbuffers::{Builder, Field};
+    let mut builder = Builder::new(&mut out);
+    let entries: Vec<_> = value.entries.iter().map(|(key, value)| {
+        let key = builder.push_vector(key, 1).unwrap();
+        foreign_table(&mut builder, &[Field::Offset(key), Field::I64(value.get())])
+    }).collect();
+    let entries = builder.push_offset_vector(&entries).unwrap();
+    let root = foreign_table(&mut builder, &[Field::Offset(entries)]);
+    let bytes = builder.finish(root, 8).unwrap();
     <ByteKeys as Payload<FlatBuffers>>::verify(bytes).map(|_| ())
 }
 fn main() {
@@ -294,9 +466,12 @@ fn anonymous_pattern_validation_obeys_the_feature() {
 use ridl_rt::encoding::FlatBuffers;
 use ridl_rt::payload::{Payload, Rule, VerifyError};
 fn verify(text: &str) -> Result<(), VerifyError> {
-    let value = Pattern { text: text.into() };
-    let mut out = vec![0; <Pattern as Payload<FlatBuffers>>::MAX_SIZE];
-    let bytes = value.encode(&mut out).unwrap().bytes;
+    use ridl_rt::flatbuffers::{Builder, Field};
+    let mut out = vec![0; 4096];
+    let mut builder = Builder::new(&mut out);
+    let text = builder.push_string(text).unwrap();
+    let root = foreign_table(&mut builder, &[Field::Offset(text)]);
+    let bytes = builder.finish(root, 8).unwrap();
     <Pattern as Payload<FlatBuffers>>::verify(bytes).map(|_| ())
 }
 fn main() {

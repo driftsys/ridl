@@ -371,10 +371,13 @@ Finally, `Payload<E>::MAX_SIZE` is the largest encoded size of any legal value.
 It is what sized the stack buffer in step 1, and what the generated
 per-interface buffer constants are computed from.
 
-`encode` does **not** check the value's constraints. A value is trusted to be
-valid when constructed, and the receiver's `verify` reports one that is not. The
-generated encode sites treat a capacity failure as `unreachable!` with a message
-naming the type, because a legal value cannot exceed its own `MAX_SIZE`.
+The generated encoder checks the lengths of plain bounded fields as described in
+the
+[codec design](../design/flatbuffers-codec.md#encode-verify-decode-max_size).
+Named scalar values retain their constructor checks and explicit unchecked
+opt-out; the receiver's `verify` checks the received constraints. The generated
+face treats a capacity failure as `unreachable!` with a message naming the type,
+because a legal value cannot exceed its own `MAX_SIZE`.
 
 > `FlatBuffers` is `ridl_rt::encoding::FlatBuffers`, the payload encoding of the
 > generated package, which the generated code names by that path at each site
