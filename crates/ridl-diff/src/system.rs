@@ -728,7 +728,10 @@ mod tests {
             before: None,
             after: Some("distribution".to_string()),
         };
-        assert_eq!(diff_systems(&absent, &present), [change.clone()]);
+        assert_eq!(
+            diff_systems(&absent, &present).as_slice(),
+            std::slice::from_ref(&change),
+        );
         assert_eq!(
             diff_systems(&present, &absent),
             [SystemChange {
