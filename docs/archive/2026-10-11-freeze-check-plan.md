@@ -21,9 +21,9 @@ read from git the same way.
 `ridl-ir`'s build), the `just` gate (ADR-0009).
 
 **Spec:**
-[`2026-10-11-release-0.10-design.md`](2026-10-11-release-0.10-design.md),
+[`2026-10-11-release-0.10-design.md`](./2026-10-11-release-0.10-design.md),
 section 4. Lanes:
-[`2026-10-11-release-0.10-lanes-plan.md`](2026-10-11-release-0.10-lanes-plan.md).
+[`2026-10-11-release-0.10-lanes-plan.md`](./2026-10-11-release-0.10-lanes-plan.md).
 
 ## Deviation from the spec (approved with this plan)
 
@@ -101,7 +101,7 @@ task. On `main` at `bc58189e` or later:
 
 - Modify: `bootstrap` (add `cargo-semver-checks` to the `require` list with an
   install hint), `.github/workflows/ci.yml` (install step in the gate job)
-- Create: `docs/wip/freeze-check-semver-spike.md` (the result, three or four
+- Create: `docs/archive/freeze-check-semver-spike.md` (the result, three or four
   lines; it is gardened with this plan)
 
 - [ ] **Step 1:** Install the newest `cargo-semver-checks` release:
@@ -113,7 +113,7 @@ task. On `main` at `bc58189e` or later:
       it reports a rustdoc format error instead, record the error and use the
       fallback in Task 5.
 - [ ] **Step 3:** Record the version, the command and the result in
-      `docs/wip/freeze-check-semver-spike.md`. Add the `require` entry to
+      `docs/archive/freeze-check-semver-spike.md`. Add the `require` entry to
       `bootstrap` and a pinned install step to the CI gate job (the version from
       step 1, with `--locked`).
 - [ ] **Step 4:** Commit:

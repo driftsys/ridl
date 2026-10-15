@@ -27,7 +27,7 @@ and adds `ridl vendor` and `ridl vendor --check` over a new `ridl-core`
 inputs (`Package`, `Workspace`), `sha2`, `tar`, `ureq` behind the `ridl-core`
 `fetch` feature, `clap` for the CLI, `insta` not needed.
 
-**Spec:** `docs/wip/2026-10-12-ridl-vendor-design.md`
+**Spec:** `docs/archive/2026-10-12-ridl-vendor-design.md`
 
 ## Global Constraints
 

@@ -163,6 +163,7 @@ fn main() {
     // ANCHOR_END: bind
 
     // 1 — signal
+    // ANCHOR: signal
     {
         publisher
             .temperature(api::Temperature::new(21).expect("21 is inside Temperature's range"))
@@ -173,6 +174,7 @@ fn main() {
         assert_eq!(sample.provenance, Provenance::Live);
         println!("signal ok {}", sample.value.get());
     }
+    // ANCHOR_END: signal
 
     // 2 — event
     {

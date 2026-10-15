@@ -229,6 +229,7 @@ reads that copy first, so a `ridl check --frozen` on a machine with no network
 and no cache still builds; `ridl vendor --check` verifies that directory in CI.
 A remote unit is a read-only dependency: its errors fail the check, its warnings
 are not shown, and `ridl build` generates it beside your own packages. The
+[Remote units and `ridl vendor`](remote-units.md) chapter is the guide, and the
 [CLI reference](cli-reference.md#ridl-check) says what each command writes.
 
 You can run `ridl` from the workspace root or from inside a member. A command

@@ -24,7 +24,7 @@ diff category.
 **Tech Stack:** Rust 2024 (the pin in `rust-toolchain.toml`), prost and
 pbjson-build for the IR, the `xtask freeze` dumps, prim for Markdown.
 
-**Spec:** `docs/wip/2026-10-11-attribute-registry-and-family-design.md`.
+**Spec:** `docs/archive/2026-10-11-attribute-registry-and-family-design.md`.
 Decisions D-1 to D-6 of its section 2 are settled; this plan does not reopen
 them.
 

@@ -76,7 +76,35 @@ are their durable records. The induced call payloads design and plan
 [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
 and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
 [`../design/interaction-face.md`](../design/interaction-face.md) are their
-durable records.
+durable records. The remote units and `ridl vendor` design and plan
+(`2026-10-12-ridl-vendor-{design,plan}.md`) were archived on 2026-10-13, once
+both parts of #48 landed (#941 and #950); the 2026-10-13 amendments of
+[ADR-0002](../decisions/ADR-0002-module-system.md),
+[ADR-0010](../decisions/ADR-0010-cli-conventions.md),
+[ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md) and
+[ADR-0029](../decisions/ADR-0029-stability-policy.md) and
+[the CLI reference](../book/cli-reference.md) are their durable records. The
+attribute registry and interaction family design and plan
+(`2026-10-11-attribute-registry-and-family-{design,plan}.md`) were archived on
+2026-10-13, once the registry, the fail-closed diff and the `family` and `shape`
+fields landed (#883, #892); the 2026-10-11 amendments of
+[ADR-0012](../decisions/ADR-0012-interaction-boundary-model.md) and
+[the ridl language reference](../specification/ridl-language-reference.md)
+(which describes the registry and the `family` field) are their durable records.
+The freeze check plan and its `cargo-semver-checks` spike
+(`2026-10-11-freeze-check-plan.md`, `freeze-check-semver-spike.md`) were
+archived on 2026-10-13, once the check landed (#866);
+[ADR-0029](../decisions/ADR-0029-stability-policy.md),
+[`../../freeze/README.md`](../../freeze/README.md) and
+[the stability chapter](../book/stability.md) are their durable records. The
+release 0.10 design and lanes plan
+(`2026-10-11-release-0.10-{design,lanes-plan}.md`) were archived on 2026-10-14,
+once 0.10.0 was released and every frozen surface had a row in
+`freeze/surfaces.toml`; [ADR-0029](../decisions/ADR-0029-stability-policy.md),
+[`../../freeze/README.md`](../../freeze/README.md) and
+[the stability chapter](../book/stability.md) are their durable records, and the
+2026-10-14 amendment of ADR-0029 records where the release departed from the
+design.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -276,3 +304,35 @@ execution handoff and the Kotlin heads-up and release-note draft
 (`2026-10-08-catalog-per-unit-handoff.md`, `catalog-per-unit-handoff.md`), when
 the work landed and its material was gardened into ADR-0002, ADR-0014 decision
 15, ADR-0015, ADR-0022 decision 6 and the design records they name.
+
+## Files that stay after the 0.10.0 gardening pass (2026-10-13)
+
+Each file below was read against the code and the issue tracker on 2026-10-13
+and was not archived. The reason is stated once per file or group.
+
+- **2026-10-11-ridl-authoring-skill-design.md**,
+  **2026-10-11-ridl-authoring-skill-plan.md** and
+  **skill-ridl-authoring-outline.md** — the skill's gates, eval harness and
+  distribution landed (#893), but `skills/ridl-authoring/` holds a skeleton, not
+  the rule and reference content, and the plan's Tasks 10 to 13 (the content,
+  the judge check, the release record, the gardening and the ADR-0005
+  amendments) are open. The plan's Task 13 is the standing instruction.
+- **2026-10-07-generated-observation-design.md** and
+  **2026-10-07-generated-observation-plan.md** — optional trace spans from the
+  generated Rust face, driftsys/ridl#754. Open; the generated crate has no
+  `__observe` module.
+- **fmt-ridl-rsdl-layout.md**, **fmt-ridl-rsdl-plan.md**,
+  **fmt-ridl-rsdl-decisions.md**, **fmt-ridl-rsdl-review.md** and
+  **fmt-ridl-rsdl-evidence/** — the formatter work landed (#638, #387 closed).
+  The layout note is still the only record of the canonical layout rules of
+  `ridl fmt` (the decisions log calls it normative) and
+  [`family-general-form.md`](family-general-form.md) refers to it, so archiving
+  it needs a durable home for those rules first. That is a decision for the
+  maintainer.
+- **2026-09-20-lane-r-driver.md**, **2026-09-21-nested-interface-design.md** and
+  **2026-10-01-portable-match-patterns-design.md** — each states in its own
+  header that it is a driver prompt or a design note that has not graduated (the
+  nested interface note into an amendment of ADR-0015, the match pattern note
+  into an amendment of the typl reference). The tracker shows #597 closed, but
+  no commit after the design implements it; the maintainer decides whether each
+  is taken, archived or superseded.

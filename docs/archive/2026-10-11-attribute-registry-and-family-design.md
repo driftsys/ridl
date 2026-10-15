@@ -5,11 +5,11 @@ Every decision in section 2 is his. The plan that executes this design is
 written after this document is approved.
 
 Satisfies: release 0.10 design R-4
-([`2026-10-11-release-0.10-design.md`](2026-10-11-release-0.10-design.md));
+([`2026-10-11-release-0.10-design.md`](./2026-10-11-release-0.10-design.md));
 roadmap stories E3.1, E3.2 and E3.3; ADR-0012 decisions 4, 6, 8 and 9.
 
 Issues: #268 (E3.1), #269 (E3.2), #270 (E3.3), #370. Lane L of the
-[lanes plan](2026-10-11-release-0.10-lanes-plan.md).
+[lanes plan](./2026-10-11-release-0.10-lanes-plan.md).
 
 ## 1. Goal
 

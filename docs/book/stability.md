@@ -3,8 +3,9 @@
 From release 0.10.0, you can move from one 0.10.x release to the next without
 changing a source file, a manifest, a script that calls the CLI, a codegen
 plugin, a program that uses the generated Rust crate, or a deployed peer. This
-chapter lists what that promise covers and what it leaves out. The policy is in
-effect now; release 0.10.0 is not published yet.
+chapter lists what that promise covers and what it leaves out. Release 0.10.0 is
+published. `ridl vendor` and the `vendor/` layout were added after it, so the
+promise covers them from the first release that contains them.
 
 ## What will not change in 0.10.x
 
