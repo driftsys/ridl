@@ -60,3 +60,13 @@ struct Elements {
   text : [string [0..256]; 0..2]
   data : [bytes [0..256]; 0..2]
 }
+
+struct MapValues {
+  text : [integer : string [2..4]; 0..2]
+  data : [integer : bytes [2..4]; 0..2]
+}
+
+struct OptionalFields {
+  text : string [2..4]?
+  data : bytes [2..4]?
+}

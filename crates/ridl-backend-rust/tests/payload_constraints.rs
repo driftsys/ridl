@@ -150,20 +150,65 @@ fn main() {
     let mut out = vec![0; 16384];
     let mut keys = Keys { text: vec![("é".repeat(256), Whole::new(1))], number: vec![] };
     assert!(keys.encode(&mut out).is_ok(), "key lengths count characters");
-    keys.text[0].0 = "x".repeat(257);
+    keys.text.push(("x".repeat(257), Whole::new(2)));
     assert_eq!(keys.encode(&mut out).err(), expected("Keys"));
     let mut bytes = ByteKeys { entries: vec![(vec![1; 256], Whole::new(1))] };
     assert!(bytes.encode(&mut out).is_ok());
-    bytes.entries[0].0.push(1);
+    bytes.entries.push((vec![1; 257], Whole::new(2)));
     assert_eq!(bytes.encode(&mut out).err(), expected("ByteKeys"));
 
     let mut elements = Elements { text: vec!["é".repeat(256)], data: vec![vec![1; 256]] };
     assert!(elements.encode(&mut out).is_ok(), "valid counts and elements encode");
-    elements.text[0] = "x".repeat(257);
+    elements.text.push("x".repeat(257));
     assert_eq!(elements.encode(&mut out).err(), expected("Elements"));
-    elements.text[0] = "x".repeat(256);
-    elements.data[0].push(1);
+    elements.text[1] = "x".repeat(256);
+    elements.data.push(vec![1; 257]);
     assert_eq!(elements.encode(&mut out).err(), expected("Elements"));
+}
+"#,
+        ),
+    );
+}
+
+#[test]
+fn encode_checks_anonymous_map_values_and_present_optional_fields() {
+    rustc::run_program(
+        "map_value_optional_encode_lengths",
+        &program(
+            r#"
+use ridl_rt::payload::{EncodeError, Payload, Rule, Violation};
+fn expected(owner: &'static str) -> Option<EncodeError> {
+    Some(EncodeError::Contract(Violation { type_name: Some(owner), rule: Rule::Length }))
+}
+fn main() {
+    let mut out = vec![0; 4096];
+    let mut values = MapValues { text: vec![(1, "four".into())], data: vec![] };
+    assert!(values.encode(&mut out).is_ok());
+    for text in ["é", "abcde"] {
+        values.text[0].1 = text.into();
+        assert_eq!(values.encode(&mut out).err(), expected("MapValues"));
+    }
+    values.text.clear();
+    values.data = vec![(1, vec![1; 4])];
+    assert!(values.encode(&mut out).is_ok());
+    for length in [1, 5] {
+        values.data[0].1 = vec![1; length];
+        assert_eq!(values.encode(&mut out).err(), expected("MapValues"));
+    }
+    let mut optional = OptionalFields { text: None, data: None };
+    assert!(optional.encode(&mut out).is_ok(), "absent fields have no length to check");
+    optional.text = Some("four".into());
+    optional.data = Some(vec![1; 4]);
+    assert!(optional.encode(&mut out).is_ok());
+    for text in ["é", "abcde"] {
+        optional.text = Some(text.into());
+        assert_eq!(optional.encode(&mut out).err(), expected("OptionalFields"));
+    }
+    optional.text = None;
+    for length in [1, 5] {
+        optional.data = Some(vec![1; length]);
+        assert_eq!(optional.encode(&mut out).err(), expected("OptionalFields"));
+    }
 }
 "#,
         ),

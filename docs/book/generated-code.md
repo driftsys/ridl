@@ -419,9 +419,9 @@ This table records, for each kind of rule, the generated item that checks it:
 | range            | checked by `new`, `TryFrom` and `verify`                  | not checked |
 | step             | checked by `new`, `TryFrom` and `verify`                  | not checked |
 | unit             | not checked                                               | not checked |
-| length           | checked by `new`, `TryFrom` and `verify`                  | not checked |
+| length           | `new`, `TryFrom`, `verify`; `encode` for anonymous fields | not checked |
 | pattern          | checked by `new`, `TryFrom` and `verify`, under a feature | not checked |
-| collection bound | checked by `verify`                                       | not checked |
+| collection bound | checked by `encode` and `verify` | not checked |
 | timing           | not checked                                               | not checked |
 | response bound   | `max` checked by the future of a `Client` call            | not checked |
 | errors           | not checked                                               | not checked |
@@ -432,9 +432,10 @@ In the Rust column:
 
 - `new` and `TryFrom` are the constructors of a named scalar. `verify` is the
   FlatBuffers codec's check of a received payload. It also checks a field whose
-  type is written inline, which has no constructor. A struct, a variable-length
-  array or a map that the program builds itself is not checked until it is
-  received.
+  type is written inline, which has no constructor. `encode` also checks
+  anonymous string and byte lengths and variable-length collection counts.
+  Exact array counts are enforced by their Rust type. Other field constraints
+  and map-key uniqueness are checked by `verify`.
 - The pattern is checked only when the crate is built with the
   `validate-pattern` feature (see [Cargo features](#cargo-features)).
 - A call's future, in the async and in the blocking `Client`, resolves to a

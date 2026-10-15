@@ -735,10 +735,12 @@ port, which the layering forbids
 ([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 6).
 
-**A sender does not verify what it sends.** `Ref::encode` trusts the value it is
-handed: a value is valid when constructed, and the receiver's check reports one
-that is not ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
-decision 7). So a provider that publishes an invalid value is a provider defect
+**A sender does not verify its encoded bytes.** `Ref::encode` calls
+`Payload::encode` without running `Payload::verify` on the result
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 7).
+Sender-side constraint checks belong to the encoder; the
+[FlatBuffers codec record](../design/flatbuffers-codec.md#encode-verify-decode-max_size)
+describes those checks. An invalid value that is published is a provider defect
 that surfaces at every consumer, through the rules below, and through the
 provider's own observability, never through a frame sent back on pub/sub (ridl
 §4.5).
