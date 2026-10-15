@@ -301,6 +301,8 @@ pub(crate) struct DocLines {
     see: Vec<String>,
     /// One `Available since <v>.` line per `since` version.
     since: Vec<String>,
+    /// The Rust module used to resolve shortcuts in the complete comment.
+    module: String,
 }
 
 impl DocLines {
@@ -315,6 +317,7 @@ impl DocLines {
         };
         DocLines {
             body,
+            module: links.module.clone(),
             rules: parts
                 .rules
                 .iter()
@@ -368,8 +371,56 @@ impl DocLines {
             }
             lines.extend(self.since.iter().cloned());
         }
-        lines
+        shorten_links(lines, &self.module)
     }
+}
+
+/// Shortens after all sections are assembled: a reference definition in any
+/// section can override a shortcut in another. Code-span labels distinguish
+/// a resolved intra-doc target from a user reference definition without an
+/// explicit path that rustdoc would diagnose as redundant.
+fn shorten_links(lines: Vec<String>, module: &str) -> Vec<String> {
+    use pulldown_cmark::{Event, LinkType, Parser, Tag};
+
+    let mut doc = lines.join("\n");
+    let mut parser = Parser::new(&doc).into_offset_iter();
+    let mut replacements = Vec::new();
+    while let Some((event, range)) = parser.next() {
+        let definitions = parser.reference_definitions();
+        let Event::Start(Tag::Link {
+            link_type: LinkType::Inline,
+            dest_url,
+            ..
+        }) = event
+        else {
+            continue;
+        };
+        let Some((owner, name)) = dest_url.rsplit_once("::") else {
+            continue;
+        };
+        if owner != module || doc[range.clone()] != format!("[{name}]({dest_url})") {
+            continue;
+        }
+        let mut label = name.to_string();
+        if definitions.get(&label).is_some() {
+            let mut ticks = String::from("`");
+            loop {
+                label = format!("{ticks}{name}{ticks}");
+                if definitions.get(&label).is_none() {
+                    break;
+                }
+                ticks.push('`');
+            }
+        }
+        replacements.push((range, format!("[{label}]")));
+    }
+    if replacements.is_empty() {
+        return lines;
+    }
+    for (range, replacement) in replacements.into_iter().rev() {
+        doc.replace_range(range, &replacement);
+    }
+    doc.split('\n').map(str::to_string).collect()
 }
 
 /// The doc comment of one carrier with no generated sentence: the doc text,
@@ -449,17 +500,11 @@ fn linked(doc: &str, doc_links: &[v1::DocLink], links: &Links<'_>) -> String {
     text
 }
 
-/// A short intra-doc link when its Rust name resolves in the doc's module,
-/// an explicit path for other emitted targets, or a qualified code span when
-/// the target has no linkable item.
+/// An explicit path for an emitted target, or a qualified code span when the
+/// target has no linkable item. Shortening waits for the complete comment.
 fn rendered_link(link: &v1::DocLink, links: &Links<'_>) -> String {
     match links.path(&link.target) {
-        Some(path) => match path.rsplit_once("::") {
-            Some((module, name)) if module == links.module && name == link.text => {
-                format!("[{}]", link.text)
-            }
-            _ => format!("[{}]({path})", link.text),
-        },
+        Some(path) => format!("[{}]({path})", link.text),
         None => format!("`{}`", link.target),
     }
 }

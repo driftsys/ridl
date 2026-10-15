@@ -6706,16 +6706,19 @@ fn doc_block_on_enum_values_and_union_arms() {
 /// replacement that counted characters would land one byte early.
 #[test]
 fn doc_link_after_multibyte_text() {
-    let doc = "Measured in °C, see [Speed].";
+    let doc = "Measured in °C, see [veh.common.Speed].";
     let source = rust_for(vec![
         speed_decl(),
         v2::Decl {
             doc: doc.to_string(),
-            links: vec![doc_link(doc, "[Speed]", "veh.common.Speed")],
+            links: vec![doc_link(doc, "[veh.common.Speed]", "veh.common.Speed")],
             ..public_decl("Celsius", unit_type("Cel", "-40.0", "125.0", "0.5", "0.0"))
         },
     ]);
-    assert!(source.contains("see [Speed]."), "got:\n{source}");
+    assert!(
+        source.contains("Measured in °C, see [veh.common.Speed](crate::veh::common::Speed)."),
+        "got:\n{source}"
+    );
 }
 
 /// A link to an internal type and a link to a type of a package outside the

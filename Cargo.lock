@@ -2027,6 +2027,7 @@ dependencies = [
  "planus-translation",
  "prettyplease",
  "proc-macro2",
+ "pulldown-cmark",
  "quote",
  "ridl-backend-flatbuffers",
  "ridl-core",

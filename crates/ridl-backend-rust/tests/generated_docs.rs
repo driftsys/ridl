@@ -396,3 +396,25 @@ fn short_links_require_the_rust_name_in_the_docs_module() {
         );
     }
 }
+
+#[test]
+fn reference_definitions_cannot_redirect_generated_see_links() {
+    let source = pipeline_source(
+        "reference-links",
+        r#"
+package veh.docs
+/// A temperature.
+type Temperature: integer [0..100]
+/// A reading.
+///
+/// [temperature]: https://example.org/plain
+/// [`Temperature`]: https://example.org/code
+/// @see Temperature
+struct Reading {
+  /// A value.
+  value: Temperature
+}
+"#,
+    );
+    assert!(source.contains(" - [``Temperature``]"), "{source}");
+}

@@ -379,7 +379,9 @@ holds no item for, and for a declaration of another package that the module
 does not import. `@labels` is not rendered.
 
 A Rust link uses the short form `[Speed]` when that text is the target's Rust
-name and the target is in the module that holds the doc. Other links use an
+name and the target is in the module that holds the doc. When a Markdown
+reference definition uses the same label, the generated shortcut uses code
+formatting to preserve the resolved target. Other links use an
 absolute path from the crate root, such as `crate::veh::common::Speed`, which
 resolves in the crate `ridl build` emits. A program that brings a generated file
 in with `include!` inside a module of its own moves the items away from those
