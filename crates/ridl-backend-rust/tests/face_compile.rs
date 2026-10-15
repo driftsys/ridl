@@ -120,6 +120,75 @@ internal interface Diagnostics {
 }
 "#;
 
+/// Interactions named `loop`, `while`, `mod` and `move` keep raw identifiers
+/// for their methods, and every helper function joined to those names spells the
+/// plain name: `send_loop`, not `send_r#loop`, which is not an identifier
+/// (driftsys/ridl#863).
+#[test]
+fn an_interaction_named_with_a_rust_keyword_compiles() {
+    face_compiles_with(
+        "keyword_interactions",
+        r#"
+package face.keywords
+
+type Level : integer [0..100]
+
+interface Panel {
+  signal mod: Level @10ms
+  event move: Level @[100ms..1s]
+  command loop(level: Level) @[..50ms]
+  query while(level: Level): Level @[..50ms]
+}
+"#,
+        &format!(
+            r#"
+pub mod consumer {{
+    use super::panel::prelude::*;
+
+    pub fn client<P>(port: P, level: super::Level)
+    where
+        P: {CLIENT_BOUNDS},
+        super::Panel: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+    {{
+        let mut client: super::panel::Client<P> = Bind::new(port);
+        let _ = client.r#mod();
+        let _ = super::panel::Subscribe::subscribe_move(&mut client);
+        let _ = client.r#loop(level);
+        let _ = client.r#while(level);
+    }}
+
+    pub fn publisher<W>(port: W, level: super::Level)
+    where
+        W: {PUBLISHER_BOUNDS},
+        super::Panel: ::ridl_rt::contract::Sizes<W::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<W::Encoding>,
+    {{
+        let mut publisher: super::panel::Publisher<W> = Bind::new(port);
+        let _ = publisher.r#mod(level);
+        let _ = publisher.r#move(level);
+        let _ = super::panel::Invalidate::invalidate_mod(&mut publisher);
+    }}
+
+    #[cfg(feature = "std")]
+    pub fn blocking<P>(port: P, level: super::Level)
+    where
+        P: {CLIENT_BOUNDS},
+        super::Panel: ::ridl_rt::contract::Sizes<P::Encoding>,
+        super::Level: ::ridl_rt::payload::Payload<P::Encoding>,
+    {{
+        let mut client: super::panel::blocking::Client<P> = Bind::new(port);
+        let _ = client.r#mod();
+        let _ = client.subscribe_move();
+        let _ = client.r#loop(level);
+        let _ = client.r#while(level);
+    }}
+}}
+"#
+        ),
+    );
+}
+
 #[test]
 fn an_internal_interface_beside_a_public_one_compiles() {
     face_compiles("hidden", INTERNAL_BESIDE_PUBLIC);
