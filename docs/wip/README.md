@@ -104,7 +104,24 @@ once 0.10.0 was released and every frozen surface had a row in
 [`../../freeze/README.md`](../../freeze/README.md) and
 [the stability chapter](../book/stability.md) are their durable records, and the
 2026-10-14 amendment of ADR-0029 records where the release departed from the
-design.
+design. The step 1 lanes plan (`2026-09-13-step1-lanes-plan.md`), the driver
+prompts of lanes A, B, L and C
+(`2026-09-13-lane-{a-ridl-rt,b-rsdl,l-lock,c-typl}-driver.md` and
+`2026-09-16-lane-c-c4-driver.md`) and the lane R driver
+(`2026-09-20-lane-r-driver.md`) were archived on 2026-10-15, once every story of
+lanes A, B, L, C and R was closed. The durable records are
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) and
+[the `ridl-rt` design record](../design/ridl-rt.md) for lane A,
+[ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
+[the rsdl implementation technote](../technotes/rsdl-implementation.md) for lane
+B, [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) (the
+2026-09-15 interface lock amendment),
+[ADR-0010](../decisions/ADR-0010-cli-conventions.md) and
+[the ridl reference](../specification/ridl-language-reference.md) §11 for lane
+L, and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
+[`../design/interaction-face.md`](../design/interaction-face.md) for lane R. The
+stories of lane C (#318 and #246 to #255) are closed. The coordination issue
+#328 stays open.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -199,30 +216,6 @@ design.
   **2026-09-12-interface-id-study-2.md** — the two identity study reports that
   note's D-7 summarises, kept verbatim; the first ranked the carriers, the
   second simulated the merges and the diff. **Not ratified.**
-- **2026-09-13-step1-lanes-plan.md** and its four driver prompts,
-  **2026-09-13-lane-a-ridl-rt-driver.md**, **2026-09-13-lane-b-rsdl-driver.md**,
-  **2026-09-13-lane-l-lock-driver.md** and **2026-09-13-lane-c-typl-driver.md**
-  — the coordination plan for the first part of roadmap step 1: `ridl-rt` 0.1.0,
-  rsdl and its reference, the lock block of the rsdl note's D-7, and the typl
-  debt, as four lanes that run in parallel with one driver session each. It
-  decides the order, the gates, the model for each stage, and which lane may
-  change a shared file when; each lane's own spec decides the design. The
-  coordination issue is #328. Lane A (`ridl-rt` 0.1.0) landed; its own
-  design/plan pair is archived — see
-  [`../archive/README.md`](../archive/README.md). Lane B (rsdl) landed, story
-  E6.17, the catalog hash per region, last; its plan (`2026-09-15-rsdl-plan.md`)
-  is archived too, and its durable records are
-  [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
-  [the rsdl implementation technote](../technotes/rsdl-implementation.md). The
-  state of the other two lanes is on #328.
-- **2026-09-16-lane-c-c4-driver.md** — the driver prompt for lane C's last
-  stage, C4 (Epic 10). Its own file because C4 is the largest stage of the four
-  lanes — ten live tasks, one pull request each — so it runs as four sessions
-  rather than one, and because it uses a cheaper two-seat review across model
-  families instead of the four-seat one the 2026-09-13 prompts describe — a cost
-  decision with a risk the file names, not an evidence-driven one. It carries
-  the model routing Sebastien set on 2026-09-16 and three rules C3 paid to
-  learn. Archive it with the lanes plan.
 - **2026-09-22-lane-p-driver.md** — the driver for lane P, the codegen plugin
   system on the way to a Kotlin backend: E4.5a (the IR stability policy and the
   canonical encoding, with #231 first), the lowered codegen model, E4.5b (the
@@ -329,10 +322,10 @@ and was not archived. The reason is stated once per file or group.
   [`family-general-form.md`](family-general-form.md) refers to it, so archiving
   it needs a durable home for those rules first. That is a decision for the
   maintainer.
-- **2026-09-20-lane-r-driver.md**, **2026-09-21-nested-interface-design.md** and
+- **2026-09-21-nested-interface-design.md** and
   **2026-10-01-portable-match-patterns-design.md** — each states in its own
-  header that it is a driver prompt or a design note that has not graduated (the
-  nested interface note into an amendment of ADR-0015, the match pattern note
-  into an amendment of the typl reference). The tracker shows #597 closed, but
-  no commit after the design implements it; the maintainer decides whether each
-  is taken, archived or superseded.
+  header that it is a design note that has not graduated (the nested interface
+  note into an amendment of ADR-0015, the match pattern note into an amendment
+  of the typl reference). The tracker shows #597 closed, but no commit after the
+  design implements it; the maintainer decides whether each is taken, archived
+  or superseded.

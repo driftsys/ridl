@@ -36,12 +36,12 @@ listed in §4 are not taken yet, and F2 takes them.
   `tests/dispatch_generation.rs` pin the public face by exact text; all of them
   run in the gate.
 - Review before merge, per the lanes plan §7
-  ([`2026-09-13-step1-lanes-plan.md`](../wip/2026-09-13-step1-lanes-plan.md)):
-  open the pull request, run `/review <PR>` (the docs-only lane when no
-  executable line changes), post the ledger as a comment, fix what is kept, run
-  pass 2, run `just verify`. After that the driver may squash-merge; Sebastien
-  has given that permission for reviewed and verified work. One pull request
-  open at a time, except where §3 says a stage's pull requests are independent.
+  ([`2026-09-13-step1-lanes-plan.md`](2026-09-13-step1-lanes-plan.md)): open the
+  pull request, run `/review <PR>` (the docs-only lane when no executable line
+  changes), post the ledger as a comment, fix what is kept, run pass 2, run
+  `just verify`. After that the driver may squash-merge; Sebastien has given
+  that permission for reviewed and verified work. One pull request open at a
+  time, except where §3 says a stage's pull requests are independent.
 - Never push a tag, publish to a registry, add a secret, or push to `main`.
 - A new crate adds its own scope to `.git-std.toml`, which is an explicit list.
 
