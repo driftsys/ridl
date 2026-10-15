@@ -59,12 +59,14 @@ repairs the new release wants in the same commit.
 
 ## Changing a frozen surface
 
-Ten surfaces are frozen from release 0.10.0, and `just freeze-check` compares
-each one with a baseline git ref (ADR-0029). The dumps are in `freeze/`, and the
-baseline of each surface is in `freeze/surfaces.toml`. Some parts of the frozen
-surfaces are frozen by policy and checked by no tool: the formats of
-`interfaces.lock` and `.ridl/baseline`, the exit codes of every subcommand other
-than `ridl check`, the output of `ridl diff` and the `ridl-diff` categories, the
+Eleven surfaces are frozen. Nine are frozen from release 0.10.0. The `manifest`
+and `cli` surfaces are frozen from the first release after it, because
+`ridl vendor` landed after the 0.10.0 tag. `just freeze-check` compares each one
+with a baseline git ref (ADR-0029). The dumps are in `freeze/`, and the baseline
+of each surface is in `freeze/surfaces.toml`. Some parts of the frozen surfaces
+are frozen by policy and checked by no tool: the formats of `interfaces.lock`
+and `.ridl/baseline`, the exit codes of every subcommand other than
+`ridl check`, the output of `ridl diff` and the `ridl-diff` categories, the
 layouts of the `unsubscribe`, `read` and `occurrence` frames, which no test
 vector of the frame specification §11.1 shows, the payload-presence rule of
 §11.1 for a `publish` under `Init` or `Invalid(Declared)` and for a `response`

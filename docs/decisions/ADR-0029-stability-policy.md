@@ -66,18 +66,18 @@ changed in place.
 
 **Amended 2026-10-14 — decision 4, release 0.10.0 as made.** The release pull
 request of 0.10.0 did not move the baselines to `v0.10.0`: the tag did not exist
-until that pull request merged, so every row of `freeze/surfaces.toml` still
-names the merge commit of its dump. Moving the rows to the tag is an open
-follow-up. The `manifest` and `cli` rows were added after the tag, with baseline
-`4edf558a`, because `ridl vendor` (driftsys/ridl#48) landed after the release;
-the `vendor/` layout and `ridl vendor` are frozen from the first release that
-contains them, not from 0.10.0. The crates.io publish of 0.10.0 failed once at
-its verify job, which runs `just build` and so needs `cargo-semver-checks`; the
-workflow installs it now (driftsys/ridl#951) and the tag was moved to the fixed
-commit. The release design asked for a "Migrating from 0.8 to 0.10" book
-chapter; it was not written, because the release is before 1.0 and the changelog
-lists the breaks, so the Stability chapter of the book and the changelog are the
-user-facing record. Decision 4's second bullet is changed in place.
+until that pull request merged. A later pull request moved the nine rows that
+the tag contains to `v0.10.0`. The `manifest` and `cli` rows stay at `4edf558a`,
+the merge commit of their last break: they were added after the tag, because
+`ridl vendor` (driftsys/ridl#48) landed after the release; the `vendor/` layout
+and `ridl vendor` are frozen from the first release that contains them, not from
+0.10.0. The crates.io publish of 0.10.0 failed once at its verify job, which
+runs `just build` and so needs `cargo-semver-checks`; the workflow installs it
+now (driftsys/ridl#951) and the tag was moved to the fixed commit. The release
+design asked for a "Migrating from 0.8 to 0.10" book chapter; it was not
+written, because the release is before 1.0 and the changelog lists the breaks,
+so the Stability chapter of the book and the changelog are the user-facing
+record. Decision 4's second bullet is changed in place.
 
 ## Context
 
