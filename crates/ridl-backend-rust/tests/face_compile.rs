@@ -120,8 +120,8 @@ internal interface Diagnostics {
 }
 "#;
 
-/// An interaction named with a Rust keyword keeps the raw identifier for its
-/// method, and every helper function the face joins to that name spells the
+/// Interactions named `loop`, `while`, `mod` and `move` keep raw identifiers
+/// for their methods, and every helper function joined to those names spells the
 /// plain name: `send_loop`, not `send_r#loop`, which is not an identifier
 /// (driftsys/ridl#863).
 #[test]
