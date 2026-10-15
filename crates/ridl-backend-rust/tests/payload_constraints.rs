@@ -137,6 +137,40 @@ fn main() {
 }
 
 #[test]
+fn encode_checks_anonymous_map_keys_and_vector_elements() {
+    rustc::run_program(
+        "nested_inline_encode_lengths",
+        &program(
+            r#"
+use ridl_rt::payload::{EncodeError, Payload, Rule, Violation};
+fn expected(owner: &'static str) -> Option<EncodeError> {
+    Some(EncodeError::Contract(Violation { type_name: Some(owner), rule: Rule::Length }))
+}
+fn main() {
+    let mut out = vec![0; 16384];
+    let mut keys = Keys { text: vec![("é".repeat(256), Whole::new(1))], number: vec![] };
+    assert!(keys.encode(&mut out).is_ok(), "key lengths count characters");
+    keys.text[0].0 = "x".repeat(257);
+    assert_eq!(keys.encode(&mut out).err(), expected("Keys"));
+    let mut bytes = ByteKeys { entries: vec![(vec![1; 256], Whole::new(1))] };
+    assert!(bytes.encode(&mut out).is_ok());
+    bytes.entries[0].0.push(1);
+    assert_eq!(bytes.encode(&mut out).err(), expected("ByteKeys"));
+
+    let mut elements = Elements { text: vec!["é".repeat(256)], data: vec![vec![1; 256]] };
+    assert!(elements.encode(&mut out).is_ok(), "valid counts and elements encode");
+    elements.text[0] = "x".repeat(257);
+    assert_eq!(elements.encode(&mut out).err(), expected("Elements"));
+    elements.text[0] = "x".repeat(256);
+    elements.data[0].push(1);
+    assert_eq!(elements.encode(&mut out).err(), expected("Elements"));
+}
+"#,
+        ),
+    );
+}
+
+#[test]
 fn verify_enforces_anonymous_scalar_constraints() {
     rustc::run_program(
         "inline_constraints",
