@@ -30,7 +30,7 @@ use super::{
     ident, member_doc, type_path,
 };
 use proc_macro2::{Ident, TokenStream};
-use quote::quote;
+use quote::{format_ident, quote};
 
 /// A type reference as the blocking module names it: one module deeper than
 /// the face module, so a same-package declaration is `super::super::<Name>`,
@@ -200,7 +200,7 @@ fn client(
     // inherent path `blocking::Client::with_timeout(&mut client, x)`.
     let events_impl = (!events.is_empty()).then(|| {
         let subscribes = events.iter().map(|(member, _)| {
-            let method = ident(&format!("subscribe_{}", member.method));
+            let method = format_ident!("subscribe_{}", member.method);
             let doc = format!(
                 "Starts delivery of event `{}`, as the async client's \
                  `Subscribe::{method}` does.",

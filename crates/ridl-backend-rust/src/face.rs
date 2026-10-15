@@ -113,7 +113,7 @@ use crate::{
     Ctx, GenerateError, camel_of, declared, deprecated_attr, derives, ident, snake_of, type_path,
 };
 use proc_macro2::{Ident, Literal, TokenStream};
-use quote::quote;
+use quote::{format_ident, quote};
 use ridl_ir::codegen::v1;
 
 mod blocking;
@@ -529,7 +529,7 @@ fn client(
 
     if !events.is_empty() {
         let subscribes = events.iter().map(|(member, _)| {
-            let method = ident(&format!("subscribe_{}", member.method));
+            let method = format_ident!("subscribe_{}", member.method);
             let ordinal = &member.ordinal;
             let doc = member_doc(member, &subscribe_sentence(member));
             quote! {
@@ -640,7 +640,7 @@ fn client(
 /// member named `subscribe<Event>` cannot capture that call.
 fn subscribe_trait(iface_name: &str, events: &[(Member, &str)]) -> TokenStream {
     let methods = events.iter().map(|(member, _)| {
-        let method = ident(&format!("subscribe_{}", member.method));
+        let method = format_ident!("subscribe_{}", member.method);
         let doc = subscribe_sentence(member);
         quote! {
             #[doc = #doc]
@@ -674,7 +674,7 @@ fn subscribe_sentence(member: &Member) -> String {
 /// The same reasoning as [`subscribe_trait`].
 fn invalidate_trait(iface_name: &str, signals: &[(Member, &str)]) -> TokenStream {
     let methods = signals.iter().map(|(member, _)| {
-        let method = ident(&format!("invalidate_{}", member.method));
+        let method = format_ident!("invalidate_{}", member.method);
         let doc = format!(
             "Stages the invalid state for signal `{}`, with \
              `Cause::Declared`. It is published by `commit`.",
@@ -823,7 +823,7 @@ pub(crate) fn module_ident(interface: &v1::Interface) -> Ident {
 
 /// The name of one call's internal send, `send_<name>`.
 fn send_fn(call: &Call) -> Ident {
-    ident(&format!("send_{}", call.member.method))
+    format_ident!("send_{}", call.member.method)
 }
 
 /// The name of one call's internal outcome read: `poll_<name>_ack` for a
@@ -834,7 +834,7 @@ fn read_fn(call: &Call) -> Ident {
     } else {
         "ack"
     };
-    ident(&format!("poll_{}_{suffix}", call.member.method))
+    format_ident!("poll_{}_{}", call.member.method, suffix)
 }
 
 /// One public call method: sends when it is called, and returns the call's
@@ -1019,7 +1019,7 @@ fn publisher(
     // derived `invalidate_<signal>` are trait methods (ADR-0023 decision 7).
     let fixed = (!signals.is_empty()).then(|| {
         let invalidates = signals.iter().map(|(member, _)| {
-            let invalidate = ident(&format!("invalidate_{}", member.method));
+            let invalidate = format_ident!("invalidate_{}", member.method);
             let ordinal = &member.ordinal;
             quote! {
                 fn #invalidate(
