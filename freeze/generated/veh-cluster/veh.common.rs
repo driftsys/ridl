@@ -55,7 +55,10 @@ impl Speed {
                     if !__checked.is_finite() {
                         true
                     } else {
-                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __represented = ::core::primitive::f32::from_bits(
+                            (__checked as ::core::primitive::f32).to_bits()
+                                & 0x7fff_ffffu32,
+                        );
                         let __bits = __represented.to_bits();
                         let __below = if __bits == 0 {
                             -::core::primitive::f32::from_bits(1)
@@ -90,19 +93,37 @@ impl Speed {
                                 } else {
                                     0.0
                                 };
-                            let __scale = __checked
-                                .abs()
-                                .max((__phase / __factor).abs())
-                                .max(__original_step.abs());
+                            let __scale = ::core::primitive::f64::from_bits(
+                                    (__checked).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__phase / __factor).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__original_step).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                );
                             let __tolerance = (4.0
                                 * (::core::primitive::f32::EPSILON
                                     as ::core::primitive::f64) * __scale)
                                 .min(__original_step / 4.0);
                             let mut __distance = ::core::primitive::f64::INFINITY;
-                            let __rescale = if __scaled_value
-                                .abs()
-                                .max(__phase.abs())
-                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            let __rescale = if ::core::primitive::f64::from_bits(
+                                    (__scaled_value).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__phase).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__step).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                ) > ::core::primitive::f64::MAX / 4.0
                             {
                                 0.25
                             } else {
@@ -142,7 +163,12 @@ impl Speed {
                                 let __nearest = (__nearest / __factor / __rescale)
                                     as ::core::primitive::f32 as ::core::primitive::f64;
                                 if __nearest.is_finite() {
-                                    __distance = __distance.min((__checked - __nearest).abs());
+                                    __distance = __distance
+                                        .min(
+                                            ::core::primitive::f64::from_bits(
+                                                (__checked - __nearest).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                            ),
+                                        );
                                 }
                             }
                             !__quotient.is_finite() || __distance > __tolerance
@@ -244,7 +270,10 @@ impl Temperature {
                     if !__checked.is_finite() {
                         true
                     } else {
-                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __represented = ::core::primitive::f32::from_bits(
+                            (__checked as ::core::primitive::f32).to_bits()
+                                & 0x7fff_ffffu32,
+                        );
                         let __bits = __represented.to_bits();
                         let __below = if __bits == 0 {
                             -::core::primitive::f32::from_bits(1)
@@ -279,19 +308,37 @@ impl Temperature {
                                 } else {
                                     0.0
                                 };
-                            let __scale = __checked
-                                .abs()
-                                .max((__phase / __factor).abs())
-                                .max(__original_step.abs());
+                            let __scale = ::core::primitive::f64::from_bits(
+                                    (__checked).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__phase / __factor).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__original_step).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                );
                             let __tolerance = (4.0
                                 * (::core::primitive::f32::EPSILON
                                     as ::core::primitive::f64) * __scale)
                                 .min(__original_step / 4.0);
                             let mut __distance = ::core::primitive::f64::INFINITY;
-                            let __rescale = if __scaled_value
-                                .abs()
-                                .max(__phase.abs())
-                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            let __rescale = if ::core::primitive::f64::from_bits(
+                                    (__scaled_value).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__phase).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__step).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                ) > ::core::primitive::f64::MAX / 4.0
                             {
                                 0.25
                             } else {
@@ -331,7 +378,12 @@ impl Temperature {
                                 let __nearest = (__nearest / __factor / __rescale)
                                     as ::core::primitive::f32 as ::core::primitive::f64;
                                 if __nearest.is_finite() {
-                                    __distance = __distance.min((__checked - __nearest).abs());
+                                    __distance = __distance
+                                        .min(
+                                            ::core::primitive::f64::from_bits(
+                                                (__checked - __nearest).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                            ),
+                                        );
                                 }
                             }
                             !__quotient.is_finite() || __distance > __tolerance
@@ -433,7 +485,10 @@ impl RPM {
                     if !__checked.is_finite() {
                         true
                     } else {
-                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __represented = ::core::primitive::f32::from_bits(
+                            (__checked as ::core::primitive::f32).to_bits()
+                                & 0x7fff_ffffu32,
+                        );
                         let __bits = __represented.to_bits();
                         let __below = if __bits == 0 {
                             -::core::primitive::f32::from_bits(1)
@@ -468,19 +523,37 @@ impl RPM {
                                 } else {
                                     0.0
                                 };
-                            let __scale = __checked
-                                .abs()
-                                .max((__phase / __factor).abs())
-                                .max(__original_step.abs());
+                            let __scale = ::core::primitive::f64::from_bits(
+                                    (__checked).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__phase / __factor).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__original_step).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                );
                             let __tolerance = (4.0
                                 * (::core::primitive::f32::EPSILON
                                     as ::core::primitive::f64) * __scale)
                                 .min(__original_step / 4.0);
                             let mut __distance = ::core::primitive::f64::INFINITY;
-                            let __rescale = if __scaled_value
-                                .abs()
-                                .max(__phase.abs())
-                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            let __rescale = if ::core::primitive::f64::from_bits(
+                                    (__scaled_value).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__phase).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__step).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                ) > ::core::primitive::f64::MAX / 4.0
                             {
                                 0.25
                             } else {
@@ -520,7 +593,12 @@ impl RPM {
                                 let __nearest = (__nearest / __factor / __rescale)
                                     as ::core::primitive::f32 as ::core::primitive::f64;
                                 if __nearest.is_finite() {
-                                    __distance = __distance.min((__checked - __nearest).abs());
+                                    __distance = __distance
+                                        .min(
+                                            ::core::primitive::f64::from_bits(
+                                                (__checked - __nearest).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                            ),
+                                        );
                                 }
                             }
                             !__quotient.is_finite() || __distance > __tolerance
@@ -622,7 +700,10 @@ impl Ratio {
                     if !__checked.is_finite() {
                         true
                     } else {
-                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __represented = ::core::primitive::f32::from_bits(
+                            (__checked as ::core::primitive::f32).to_bits()
+                                & 0x7fff_ffffu32,
+                        );
                         let __bits = __represented.to_bits();
                         let __below = if __bits == 0 {
                             -::core::primitive::f32::from_bits(1)
@@ -657,19 +738,37 @@ impl Ratio {
                                 } else {
                                     0.0
                                 };
-                            let __scale = __checked
-                                .abs()
-                                .max((__phase / __factor).abs())
-                                .max(__original_step.abs());
+                            let __scale = ::core::primitive::f64::from_bits(
+                                    (__checked).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__phase / __factor).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__original_step).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                );
                             let __tolerance = (4.0
                                 * (::core::primitive::f32::EPSILON
                                     as ::core::primitive::f64) * __scale)
                                 .min(__original_step / 4.0);
                             let mut __distance = ::core::primitive::f64::INFINITY;
-                            let __rescale = if __scaled_value
-                                .abs()
-                                .max(__phase.abs())
-                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            let __rescale = if ::core::primitive::f64::from_bits(
+                                    (__scaled_value).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__phase).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__step).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                ) > ::core::primitive::f64::MAX / 4.0
                             {
                                 0.25
                             } else {
@@ -709,7 +808,12 @@ impl Ratio {
                                 let __nearest = (__nearest / __factor / __rescale)
                                     as ::core::primitive::f32 as ::core::primitive::f64;
                                 if __nearest.is_finite() {
-                                    __distance = __distance.min((__checked - __nearest).abs());
+                                    __distance = __distance
+                                        .min(
+                                            ::core::primitive::f64::from_bits(
+                                                (__checked - __nearest).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                            ),
+                                        );
                                 }
                             }
                             !__quotient.is_finite() || __distance > __tolerance
@@ -871,7 +975,10 @@ impl Gain {
                     if !__checked.is_finite() {
                         true
                     } else {
-                        let __represented = (__checked as ::core::primitive::f32).abs();
+                        let __represented = ::core::primitive::f32::from_bits(
+                            (__checked as ::core::primitive::f32).to_bits()
+                                & 0x7fff_ffffu32,
+                        );
                         let __bits = __represented.to_bits();
                         let __below = if __bits == 0 {
                             -::core::primitive::f32::from_bits(1)
@@ -906,19 +1013,37 @@ impl Gain {
                                 } else {
                                     0.0
                                 };
-                            let __scale = __checked
-                                .abs()
-                                .max((__phase / __factor).abs())
-                                .max(__original_step.abs());
+                            let __scale = ::core::primitive::f64::from_bits(
+                                    (__checked).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__phase / __factor).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__original_step).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                );
                             let __tolerance = (4.0
                                 * (::core::primitive::f32::EPSILON
                                     as ::core::primitive::f64) * __scale)
                                 .min(__original_step / 4.0);
                             let mut __distance = ::core::primitive::f64::INFINITY;
-                            let __rescale = if __scaled_value
-                                .abs()
-                                .max(__phase.abs())
-                                .max(__step.abs()) > ::core::primitive::f64::MAX / 4.0
+                            let __rescale = if ::core::primitive::f64::from_bits(
+                                    (__scaled_value).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__phase).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                )
+                                .max(
+                                    ::core::primitive::f64::from_bits(
+                                        (__step).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                    ),
+                                ) > ::core::primitive::f64::MAX / 4.0
                             {
                                 0.25
                             } else {
@@ -958,7 +1083,12 @@ impl Gain {
                                 let __nearest = (__nearest / __factor / __rescale)
                                     as ::core::primitive::f32 as ::core::primitive::f64;
                                 if __nearest.is_finite() {
-                                    __distance = __distance.min((__checked - __nearest).abs());
+                                    __distance = __distance
+                                        .min(
+                                            ::core::primitive::f64::from_bits(
+                                                (__checked - __nearest).to_bits() & 0x7fff_ffff_ffff_ffffu64,
+                                            ),
+                                        );
                                 }
                             }
                             !__quotient.is_finite() || __distance > __tolerance

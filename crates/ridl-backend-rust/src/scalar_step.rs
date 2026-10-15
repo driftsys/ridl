@@ -36,6 +36,15 @@ fn split(value: &BigRational) -> Option<(Literal, Literal)> {
     Some((Literal::f64_suffixed(high), Literal::f64_suffixed(low)))
 }
 
+/// Clears the IEEE-754 sign bit using operations available in core on Rust 1.83.
+fn absolute(value: &TokenStream, wire_f32: bool) -> TokenStream {
+    if wire_f32 {
+        quote! { ::core::primitive::f32::from_bits((#value).to_bits() & 0x7fff_ffffu32) }
+    } else {
+        quote! { ::core::primitive::f64::from_bits((#value).to_bits() & 0x7fff_ffff_ffff_ffffu64) }
+    }
+}
+
 /// Emits the invalidity predicate for a float's declared decimal lattice.
 /// All exact arithmetic happens in the compiler; generated code uses only
 /// primitive operations. Reducing the origin modulo the step preserves the
@@ -117,10 +126,12 @@ fn float_invalid_at_precision(
         } else {
             quote! { ::core::primitive::f64::EPSILON }
         };
+        let distance = absolute(&quote! { #value - *__point }, false);
+        let magnitude = absolute(value, false);
+        let point = absolute(&quote! { *__point }, false);
         return quote! {
             !#value.is_finite() || ![#(#candidates),*].iter().any(|__point| {
-                (#value - *__point).abs()
-                    <= 4.0 * #epsilon * #value.abs().max(__point.abs())
+                #distance <= 4.0 * #epsilon * #magnitude.max(#point)
             })
         };
     };
@@ -147,6 +158,14 @@ fn float_invalid_at_precision(
     } else {
         quote! { __nearest / __factor / __rescale }
     };
+    let represented = absolute(&represented, wire_f32);
+    let magnitude = absolute(value, false);
+    let phase_magnitude = absolute(&quote! { __phase / __factor }, false);
+    let step_magnitude = absolute(&quote! { __original_step }, false);
+    let scaled_magnitude = absolute(&quote! { __scaled_value }, false);
+    let scaled_phase_magnitude = absolute(&quote! { __phase }, false);
+    let scaled_step_magnitude = absolute(&quote! { __step }, false);
+    let distance = absolute(&quote! { #value - __nearest }, false);
     quote! {
         {
             let __factor: ::core::primitive::f64 = #factor;
@@ -160,7 +179,7 @@ fn float_invalid_at_precision(
             } else {
                 // Adjacent values define the actual rounding cell. Signed
                 // zero has the same two adjacent magnitudes as positive zero.
-                let __represented = (#represented).abs();
+                let __represented = #represented;
                 let __bits = __represented.to_bits();
                 let __below = if __bits == 0 {
                     -#float::from_bits(1)
@@ -195,13 +214,13 @@ fn float_invalid_at_precision(
                     } else {
                         0.0
                     };
-                    let __scale = #value.abs().max((__phase / __factor).abs()).max(__original_step.abs());
+                    let __scale = #magnitude.max(#phase_magnitude).max(#step_magnitude);
                     let __tolerance = (4.0 * #epsilon * __scale).min(__original_step / 4.0);
                     let mut __distance = ::core::primitive::f64::INFINITY;
                     // Scale large terms before reconstructing. A rounded high
                     // sum can otherwise overflow before its negative decimal
                     // residual brings the exact point back into finite range.
-                    let __rescale = if __scaled_value.abs().max(__phase.abs()).max(__step.abs())
+                    let __rescale = if #scaled_magnitude.max(#scaled_phase_magnitude).max(#scaled_step_magnitude)
                         > ::core::primitive::f64::MAX / 4.0 {
                         0.25
                     } else {
@@ -234,7 +253,7 @@ fn float_invalid_at_precision(
                         let __nearest = __sum + __low;
                         let __nearest = #nearest_at_precision;
                         if __nearest.is_finite() {
-                            __distance = __distance.min((#value - __nearest).abs());
+                            __distance = __distance.min(#distance);
                         }
                     }
                     !__quotient.is_finite() || __distance > __tolerance

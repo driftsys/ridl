@@ -278,9 +278,8 @@ wasm-check:
 # the `suite!` test compiled.
 #
 # The crate emitted for the veh-cluster corpus is built with cargo, not with
-# rustc as the cabin crate is, and with every cargo feature on. With the default
-# features off it does not build on the minimum (driftsys/ridl#874), so that
-# cell is not here. The recipe reads the edition from the emitted veh-cluster
+# rustc as the cabin crate is, with every cargo feature on and with default
+# features off. The recipe reads the edition from the emitted veh-cluster
 # manifest and fails when it is not 2021 (the cabin cell compiles with rustc
 # and does not read its manifest): `ridl build` writes edition 2021, so a Rust 1.83
 # user builds the emitted crate without editing its manifest (ADR-0029
@@ -645,9 +644,9 @@ compat-check: toolchain-check
     # ridl-descriptor: resolved with the pin's cargo and the fallback
     # resolver, fetched with the minimum's cargo (cargo 1.83 does not see the
     # index and sources that the pin's cargo downloads), then built offline
-    # and locked. There is no `--no-default-features` cell: that build fails
-    # at the minimum (driftsys/ridl#874). The cell has its own CARGO_HOME, for
-    # the reason given for ridl-descriptor above.
+    # and locked, then built again without default features to check no_std.
+    # The cell has its own CARGO_HOME for the reason given for ridl-descriptor
+    # above.
     corpus_home="$PWD/target/compat-check/cargo-home-corpus"
     corpus="$PWD/target/compat-check/veh-cluster"
     mkdir -p "$corpus"
@@ -677,6 +676,8 @@ compat-check: toolchain-check
         cargo "+$minimum" fetch --locked --manifest-path "$corpus/generated/Cargo.toml"
     echo "compat-check: $minimum, edition 2021 (the emitted veh-cluster crate, all features)"
     CARGO_HOME="$corpus_home" cargo "+$minimum" build --all-features --offline --locked --manifest-path "$corpus/generated/Cargo.toml"
+    echo "compat-check: $minimum, edition 2021 (the emitted veh-cluster crate, no default features)"
+    CARGO_HOME="$corpus_home" cargo "+$minimum" build --no-default-features --offline --locked --manifest-path "$corpus/generated/Cargo.toml"
 
     # Edition 2024 requires rust-version >= 1.85 (cargo refuses to parse the
     # manifest otherwise); the pin already satisfies that, so this run's
