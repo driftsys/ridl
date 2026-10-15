@@ -378,11 +378,12 @@ also the case for an interface, an interaction and a union arm, which the module
 holds no item for, and for a declaration of another package that the module
 does not import. `@labels` is not rendered.
 
-A Rust link is an absolute path from the crate root, such as
-`crate::veh::common::Speed`, which resolves in the crate `ridl build` emits. A
-program that brings a generated file in with `include!` inside a module of its
-own moves the items away from those paths, so rustdoc reports each such link as
-unresolved.
+A Rust link uses the short form `[Speed]` when that text is the target's Rust
+name and the target is in the module that holds the doc. Other links use an
+absolute path from the crate root, such as `crate::veh::common::Speed`, which
+resolves in the crate `ridl build` emits. A program that brings a generated file
+in with `include!` inside a module of its own moves the items away from those
+absolute paths, so rustdoc reports those links as unresolved.
 
 In the Rust face, the doc of an interaction goes on these methods: for a signal,
 the method of the async `Client`, of the blocking `Client` and of the

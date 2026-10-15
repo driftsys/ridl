@@ -325,11 +325,11 @@ impl ::core::default::Default for Hidden {
         Hidden::new(0)
     }
 }
-/// Combines [Speed](crate::veh::common::Speed) and [Reading.speed](crate::veh::common::Reading::speed), from `other.pkg.Thing` and `veh.common.Hidden`.
+/// Combines [Speed] and [Reading.speed](crate::veh::common::Reading::speed), from `other.pkg.Thing` and `veh.common.Hidden`.
 ///
 /// # See also
 ///
-/// - [Speed](crate::veh::common::Speed)
+/// - [Speed]
 /// - `other.pkg.Thing`
 ///
 /// Available since 0.3.
@@ -347,7 +347,7 @@ pub struct Reading {
     ///
     /// # See also
     ///
-    /// - [Vin](crate::veh::common::Vin)
+    /// - [Vin]
     ///
     /// Available since 0.2.
     pub speed: Speed,

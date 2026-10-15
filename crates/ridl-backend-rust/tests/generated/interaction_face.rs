@@ -3694,8 +3694,8 @@ impl ::ridl_rt::contract::Query for ZonePayloadRead {
         ::core::result::Result::Ok(())
     }
 }
-/// The cabin climate controller. It publishes the cabin [Temperature](crate::face::demo::Temperature) and
-/// takes a control [Level](crate::face::demo::Level).
+/// The cabin climate controller. It publishes the cabin [Temperature] and
+/// takes a control [Level].
 ///
 ///The generated interaction face of interface `Cabin`.
 ///

@@ -236,6 +236,8 @@ pub(crate) fn one_interface(
     let iface_name = declared_name(interface).unwrap_or_default();
     let iface = ident(iface_name);
     let module = module_ident(interface);
+    let prefix = crate::package_prefix(ctx.package_name(), &module);
+    let member_links = links.in_module(quote! { #prefix #module });
 
     // Payload type names are kept beside each member, because the face names
     // the payload type directly: the declared type, or the struct the
@@ -264,7 +266,7 @@ pub(crate) fn one_interface(
             },
             declared: name,
             camel: camel_of(interaction.name.as_ref()),
-            doc: DocLines::new(&DocParts::interaction(interaction), links),
+            doc: DocLines::new(&DocParts::interaction(interaction), &member_links),
             deprecated: interaction.deprecated.as_deref(),
         };
         match interaction.shape.as_ref() {
@@ -287,7 +289,7 @@ pub(crate) fn one_interface(
                     arg: call_arg_name(&command.params, command.request.is_some()),
                     member,
                     reply_type: None,
-                    params: docs::parameter_lines(&command.params, links),
+                    params: docs::parameter_lines(&command.params, &member_links),
                 });
             }
             Some(v1::interaction::Shape::Query(query)) => {
@@ -296,7 +298,7 @@ pub(crate) fn one_interface(
                     arg: call_arg_name(&query.params, query.request.is_some()),
                     member,
                     reply_type: Some(query_reply_type(ctx, query, name)?),
-                    params: docs::parameter_lines(&query.params, links),
+                    params: docs::parameter_lines(&query.params, &member_links),
                 });
             }
             // A `fixed` is provisioned, not interacted with, so the MVP's face

@@ -106,11 +106,34 @@ impl<'a> DocParts<'a> {
 pub(crate) struct Links<'a> {
     model: &'a v1::Model,
     faced: &'a BTreeSet<u32>,
+    module: String,
 }
 
 impl<'a> Links<'a> {
     pub(crate) fn new(model: &'a v1::Model, faced: &'a BTreeSet<u32>) -> Self {
-        Links { model, faced }
+        let package = model
+            .scope
+            .as_ref()
+            .map(|scope| scope.package.as_str())
+            .unwrap_or_default();
+        let segments = package
+            .split('.')
+            .filter(|segment| !segment.is_empty())
+            .map(ident);
+        Links {
+            model,
+            faced,
+            module: spelled(quote! { crate #(:: #segments)* }),
+        }
+    }
+
+    /// The same targets, rendered from the module that holds this doc.
+    pub(crate) fn in_module(&self, module: TokenStream) -> Self {
+        Links {
+            model: self.model,
+            faced: self.faced,
+            module: spelled(module),
+        }
     }
 
     /// The rustdoc path of `target`, a canonical qualified name `pkg.Name`
@@ -426,11 +449,17 @@ fn linked(doc: &str, doc_links: &[v1::DocLink], links: &Links<'_>) -> String {
     text
 }
 
-/// `[<text>](<path>)` when the target is an item of this output, and a code
-/// span of the qualified target name otherwise.
+/// A short intra-doc link when its Rust name resolves in the doc's module,
+/// an explicit path for other emitted targets, or a qualified code span when
+/// the target has no linkable item.
 fn rendered_link(link: &v1::DocLink, links: &Links<'_>) -> String {
     match links.path(&link.target) {
-        Some(path) => format!("[{}]({path})", link.text),
+        Some(path) => match path.rsplit_once("::") {
+            Some((module, name)) if module == links.module && name == link.text => {
+                format!("[{}]", link.text)
+            }
+            _ => format!("[{}]({path})", link.text),
+        },
         None => format!("`{}`", link.target),
     }
 }

@@ -360,9 +360,29 @@ struct Links {
     );
     assert!(
         source.contains(
-            "Links to [SpeedLimit](crate::veh::prefix::SpeedLimit) and \
+            "Links to [SpeedLimit] and \
              [PanelTwo](crate::veh::prefix::panel_two)."
         ),
         "{source}"
     );
+}
+
+#[test]
+fn short_links_require_the_rust_name_in_the_docs_module() {
+    let package = ir::compile_fixture("doc_short_links.ridl");
+    let source = ridl_backend_rust::generate_pipeline(
+        &package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        &[],
+    )
+    .expect("the fixture generates")
+    .rust_source;
+    for expected in [
+        "Same module [Temperature]; explicit member [Horn.active](crate::veh::docs::horn::Client::active).",
+        "Field [Temperature].",
+        "Module [Temperature].",
+        "Nested [Temperature](crate::veh::docs::Temperature).",
+    ] {
+        assert!(source.contains(expected), "missing {expected}:\n{source}");
+    }
 }

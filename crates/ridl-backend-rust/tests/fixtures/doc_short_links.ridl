@@ -1,0 +1,22 @@
+package veh.docs
+
+/// A temperature.
+type Temperature: integer [0..100]
+
+/// The horn.
+interface Horn {
+  /// The active state.
+  signal active: Temperature @10ms
+}
+
+/// Same module [Temperature]; explicit member [Horn.active].
+struct Reading {
+  /// Field [Temperature].
+  value: Temperature
+}
+
+/// Module [Temperature].
+interface Climate {
+  /// Nested [Temperature].
+  query read(): Temperature @[..1s]
+}
