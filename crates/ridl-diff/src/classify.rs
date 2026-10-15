@@ -549,10 +549,11 @@ fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>) -> bool {
     }
     // A minimum is also the origin of a stepped grid. Widening the interval
     // only preserves old values when the origin moves by whole steps.
-    if let Some(step) = new.step.as_deref() {
-        if old.min != new.min && !same_grid(old.min.as_deref(), new.min.as_deref(), step) {
-            return true;
-        }
+    if let Some(step) = new.step.as_deref()
+        && old.min != new.min
+        && !same_grid(old.min.as_deref(), new.min.as_deref(), step)
+    {
+        return true;
     }
     // A pattern added or rewritten can reject strings that matched before.
     // Removed, it widens.

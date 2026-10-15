@@ -184,12 +184,12 @@ nothing.
    after them under the two rsdl §14 headings — "placement changed" and
    "composition changed" — as a `SystemHeading` in `ridl_diff::system`, beside
    `Category` and never inside it, because a `Category` carries a verdict and
-   these do not; `--explain` does not list them. Exactly the §14 changes are
-   listed: a change to `labels`, to a backend key or to a distribution is not.
-   **Both sides must be source trees:** only a compiled workspace carries a
-   lowered system, an `.ir.json` snapshot carries none, so
-   `ridl diff .ridl/baseline .` lists no system change rather than reporting the
-   whole system as added.
+   these do not; `--explain` does not list them. The rsdl reference §14 owns the
+   compared system facts, including the registry's reported attributes and added
+   or removed distributions. **Both sides must be source trees:** only a
+   compiled workspace carries a lowered system, an `.ir.json` snapshot carries
+   none, so `ridl diff .ridl/baseline .` lists no system change rather than
+   reporting the whole system as added.
 
 10. **The book holds exactly one `system` fence** (plan decision P-B3). The
     book-example harness stages the whole book as one workspace and now compiles
