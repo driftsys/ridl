@@ -1,11 +1,14 @@
 # Specification
 
-The normative language references for the RIDL family. Cross-profile working
-specs and the pre-ADR concept note live in [`../wip/`](../wip/); superseded
-documents in [`../archive/`](../archive/).
+The normative language references for the RIDL family. The pre-ADR concept note
+lives in [`../wip/`](../wip/); superseded documents in
+[`../archive/`](../archive/).
 
 - **ridl-family-overview.md** — the entry point: the map, the shared doctrines
   (indexed once), the decision ledger, and the open-question index. Start here.
+- **family-general-form.md** — the surface rules every language shares: the
+  three declaration shapes, the nine invariants, the attribute model and the
+  formatting rules.
 - **typl-language-reference.md** — the vocabulary layer: types, ranges, units,
   constants, composites, packages.
 - **ridl-language-reference.md** — the system-interaction layer: `signal` /

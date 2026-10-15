@@ -77,10 +77,10 @@ docs/
 │   ├── rxdl-language-reference.md
 │   ├── rmdl-language-reference.md
 │   ├── rsdl-language-reference.md
+│   ├── family-general-form.md      Cross-profile syntax, typing, and attribute rules
 │   └── expr-core-specification.md  The shared contract-term grammar (require / ensure, and rmdl's function layer)
 ├── wip/                        Pre-ADR drafts and working specs — nothing here is ratified
 │   ├── ridl-family-concept.md      Concept note — the family direction (pre-ADR)
-│   ├── family-general-form.md      Cross-profile syntax, typing, and attribute rules
 │   └── …                           Design notes feeding the roadmap; see wip/README.md
 ├── design/                      Architecture records — a crate/component, as built
 │   └── ridl-rt.md               The ridl-rt 0.1 runtime library: modules, types, traits

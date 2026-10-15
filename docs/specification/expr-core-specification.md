@@ -44,7 +44,7 @@ is a shared core that the profiles surface in their own positions:
 - **ridl** — `require`/`ensure` predicate attributes on `command` and `query`
   (ridl §13; carrier production `attribute = "require" expr | "ensure" expr`,
   ridl Appendix C; the three-form attribute model is the family general form
-  working spec §4.2)
+  §4.2)
 - **ridl boundary model** — availability predicates and the correspondence
   obligations (ADR-0012)
 - **rmdl** — the expression layer of functions and models (rmdl §4 states: "The

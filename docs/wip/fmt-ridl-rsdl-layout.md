@@ -60,9 +60,9 @@ function for one node kind, or a reuse of one that exists.
 
 These rules are already in force for the typl declarations and apply to the
 seven declarations with no change. The citation is the paragraph of
-`docs/wip/family-general-form.md` §5 (general form §5 below) or the module
-documentation of `crates/ridl-fmt/src/lib.rs` (the crate doc below) that states
-the rule.
+`docs/specification/family-general-form.md` §5 (general form §5 below) or the
+module documentation of `crates/ridl-fmt/src/lib.rs` (the crate doc below) that
+states the rule.
 
 - **Tight colon** — `name: Type`, no space before, one after, in every position:
   declarations, parameters, tuple fields, map types, returns and relations
@@ -801,7 +801,7 @@ so does a block whose inline form makes its line exceed the width (§6.2); every
 other block is inline. Rejected: (b) by source (a line break after `[`); (c) by
 width alone, which would put a one-predicate contract on the member's line, as
 one example in the family does: the callable-declaration fence of general form
-§2, Shape 2 (`docs/wip/family-general-form.md` line 85,
+§2, Shape 2 (`docs/specification/family-general-form.md`,
 `command setGear(…) [ require … ]` on one line), which the D-10 follow-up
 reformats. Reason: it matches every other example in the general form and every
 example in the two references and the book, and gives one rendering per
@@ -1118,10 +1118,10 @@ already runs them.
 
 - Satisfies: driftsys/ridl#387 (this note is the design; the implementation
   closes the issue).
-- Extends: `family-general-form.md` §5 (the formatting decision), §4.4
-  (attribute placement and the block form), R5 (the sentence order), R8
-  (separator discipline); `crates/ridl-fmt/src/lib.rs` module documentation (the
-  rules in force).
+- Extends: `docs/specification/family-general-form.md` §5 (the formatting
+  decision), §4.4 (attribute placement and the block form), R5 (the sentence
+  order), R8 (separator discipline); `crates/ridl-fmt/src/lib.rs` module
+  documentation (the rules in force).
 - Related: ADR-0015 decision 13 (required commas in a service list); ADR-0008
   decision 2 (the init position); typl reference §15.2 (separators); rsdl
   reference §3 to §5 and Appendix A; ridl reference §14 and Appendix C (its
