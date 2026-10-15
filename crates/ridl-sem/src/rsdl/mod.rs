@@ -1014,6 +1014,10 @@ deployment Production for Vehicle {
                 "component C { requires I [ labels = (QM) ] }",
                 &["FORM-107"],
             ),
+            (
+                "component C [ require true, require false ] {}",
+                &["FORM-107", "FORM-108"],
+            ),
             // FORM-108: a key twice in one block, backend keys included.
             (
                 "system S [ labels = (QM), labels = (QM) ] {}",
