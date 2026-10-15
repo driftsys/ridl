@@ -67,7 +67,7 @@ docs/
 ├── ROADMAP.md                  Forward plan — epics, stories, the two-step release
 │                               plan; what has shipped is in docs/archive/roadmap-landed-record.md
 ├── BACKLOG.md                  Dated issue priorities, bugs and technical debt
-├── book/                       mdBook source (just book) — introduction, reading guide, getting started
+├── book/                       mdBook source (just book) — chapters in docs/book/SUMMARY.md
 │                               Its `ridl` examples are compiled by crates/ridl/tests/book_examples.rs
 │                               Published to https://driftsys.github.io/ridl/ on every push to main
 ├── specification/              The normative language references + the family overview
