@@ -14,10 +14,15 @@ restate it.
 `ridl-loopback` as well, and `ridl-descriptor` has its own minimum, Rust 1.88,
 because its dependency `planus` is pinned to 1.3.0, which declares 1.88.
 `just compat-check` builds the packaged manifests of both crates at those
-versions. The generated crate is checked at 1.83 as the crate emitted for the
-`veh-cluster` corpus with every cargo feature on, and as the crate emitted for
-`examples/cabin` with its `std` feature on, because it does not build on 1.83
-with the default features off.
+versions. At that time, the generated crate was checked at 1.83 as the crate
+emitted for the `veh-cluster` corpus with every cargo feature on, and as the
+crate emitted for `examples/cabin` with its `std` feature on, because it did not
+build on 1.83 with the default features off.
+
+**Amended 2026-10-15 — decision 5, generated no_std compatibility.** The fix for
+driftsys/ridl#874 removes the generated float checks' dependency on
+standard-library absolute-value methods. `just compat-check` now also builds the
+emitted `veh-cluster` crate with default features off on Rust 1.83.
 
 Written from the release 0.10 design (2026-10-11), whose decisions R-2, R-8 and
 R-9 Sebastien took in the brainstorming session of the same day. The design's

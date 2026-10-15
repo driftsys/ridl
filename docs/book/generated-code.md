@@ -267,9 +267,9 @@ the codec needs, and no feature for a types-only build. An application that name
 
 `ridl-rt` has no dependency in any feature combination. It builds for `wasm32`,
 and its minimum Rust version is 1.83. The generated crate declares edition 2021
-and builds with Rust 1.83 or later with every cargo feature on; with both `std`
-and `validate-pattern` off it needs a later Rust (driftsys/ridl#874). To keep
-Rust 1.83, resolve its dependencies as [Stability](stability.md) describes. When
+and builds with Rust 1.83 or later with every cargo feature on or with default
+features off. To keep Rust 1.83, resolve its dependencies as
+[Stability](stability.md) describes. When
 you build the generated crate as its own workspace root, its edition 2021
 selects resolver 2, which by default does not read `rust-version`, and its
 manifest declares no `rust-version`. Resolve with cargo 1.84 or later and

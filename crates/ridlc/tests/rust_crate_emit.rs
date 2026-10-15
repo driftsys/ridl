@@ -444,8 +444,7 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
     );
     assert_eq!(
         manifest.package.rust_version, None,
-        "the generated crate declares no rust-version: with its default features off it does \
-         not build on Rust 1.83 (driftsys/ridl#874)"
+        "the generated manifest declares no rust-version"
     );
     assert_eq!(
         manifest.lib.path, "lib.rs",

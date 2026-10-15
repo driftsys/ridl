@@ -278,9 +278,8 @@ wasm-check:
 # the `suite!` test compiled.
 #
 # The crate emitted for the veh-cluster corpus is built with cargo, not with
-# rustc as the cabin crate is, and with every cargo feature on. With the default
-# features off it does not build on the minimum (driftsys/ridl#874), so that
-# cell is not here. The recipe reads the edition from the emitted veh-cluster
+# rustc as the cabin crate is, with every cargo feature on and with default
+# features off. The recipe reads the edition from the emitted veh-cluster
 # manifest and fails when it is not 2021 (the cabin cell compiles with rustc
 # and does not read its manifest): `ridl build` writes edition 2021, so a Rust 1.83
 # user builds the emitted crate without editing its manifest (ADR-0029
