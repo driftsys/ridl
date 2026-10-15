@@ -47,3 +47,6 @@ component Draft [
   instances = solo,
   external = true,
 ] {}
+
+// FORM-107: predicate attributes have no legal rsdl site.
+component Predicates [ require true, ensure false ] {}

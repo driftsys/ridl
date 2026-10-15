@@ -181,3 +181,31 @@ fn a_deployment_names_its_system_and_holds_machines_with_placement_lines() {
         .collect();
     assert_eq!(values, ["2", "3"]);
 }
+
+#[test]
+fn predicate_attributes_reach_the_placement_checker() {
+    let root = source("package app\ncomponent C [ require true, ensure false ] {}\n");
+    let predicates: Vec<_> = root
+        .syntax()
+        .descendants()
+        .filter_map(ridl_syntax::ast::Attribute::cast)
+        .map(|attribute| attribute.predicate_kind())
+        .collect();
+    assert_eq!(
+        predicates,
+        vec![
+            Some(ridl_syntax::ast::PredicateKind::Require),
+            Some(ridl_syntax::ast::PredicateKind::Ensure),
+        ]
+    );
+    for word in ["require", "ensure"] {
+        let parsed = parse(
+            &format!("package app\ncomponent {word} {{}}\n"),
+            Profile::Rsdl,
+        );
+        assert!(
+            !parsed.errors().is_empty(),
+            "{word} remains reserved as a name"
+        );
+    }
+}

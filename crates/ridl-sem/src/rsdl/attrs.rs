@@ -3,7 +3,8 @@
 //! Every plain and every namespaced key is looked up in the attribute
 //! registry (`ridl_core::attributes`), the one allow-list. A key with no row is
 //! FORM-106, a key whose row does not name this site is FORM-107, and a key
-//! twice in one block is FORM-108. A `namespace.key` is a backend key, carried
+//! twice in one block is FORM-108. Predicate keys have no legal rsdl site
+//! and draw FORM-107 directly. A `namespace.key` is a backend key, carried
 //! uninterpreted. The value rules of the core keys are RSDL-305 (`instances`),
 //! RSDL-313 (`external`), RSDL-908 (`tier`) and RSDL-709 (`depth`, `slots`,
 //! `budget`).
@@ -98,6 +99,21 @@ pub(super) fn read(
             file,
             range: attribute.syntax().text_range(),
         };
+        if let Some(predicate) = attribute
+            .require_token()
+            .or_else(|| attribute.ensure_token())
+        {
+            reporter.error(
+                DiagCode::FORM_107,
+                site,
+                format!(
+                    "attribute `{}` not valid on {} (rsdl reference §5)",
+                    predicate.text(),
+                    at.noun()
+                ),
+            );
+            continue;
+        }
         let segments: Vec<String> = attribute
             .key_segments()
             .filter_map(|name| Some(name.ident_token()?.text().to_string()))

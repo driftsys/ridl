@@ -978,10 +978,23 @@ deployment Production for Vehicle {
             ("system S [ linux.cpu_set ] {}", &["FORM-106"]),
             // A namespace spelled like a core key is still a backend key.
             ("system S [ labels.x = 1, tier.y ] {}", &[]),
-            // A ridl predicate parses as a predicate, not as a key, so it
-            // never reaches the registry lookup. It is silently dropped here
-            // today, which driftsys/ridl#880 records.
-            ("component C [ require ] {}", &[]),
+            // Predicate keys have no legal rsdl site, with or without an expression.
+            ("component C [ require ] {}", &["FORM-107"]),
+            ("component C [ ensure ] {}", &["FORM-107"]),
+            (
+                "component C [ require true, ensure false ] {}",
+                &["FORM-107", "FORM-107"],
+            ),
+            ("system S [ require true ] {}", &["FORM-107"]),
+            ("distribution D [ ensure true ] {}", &["FORM-107"]),
+            ("deployment D for S [ require true ] {}", &["FORM-107"]),
+            ("machine M [ ensure true ] {}", &["FORM-107"]),
+            ("component C { requires I [ ensure true ] }", &["FORM-107"]),
+            ("system S { C [ require true ] }", &["FORM-107"]),
+            (
+                "deployment D for S { machine M { C [ ensure true ] } }",
+                &["FORM-107"],
+            ),
             // FORM-107: a key its row does not name, and any rsdl key on a line
             // (the sizing keys of a placement line aside).
             ("component C [ tier = PLATFORM ] {}", &["FORM-107"]),
