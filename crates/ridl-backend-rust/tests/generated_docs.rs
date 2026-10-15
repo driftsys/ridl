@@ -382,7 +382,17 @@ fn short_links_require_the_rust_name_in_the_docs_module() {
         "Field [Temperature].",
         "Module [Temperature].",
         "Nested [Temperature](crate::veh::docs::Temperature).",
+        "Query parameter [Temperature](crate::veh::docs::Temperature).",
+        "Command parameter [Temperature](crate::veh::docs::Temperature).",
     ] {
         assert!(source.contains(expected), "missing {expected}:\n{source}");
+    }
+    for label in ["Query", "Command"] {
+        let parameter = format!("{label} parameter [Temperature](crate::veh::docs::Temperature).");
+        assert_eq!(
+            source.matches(&parameter).count(),
+            3,
+            "async client, blocking client and Provider must each carry {parameter}:\n{source}"
+        );
     }
 }

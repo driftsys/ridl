@@ -18,5 +18,13 @@ struct Reading {
 /// Module [Temperature].
 interface Climate {
   /// Nested [Temperature].
-  query read(): Temperature @[..1s]
+  query read(
+    /// Query parameter [Temperature].
+    window: Temperature
+  ): Temperature @[..1s]
+  /// Sets the temperature.
+  command set(
+    /// Command parameter [Temperature].
+    target: Temperature
+  ) @[..1s]
 }
