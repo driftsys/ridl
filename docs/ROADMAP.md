@@ -263,7 +263,7 @@ beside both rather than after rsdl. The lanes plan records that as its P-3, with
 the three decisions this page also carries: P-4, the lock's priority over the
 rsdl lowering and the catalog descriptor; P-5, the two Rust naming defects that
 move to Epic 10; and P-6, where E14.2 and E14.3 sit
-([`2026-09-13-step1-lanes-plan.md`](wip/2026-09-13-step1-lanes-plan.md) §2).
+([`2026-09-13-step1-lanes-plan.md`](archive/2026-09-13-step1-lanes-plan.md) §2).
 
 **Two prerequisites block work already scheduled**, and neither is an epic: typl
 §17.11's deferred width floor, because widening a range flips the resolved

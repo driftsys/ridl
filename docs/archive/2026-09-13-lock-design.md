@@ -2,8 +2,7 @@
 
 Status: working note, 2026-09-13, design agreed in conversation with Sebastien
 section by section. Nothing here is ratified. Stage L1 of lane L in
-[`2026-09-13-step1-lanes-plan.md`](../wip/2026-09-13-step1-lanes-plan.md). Read
-after
+[`2026-09-13-step1-lanes-plan.md`](2026-09-13-step1-lanes-plan.md). Read after
 [`2026-09-12-rsdl-rewrite-decisions.md`](../wip/2026-09-12-rsdl-rewrite-decisions.md)
 D-7 and the two identity studies
 ([`2026-09-12-interface-id-study.md`](../wip/2026-09-12-interface-id-study.md),
