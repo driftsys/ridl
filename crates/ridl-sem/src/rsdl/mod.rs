@@ -978,10 +978,31 @@ deployment Production for Vehicle {
             ("system S [ linux.cpu_set ] {}", &["FORM-106"]),
             // A namespace spelled like a core key is still a backend key.
             ("system S [ labels.x = 1, tier.y ] {}", &[]),
-            // A ridl predicate parses as a predicate, not as a key, so it
-            // never reaches the registry lookup. It is silently dropped here
-            // today, which driftsys/ridl#880 records.
-            ("component C [ require ] {}", &[]),
+            // Predicate keys have no legal rsdl site, with or without an expression.
+            ("component C [ require ] {}", &["FORM-107"]),
+            ("component C [ ensure ] {}", &["FORM-107"]),
+            (
+                "component C [ require true, ensure false ] {}",
+                &["FORM-107", "FORM-107"],
+            ),
+            ("system S [ require true ] {}", &["FORM-107"]),
+            ("distribution D [ ensure true ] {}", &["FORM-107"]),
+            ("deployment D for S [ require true ] {}", &["FORM-107"]),
+            ("machine M [ ensure true ] {}", &["FORM-107"]),
+            ("component C { requires I [ ensure true ] }", &["FORM-107"]),
+            (
+                "component C { offers I [ require true, ensure false ] }",
+                &["FORM-107", "FORM-107"],
+            ),
+            (
+                "distribution D { C [ require true, ensure false ] }",
+                &["FORM-107", "FORM-107"],
+            ),
+            ("system S { C [ require true ] }", &["FORM-107"]),
+            (
+                "deployment D for S { machine M { C [ ensure true ] } }",
+                &["FORM-107"],
+            ),
             // FORM-107: a key its row does not name, and any rsdl key on a line
             // (the sizing keys of a placement line aside).
             ("component C [ tier = PLATFORM ] {}", &["FORM-107"]),
@@ -992,6 +1013,10 @@ deployment Production for Vehicle {
             (
                 "component C { requires I [ labels = (QM) ] }",
                 &["FORM-107"],
+            ),
+            (
+                "component C [ require true, require false ] {}",
+                &["FORM-107", "FORM-108"],
             ),
             // FORM-108: a key twice in one block, backend keys included.
             (
@@ -1036,6 +1061,22 @@ deployment Production for Vehicle {
                 })
                 .collect();
             assert_eq!(attribute_codes, *expected, "`{decl}`");
+        }
+    }
+
+    #[test]
+    fn duplicate_predicates_point_to_the_second_expression() {
+        for predicate in ["require", "ensure"] {
+            let text =
+                format!("package p\ncomponent C [ {predicate} true, {predicate} false ] {{}}\n");
+            let system = check(&[("p", &[("p/x.rsdl", text.as_str())])]);
+            assert_eq!(codes(&system), ["FORM-107", "FORM-108"]);
+            let duplicate = &system.diagnostics[1];
+            let range = duplicate.primary.range;
+            assert_eq!(
+                &text[usize::from(range.start())..usize::from(range.end())],
+                format!("{predicate} false"),
+            );
         }
     }
 

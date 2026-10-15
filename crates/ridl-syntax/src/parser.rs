@@ -1590,8 +1590,9 @@ impl<'a> Parser<'a> {
                 Some(SyntaxKind::Comma) => self.bump(),
                 // A `ReservedWord` in key position goes through
                 // [`Parser::name`], which holds it in an `ErrorNode` with
-                // FORM-105 — the E1 reserved-word discipline — so the rest
-                // of the attribute (`= value`) still parses.
+                // FORM-105, so the rest of the attribute still parses.
+                // The rsdl predicate words are recognized by `attribute`
+                // instead, for semantic placement checking.
                 Some(
                     SyntaxKind::Ident
                     | SyntaxKind::RequireKw
@@ -1631,27 +1632,40 @@ impl<'a> Parser<'a> {
     /// — the three forms of gf §4.2. One grammar production for all of
     /// them; which keys are legal where is checker scope (gf §4.3,
     /// FORM-106/107/108). Callers have confirmed the leading token is an
-    /// `Ident` or a predicate keyword.
+    /// `Ident`, a predicate keyword, or a reserved word.
     fn attribute(&mut self) {
         self.start(SyntaxKind::Attribute);
-        match self.current() {
-            Some(SyntaxKind::RequireKw | SyntaxKind::EnsureKw) => {
-                self.bump(); // 'require' | 'ensure'
-                self.expr();
+        // Predicate words stay reserved in rsdl names, but the shared
+        // attribute grammar leaves their placement to the semantic checker.
+        let predicate = match self.current() {
+            Some(kind @ (SyntaxKind::RequireKw | SyntaxKind::EnsureKw)) => Some(kind),
+            Some(SyntaxKind::ReservedWord) if self.profile == Profile::Rsdl => {
+                match self.current_text() {
+                    "require" => Some(SyntaxKind::RequireKw),
+                    "ensure" => Some(SyntaxKind::EnsureKw),
+                    _ => None,
+                }
             }
-            _ => {
-                self.name(); // the attr key
-                // A backend key `namespace.key` (rsdl reference §5, Appendix
-                // B `key`). Only the rsdl profile admits the dotted key; under
-                // typl and ridl the `.` stays an unexpected token in the block.
-                if self.profile == Profile::Rsdl && self.at(SyntaxKind::Dot) {
-                    self.bump(); // '.'
-                    self.name();
-                }
-                if self.at(SyntaxKind::Eq) {
-                    self.bump();
-                    self.attr_value();
-                }
+            _ => None,
+        };
+        if let Some(kind) = predicate {
+            self.eat_trivia();
+            let token = &self.tokens[self.pos];
+            self.builder.token(kind.into(), token.text);
+            self.pos += 1;
+            self.expr();
+        } else {
+            self.name(); // the attr key
+            // A backend key `namespace.key` (rsdl reference §5, Appendix
+            // B `key`). Only the rsdl profile admits the dotted key; under
+            // typl and ridl the `.` stays an unexpected token in the block.
+            if self.profile == Profile::Rsdl && self.at(SyntaxKind::Dot) {
+                self.bump(); // '.'
+                self.name();
+            }
+            if self.at(SyntaxKind::Eq) {
+                self.bump();
+                self.attr_value();
             }
         }
         self.builder.finish_node();

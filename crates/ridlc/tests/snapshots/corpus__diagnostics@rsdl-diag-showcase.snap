@@ -111,6 +111,18 @@ error[RSDL-313]: `external` is a flag and takes no value — write `[ external ]
 48 │   external = true,
    │   ^^^^^^^^^^^^^^^
 
+error[FORM-107]: attribute `require` not valid on a `component` (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:52:24
+   │
+52 │ component Predicates [ require true, ensure false ] {}
+   │                        ^^^^^^^^^^^^
+
+error[FORM-107]: attribute `ensure` not valid on a `component` (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:52:38
+   │
+52 │ component Predicates [ require true, ensure false ] {}
+   │                                      ^^^^^^^^^^^^
+
 error[RSDL-701]: `Rear.Unit` is placed on no machine of `Road` — every instance of the closure is on exactly one machine per deployment (rsdl reference §9)
   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:7:12
   │

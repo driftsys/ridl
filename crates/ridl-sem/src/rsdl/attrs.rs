@@ -3,7 +3,8 @@
 //! Every plain and every namespaced key is looked up in the attribute
 //! registry (`ridl_core::attributes`), the one allow-list. A key with no row is
 //! FORM-106, a key whose row does not name this site is FORM-107, and a key
-//! twice in one block is FORM-108. A `namespace.key` is a backend key, carried
+//! twice in one block is FORM-108. Predicate keys use the same lookup and
+//! placement checks; the registry gives them no legal rsdl site. A `namespace.key` is a backend key, carried
 //! uninterpreted. The value rules of the core keys are RSDL-305 (`instances`),
 //! RSDL-313 (`external`), RSDL-908 (`tier`) and RSDL-709 (`depth`, `slots`,
 //! `budget`).
@@ -102,12 +103,19 @@ pub(super) fn read(
             .key_segments()
             .filter_map(|name| Some(name.ident_token()?.text().to_string()))
             .collect();
-        // A key the parser could not read — a reserved word, a dangling `.` —
-        // already drew its parse error.
-        let key = match (segments.as_slice(), attribute.dot_token().is_some()) {
-            ([key], false) => key.clone(),
-            ([namespace, key], true) => format!("{namespace}.{key}"),
-            _ => continue,
+        let key = if let Some(predicate) = attribute
+            .require_token()
+            .or_else(|| attribute.ensure_token())
+        {
+            predicate.text().to_string()
+        } else {
+            // A key the parser could not read — a reserved word, a dangling `.` —
+            // already drew its parse error.
+            match (segments.as_slice(), attribute.dot_token().is_some()) {
+                ([key], false) => key.clone(),
+                ([namespace, key], true) => format!("{namespace}.{key}"),
+                _ => continue,
+            }
         };
         if !seen.insert(key.clone()) {
             reporter.error(
