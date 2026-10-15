@@ -1,5 +1,4 @@
 ---
-schema: 1
 name: ridl-authoring
 description: >-
   Write, review and evolve RIDL-family contracts: typl types, ridl interfaces
@@ -10,68 +9,40 @@ metadata:
   version: "0.10.0"
 ---
 
-## The model in one minute
+## What RIDL is
 
 See [The family](https://driftsys.github.io/ridl/introduction.html#the-family).
-`typl` is vocabulary (types, ranges, units, constants), `ridl` interactions at a
-boundary, `rsdl` architecture (components, wiring, deployment); `rmdl`
-(behaviour) is specified only. The lattice: `typl ← {ridl, rmdl} ← rsdl`.
+RIDL is a family of languages that share one toolchain, `ridl`:
 
-## The tooling
+- `typl` describes data: types, ranges, units and constants.
+- `ridl` describes the interactions at a boundary: signals, events, commands and
+  queries.
+- `rsdl` describes the architecture: components, wiring and deployment.
 
-One `ridl` binary serves three surfaces
-([CLI reference](https://driftsys.github.io/ridl/cli-reference.html#ridl-mcp)).
+A project is a workspace: a `ridl.toml` and its `.typl`, `.ridl` and `.rsdl`
+files. `rmdl` (behaviour) is specified only.
 
-- **MCP** (`ridl mcp`): read-only tools an agent calls: `ridl_check`,
-  `ridl_explain`, `ridl_diff`, `ridl_metrics`, `ridl_list_interactions`,
-  `ridl_describe_type`, `ridl_resolve`, `ridl_references`, `ridl_dependencies`.
-  Prefer them; they teach no syntax, the examples and references below do.
-- **CLI**: when no MCP is connected: `ridl check --format json`,
-  `ridl diff <old> <new>`, `ridl fmt`, `ridl new` to scaffold, `ridl help`.
-- **LSP** (`ridl lsp`): editor diagnostics; an agent does not call it.
-
-## Installing
+## Check your work
 
 See
-[Installing the toolchain](https://driftsys.github.io/ridl/getting-started.html#installing-the-toolchain).
-If `ridl` is not on the `PATH`, tell the user, and run an installer only after
-they agree:
+[the CLI reference](https://driftsys.github.io/ridl/cli-reference.html#ridl-mcp).
+Never hand over a source that `ridl` has not checked.
 
-- Linux and macOS:
-  `curl -fsSL https://raw.githubusercontent.com/driftsys/ridl/main/install.sh | bash`
-- Windows:
-  `irm https://raw.githubusercontent.com/driftsys/ridl/main/install.ps1 | iex`
-- VS Code: the "RIDL" extension bundles `ridl`, runs the language server and
-  registers `ridl mcp` for Copilot (VS Code 1.109 or newer); the command "RIDL:
-  Install ridl to PATH" puts the binary on the `PATH`.
-- Another agent host: register `ridl mcp` as a stdio server, for Claude Code
-  `claude mcp add ridl -- ridl mcp`
-  ([agent setup](https://driftsys.github.io/ridl/getting-started.html#editor-and-agent-setup)).
+1. After every edit, check the workspace and fix every diagnostic, in order.
+   With the `ridl` MCP server connected, call `ridl_check`, and `ridl_explain`
+   with a code for its rule. Without it, run `ridl check --format json` and read
+   the code in the Diagnostics reference below; never guess a rule.
+2. When you change an existing workspace, copy it outside the workspace before
+   the first edit. Compare the copy with the edited workspace with `ridl_diff`
+   (or `ridl diff <old> <new>`). A copy taken after the edit reports no change.
+   Exit 0 is required unless a break is deliberate and stated.
+3. End with the result of the check, and of the diff when you ran one.
 
-## The verify loop
+If `ridl` is not installed, see
+[Installing the toolchain](https://driftsys.github.io/ridl/getting-started.html#installing-the-toolchain)
+and ask the user before you install anything.
 
-Never trust a generated source unchecked; always report the loop's result.
-
-1. Write the source, then call `ridl_check`; fix every diagnostic in order. Call
-   `ridl_explain` with a code for its severity and rule. Treat `TYPL-406`
-   (`missing-docs`) like any diagnostic — fix it, never ignore it.
-2. Before the first edit of an _existing_ workspace, copy it outside first — a
-   copy taken after editing makes `ridl_diff` report `identical` no matter what
-   changed. Diff the outside copy (`old`) against the edited workspace (`new`);
-   exit 0 is required unless a break is deliberate and stated.
-3. Ground new work in what the workspace declares: call
-   `ridl_list_interactions`, `ridl_describe_type` and `ridl_resolve` before an
-   `import`; use `ridl_metrics` for a naming judgement (`RIDL-414`, `TYPL-222`).
-4. When a requirement has no schema expression (retry, ordering, storage), say
-   so, name what the schema does and does not enforce, and describe the rest in
-   prose.
-5. In the final message, state the `ridl_check` result and any `ridl_diff`
-   verdict.
-6. Document every exported declaration and member with what a caller must know,
-   not the range, unit or timing it already states (see
-   [House style](https://driftsys.github.io/ridl/documenting.html#house-style)).
-
-## Basic examples
+## A first look
 
 A ranged unit type, a constant and an enum, each documented (more in
 [Your first interface](https://driftsys.github.io/ridl/getting-started.html#your-first-interface)):
