@@ -70,7 +70,7 @@ numbers collide on a merge instead of shifting; the tooling removes the typing.
   baseline gate, the new codes. §14.5 and ADR-0015 d17: a binding keys ordinal
   spaces on (package, id), not the name — required by the rename constraint;
   RIDL-147 then needs a ruling.
-- `docs/wip/family-general-form.md` §4.3: row
+- `docs/specification/family-general-form.md` §4.3: row
   `id | assignment | interface | routing table, rsdl lowering, diff`; §5: `fmt`
   stamps a missing id, the one place it assigns identity.
 - `crates/ridl-ir/proto/ridl/ir/v2/ir.proto`: `Interface.id` (uint32, field 7),

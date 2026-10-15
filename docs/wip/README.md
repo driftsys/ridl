@@ -123,6 +123,11 @@ L, and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
 stories of lane C (#318 and #246 to #255) are closed. The coordination issue
 #328 stays open.
 
+The family general form (`family-general-form.md`) was ratified rather than
+archived: it graduated into
+[`../specification/family-general-form.md`](../specification/family-general-form.md)
+on 2026-10-15, as version 0.3.0, edited to match the system as built.
+
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
   not-yet-written ADR-0003). Parts of it are aspirational rather than as-built —
@@ -130,16 +135,6 @@ stories of lane C (#318 and #246 to #255) are closed. The coordination issue
   directories that the workspace does not have (every crate lives at
   `crates/<crate-name>/`, issue #180). Read §8.1 for the plumbing/porcelain
   model it argues for, which did ship, not for the layout it draws.
-- **family-general-form.md** — the cross-profile surface rules (three
-  declaration shapes, nine invariants, the attribute model). A pre-ADR working
-  spec, and the one document here that other records depend on: ADR-0008
-  decision 1 made it authoritative for four points of the E2 interaction
-  surface, and three documents under `../specification/` cite it by section —
-  the ridl reference (§6.1, §6.4), the family overview (§4.3, for the FORM-106
-  to FORM-108 rows), and the expr-core specification (§4.2). **Unresolved:** a
-  document cited that way is normative in effect while its folder says it is
-  not. Promoting it is a ratification decision, not a gardening move, so the E2
-  gardening pass left it here and recorded the tension on issue #172.
 - **skill-ridl-authoring-outline.md** — outline for the agent-authoring skill
   (see ADR-0005). Forward-looking: the skill it outlines is roadmap story E8.2,
   which has not been built.
@@ -319,9 +314,9 @@ and was not archived. The reason is stated once per file or group.
   **fmt-ridl-rsdl-evidence/** — the formatter work landed (#638, #387 closed).
   The layout note is still the only record of the canonical layout rules of
   `ridl fmt` (the decisions log calls it normative) and
-  [`family-general-form.md`](family-general-form.md) refers to it, so archiving
-  it needs a durable home for those rules first. That is a decision for the
-  maintainer.
+  [`family-general-form.md`](../specification/family-general-form.md) refers to
+  it, so archiving it needs a durable home for those rules first. That is a
+  decision for the maintainer.
 - **2026-09-21-nested-interface-design.md** and
   **2026-10-01-portable-match-patterns-design.md** — each states in its own
   header that it is a design note that has not graduated (the nested interface

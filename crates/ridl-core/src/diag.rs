@@ -244,7 +244,7 @@ diag_codes! {
         FORM_105 = "FORM-105", Error,
             "reserved word used as an identifier";
 
-        /// Unknown attribute key — not a key the general form §4.3 table defines.
+        /// Unknown attribute key — not a key in the attribute registry (general form §4.3).
         FORM_106 = "FORM-106", Error,
             "unknown attribute key";
 

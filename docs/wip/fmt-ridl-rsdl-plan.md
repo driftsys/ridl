@@ -17,9 +17,9 @@ disagree, the note wins, and the disagreement is reported to the maintainer.
 
 Out of scope: everything the note defers — the D-10 follow-up that reformats the
 fences of the language references (`docs/specification/`) and of
-`docs/wip/family-general-form.md`, including the erratum in ridl reference
-Appendix C (D-4) and the two-space `ensure` examples (D-5); breaking an
-expression across lines (note §6.3); reading `indent_size` or `indent_style`
+`docs/specification/family-general-form.md`, including the erratum in ridl
+reference Appendix C (D-4) and the two-space `ensure` examples (D-5); breaking
+an expression across lines (note §6.3); reading `indent_size` or `indent_style`
 (D-12); any change to the grammar, the parser or a diagnostic.
 
 ## 2. Read first
@@ -28,8 +28,8 @@ expression across lines (note §6.3); reading `indent_size` or `indent_style`
   conventions.
 - `docs/wip/fmt-ridl-rsdl-layout.md` — the whole note. §8 lists the thirteen
   decisions, all decided; the plan cites them as D-1 to D-13.
-- `docs/wip/family-general-form.md` §5 — the formatting rules the note extends;
-  §4.4 and R5 for the attribute block and the annotation order.
+- `docs/specification/family-general-form.md` §5 — the formatting rules the note
+  extends; §4.4 and R5 for the attribute block and the annotation order.
 - `docs/technotes/walking-skeleton-architecture.md` — the `crates/ridl-fmt`
   entry, for where the formatter sits.
 - `crates/ridl-fmt/src/lib.rs` — the whole formatter. The functions that matter:

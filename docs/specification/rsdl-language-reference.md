@@ -393,17 +393,17 @@ built (`ridl_core::attributes`, ADR-0012 decision 8): one row per key, with its
 owner (`core`, or `backend` for the `backend.key` pattern), its form, its sites,
 its consumer and what `ridl diff` does with a change to it.
 
-| Key           | Form                            | Legal on                     | Consumer                                               | Diff                                        |
-| ------------- | ------------------------------- | ---------------------------- | ------------------------------------------------------ | ------------------------------------------- |
-| `instances`   | `= (a, b, …)` camelCase names   | `component`                  | the instance set, §7                                   | reported under the heading of its site, §14 |
-| `external`    | flag                            | `component`, `machine`       | placement and the surface set, §9, §13                 | reported under the heading of its site, §14 |
-| `tier`        | `= PLATFORM` or `= APPLICATION` | `distribution`               | RSDL-901, §3.3                                         | reported under the heading of its site, §14 |
-| `depth`       | `= N`, integer occurrences      | `deployment`, placement line | the ring depth of an event channel, §13                | not reported: sizing, §14                   |
-| `slots`       | `= N`, integer table entries    | `deployment`, placement line | the slot count of a command or query channel, §13      | not reported: sizing, §14                   |
-| `budget`      | `= N`, integer bytes            | `deployment`, placement line | the byte budget of a command or query channel, §13     | not reported: sizing, §14                   |
-| `labels`      | `= (LABEL, …)`                  | the five declarations        | assurance profiles (typl §14.3, general form §4.7)     | reported under the heading of its site, §14 |
-| `deprecated`  | `= "reason"`                    | the five declarations        | the family lint (general form §4.7); rsdl adds no rule | reported under the heading of its site, §14 |
-| `backend.key` | flag or assignment              | every declaration and line   | that backend, uninterpreted                            | reported under the heading of its site, §14 |
+| Key           | Form                            | Legal on                     | Consumer                                           | Diff                                        |
+| ------------- | ------------------------------- | ---------------------------- | -------------------------------------------------- | ------------------------------------------- |
+| `instances`   | `= (a, b, …)` camelCase names   | `component`                  | the instance set, §7                               | reported under the heading of its site, §14 |
+| `external`    | flag                            | `component`, `machine`       | placement and the surface set, §9, §13             | reported under the heading of its site, §14 |
+| `tier`        | `= PLATFORM` or `= APPLICATION` | `distribution`               | RSDL-901, §3.3                                     | reported under the heading of its site, §14 |
+| `depth`       | `= N`, integer occurrences      | `deployment`, placement line | the ring depth of an event channel, §13            | not reported: sizing, §14                   |
+| `slots`       | `= N`, integer table entries    | `deployment`, placement line | the slot count of a command or query channel, §13  | not reported: sizing, §14                   |
+| `budget`      | `= N`, integer bytes            | `deployment`, placement line | the byte budget of a command or query channel, §13 | not reported: sizing, §14                   |
+| `labels`      | `= (LABEL, …)`                  | the five declarations        | assurance profiles (typl §14.3)                    | reported under the heading of its site, §14 |
+| `deprecated`  | `= "reason"`                    | the five declarations        | the family lint; rsdl adds no rule                 | reported under the heading of its site, §14 |
+| `backend.key` | flag or assignment              | every declaration and line   | that backend, uninterpreted                        | reported under the heading of its site, §14 |
 
 - `instances` must be a parenthesised list of one or more camelCase names: `()`
   and `instances = solo` are RSDL-305. `external` is a flag and takes no value:

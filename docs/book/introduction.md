@@ -73,16 +73,17 @@ This book is the reader's entry point. The normative documents live in the
 repository:
 
 - **Specifications** — `docs/specification/`: the normative home of the family
-  overview, the five language references, the expr-core specification (the
-  shared grammar of `require` / `ensure` clauses), and the frame specification
-  (what crosses a runtime boundary per interaction kind). Every one of them
-  except the family overview is reproduced in this book's Language reference
+  overview, the family general form (the surface rules every language shares),
+  the five language references, the expr-core specification (the shared grammar
+  of `require` / `ensure` clauses), and the frame specification (what crosses a
+  runtime boundary per interaction kind). Every one of them except the family
+  overview and the general form is reproduced in this book's Language reference
   section — [typl](reference/typl.md), [ridl](reference/ridl.md),
   [rxdl](reference/rxdl.md), [rmdl](reference/rmdl.md),
   [rsdl](reference/rsdl.md), [expr-core](reference/expr-core.md),
   [frame](reference/frame.md).
-- **Work in progress** — `docs/wip/`: the pre-ADR concept note, the
-  cross-profile general-form working spec, and the authoring-skill outline.
+- **Work in progress** — `docs/wip/`: the pre-ADR concept note and the
+  authoring-skill outline.
 - **Decisions** — `docs/decisions/`: the architecture decision records —
   ADR-0002 (module system), ADR-0004 (implementation sequencing and stack),
   ADR-0005 (agent enablement), ADR-0006 (walking-skeleton execution),

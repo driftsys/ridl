@@ -141,7 +141,8 @@ the row that does not need profile-specific words.
 
 ## References
 
-- `docs/wip/family-general-form.md` §6.5 — the reopened question this closes
+- `docs/specification/family-general-form.md` §6.5 — the reopened question this
+  closes
 - ADR-0008 decision 5 — the E2 freeze this supersedes
 - ADR-0008 decision 8 — the IR field-numbering contract decision 3 preserves
 - `docs/specification/ridl-language-reference.md` §8 — the kind as specified

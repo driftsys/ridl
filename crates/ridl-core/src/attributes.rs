@@ -190,7 +190,7 @@ pub const ATTRIBUTES: &[AttrKey] = &[
         owner: Owner::Core,
         form: Form::Assignment,
         sites: RSDL_DECLARATIONS,
-        consumer: "assurance profiles (typl reference §14.3, general form §4.7)",
+        consumer: "assurance profiles (typl reference §14.3, rsdl reference §5)",
         diff: Diff::Compared(
             "`composition changed` on a system, a component or a distribution, \
              `placement changed` on a deployment or a machine",
@@ -201,7 +201,7 @@ pub const ATTRIBUTES: &[AttrKey] = &[
         owner: Owner::Core,
         form: Form::Assignment,
         sites: RSDL_DECLARATIONS,
-        consumer: "the family lint (general form §4.7)",
+        consumer: "the family lint (rsdl reference §5)",
         diff: Diff::Compared(
             "`composition changed` on a system, a component or a distribution, \
              `placement changed` on a deployment or a machine",

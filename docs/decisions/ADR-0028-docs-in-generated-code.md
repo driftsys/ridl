@@ -30,9 +30,9 @@ It amends two records in place, in the same change:
   declined (decision 4 below). Its decision 6: the codegen model now carries the
   doc links, `see` and `since`. Its decision 9: the shape of `Rule` is fixed,
   and the `Model` carries it (decision 5 below).
-- [The general form](../wip/family-general-form.md) §4.1, §4.7, §7 item 2, the
-  R4 invariant and the decisions ledger: `@labels` and `@deprecated` stay doc
-  tags.
+- [The general form](../specification/family-general-form.md) §4.1, §4.7, §7
+  item 2, the R4 invariant and the decisions ledger: `@labels` and `@deprecated`
+  stay doc tags.
 
 ## Context
 
@@ -260,7 +260,7 @@ From the design. The numbers are the decisions that reject them.
   the codegen plugin protocol.
 - [The IR specification](../specification/ir-specification.md) §6 — additive
   changes.
-- [The general form](../wip/family-general-form.md) §4.7 — the declined
-  promotion.
+- [The general form](../specification/family-general-form.md) §4.7 — the
+  declined promotion.
 - [The design](../archive/2026-10-10-docs-in-generated-code-design.md) — spec
   2b.

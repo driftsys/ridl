@@ -434,7 +434,10 @@ disagreeing sources is the correct one.
    ordinal drift; §10.3 for the Stratum-3 wording. The authority rule itself is
    unchanged and still stands: where general form §6 states a supersession the
    reference has not absorbed, the general form governs for E2. It simply has no
-   remaining case to govern.
+   remaining case to govern. **Extended (2026-10-15):** the general form was
+   ratified as a specification, `docs/specification/family-general-form.md`
+   version 0.3.0, edited to match the system as built. It is no longer a working
+   spec, and the authority rule still has no case to govern.
 
 2. **Signal init is the bare `= value` form, before any timing; signals carry no
    attribute block.**
@@ -1403,7 +1406,7 @@ disagreeing sources is the correct one.
 - docs/specification/ridl-language-reference.md — the language E2 builds.
 - docs/specification/typl-language-reference.md — §2.8, the duration-atom list
   decision 16 extends.
-- docs/wip/family-general-form.md — §4 (attributes) and §6 (the four
+- docs/specification/family-general-form.md — §4 (attributes) and §6 (the four
   supersessions decision 1 adopts).
 - docs/wip/ridl-family-concept.md — §9.1 (the `ridl diff` exit-code contract,
   decision 9).
