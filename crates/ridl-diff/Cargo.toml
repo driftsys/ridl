@@ -7,6 +7,7 @@ repository.workspace = true
 description = "The `ridl diff` engine: compares two resolved IR snapshots and classifies every difference."
 
 [dependencies]
+num-bigint.workspace = true
 ridl-ir.workspace = true
 serde.workspace = true
 serde_json.workspace = true

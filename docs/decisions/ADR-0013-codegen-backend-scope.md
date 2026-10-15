@@ -295,8 +295,8 @@ language layer at `int64`/`float64`.
    classifies a constraint change (`constraint_changed`); that classification
    and its reasons are `ridl-diff`'s. Whether a widened constraint is compatible
    for a consumer that receives the value, and not only for one that builds it,
-   is open as driftsys/ridl#926, and driftsys/ridl#925 reports that a lowered
-   minimum that moves a step grid is classified compatible.
+   is open as driftsys/ridl#926. A lowered minimum that moves a stepped grid is
+   classified breaking; an aligned widening keeps the grid and is compatible.
    `a_narrowed_range_exits_one_and_a_widened_range_exits_zero` in
    `crates/ridl/tests/diff_cli.rs` runs the built `ridl` binary on one case, a
    narrowed and a widened integer maximum.

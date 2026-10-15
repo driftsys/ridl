@@ -521,9 +521,10 @@ fn constraint(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict 
 
 /// Whether the constraint moved in the narrowing direction on any facet.
 ///
-/// Each facet is judged independently and any narrowing decides the whole
+/// Each bound is judged independently and any narrowing decides the whole
 /// change, so a mixed edit — a lowered `min` with a lowered `max` — is breaking
-/// on the half that narrows.
+/// on the half that narrows. A stepped minimum also defines the grid origin,
+/// so a shifted grid is breaking even when the interval widens.
 fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>) -> bool {
     let (Some(old), Some(new)) = (old, new) else {
         // A constraint appearing where there was none bounds a previously
@@ -546,6 +547,14 @@ fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>) -> bool {
     if new.step.is_some() && old.step != new.step {
         return true;
     }
+    // A minimum is also the origin of a stepped grid. Widening the interval
+    // only preserves old values when the origin moves by whole steps.
+    if let Some(step) = new.step.as_deref()
+        && old.min != new.min
+        && !same_grid(old.min.as_deref(), new.min.as_deref(), step)
+    {
+        return true;
+    }
     // A pattern added or rewritten can reject strings that matched before.
     // Removed, it widens.
     if (new.pattern.is_some() && old.pattern != new.pattern)
@@ -554,6 +563,41 @@ fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>) -> bool {
         return true;
     }
     false
+}
+
+/// Whether two origins differ by a whole positive step, in exact decimal
+/// arithmetic. An omitted minimum has origin zero (typl §4.3). Unknown
+/// spellings fail closed, as do invalid steps from foreign IR snapshots.
+fn same_grid(old: Option<&str>, new: Option<&str>, step: &str) -> bool {
+    use num_bigint::BigInt;
+
+    let read = |text: &str| -> Option<(BigInt, usize)> {
+        let (negative, digits) = split_sign(text)?;
+        let (whole, fraction) = digits.split_once('.').unwrap_or((&digits, ""));
+        if whole.is_empty() || (digits.contains('.') && fraction.is_empty()) {
+            return None;
+        }
+        let coefficient = BigInt::parse_bytes(format!("{whole}{fraction}").as_bytes(), 10)?;
+        Some((
+            if negative { -coefficient } else { coefficient },
+            fraction.len(),
+        ))
+    };
+    let (Some(old), Some(new), Some(step)) = (
+        read(old.unwrap_or("0")),
+        read(new.unwrap_or("0")),
+        read(step),
+    ) else {
+        return false;
+    };
+    let scale = old.1.max(new.1).max(step.1);
+    let rescale = |(coefficient, places): (BigInt, usize)| -> Option<BigInt> {
+        Some(coefficient * BigInt::from(10).pow(u32::try_from(scale - places).ok()?))
+    };
+    let (Some(old), Some(new), Some(step)) = (rescale(old), rescale(new), rescale(step)) else {
+        return false;
+    };
+    step > BigInt::from(0) && (old - new) % step == BigInt::from(0)
 }
 
 /// Whether a lower bound was added or moved up.
@@ -1344,12 +1388,14 @@ pub fn explain(category: Category) -> &'static str {
         ),
         Category::ConstraintChanged => concat!(
             "A scalar constraint changed, or a composite body changed in place.\n",
-            "  compatible  widened — min lowered, max raised, a length bound loosened,\n",
+            "  compatible  widened — min lowered without shifting a stepped grid, max\n",
+            "              raised, a length bound loosened,\n",
             "              a step removed, a match pattern removed (by literal or by\n",
             "              named constant), or the whole constraint dropped so the\n",
             "              value is unbounded again\n",
             "  breaking    narrowed — min raised, max lowered, a length bound\n",
-            "              tightened, a step added or changed (divisibility is never\n",
+            "              tightened, a stepped grid shifted, a step added or changed\n",
+            "              (divisibility between different steps is never\n",
             "              proved), a match pattern added or rewritten (by literal or\n",
             "              by named constant), or a constraint appearing where there\n",
             "              was none, which bounds a previously unbounded value. A\n",

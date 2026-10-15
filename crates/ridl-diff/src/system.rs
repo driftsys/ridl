@@ -15,9 +15,13 @@
 //! - **Composition changed** — a change to the closure or to a component's
 //!   lines: a component added to or removed from the system, an `offers` or
 //!   `requires` line added or removed, `instances` changed, a component made
-//!   `external`, or a `labels`, `deprecated`, `tier` or backend key of the
+//!   `external`, a distribution added or removed, or a `labels`, `deprecated`,
+//!   `tier` or backend key of the
 //!   system, of a component, of a distribution or of one of their lines
 //!   changed.
+//!
+//! Distribution membership changes and attributes of unpaired distribution
+//! members are not yet reported (driftsys/ridl#974).
 //!
 //! Both read the lowered `System` of each side and nothing else.
 
@@ -36,9 +40,8 @@ pub enum SystemHeading {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SystemChange {
     pub heading: SystemHeading,
-    /// A slash-separated path: a component's qualified name, then `offers`,
-    /// `requires`, `instances` or `external`; or a deployment's name, then a
-    /// machine or an instance.
+    /// A slash-separated path naming the affected system, component,
+    /// distribution, deployment, machine, instance, member or attribute.
     pub path: String,
     /// The rendered old value, absent when the change is an addition.
     pub before: Option<String>,
@@ -109,54 +112,32 @@ pub fn diff_systems(old: &System, new: &System) -> Vec<SystemChange> {
             composition(&mut changes, name, Some("in the closure"), None);
         }
     }
+    let empty_distribution = v2::Distribution::default();
     for distribution in &new.distributions {
         let name = distribution.qualified_name();
-        let Some(before) = old
+        let before = old
             .distributions
             .iter()
-            .find(|before| before.qualified_name() == name)
-        else {
-            // The distribution set is not compared, so a distribution present
-            // on one side only is reported neither as added nor as removed
-            // (driftsys/ridl#884).
-            continue;
-        };
-        value_change(
-            &mut changes,
-            SystemHeading::CompositionChanged,
-            format!("{name}/tier"),
-            tier_text(before.tier),
-            tier_text(distribution.tier),
-        );
-        declaration_attrs(
-            &mut changes,
-            SystemHeading::CompositionChanged,
+            .find(|before| before.qualified_name() == name);
+        if before.is_none() {
+            composition(&mut changes, name.clone(), None, Some("distribution"));
+        }
+        compare_distribution(
+            before.unwrap_or(&empty_distribution),
+            distribution,
             &name,
-            (
-                &before.labels,
-                before.deprecated.as_ref(),
-                &before.attributes,
-            ),
-            (
-                &distribution.labels,
-                distribution.deprecated.as_ref(),
-                &distribution.attributes,
-            ),
+            &mut changes,
         );
-        for line in &distribution.members {
-            if let Some(before) = before
-                .members
-                .iter()
-                .find(|earlier| earlier.component == line.component)
-            {
-                line_attrs(
-                    &mut changes,
-                    SystemHeading::CompositionChanged,
-                    &format!("{name}/{}", line.component),
-                    &before.attributes,
-                    &line.attributes,
-                );
-            }
+    }
+    for distribution in &old.distributions {
+        let name = distribution.qualified_name();
+        if !new
+            .distributions
+            .iter()
+            .any(|after| after.qualified_name() == name)
+        {
+            composition(&mut changes, name.clone(), Some("distribution"), None);
+            compare_distribution(distribution, &empty_distribution, &name, &mut changes);
         }
     }
     for deployment in &new.deployments {
@@ -381,6 +362,49 @@ fn compare_deployments(old: &Deployment, new: &Deployment, changes: &mut Vec<Sys
             &before.attributes,
             &placed.attributes,
         );
+    }
+}
+
+fn compare_distribution(
+    before: &v2::Distribution,
+    after: &v2::Distribution,
+    name: &str,
+    changes: &mut Vec<SystemChange>,
+) {
+    value_change(
+        changes,
+        SystemHeading::CompositionChanged,
+        format!("{name}/tier"),
+        tier_text(before.tier),
+        tier_text(after.tier),
+    );
+    declaration_attrs(
+        changes,
+        SystemHeading::CompositionChanged,
+        name,
+        (
+            &before.labels,
+            before.deprecated.as_ref(),
+            &before.attributes,
+        ),
+        (&after.labels, after.deprecated.as_ref(), &after.attributes),
+    );
+    // Unpaired distribution members and their attributes are not reported
+    // yet (driftsys/ridl#974).
+    for line in &after.members {
+        if let Some(before) = before
+            .members
+            .iter()
+            .find(|earlier| earlier.component == line.component)
+        {
+            line_attrs(
+                changes,
+                SystemHeading::CompositionChanged,
+                &format!("{name}/{}", line.component),
+                &before.attributes,
+                &line.attributes,
+            );
+        }
     }
 }
 
@@ -691,6 +715,81 @@ mod tests {
             ..Default::default()
         });
         system
+    }
+
+    #[test]
+    fn bare_distributions_are_reported_in_both_directions() {
+        let present = with_distribution();
+        let mut absent = present.clone();
+        absent.distributions.clear();
+        let change = SystemChange {
+            heading: SystemHeading::CompositionChanged,
+            path: "veh.topology.Adas".to_string(),
+            before: None,
+            after: Some("distribution".to_string()),
+        };
+        assert_eq!(
+            diff_systems(&absent, &present).as_slice(),
+            std::slice::from_ref(&change),
+        );
+        assert_eq!(
+            diff_systems(&present, &absent),
+            [SystemChange {
+                before: change.after,
+                after: change.before,
+                ..change
+            }]
+        );
+    }
+
+    #[test]
+    fn added_and_removed_distributions_include_their_attributes() {
+        let mut old = with_distribution();
+        // An unchanged distribution with the same short name must not hide
+        // the changed distribution from a different package.
+        old.distributions.push(v2::Distribution {
+            name: "Adas".to_string(),
+            package: "veh.other".to_string(),
+            ..Default::default()
+        });
+        let mut new = old.clone();
+        let distribution = &mut new.distributions[0];
+        distribution.tier = v2::Tier::Platform as i32;
+        distribution.labels = vec!["QM".to_string()];
+        distribution.deprecated = Some("use Next".to_string());
+        distribution.attributes = vec![backend("sign", "key", Some("release"))];
+        let mut absent = old.clone();
+        absent
+            .distributions
+            .retain(|distribution| distribution.package != "veh.topology");
+        let added = diff_systems(&absent, &new);
+        let expected = [
+            ("veh.topology.Adas", None, Some("distribution")),
+            ("veh.topology.Adas/tier", None, Some("PLATFORM")),
+            ("veh.topology.Adas/labels", Some("()"), Some("(QM)")),
+            ("veh.topology.Adas/deprecated", None, Some("\"use Next\"")),
+            (
+                "veh.topology.Adas/attributes",
+                Some("[]"),
+                Some("[ sign.key = release ]"),
+            ),
+        ];
+        assert_eq!(added.len(), expected.len(), "{added:?}");
+        for (change, (path, before, after)) in added.iter().zip(expected) {
+            assert_eq!(change.heading, SystemHeading::CompositionChanged);
+            assert_eq!(change.path, path);
+            assert_eq!(change.before.as_deref(), before);
+            assert_eq!(change.after.as_deref(), after);
+        }
+        assert_eq!(diff_systems(&old, &new), added[1..]);
+        let removed = diff_systems(&new, &absent);
+        assert_eq!(removed.len(), added.len());
+        for (removed, added) in removed.iter().zip(&added) {
+            assert_eq!(removed.heading, added.heading);
+            assert_eq!(removed.path, added.path);
+            assert_eq!(removed.before, added.after);
+            assert_eq!(removed.after, added.before);
+        }
     }
 
     /// Every `Compared` row of the registry with an rsdl site is reported by
