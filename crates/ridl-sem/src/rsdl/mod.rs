@@ -990,6 +990,14 @@ deployment Production for Vehicle {
             ("deployment D for S [ require true ] {}", &["FORM-107"]),
             ("machine M [ ensure true ] {}", &["FORM-107"]),
             ("component C { requires I [ ensure true ] }", &["FORM-107"]),
+            (
+                "component C { offers I [ require true, ensure false ] }",
+                &["FORM-107", "FORM-107"],
+            ),
+            (
+                "distribution D { C [ require true, ensure false ] }",
+                &["FORM-107", "FORM-107"],
+            ),
             ("system S { C [ require true ] }", &["FORM-107"]),
             (
                 "deployment D for S { machine M { C [ ensure true ] } }",
