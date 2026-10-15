@@ -20,6 +20,9 @@
 //!   system, of a component, of a distribution or of one of their lines
 //!   changed.
 //!
+//! Distribution membership changes and attributes of unpaired distribution
+//! members are not yet reported (driftsys/ridl#974).
+//!
 //! Both read the lowered `System` of each side and nothing else.
 
 use ridl_ir::v2::{self, Component, Deployment, InterfaceRef, System};
@@ -37,9 +40,8 @@ pub enum SystemHeading {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SystemChange {
     pub heading: SystemHeading,
-    /// A slash-separated path: a component's or distribution's qualified
-    /// name, optionally followed by a changed member or attribute; or a
-    /// deployment's name, then a machine, an instance or an attribute.
+    /// A slash-separated path naming the affected system, component,
+    /// distribution, deployment, machine, instance, member or attribute.
     pub path: String,
     /// The rendered old value, absent when the change is an addition.
     pub before: Option<String>,
