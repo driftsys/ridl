@@ -108,14 +108,17 @@ design. The step 1 lanes plan (`2026-09-13-step1-lanes-plan.md`), the driver
 prompts of lanes A, B, L and C
 (`2026-09-13-lane-{a-ridl-rt,b-rsdl,l-lock,c-typl}-driver.md` and
 `2026-09-16-lane-c-c4-driver.md`) and the lane R driver
-(`2026-09-20-lane-r-driver.md`) were archived on 2026-10-15, once every story
-they name was closed. The durable records are
+(`2026-09-20-lane-r-driver.md`) were archived on 2026-10-15, once every story of
+lanes A, B, L, C and R was closed. The durable records are
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) and
 [the `ridl-rt` design record](../design/ridl-rt.md) for lane A,
 [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
 [the rsdl implementation technote](../technotes/rsdl-implementation.md) for lane
-B, [ADR-0002](../decisions/ADR-0002-module-system.md) for the lock of lane L,
-and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
+B, [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) (the
+2026-09-15 interface lock amendment),
+[ADR-0010](../decisions/ADR-0010-cli-conventions.md) and
+[the ridl reference](../specification/ridl-language-reference.md) §11 for lane
+L, and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
 [`../design/interaction-face.md`](../design/interaction-face.md) for lane R. The
 stories of lane C (#318 and #246 to #255) are closed. The coordination issue
 #328 stays open.
