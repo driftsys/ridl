@@ -39,9 +39,9 @@ regex.workspace = true
 # Not `{ workspace = true, default-features = false }`: cargo refuses a
 # `default-features = false` override on a workspace-inherited dependency
 # outright, so this one dependency is declared directly instead. The version
-# is the one literal in the workspace outside `[workspace.dependencies]` —
-# bump it alongside `[workspace.package].version` in the root `Cargo.toml`.
-ridl-core = { path = "../ridl-core", version = "0.10.0", default-features = false }
+# is a literal outside `[workspace.dependencies]`, as in ridl-diff — bump
+# both alongside `[workspace.package].version` in the root `Cargo.toml`.
+ridl-core = { path = "../ridl-core", version = "0.11.0", default-features = false }
 ridl-ir.workspace = true
 ridl-syntax.workspace = true
 rowan.workspace = true

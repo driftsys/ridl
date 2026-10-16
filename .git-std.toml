@@ -104,3 +104,11 @@ regex = 'ridl-rt-conformance = "=([^"]+)"'
 [[version_files]]
 path = "skills/ridl-authoring/SKILL.md"
 regex = '(?m)^  version: "([^"]+)"'
+
+[[version_files]]
+path = "docs/book/running-a-program.md"
+regex = '(?m)^ridl-loopback = "([^"]+)"'
+
+[[version_files]]
+path = "docs/book/running-a-program.md"
+regex = '(?m)^ridl-rt = \{ version = "([^"]+)"'

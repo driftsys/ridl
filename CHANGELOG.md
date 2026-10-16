@@ -1,5 +1,92 @@
 # Changelog
 
+## [0.11.0] (2026-10-16)
+
+### Refactoring
+
+- **ridl-core:** share the MANI-013 walk rules with ridl init ([#942])
+  ([94c260d]), closes [#850]
+
+### Bug Fixes
+
+- **ridl-backend-rust:** shorten links resolved in the doc module ([#975])
+  ([955d537])
+- **ridl-diff:** report distribution changes and shifted grids ([#973])
+  ([ed6c0e0])
+- **rsdl:** reject predicate attributes with placement diagnostics ([#972])
+  ([43b92b2])
+- **ridl-backend-rust:** validate inline payload lengths before encoding
+  ([#971]) ([7c4ae47])
+- **ridl-backend-rust:** support Rust 1.83 without std ([#969]) ([5219f8a])
+- **ridl-backend-rust:** compose keyword interaction helper names ([#967])
+  ([6708086])
+
+### Features
+
+- **skills:** simplify the ridl-authoring skill to the check instructions, a
+  first look and the docs ([#963]) ([ec63c0e])
+- reserve vendor/ and add ridl vendor ([#950]) ([4edf558])
+
+### Documentation
+
+- **docs:** point README book contents to SUMMARY.md ([#976]) ([6686b43])
+- **family:** ratify the family general form ([#966]) ([224b67f])
+- **repo:** garden the step 1 lanes plan and its driver prompts ([#965])
+  ([640a687])
+- **repo:** garden the release 0.10 design and lanes plan ([#960]) ([eb3f05b])
+- **repo:** record ridl vendor as landed and drop a dead spec citation ([#959])
+  ([5816f7a])
+- **repo:** garden the attribute registry and freeze check records ([#958])
+  ([ec69d1c])
+- **repo:** garden the remote units and ridl vendor design and plan ([#955])
+  ([dd63a94])
+- **docs:** add the remote units and ridl vendor chapter to the book ([#957])
+  ([1bb870d])
+- **docs:** add the onboarding chapter from ridl new to a running program
+  ([#956]) ([8753c00])
+- **repo:** garden the induced call payload design and plan ([#948]) ([c019f74])
+
+[0.11.0]: https://github.com/driftsys/ridl/compare/v0.10.0...v0.11.0
+[94c260d]: https://github.com/driftsys/ridl/commit/94c260d
+[#942]: https://github.com/driftsys/ridl/issues/942
+[#850]: https://github.com/driftsys/ridl/issues/850
+[955d537]: https://github.com/driftsys/ridl/commit/955d537
+[#975]: https://github.com/driftsys/ridl/issues/975
+[ed6c0e0]: https://github.com/driftsys/ridl/commit/ed6c0e0
+[#973]: https://github.com/driftsys/ridl/issues/973
+[43b92b2]: https://github.com/driftsys/ridl/commit/43b92b2
+[#972]: https://github.com/driftsys/ridl/issues/972
+[7c4ae47]: https://github.com/driftsys/ridl/commit/7c4ae47
+[#971]: https://github.com/driftsys/ridl/issues/971
+[5219f8a]: https://github.com/driftsys/ridl/commit/5219f8a
+[#969]: https://github.com/driftsys/ridl/issues/969
+[6708086]: https://github.com/driftsys/ridl/commit/6708086
+[#967]: https://github.com/driftsys/ridl/issues/967
+[ec63c0e]: https://github.com/driftsys/ridl/commit/ec63c0e
+[#963]: https://github.com/driftsys/ridl/issues/963
+[4edf558]: https://github.com/driftsys/ridl/commit/4edf558
+[#950]: https://github.com/driftsys/ridl/issues/950
+[6686b43]: https://github.com/driftsys/ridl/commit/6686b43
+[#976]: https://github.com/driftsys/ridl/issues/976
+[224b67f]: https://github.com/driftsys/ridl/commit/224b67f
+[#966]: https://github.com/driftsys/ridl/issues/966
+[640a687]: https://github.com/driftsys/ridl/commit/640a687
+[#965]: https://github.com/driftsys/ridl/issues/965
+[eb3f05b]: https://github.com/driftsys/ridl/commit/eb3f05b
+[#960]: https://github.com/driftsys/ridl/issues/960
+[5816f7a]: https://github.com/driftsys/ridl/commit/5816f7a
+[#959]: https://github.com/driftsys/ridl/issues/959
+[ec69d1c]: https://github.com/driftsys/ridl/commit/ec69d1c
+[#958]: https://github.com/driftsys/ridl/issues/958
+[dd63a94]: https://github.com/driftsys/ridl/commit/dd63a94
+[#955]: https://github.com/driftsys/ridl/issues/955
+[1bb870d]: https://github.com/driftsys/ridl/commit/1bb870d
+[#957]: https://github.com/driftsys/ridl/issues/957
+[8753c00]: https://github.com/driftsys/ridl/commit/8753c00
+[#956]: https://github.com/driftsys/ridl/issues/956
+[c019f74]: https://github.com/driftsys/ridl/commit/c019f74
+[#948]: https://github.com/driftsys/ridl/issues/948
+
 ## [0.10.0] (2026-10-13)
 
 ### Bug Fixes
