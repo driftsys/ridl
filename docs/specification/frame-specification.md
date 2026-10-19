@@ -646,6 +646,11 @@ between peers, `Contract::UnknownInteraction`:
 - a `publish`, an `occurrence`, a `response` or an `unsubscribe` is discarded
   and recorded; nothing is sent back.
 
+An `answer` or a `response` that refuses a frame carries the `interface`,
+`ordinal` and `kind` of that frame as received. So a `response` carrying
+`contract(UnknownInteraction)` may carry a `kind` other than `Command` or
+`Query`, and a receiver accepts it.
+
 An interface the catalog retires, and a `reserved` ordinal, are unknown for this
 purpose: the descriptors hold no row for either. On a session attached under an
 earlier hash (§6.1), a `subscribe`, a `read` or a `request` naming an
