@@ -3,7 +3,7 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::mpsc::{self, Receiver};
+use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -20,7 +20,7 @@ use ridl_rt::trace::TraceContext;
 use ridl_transport_ws::frame::{
     decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState, Target,
 };
-use ridl_transport_ws::{serve, Backend, Config, Ended, Note, Polling, Scanning};
+use ridl_transport_ws::{serve, Backend, Config, Connection, Ended, Note, Polling, Scanning};
 use tungstenite::client::IntoClientRequest;
 use tungstenite::protocol::frame::coding::CloseCode;
 use tungstenite::protocol::frame::CloseFrame;
@@ -41,6 +41,17 @@ const COMMAND: Target = Target {
     iface: IFACE,
     ord: Ordinal(3),
 };
+
+/// An upgrade request this server accepts, for a client without
+/// `tungstenite`.
+const UPGRADE_REQUEST: &[u8] = b"GET / HTTP/1.1\r\n\
+    Host: localhost\r\n\
+    Upgrade: websocket\r\n\
+    Connection: Upgrade\r\n\
+    Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+    Sec-WebSocket-Version: 13\r\n\
+    Sec-WebSocket-Protocol: ridl-ws-v1\r\n\
+    \r\n";
 
 /// How long a test waits on its peer before it fails instead of hanging.
 const TEST_LIMIT: Duration = Duration::from_secs(10);
@@ -337,26 +348,9 @@ fn a_silent_client_ends_the_session_at_the_liveness_timeout() {
     let (server, mut client) = pair();
     // The request is written before `serve` starts, so that the time `serve`
     // runs is the handshake, which needs no wait, and then the silence.
-    client
-        .write_all(
-            b"GET / HTTP/1.1\r\n\
-              Host: localhost\r\n\
-              Upgrade: websocket\r\n\
-              Connection: Upgrade\r\n\
-              Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
-              Sec-WebSocket-Version: 13\r\n\
-              Sec-WebSocket-Protocol: ridl-ws-v1\r\n\
-              \r\n",
-        )
-        .unwrap();
+    client.write_all(UPGRADE_REQUEST).unwrap();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut head = Vec::new();
-    let mut byte = [0u8; 1];
-    while !head.ends_with(b"\r\n\r\n") {
-        client.read_exact(&mut byte).unwrap();
-        head.push(byte[0]);
-    }
-    assert!(head.starts_with(b"HTTP/1.1 101 "));
+    read_upgrade_answer(&mut client);
 
     // The client now reads nothing and sends nothing.
     let (ended, elapsed) = handle.join();
@@ -523,4 +517,229 @@ impl Caller for Watched {
         self.log.lock().unwrap().push("forget");
         self.inner.forget(c);
     }
+}
+
+#[test]
+fn a_client_that_stops_reading_ends_the_session_at_the_liveness_timeout() {
+    let mut config = config();
+    config.liveness_timeout = Duration::from_millis(300);
+    // A full send buffer blocks a write for at most the liveness timeout,
+    // and the last message arrived at most one liveness timeout earlier.
+    let bound = 2 * config.liveness_timeout + Duration::from_millis(500);
+    let (server, client) = pair();
+    let rt = Loopback::new(CATALOG);
+    let mut provider = rt.attach();
+    let handle = spawn(server, Scanning(rt), config);
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    send(&mut ws, Frame::Subscribe(SIGNAL));
+
+    // The client now reads nothing, while the provider commits large values
+    // until the session ends.
+    let (done, ended) = mpsc::channel();
+    let committer = thread::spawn(move || {
+        let mut value = vec![0u8; 60 * 1024];
+        while let Err(TryRecvError::Empty) = ended.try_recv() {
+            value[0] = value[0].wrapping_add(1);
+            provider.set(IFACE, Ordinal(1), &value).unwrap();
+            provider.commit();
+            thread::sleep(Duration::from_millis(5));
+        }
+    });
+    let (ended, elapsed) = handle.join();
+    done.send(()).unwrap();
+    committer.join().unwrap();
+    assert_eq!(ended, Ended::LivenessTimeout);
+    assert!(elapsed < bound, "ended after {elapsed:?}, over {bound:?}");
+    drop(ws);
+}
+
+/// A client that sends a message over the limit with more of it still
+/// unsent: the server must read the rest before it closes, or the close
+/// resets the connection and the client loses the close frame.
+#[test]
+fn an_oversized_message_closes_1009_and_the_client_sees_it() {
+    let config = config().with_max_message_bytes(1024).unwrap();
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    ws.send(Message::binary(vec![0u8; 256 * 1024])).unwrap();
+    // A reset, when there is one, arrives within this wait, before the
+    // client reads.
+    thread::sleep(Duration::from_millis(200));
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Size));
+    assert_eq!(handle.join().0, Ended::ServerClosed(1009));
+}
+
+#[test]
+fn a_text_message_closes_1003_and_the_client_sees_it() {
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    // A large message after the text one is still unread when the server
+    // closes.
+    ws.send(Message::text("not binary")).unwrap();
+    ws.send(Message::binary(vec![0u8; 256 * 1024])).unwrap();
+    thread::sleep(Duration::from_millis(200));
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Unsupported));
+    assert_eq!(handle.join().0, Ended::ServerClosed(1003));
+}
+
+#[test]
+fn a_data_message_resets_the_liveness_clock() {
+    let mut config = config();
+    config.liveness_timeout = Duration::from_millis(300);
+    // No ping, so that the client sends no pong: only data messages arrive.
+    config.ping_interval = TEST_LIMIT;
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_millis(900) {
+        send(&mut ws, Frame::Subscribe(SIGNAL));
+        thread::sleep(Duration::from_millis(50));
+    }
+    ws.close(None).unwrap();
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+}
+
+#[test]
+fn the_server_pings_while_messages_keep_arriving() {
+    let interval = Duration::from_millis(50);
+    let mut config = config();
+    config.ping_interval = interval;
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    // A message every 10 ms for 8 ping intervals.
+    let start = Instant::now();
+    while start.elapsed() < 8 * interval {
+        send(&mut ws, Frame::Subscribe(SIGNAL));
+        thread::sleep(Duration::from_millis(10));
+    }
+    ws.close(None).unwrap();
+    let mut pings = 0;
+    let start = Instant::now();
+    loop {
+        assert!(
+            start.elapsed() < TEST_LIMIT,
+            "no close within {TEST_LIMIT:?}"
+        );
+        match ws.read().unwrap() {
+            Message::Ping(_) => pings += 1,
+            Message::Binary(_) | Message::Pong(_) => {}
+            Message::Close(_) => break,
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+    // About 8 are due; 3 leaves a wide margin for a slow machine.
+    assert!(pings >= 3, "{pings} pings in 8 intervals");
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+}
+
+#[test]
+fn a_client_that_closes_the_connection_without_a_close_frame_ends_with_eof() {
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    drop(ws);
+    assert_eq!(
+        handle.join().0,
+        Ended::Io(std::io::ErrorKind::UnexpectedEof)
+    );
+}
+
+/// A connection that gives a complete upgrade request, then fails every
+/// read with `TimedOut`, the kind a read timeout gives on Windows.
+struct TimingOut {
+    request: Vec<u8>,
+    pos: usize,
+}
+
+impl Read for TimingOut {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.pos < self.request.len() {
+            let n = buf.len().min(self.request.len() - self.pos);
+            buf[..n].copy_from_slice(&self.request[self.pos..self.pos + n]);
+            self.pos += n;
+            return Ok(n);
+        }
+        thread::sleep(Duration::from_millis(1));
+        Err(std::io::ErrorKind::TimedOut.into())
+    }
+}
+
+impl Write for TimingOut {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Connection for TimingOut {
+    fn set_read_timeout(&self, _: Option<Duration>) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn set_write_timeout(&self, _: Option<Duration>) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[test]
+fn a_read_that_fails_with_timed_out_is_a_tick() {
+    let mut config = config();
+    config.liveness_timeout = Duration::from_millis(100);
+    let conn = TimingOut {
+        request: UPGRADE_REQUEST.to_vec(),
+        pos: 0,
+    };
+    assert_eq!(
+        serve(conn, Scanning(Loopback::new(CATALOG)), &config),
+        Ended::LivenessTimeout
+    );
+}
+
+/// The bytes of a raw client's upgrade answer, read up to the empty line.
+fn read_upgrade_answer(client: &mut TcpStream) {
+    let mut head = Vec::new();
+    let mut byte = [0u8; 1];
+    while !head.ends_with(b"\r\n\r\n") {
+        client.read_exact(&mut byte).unwrap();
+        head.push(byte[0]);
+    }
+    assert!(head.starts_with(b"HTTP/1.1 101 "));
+}
+
+#[test]
+fn a_server_close_is_followed_by_the_end_of_the_stream_and_not_a_reset() {
+    let config = config().with_max_message_bytes(1024).unwrap();
+    let (server, mut client) = pair();
+    client.write_all(UPGRADE_REQUEST).unwrap();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
+    read_upgrade_answer(&mut client);
+    // A masked binary frame that announces 1 MiB, with 64 KiB of its payload:
+    // the server closes 1009 once it reads the length, with the payload
+    // still unread.
+    let mut frame = vec![0x82, 0x80 | 127];
+    frame.extend_from_slice(&(1024u64 * 1024).to_be_bytes());
+    frame.extend_from_slice(&[1, 2, 3, 4]);
+    frame.resize(frame.len() + 64 * 1024, 0);
+    client.write_all(&frame).unwrap();
+    assert_eq!(handle.join().0, Ended::ServerClosed(1009));
+    // The close frame, unmasked, with code 1009, then the end of the stream:
+    // the server read what the client sent before it closed the connection,
+    // so the connection was not reset.
+    let mut close = [0u8; 4];
+    client.read_exact(&mut close).unwrap();
+    assert_eq!(close, [0x88, 0x02, 0x03, 0xF1]);
+    let mut rest = [0u8; 16];
+    assert_eq!(client.read(&mut rest).unwrap(), 0);
 }

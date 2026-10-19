@@ -31,10 +31,22 @@ pub trait Connection: Read + Write {
     /// duration.
     fn set_read_timeout(&self, t: Option<Duration>) -> io::Result<()>;
 
+    /// Sets how long one write waits for room in the stream before it fails
+    /// with `WouldBlock` or `TimedOut`. `None` waits without limit.
+    /// [`serve`] sets it to [`Config::liveness_timeout`], so that a client
+    /// that stops reading cannot hold the thread.
+    ///
+    /// # Errors
+    ///
+    /// The error of the underlying stream, such as `InvalidInput` for a zero
+    /// duration.
+    fn set_write_timeout(&self, t: Option<Duration>) -> io::Result<()>;
+
     /// Ends the write side of the stream, so that the peer reads the end of
     /// the stream after the bytes already written. [`serve`] calls it after
-    /// it answers a handshake `400 Bad Request`. The default does nothing,
-    /// for a stream that has no write side of its own to end.
+    /// every close frame it sends and after a handshake `400 Bad Request`.
+    /// The default does nothing, for a stream that has no write side of its
+    /// own to end.
     ///
     /// # Errors
     ///
@@ -49,6 +61,10 @@ impl Connection for TcpStream {
         TcpStream::set_read_timeout(self, t)
     }
 
+    fn set_write_timeout(&self, t: Option<Duration>) -> io::Result<()> {
+        TcpStream::set_write_timeout(self, t)
+    }
+
     fn shutdown_write(&self) -> io::Result<()> {
         self.shutdown(Shutdown::Write)
     }
@@ -58,6 +74,10 @@ impl Connection for TcpStream {
 impl Connection for std::os::unix::net::UnixStream {
     fn set_read_timeout(&self, t: Option<Duration>) -> io::Result<()> {
         std::os::unix::net::UnixStream::set_read_timeout(self, t)
+    }
+
+    fn set_write_timeout(&self, t: Option<Duration>) -> io::Result<()> {
+        std::os::unix::net::UnixStream::set_write_timeout(self, t)
     }
 
     fn shutdown_write(&self) -> io::Result<()> {
@@ -83,8 +103,9 @@ pub enum Ended {
     /// malformed, its head passed 8 KiB, or it did not offer `ridl-ws-v1`.
     Rejected,
     /// The opening handshake did not finish within
-    /// [`Config::liveness_timeout`], or no message of any kind, data or
-    /// control, arrived for that long after it. No close frame is sent.
+    /// [`Config::liveness_timeout`], no message of any kind, data or
+    /// control, arrived for that long after it, or a write waited that long
+    /// for the client to read. No close frame is sent.
     LivenessTimeout,
     /// A read or a write of the connection failed with this kind of error.
     /// `UnexpectedEof` is a client that closed the connection without a
@@ -95,9 +116,10 @@ pub enum Ended {
 /// The size of the buffer each socket read fills.
 const READ_BUFFER: usize = 16 * 1024;
 
-/// How long the server goes on reading after it answers a handshake `400`,
-/// so that the client reads the answer before the connection closes.
-const REJECT_LINGER: Duration = Duration::from_millis(100);
+/// How long the server goes on reading after it answers a handshake `400`
+/// or sends a close frame, so that the client reads the answer or the close
+/// frame before the connection closes.
+const LINGER: Duration = Duration::from_millis(100);
 
 /// Serves `backend` to the WebSocket client on `conn`, and returns when the
 /// session ends.
@@ -107,17 +129,23 @@ const REJECT_LINGER: Duration = Duration::from_millis(100);
 /// [`Config::poll_interval`], handles each whole message read, polls the
 /// backend once and sends what changed, and sends a ping each
 /// [`Config::ping_interval`]. A change on the backend is sent at most one
-/// poll interval after it, plus the write.
+/// poll interval after it, plus the write. Each write has a write timeout of
+/// [`Config::liveness_timeout`]: a client that stops reading for that long
+/// ends the session with [`Ended::LivenessTimeout`].
 ///
 /// At every end, each backend call in flight is forgotten and `backend` is
 /// dropped, with its event subscriptions; then `conn` is dropped. After a
-/// close frame, sent or answered, `serve` returns without waiting for the
-/// client to close the connection: the client waits for the server to close
-/// it (RFC 6455 §7.1.1).
+/// close frame it sends, the server ends its write side and reads and drops
+/// what the client still sends, until the client closes the connection or
+/// 100 ms pass: a connection closed with unread bytes is reset, and the
+/// client could lose the close frame. After it answers a client's close
+/// frame, `serve` returns without waiting. In neither case does it wait for
+/// the client to close the connection: the client waits for the server to
+/// close it (RFC 6455 §7.1.1).
 ///
-/// A zero [`Config::poll_interval`] is refused by the stream's
-/// `set_read_timeout`, and `serve` returns [`Ended::Io`] with
-/// `InvalidInput`.
+/// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
+/// refused by the stream's `set_read_timeout` or `set_write_timeout`, and
+/// `serve` returns [`Ended::Io`] with `InvalidInput`.
 pub fn serve<C: Connection, B: Backend>(mut conn: C, backend: B, config: &Config) -> Ended {
     let mut session = Session::new(backend, config);
     let ended = run(&mut conn, &mut session, config);
@@ -130,6 +158,9 @@ fn run<C: Connection, B: Backend>(
     session: &mut Session<B>,
     config: &Config,
 ) -> Ended {
+    if let Err(e) = conn.set_write_timeout(Some(config.liveness_timeout)) {
+        return Ended::Io(e.kind());
+    }
     let deadline = Instant::now() + config.liveness_timeout;
     match ws::handshake(&mut Deadline { conn, at: deadline }) {
         Ok(Upgrade::Accepted) => {}
@@ -165,7 +196,7 @@ fn run<C: Connection, B: Backend>(
                 Ok(Event::Binary(msg)) => session.on_message(&msg, now, &mut out),
                 Ok(Event::Ping(payload)) => match ws::write_pong(conn, &payload) {
                     Ok(()) => continue,
-                    Err(e) => return Ended::Io(e.kind()),
+                    Err(e) => return write_failed(&e),
                 },
                 Ok(Event::Pong) => continue,
                 Ok(Event::Close(code)) => {
@@ -191,19 +222,20 @@ fn run<C: Connection, B: Backend>(
         }
         if now.duration_since(pinged) >= config.ping_interval {
             if let Err(e) = ws::write_ping(conn) {
-                return Ended::Io(e.kind());
+                return write_failed(&e);
             }
             pinged = now;
         }
     }
 }
 
-/// Writes each frame of `out` as one binary message, then a close frame when
-/// `step` is a close. Returns why the session ended, when it did.
-fn flush<C: Write>(conn: &mut C, out: &mut Vec<Vec<u8>>, step: Step) -> Option<Ended> {
+/// Writes each frame of `out` as one binary message, then, when `step` is a
+/// close, a close frame followed by [`linger`]. Returns why the session
+/// ended, when it did.
+fn flush<C: Connection>(conn: &mut C, out: &mut Vec<Vec<u8>>, step: Step) -> Option<Ended> {
     for msg in out.drain(..) {
         if let Err(e) = ws::write_binary(conn, &msg) {
-            return Some(Ended::Io(e.kind()));
+            return Some(write_failed(&e));
         }
     }
     match step {
@@ -211,12 +243,23 @@ fn flush<C: Write>(conn: &mut C, out: &mut Vec<Vec<u8>>, step: Step) -> Option<E
         Step::Close(code) => {
             // As for the answer to a client's close: the session has ended.
             let _ = ws::write_close(conn, CloseCode(code));
+            linger(conn);
             Some(Ended::ServerClosed(code))
         }
     }
 }
 
-/// Whether `e` is a read that waited its whole read timeout.
+/// Why the session ended when a write failed with `e`: a write that waited
+/// its whole write timeout is a client that stopped reading.
+fn write_failed(e: &io::Error) -> Ended {
+    if timed_out(e) {
+        Ended::LivenessTimeout
+    } else {
+        Ended::Io(e.kind())
+    }
+}
+
+/// Whether `e` is a read or a write that waited its whole timeout.
 fn timed_out(e: &io::Error) -> bool {
     matches!(
         e.kind(),
@@ -224,14 +267,15 @@ fn timed_out(e: &io::Error) -> bool {
     )
 }
 
-/// After a handshake `400`: ends the write side, then reads and drops what
-/// the client still sends, until the client closes or [`REJECT_LINGER`]
-/// passes. Closing a connection with unread bytes in its receive buffer
-/// resets it, and a client may then lose the `400` it has not read yet.
+/// After a handshake `400` or a close frame the server sent: ends the write
+/// side, then reads and drops what the client still sends, until the client
+/// closes or [`LINGER`] passes. Closing a connection with unread bytes in its
+/// receive buffer resets it, and a client may then lose the `400` or the
+/// close frame it has not read yet.
 fn linger<C: Connection>(conn: &mut C) {
     let _ = conn.shutdown_write();
-    let until = Instant::now() + REJECT_LINGER;
-    let mut buf = [0u8; 512];
+    let until = Instant::now() + LINGER;
+    let mut buf = [0u8; 4096];
     loop {
         let left = until.saturating_duration_since(Instant::now());
         if left.is_zero() || conn.set_read_timeout(Some(left)).is_err() {

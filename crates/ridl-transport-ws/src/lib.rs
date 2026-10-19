@@ -54,9 +54,11 @@
 //!   owns the sockets and the threads.
 //! - It has no TLS. A `wss://` deployment ends TLS in front of the server, or
 //!   gives [`serve`] a TLS stream that implements [`Connection`].
-//! - It authenticates no one. The path, the query and the headers of the
-//!   upgrade request are ignored (§11.1 item 1): the access policy is the
-//!   embedder's, and runs before [`serve`].
+//! - It authenticates no one. The path and the query of the upgrade request
+//!   are ignored, and so is every header other than the ones the handshake
+//!   reads (`Upgrade`, `Connection`, `Sec-WebSocket-Key`,
+//!   `Sec-WebSocket-Version` and `Sec-WebSocket-Protocol`; §11.1 item 1):
+//!   the access policy is the embedder's, and runs before [`serve`].
 //! - It reads no catalog descriptor. An `attach` is accepted on an exact match
 //!   of the unit name and the catalog hash, and the server checks a frame's
 //!   `kind` against the form, not against the catalog.
