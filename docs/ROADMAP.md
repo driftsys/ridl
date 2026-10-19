@@ -237,7 +237,7 @@ shape of ADR-0017 and ADR-0019, written when the backend is.
 E15 the lock ─┬─→ E16 the catalog descriptor, landed ─→ E6.17 the catalog hash per region, landed
               │       ─→ E17 layout inputs for plugins, landed: E17.0 ─→ E17.1 ─→ E17.4 ─→ E17.5
               │                 E17.0 ─→ E17.2 ─────────────→ E17.5
-              │       E11.9 WebSocket transport (#265) ─→ E17.3, open
+              │       E11.9 WebSocket transport (#265), landed ─→ E17.3, landed
               └─→ E14.2 ridl §17 dispositions ─┐
                                                │
 E14.1 typl §17 dispositions ───────────────────┼─→ E14.3 both references
@@ -394,21 +394,15 @@ that encoding.
 
 **Milestone:** a backend plugin computes and generates a deployment's
 shared-memory layouts and socket message layouts from its `CodegenRequest`
-alone. **Status:** landed on 2026-10-06 except one row. The deployment section
-of the request, the size states, the rsdl `depth`, `slots` and `budget` keys and
-the test plugin that computes `examples/cabin`'s layouts are built; the record
-of what landed, with the milestone's reasoning and the stories' rows, is in the
+alone. **Status:** landed; E17.3, the last row, landed on 2026-10-20 with E11.9.
+The deployment section of the request, the size states, the rsdl `depth`,
+`slots` and `budget` keys and the test plugin that computes `examples/cabin`'s
+layouts are built; the record of what landed, with the milestone's reasoning and
+the stories' rows, is in the
 [landed record](archive/roadmap-landed-record.md#epic-17--layout-inputs-for-backend-plugins-the-landed-part),
 and the as-built description is
 [the codegen plugin design](design/codegen-plugins.md) with
 [ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 11.
-
-**The one open item** is the check of the WebSocket binding's overheads against
-a frame the transport writes (driftsys/ridl#265).
-
-| ID    | Story                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Done when                                                                                                                                                             | Size |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E17.3 | The fixed overheads in the request's deployment section: for each transport binding that defines them, the frame header size and the envelope size, each with the version it belongs to. Depends on E11.9 (driftsys/ridl#265), the first binding. **Partly landed: the table of known bindings and its emitter (driftsys/ridl#731) and the `websocket` row of the frame specification §11.1 exist. The test that checks the sum against a frame the WebSocket transport writes is open (driftsys/ridl#718, with driftsys/ridl#265).** | a socket message's maximum size is the frame header plus the envelope plus the payload bound, and a test checks that sum against a frame the WebSocket binding writes | S    |
 
 **`repr(C)` joins when E11.12 lands.** The alignment and the layout of a slot
 for the third encoding come from its projection record; until then a channel
@@ -528,9 +522,8 @@ alone, and the two bindings by name: E11.9's WebSocket transport and, on
 Android, a runtime's own binder contract. ridl specifies no Binder layout and no
 transaction code; this reverses the lane P driver's decision D-P5, which had the
 Kotlin backend generate an AIDL binding per interface (driftsys/ridl#516). The
-WebSocket binding is now specified in §11.1 of the frame specification; its
-transport is not built, nothing in this workspace speaks the frame, and
-`ridl-loopback` runs in process.
+WebSocket binding is specified in §11.1 of the frame specification, and E11.9
+built its transport; `ridl-loopback` runs in process and speaks no frame.
 
 **E11.15 landed** (driftsys/ridl#445). `crates/ridl-loopback` is the first
 runtime in this workspace: six handles, one per port role, with a `Send + Sync`
@@ -539,7 +532,27 @@ implementing all eleven port traits by delegation. Every interaction-face round
 trip builds its face over it, and the test-only double it replaced is deleted.
 Its as-built record is
 [the `ridl-loopback` design record](design/ridl-loopback.md). It is not a
-transport: E11.9 still owns that, and it does not link this crate.
+transport: E11.9 owns that, and it does not link this crate.
+
+**E11.9 landed** (driftsys/ridl#265, PR driftsys/ridl#990).
+`crates/ridl-transport-ws` is the Rust side of the §11.1 WebSocket binding: a
+`core`-only codec for the ten frame forms that reproduces every test vector of
+§11.1, and a server that acts as the providing side of a frame session on one
+connection the embedder accepted, over a `ridl-rt` port set the embedder chose
+(`SignalReader`, `EventSource`, `Caller`, and `FixedReader`). It forwards
+payload bytes without decoding them, binds no socket and starts no task. Its
+tests include a test client that reaches the server from a second connection and
+a size test that checks the `websocket` row of the binding table against the
+frames the codec writes, which closes the open half of driftsys/ridl#718. Its
+as-built record is
+[the `ridl-transport-ws` design record](design/ridl-transport-ws.md).
+Follow-ups: driftsys/ridl#984 (bound the per-session signal state),
+driftsys/ridl#985 (read the catalog descriptor), driftsys/ridl#986 (frame
+specification: retention of a settled response, §7 against §11.1 item 6),
+driftsys/ridl#987 (add the crate to the runtime-crates and msrv freeze
+surfaces), driftsys/ridl#988 (serve the stand-in ports) and driftsys/ridl#989
+(run `examples/cabin` over the transport). The row stays in the table above, as
+the rows of E11.1 and E11.15 do, because the epic is not complete.
 
 **E11.13 landed in driftsys/ridl#418.** It is the MVP of the generated
 interaction face, taken deliberately out of sequence: ADR-0018 decision 15
@@ -1150,7 +1163,7 @@ reopening is an observation rather than an argument.
 | E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
 | E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                      |
 | E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR             |
-| E17  | layout inputs for plugins       | **step 1**, landed except the check of the WebSocket overheads (E17.3)             |
+| E17  | layout inputs for plugins       | **step 1**, landed                                                                 |
 | E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                           |
 | E11  | the runtime library             | **step 1** — generated code links a library                                        |
 | E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                      |
