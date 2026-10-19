@@ -22,7 +22,7 @@ use ridl_transport_ws::{serve, Config, Scanning};
 
 use support::client::WsClient;
 use support::provider::{provider, provider_step, CATALOG};
-use support::scenario::{run, Rig, LIMIT};
+use support::scenario::{run, Rig};
 
 /// The environment variable that makes `provider_process` serve.
 const PROVIDER_ENV: &str = "RIDL_TRANSPORT_WS_PROVIDER";
@@ -32,7 +32,7 @@ const ACCEPT_LIMIT: Duration = Duration::from_secs(10);
 
 /// How long the parent waits for the provider's process to start and print
 /// its port: a process start on a loaded runner takes longer than one step
-/// of the scenario, which [`LIMIT`] bounds.
+/// of the scenario, which `support::scenario::LIMIT` bounds at 2 s.
 const START_LIMIT: Duration = Duration::from_secs(10);
 
 /// The in-process rig: the consumer's ports and the provider are two

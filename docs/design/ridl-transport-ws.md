@@ -608,6 +608,8 @@ All under `crates/ridl-transport-ws/`.
   `attach` with a 255-byte name is 294 bytes. `known_bindings()` is a public
   function added to `ridl-ir` for this test, because the only other public route
   to the row needs a whole lowered system.
+- **The constraints** (`tests/constraints.rs`). D-1's "no `alloc`" and D-2's
+  dependency set, read from the sources and the manifests (see "Gates").
 - **The codec's failures** (`tests/decode_errors.rs`). One test per case of D-4
   and D-5.
 - **The WebSocket layer** (unit tests in `src/ws.rs`, `src/ws/sha1.rs`,
