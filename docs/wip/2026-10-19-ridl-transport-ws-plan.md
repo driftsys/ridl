@@ -277,7 +277,7 @@ on anything else, returning `Rejected`.
       the 448-bit FIPS 180 message against their published digests; base64 of
       `""`, `"f"`, `"fo"`, `"foo"`, `"foob"`, `"fooba"`, `"foobar"` (RFC 4648
       §10);
-      `accept_key("dGhlIHNhbXBsZSBub25jZQ==") == "s3pPLMBiTxaQ9kYGJfbf+GxwOkk="`
+      `accept_key("dGhlIHNhbXBsZSBub25jZQ==") == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="`
       (RFC 6455 §1.3). Fail, implement, pass.
 - [ ] **Step 2: Tests against `tungstenite`** (client on a thread, server side
       driven over the accepted `TcpStream`; the crate's own code never binds —

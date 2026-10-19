@@ -105,12 +105,16 @@ run the close handshake. That is roughly 600 lines, and it is the whole of what
 the binding needs. The server never writes a masked frame, so it needs no random
 numbers.
 
-| Dependency                     | Kind   | Why                                                                                                                                |
-| ------------------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `ridl-rt`                      | normal | the port traits and the vocabulary of frame specification §2; no feature turned on                                                 |
-| `ridl-loopback`                | dev    | the backend of every server test, and the in-process half of the done-when                                                         |
-| `tungstenite`, no default feat | dev    | an independent WebSocket client, so the hand-written server side is tested against an implementation this repository did not write |
-| `ridl-ir`                      | dev    | the `websocket` binding row, for driftsys/ridl#718's check (T-2)                                                                   |
+| Dependency                   | Kind   | Why                                                                                                                                |
+| ---------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `ridl-rt`                    | normal | the port traits and the vocabulary of frame specification §2; no feature turned on                                                 |
+| `ridl-loopback`              | dev    | the backend of every server test, and the in-process half of the done-when                                                         |
+| `tungstenite` 0.29, defaults | dev    | an independent WebSocket client, so the hand-written server side is tested against an implementation this repository did not write |
+| `ridl-ir`                    | dev    | the `websocket` binding row, for driftsys/ridl#718's check (T-2)                                                                   |
+
+(As built: `tungstenite` 0.29 with its default `handshake` feature, because the
+client must run the handshake that T-4 checks; 0.29 is the newest release whose
+`rust-version` is not above this crate's. 0.30 needs Rust 1.85.)
 
 A dev-dependency does not reach an embedder's build tree. This changes ADR-0020
 decision 6's row for `ridl-transport-ws`, whose "Depends on" column reads
@@ -177,10 +181,16 @@ pub fn serve<C: Connection, P: Backend>(conn: C, ports: P, config: &Config) -> E
 
 The embedder binds a listener, applies its access policy to each accepted
 connection, chooses a thread, builds one `Backend` value for the connection, and
-calls `serve`. `serve` returns when the session ends, with why. `Connection` is
-`Read + Write` plus `set_read_timeout`, implemented here for
-`std::net::TcpStream` and, on Unix, `std::os::unix::net::UnixStream`. Nothing in
-the crate calls `bind`, `listen`, `spawn` or `connect`.
+calls `serve`. `serve` returns when the session ends, with why. (As built:
+`serve` sets the write timeout to `liveness_timeout`, and a write that fails
+with `WouldBlock` or `TimedOut` ends the session as `Ended::LivenessTimeout`,
+because the client has stopped taking messages for the liveness period. The
+method is required, not provided, so that no embedder's connection is silently
+unbounded.) `Connection` is `Read + Write` plus `set_read_timeout`, a required
+`set_write_timeout` and a provided `shutdown_write` (as built; the default of
+`shutdown_write` does nothing), implemented here for `std::net::TcpStream` and,
+on Unix, `std::os::unix::net::UnixStream`. Nothing in the crate calls `bind`,
+`listen`, `spawn` or `connect`.
 
 **D-8. The tick.** `serve` reads the socket with a read timeout of
 `config.poll_interval` (default 20 ms). Each pass of its loop: feed the bytes
@@ -303,13 +313,21 @@ not".
   grows the buffer when `scan` returns 0 and a mark is still behind its
   generation (the loop the port documentation describes), and reads and sends
   each changed signal that is subscribed. Entries for signals that are not
-  subscribed are ignored. The cost of a tick with no change is one `scan` call.
+  subscribed are ignored. (As built: every `Changed` entry of a subscribed
+  signal is read and published, with no `seq` filter, because the mark set at
+  subscribe excludes earlier commits; so a writer that restarts and reuses a
+  `seq` is still published.) The cost of a tick with no change is one `scan`
+  call.
 - **Without it**: each tick the server reads every subscribed signal and sends a
   `publish` when the sample's backend `envelope.seq` or its provenance differs
-  from the one it last saw for that signal ("differs", not "is greater": a
-  backend's counter may restart or interleave, D-24). The port contract makes
-  `seq` count every publication of a channel, an invalidation and a
-  re-affirmation included (the conformance test
+  from the one it last saw for that signal (as built: it compares the backend
+  `seq`, the provenance, the `stamp` and the value bytes with the last state
+  sent, which costs one stored copy per subscribed signal; a republish of
+  identical bytes under an identical `seq`, provenance and `stamp` is
+  indistinguishable and harmless) ("differs", not "is greater": a backend's
+  counter may restart or interleave, D-24). The port contract makes `seq` count
+  every publication of a channel, an invalidation and a re-affirmation included
+  (the conformance test
   `a_channel_sequence_number_counts_that_channel_publications`), so a changed
   `seq` is a change. The cost of a tick is one `read` per subscribed signal, and
   a backend with many subscribed signals and no `ScannableSignals` pays that on
@@ -329,9 +347,11 @@ sends one `occurrence` per occurrence, with the backend's `stamp` and the next
 session `seq` of that event channel (D-24), so a gap the client sees is a gap on
 this session. A `Short` read is retried with a larger buffer, as for signals.
 The occurrence's trace context is dropped: the frame does not carry one (§2).
-Because the backend subscribes before the `answer` is sent and nothing is
-drained until the next tick, no occurrence reaches the client before its
-`answer`.
+(As built: an occurrence larger than `max_message_bytes` is dropped and noted as
+`ValueTooLarge`, and the session `seq` of its channel is advanced, so the client
+sees a gap and records a loss (§5.2) instead of a silent drop.) Because the
+backend subscribes before the `answer` is sent and nothing is drained until the
+next tick, no occurrence reaches the client before its `answer`.
 
 **D-16. Calls and the correlation map.**
 
@@ -360,6 +380,12 @@ drained until the next tick, no occurrence reaches the client before its
 
   The last row follows §9.6: those three are the absence of a frame and are
   never sent. The client's own bound reports them.
+
+  (As built: a settled reply larger than `max_message_bytes` is recorded and
+  forgotten with no frame, so the client's own bound reports `Timeout`;
+  `corrupt` would blame the arguments. The last 64 settled responses that the
+  duplicate rule below keeps include the responses sent at once, such as a
+  `busy` or a `contract`. A `request` with `seq` 0 is recorded and dropped.)
 
 - **Abandoned calls.** **(agent's call)** A call whose outcome is still unknown
   `config.call_abandon_after` (default 60 s) after it was sent is forgotten on
@@ -391,6 +417,13 @@ reports `Detached` from any call ends the session with close 1001, because the
 provider is going away. `serve` returns `Ended` with one of: the client closed
 (with its code), the server closed (with its code and the reason recorded), the
 liveness timeout passed, or an IO error.
+
+(As built: the embedder may also receive `Note` values, the records of what the
+session dropped or closed on: `Violation`, `Discarded`, `MessageBeforeAttach` (a
+message other than `attach` first; closes 1002), `SecondAttach` (closes 1002),
+`UnexpectedDirection` (closes 1002), `KindNotAdmitted` (an `unsubscribe` of a
+kind the form does not admit; dropped), `ValueTooLarge`, `DuplicateDropped` and
+`CallAbandoned`.)
 
 **D-24. Sequence numbers are the session's.** **(agent's call)** §3 and §7 make
 each channel counter per session, starting at 1, and the backend's counters are
@@ -431,7 +464,9 @@ offer it, the server answers `400 Bad Request` and does not upgrade. **(agent's
 call)**: §11.1 says that the client fails a connection on which the server
 selected none; answering 400 makes the failure visible at once, also to a client
 that does not check. The selection is a table from subprotocol name to session
-role with one row, so section 9's later row is a table entry.
+role with one row, so section 9's later row is a table entry. (As built: a
+single comparison with `ridl-ws-v1`, because a table of one row is speculative;
+the reversed role replaces the comparison with the table when it is added.)
 
 **D-21. Messages.** Binary messages only; a text message closes with 1003.
 Fragmented messages are reassembled; a message whose total size passes
@@ -450,7 +485,12 @@ at a cost of one small frame per 5 s.
 **D-23. Close codes.** Exactly §11.1 item 4's: 1000 on purpose and after
 `attached(refused)`, 1001 when the backend detaches, 1002 on a protocol
 violation, 1003 on a text message, 1009 on an oversized message. The server
-answers a client's close frame with a close frame and returns.
+answers a client's close frame with a close frame and returns. (As built: after
+every close frame it sends, the server shuts down its write side and lingers for
+up to 100 ms, reading and discarding what the client still sends, so that the
+close frame reaches the client instead of being lost to a reset of the
+connection. A rejected handshake gets the same treatment, so the client sees the
+`400`.)
 
 ## 8. Tests
 
@@ -477,7 +517,8 @@ against the row's `version`.
 
 **T-4. The WebSocket layer**, against `tungstenite` as the client, with its
 default `handshake` feature on, so that the handshake and `Sec-WebSocket-Accept`
-are checked by an implementation this repository did not write. The
+are checked by an implementation this repository did not write (the RFC 6455
+sample `dGhlIHNhbXBsZSBub25jZQ==` gives `s3pPLMBiTxaQ9kYGzzhZRbK+xOo=`). The
 dev-dependency's tree size does not reach an embedder. The version is the newest
 that resolves under `--locked` with the pinned toolchain; tests do not run at
 1.83 (C-4 is checked by building the packaged crate, which drops
