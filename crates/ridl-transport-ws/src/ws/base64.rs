@@ -1,4 +1,5 @@
-//! Base64 encoding (RFC 4648 §4), used only to write `Sec-WebSocket-Accept`.
+//! Base64 (RFC 4648 §4): the encoder writes `Sec-WebSocket-Accept`, and the
+//! decoder checks that `Sec-WebSocket-Key` decodes to 16 bytes.
 
 /// Returns `data` in the base64 alphabet of RFC 4648 §4, with padding.
 pub(super) fn encode(data: &[u8]) -> String {
@@ -18,9 +19,53 @@ pub(super) fn encode(data: &[u8]) -> String {
     out
 }
 
+/// Decodes `text` from the base64 alphabet of RFC 4648 §4, with padding, or
+/// returns `None` when `text` is not such an encoding: a length that is not
+/// a multiple of 4, a byte outside the alphabet, or padding of more than two
+/// `=` or anywhere but at the end.
+pub(super) fn decode(text: &str) -> Option<Vec<u8>> {
+    let bytes = text.as_bytes();
+    if bytes.len() % 4 != 0 {
+        return None;
+    }
+    let groups = bytes.len() / 4;
+    let mut out = Vec::with_capacity(groups * 3);
+    for (i, group) in bytes.chunks(4).enumerate() {
+        let pad = group.iter().rev().take_while(|&&b| b == b'=').count();
+        if pad > 2 || (pad > 0 && i + 1 != groups) {
+            return None;
+        }
+        let mut n: u32 = 0;
+        for &b in &group[..4 - pad] {
+            n = (n << 6) | u32::from(sextet(b)?);
+        }
+        n <<= 6 * pad as u32;
+        out.push((n >> 16) as u8);
+        if pad < 2 {
+            out.push((n >> 8) as u8);
+        }
+        if pad < 1 {
+            out.push(n as u8);
+        }
+    }
+    Some(out)
+}
+
+/// The value of one byte of the alphabet.
+fn sextet(b: u8) -> Option<u8> {
+    match b {
+        b'A'..=b'Z' => Some(b - b'A'),
+        b'a'..=b'z' => Some(b - b'a' + 26),
+        b'0'..=b'9' => Some(b - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::encode;
+    use super::{decode, encode};
 
     #[test]
     fn the_rfc_4648_test_vectors_encode() {
@@ -35,6 +80,32 @@ mod tests {
         ];
         for (input, expected) in vectors {
             assert_eq!(encode(input.as_bytes()), expected, "input {input:?}");
+            assert_eq!(
+                decode(expected).as_deref(),
+                Some(input.as_bytes()),
+                "text {expected:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_rfc_6455_sample_key_decodes_to_16_bytes() {
+        let key = decode("dGhlIHNhbXBsZSBub25jZQ==").unwrap();
+        assert_eq!(key, b"the sample nonce");
+    }
+
+    #[test]
+    fn text_that_is_not_base64_does_not_decode() {
+        let cases = [
+            "Zg",       // not a multiple of 4
+            "Zg=",      // not a multiple of 4
+            "Zg==Zg==", // padding before the end
+            "Z===",     // three padding bytes
+            "Zm9!",     // outside the alphabet
+            "Zm 9",     // a space
+        ];
+        for text in cases {
+            assert_eq!(decode(text), None, "text {text:?}");
         }
     }
 }

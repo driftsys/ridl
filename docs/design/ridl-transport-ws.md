@@ -525,12 +525,15 @@ pinged sends nothing; the rustdoc says so.
 The layer is `crates/ridl-transport-ws/src/ws.rs`, private, with its tests in
 the same file against `tungstenite`.
 
-**D-19. The handshake.** One `GET` request with `Upgrade: websocket`,
-`Connection: Upgrade`, `Sec-WebSocket-Version: 13` and a `Sec-WebSocket-Key`.
-The request line and headers are limited to 8 KiB; above that, or on any
-malformed request, the server answers `400 Bad Request` and closes. The path,
-the query and other headers are ignored (§11.1 item 1: the binding places
-nothing there; the embedder's access policy runs before `serve`).
+**D-19. The handshake.** One `GET` request with a `Host` header,
+`Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Version: 13` and one
+`Sec-WebSocket-Key` that decodes from base64 to 16 bytes (RFC 6455 §4.2.1). The
+request line and headers are limited to 8 KiB; above that, or on any malformed
+request, the server answers `400 Bad Request` and closes. When the version is
+not 13, the `400` carries `Sec-WebSocket-Version: 13`, the version the server
+speaks (RFC 6455 §4.2.2 item 4). The path, the query and other headers are
+ignored (§11.1 item 1: the binding places nothing there; the embedder's access
+policy runs before `serve`).
 
 The `Origin` header is the one exception: it is read and given to a check the
 embedder sets with `Config::with_origin_check`, as `None` when the request has

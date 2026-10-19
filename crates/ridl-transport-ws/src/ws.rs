@@ -18,9 +18,15 @@ const MAX_HEAD_BYTES: usize = 8 * 1024;
 /// The value RFC 6455 §1.3 appends to `Sec-WebSocket-Key` before hashing.
 const ACCEPT_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-/// The response to every request that is not upgraded.
+/// The response to every request that is not upgraded, but for one whose
+/// `Sec-WebSocket-Version` is not 13.
 const BAD_REQUEST: &[u8] =
     b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+
+/// The response to a request whose `Sec-WebSocket-Version` is not 13: the
+/// version the server speaks is named (RFC 6455 §4.2.2 item 4).
+const BAD_VERSION: &[u8] = b"HTTP/1.1 400 Bad Request\r\nSec-WebSocket-Version: 13\r\n\
+    Connection: close\r\nContent-Length: 0\r\n\r\n";
 
 /// The response to an upgrade request whose `Origin` the check refused.
 const FORBIDDEN: &[u8] =
@@ -41,16 +47,19 @@ pub(crate) enum Upgrade {
 
 /// Reads one HTTP/1.1 upgrade request from `stream` and answers it.
 ///
-/// The request is upgraded when it is a `GET` with `Upgrade: websocket`,
-/// `Connection: Upgrade`, `Sec-WebSocket-Version: 13`, one `Sec-WebSocket-Key`,
-/// and `ridl-ws-v1` in any position of `Sec-WebSocket-Protocol`, and when
-/// `accept_origin` accepts its `Origin` header, which is `None` when the
-/// request has none. The path, the query and every other header are ignored.
-/// A request head over 8 KiB, a malformed request, a request with more than
-/// one `Origin` header, or a request that does not offer `ridl-ws-v1` is
-/// answered `400 Bad Request` and returns [`Upgrade::Rejected`]. A request
-/// whose `Origin` `accept_origin` refuses is answered `403 Forbidden` and
-/// returns [`Upgrade::Forbidden`].
+/// The request is upgraded when it is a `GET` with a `Host` header,
+/// `Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Version: 13`,
+/// one `Sec-WebSocket-Key` that decodes from base64 to 16 bytes, and
+/// `ridl-ws-v1` in any position of `Sec-WebSocket-Protocol` (RFC 6455
+/// §4.2.1), and when `accept_origin` accepts its `Origin` header, which is
+/// `None` when the request has none. The path, the query and every other
+/// header are ignored. A request head over 8 KiB, a malformed request, a
+/// request with more than one `Origin` header, or a request that does not
+/// offer `ridl-ws-v1` is answered `400 Bad Request` and returns
+/// [`Upgrade::Rejected`]; when the version is not 13, the `400` names the
+/// version the server speaks in a `Sec-WebSocket-Version: 13` header (RFC
+/// 6455 §4.2.2 item 4). A request whose `Origin` `accept_origin` refuses is
+/// answered `403 Forbidden` and returns [`Upgrade::Forbidden`].
 ///
 /// The head is read one byte at a time, so that no byte after the empty line
 /// that ends it is taken from the stream.
@@ -64,10 +73,12 @@ pub(crate) fn handshake<S: Read + Write>(
     accept_origin: impl FnOnce(Option<&str>) -> bool,
 ) -> io::Result<Upgrade> {
     let Some(head) = read_head(stream)? else {
-        return reject(stream);
+        return reject(stream, BAD_REQUEST);
     };
-    let Some(request) = upgrade_request(&head) else {
-        return reject(stream);
+    let request = match upgrade_request(&head) {
+        Ok(request) => request,
+        Err(Reject::BadRequest) => return reject(stream, BAD_REQUEST),
+        Err(Reject::Version) => return reject(stream, BAD_VERSION),
     };
     if !accept_origin(request.origin) {
         stream.write_all(FORBIDDEN)?;
@@ -89,8 +100,8 @@ pub(crate) fn handshake<S: Read + Write>(
     Ok(Upgrade::Accepted)
 }
 
-fn reject<S: Write>(stream: &mut S) -> io::Result<Upgrade> {
-    stream.write_all(BAD_REQUEST)?;
+fn reject<S: Write>(stream: &mut S, response: &[u8]) -> io::Result<Upgrade> {
+    stream.write_all(response)?;
     stream.flush()?;
     Ok(Upgrade::Rejected)
 }
@@ -123,27 +134,37 @@ struct UpgradeRequest<'a> {
     origin: Option<&'a str>,
 }
 
+/// Why a request is not upgraded, which decides the `400` written.
+enum Reject {
+    /// The request is malformed, or it is not the upgrade this server
+    /// accepts.
+    BadRequest,
+    /// The request is well formed and its `Sec-WebSocket-Version` is not 13.
+    Version,
+}
+
 /// Returns the key and the origin of `head` when `head` is an upgrade request
-/// this server accepts, and `None` otherwise.
-fn upgrade_request(head: &[u8]) -> Option<UpgradeRequest<'_>> {
-    let head = std::str::from_utf8(head).ok()?;
-    let head = head.strip_suffix("\r\n\r\n")?;
+/// this server accepts, and why not otherwise.
+fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
+    let head = std::str::from_utf8(head).map_err(|_| Reject::BadRequest)?;
+    let head = head.strip_suffix("\r\n\r\n").ok_or(Reject::BadRequest)?;
     let mut lines = head.split("\r\n");
 
-    let mut request_line = lines.next()?.split(' ');
+    let mut request_line = lines.next().ok_or(Reject::BadRequest)?.split(' ');
     let (method, target, version) = (
-        request_line.next()?,
-        request_line.next()?,
-        request_line.next()?,
+        request_line.next().ok_or(Reject::BadRequest)?,
+        request_line.next().ok_or(Reject::BadRequest)?,
+        request_line.next().ok_or(Reject::BadRequest)?,
     );
     if request_line.next().is_some()
         || method != "GET"
         || target.is_empty()
         || version != "HTTP/1.1"
     {
-        return None;
+        return Err(Reject::BadRequest);
     }
 
+    let mut host = false;
     let mut upgrade = false;
     let mut connection = false;
     let mut version_13 = false;
@@ -154,11 +175,13 @@ fn upgrade_request(head: &[u8]) -> Option<UpgradeRequest<'_>> {
         // A line that starts with white space continues the previous header
         // (obsolete line folding), which RFC 9112 §5.2 lets a server reject.
         if line.starts_with([' ', '\t']) {
-            return None;
+            return Err(Reject::BadRequest);
         }
-        let (name, value) = line.split_once(':')?;
+        let (name, value) = line.split_once(':').ok_or(Reject::BadRequest)?;
         let value = value.trim_matches([' ', '\t']);
-        if name.eq_ignore_ascii_case("Upgrade") {
+        if name.eq_ignore_ascii_case("Host") {
+            host = true;
+        } else if name.eq_ignore_ascii_case("Upgrade") {
             upgrade |= has_token(value, "websocket");
         } else if name.eq_ignore_ascii_case("Connection") {
             connection |= has_token(value, "upgrade");
@@ -169,23 +192,28 @@ fn upgrade_request(head: &[u8]) -> Option<UpgradeRequest<'_>> {
                 .split(',')
                 .any(|p| p.trim_matches([' ', '\t']) == frame::SUBPROTOCOL);
         } else if name.eq_ignore_ascii_case("Sec-WebSocket-Key") {
-            if key.is_some() || value.is_empty() {
-                return None;
+            // One key, of 16 bytes in base64 (RFC 6455 §4.2.1 item 5).
+            if key.is_some() || !base64::decode(value).is_some_and(|k| k.len() == 16) {
+                return Err(Reject::BadRequest);
             }
             key = Some(value);
         } else if name.eq_ignore_ascii_case("Origin") {
             // One request has one origin (RFC 6454 §7.3); with two, the
             // check could see one and a proxy the other.
             if origin.is_some() {
-                return None;
+                return Err(Reject::BadRequest);
             }
             origin = Some(value);
         }
     }
-    if !(upgrade && connection && version_13 && subprotocol) {
-        return None;
+    if !version_13 {
+        return Err(Reject::Version);
     }
-    Some(UpgradeRequest { key: key?, origin })
+    if !(host && upgrade && connection && subprotocol) {
+        return Err(Reject::BadRequest);
+    }
+    let key = key.ok_or(Reject::BadRequest)?;
+    Ok(UpgradeRequest { key, origin })
 }
 
 /// Whether the comma-separated list `value` holds `token`, compared without
@@ -809,6 +837,52 @@ mod tests {
         for head in cases {
             assert_eq!(handshake_on(&head).0, Upgrade::Rejected, "head {head:?}");
         }
+    }
+
+    #[test]
+    fn a_request_without_a_host_header_gets_400() {
+        let head = GOOD_HEAD.replace("Host: server.example.com\r\n", "");
+        assert_eq!(
+            handshake_on(&head),
+            (
+                Upgrade::Rejected,
+                String::from_utf8(BAD_REQUEST.to_vec()).unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn a_key_that_does_not_decode_to_16_bytes_gets_400() {
+        let keys = [
+            "AAAAAAAAAAAAAAAAAAAA",         // 15 bytes
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAA", // 21 bytes
+            "dGhlIHNhbXBsZSBub25jZQ!=",     // outside the alphabet
+            "dGhlIHNhbXBsZSBub25jZQ=",      // not a multiple of 4
+        ];
+        for key in keys {
+            let head = GOOD_HEAD.replace("dGhlIHNhbXBsZSBub25jZQ==", key);
+            assert_eq!(handshake_on(&head).0, Upgrade::Rejected, "key {key:?}");
+        }
+    }
+
+    #[test]
+    fn a_version_other_than_13_gets_400_naming_version_13() {
+        let expected = "HTTP/1.1 400 Bad Request\r\n\
+            Sec-WebSocket-Version: 13\r\n\
+            Connection: close\r\nContent-Length: 0\r\n\r\n";
+        for head in [
+            GOOD_HEAD.replace("Version: 13", "Version: 8"),
+            GOOD_HEAD.replace("Sec-WebSocket-Version: 13\r\n", ""),
+        ] {
+            assert_eq!(
+                handshake_on(&head),
+                (Upgrade::Rejected, expected.to_owned()),
+                "head {head:?}"
+            );
+        }
+        // Any other refusal does not name the version.
+        let head = GOOD_HEAD.replace("ridl-ws-v1", "ridl-ws-v2");
+        assert!(!handshake_on(&head).1.contains("Sec-WebSocket-Version"));
     }
 
     #[test]

@@ -114,8 +114,9 @@ pub enum Ended {
     /// frame is also recorded as a [`Note`].
     ServerClosed(u16),
     /// The opening handshake was answered `400 Bad Request`, because the
-    /// request was malformed, its head passed 8 KiB, or it did not offer
-    /// `ridl-ws-v1`; or `403 Forbidden`, because the check set by
+    /// request was malformed, its head passed 8 KiB, it lacked a header the
+    /// upgrade needs, its `Sec-WebSocket-Version` was not 13, or it did not
+    /// offer `ridl-ws-v1`; or `403 Forbidden`, because the check set by
     /// [`Config::with_origin_check`] refused its `Origin`.
     Rejected,
     /// The opening handshake did not finish within
