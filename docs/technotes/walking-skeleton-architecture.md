@@ -323,7 +323,7 @@ crate the workspace holds — see `AGENTS.md` for that.
   the observe and call ports, applies the exact-match rule at `attach`, and
   keeps the last 64 settled responses of a session. Its tests run it against
   `tungstenite` as the client and over `ridl-loopback`. See frame specification
-  §11.1.
+  §11.1 and [its design record](../design/ridl-transport-ws.md).
 
 - **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and
   unpublished: `--emit codegen-model` as a process, over the backend contract
