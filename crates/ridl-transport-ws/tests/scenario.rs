@@ -4,16 +4,18 @@
 //! The second process is this test executable again, run with only the
 //! ignored test `provider_process` and the environment variable
 //! `RIDL_TRANSPORT_WS_PROVIDER=1`, which makes that test serve the provider
-//! on a TCP port it prints.
+//! on a TCP port it prints. The child ends on its own when its stdin reaches
+//! the end, which happens when the parent ends without killing it, and when
+//! no connection arrives within [`ACCEPT_LIMIT`].
 
 mod support;
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, ErrorKind, Write};
 use std::net::{SocketAddr, TcpListener};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use ridl_loopback::Loopback;
 use ridl_transport_ws::{serve, Config, Scanning};
@@ -24,6 +26,9 @@ use support::scenario::{run, Rig, LIMIT};
 
 /// The environment variable that makes `provider_process` serve.
 const PROVIDER_ENV: &str = "RIDL_TRANSPORT_WS_PROVIDER";
+
+/// How long the provider's process waits for its one connection.
+const ACCEPT_LIMIT: Duration = Duration::from_secs(10);
 
 /// The in-process rig: the consumer's ports and the provider are two
 /// aggregates on one loopback store, and a step is one pass of the provider.
@@ -90,7 +95,9 @@ fn spawn_provider() -> (ChildGuard, SocketAddr) {
         Command::new(exe)
             .args(["--exact", "provider_process", "--nocapture", "--ignored"])
             .env(PROVIDER_ENV, "1")
-            .stdin(Stdio::null())
+            // A pipe the parent never writes: the child reads its end when
+            // the parent's side closes, which happens however the parent ends.
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
@@ -132,13 +139,20 @@ fn the_scenario_runs_over_websocket_to_a_second_process() {
 /// The provider's process. It returns at once unless
 /// `RIDL_TRANSPORT_WS_PROVIDER=1`; then it prints `port <n>`, runs the
 /// provider on a thread every 5 ms, and serves the first connection on that
-/// port.
+/// port. It exits when its stdin reaches the end, and fails when no
+/// connection arrives within [`ACCEPT_LIMIT`].
 #[test]
 #[ignore = "run as the second process of the WebSocket scenario"]
 fn provider_process() {
     if std::env::var(PROVIDER_ENV).as_deref() != Ok("1") {
         return;
     }
+    thread::spawn(|| {
+        // The parent writes nothing, so this returns when the parent's end of
+        // the pipe closes.
+        let _ = io::copy(&mut io::stdin(), &mut io::sink());
+        std::process::exit(0);
+    });
     let mut rt = provider();
     let backend = Scanning(rt.attach());
     let listener = TcpListener::bind("127.0.0.1:0").expect("bound");
@@ -149,6 +163,24 @@ fn provider_process() {
         provider_step(&mut rt);
         thread::sleep(Duration::from_millis(5));
     });
-    let (conn, _) = listener.accept().expect("a connection");
+    listener
+        .set_nonblocking(true)
+        .expect("a nonblocking listener");
+    let start = Instant::now();
+    let conn = loop {
+        match listener.accept() {
+            Ok((conn, _)) => break conn,
+            Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                assert!(
+                    start.elapsed() < ACCEPT_LIMIT,
+                    "a connection within {ACCEPT_LIMIT:?}"
+                );
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(e) => panic!("accept failed: {e}"),
+        }
+    };
+    // On some platforms the accepted stream inherits the listener's mode.
+    conn.set_nonblocking(false).expect("a blocking connection");
     serve(conn, backend, &Config::default());
 }

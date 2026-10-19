@@ -34,3 +34,13 @@ ridl-loopback = { path = "../ridl-loopback" }
 # A dev-dependency does not reach the build of a crate that depends on this
 # one. 0.29 is the newest release whose rust-version is not above this crate's.
 tungstenite = "0.29.0"
+
+# The two test targets that run `serve` need the `server` feature. With it off,
+# they are skipped, and the codec's test targets still run.
+[[test]]
+name = "serve"
+required-features = ["server"]
+
+[[test]]
+name = "scenario"
+required-features = ["server"]

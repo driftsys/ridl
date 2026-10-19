@@ -17,7 +17,10 @@
 //! connection. Here each connection gets its own thread and its own aggregate
 //! handle on one `ridl-loopback` store:
 //!
-//! ```no_run
+// The example uses the `server` API, so it is compiled only when that feature
+// is on.
+#![cfg_attr(feature = "server", doc = "```no_run")]
+#![cfg_attr(not(feature = "server"), doc = "```ignore")]
 //! use std::net::TcpListener;
 //! use std::thread;
 //!
