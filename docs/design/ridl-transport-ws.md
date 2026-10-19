@@ -312,7 +312,10 @@ client is written to this rule.
   on a signal the session holds no state for, sends `Init` with `seq` 0 and
   creates no channel state, so a client cannot grow the session by reading
   signals that were never published.
-- `unsubscribe`: the server forgets the signal and sends nothing.
+- `unsubscribe`: the server marks the signal unsubscribed and sends nothing. The
+  channel's state, its session `seq` and the sample last sent, stays for the
+  rest of the session (D-24; frame specification §7), so a later `subscribe` of
+  the same signal continues the count.
 - The state sent is the backend's `RawSample`, mapped:
 
   | Backend provenance     | `publish` state   | Payload        |
@@ -384,11 +387,12 @@ event channel of the session, a counter from 1, and stamps each `publish` and
 `occurrence` it sends with the next value; `Init` keeps `seq` 0. The backend's
 `stamp` is kept unchanged, because the stamp is the sender's (ridl §3.1) and
 every timing rule of §8 is evaluated on it. A `publish` answering a `read` of a
-signal whose backend `seq` and provenance have not changed since the server last
-sent that channel reuses the session `seq` it sent then; otherwise it takes the
-next one. §13's relay rule is for a relay that forwards frames between two
-sessions; this server forwards samples from ports, which carry no session
-counter.
+signal whose backend `seq`, provenance, `stamp` and value bytes all equal the
+sample the server last sent on that channel reuses the session `seq` it sent
+then; otherwise it takes the next one. The comparison is the four fields,
+because a replaced writer may repeat a backend `seq` (D-14). §13's relay rule is
+for a relay that forwards frames between two sessions; this server forwards
+samples from ports, which carry no session counter.
 
 ### Events
 

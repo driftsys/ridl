@@ -982,10 +982,10 @@ mod tests {
     use ridl_rt::payload::{Rule, Violation};
     use ridl_rt::port::{
         Attached, Caller, Changed, Claim, Clock, Correlation, Encoded, EventSink, EventSource,
-        Handler, RawOccurrence, RawSample, ReadError, ScannableSignals, SendError, SignalReader,
-        SignalWriter, SubscribeError, Watermark,
+        FixedReader, Handler, RawOccurrence, RawSample, ReadError, ScannableSignals, SendError,
+        SignalReader, SignalWriter, SubscribeError, Watermark,
     };
-    use ridl_rt::sample::{Cause, Duration, Envelope, Freshness, Provenance, Timestamp};
+    use ridl_rt::sample::{Cause, Detection, Duration, Envelope, Freshness, Provenance, Timestamp};
     use ridl_rt::trace::TraceContext;
 
     use super::{Session, Step};
@@ -1010,6 +1010,8 @@ mod tests {
         iface: IFACE,
         ord: Ordinal(5),
     };
+    /// The size of a `publish` that carries no payload.
+    const PUBLISH_HEADER: usize = 27;
 
     fn target(kind: Kind, ord: u32) -> Target {
         Target {
@@ -1410,23 +1412,6 @@ mod tests {
         assert_eq!(decode(&out[0]).unwrap(), accepted(SIGNAL));
     }
 
-    #[test]
-    fn a_read_publishes_once_and_does_not_subscribe() {
-        let (mut s, mut p, _n) = scanning();
-        open(&mut s);
-        commit(&mut p, &[1]);
-        let (step, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
-        assert_eq!(step, Step::Continue);
-        assert_eq!(out.len(), 1);
-        assert_eq!(
-            decode(&out[0]).unwrap(),
-            publish(SIGNAL, 0, 1, PublishState::Live(&[1]))
-        );
-        commit(&mut p, &[2]);
-        let (_, out) = tick(&mut s);
-        assert!(out.is_empty());
-    }
-
     /// A `read` of a signal that was never published is answered `Init`
     /// with `seq` 0 and leaves no channel state, so reads of many distinct
     /// keys do not grow the session. A read after a publication then counts
@@ -1575,6 +1560,91 @@ mod tests {
             assert!(out.is_empty());
         }
     );
+
+    both_modes!(
+        read_does_not_subscribe,
+        a_read_publishes_once_and_does_not_subscribe_scanning,
+        a_read_publishes_once_and_does_not_subscribe_polling,
+        |s, p| {
+            open(&mut s);
+            commit(&mut p, &[1]);
+            let (step, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+            assert_eq!(step, Step::Continue);
+            assert_eq!(out.len(), 1);
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                publish(SIGNAL, 0, 1, PublishState::Live(&[1]))
+            );
+            let subscribed = s
+                .signals
+                .get(&(IFACE, Ordinal(1)))
+                .is_some_and(|ch| ch.subscribed);
+            assert!(!subscribed);
+            commit(&mut p, &[2]);
+            let (_, out) = tick(&mut s);
+            assert!(out.is_empty());
+        }
+    );
+
+    both_modes!(
+        signal_seq_outlives_subscription,
+        a_signal_channel_seq_outlives_its_subscription_scanning,
+        a_signal_channel_seq_outlives_its_subscription_polling,
+        |s, p| {
+            open(&mut s);
+            send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+            commit(&mut p, &[1]);
+            let (_, out) = tick(&mut s);
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                publish(SIGNAL, 0, 1, PublishState::Live(&[1]))
+            );
+            send(&mut s, &msg(Frame::Unsubscribe(SIGNAL)));
+            commit(&mut p, &[2]);
+            let (_, out) = tick(&mut s);
+            assert!(out.is_empty());
+            // The counter goes on from 1: the channel's state lasts as long
+            // as the session (frame specification §7).
+            let (_, out) = send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+            assert_eq!(out.len(), 2);
+            assert_eq!(
+                decode(&out[1]).unwrap(),
+                publish(SIGNAL, 0, 2, PublishState::Live(&[2]))
+            );
+        }
+    );
+
+    /// A `Changed` entry of a signal of a marked interface that the client
+    /// did not subscribe is ignored.
+    #[test]
+    fn a_scan_entry_of_a_signal_that_is_not_subscribed_is_not_published() {
+        let (mut s, mut p, _n) = scanning();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        p.set(IFACE, Ordinal(2), &[2]).unwrap();
+        p.commit();
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+    }
+
+    /// Unsubscribing one signal keeps the interface's mark while a sibling
+    /// is still subscribed, so the sibling's changes are still scanned.
+    #[test]
+    fn the_interface_mark_stays_while_a_sibling_signal_is_subscribed() {
+        let (mut s, mut p, _n) = scanning();
+        open(&mut s);
+        let sibling = target(Kind::Signal, 2);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        send(&mut s, &msg(Frame::Subscribe(sibling)));
+        send(&mut s, &msg(Frame::Unsubscribe(sibling)));
+        commit(&mut p, &[5]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 0, 1, PublishState::Live(&[5]))
+        );
+    }
 
     both_modes!(
         two_commits_coalesced,
@@ -1906,6 +1976,28 @@ mod tests {
         );
     }
 
+    /// `Invalid(Detected(_))` never crosses (frame specification §9.6): it
+    /// is sent as `InvalidDeclared`, with no payload.
+    #[test]
+    fn a_detected_invalidity_is_published_as_invalid_declared_with_no_payload() {
+        let provenance = Rc::new(Cell::new(Provenance::Invalid(Cause::Detected(
+            Detection::Corrupt,
+        ))));
+        let backend = Polling(Fixed {
+            inner: Loopback::new(CATALOG),
+            provenance: Rc::clone(&provenance),
+        });
+        let mut s = Session::new(backend, &Config::default());
+        open(&mut s);
+        let (_, out) = send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        assert_eq!(out.len(), 2);
+        assert_eq!(
+            decode(&out[1]).unwrap(),
+            publish(SIGNAL, 0, 1, PublishState::InvalidDeclared)
+        );
+        assert_eq!(out[1].len(), PUBLISH_HEADER);
+    }
+
     /// One commit of more signals than the scan buffer holds: the buffer
     /// grows and every subscribed one is published.
     #[test]
@@ -1982,6 +2074,27 @@ mod tests {
                 needed: 2000
             }]
         );
+    }
+
+    /// A value that fits resets the record, so a value too large again
+    /// afterwards, of the same size, is recorded again.
+    #[test]
+    fn a_value_too_large_again_after_one_that_fit_is_recorded_again() {
+        let (mut s, mut p, notes) = limited();
+        open(&mut s);
+        commit(&mut p, &[1; 2000]);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        commit(&mut p, &[9]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        commit(&mut p, &[2; 2000]);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        let too_large = Note::ValueTooLarge {
+            target: SIGNAL,
+            needed: 2000,
+        };
+        assert_eq!(*notes.lock().unwrap(), vec![too_large, too_large]);
     }
 
     #[test]
@@ -2258,6 +2371,32 @@ mod tests {
         assert_eq!(occurrence_seqs(&out), vec![3]);
         let (_, out) = tick(&mut s);
         assert!(out.is_empty());
+    }
+
+    /// One tick with a changed signal, a waiting occurrence and a settled
+    /// call sends them in that order.
+    #[test]
+    fn a_tick_sends_signals_then_occurrences_then_responses() {
+        let (mut s, mut p, _n) = scanning();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        send(&mut s, &msg(Frame::Subscribe(EVENT)));
+        let (_, out) = send(&mut s, &request(COMMAND, 1, &[]));
+        assert!(out.is_empty());
+        let c = claim(&mut p, COMMAND);
+        p.settle(c.id, Ok(&[])).unwrap();
+        raise(&mut p, EVENT, &[2]);
+        commit(&mut p, &[1]);
+        let (_, out) = tick(&mut s);
+        let frames: Vec<Frame<'_>> = out.iter().map(|m| decode(m).unwrap()).collect();
+        assert_eq!(
+            frames,
+            vec![
+                publish(SIGNAL, 0, 1, PublishState::Live(&[1])),
+                occurrence(EVENT, 0, 1, &[2]),
+                response(COMMAND, 0, 1, 1, ResponseOutcome::Accepted),
+            ]
+        );
     }
 
     /// A scanning backend that counts its `scan` calls and, when asked,
@@ -2862,6 +3001,110 @@ mod tests {
         assert_eq!(out[0].len(), LIMIT);
     }
 
+    // -- The cap boundaries, above the first buffer ---------------------------
+
+    /// A limit above the first buffer, so that a value at the cap is first
+    /// reported as `Short` and the comparison with the cap decides.
+    const ROOMY_LIMIT: usize = 4096;
+
+    fn roomy() -> (Session<Scanning<Loopback>>, Loopback, Notes) {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let p = rt.attach();
+        let config = config(&notes)
+            .with_max_message_bytes(ROOMY_LIMIT)
+            .expect("above the minimum");
+        (Session::new(Scanning(rt), &config), p, notes)
+    }
+
+    fn roomy_cap(frame: Frame<'_>) -> usize {
+        ROOMY_LIMIT - frame.encoded_len()
+    }
+
+    #[test]
+    fn a_signal_of_exactly_the_cap_is_sent_and_one_byte_more_is_not() {
+        let (mut s, mut p, notes) = roomy();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        let cap = roomy_cap(publish(SIGNAL, 0, 0, PublishState::Live(&[])));
+        commit(&mut p, &vec![1; cap]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), ROOMY_LIMIT);
+        commit(&mut p, &vec![2; cap + 1]);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: SIGNAL,
+                needed: cap + 1
+            }]
+        );
+    }
+
+    #[test]
+    fn a_fixed_of_exactly_the_cap_is_sent_and_one_byte_more_is_not() {
+        let (mut s, mut p, notes) = roomy();
+        open(&mut s);
+        let cap = roomy_cap(publish(FIXED, 0, 0, PublishState::Live(&[])));
+        p.provision_fixed(IFACE, Ordinal(5), &vec![1; cap]);
+        let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), ROOMY_LIMIT);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![2; cap + 1]);
+        let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert!(out.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: FIXED,
+                needed: cap + 1
+            }]
+        );
+    }
+
+    #[test]
+    fn an_occurrence_of_exactly_the_cap_is_sent_and_one_byte_more_is_not() {
+        let (mut s, mut p, notes) = roomy();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(EVENT)));
+        let cap = roomy_cap(occurrence(EVENT, 0, 0, &[]));
+        raise(&mut p, EVENT, &vec![1; cap]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), ROOMY_LIMIT);
+        raise(&mut p, EVENT, &vec![2; cap + 1]);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: EVENT,
+                needed: cap + 1
+            }]
+        );
+    }
+
+    #[test]
+    fn a_reply_of_exactly_the_cap_is_sent_and_one_byte_more_is_not() {
+        let (mut s, mut p, notes) = roomy();
+        open(&mut s);
+        let cap = roomy_cap(response(QUERY, 0, 0, 0, ResponseOutcome::Reply(&[])));
+        let out = settled(&mut s, &mut p, QUERY, 1, Ok(&vec![1; cap]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), ROOMY_LIMIT);
+        let out = settled(&mut s, &mut p, QUERY, 2, Ok(&vec![2; cap + 1]));
+        assert!(out.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: QUERY,
+                needed: cap + 1
+            }]
+        );
+    }
+
     // -- D-18: the end of a session -----------------------------------------
 
     #[test]
@@ -2881,36 +3124,92 @@ mod tests {
         None,
         /// `EventSource::subscribe` answers `Detached`.
         Subscribe,
+        /// `EventSource::subscribe` answers `Contract(UnknownInteraction)`.
+        SubscribeContract,
         /// `EventSource::next` answers `Detached`.
         Next,
         /// `Caller::command` answers `Detached`.
         Command,
         /// `Caller::query` answers `Detached`.
         Query,
+        /// `Caller::query` answers `Contract(ContractBroken)`.
+        QueryContract,
         /// `Caller::reply` answers `Detached`.
         Reply,
         /// `Caller::command` answers `TooLarge`.
         CommandTooLarge,
+        /// `SignalReader::read` answers `Detached`.
+        ReadDetached,
+        /// `SignalReader::read` of ordinal 1 answers `Contract(ContractBroken)`.
+        ReadContract,
+        /// `FixedReader::read_fixed` answers `Detached`.
+        FixedDetached,
     }
 
     /// Ports that delegate to a loopback, but for one call that fails, and
-    /// that record what is forgotten.
+    /// that record what is forgotten. The failing call can be changed while
+    /// the session runs.
     struct Faulty {
         inner: Loopback,
-        fail: Fail,
+        fail: Rc<Cell<Fail>>,
         forgotten: Rc<RefCell<Vec<Correlation>>>,
     }
 
-    fn faulty(fail: Fail) -> (Session<Polling<Faulty>>, Rc<RefCell<Vec<Correlation>>>) {
+    /// A scanning backend over [`Faulty`], with the loopback's `fixed`.
+    struct FaultyBackend(Faulty);
+
+    impl Backend for FaultyBackend {
+        type Ports = Faulty;
+
+        fn ports(&mut self) -> &mut Faulty {
+            &mut self.0
+        }
+
+        fn scannable(&self) -> Option<&dyn ScannableSignals> {
+            Some(&self.0.inner)
+        }
+
+        fn read_fixed(
+            &self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            out: &mut [u8],
+        ) -> Result<usize, ReadError> {
+            if self.0.fail.get() == Fail::FixedDetached {
+                return Err(ReadError::Detached);
+            }
+            FixedReader::read_fixed(&self.0.inner, iface, ord, out)
+        }
+    }
+
+    /// An open session over a [`FaultyBackend`], the provider's handle on
+    /// the same store, the switch of the failing call, and the correlations
+    /// forgotten.
+    struct FaultyRig {
+        s: Session<FaultyBackend>,
+        p: Loopback,
+        fail: Rc<Cell<Fail>>,
+        forgotten: Rc<RefCell<Vec<Correlation>>>,
+    }
+
+    fn faulty(fail: Fail) -> FaultyRig {
         let forgotten = Rc::new(RefCell::new(Vec::new()));
-        let backend = Polling(Faulty {
-            inner: Loopback::new(CATALOG),
-            fail,
+        let fail = Rc::new(Cell::new(fail));
+        let rt = Loopback::new(CATALOG);
+        let p = rt.attach();
+        let backend = FaultyBackend(Faulty {
+            inner: rt,
+            fail: Rc::clone(&fail),
             forgotten: Rc::clone(&forgotten),
         });
         let mut s = Session::new(backend, &Config::default());
         open(&mut s);
-        (s, forgotten)
+        FaultyRig {
+            s,
+            p,
+            fail,
+            forgotten,
+        }
     }
 
     impl Attached for Faulty {
@@ -2936,7 +3235,13 @@ mod tests {
             ord: Ordinal,
             out: &mut [u8],
         ) -> Result<RawSample, ReadError> {
-            self.inner.read(iface, ord, out)
+            match self.fail.get() {
+                Fail::ReadDetached => Err(ReadError::Detached),
+                Fail::ReadContract if ord == Ordinal(1) => {
+                    Err(ReadError::Contract(Contract::ContractBroken))
+                }
+                _ => self.inner.read(iface, ord, out),
+            }
         }
     }
 
@@ -2946,16 +3251,19 @@ mod tests {
             iface: InterfaceNo,
             ords: &[Ordinal],
         ) -> Result<(), SubscribeError> {
-            if self.fail == Fail::Subscribe {
-                return Err(SubscribeError::Detached);
+            match self.fail.get() {
+                Fail::Subscribe => Err(SubscribeError::Detached),
+                Fail::SubscribeContract => {
+                    Err(SubscribeError::Contract(Contract::UnknownInteraction))
+                }
+                _ => self.inner.subscribe(iface, ords),
             }
-            self.inner.subscribe(iface, ords)
         }
         fn unsubscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) {
             self.inner.unsubscribe(iface, ords);
         }
         fn next(&mut self, out: &mut [u8]) -> Result<Option<RawOccurrence>, ReadError> {
-            if self.fail == Fail::Next {
+            if self.fail.get() == Fail::Next {
                 return Err(ReadError::Detached);
             }
             self.inner.next(out)
@@ -2970,7 +3278,7 @@ mod tests {
             args: &[u8],
             trace: Option<TraceContext>,
         ) -> Result<Correlation, SendError> {
-            match self.fail {
+            match self.fail.get() {
                 Fail::Command => Err(SendError::Detached),
                 Fail::CommandTooLarge => Err(SendError::TooLarge { cap: 8 }),
                 _ => self.inner.command(iface, ord, args, trace),
@@ -2983,10 +3291,11 @@ mod tests {
             args: &[u8],
             trace: Option<TraceContext>,
         ) -> Result<Correlation, SendError> {
-            if self.fail == Fail::Query {
-                return Err(SendError::Detached);
+            match self.fail.get() {
+                Fail::Query => Err(SendError::Detached),
+                Fail::QueryContract => Err(SendError::Contract(Contract::ContractBroken)),
+                _ => self.inner.query(iface, ord, args, trace),
             }
-            self.inner.query(iface, ord, args, trace)
         }
         fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
             self.inner.ack(c)
@@ -2996,7 +3305,7 @@ mod tests {
             c: Correlation,
             out: &mut [u8],
         ) -> Result<Option<Result<usize, CallError>>, ReadError> {
-            if self.fail == Fail::Reply {
+            if self.fail.get() == Fail::Reply {
                 return Err(ReadError::Detached);
             }
             self.inner.reply(c, out)
@@ -3009,12 +3318,12 @@ mod tests {
 
     #[test]
     fn close_forgets_each_call_on_the_backend() {
-        let (mut s, forgotten) = faulty(Fail::None);
-        send(&mut s, &request(COMMAND, 1, &[]));
-        send(&mut s, &request(QUERY, 2, &[]));
-        assert!(forgotten.borrow().is_empty());
-        s.close();
-        let mut forgotten = forgotten.borrow().clone();
+        let mut r = faulty(Fail::None);
+        send(&mut r.s, &request(COMMAND, 1, &[]));
+        send(&mut r.s, &request(QUERY, 2, &[]));
+        assert!(r.forgotten.borrow().is_empty());
+        r.s.close();
+        let mut forgotten = r.forgotten.borrow().clone();
         forgotten.sort_unstable();
         assert_eq!(forgotten.len(), 2);
         assert_ne!(forgotten[0], forgotten[1]);
@@ -3026,29 +3335,119 @@ mod tests {
             (Fail::Subscribe, msg(Frame::Subscribe(EVENT))),
             (Fail::Command, request(COMMAND, 1, &[])),
             (Fail::Query, request(QUERY, 1, &[])),
+            (Fail::ReadDetached, msg(Frame::Subscribe(SIGNAL))),
+            (Fail::ReadDetached, msg(Frame::Read(SIGNAL))),
+            (Fail::FixedDetached, msg(Frame::Read(FIXED))),
         ];
         for (fail, m) in cases {
-            let (mut s, _) = faulty(fail);
-            let (step, out) = send(&mut s, &m);
+            let mut r = faulty(fail);
+            let (step, out) = send(&mut r.s, &m);
             assert_eq!(step, Step::Close(1001), "{fail:?}");
             assert!(out.is_empty(), "{fail:?}");
         }
-        let (mut s, _) = faulty(Fail::Next);
-        let (step, out) = tick(&mut s);
+        let mut r = faulty(Fail::Next);
+        let (step, out) = tick(&mut r.s);
         assert_eq!(step, Step::Close(1001));
         assert!(out.is_empty());
-        let (mut s, _) = faulty(Fail::Reply);
-        let (step, _) = send(&mut s, &request(QUERY, 1, &[]));
+        let mut r = faulty(Fail::Reply);
+        let (step, _) = send(&mut r.s, &request(QUERY, 1, &[]));
         assert_eq!(step, Step::Continue);
-        let (step, out) = tick(&mut s);
+        let (step, out) = tick(&mut r.s);
         assert_eq!(step, Step::Close(1001));
         assert!(out.is_empty());
     }
 
+    /// A signal subscribed while the backend was healthy, read on a tick
+    /// after the backend detached.
+    #[test]
+    fn a_signal_read_that_detaches_on_a_tick_closes_1001() {
+        let mut r = faulty(Fail::None);
+        send(&mut r.s, &msg(Frame::Subscribe(SIGNAL)));
+        commit(&mut r.p, &[1]);
+        r.fail.set(Fail::ReadDetached);
+        let (step, out) = tick(&mut r.s);
+        assert_eq!(step, Step::Close(1001));
+        assert!(out.is_empty());
+    }
+
+    /// A signal `subscribe` the backend refuses with a contract error is
+    /// answered `contract` and subscribes nothing: no mark is left on the
+    /// interface, so a sibling subscribed later, after a commit, does not
+    /// get that commit sent again by the next tick.
+    #[test]
+    fn a_signal_subscribe_the_backend_refuses_is_answered_contract_and_leaves_no_mark() {
+        let mut r = faulty(Fail::ReadContract);
+        let (step, out) = send(&mut r.s, &msg(Frame::Subscribe(SIGNAL)));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            Frame::Answer {
+                target: SIGNAL,
+                outcome: AnswerOutcome::Contract(Contract::ContractBroken),
+            }
+        );
+        assert!(r.s.marks.is_empty());
+        assert!(!r.s.signals.contains_key(&(IFACE, Ordinal(1))));
+        let sibling = target(Kind::Signal, 2);
+        r.p.set(IFACE, Ordinal(2), &[2]).unwrap();
+        r.p.commit();
+        let (_, out) = send(&mut r.s, &msg(Frame::Subscribe(sibling)));
+        assert_eq!(out.len(), 2);
+        assert_eq!(
+            decode(&out[1]).unwrap(),
+            publish(sibling, 0, 1, PublishState::Live(&[2]))
+        );
+        let (_, out) = tick(&mut r.s);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn a_signal_read_the_backend_refuses_is_answered_contract() {
+        let mut r = faulty(Fail::ReadContract);
+        let (step, out) = send(&mut r.s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            Frame::Answer {
+                target: SIGNAL,
+                outcome: AnswerOutcome::Contract(Contract::ContractBroken),
+            }
+        );
+    }
+
+    #[test]
+    fn an_event_subscribe_the_backend_refuses_is_answered_contract() {
+        let mut r = faulty(Fail::SubscribeContract);
+        let (step, out) = send(&mut r.s, &msg(Frame::Subscribe(EVENT)));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(EVENT));
+    }
+
+    #[test]
+    fn a_query_the_backend_refuses_at_send_is_answered_contract() {
+        let mut r = faulty(Fail::QueryContract);
+        let (step, out) = send(&mut r.s, &request(QUERY, 1, &[]));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(
+                QUERY,
+                0,
+                1,
+                1,
+                ResponseOutcome::Contract(Contract::ContractBroken)
+            )
+        );
+    }
+
     #[test]
     fn a_send_refused_as_too_large_is_answered_corrupt() {
-        let (mut s, _) = faulty(Fail::CommandTooLarge);
-        let (step, out) = send(&mut s, &request(COMMAND, 1, &[1; 9]));
+        let mut r = faulty(Fail::CommandTooLarge);
+        let (step, out) = send(&mut r.s, &request(COMMAND, 1, &[1; 9]));
         assert_eq!(step, Step::Continue);
         assert_eq!(out.len(), 1);
         assert_eq!(
