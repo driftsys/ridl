@@ -283,6 +283,11 @@ wasm-check:
 # apart from the appended tables, must build with the minimum toolchain, with
 # the `suite!` test compiled.
 #
+# ridl-transport-ws is held to the same terms: its manifest must set the same
+# rust-version as ridl-rt and edition 2021, and the packaged crate, unchanged
+# apart from the appended tables, must build with the minimum toolchain with
+# its default features and with none.
+#
 # The crate emitted for the veh-cluster corpus is built with cargo, not with
 # rustc as the cabin crate is, with every cargo feature on and with default
 # features off. The recipe reads the edition from the emitted veh-cluster
@@ -318,8 +323,8 @@ wasm-check:
 #
 # The recipe also fails on: a ridl-descriptor manifest without a rust-version
 # line, or one that names a version newer than the pin; a workspace
-# dependency, other than a dev-dependency, of ridl-rt, ridl-rt-conformance or
-# ridl-loopback outside those three, or of ridl-ir or ridl-descriptor outside
+# dependency, other than a dev-dependency, of ridl-rt, ridl-rt-conformance,
+# ridl-loopback or ridl-transport-ws outside those four, or of ridl-ir or ridl-descriptor outside
 # those two; a packaged ridl-descriptor that names ridl-backend-rust; or a
 # packaged ridl-descriptor test list that differs from the one the recipe
 # expects.
@@ -390,6 +395,15 @@ compat-check: toolchain-check
         exit 1
     fi
 
+    # ridl-transport-ws is held to the same minimum and edition.
+    transport_manifest="crates/ridl-transport-ws/Cargo.toml"
+    if ! grep -qxF "rust-version = \"$minimum\"" "$transport_manifest" \
+        || ! grep -qxF 'edition = "2021"' "$transport_manifest"; then
+        echo "compat-check: $transport_manifest must set edition = \"2021\" and" >&2
+        echo "compat-check: rust-version = \"$minimum\", the same as $manifest." >&2
+        exit 1
+    fi
+
     # ridl-descriptor states its edition as a literal, so that a change to the
     # workspace edition does not change it.
     descriptor_edition_manifest="crates/ridl-descriptor/Cargo.toml"
@@ -435,7 +449,7 @@ compat-check: toolchain-check
                 | select(.name as $name | $crates | any(. == $name) | not)
                 | "\($from) -> \(.name)"'
     }
-    for set in "ridl-rt ridl-rt-conformance ridl-loopback" "ridl-ir ridl-descriptor"; do
+    for set in "ridl-rt ridl-rt-conformance ridl-loopback ridl-transport-ws" "ridl-ir ridl-descriptor"; do
         extra="$(unpackaged_deps "$set")"
         if [ -n "$extra" ]; then
             echo "compat-check: one of $set now depends on another workspace crate;" >&2
@@ -445,12 +459,12 @@ compat-check: toolchain-check
         fi
     done
 
-    # All five crates in one command: the packaged ridl-rt-conformance and
-    # ridl-loopback depend on ridl-rt, and ridl-descriptor on ridl-ir, at this
+    # All six crates in one command: the packaged ridl-rt-conformance,
+    # ridl-loopback and ridl-transport-ws depend on ridl-rt, and ridl-descriptor on ridl-ir, at this
     # version, which is not on the registry until the release publishes it, so
     # the single-crate form fails while the version is unpublished.
-    echo "compat-check: packaging ridl-rt, ridl-rt-conformance, ridl-loopback, ridl-ir and ridl-descriptor $version"
-    cargo package -p ridl-rt -p ridl-rt-conformance -p ridl-loopback -p ridl-ir -p ridl-descriptor \
+    echo "compat-check: packaging ridl-rt, ridl-rt-conformance, ridl-loopback, ridl-transport-ws, ridl-ir and ridl-descriptor $version"
+    cargo package -p ridl-rt -p ridl-rt-conformance -p ridl-loopback -p ridl-transport-ws -p ridl-ir -p ridl-descriptor \
         --no-verify --allow-dirty
 
     package_dir="${CARGO_TARGET_DIR:-target}/package"
@@ -483,11 +497,13 @@ compat-check: toolchain-check
     pkg="$PWD/target/compat-check/pkg"
     pkg_conformance="$PWD/target/compat-check/pkg-conformance"
     pkg_loopback="$PWD/target/compat-check/pkg-loopback"
+    pkg_transport="$PWD/target/compat-check/pkg-transport"
     pkg_ir="$PWD/target/compat-check/pkg-ir"
     pkg_descriptor="$PWD/target/compat-check/pkg-descriptor"
     extract ridl-rt "$pkg"
     extract ridl-rt-conformance "$pkg_conformance"
     extract ridl-loopback "$pkg_loopback"
+    extract ridl-transport-ws "$pkg_transport"
     extract ridl-ir "$pkg_ir"
     extract ridl-descriptor "$pkg_descriptor"
 
@@ -639,6 +655,28 @@ compat-check: toolchain-check
     append_tables "$pkg_loopback/Cargo.toml" "ridl-rt=$pkg"
     echo "compat-check: $minimum, edition 2021 (packaged ridl-loopback, suite! expanded)"
     cargo "+$minimum" test --no-run --offline --manifest-path "$pkg_loopback/Cargo.toml"
+
+    # ridl-transport-ws as published: only the tables below are appended. Its
+    # tests are not run here (the package excludes them, and the pin runs them
+    # in the workspace). Its WebSocket client, tungstenite, is a
+    # dev-dependency, so building the package does not compile it, but cargo
+    # still resolves it, and the offline build cannot: the recipe removes its
+    # table first, and fails when the manifest has any other dev-dependency
+    # table. Built with the default features and with none (the codec alone,
+    # with no `std`).
+    if [ "$(grep -c '^\[dev-dependencies' "$pkg_transport/Cargo.toml")" != 1 ] \
+        || ! grep -qxF '[dev-dependencies.tungstenite]' "$pkg_transport/Cargo.toml"; then
+        echo "compat-check: the packaged ridl-transport-ws manifest no longer has" >&2
+        echo "compat-check: tungstenite as its only dev-dependency table." >&2
+        exit 1
+    fi
+    sed -i.bak '/^\[dev-dependencies\.tungstenite\]$/,/^$/d' "$pkg_transport/Cargo.toml"
+    rm -f "$pkg_transport/Cargo.toml.bak"
+    append_tables "$pkg_transport/Cargo.toml" "ridl-rt=$pkg"
+    echo "compat-check: $minimum, edition 2021 (packaged ridl-transport-ws, default features)"
+    cargo "+$minimum" build --offline --manifest-path "$pkg_transport/Cargo.toml"
+    echo "compat-check: $minimum, edition 2021 (packaged ridl-transport-ws, no default features)"
+    cargo "+$minimum" build --offline --no-default-features --manifest-path "$pkg_transport/Cargo.toml"
 
     # The crate `ridl build` emits for the veh-cluster corpus, as edition 2021
     # at the minimum with every feature on, so the regex dependency of
