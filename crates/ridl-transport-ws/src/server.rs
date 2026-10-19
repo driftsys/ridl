@@ -44,7 +44,8 @@ pub trait Connection: Read + Write {
 
     /// Ends the write side of the stream, so that the peer reads the end of
     /// the stream after the bytes already written. [`serve`] calls it after
-    /// every close frame it sends and after a handshake `400 Bad Request`.
+    /// every close frame it sends and after a handshake `400 Bad Request` or
+    /// `403 Forbidden`.
     /// The default does nothing, for a stream that has no write side of its
     /// own to end.
     ///
@@ -99,8 +100,10 @@ pub enum Ended {
     /// on a message over [`Config::max_message_bytes`]. A violation of the
     /// frame is also recorded as a [`Note`].
     ServerClosed(u16),
-    /// The opening handshake was answered `400 Bad Request`: the request was
-    /// malformed, its head passed 8 KiB, or it did not offer `ridl-ws-v1`.
+    /// The opening handshake was answered `400 Bad Request`, because the
+    /// request was malformed, its head passed 8 KiB, or it did not offer
+    /// `ridl-ws-v1`; or `403 Forbidden`, because the check set by
+    /// [`Config::with_origin_check`] refused its `Origin`.
     Rejected,
     /// The opening handshake did not finish within
     /// [`Config::liveness_timeout`], no message of any kind, data or
@@ -117,7 +120,7 @@ pub enum Ended {
 const READ_BUFFER: usize = 16 * 1024;
 
 /// How long the server goes on reading after it answers a handshake `400`
-/// or sends a close frame, so that the client reads the answer or the close
+/// or `403`, or sends a close frame, so that the client reads the answer or the close
 /// frame before the connection closes.
 const LINGER: Duration = Duration::from_millis(100);
 
@@ -171,9 +174,10 @@ fn run<C: Connection, B: Backend>(
         return Ended::Io(e.kind());
     }
     let deadline = Instant::now() + config.liveness_timeout;
-    match ws::handshake(&mut Deadline { conn, at: deadline }) {
+    let accept_origin = |origin: Option<&str>| config.origin_accepted(origin);
+    match ws::handshake(&mut Deadline { conn, at: deadline }, accept_origin) {
         Ok(Upgrade::Accepted) => {}
-        Ok(Upgrade::Rejected) => {
+        Ok(Upgrade::Rejected | Upgrade::Forbidden) => {
             linger(conn);
             return Ended::Rejected;
         }
@@ -276,7 +280,7 @@ fn timed_out(e: &io::Error) -> bool {
     )
 }
 
-/// After a handshake `400` or a close frame the server sent: ends the write
+/// After a handshake `400` or `403`, or a close frame the server sent: ends the write
 /// side, then reads and drops what the client still sends, until the client
 /// closes or [`LINGER`] passes. Closing a connection with unread bytes in its
 /// receive buffer resets it, and a client may then lose the `400` or the

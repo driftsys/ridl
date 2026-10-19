@@ -22,6 +22,10 @@ const ACCEPT_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const BAD_REQUEST: &[u8] =
     b"HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
 
+/// The response to an upgrade request whose `Origin` the check refused.
+const FORBIDDEN: &[u8] =
+    b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n";
+
 /// The result of [`handshake`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Upgrade {
@@ -30,16 +34,23 @@ pub(crate) enum Upgrade {
     Accepted,
     /// The server answered `400 Bad Request`. The caller closes the stream.
     Rejected,
+    /// The server answered `403 Forbidden`: the origin check refused the
+    /// request's `Origin`. The caller closes the stream.
+    Forbidden,
 }
 
 /// Reads one HTTP/1.1 upgrade request from `stream` and answers it.
 ///
 /// The request is upgraded when it is a `GET` with `Upgrade: websocket`,
 /// `Connection: Upgrade`, `Sec-WebSocket-Version: 13`, one `Sec-WebSocket-Key`,
-/// and `ridl-ws-v1` in any position of `Sec-WebSocket-Protocol`. The path, the
-/// query and every other header are ignored. A request head over 8 KiB, a
-/// malformed request, or a request that does not offer `ridl-ws-v1` is
-/// answered `400 Bad Request` and returns [`Upgrade::Rejected`].
+/// and `ridl-ws-v1` in any position of `Sec-WebSocket-Protocol`, and when
+/// `accept_origin` accepts its `Origin` header, which is `None` when the
+/// request has none. The path, the query and every other header are ignored.
+/// A request head over 8 KiB, a malformed request, a request with more than
+/// one `Origin` header, or a request that does not offer `ridl-ws-v1` is
+/// answered `400 Bad Request` and returns [`Upgrade::Rejected`]. A request
+/// whose `Origin` `accept_origin` refuses is answered `403 Forbidden` and
+/// returns [`Upgrade::Forbidden`].
 ///
 /// The head is read one byte at a time, so that no byte after the empty line
 /// that ends it is taken from the stream.
@@ -48,13 +59,21 @@ pub(crate) enum Upgrade {
 ///
 /// An error of `stream`, or `UnexpectedEof` when the stream ends before the
 /// head does.
-pub(crate) fn handshake<S: Read + Write>(stream: &mut S) -> io::Result<Upgrade> {
+pub(crate) fn handshake<S: Read + Write>(
+    stream: &mut S,
+    accept_origin: impl FnOnce(Option<&str>) -> bool,
+) -> io::Result<Upgrade> {
     let Some(head) = read_head(stream)? else {
         return reject(stream);
     };
-    let Some(key) = upgrade_key(&head) else {
+    let Some(request) = upgrade_request(&head) else {
         return reject(stream);
     };
+    if !accept_origin(request.origin) {
+        stream.write_all(FORBIDDEN)?;
+        stream.flush()?;
+        return Ok(Upgrade::Forbidden);
+    }
     let response = format!(
         "HTTP/1.1 101 Switching Protocols\r\n\
          Upgrade: websocket\r\n\
@@ -62,7 +81,7 @@ pub(crate) fn handshake<S: Read + Write>(stream: &mut S) -> io::Result<Upgrade> 
          Sec-WebSocket-Accept: {}\r\n\
          Sec-WebSocket-Protocol: {}\r\n\
          \r\n",
-        accept_key(key),
+        accept_key(request.key),
         frame::SUBPROTOCOL,
     );
     stream.write_all(response.as_bytes())?;
@@ -95,9 +114,18 @@ fn read_head<S: Read>(stream: &mut S) -> io::Result<Option<Vec<u8>>> {
     Ok(Some(head))
 }
 
-/// Returns the `Sec-WebSocket-Key` of `head` when `head` is an upgrade request
+/// The headers of an upgrade request that [`handshake`] uses after it has
+/// checked them.
+struct UpgradeRequest<'a> {
+    /// The `Sec-WebSocket-Key`.
+    key: &'a str,
+    /// The `Origin`, when the request has one.
+    origin: Option<&'a str>,
+}
+
+/// Returns the key and the origin of `head` when `head` is an upgrade request
 /// this server accepts, and `None` otherwise.
-fn upgrade_key(head: &[u8]) -> Option<&str> {
+fn upgrade_request(head: &[u8]) -> Option<UpgradeRequest<'_>> {
     let head = std::str::from_utf8(head).ok()?;
     let head = head.strip_suffix("\r\n\r\n")?;
     let mut lines = head.split("\r\n");
@@ -121,6 +149,7 @@ fn upgrade_key(head: &[u8]) -> Option<&str> {
     let mut version_13 = false;
     let mut subprotocol = false;
     let mut key = None;
+    let mut origin = None;
     for line in lines {
         // A line that starts with white space continues the previous header
         // (obsolete line folding), which RFC 9112 §5.2 lets a server reject.
@@ -144,11 +173,19 @@ fn upgrade_key(head: &[u8]) -> Option<&str> {
                 return None;
             }
             key = Some(value);
+        } else if name.eq_ignore_ascii_case("Origin") {
+            // One request has one origin (RFC 6454 §7.3); with two, the
+            // check could see one and a proxy the other.
+            if origin.is_some() {
+                return None;
+            }
+            origin = Some(value);
         }
     }
-    (upgrade && connection && version_13 && subprotocol)
-        .then_some(key)
-        .flatten()
+    if !(upgrade && connection && version_13 && subprotocol) {
+        return None;
+    }
+    Some(UpgradeRequest { key: key?, origin })
 }
 
 /// Whether the comma-separated list `value` holds `token`, compared without
@@ -505,7 +542,7 @@ mod tests {
             let (ws, _) = connect(client_end, frame::SUBPROTOCOL).unwrap();
             client(ws)
         });
-        assert_eq!(handshake(&mut server).unwrap(), Upgrade::Accepted);
+        assert_eq!(handshake(&mut server, |_| true).unwrap(), Upgrade::Accepted);
         (server, handle)
     }
 
@@ -558,9 +595,18 @@ mod tests {
         std::iter::from_fn(|| parser.next()).collect()
     }
 
-    /// Runs [`handshake`] over an in-memory stream that holds `head`, and
-    /// returns the result and the response the server wrote.
+    /// Runs [`handshake`] over an in-memory stream that holds `head`, with
+    /// no origin check, and returns the result and the response the server
+    /// wrote.
     fn handshake_on(head: &str) -> (Upgrade, String) {
+        handshake_checked(head, |_| true)
+    }
+
+    /// The same with `accept_origin` as the origin check.
+    fn handshake_checked(
+        head: &str,
+        accept_origin: impl FnOnce(Option<&str>) -> bool,
+    ) -> (Upgrade, String) {
         struct Mem<'a> {
             input: &'a [u8],
             output: Vec<u8>,
@@ -582,7 +628,7 @@ mod tests {
             input: head.as_bytes(),
             output: Vec::new(),
         };
-        let upgrade = handshake(&mut mem).unwrap();
+        let upgrade = handshake(&mut mem, accept_origin).unwrap();
         (upgrade, String::from_utf8(mem.output).unwrap())
     }
 
@@ -609,7 +655,7 @@ mod tests {
     fn a_client_offering_ridl_ws_v1_is_upgraded_with_it_selected() {
         let (mut server, client_end) = pair();
         let client = thread::spawn(move || connect(client_end, "ridl-ws-v1").map(|(_, p)| p));
-        assert_eq!(handshake(&mut server).unwrap(), Upgrade::Accepted);
+        assert_eq!(handshake(&mut server, |_| true).unwrap(), Upgrade::Accepted);
         assert_eq!(
             client.join().unwrap().unwrap().as_deref(),
             Some("ridl-ws-v1")
@@ -621,7 +667,7 @@ mod tests {
         let (mut server, client_end) = pair();
         let client =
             thread::spawn(move || connect(client_end, "ridl-ws-v2, ridl-ws-v1").map(|(_, p)| p));
-        assert_eq!(handshake(&mut server).unwrap(), Upgrade::Accepted);
+        assert_eq!(handshake(&mut server, |_| true).unwrap(), Upgrade::Accepted);
         assert_eq!(
             client.join().unwrap().unwrap().as_deref(),
             Some("ridl-ws-v1")
@@ -632,11 +678,51 @@ mod tests {
     fn a_client_offering_no_subprotocol_gets_400() {
         let (mut server, client_end) = pair();
         let client = thread::spawn(move || connect(client_end, "").map(|(_, p)| p));
-        assert_eq!(handshake(&mut server).unwrap(), Upgrade::Rejected);
+        assert_eq!(handshake(&mut server, |_| true).unwrap(), Upgrade::Rejected);
         match client.join().unwrap() {
             Err(tungstenite::Error::Http(response)) => assert_eq!(response.status(), 400),
             other => panic!("expected a 400 response, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn the_origin_check_sees_the_origin_value() {
+        let head = GOOD_HEAD.replace("Host:", "Origin:  http://a.example \r\nHost:");
+        let mut seen = None;
+        let (upgrade, _) = handshake_checked(&head, |o| {
+            seen = o.map(str::to_owned);
+            true
+        });
+        assert_eq!(upgrade, Upgrade::Accepted);
+        assert_eq!(seen.as_deref(), Some("http://a.example"));
+    }
+
+    #[test]
+    fn a_refused_origin_gets_403() {
+        let head = GOOD_HEAD.replace("Host:", "Origin: http://a.example\r\nHost:");
+        assert_eq!(
+            handshake_checked(&head, |_| false),
+            (
+                Upgrade::Forbidden,
+                String::from_utf8(FORBIDDEN.to_vec()).unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn a_malformed_request_gets_400_before_the_origin_check() {
+        let head = GOOD_HEAD.replace("ridl-ws-v1", "ridl-ws-v2");
+        let (upgrade, _) = handshake_checked(&head, |_| panic!("the check is not called"));
+        assert_eq!(upgrade, Upgrade::Rejected);
+    }
+
+    #[test]
+    fn a_request_with_two_origins_gets_400() {
+        let head = GOOD_HEAD.replace(
+            "Host:",
+            "Origin: http://a.example\r\nOrigin: http://b.example\r\nHost:",
+        );
+        assert_eq!(handshake_checked(&head, |_| true).0, Upgrade::Rejected);
     }
 
     #[test]
@@ -662,7 +748,7 @@ mod tests {
             client.read_exact(&mut response).unwrap();
             response
         });
-        assert_eq!(handshake(&mut server).unwrap(), Upgrade::Rejected);
+        assert_eq!(handshake(&mut server, |_| true).unwrap(), Upgrade::Rejected);
         // The server end stays open until the client has read the response:
         // closing a socket with unread input resets the connection.
         assert_eq!(writer.join().unwrap(), BAD_REQUEST);
@@ -758,7 +844,7 @@ mod tests {
             input: GOOD_HEAD.as_bytes(),
             output: Vec::new(),
         };
-        assert_eq!(handshake(&mut stream).unwrap(), Upgrade::Accepted);
+        assert_eq!(handshake(&mut stream, |_| true).unwrap(), Upgrade::Accepted);
         assert!(stream.interrupted);
     }
 

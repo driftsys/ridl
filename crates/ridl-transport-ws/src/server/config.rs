@@ -75,6 +75,9 @@ impl std::error::Error for LimitTooSmall {}
 /// The hook the server calls with each [`Note`].
 pub(crate) type Record = Arc<dyn Fn(&Note) + Send + Sync>;
 
+/// The hook the handshake calls with the request's `Origin` header.
+pub(crate) type OriginCheck = Arc<dyn Fn(Option<&str>) -> bool + Send + Sync>;
+
 /// The settings of one server.
 #[derive(Clone)]
 pub struct Config {
@@ -90,12 +93,13 @@ pub struct Config {
     pub call_abandon_after: Duration,
     max_message_bytes: usize,
     record: Option<Record>,
+    origin_check: Option<OriginCheck>,
 }
 
 impl Default for Config {
     /// 20 ms between polls, a ping every 5 s, a liveness timeout of 15 s, a
-    /// call abandoned after 60 s, a message limit of 1 MiB, and nothing
-    /// recorded.
+    /// call abandoned after 60 s, a message limit of 1 MiB, nothing
+    /// recorded, and no origin check.
     fn default() -> Self {
         Config {
             poll_interval: Duration::from_millis(20),
@@ -104,6 +108,7 @@ impl Default for Config {
             call_abandon_after: Duration::from_secs(60),
             max_message_bytes: 1024 * 1024,
             record: None,
+            origin_check: None,
         }
     }
 }
@@ -133,6 +138,31 @@ impl Config {
     /// The recording hook, for the session.
     pub(crate) fn record(&self) -> Option<Record> {
         self.record.clone()
+    }
+
+    /// Sets the check the opening handshake applies to the request's
+    /// `Origin` header. The handshake calls `f` with the header's value, or
+    /// with `None` when the request has no `Origin` header, once the request
+    /// is otherwise one the server upgrades. When `f` returns `false`, the
+    /// request is answered `403 Forbidden` and [`serve`](crate::serve)
+    /// returns [`Ended::Rejected`](crate::Ended::Rejected).
+    ///
+    /// Without a check, every `Origin` is accepted. A browser sends the
+    /// origin of the page that opens the WebSocket, and any web page can open
+    /// one to a local address, so a server that a browser reaches should set
+    /// a check. A client that is not a browser sends any `Origin` it chooses,
+    /// or none: the check is not authentication.
+    pub fn with_origin_check(
+        mut self,
+        f: impl Fn(Option<&str>) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.origin_check = Some(Arc::new(f));
+        self
+    }
+
+    /// Whether the origin check, when one is set, accepts `origin`.
+    pub(crate) fn origin_accepted(&self, origin: Option<&str>) -> bool {
+        self.origin_check.as_ref().is_none_or(|f| f(origin))
     }
 }
 

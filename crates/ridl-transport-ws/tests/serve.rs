@@ -246,6 +246,67 @@ fn an_oversized_head_is_answered_400_and_not_reset() {
     assert_eq!(handle.join().0, Ended::Rejected);
 }
 
+/// [`UPGRADE_REQUEST`] with an `Origin` header.
+fn upgrade_request_from(origin: &str) -> Vec<u8> {
+    let request = std::str::from_utf8(UPGRADE_REQUEST).unwrap();
+    request
+        .replacen("Host:", &format!("Origin: {origin}\r\nHost:"), 1)
+        .into_bytes()
+}
+
+/// A configuration whose origin check accepts `http://good.example` only.
+fn origin_checked() -> Config {
+    config().with_origin_check(|origin| origin == Some("http://good.example"))
+}
+
+#[test]
+fn a_refused_origin_is_answered_403_and_returns_rejected() {
+    let (server, mut client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), origin_checked());
+    client
+        .write_all(&upgrade_request_from("http://evil.example"))
+        .unwrap();
+    let mut answer = Vec::new();
+    client.read_to_end(&mut answer).unwrap();
+    assert!(
+        answer.starts_with(b"HTTP/1.1 403 Forbidden\r\n"),
+        "{answer:?}"
+    );
+    assert_eq!(handle.join().0, Ended::Rejected);
+}
+
+#[test]
+fn an_accepted_origin_is_upgraded() {
+    let (server, mut client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), origin_checked());
+    client
+        .write_all(&upgrade_request_from("http://good.example"))
+        .unwrap();
+    read_upgrade_answer(&mut client);
+    drop(client);
+    assert_eq!(
+        handle.join().0,
+        Ended::Io(std::io::ErrorKind::UnexpectedEof)
+    );
+}
+
+#[test]
+fn a_request_without_origin_passes_none_to_the_check() {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&seen);
+    let config = config().with_origin_check(move |origin| {
+        sink.lock().unwrap().push(origin.map(str::to_owned));
+        true
+    });
+    let (server, mut client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
+    client.write_all(UPGRADE_REQUEST).unwrap();
+    read_upgrade_answer(&mut client);
+    drop(client);
+    handle.join();
+    assert_eq!(*seen.lock().unwrap(), vec![None]);
+}
+
 #[test]
 fn a_handshake_that_does_not_finish_ends_at_the_liveness_timeout() {
     let mut config = config();

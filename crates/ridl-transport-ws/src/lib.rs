@@ -60,8 +60,16 @@
 //! - It authenticates no one. The path and the query of the upgrade request
 //!   are ignored, and so is every header other than the ones the handshake
 //!   reads (`Upgrade`, `Connection`, `Sec-WebSocket-Key`,
-//!   `Sec-WebSocket-Version` and `Sec-WebSocket-Protocol`; §11.1 item 1):
-//!   the access policy is the embedder's, and runs before [`serve`].
+//!   `Sec-WebSocket-Version` and `Sec-WebSocket-Protocol`; §11.1 item 1, and
+//!   `Origin`, which it gives to the check that
+//!   [`Config::with_origin_check`] sets): the access policy is the
+//!   embedder's, and runs before [`serve`].
+//! - It checks no `Origin` unless the embedder sets a check. Any web page a
+//!   browser loads can open a WebSocket to a local address, such as
+//!   `ws://127.0.0.1:9000`, and the embedder's access policy sees the same
+//!   peer address for that page as for a trusted one. An embedder whose
+//!   server a browser reaches should set [`Config::with_origin_check`] to
+//!   accept only its own origins.
 //! - It reads no catalog descriptor. An `attach` is accepted on an exact match
 //!   of the unit name and the catalog hash, and the server checks a frame's
 //!   `kind` against the form, not against the catalog.
