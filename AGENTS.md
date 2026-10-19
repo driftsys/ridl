@@ -66,6 +66,7 @@ and `rmdl` stays a Proposed draft with no implementation. See
     codegen plugin protocol; read its **Documents amended** table first.
   - ADR-0021 and `docs/design/ridl-rt.md` — before changing `ridl-rt` or
     anything that consumes it.
+  - `docs/design/ridl-transport-ws.md` — before changing `ridl-transport-ws`.
   - ADR-0022 and `docs/technotes/rsdl-implementation.md` — before changing the
     IR's system artifact, the `ridl build` contract, or `ridl diff`.
   - ADR-0023 and `docs/design/interaction-face.md` — before extending the Rust
@@ -169,13 +170,16 @@ member; rsdl is the apex.
                          and ridl-descriptor with its default features off,
                          and with only dedup on, for a
                          target with no standard library, and with its
-                         features on for wasm32
+                         features on for wasm32, and the ridl-transport-ws
+                         codec (default features off) for wasm32 and for
+                         thumbv7em-none-eabihf
     just compat-check    build and test the packaged ridl-rt and
                          ridl-rt-conformance crates as edition
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
                          and as edition 2024 with the rust-toolchain.toml pin,
                          check both crates' LICENSE files, build the packaged
-                         ridl-loopback at that rust-version, build the packaged
+                         ridl-loopback and ridl-transport-ws (with its default
+                         features on and off) at that rust-version, build the packaged
                          ridl-ir and ridl-descriptor at the rust-version in
                          crates/ridl-descriptor/Cargo.toml, and check the crate
                          ridl build emits for examples/cabin (built with
