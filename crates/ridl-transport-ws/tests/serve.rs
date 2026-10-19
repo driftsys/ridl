@@ -745,6 +745,115 @@ fn the_backend_is_polled_at_most_once_per_poll_interval_under_a_fast_sender() {
     );
 }
 
+/// A masked binary frame that carries `payload`, under a zero mask, for a
+/// client without `tungstenite`. Payloads below 126 bytes only.
+fn masked(payload: &[u8]) -> Vec<u8> {
+    assert!(payload.len() < 126);
+    let mut frame = vec![0x82, 0x80 | payload.len() as u8, 0, 0, 0, 0];
+    frame.extend_from_slice(payload);
+    frame
+}
+
+/// Takes every whole unmasked server frame at the front of `buf` and returns
+/// the payloads of the binary ones. Payloads below 126 bytes only.
+fn take_binary_frames(buf: &mut Vec<u8>) -> Vec<Vec<u8>> {
+    let mut frames = Vec::new();
+    while buf.len() >= 2 {
+        let len = usize::from(buf[1]);
+        assert!(len < 126, "a frame of {len} bytes");
+        if buf.len() < 2 + len {
+            break;
+        }
+        let frame: Vec<u8> = buf.drain(..2 + len).collect();
+        if frame[0] == 0x82 {
+            frames.push(frame[2..].to_vec());
+        }
+    }
+    frames
+}
+
+/// The other direction of the poll gate: a client that sends a message every
+/// millisecond does not delay the polls either. A change committed while the
+/// messages flow is sent within about two poll intervals.
+#[test]
+fn a_change_reaches_a_fast_sender_within_two_poll_intervals() {
+    let mut config = config();
+    config.poll_interval = Duration::from_millis(50);
+    config.ping_interval = TEST_LIMIT;
+    let bound = 2 * config.poll_interval + Duration::from_millis(50);
+    let (server, mut client) = pair();
+    let rt = Loopback::new(CATALOG);
+    let mut provider = rt.attach();
+    client.write_all(UPGRADE_REQUEST).unwrap();
+    let handle = spawn(server, Scanning(rt), config);
+    read_upgrade_answer(&mut client);
+
+    // The attach, then the subscribe: three frames come back.
+    let attach = Attach::new(1, 1, CATALOG.hash, CATALOG.name).unwrap();
+    client
+        .write_all(&masked(&encode(Frame::Attach(attach))))
+        .unwrap();
+    let subscribe = masked(&encode(Frame::Subscribe(SIGNAL)));
+    client.write_all(&subscribe).unwrap();
+    let mut buf = Vec::new();
+    let mut got = Vec::new();
+    let mut chunk = [0u8; 4096];
+    while got.len() < 3 {
+        let n = client.read(&mut chunk).unwrap();
+        assert!(n > 0, "the server closed");
+        buf.extend_from_slice(&chunk[..n]);
+        got.extend(take_binary_frames(&mut buf));
+    }
+    assert_eq!(decode(&got[2]).unwrap(), publish(0, 0, PublishState::Init));
+
+    // A subscribe every millisecond, each answered; the change is committed
+    // after 100 ms of that, and the answers are read until its publish
+    // arrives.
+    client
+        .set_read_timeout(Some(Duration::from_millis(1)))
+        .unwrap();
+    let start = Instant::now();
+    let mut committed = None;
+    let latency = loop {
+        assert!(start.elapsed() < TEST_LIMIT, "no publish within the limit");
+        client.write_all(&subscribe).unwrap();
+        if committed.is_none() && start.elapsed() >= Duration::from_millis(100) {
+            provider.set(IFACE, Ordinal(1), &[9]).unwrap();
+            provider.commit();
+            committed = Some(Instant::now());
+        }
+        match client.read(&mut chunk) {
+            Ok(0) => panic!("the server closed"),
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) => {}
+            Err(e) => panic!("{e}"),
+        }
+        let frames = take_binary_frames(&mut buf);
+        if let Some(at) = committed {
+            if frames
+                .iter()
+                .any(|f| decode(f).unwrap() == publish(0, 1, PublishState::Live(&[9])))
+            {
+                break at.elapsed();
+            }
+        }
+        thread::sleep(Duration::from_millis(1));
+    };
+    assert!(
+        latency < bound,
+        "the change arrived after {latency:?}, over {bound:?}"
+    );
+    drop(client);
+    assert_eq!(
+        handle.join().0,
+        Ended::Io(std::io::ErrorKind::UnexpectedEof)
+    );
+}
+
 /// Pings from the client, with no data message, keep the session alive past
 /// the liveness timeout: a control frame counts as a message.
 #[test]
@@ -849,6 +958,92 @@ fn a_read_that_fails_with_interrupted_is_a_tick_and_not_an_end() {
         serve(conn, Scanning(Loopback::new(CATALOG)), &config),
         Ended::LivenessTimeout
     );
+}
+
+/// A connection that gives the upgrade request, then one message half a
+/// poll interval later, then fails every read with `TimedOut`, and records
+/// each read timeout `serve` sets on it.
+struct Scripted {
+    request: Vec<u8>,
+    message: Vec<u8>,
+    pos: usize,
+    delivered: bool,
+    timeouts: Arc<Mutex<Vec<Duration>>>,
+}
+
+impl Read for Scripted {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.pos < self.request.len() {
+            let n = buf.len().min(self.request.len() - self.pos);
+            buf[..n].copy_from_slice(&self.request[self.pos..self.pos + n]);
+            self.pos += n;
+            return Ok(n);
+        }
+        if !self.delivered {
+            self.delivered = true;
+            thread::sleep(Duration::from_millis(25));
+            buf[..self.message.len()].copy_from_slice(&self.message);
+            return Ok(self.message.len());
+        }
+        thread::sleep(Duration::from_millis(1));
+        Err(std::io::ErrorKind::TimedOut.into())
+    }
+}
+
+impl Write for Scripted {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Connection for Scripted {
+    fn set_read_timeout(&self, t: Option<Duration>) -> std::io::Result<()> {
+        self.timeouts.lock().unwrap().push(t.unwrap());
+        Ok(())
+    }
+    fn set_write_timeout(&self, _: Option<Duration>) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// After a message read half a poll interval into the interval, the next
+/// read waits only for the rest of the interval, not a whole new one, so
+/// that the message does not push the next poll back.
+#[test]
+fn a_read_after_a_message_waits_only_until_the_next_poll_is_due() {
+    let mut config = config();
+    config.poll_interval = Duration::from_millis(50);
+    config.liveness_timeout = Duration::from_millis(150);
+    let timeouts = Arc::new(Mutex::new(Vec::new()));
+    let attach = Attach::new(1, 1, CATALOG.hash, CATALOG.name).unwrap();
+    let conn = Scripted {
+        request: UPGRADE_REQUEST.to_vec(),
+        message: masked(&encode(Frame::Attach(attach))),
+        pos: 0,
+        delivered: false,
+        timeouts: Arc::clone(&timeouts),
+    };
+    assert_eq!(
+        serve(conn, Scanning(Loopback::new(CATALOG)), &config),
+        Ended::LivenessTimeout
+    );
+    let timeouts = timeouts.lock().unwrap();
+    // The handshake's own timeouts, then the first poll interval, then the
+    // timeout set after the message, about half an interval in.
+    let after_message = timeouts
+        .iter()
+        .skip_while(|t| **t != config.poll_interval)
+        .nth(1)
+        .copied()
+        .expect("a timeout set after the message");
+    assert!(
+        after_message <= Duration::from_millis(30),
+        "the read after the message waits {after_message:?}"
+    );
+    assert!(after_message >= Duration::from_millis(1));
 }
 
 /// A connection whose drop waits for the test's release, so that an end of

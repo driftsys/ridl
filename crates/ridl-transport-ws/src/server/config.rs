@@ -88,7 +88,9 @@ pub(crate) type OriginCheck = Arc<dyn Fn(Option<&str>) -> bool + Send + Sync>;
 /// The settings of one server.
 #[derive(Clone)]
 pub struct Config {
-    /// How long a socket read waits before the backend is polled.
+    /// How often the backend is polled: once per interval, whatever the
+    /// client's message rate. A socket read waits until the next poll is
+    /// due, so a read waits at most this long.
     pub poll_interval: Duration,
     /// How long between two pings.
     ///

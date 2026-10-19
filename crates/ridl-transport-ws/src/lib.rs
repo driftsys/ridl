@@ -59,7 +59,7 @@
 //!   gives [`serve`] a TLS stream that implements [`Connection`].
 //! - It authenticates no one. The path and the query of the upgrade request
 //!   are ignored, and so is every header other than the ones the handshake
-//!   reads (`Upgrade`, `Connection`, `Sec-WebSocket-Key`,
+//!   reads (`Host`, `Upgrade`, `Connection`, `Sec-WebSocket-Key`,
 //!   `Sec-WebSocket-Version` and `Sec-WebSocket-Protocol`; §11.1 item 1, and
 //!   `Origin`, which it gives to the check that
 //!   [`Config::with_origin_check`] sets): the access policy is the

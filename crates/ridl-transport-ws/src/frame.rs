@@ -350,8 +350,9 @@ fn kind_from(code: u8) -> Result<Kind, ProtocolViolation> {
 /// `None` for a `Rule` variant frame version 1 has no code for. `Rule` is
 /// `#[non_exhaustive]`, and a new variant comes only with a new frame
 /// version, so a sender built against a newer `ridl-rt` checks here before
-/// it builds a `contract(InvalidValue)` outcome: the server answers such a
-/// violation `corrupt` instead.
+/// it builds a `contract(InvalidValue)` outcome: the server sends such a
+/// violation as `corrupt` on a `response` and as `contract(ContractBroken)`
+/// on an `answer`, which has no `corrupt` outcome.
 pub fn rule_tag(rule: Rule) -> Option<u8> {
     match rule {
         Rule::Range => Some(1),

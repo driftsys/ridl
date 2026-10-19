@@ -88,6 +88,14 @@ mod tests {
         }
     }
 
+    /// The two bytes of the alphabet after the letters and digits, which no
+    /// RFC 4648 vector uses.
+    #[test]
+    fn plus_and_slash_encode_and_decode() {
+        assert_eq!(encode(&[0xfb, 0xff, 0xbf]), "+/+/");
+        assert_eq!(decode("+/+/").as_deref(), Some(&[0xfb, 0xff, 0xbf][..]));
+    }
+
     #[test]
     fn the_rfc_6455_sample_key_decodes_to_16_bytes() {
         let key = decode("dGhlIHNhbXBsZSBub25jZQ==").unwrap();

@@ -137,9 +137,12 @@ gives the code of a rule, or `None` for one this frame version has no code for;
 the codec writes `detail` 0 for such a rule, which no receiver accepts, and does
 not panic. The server checks the rule before it builds an outcome: a `response`
 with such a violation is sent as `corrupt`, an `answer` as
-`contract(ContractBroken)`, and `Note::RuleNotCarried` is recorded. The common
-header fields are one `Target { kind, iface, ord }` with `ridl-rt`'s `Kind`,
-`InterfaceNo` and `Ordinal`; the envelope is `ridl-rt`'s `Envelope`.
+`contract(ContractBroken)`, and `Note::RuleNotCarried` is recorded. No test
+reaches these three paths: every `Rule` of the current `ridl-rt` has a tag, so
+no test can build a violation the frame cannot carry without a seam in
+`ridl-rt`. The gap is known and accepted until `ridl-rt` adds a variant. The
+common header fields are one `Target { kind, iface, ord }` with `ridl-rt`'s
+`Kind`, `InterfaceNo` and `Ordinal`; the envelope is `ridl-rt`'s `Envelope`.
 
 **D-4. Decode reports two kinds of failure.** §11.1 item 4 treats them
 differently, so the error says which:
@@ -208,23 +211,26 @@ The crate sets no socket option. Each frame the server sends is written with one
 write call (D-21), and the rustdoc of `Connection` says that an embedder may set
 `TCP_NODELAY`.
 
-**D-8. The tick.** `serve` reads the socket with a read timeout of
-`config.poll_interval` (default 20 ms). Each pass of its loop feeds the bytes
-read to the WebSocket parser and handles every complete message; then, when a
-`poll_interval` has passed since the last poll, polls the backend once (signal
-changes, waiting occurrences, call outcomes) and sends what that produced; then
-pings if `ping_interval` has passed since the last ping. A message is handled as
-soon as it is read, and the backend is polled at most once per `poll_interval`,
-whatever the client's message rate: a client that sends often does not multiply
-the backend's work. The latency of a change is at most one `poll_interval` plus
-the write. A runtime's `Wakeable` cannot wake a thread blocked in a socket read,
-so it is not used.
+**D-8. The tick.** `serve` reads the socket with a read timeout that ends when
+the next poll is due: `config.poll_interval` (default 20 ms) after the last
+poll, so a read after a message waits only for the rest of the interval. Each
+pass of its loop feeds the bytes read to the WebSocket parser and handles every
+complete message; then, when a `poll_interval` has passed since the last poll,
+polls the backend once (signal changes, waiting occurrences, call outcomes) and
+sends what that produced; then pings if `ping_interval` has passed since the
+last ping. A message is handled as soon as it is read, and the backend is polled
+once per `poll_interval`, whatever the client's message rate: a client that
+sends often neither multiplies the backend's work nor delays a poll. The latency
+of a change is at most one `poll_interval` plus the write. A runtime's
+`Wakeable` cannot wake a thread blocked in a socket read, so it is not used.
 
-The stream must be in blocking mode: a stream in non-blocking mode fails every
-read at once with `WouldBlock`, which the loop takes as the read timeout, so the
-session ends with `LivenessTimeout` once that period has passed. The rustdoc of
-`Connection` and `serve` says so, and that a stream accepted from a non-blocking
-listener may inherit that mode on some platforms.
+The stream must be in blocking mode. On a stream in non-blocking mode a read
+with no bytes waiting fails at once with `WouldBlock`, which `serve` takes as a
+read timeout: during the handshake, the first such read ends the session with
+`LivenessTimeout`; after the handshake, the loop spins without waiting, polling
+at each `poll_interval`, until the liveness timeout ends the session. The
+rustdoc of `Connection` and `serve` says so, and that a stream accepted from a
+non-blocking listener may inherit that mode on some platforms.
 
 **D-9. A sans-IO session core.** The frame-level logic is a private `Session`
 type (`server/session.rs`) that takes decoded messages and the backend and
@@ -529,11 +535,12 @@ the same file against `tungstenite`.
 `Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Version: 13` and one
 `Sec-WebSocket-Key` that decodes from base64 to 16 bytes (RFC 6455 §4.2.1). The
 request line and headers are limited to 8 KiB; above that, or on any malformed
-request, the server answers `400 Bad Request` and closes. When the version is
-not 13, the `400` carries `Sec-WebSocket-Version: 13`, the version the server
-speaks (RFC 6455 §4.2.2 item 4). The path, the query and other headers are
-ignored (§11.1 item 1: the binding places nothing there; the embedder's access
-policy runs before `serve`).
+request, the server answers `400 Bad Request` and closes. The version is checked
+before the other headers: when a well-formed request's version is not 13,
+whatever its other headers hold, the `400` carries `Sec-WebSocket-Version: 13`,
+the version the server speaks (RFC 6455 §4.2.2 item 4). The path, the query and
+other headers are ignored (§11.1 item 1: the binding places nothing there; the
+embedder's access policy runs before `serve`).
 
 The `Origin` header is the one exception: it is read and given to a check the
 embedder sets with `Config::with_origin_check`, as `None` when the request has
@@ -720,17 +727,17 @@ What the crate already does so that the addition is local:
 
 ## Alternatives considered
 
-| Alternative                                                             | Verdict  | Why                                                                                                                                                                                                                                                     |
-| ----------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tungstenite` as the WebSocket layer                                    | rejected | twenty-two crates in the embedder's tree (`http`, `httparse`, `sha1` and its `digest` tree, `rand` and its tree, `thiserror`, `log`, `bytes`, `data-encoding`, `zerocopy`), against the dependency constraint, for a server side of a few hundred lines |
-| `tokio` with `tokio-tungstenite`                                        | rejected | forces an async runtime on a small daemon, and a larger tree still                                                                                                                                                                                      |
-| a WebSocket trait the embedder implements                               | rejected | moves the RFC 6455 work to every embedder, and the crate could not test the binding end to end                                                                                                                                                          |
-| the crate binds and accepts itself (`Server::bind(addr)`)               | rejected | the embedder decides the address and the access policy                                                                                                                                                                                                  |
-| the codec in its own crate                                              | rejected | two crates to publish for one binding; a feature gives the same `no_std` build                                                                                                                                                                          |
-| one shared backend fanned out to every connection                       | rejected | one `EventSource` queue and one `Caller` counter would be shared by every client, so a caller's identity could not be the connection (§11.1 item 5); one `Backend` per connection gives that with no extra code                                         |
-| waking on `Wakeable` instead of a polling tick                          | rejected | a waker cannot interrupt a blocking socket read without a second thread or a platform poller, both of which grow the crate; the tick bounds the latency to `poll_interval`                                                                              |
-| `Invalid(Detected)` sent as `Live` with the last good value             | rejected | hides an invalidity from the client (D-13)                                                                                                                                                                                                              |
-| forwarding the backend's `seq`                                          | rejected | a backend counter restarts with a replaced writer and interleaves across writers, so the consumer would discard later publications as stale (D-24)                                                                                                      |
-| reading the catalog descriptor to check `kind` and bounds               | deferred | adds `ridl-descriptor` to the embedder's tree and a descriptor to its deployment (driftsys/ridl#985)                                                                                                                                                    |
-| a public Rust client                                                    | deferred | not needed by the first consumer, whose client is TypeScript; the test client covers the done-when (driftsys/ridl#989)                                                                                                                                  |
-| accepting the upgrade without a subprotocol and letting the client fail | rejected | a client that does not check would send `attach` on an unnegotiated connection (D-20)                                                                                                                                                                   |
+| Alternative                                                             | Verdict  | Why                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tungstenite` as the WebSocket layer                                    | rejected | about twenty crates in the embedder's tree (`http`, `httparse`, `sha1`, `rand`, `thiserror`, `log`, `bytes`, `data-encoding`, and what those depend on), against the dependency constraint, for a server side of a few hundred lines |
+| `tokio` with `tokio-tungstenite`                                        | rejected | forces an async runtime on a small daemon, and a larger tree still                                                                                                                                                                   |
+| a WebSocket trait the embedder implements                               | rejected | moves the RFC 6455 work to every embedder, and the crate could not test the binding end to end                                                                                                                                       |
+| the crate binds and accepts itself (`Server::bind(addr)`)               | rejected | the embedder decides the address and the access policy                                                                                                                                                                               |
+| the codec in its own crate                                              | rejected | two crates to publish for one binding; a feature gives the same `no_std` build                                                                                                                                                       |
+| one shared backend fanned out to every connection                       | rejected | one `EventSource` queue and one `Caller` counter would be shared by every client, so a caller's identity could not be the connection (§11.1 item 5); one `Backend` per connection gives that with no extra code                      |
+| waking on `Wakeable` instead of a polling tick                          | rejected | a waker cannot interrupt a blocking socket read without a second thread or a platform poller, both of which grow the crate; the tick bounds the latency to `poll_interval`                                                           |
+| `Invalid(Detected)` sent as `Live` with the last good value             | rejected | hides an invalidity from the client (D-13)                                                                                                                                                                                           |
+| forwarding the backend's `seq`                                          | rejected | a backend counter restarts with a replaced writer and interleaves across writers, so the consumer would discard later publications as stale (D-24)                                                                                   |
+| reading the catalog descriptor to check `kind` and bounds               | deferred | adds `ridl-descriptor` to the embedder's tree and a descriptor to its deployment (driftsys/ridl#985)                                                                                                                                 |
+| a public Rust client                                                    | deferred | not needed by the first consumer, whose client is TypeScript; the test client covers the done-when (driftsys/ridl#989)                                                                                                               |
+| accepting the upgrade without a subprotocol and letting the client fail | rejected | a client that does not check would send `attach` on an unnegotiated connection (D-20)                                                                                                                                                |

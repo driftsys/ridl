@@ -56,9 +56,10 @@ pub(crate) enum Upgrade {
 /// header are ignored. A request head over 8 KiB, a malformed request, a
 /// request with more than one `Origin` header, or a request that does not
 /// offer `ridl-ws-v1` is answered `400 Bad Request` and returns
-/// [`Upgrade::Rejected`]; when the version is not 13, the `400` names the
-/// version the server speaks in a `Sec-WebSocket-Version: 13` header (RFC
-/// 6455 §4.2.2 item 4). A request whose `Origin` `accept_origin` refuses is
+/// [`Upgrade::Rejected`]; when the request is well formed and its version is
+/// not 13, whatever its other headers, the `400` names the version the server
+/// speaks in a `Sec-WebSocket-Version: 13` header (RFC 6455 §4.2.2 item 4).
+/// A request whose `Origin` `accept_origin` refuses is
 /// answered `403 Forbidden` and returns [`Upgrade::Forbidden`].
 ///
 /// The head is read one byte at a time, so that no byte after the empty line
@@ -164,29 +165,39 @@ fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
         return Err(Reject::BadRequest);
     }
 
-    let mut host = false;
-    let mut upgrade = false;
-    let mut connection = false;
-    let mut version_13 = false;
-    let mut subprotocol = false;
-    let mut key = None;
-    let mut origin = None;
+    // The headers, each a name and a trimmed value. A line that starts with
+    // white space continues the previous header (obsolete line folding),
+    // which RFC 9112 §5.2 lets a server reject.
+    let mut headers = Vec::new();
     for line in lines {
-        // A line that starts with white space continues the previous header
-        // (obsolete line folding), which RFC 9112 §5.2 lets a server reject.
         if line.starts_with([' ', '\t']) {
             return Err(Reject::BadRequest);
         }
         let (name, value) = line.split_once(':').ok_or(Reject::BadRequest)?;
-        let value = value.trim_matches([' ', '\t']);
+        headers.push((name, value.trim_matches([' ', '\t'])));
+    }
+    // The version first, so that a well-formed request of another version
+    // is told which version the server speaks, whatever its other headers.
+    let version_13 = headers
+        .iter()
+        .any(|(name, value)| name.eq_ignore_ascii_case("Sec-WebSocket-Version") && *value == "13");
+    if !version_13 {
+        return Err(Reject::Version);
+    }
+
+    let mut host = false;
+    let mut upgrade = false;
+    let mut connection = false;
+    let mut subprotocol = false;
+    let mut key = None;
+    let mut origin = None;
+    for (name, value) in headers {
         if name.eq_ignore_ascii_case("Host") {
             host = true;
         } else if name.eq_ignore_ascii_case("Upgrade") {
             upgrade |= has_token(value, "websocket");
         } else if name.eq_ignore_ascii_case("Connection") {
             connection |= has_token(value, "upgrade");
-        } else if name.eq_ignore_ascii_case("Sec-WebSocket-Version") {
-            version_13 |= value == "13";
         } else if name.eq_ignore_ascii_case("Sec-WebSocket-Protocol") {
             subprotocol |= value
                 .split(',')
@@ -205,9 +216,6 @@ fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
             }
             origin = Some(value);
         }
-    }
-    if !version_13 {
-        return Err(Reject::Version);
     }
     if !(host && upgrade && connection && subprotocol) {
         return Err(Reject::BadRequest);
@@ -873,6 +881,14 @@ mod tests {
         for head in [
             GOOD_HEAD.replace("Version: 13", "Version: 8"),
             GOOD_HEAD.replace("Sec-WebSocket-Version: 13\r\n", ""),
+            // The version is checked before the other headers.
+            GOOD_HEAD
+                .replace("Version: 13", "Version: 8")
+                .replace("dGhlIHNhbXBsZSBub25jZQ==", "notakey"),
+            GOOD_HEAD.replace("Version: 13", "Version: 8").replace(
+                "Host:",
+                "Origin: http://a.example\r\nOrigin: http://b.example\r\nHost:",
+            ),
         ] {
             assert_eq!(
                 handshake_on(&head),

@@ -22,9 +22,9 @@ use session::{Session, Step};
 /// The embedder accepts the connection and applies its access policy before
 /// it calls [`serve`]; the crate binds, listens and connects nothing. The
 /// stream must be in blocking mode: [`serve`] waits in each read for up to
-/// the timeout it set with [`Connection::set_read_timeout`], and a stream in
-/// non-blocking mode ends the session at the liveness timeout (see
-/// [`serve`]).
+/// the timeout it set with [`Connection::set_read_timeout`], and takes the
+/// `WouldBlock` a non-blocking stream fails with at once as that timeout
+/// (see [`serve`] for what follows).
 ///
 /// [`serve`] writes each WebSocket frame with one write, so a frame does not
 /// wait on Nagle's algorithm between its header and its payload. The crate
@@ -133,6 +133,10 @@ pub enum Ended {
 /// The size of the buffer each socket read fills.
 const READ_BUFFER: usize = 16 * 1024;
 
+/// The shortest read timeout the loop sets when the next poll is due at
+/// once: a zero timeout is refused by the stream.
+const MIN_READ_TIMEOUT: Duration = Duration::from_millis(1);
+
 /// How long the server goes on reading after it answers a handshake `400`
 /// or `403`, or sends a close frame, the answer to the client's included, so
 /// that the client reads the answer or the close frame before the connection
@@ -143,26 +147,29 @@ const LINGER: Duration = Duration::from_millis(100);
 /// session ends.
 ///
 /// `serve` blocks the calling thread for the whole session. It answers the
-/// opening handshake, then loops: it reads `conn` with a read timeout of
-/// [`Config::poll_interval`], handles each whole message read, and, when a
-/// poll interval has passed since the last poll, polls the backend once and
-/// sends what changed; it sends a ping each [`Config::ping_interval`]. A
-/// message is handled as soon as it is read, and the backend is polled at
-/// most once per poll interval, whatever the client's message rate. A change
-/// on the backend is sent at most one poll interval after it, plus the
-/// write. Each write call has a write timeout of
+/// opening handshake, then loops: it reads `conn` with a read timeout that
+/// ends when the next poll is due, at most [`Config::poll_interval`] after
+/// the last one, handles each whole message read, and, when a poll interval
+/// has passed since the last poll, polls the backend once and sends what
+/// changed; it sends a ping each [`Config::ping_interval`]. A message is
+/// handled as soon as it is read, and the backend is polled once per poll
+/// interval, whatever the client's message rate: a client that sends often
+/// neither multiplies the polls nor delays them. A change on the backend is
+/// sent at most one poll interval after it, plus the write. Each write call has a write timeout of
 /// [`Config::liveness_timeout`]: a client that reads nothing for that long,
 /// so that a write call makes no progress, ends the session with
 /// [`Ended::LivenessTimeout`]. A client that keeps reading, however slowly,
 /// does not.
 ///
 /// `conn` must be in blocking mode: `serve` waits in each read for up to the
-/// read timeout it set. On a stream in non-blocking mode every read fails at
-/// once with `WouldBlock`, which `serve` takes as the read timeout, so the
-/// loop spins and the session ends with [`Ended::LivenessTimeout`] as soon as
-/// a liveness timeout has passed. On some platforms a stream accepted from a
-/// non-blocking listener inherits that mode; `TcpStream::set_nonblocking(false)`
-/// before `serve` sets it right.
+/// read timeout it set. On a stream in non-blocking mode a read with no bytes
+/// waiting fails at once with `WouldBlock`, which `serve` takes as a read
+/// timeout: during the handshake that ends the session with
+/// [`Ended::LivenessTimeout`] at the first such read, and after the handshake
+/// the loop spins without waiting, polling at each poll interval, until the
+/// liveness timeout ends the session. On some platforms a stream accepted
+/// from a non-blocking listener inherits that mode;
+/// `TcpStream::set_nonblocking(false)` before `serve` sets it right.
 ///
 /// At every end, each backend call in flight is forgotten and `backend` is
 /// dropped, with its event subscriptions; then `conn` is dropped. After
@@ -265,6 +272,15 @@ fn run<C: Connection, B: Backend>(
             if let Some(ended) = flush(conn, &mut writer, &mut out, step) {
                 return ended;
             }
+        }
+        // The next read waits only until the next poll is due, so that a
+        // message read just before it does not push the poll a whole
+        // interval back: a change is still sent within one poll interval.
+        let wait = (ticked + config.poll_interval)
+            .saturating_duration_since(Instant::now())
+            .max(MIN_READ_TIMEOUT);
+        if let Err(e) = conn.set_read_timeout(Some(wait)) {
+            return Ended::Io(e.kind());
         }
         if now.duration_since(heard) >= config.liveness_timeout {
             return Ended::LivenessTimeout;

@@ -2384,22 +2384,46 @@ mod tests {
         assert!(out.is_empty());
     }
 
-    /// Occurrences of half the largest size stop the tick once the bytes
-    /// sent reach the message limit: two of them, not three.
+    /// Two occurrences whose frames total exactly the message limit stop the
+    /// tick: the limit is reached, so the third waits.
     #[test]
     fn a_tick_stops_draining_once_it_has_sent_a_message_limit_of_occurrences() {
         let (mut s, mut p, _n) = limited();
         open(&mut s);
         send(&mut s, &msg(Frame::Subscribe(EVENT)));
-        for _ in 0..3 {
-            raise(&mut p, EVENT, &vec![1; occurrence_cap() / 2]);
-        }
+        let header = occurrence(EVENT, 0, 0, &[]).encoded_len();
+        let first = occurrence_cap() / 2;
+        let second = LIMIT - (header + first) - header;
+        raise(&mut p, EVENT, &vec![1; first]);
+        raise(&mut p, EVENT, &vec![2; second]);
+        raise(&mut p, EVENT, &[3]);
         let (_, out) = tick(&mut s);
         assert_eq!(occurrence_seqs(&out), vec![1, 2]);
+        assert_eq!(out[0].len() + out[1].len(), LIMIT);
         let (_, out) = tick(&mut s);
         assert_eq!(occurrence_seqs(&out), vec![3]);
         let (_, out) = tick(&mut s);
         assert!(out.is_empty());
+    }
+
+    /// A dropped occurrence counts against the budget of 64 as a read one
+    /// does, so a provider that raises oversized occurrences cannot hold the
+    /// tick either.
+    #[test]
+    fn a_dropped_occurrence_counts_against_the_budget_of_a_tick() {
+        let (mut s, mut p, notes) = limited();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(EVENT)));
+        for _ in 0..100 {
+            raise(&mut p, EVENT, &[1; 2000]);
+        }
+        raise(&mut p, EVENT, &[9]);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        assert_eq!(notes.lock().unwrap().len(), 64);
+        let (_, out) = tick(&mut s);
+        assert_eq!(occurrence_seqs(&out), vec![101]);
+        assert_eq!(notes.lock().unwrap().len(), 100);
     }
 
     /// One tick with a changed signal, a waiting occurrence and a settled
@@ -3153,7 +3177,7 @@ mod tests {
         None,
         /// `EventSource::subscribe` answers `Detached`.
         Subscribe,
-        /// `EventSource::subscribe` answers `Contract(UnknownInteraction)`.
+        /// `EventSource::subscribe` answers `Contract(PreconditionFailed)`.
         SubscribeContract,
         /// `EventSource::next` answers `Detached`.
         Next,
@@ -3161,7 +3185,7 @@ mod tests {
         Command,
         /// `Caller::query` answers `Detached`.
         Query,
-        /// `Caller::query` answers `Contract(ContractBroken)`.
+        /// `Caller::query` answers `Contract(PreconditionFailed)`.
         QueryContract,
         /// `Caller::reply` answers `Detached`.
         Reply,
@@ -3169,7 +3193,8 @@ mod tests {
         CommandTooLarge,
         /// `SignalReader::read` answers `Detached`.
         ReadDetached,
-        /// `SignalReader::read` of ordinal 1 answers `Contract(ContractBroken)`.
+        /// `SignalReader::read` of ordinal 1 answers
+        /// `Contract(PreconditionFailed)`.
         ReadContract,
         /// `FixedReader::read_fixed` answers `Detached`.
         FixedDetached,
@@ -3267,7 +3292,7 @@ mod tests {
             match self.fail.get() {
                 Fail::ReadDetached => Err(ReadError::Detached),
                 Fail::ReadContract if ord == Ordinal(1) => {
-                    Err(ReadError::Contract(Contract::ContractBroken))
+                    Err(ReadError::Contract(Contract::PreconditionFailed))
                 }
                 _ => self.inner.read(iface, ord, out),
             }
@@ -3283,7 +3308,7 @@ mod tests {
             match self.fail.get() {
                 Fail::Subscribe => Err(SubscribeError::Detached),
                 Fail::SubscribeContract => {
-                    Err(SubscribeError::Contract(Contract::UnknownInteraction))
+                    Err(SubscribeError::Contract(Contract::PreconditionFailed))
                 }
                 _ => self.inner.subscribe(iface, ords),
             }
@@ -3322,7 +3347,7 @@ mod tests {
         ) -> Result<Correlation, SendError> {
             match self.fail.get() {
                 Fail::Query => Err(SendError::Detached),
-                Fail::QueryContract => Err(SendError::Contract(Contract::ContractBroken)),
+                Fail::QueryContract => Err(SendError::Contract(Contract::PreconditionFailed)),
                 _ => self.inner.query(iface, ord, args, trace),
             }
         }
@@ -3413,7 +3438,7 @@ mod tests {
             decode(&out[0]).unwrap(),
             Frame::Answer {
                 target: SIGNAL,
-                outcome: AnswerOutcome::Contract(Contract::ContractBroken),
+                outcome: AnswerOutcome::Contract(Contract::PreconditionFailed),
             }
         );
         assert!(r.s.marks.is_empty());
@@ -3441,7 +3466,7 @@ mod tests {
             decode(&out[0]).unwrap(),
             Frame::Answer {
                 target: SIGNAL,
-                outcome: AnswerOutcome::Contract(Contract::ContractBroken),
+                outcome: AnswerOutcome::Contract(Contract::PreconditionFailed),
             }
         );
     }
@@ -3452,7 +3477,13 @@ mod tests {
         let (step, out) = send(&mut r.s, &msg(Frame::Subscribe(EVENT)));
         assert_eq!(step, Step::Continue);
         assert_eq!(out.len(), 1);
-        assert_eq!(decode(&out[0]).unwrap(), unknown(EVENT));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            Frame::Answer {
+                target: EVENT,
+                outcome: AnswerOutcome::Contract(Contract::PreconditionFailed),
+            }
+        );
     }
 
     #[test]
@@ -3468,7 +3499,7 @@ mod tests {
                 0,
                 1,
                 1,
-                ResponseOutcome::Contract(Contract::ContractBroken)
+                ResponseOutcome::Contract(Contract::PreconditionFailed)
             )
         );
     }
