@@ -203,12 +203,21 @@ write call (D-21), and the rustdoc of `Connection` says that an embedder may set
 
 **D-8. The tick.** `serve` reads the socket with a read timeout of
 `config.poll_interval` (default 20 ms). Each pass of its loop feeds the bytes
-read to the WebSocket parser and handles every complete message; then polls the
-backend once (signal changes, waiting occurrences, call outcomes); then sends
-what that produced; then pings if `ping_interval` has passed since the last
-ping. The latency of a change is at most one `poll_interval` plus the write. A
-runtime's `Wakeable` cannot wake a thread blocked in a socket read, so it is not
-used.
+read to the WebSocket parser and handles every complete message; then, when a
+`poll_interval` has passed since the last poll, polls the backend once (signal
+changes, waiting occurrences, call outcomes) and sends what that produced; then
+pings if `ping_interval` has passed since the last ping. A message is handled as
+soon as it is read, and the backend is polled at most once per `poll_interval`,
+whatever the client's message rate: a client that sends often does not multiply
+the backend's work. The latency of a change is at most one `poll_interval` plus
+the write. A runtime's `Wakeable` cannot wake a thread blocked in a socket read,
+so it is not used.
+
+The stream must be in blocking mode: a stream in non-blocking mode fails every
+read at once with `WouldBlock`, which the loop takes as the read timeout, so the
+session ends with `LivenessTimeout` once that period has passed. The rustdoc of
+`Connection` and `serve` says so, and that a stream accepted from a non-blocking
+listener may inherit that mode on some platforms.
 
 **D-9. A sans-IO session core.** The frame-level logic is a private `Session`
 type (`server/session.rs`) that takes decoded messages and the backend and
@@ -551,13 +560,13 @@ at a cost of one small frame per 5 s.
 **D-23. Close codes.** Exactly §11.1 item 4's: 1000 on purpose and after
 `attached(refused)`, 1001 when the backend detaches, 1002 on a protocol
 violation, 1003 on a text message, 1009 on an oversized message. The server
-answers a client's close frame with a close frame and returns without waiting.
-After every close frame it sends, and after a handshake `400` or `403`, the
-server shuts down its write side and lingers for up to 100 ms, reading and
-discarding what the client still sends, so that the close frame or the answer
-reaches the client instead of being lost to a reset of the connection. In
-neither case does it wait for the client to close the connection (RFC 6455
-§7.1.1).
+answers a client's close frame with a close frame that carries the same code.
+After every close frame it sends, the answer to the client's included, and after
+a handshake `400` or `403`, the server shuts down its write side and lingers for
+up to 100 ms, reading and discarding what the client still sends, so that the
+close frame or the answer reaches the client instead of being lost to a reset of
+the connection. It waits no longer than that for the client to close the
+connection (RFC 6455 §7.1.1 has the client wait for the server to close it).
 
 ## Tests
 

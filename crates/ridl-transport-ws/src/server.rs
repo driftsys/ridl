@@ -20,7 +20,11 @@ use session::{Session, Step};
 /// A connected stream that [`serve`] runs one session over.
 ///
 /// The embedder accepts the connection and applies its access policy before
-/// it calls [`serve`]; the crate binds, listens and connects nothing.
+/// it calls [`serve`]; the crate binds, listens and connects nothing. The
+/// stream must be in blocking mode: [`serve`] waits in each read for up to
+/// the timeout it set with [`Connection::set_read_timeout`], and a stream in
+/// non-blocking mode ends the session at the liveness timeout (see
+/// [`serve`]).
 ///
 /// [`serve`] writes each WebSocket frame with one write, so a frame does not
 /// wait on Nagle's algorithm between its header and its payload. The crate
@@ -129,8 +133,9 @@ pub enum Ended {
 const READ_BUFFER: usize = 16 * 1024;
 
 /// How long the server goes on reading after it answers a handshake `400`
-/// or `403`, or sends a close frame, so that the client reads the answer or the close
-/// frame before the connection closes.
+/// or `403`, or sends a close frame, the answer to the client's included, so
+/// that the client reads the answer or the close frame before the connection
+/// closes.
 const LINGER: Duration = Duration::from_millis(100);
 
 /// Serves `backend` to the WebSocket client on `conn`, and returns when the
@@ -138,24 +143,35 @@ const LINGER: Duration = Duration::from_millis(100);
 ///
 /// `serve` blocks the calling thread for the whole session. It answers the
 /// opening handshake, then loops: it reads `conn` with a read timeout of
-/// [`Config::poll_interval`], handles each whole message read, polls the
-/// backend once and sends what changed, and sends a ping each
-/// [`Config::ping_interval`]. A change on the backend is sent at most one
-/// poll interval after it, plus the write. Each write call has a write
-/// timeout of [`Config::liveness_timeout`]: a client that reads nothing for
-/// that long, so that a write call makes no progress, ends the session with
+/// [`Config::poll_interval`], handles each whole message read, and, when a
+/// poll interval has passed since the last poll, polls the backend once and
+/// sends what changed; it sends a ping each [`Config::ping_interval`]. A
+/// message is handled as soon as it is read, and the backend is polled at
+/// most once per poll interval, whatever the client's message rate. A change
+/// on the backend is sent at most one poll interval after it, plus the
+/// write. Each write call has a write timeout of
+/// [`Config::liveness_timeout`]: a client that reads nothing for that long,
+/// so that a write call makes no progress, ends the session with
 /// [`Ended::LivenessTimeout`]. A client that keeps reading, however slowly,
 /// does not.
 ///
+/// `conn` must be in blocking mode: `serve` waits in each read for up to the
+/// read timeout it set. On a stream in non-blocking mode every read fails at
+/// once with `WouldBlock`, which `serve` takes as the read timeout, so the
+/// loop spins and the session ends with [`Ended::LivenessTimeout`] as soon as
+/// a liveness timeout has passed. On some platforms a stream accepted from a
+/// non-blocking listener inherits that mode; `TcpStream::set_nonblocking(false)`
+/// before `serve` sets it right.
+///
 /// At every end, each backend call in flight is forgotten and `backend` is
-/// dropped, with its event subscriptions; then `conn` is dropped. After a
-/// close frame it sends, the server ends its write side and reads and drops
-/// what the client still sends, until the client closes the connection or
-/// 100 ms pass: a connection closed with unread bytes is reset, and the
-/// client could lose the close frame. After it answers a client's close
-/// frame, `serve` returns without waiting. In neither case does it wait for
-/// the client to close the connection: the client waits for the server to
-/// close it (RFC 6455 §7.1.1).
+/// dropped, with its event subscriptions; then `conn` is dropped. After
+/// every close frame it sends, in answer to the client's or on its own, the
+/// server ends its write side and reads and drops what the client still
+/// sends, until the client closes the connection or 100 ms pass: a
+/// connection closed with unread bytes is reset, and the client could lose
+/// the close frame. It waits no longer than that for the client to close
+/// the connection (RFC 6455 §7.1.1 has the client wait for the server to
+/// close it).
 ///
 /// The session keeps state for each signal the client subscribes, and for
 /// each signal a `read` found published, for as long as the session lasts:
@@ -206,6 +222,7 @@ fn run<C: Connection, B: Backend>(
     let opened = Instant::now();
     let mut heard = opened;
     let mut pinged = opened;
+    let mut ticked = opened;
     loop {
         match conn.read(&mut buf) {
             Ok(0) => return Ended::Io(io::ErrorKind::UnexpectedEof),
@@ -228,6 +245,7 @@ fn run<C: Connection, B: Backend>(
                     // The session has ended whether or not the answer is
                     // written, so an error writing it is not reported.
                     let _ = writer.close(conn, code.map_or(CloseCode::NORMAL, CloseCode));
+                    linger(conn);
                     return Ended::ClientClosed(code);
                 }
                 Err(code) => Step::Close(code.0),
@@ -237,10 +255,15 @@ fn run<C: Connection, B: Backend>(
             }
         }
 
+        // A message is handled as soon as it is read, but the backend is
+        // polled at most once per poll interval, whatever the client's rate.
         let now = Instant::now();
-        let step = session.tick(now, &mut out);
-        if let Some(ended) = flush(conn, &mut writer, &mut out, step) {
-            return ended;
+        if now.duration_since(ticked) >= config.poll_interval {
+            ticked = now;
+            let step = session.tick(now, &mut out);
+            if let Some(ended) = flush(conn, &mut writer, &mut out, step) {
+                return ended;
+            }
         }
         if now.duration_since(heard) >= config.liveness_timeout {
             return Ended::LivenessTimeout;

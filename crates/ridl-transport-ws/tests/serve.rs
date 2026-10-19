@@ -3,6 +3,7 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -96,7 +97,11 @@ impl Server {
 }
 
 /// Runs `serve` on its own thread.
-fn spawn<B: Backend + Send + 'static>(conn: TcpStream, backend: B, config: Config) -> Server {
+fn spawn<C: Connection + Send + 'static, B: Backend + Send + 'static>(
+    conn: C,
+    backend: B,
+    config: Config,
+) -> Server {
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let start = Instant::now();
@@ -441,7 +446,7 @@ fn a_protocol_violation_closes_1002_and_records_a_note() {
 #[test]
 fn a_backend_that_detaches_closes_1001() {
     let (server, client) = pair();
-    let (backend, _) = watched(true);
+    let (backend, _, _) = watched(true);
     let handle = spawn(server, backend, config());
     let mut ws = connect(client, "ridl-ws-v1").unwrap();
     attach(&mut ws);
@@ -453,7 +458,7 @@ fn a_backend_that_detaches_closes_1001() {
 #[test]
 fn the_end_of_a_session_forgets_each_call_in_flight_then_drops_the_backend() {
     let (server, client) = pair();
-    let (backend, log) = watched(false);
+    let (backend, log, _) = watched(false);
     let handle = spawn(server, backend, config());
     let mut ws = connect(client, "ridl-ws-v1").unwrap();
     attach(&mut ws);
@@ -479,22 +484,30 @@ fn the_end_of_a_session_forgets_each_call_in_flight_then_drops_the_backend() {
 /// call forgotten, `"drop"` when it was dropped.
 type Log = Arc<Mutex<Vec<&'static str>>>;
 
-/// Ports that delegate to a loopback and log each `forget` and their drop.
-/// With `detach_next`, `EventSource::next` answers `Detached`.
+/// The number of times a [`Watched`] backend's `next` was called, which is
+/// once per tick.
+type Polls = Arc<AtomicUsize>;
+
+/// Ports that delegate to a loopback, log each `forget` and their drop, and
+/// count the calls of `next`. With `detach_next`, `EventSource::next` answers
+/// `Detached`.
 struct Watched {
     inner: Loopback,
     detach_next: bool,
     log: Log,
+    polls: Polls,
 }
 
-fn watched(detach_next: bool) -> (Polling<Watched>, Log) {
+fn watched(detach_next: bool) -> (Polling<Watched>, Log, Polls) {
     let log = Log::default();
+    let polls = Polls::default();
     let ports = Watched {
         inner: Loopback::new(CATALOG),
         detach_next,
         log: Arc::clone(&log),
+        polls: Arc::clone(&polls),
     };
-    (Polling(ports), log)
+    (Polling(ports), log, polls)
 }
 
 impl Drop for Watched {
@@ -538,6 +551,7 @@ impl EventSource for Watched {
         self.inner.unsubscribe(iface, ords);
     }
     fn next(&mut self, out: &mut [u8]) -> Result<Option<RawOccurrence>, ReadError> {
+        self.polls.fetch_add(1, Ordering::SeqCst);
         if self.detach_next {
             return Err(ReadError::Detached);
         }
@@ -703,6 +717,55 @@ fn the_server_pings_while_messages_keep_arriving() {
     assert_eq!(handle.join().0, Ended::ClientClosed(None));
 }
 
+/// A client that sends a message every millisecond does not make the server
+/// poll the backend more often than once per poll interval.
+#[test]
+fn the_backend_is_polled_at_most_once_per_poll_interval_under_a_fast_sender() {
+    let mut config = config();
+    config.poll_interval = Duration::from_millis(20);
+    let (server, client) = pair();
+    let (backend, _, polls) = watched(false);
+    let handle = spawn(server, backend, config);
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    let messages = 300;
+    for _ in 0..messages {
+        send(&mut ws, Frame::Subscribe(SIGNAL));
+        thread::sleep(Duration::from_millis(1));
+    }
+    ws.close(None).unwrap();
+    recv_close(&mut ws);
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+    // About one poll per 20 ms over at least 300 ms: 15 or so, and far below
+    // the one per message that polling on every read would give.
+    let polls = polls.load(Ordering::SeqCst);
+    assert!(
+        polls < messages / 4,
+        "{polls} polls for {messages} messages"
+    );
+}
+
+/// Pings from the client, with no data message, keep the session alive past
+/// the liveness timeout: a control frame counts as a message.
+#[test]
+fn a_control_frame_resets_the_liveness_clock() {
+    let mut config = config();
+    config.liveness_timeout = Duration::from_millis(300);
+    config.ping_interval = TEST_LIMIT;
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_millis(900) {
+        ws.send(Message::Ping(Vec::new().into())).unwrap();
+        thread::sleep(Duration::from_millis(50));
+    }
+    ws.close(None).unwrap();
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+}
+
 #[test]
 fn a_client_that_closes_the_connection_without_a_close_frame_ends_with_eof() {
     let (server, client) = pair();
@@ -717,13 +780,25 @@ fn a_client_that_closes_the_connection_without_a_close_frame_ends_with_eof() {
 }
 
 /// A connection that gives a complete upgrade request, then fails every
-/// read with `TimedOut`, the kind a read timeout gives on Windows.
-struct TimingOut {
+/// read with `kind`: `TimedOut`, the kind a read timeout gives on Windows,
+/// or `Interrupted`, a read a signal cut short.
+struct Failing {
     request: Vec<u8>,
     pos: usize,
+    kind: std::io::ErrorKind,
 }
 
-impl Read for TimingOut {
+impl Failing {
+    fn after_the_handshake(kind: std::io::ErrorKind) -> Self {
+        Failing {
+            request: UPGRADE_REQUEST.to_vec(),
+            pos: 0,
+            kind,
+        }
+    }
+}
+
+impl Read for Failing {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self.pos < self.request.len() {
             let n = buf.len().min(self.request.len() - self.pos);
@@ -732,11 +807,11 @@ impl Read for TimingOut {
             return Ok(n);
         }
         thread::sleep(Duration::from_millis(1));
-        Err(std::io::ErrorKind::TimedOut.into())
+        Err(self.kind.into())
     }
 }
 
-impl Write for TimingOut {
+impl Write for Failing {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         Ok(buf.len())
     }
@@ -745,7 +820,7 @@ impl Write for TimingOut {
     }
 }
 
-impl Connection for TimingOut {
+impl Connection for Failing {
     fn set_read_timeout(&self, _: Option<Duration>) -> std::io::Result<()> {
         Ok(())
     }
@@ -758,14 +833,74 @@ impl Connection for TimingOut {
 fn a_read_that_fails_with_timed_out_is_a_tick() {
     let mut config = config();
     config.liveness_timeout = Duration::from_millis(100);
-    let conn = TimingOut {
-        request: UPGRADE_REQUEST.to_vec(),
-        pos: 0,
-    };
+    let conn = Failing::after_the_handshake(std::io::ErrorKind::TimedOut);
     assert_eq!(
         serve(conn, Scanning(Loopback::new(CATALOG)), &config),
         Ended::LivenessTimeout
     );
+}
+
+#[test]
+fn a_read_that_fails_with_interrupted_is_a_tick_and_not_an_end() {
+    let mut config = config();
+    config.liveness_timeout = Duration::from_millis(100);
+    let conn = Failing::after_the_handshake(std::io::ErrorKind::Interrupted);
+    assert_eq!(
+        serve(conn, Scanning(Loopback::new(CATALOG)), &config),
+        Ended::LivenessTimeout
+    );
+}
+
+/// A connection whose drop waits for the test's release, so that an end of
+/// stream the client reads before the release can only come from
+/// `shutdown_write`, not from the connection being dropped.
+struct Held {
+    stream: TcpStream,
+    release: Receiver<()>,
+}
+
+fn held(stream: TcpStream) -> (Held, mpsc::Sender<()>) {
+    let (release, wait) = mpsc::channel();
+    (
+        Held {
+            stream,
+            release: wait,
+        },
+        release,
+    )
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        let _ = self.release.recv_timeout(TEST_LIMIT);
+    }
+}
+
+impl Read for Held {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.stream.read(buf)
+    }
+}
+
+impl Write for Held {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.stream.write(buf)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.stream.flush()
+    }
+}
+
+impl Connection for Held {
+    fn set_read_timeout(&self, t: Option<Duration>) -> std::io::Result<()> {
+        self.stream.set_read_timeout(t)
+    }
+    fn set_write_timeout(&self, t: Option<Duration>) -> std::io::Result<()> {
+        self.stream.set_write_timeout(t)
+    }
+    fn shutdown_write(&self) -> std::io::Result<()> {
+        self.stream.shutdown(std::net::Shutdown::Write)
+    }
 }
 
 /// The bytes of a raw client's upgrade answer, read up to the empty line.
@@ -779,28 +914,54 @@ fn read_upgrade_answer(client: &mut TcpStream) {
     assert!(head.starts_with(b"HTTP/1.1 101 "));
 }
 
+/// Reads the server's unmasked close frame with `code`, then the end of the
+/// stream, while the server's connection is held open: the end of the
+/// stream is `shutdown_write`, and not the drop of the connection.
+fn read_close_then_end_of_stream(client: &mut TcpStream, code: u16) {
+    let mut close = [0u8; 4];
+    client.read_exact(&mut close).unwrap();
+    let [hi, lo] = code.to_be_bytes();
+    assert_eq!(close, [0x88, 0x02, hi, lo]);
+    let mut rest = [0u8; 16];
+    assert_eq!(client.read(&mut rest).unwrap(), 0);
+}
+
 #[test]
 fn a_server_close_is_followed_by_the_end_of_the_stream_and_not_a_reset() {
     let config = config().with_max_message_bytes(1024).unwrap();
     let (server, mut client) = pair();
+    let (server, release) = held(server);
     client.write_all(UPGRADE_REQUEST).unwrap();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
     read_upgrade_answer(&mut client);
     // A masked binary frame that announces 1 MiB, with 64 KiB of its payload:
     // the server closes 1009 once it reads the length, with the payload
-    // still unread.
+    // still unread. The server read what the client sent before it closed
+    // the connection, so the connection was not reset.
     let mut frame = vec![0x82, 0x80 | 127];
     frame.extend_from_slice(&(1024u64 * 1024).to_be_bytes());
     frame.extend_from_slice(&[1, 2, 3, 4]);
     frame.resize(frame.len() + 64 * 1024, 0);
     client.write_all(&frame).unwrap();
+    read_close_then_end_of_stream(&mut client, 1009);
+    release.send(()).unwrap();
     assert_eq!(handle.join().0, Ended::ServerClosed(1009));
-    // The close frame, unmasked, with code 1009, then the end of the stream:
-    // the server read what the client sent before it closed the connection,
-    // so the connection was not reset.
-    let mut close = [0u8; 4];
-    client.read_exact(&mut close).unwrap();
-    assert_eq!(close, [0x88, 0x02, 0x03, 0xF1]);
-    let mut rest = [0u8; 16];
-    assert_eq!(client.read(&mut rest).unwrap(), 0);
+}
+
+/// The answer to a client's close frame is followed by the end of the
+/// stream too, before the server's connection is dropped.
+#[test]
+fn the_answer_to_a_client_close_is_followed_by_the_end_of_the_stream() {
+    let (server, mut client) = pair();
+    let (server, release) = held(server);
+    client.write_all(UPGRADE_REQUEST).unwrap();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
+    read_upgrade_answer(&mut client);
+    // A masked close frame with code 1000, under a zero mask.
+    client
+        .write_all(&[0x88, 0x82, 0, 0, 0, 0, 0x03, 0xE8])
+        .unwrap();
+    read_close_then_end_of_stream(&mut client, 1000);
+    release.send(()).unwrap();
+    assert_eq!(handle.join().0, Ended::ClientClosed(Some(1000)));
 }
