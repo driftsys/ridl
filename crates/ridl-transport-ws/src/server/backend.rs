@@ -12,7 +12,11 @@ use ridl_rt::port::{
 /// One value per connection: its ports have their own event queue (their
 /// [`EventSource`]) and their own sequence counter (their [`Caller`]), which
 /// is what makes the caller's identity the connection (frame specification
-/// §11.1 item 5). The ports are an associated type rather than supertraits so
+/// §11.1 item 5). The value is dropped at the end of the session, after every
+/// call in flight has been forgotten, and the backend's event subscriptions
+/// end with it: the server does not unsubscribe them one by one, so a backend
+/// whose subscriptions outlive its port value must release them in its own
+/// `Drop`. The ports are an associated type rather than supertraits so
 /// that an embedder can serve a runtime type it does not own: the orphan rule
 /// forbids implementing this trait on another crate's type, and [`Polling`]
 /// and [`Scanning`] cover the two common cases with no code. A backend with

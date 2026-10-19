@@ -197,8 +197,9 @@ impl<B: Backend> Session<B> {
         self.keep_closed(step)
     }
 
-    /// Ends the session: every backend call in flight is forgotten, and the
-    /// backend's subscriptions go with the backend value.
+    /// Ends the session: every backend call in flight is forgotten, then the
+    /// [`Backend`] value is dropped with the session, and the backend's
+    /// subscriptions end with it (the rule on [`Backend`]).
     pub(crate) fn close(mut self) {
         for c in self.calls.drain() {
             self.backend.ports().forget(c);
@@ -325,12 +326,25 @@ impl<B: Backend> Session<B> {
     /// occurrence behind it.
     fn drain_occurrences(&mut self, out: &mut Vec<Vec<u8>>) -> Step {
         loop {
-            let occurrence = match self.backend.ports().next(&mut self.buf) {
-                Ok(Some(occurrence)) => occurrence,
+            let cap = self.occurrence_cap;
+            let read = self.backend.ports().next(room(&mut self.buf, cap));
+            let (occurrence, fits) = match read {
+                Ok(Some(occurrence)) => (occurrence, true),
                 Ok(None) => return Step::Continue,
-                Err(ReadError::Short { needed }) => {
+                Err(ReadError::Short { needed }) if needed <= cap => {
                     self.buf.resize(needed, 0);
                     continue;
+                }
+                // Too large to send: read into a buffer of its own, which is
+                // dropped with it, so the session's buffer never grows past
+                // the cap.
+                Err(ReadError::Short { needed }) => {
+                    let mut scratch = vec![0; needed];
+                    match self.backend.ports().next(&mut scratch) {
+                        Ok(Some(occurrence)) => (occurrence, false),
+                        Ok(None) => return Step::Continue,
+                        Err(_) => return Step::Close(CloseCode::GOING_AWAY.0),
+                    }
                 }
                 Err(_) => return Step::Close(CloseCode::GOING_AWAY.0),
             };
@@ -339,15 +353,18 @@ impl<B: Backend> Session<B> {
                 iface: occurrence.iface,
                 ord: occurrence.ord,
             };
-            if occurrence.len > self.occurrence_cap {
+            // The channel's `seq` advances for a dropped occurrence too, so
+            // that the client sees the gap and records a loss (frame
+            // specification §5.2) rather than nothing.
+            let counter = self.events.entry((target.iface, target.ord)).or_default();
+            *counter += 1;
+            if !fits {
                 self.note(Note::ValueTooLarge {
                     target,
                     needed: occurrence.len,
                 });
                 continue;
             }
-            let counter = self.events.entry((target.iface, target.ord)).or_default();
-            *counter += 1;
             push(
                 out,
                 &Frame::Occurrence {
@@ -369,31 +386,31 @@ impl<B: Backend> Session<B> {
     /// forgotten and recorded, so that it does not hold a backend slot until
     /// the client disconnects.
     fn poll_calls(&mut self, now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
-        for call in self.calls.in_flight() {
+        'calls: for call in self.calls.in_flight() {
             let outcome = match call.target.kind {
                 Kind::Command => self
                     .backend
                     .ports()
                     .ack(call.correlation)
                     .map(Outcome::from),
-                _ => match self.backend.ports().reply(call.correlation, &mut self.buf) {
-                    Ok(known) => known.map(Outcome::from),
-                    Err(ReadError::Short { needed }) => {
-                        if needed > self.reply_cap {
+                _ => loop {
+                    let cap = self.reply_cap;
+                    let ports = self.backend.ports();
+                    match ports.reply(call.correlation, room(&mut self.buf, cap)) {
+                        Ok(known) => break known.map(Outcome::from),
+                        Err(ReadError::Short { needed }) if needed <= cap => {
+                            self.buf.resize(needed, 0);
+                        }
+                        Err(ReadError::Short { needed }) => {
                             self.note(Note::ValueTooLarge {
                                 target: call.target,
                                 needed,
                             });
                             self.forget(call.correlation);
-                            continue;
+                            continue 'calls;
                         }
-                        self.buf.resize(needed, 0);
-                        match self.backend.ports().reply(call.correlation, &mut self.buf) {
-                            Ok(known) => known.map(Outcome::from),
-                            Err(_) => return Step::Close(CloseCode::GOING_AWAY.0),
-                        }
+                        Err(_) => return Step::Close(CloseCode::GOING_AWAY.0),
                     }
-                    Err(_) => return Step::Close(CloseCode::GOING_AWAY.0),
                 },
             };
             let Some(outcome) = outcome else {
@@ -590,9 +607,10 @@ impl<B: Backend> Session<B> {
     /// the backend's clock as the stamp.
     fn read_fixed(&mut self, target: Target, out: &mut Vec<Vec<u8>>) -> Step {
         let len = loop {
+            let cap = self.payload_cap;
             match self
                 .backend
-                .read_fixed(target.iface, target.ord, &mut self.buf)
+                .read_fixed(target.iface, target.ord, room(&mut self.buf, cap))
             {
                 Ok(len) => break len,
                 Err(ReadError::Short { needed }) => {
@@ -714,7 +732,9 @@ impl<B: Backend> Session<B> {
     /// the payload the message limit allows.
     fn fetch_signal(&mut self, key: Key) -> Fetch {
         loop {
-            match self.backend.ports().read(key.0, key.1, &mut self.buf) {
+            let cap = self.payload_cap;
+            let ports = self.backend.ports();
+            match ports.read(key.0, key.1, room(&mut self.buf, cap)) {
                 Ok(sample) => return Fetch::Sample(sample),
                 Err(ReadError::Short { needed }) => {
                     if needed > self.payload_cap {
@@ -878,6 +898,14 @@ fn signal_target(key: Key) -> Target {
         iface: key.0,
         ord: key.1,
     }
+}
+
+/// The front of `buf`, at most `cap` bytes: what a backend read may copy
+/// into, so that a value over the cap is reported as `Short` and never read
+/// whole into the session's buffer, whatever size the buffer has.
+fn room(buf: &mut [u8], cap: usize) -> &mut [u8] {
+    let n = buf.len().min(cap);
+    &mut buf[..n]
 }
 
 /// Encodes one frame as one entry of `out`.
@@ -1960,7 +1988,9 @@ mod tests {
     }
 
     /// An occurrence that does not fit one message is recorded and dropped,
-    /// and the ones behind it in the queue still reach the client.
+    /// and the ones behind it in the queue still reach the client. The
+    /// channel's `seq` advances for the dropped one, so the client sees the
+    /// gap.
     #[test]
     fn an_occurrence_larger_than_the_message_limit_is_recorded_and_not_sent() {
         let notes = Notes::default();
@@ -1977,7 +2007,7 @@ mod tests {
         let (step, out) = tick(&mut s);
         assert_eq!(step, Step::Continue);
         assert_eq!(out.len(), 1);
-        assert_eq!(decode(&out[0]).unwrap(), occurrence(EVENT, 0, 1, &[1]));
+        assert_eq!(decode(&out[0]).unwrap(), occurrence(EVENT, 0, 2, &[1]));
         assert_eq!(
             *notes.lock().unwrap(),
             vec![Note::ValueTooLarge {
@@ -2345,6 +2375,155 @@ mod tests {
             }]
         );
         assert!(send_commands(&mut s, 2, Loopback::SLOTS as u64).is_empty());
+    }
+
+    // -- The message limit holds whatever the buffer has grown to -----------
+
+    const LIMIT: usize = 1024;
+
+    /// A session over a scanning loopback under [`LIMIT`].
+    fn limited() -> (Session<Scanning<Loopback>>, Loopback, Notes) {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let p = rt.attach();
+        let config = config(&notes)
+            .with_max_message_bytes(LIMIT)
+            .expect("above the minimum");
+        (Session::new(Scanning(rt), &config), p, notes)
+    }
+
+    /// The largest payload `frame` may carry under [`LIMIT`], with `frame`
+    /// built with an empty payload.
+    fn cap(frame: Frame<'_>) -> usize {
+        LIMIT - frame.encoded_len()
+    }
+
+    fn signal_cap() -> usize {
+        cap(publish(SIGNAL, 0, 0, PublishState::Live(&[])))
+    }
+
+    fn occurrence_cap() -> usize {
+        cap(occurrence(EVENT, 0, 0, &[]))
+    }
+
+    fn reply_cap() -> usize {
+        cap(response(QUERY, 0, 0, 0, ResponseOutcome::Reply(&[])))
+    }
+
+    fn assert_within_limit(out: &[Vec<u8>]) {
+        for m in out {
+            assert!(m.len() <= LIMIT, "a frame of {} bytes", m.len());
+        }
+    }
+
+    /// Drains one oversized occurrence, which grows nothing the later reads
+    /// can use, and then an occurrence of the cap, which fills the buffer to
+    /// one byte above the signal cap.
+    fn grow_by_occurrences(s: &mut Session<Scanning<Loopback>>, p: &mut Loopback) {
+        send(s, &msg(Frame::Subscribe(EVENT)));
+        raise(p, EVENT, &[1; 2000]);
+        raise(p, EVENT, &vec![2; occurrence_cap()]);
+        let (_, out) = tick(s);
+        assert_eq!(out.len(), 1);
+        assert_within_limit(&out);
+    }
+
+    #[test]
+    fn a_signal_is_capped_after_the_buffer_grew_on_occurrences() {
+        let (mut s, mut p, notes) = limited();
+        open(&mut s);
+        grow_by_occurrences(&mut s, &mut p);
+        // One byte over the signal cap, and inside the buffer's size.
+        commit(&mut p, &vec![3; signal_cap() + 1]);
+        let (_, out) = send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), accepted(SIGNAL));
+        assert!(notes.lock().unwrap().contains(&Note::ValueTooLarge {
+            target: SIGNAL,
+            needed: signal_cap() + 1
+        }));
+        commit(&mut p, &vec![4; signal_cap()]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), LIMIT);
+        assert_within_limit(&out);
+    }
+
+    #[test]
+    fn an_occurrence_is_capped_after_the_buffer_grew_on_an_occurrence() {
+        let (mut s, mut p, notes) = limited();
+        open(&mut s);
+        grow_by_occurrences(&mut s, &mut p);
+        raise(&mut p, EVENT, &vec![3; occurrence_cap() + 1]);
+        raise(&mut p, EVENT, &vec![4; occurrence_cap()]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), LIMIT);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            occurrence(EVENT, 0, 4, &vec![4; occurrence_cap()])
+        );
+        assert!(notes.lock().unwrap().contains(&Note::ValueTooLarge {
+            target: EVENT,
+            needed: occurrence_cap() + 1
+        }));
+    }
+
+    #[test]
+    fn a_fixed_is_capped_after_the_buffer_grew_on_occurrences() {
+        let (mut s, mut p, notes) = limited();
+        open(&mut s);
+        grow_by_occurrences(&mut s, &mut p);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![3; signal_cap() + 1]);
+        let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert!(out.is_empty());
+        assert!(notes.lock().unwrap().contains(&Note::ValueTooLarge {
+            target: FIXED,
+            needed: signal_cap() + 1
+        }));
+        p.provision_fixed(IFACE, Ordinal(5), &vec![4; signal_cap()]);
+        let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), LIMIT);
+    }
+
+    /// The review's probe: a 2000-byte occurrence, then a 1500-byte reply.
+    #[test]
+    fn a_reply_is_capped_after_the_buffer_grew_on_occurrences() {
+        let (mut s, mut p, notes) = limited();
+        open(&mut s);
+        grow_by_occurrences(&mut s, &mut p);
+        let out = settled(&mut s, &mut p, QUERY, 1, Ok(&[1; 1500]));
+        assert!(out.is_empty());
+        assert!(notes.lock().unwrap().contains(&Note::ValueTooLarge {
+            target: QUERY,
+            needed: 1500
+        }));
+    }
+
+    /// The reply cap is below the signal cap: after a signal of the signal
+    /// cap, a reply one byte over its own cap fits the buffer and is still
+    /// not sent.
+    #[test]
+    fn a_reply_one_byte_over_its_cap_is_not_sent_after_a_full_size_signal() {
+        let (mut s, mut p, notes) = limited();
+        open(&mut s);
+        commit(&mut p, &vec![1; signal_cap()]);
+        let (_, out) = send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        assert_eq!(out.len(), 2);
+        assert_within_limit(&out);
+        let out = settled(&mut s, &mut p, QUERY, 1, Ok(&vec![2; reply_cap() + 1]));
+        assert!(out.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: QUERY,
+                needed: reply_cap() + 1
+            }]
+        );
+        let out = settled(&mut s, &mut p, QUERY, 2, Ok(&vec![3; reply_cap()]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), LIMIT);
     }
 
     // -- D-18: the end of a session -----------------------------------------
