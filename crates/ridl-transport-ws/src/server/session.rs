@@ -42,12 +42,36 @@ struct SignalChannel {
     /// The last session `seq` assigned on this channel; 0 before the first
     /// `Live` or `InvalidDeclared` publication.
     counter: u64,
-    /// The backend `seq` and provenance of the sample last sent, or last
-    /// found too large to send.
-    last: Option<(u64, Provenance)>,
-    /// The size last recorded as too large on a tick, so that a value that
-    /// stays too large is recorded once per change, not once per tick.
+    /// The sample last sent on this channel, which a later sample is
+    /// compared against. `None` before the first `publish`.
+    last: Option<Sent>,
+    /// The size last recorded as too large, so that a value that stays too
+    /// large is recorded once per size, not once per tick.
     too_large: Option<usize>,
+}
+
+/// What a `publish` carried, as the backend gave it. A polling tick sends a
+/// sample that differs from it in any field, and a `read` reuses the session
+/// `seq` only for a sample equal to it in every field: a replaced writer may
+/// repeat a backend `seq`, so the `seq` alone does not identify a sample.
+struct Sent {
+    seq: u64,
+    provenance: Provenance,
+    stamp: Timestamp,
+    bytes: Vec<u8>,
+}
+
+impl SignalChannel {
+    /// Whether `sample`, with `bytes` as its value, equals the sample last
+    /// sent in every field.
+    fn unchanged(&self, sample: &RawSample, bytes: &[u8]) -> bool {
+        self.last.as_ref().is_some_and(|last| {
+            last.seq == sample.envelope.seq
+                && last.provenance == sample.provenance
+                && last.stamp == sample.envelope.stamp
+                && last.bytes == bytes
+        })
+    }
 }
 
 /// The size of the read buffer before any value needs a larger one.
@@ -68,6 +92,9 @@ pub(crate) struct Session<B: Backend> {
     record: Option<Record>,
     /// Whether an `attach` has been accepted.
     attached: bool,
+    /// The close code once a message or a tick returned [`Step::Close`]:
+    /// from then on nothing is sent and every call returns that close.
+    closed: Option<u16>,
     signals: BTreeMap<Key, SignalChannel>,
     /// One mark per interface with a subscribed signal, in scanning mode.
     marks: Vec<Watermark>,
@@ -101,6 +128,7 @@ impl<B: Backend> Session<B> {
             payload_cap: config.max_message_bytes() - empty_publish.encoded_len(),
             record: config.record(),
             attached: false,
+            closed: None,
             signals: BTreeMap::new(),
             marks: Vec::new(),
             changes: vec![
@@ -119,7 +147,36 @@ impl<B: Backend> Session<B> {
     /// Handles one message from the client. Each entry pushed to `out` is one
     /// encoded frame. `now` is the wall time of the message; the session
     /// does not use it yet (calls, which it will time, are not served yet).
+    /// After a [`Step::Close`], every call returns that close and pushes
+    /// nothing.
     pub(crate) fn on_message(&mut self, msg: &[u8], _now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
+        if let Some(code) = self.closed {
+            return Step::Close(code);
+        }
+        let step = self.handle(msg, out);
+        self.keep_closed(step)
+    }
+
+    /// Polls the backend once and pushes what changed to `out`. `now` is the
+    /// wall time of the tick; the session does not use it yet (see
+    /// [`Session::on_message`], which also states the rule after a close).
+    pub(crate) fn tick(&mut self, _now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
+        if let Some(code) = self.closed {
+            return Step::Close(code);
+        }
+        let step = self.poll(out);
+        self.keep_closed(step)
+    }
+
+    /// Records a close, so that later calls return it.
+    fn keep_closed(&mut self, step: Step) -> Step {
+        if let Step::Close(code) = step {
+            self.closed = Some(code);
+        }
+        step
+    }
+
+    fn handle(&mut self, msg: &[u8], out: &mut Vec<Vec<u8>>) -> Step {
         let frame = match frame::decode(msg) {
             Ok(frame) => frame,
             Err(DecodeError::Violation(v)) => {
@@ -162,14 +219,17 @@ impl<B: Backend> Session<B> {
         }
     }
 
-    /// Polls the backend once and pushes what changed to `out`. `now` is the
-    /// wall time of the tick; the session does not use it yet (see
-    /// [`Session::on_message`]).
-    pub(crate) fn tick(&mut self, _now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
+    /// One pass over the signals. In scanning mode each `Changed` entry of a
+    /// subscribed signal is sent, because the backend states that the
+    /// channel changed and the mark set at subscribe excludes earlier
+    /// commits. In polling mode every subscribed signal is read and sent
+    /// when it differs in any field from the sample last sent.
+    fn poll(&mut self, out: &mut Vec<Vec<u8>>) -> Step {
         if !self.attached {
             return Step::Continue;
         }
-        let changed = if self.backend.scannable().is_some() {
+        let scanning = self.backend.scannable().is_some();
+        let changed = if scanning {
             self.scan_changes()
         } else {
             self.signals
@@ -182,13 +242,11 @@ impl<B: Backend> Session<B> {
             let target = signal_target(key);
             match self.fetch_signal(key) {
                 Fetch::Sample(sample) => {
-                    let state = (sample.envelope.seq, sample.provenance);
                     let ch = self.signals.entry(key).or_default();
-                    if ch.last == Some(state) {
-                        continue;
-                    }
                     ch.too_large = None;
-                    self.publish_signal(target, sample, out);
+                    if scanning || !ch.unchanged(&sample, &self.buf[..sample.len]) {
+                        self.publish_signal(target, sample, scanning, out);
+                    }
                 }
                 Fetch::TooLarge(needed) => {
                     let ch = self.signals.entry(key).or_default();
@@ -282,10 +340,12 @@ impl<B: Backend> Session<B> {
             Fetch::Sample(sample) => {
                 self.signals.entry(key).or_default().subscribed = true;
                 self.answer(target, AnswerOutcome::Accepted, out);
-                self.publish_signal(target, sample, out);
+                self.publish_signal(target, sample, false, out);
             }
             Fetch::TooLarge(needed) => {
-                self.signals.entry(key).or_default().subscribed = true;
+                let ch = self.signals.entry(key).or_default();
+                ch.subscribed = true;
+                ch.too_large = Some(needed);
                 self.answer(target, AnswerOutcome::Accepted, out);
                 self.note(Note::ValueTooLarge { target, needed });
             }
@@ -333,7 +393,7 @@ impl<B: Backend> Session<B> {
     fn read(&mut self, target: Target, out: &mut Vec<Vec<u8>>) -> Step {
         match target.kind {
             Kind::Signal => match self.fetch_signal((target.iface, target.ord)) {
-                Fetch::Sample(sample) => self.publish_signal(target, sample, out),
+                Fetch::Sample(sample) => self.publish_signal(target, sample, false, out),
                 Fetch::TooLarge(needed) => self.note(Note::ValueTooLarge { target, needed }),
                 Fetch::Contract(c) => self.answer(target, AnswerOutcome::Contract(c), out),
                 Fetch::Gone => return Step::Close(CloseCode::GOING_AWAY.0),
@@ -441,21 +501,32 @@ impl<B: Backend> Session<B> {
     }
 
     /// Sends a signal's sample as one `publish`, with the backend's stamp
-    /// and the session's `seq`: 0 under `Init`; otherwise the `seq` sent last
-    /// when the backend `seq` and the provenance have not changed since, and
-    /// the next one when they have.
-    fn publish_signal(&mut self, target: Target, sample: RawSample, out: &mut Vec<Vec<u8>>) {
+    /// and the session's `seq`: 0 under `Init`; otherwise the next one, or,
+    /// unless `fresh`, the `seq` sent last when the sample equals the one
+    /// sent last in every field.
+    fn publish_signal(
+        &mut self,
+        target: Target,
+        sample: RawSample,
+        fresh: bool,
+        out: &mut Vec<Vec<u8>>,
+    ) {
         let ch = self.signals.entry((target.iface, target.ord)).or_default();
-        let state = (sample.envelope.seq, sample.provenance);
+        let bytes = &self.buf[..sample.len];
         let seq = match sample.provenance {
             Provenance::Init => 0,
-            _ if ch.last == Some(state) => ch.counter,
+            _ if !fresh && ch.unchanged(&sample, bytes) => ch.counter,
             _ => {
                 ch.counter += 1;
                 ch.counter
             }
         };
-        ch.last = Some(state);
+        ch.last = Some(Sent {
+            seq: sample.envelope.seq,
+            provenance: sample.provenance,
+            stamp: sample.envelope.stamp,
+            bytes: bytes.to_vec(),
+        });
         let state = match sample.provenance {
             Provenance::Init => PublishState::Init,
             Provenance::Live => PublishState::Live(&self.buf[..sample.len]),
@@ -548,14 +619,20 @@ fn push(out: &mut Vec<Vec<u8>>, frame: &Frame<'_>) {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+    use std::rc::Rc;
     use std::sync::{Arc, Mutex};
     use std::time::Instant;
 
     use ridl_loopback::Loopback;
     use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal};
-    use ridl_rt::error::Contract;
-    use ridl_rt::port::SignalWriter;
-    use ridl_rt::sample::{Duration, Envelope, Timestamp};
+    use ridl_rt::error::{CallError, Contract};
+    use ridl_rt::port::{
+        Attached, Caller, Clock, Correlation, Encoded, EventSource, RawOccurrence, RawSample,
+        ReadError, SendError, SignalReader, SignalWriter, SubscribeError,
+    };
+    use ridl_rt::sample::{Cause, Duration, Envelope, Freshness, Provenance, Timestamp};
+    use ridl_rt::trace::TraceContext;
 
     use super::{Session, Step};
     use crate::frame::{
@@ -1135,11 +1212,307 @@ mod tests {
                 decode(&out[0]).unwrap(),
                 publish(SIGNAL, 0, 2, PublishState::Live(&[2]))
             );
-            // The tick sends the change under the seq the read assigned.
-            let (_, out) = tick(&mut s);
-            assert!(out.is_empty());
         }
     );
+
+    /// After a `read` sent a change, the scan still reports it, and the
+    /// scanning tick sends it again under the next `seq`.
+    #[test]
+    fn a_change_a_read_sent_is_sent_again_by_the_scan() {
+        let (mut s, mut p, _n) = scanning();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        commit(&mut p, &[2]);
+        send(&mut s, &msg(Frame::Read(SIGNAL)));
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 0, 2, PublishState::Live(&[2]))
+        );
+    }
+
+    /// After a `read` sent a change, the polling tick finds the sample equal
+    /// to the one sent and sends nothing.
+    #[test]
+    fn a_change_a_read_sent_is_not_sent_again_by_polling() {
+        let (mut s, mut p, _n) = polling();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        commit(&mut p, &[2]);
+        send(&mut s, &msg(Frame::Read(SIGNAL)));
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+    }
+
+    both_modes!(
+        new_writer_reuses_seq,
+        a_new_writer_whose_first_commit_reuses_the_last_seq_is_still_published_scanning,
+        a_new_writer_whose_first_commit_reuses_the_last_seq_is_still_published_polling,
+        |s, p| {
+            open(&mut s);
+            send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+            commit(&mut p, &[1]);
+            let (_, out) = tick(&mut s);
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                publish(SIGNAL, 0, 1, PublishState::Live(&[1]))
+            );
+            // The new writer's first commit is backend seq 1 again, under
+            // the same stamp: only the bytes differ.
+            let mut fresh = p.attach();
+            drop(p);
+            commit(&mut fresh, &[3]);
+            let (_, out) = tick(&mut s);
+            assert_eq!(out.len(), 1);
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                publish(SIGNAL, 0, 2, PublishState::Live(&[3]))
+            );
+        }
+    );
+
+    /// The stamp half of the polling comparison: the same backend `seq`,
+    /// provenance and bytes under a later stamp is a change.
+    #[test]
+    fn polling_publishes_a_new_stamp_under_the_same_seq_and_bytes() {
+        let (mut s, mut p, _n) = polling();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        commit(&mut p, &[1]);
+        tick(&mut s);
+        let mut fresh = p.attach();
+        drop(p);
+        fresh.advance(Duration(5));
+        commit(&mut fresh, &[1]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 5, 2, PublishState::Live(&[1]))
+        );
+    }
+
+    /// A reader whose sample is fixed but for its provenance, which the test
+    /// changes from outside. Every other port delegates to a loopback.
+    struct Fixed {
+        inner: Loopback,
+        provenance: Rc<Cell<Provenance>>,
+    }
+
+    impl Attached for Fixed {
+        fn catalog(&self) -> &CatalogRef {
+            self.inner.catalog()
+        }
+    }
+
+    impl Encoded for Fixed {
+        type Encoding = <Loopback as Encoded>::Encoding;
+    }
+
+    impl Clock for Fixed {
+        fn now(&self) -> Timestamp {
+            self.inner.now()
+        }
+    }
+
+    impl SignalReader for Fixed {
+        fn read(&self, _: InterfaceNo, _: Ordinal, out: &mut [u8]) -> Result<RawSample, ReadError> {
+            out[0] = 1;
+            Ok(RawSample {
+                provenance: self.provenance.get(),
+                freshness: Freshness::Unbounded,
+                envelope: Envelope {
+                    stamp: Timestamp(0),
+                    seq: 1,
+                },
+                len: 1,
+            })
+        }
+    }
+
+    impl EventSource for Fixed {
+        fn subscribe(
+            &mut self,
+            iface: InterfaceNo,
+            ords: &[Ordinal],
+        ) -> Result<(), SubscribeError> {
+            self.inner.subscribe(iface, ords)
+        }
+        fn unsubscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) {
+            self.inner.unsubscribe(iface, ords);
+        }
+        fn next(&mut self, out: &mut [u8]) -> Result<Option<RawOccurrence>, ReadError> {
+            self.inner.next(out)
+        }
+    }
+
+    impl Caller for Fixed {
+        fn command(
+            &mut self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            args: &[u8],
+            trace: Option<TraceContext>,
+        ) -> Result<Correlation, SendError> {
+            self.inner.command(iface, ord, args, trace)
+        }
+        fn query(
+            &mut self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            args: &[u8],
+            trace: Option<TraceContext>,
+        ) -> Result<Correlation, SendError> {
+            self.inner.query(iface, ord, args, trace)
+        }
+        fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
+            self.inner.ack(c)
+        }
+        fn reply(
+            &mut self,
+            c: Correlation,
+            out: &mut [u8],
+        ) -> Result<Option<Result<usize, CallError>>, ReadError> {
+            self.inner.reply(c, out)
+        }
+        fn forget(&mut self, c: Correlation) {
+            self.inner.forget(c);
+        }
+    }
+
+    /// The provenance half of the polling comparison: the same backend
+    /// `seq`, stamp and bytes under another provenance is a change.
+    #[test]
+    fn polling_publishes_a_provenance_change_under_the_same_seq_stamp_and_bytes() {
+        let provenance = Rc::new(Cell::new(Provenance::Live));
+        let backend = Polling(Fixed {
+            inner: Loopback::new(CATALOG),
+            provenance: Rc::clone(&provenance),
+        });
+        let mut s = Session::new(backend, &Config::default());
+        open(&mut s);
+        let (_, out) = send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        assert_eq!(
+            decode(&out[1]).unwrap(),
+            publish(SIGNAL, 0, 1, PublishState::Live(&[1]))
+        );
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        provenance.set(Provenance::Invalid(Cause::Declared));
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 0, 2, PublishState::InvalidDeclared)
+        );
+    }
+
+    /// One commit of more signals than the scan buffer holds: the buffer
+    /// grows and every subscribed one is published.
+    #[test]
+    fn more_changed_signals_than_the_first_scan_buffer_are_all_published() {
+        let (mut s, mut p, _n) = scanning();
+        open(&mut s);
+        let count = 20u32;
+        for ord in 1..=count {
+            send(&mut s, &msg(Frame::Subscribe(target(Kind::Signal, ord))));
+        }
+        for ord in 1..=count {
+            p.set(IFACE, Ordinal(ord), &[ord as u8]).unwrap();
+        }
+        p.commit();
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), count as usize);
+        let mut seen: Vec<u32> = out
+            .iter()
+            .map(|m| match decode(m).unwrap() {
+                Frame::Publish {
+                    target,
+                    envelope,
+                    state: PublishState::Live(bytes),
+                } => {
+                    assert_eq!(envelope.seq, 1);
+                    assert_eq!(bytes, &[target.ord.0 as u8]);
+                    target.ord.0
+                }
+                other => panic!("not a live publish: {other:?}"),
+            })
+            .collect();
+        seen.sort_unstable();
+        assert_eq!(seen, (1..=count).collect::<Vec<_>>());
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+    }
+
+    /// Each attach has every field wrong from one check on, so that the
+    /// reason given is the first check's.
+    #[test]
+    fn the_attach_checks_run_in_the_design_order() {
+        let cases = [
+            (2, 2, [8u8; 32], "ws.other", Reason::FrameVersionUnsupported),
+            (1, 2, [8u8; 32], "ws.other", Reason::UnknownCatalog),
+            (1, 2, [8u8; 32], "ws.test", Reason::CatalogMismatch),
+            (1, 2, [7u8; 32], "ws.test", Reason::EncodingUnsupported),
+        ];
+        for (version, encoding, hash, name, reason) in cases {
+            let (mut s, _p, _n) = scanning();
+            refused(&mut s, &attach_msg(version, encoding, hash, name), reason);
+        }
+    }
+
+    /// A value too large at subscribe is recorded once, not again by the
+    /// polling ticks that read it again.
+    #[test]
+    fn a_too_large_value_is_recorded_once_across_subscribe_and_polling_ticks() {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let mut p = rt.attach();
+        let config = config(&notes)
+            .with_max_message_bytes(1024)
+            .expect("above the minimum");
+        let mut s = Session::new(Polling(rt), &config);
+        open(&mut s);
+        commit(&mut p, &[1; 2000]);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        tick(&mut s);
+        tick(&mut s);
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: SIGNAL,
+                needed: 2000
+            }]
+        );
+    }
+
+    #[test]
+    fn after_a_close_nothing_more_is_sent_and_the_close_is_repeated() {
+        let (mut s, mut p, _n) = scanning();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        let (step, _) = send(
+            &mut s,
+            &msg(publish(SIGNAL, 0, 1, PublishState::Live(&[1]))),
+        );
+        assert_eq!(step, Step::Close(1002));
+        let (step, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(step, Step::Close(1002));
+        assert!(out.is_empty());
+        commit(&mut p, &[2]);
+        let (step, out) = tick(&mut s);
+        assert_eq!(step, Step::Close(1002));
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn after_a_refusal_the_close_is_repeated() {
+        let (mut s, _p, _n) = scanning();
+        send(&mut s, &attach_msg(1, 1, [7u8; 32], "ws.other"));
+        let (step, out) = send(&mut s, &attach_msg(1, 1, [7u8; 32], "ws.test"));
+        assert_eq!(step, Step::Close(1000));
+        assert!(out.is_empty());
+    }
 
     // -- D-17: fixed ---------------------------------------------------------
 
