@@ -278,7 +278,13 @@ because a client that sends one has the roles wrong.
   nothing is subscribed. A second `subscribe` of a subscribed signal is answered
   `accepted` and sends nothing more ("changes nothing", §6.2).
 - `read` of a signal: one `publish` of its current state; nothing is subscribed.
-  A failing read is answered as above.
+  A failing read is answered as above. (As built: a `read` whose backend sample
+  is `Init`, on a signal the session holds no state for, sends `Init` with `seq`
+  0 and creates no channel state, so a client cannot grow the session by reading
+  signals that were never published. The state of each signal the client
+  subscribes, or reads after a publication, lasts as long as the session, with
+  no bound in the crate; `serve`'s rustdoc says so, and the access policy must
+  trust each client for that growth.)
 - `unsubscribe`: the server forgets the signal and sends nothing.
 - The state sent is the backend's `RawSample`, mapped:
 
@@ -455,7 +461,15 @@ is written to this rule.
 The request line and headers are limited to 8 KiB; above that, or on any
 malformed request, the server answers `400 Bad Request` and closes. The path,
 the query and other headers are ignored (§11.1 item 1: the binding places
-nothing there; the embedder's access policy runs before `serve`).
+nothing there; the embedder's access policy runs before `serve`). (As built: the
+`Origin` header is read and given to a check the embedder sets with
+`Config::with_origin_check`, as `None` when the request has none; a request the
+check refuses is answered `403 Forbidden`, with the same linger as a `400`, and
+`serve` returns `Ended::Rejected`. Without a check every origin is accepted. A
+request with two `Origin` headers is answered `400`. The embedder's access
+policy sees only the peer address, which is the same for any web page a local
+browser loads, so a browser-facing embedder should set the check; the crate
+rustdoc says so, and that the crate authenticates no one.)
 
 **D-20. The subprotocol.** The server selects `ridl-ws-v1` when the client
 offers it, in any position of `Sec-WebSocket-Protocol`. When the client does not
@@ -473,7 +487,11 @@ Fragmented messages are reassembled; a message whose total size passes
 `max_message_bytes` is at least 294 (§11.1 "The sizes"); `Config` rejects a
 smaller value. Default 1 MiB. **(agent's call)** Client frames that are not
 masked close with 1002 (RFC 6455 §5.1). A ping is answered with a pong carrying
-its payload.
+its payload. (As built: each frame the server sends, header and payload, is
+assembled in one buffer the session reuses and written with one write call, so
+that with `TCP_NODELAY` off the payload does not wait for the peer's delayed
+acknowledgement of the header. The crate sets no socket option; the rustdoc says
+that an embedder may set `TCP_NODELAY`.)
 
 **D-22. Liveness.** The server sends a ping every `config.ping_interval`
 (default 5 s) and ends the session when no message of any kind has arrived for
