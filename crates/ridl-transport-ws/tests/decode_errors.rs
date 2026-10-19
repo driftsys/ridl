@@ -2,7 +2,7 @@
 
 use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal};
 use ridl_transport_ws::frame::{
-    decode, Attach, DecodeError, Discarded, Frame, NameError, ProtocolViolation, PublishState,
+    decode, Attach, AttachError, DecodeError, Discarded, Frame, ProtocolViolation, PublishState,
     Short, Target,
 };
 
@@ -173,11 +173,11 @@ fn a_live_publish_with_an_empty_payload_decodes() {
 #[test]
 fn attach_new_refuses_an_empty_name_and_a_256_byte_name() {
     let hash = CatalogHash([0; 32]);
-    assert_eq!(Attach::new(1, 1, hash, "").unwrap_err(), NameError::Empty);
+    assert_eq!(Attach::new(1, 1, hash, "").unwrap_err(), AttachError::Empty);
     let long = "a".repeat(256);
     assert_eq!(
         Attach::new(1, 1, hash, &long).unwrap_err(),
-        NameError::TooLong { len: 256 }
+        AttachError::TooLong { len: 256 }
     );
     let longest = "a".repeat(255);
     assert!(Attach::new(1, 1, hash, &longest).is_ok());
@@ -189,4 +189,139 @@ fn encode_into_a_short_buffer_reports_the_needed_length() {
     let mut out = [0u8; 28];
     assert_eq!(frame.encode(&mut out), Err(Short { needed: 29 }));
     assert_eq!(out, [0u8; 28], "a short buffer is left untouched");
+}
+
+const ANSWER: [u8; 12] = [0x04, 0x01, 1, 0, 0, 0, 2, 0, 0, 0, 0x01, 0x00];
+
+#[test]
+fn an_attach_with_encoding_0_or_4_is_an_unknown_code() {
+    for tag in [0u8, 4, 255] {
+        let mut m = attach_message(1, b"v");
+        m[5] = tag;
+        assert_eq!(decode_err(&m), violation(ProtocolViolation::UnknownCode));
+    }
+}
+
+#[test]
+fn attach_new_refuses_an_unknown_encoding() {
+    let hash = CatalogHash([0; 32]);
+    for tag in [0u8, 4] {
+        assert_eq!(
+            Attach::new(1, tag, hash, "v").unwrap_err(),
+            AttachError::UnknownEncoding(tag)
+        );
+    }
+    for tag in [1u8, 2, 3] {
+        assert!(Attach::new(1, tag, hash, "v").is_ok());
+    }
+}
+
+#[test]
+fn an_attach_with_bytes_after_its_name_is_a_bad_name_length() {
+    assert_eq!(
+        decode_err(&attach_message(1, b"vx")),
+        violation(ProtocolViolation::BadNameLength)
+    );
+}
+
+#[test]
+fn an_attached_with_trailing_bytes_is_control_too_long() {
+    assert_eq!(
+        decode_err(&[0x02, 0x01, 0x00, 0x00]),
+        violation(ProtocolViolation::ControlTooLong)
+    );
+}
+
+#[test]
+fn an_answer_with_trailing_bytes_is_control_too_long() {
+    let mut m = ANSWER.to_vec();
+    m.push(0);
+    assert_eq!(decode_err(&m), violation(ProtocolViolation::ControlTooLong));
+}
+
+#[test]
+fn a_nonzero_detail_on_a_response_is_nonzero_detail() {
+    for outcome in [1u8, 2, 7, 8, 4, 5, 6] {
+        let mut m = RESPONSE_ACCEPTED;
+        m[34] = outcome;
+        m[35] = 1;
+        assert_eq!(
+            decode_err(&m),
+            violation(ProtocolViolation::NonzeroDetail),
+            "outcome {outcome}"
+        );
+    }
+}
+
+#[test]
+fn a_nonzero_detail_on_an_answer_is_nonzero_detail() {
+    for outcome in [1u8, 4, 5, 6] {
+        let mut m = ANSWER;
+        m[10] = outcome;
+        m[11] = 1;
+        assert_eq!(
+            decode_err(&m),
+            violation(ProtocolViolation::NonzeroDetail),
+            "outcome {outcome}"
+        );
+    }
+}
+
+#[test]
+fn an_answer_outcome_the_form_does_not_allow_is_an_outcome_not_allowed() {
+    for outcome in [2u8, 7, 8, 9] {
+        let mut m = ANSWER;
+        m[10] = outcome;
+        assert_eq!(
+            decode_err(&m),
+            violation(ProtocolViolation::OutcomeNotAllowed),
+            "outcome {outcome}"
+        );
+    }
+}
+
+#[test]
+fn an_unknown_refusal_reason_is_an_unknown_code() {
+    for reason in [0u8, 6] {
+        assert_eq!(
+            decode_err(&[0x02, 0x09, reason]),
+            violation(ProtocolViolation::UnknownCode)
+        );
+    }
+}
+
+#[test]
+fn an_unknown_outcome_code_is_an_unknown_code() {
+    let mut m = RESPONSE_ACCEPTED;
+    m[34] = 10;
+    assert_eq!(decode_err(&m), violation(ProtocolViolation::UnknownCode));
+    m[34] = 0;
+    assert_eq!(decode_err(&m), violation(ProtocolViolation::UnknownCode));
+    let mut a = ANSWER;
+    a[10] = 10;
+    assert_eq!(decode_err(&a), violation(ProtocolViolation::UnknownCode));
+    assert_eq!(
+        decode_err(&[0x02, 10, 0]),
+        violation(ProtocolViolation::UnknownCode)
+    );
+}
+
+#[test]
+fn an_unknown_rule_is_an_unknown_code() {
+    for rule in [0u8, 7] {
+        let mut m = RESPONSE_ACCEPTED;
+        m[34] = 3;
+        m[35] = rule;
+        assert_eq!(decode_err(&m), violation(ProtocolViolation::UnknownCode));
+    }
+}
+
+#[test]
+fn an_invalid_declared_publish_with_bytes_after_its_header_is_discarded() {
+    let mut m = PUBLISH_LIVE;
+    m[26] = 3;
+    assert_eq!(
+        decode_err(&m),
+        Err(DecodeError::Discard(Discarded::UnexpectedPayload))
+    );
 }

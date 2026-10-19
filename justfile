@@ -206,7 +206,8 @@ wasm-check:
         cargo check --target wasm32-unknown-unknown -p ridl-rt --all-features
         # `ridl-transport-ws` with its `server` feature off is the frame codec
         # alone. Both targets check it, and the target with no standard library
-        # is the proof that the codec needs no standard library (design C-3).
+        # is the proof that the codec needs no standard library (frame
+        # specification §11.1).
         cargo check --target wasm32-unknown-unknown -p ridl-transport-ws --no-default-features
         cargo check --target thumbv7em-none-eabihf -p ridl-transport-ws --no-default-features
     else

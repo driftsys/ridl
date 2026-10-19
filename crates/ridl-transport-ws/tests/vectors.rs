@@ -36,6 +36,18 @@ fn envelope(stamp: i64, seq: u64) -> Envelope {
     }
 }
 
+const KNOWN: [&str; 9] = [
+    "attach-1",
+    "attached-accepted",
+    "attached-mismatch",
+    "subscribe-signal",
+    "answer-accepted",
+    "publish-live",
+    "request-command",
+    "response-accepted",
+    "response-violation",
+];
+
 fn expected(id: &str) -> Option<Frame<'static>> {
     let mut hash = [0u8; 32];
     for (i, b) in hash.iter_mut().enumerate() {
@@ -94,9 +106,11 @@ fn every_spec_vector_decodes_and_reencodes_byte_for_byte() {
         .skip(2)
         .collect();
     assert!(!rows.is_empty(), "no vector rows found");
+    let mut seen = Vec::new();
     for row in rows {
         let cells: Vec<&str> = row.split('|').map(str::trim).collect();
         let id = cells[1].trim_matches('`');
+        seen.push(id.to_string());
         let bytes = hex(cells[3]);
         let want = expected(id).unwrap_or_else(|| panic!("vector {id} is not known to this test"));
         let got = decode(&bytes).unwrap_or_else(|e| panic!("vector {id} did not decode: {e:?}"));
@@ -106,4 +120,11 @@ fn every_spec_vector_decodes_and_reencodes_byte_for_byte() {
         let n = want.encode(&mut out).unwrap();
         assert_eq!(&out[..n], &bytes[..], "encoding of {id}");
     }
+    seen.sort();
+    let mut known: Vec<String> = KNOWN.iter().map(|s| s.to_string()).collect();
+    known.sort();
+    assert_eq!(
+        seen, known,
+        "the table and this test disagree on the vectors"
+    );
 }

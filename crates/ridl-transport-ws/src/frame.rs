@@ -74,10 +74,10 @@ pub struct Target {
     pub ord: Ordinal,
 }
 
-/// The reason an [`Attach`] cannot be built from a unit name.
+/// The reason an [`Attach`] cannot be built.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum NameError {
+pub enum AttachError {
     /// The name has no bytes.
     Empty,
     /// The name is longer than 255 bytes of UTF-8.
@@ -85,6 +85,8 @@ pub enum NameError {
         /// The length of the name in bytes.
         len: usize,
     },
+    /// The encoding tag is not 1, 2 or 3.
+    UnknownEncoding(u8),
 }
 
 /// An `attach` frame: a consumer's request to open a session.
@@ -97,22 +99,26 @@ pub struct Attach<'a> {
 }
 
 impl<'a> Attach<'a> {
-    /// Builds an `attach`. The name must hold 1 to 255 bytes.
+    /// Builds an `attach`. The name must hold 1 to 255 bytes and the encoding
+    /// tag must be one of the table of [`encoding_tag`].
     pub fn new(
         frame_version: u32,
         encoding: u8,
         hash: CatalogHash,
         name: &'a str,
-    ) -> Result<Self, NameError> {
+    ) -> Result<Self, AttachError> {
+        if !(1..=3).contains(&encoding) {
+            return Err(AttachError::UnknownEncoding(encoding));
+        }
         match name.len() {
-            0 => Err(NameError::Empty),
+            0 => Err(AttachError::Empty),
             1..=255 => Ok(Attach {
                 frame_version,
                 encoding,
                 hash,
                 name,
             }),
-            len => Err(NameError::TooLong { len }),
+            len => Err(AttachError::TooLong { len }),
         }
     }
 
@@ -600,6 +606,9 @@ fn decode_attach(msg: &[u8]) -> Result<Frame<'_>, DecodeError> {
         return Err(ProtocolViolation::BadNameLength.into());
     }
     let name = str::from_utf8(&msg[ATTACH_FIXED..]).map_err(|_| ProtocolViolation::BadName)?;
+    if !(1..=3).contains(&msg[5]) {
+        return Err(ProtocolViolation::UnknownCode.into());
+    }
     let mut hash = [0u8; 32];
     hash.copy_from_slice(&msg[6..38]);
     Ok(Frame::Attach(Attach {

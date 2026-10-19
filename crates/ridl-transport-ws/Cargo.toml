@@ -8,10 +8,10 @@ rust-version = "1.83"
 license.workspace = true
 repository.workspace = true
 description = "The WebSocket binding of the ridl frame: a no_std codec and a server for ridl-rt ports."
-# The package leaves out `tests/`: a path dev-dependency carries no version, as
-# in `ridl-loopback`, so `cargo package` drops it from the packaged manifest and
-# a test that uses it would be a test target that cannot compile. The tests run
-# here, in the workspace.
+# The package leaves out `tests/`: `tests/vectors.rs` reads
+# `docs/specification/frame-specification.md`, a file of the repository that
+# the package does not contain, so that test cannot run from the packaged
+# crate. The tests run here, in the workspace.
 exclude = ["tests/"]
 
 [features]
