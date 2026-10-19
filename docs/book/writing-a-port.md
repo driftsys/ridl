@@ -227,12 +227,14 @@ rules, the invalid payload rules, or the control-plane operations. [§11](refere
 implementation — a runtime, a binding, or both — shows with its own tests to
 conform.
 
-No binding is built in this repository. The WebSocket binding is specified in
-[§11.1](reference/frame.md#111-websocket) and its transport is not built, and
-on Android a runtime binds the ports over its own binder
-contract, outside this repository. `ridl-loopback` runs in process and speaks no
-frame. The frame chapter is a specification, not a description of shipped
-behaviour; see the note at the top of [frame](reference/frame.md).
+One binding is built in this repository: the WebSocket binding of
+[§11.1](reference/frame.md#111-websocket), whose Rust side is
+`ridl-transport-ws`, a server over a `ridl-rt` port set the embedding program
+chose. On Android a runtime binds the ports over its own binder contract,
+outside this repository. `ridl-loopback` runs in process and speaks no frame.
+The frame chapter is a specification, and its As-built note says which of its
+rules the transport applies; see the note at the top of
+[frame](reference/frame.md).
 
 ## Attaching to a catalog
 

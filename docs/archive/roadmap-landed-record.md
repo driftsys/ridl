@@ -435,7 +435,7 @@ row. The as-built record is
 deployment section, and ADR-0022 decision 11. Story E17.3, the WebSocket
 binding's overheads, was the last row open; it landed on 2026-10-20 with the
 WebSocket transport (driftsys/ridl#265, PR driftsys/ridl#990), and its row is
-below.
+above.
 
 **`repr(C)` joins when E11.12 lands (still open).** The alignment and the layout
 of a slot for the third encoding come from its projection record; until then a

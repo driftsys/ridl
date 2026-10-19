@@ -341,7 +341,8 @@ sizes a socket message adds the frame header and the envelope of the transport
 binding to the payload bound; the deployment section's `bindings` list carries
 those values: the `websocket` row of
 [the frame specification §11.1](reference/frame.md#111-websocket), a data-plane
-frame header of at most 20 bytes and an envelope of 16 bytes.
+frame header of at most 20 bytes and an envelope of 16 bytes. A test of
+`ridl-transport-ws` checks that row against the frames its codec writes.
 
 ## The catalog hash
 
@@ -396,9 +397,6 @@ section carries those facts to a plugin at build time.
 
 ## What is not available yet
 
-- **A check of the binding overheads against a frame.** The `websocket`
-  row's sum is not yet checked against a frame a transport writes, because
-  no transport in this repository writes one ([driftsys/ridl#718][i718]).
 - **`repr(C)`.** The `ENCODING_REPR_C` value exists in the schema, but no
   consumer link carries it and no payload has a `repr(C)` size state
   ([driftsys/ridl#317][i317]).
@@ -447,5 +445,4 @@ section carries those facts to a plugin at build time.
 [layout]: https://github.com/driftsys/ridl/blob/main/crates/ridlc/tests/layout.rs
 [kotlin]: https://github.com/driftsys/ridlc-gen-kotlin
 [i317]: https://github.com/driftsys/ridl/issues/317
-[i718]: https://github.com/driftsys/ridl/issues/718
 [i735]: https://github.com/driftsys/ridl/issues/735

@@ -541,10 +541,11 @@ transport: E11.9 owns that, and it does not link this crate.
 connection the embedder accepted, over a `ridl-rt` port set the embedder chose
 (`SignalReader`, `EventSource`, `Caller`, and `FixedReader`). It forwards
 payload bytes without decoding them, binds no socket and starts no task. Its
-tests include a test client that reaches the server from a second connection and
-a size test that checks the `websocket` row of the binding table against the
-frames the codec writes, which closes the open half of driftsys/ridl#718. Its
-as-built record is
+tests include one scenario run twice, in process over the loopback and against
+the server in a second process through a test client, which is how "the same
+tests" of the done-when is read, and a size test that checks the `websocket` row
+of the binding table against the frames the codec writes, which closes the open
+half of driftsys/ridl#718. Its as-built record is
 [the `ridl-transport-ws` design record](design/ridl-transport-ws.md).
 Follow-ups: driftsys/ridl#984 (bound the per-session signal state),
 driftsys/ridl#985 (read the catalog descriptor), driftsys/ridl#986 (frame
