@@ -200,19 +200,29 @@ it from its own event loop.
 **D-10. The backend trait.** **(agent's call)**
 
 ```rust,ignore
-pub trait Backend: Attached + Encoded + Clock + SignalReader + EventSource + Caller {
+pub trait Backend {
+    type Ports: Attached + Encoded + Clock + SignalReader + EventSource + Caller;
+    fn ports(&mut self) -> &mut Self::Ports;
     fn scannable(&self) -> Option<&dyn ScannableSignals> { None }
     fn read_fixed(&self, iface: InterfaceNo, ord: Ordinal, out: &mut [u8])
         -> Result<usize, ReadError> { Err(ReadError::Contract(Contract::UnknownInteraction)) }
 }
+
+pub struct Polling<P>(pub P);  // P: the six bounds; no scan, no fixed
+pub struct Scanning<P>(pub P); // P: the six bounds + ScannableSignals + FixedReader
 ```
 
-One value per connection: it has its own event queue (its `EventSource`) and its
-own sequence counter (its `Caller`), which is what §11.1 item 5 needs, because
-the caller's identity is the connection. For `ridl-loopback`, the embedder
-implements it on a wrapper over `Loopback::attach()`, returning `Some(self)`
-from `scannable`. The crate ships no implementation, because it does not link
-the loopback (C-5).
+The ports are an associated type rather than supertraits so that an embedder, or
+a test crate, can serve a runtime type it does not own: the orphan rule forbids
+implementing this crate's trait on another crate's type, and the two adapters
+cover the two common cases with no code. A backend with one optional capability
+and not the other implements the three methods itself.
+
+One value per connection: its ports have their own event queue (their
+`EventSource`) and their own sequence counter (their `Caller`), which is what
+§11.1 item 5 needs, because the caller's identity is the connection. For
+`ridl-loopback`, the embedder passes `Scanning(loopback.attach())`. The crate
+ships no loopback-specific code, because it does not link the loopback (C-5).
 
 **D-11. Attach.** The first message must be an `attach`; anything else is a
 protocol violation (close 1002). The server answers:
