@@ -173,12 +173,14 @@ jobs:
           # ridl-cli — the `ridl` binary — depends on both of them plus
           # ridlc, so it is last of all. ridl-descriptor depends on ridl-ir, so
           # it publishes after ridl-ir, and before ridlc, which depends on it.
+          # ridl-transport-ws depends only on ridl-rt, so it follows ridl-rt.
           publish ridl-syntax
           publish ridl-ir
           publish ridl-descriptor
           publish ridl-rt
           publish ridl-rt-conformance
           publish ridl-loopback
+          publish ridl-transport-ws
           publish ridl-core
           publish ridl-sem
           publish ridl-diff
