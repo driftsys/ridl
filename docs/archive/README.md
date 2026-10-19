@@ -647,3 +647,9 @@ provenance. Nothing here is normative — the current references live in
   authority. The design's lane L item 3 (ratify `family-general-form.md` into
   `docs/specification/`) did not happen; that file stays in [`../wip/`](../wip/)
   with its disposition in [`../wip/README.md`](../wip/README.md).
+
+- **2026-10-15-release-0.11-plan.md** — the release 0.11 scope and plan: eight
+  defect fixes (#880, #884, #925, #919, #863, #874, #864, #877) after the freeze
+  baseline move (#962), with the alternatives considered. All landed in
+  `v0.11.0`. The plan's order and the rejected scope options are the only
+  content not recorded elsewhere.
