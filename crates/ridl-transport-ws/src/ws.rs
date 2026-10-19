@@ -217,8 +217,10 @@ const MAX_CONTROL_PAYLOAD: u64 = 125;
 #[derive(Debug)]
 pub(crate) struct Parser {
     max_message_bytes: usize,
-    /// Bytes fed and not yet consumed. They start at a frame boundary.
+    /// Bytes fed. The bytes before `pos` are consumed, and `pos` is at a
+    /// frame boundary.
     buf: Vec<u8>,
+    pos: usize,
     /// The fragments of a binary message whose final frame has not arrived.
     message: Option<Vec<u8>>,
     finished: bool,
@@ -240,6 +242,7 @@ impl Parser {
         Self {
             max_message_bytes,
             buf: Vec::new(),
+            pos: 0,
             message: None,
             finished: false,
         }
@@ -248,6 +251,10 @@ impl Parser {
     /// Adds bytes read from the client.
     pub(crate) fn feed(&mut self, bytes: &[u8]) {
         if !self.finished {
+            // The consumed bytes are removed once per call, not once per
+            // frame, so that a read holding many frames costs linear time.
+            self.buf.drain(..self.pos);
+            self.pos = 0;
             self.buf.extend_from_slice(bytes);
         }
     }
@@ -265,6 +272,7 @@ impl Parser {
         if matches!(result, Some(Err(_)) | Some(Ok(Event::Close(_)))) {
             self.finished = true;
             self.buf = Vec::new();
+            self.pos = 0;
             self.message = None;
         }
         result
@@ -277,13 +285,13 @@ impl Parser {
                 Err(code) => return Some(Err(code)),
             };
             let total = header.header_len + header.payload_len as usize;
-            if self.buf.len() < total {
-                return None;
-            }
-            let mut payload: Vec<u8> = self.buf.drain(..total).skip(header.header_len).collect();
-            for (i, byte) in payload.iter_mut().enumerate() {
-                *byte ^= header.mask[i % 4];
-            }
+            let frame = self.buf.get(self.pos..self.pos + total)?;
+            let payload: Vec<u8> = frame[header.header_len..]
+                .iter()
+                .enumerate()
+                .map(|(i, byte)| byte ^ header.mask[i % 4])
+                .collect();
+            self.pos += total;
             match header.opcode {
                 OP_PING => return Some(Ok(Event::Ping(payload))),
                 OP_PONG => return Some(Ok(Event::Pong)),
@@ -303,13 +311,14 @@ impl Parser {
         }
     }
 
-    /// Reads the header at the start of `buf`. Returns `None` when `buf` does
-    /// not hold all of it, and an error when the frame is one this server
-    /// closes on. Each check runs as soon as the bytes it reads are in `buf`,
-    /// so that an unmasked frame, which has no mask key, is not waited on.
+    /// Reads the header at `pos` in `buf`. Returns `None` when `buf` does not
+    /// hold all of it, and an error when the frame is one this server closes
+    /// on. Each check runs as soon as the bytes it reads are in `buf`, so that
+    /// an unmasked frame, which has no mask key, is not waited on.
     fn header(&self) -> Option<Result<Header, CloseCode>> {
-        let b0 = *self.buf.first()?;
-        let b1 = *self.buf.get(1)?;
+        let buf = &self.buf[self.pos..];
+        let b0 = *buf.first()?;
+        let b1 = *buf.get(1)?;
         let fin = b0 & 0x80 != 0;
         let opcode = b0 & 0x0F;
         let len7 = b1 & 0x7F;
@@ -331,13 +340,16 @@ impl Parser {
             _ => return Some(Err(CloseCode::PROTOCOL)),
         }
 
+        // A 16-bit or 64-bit length that would fit a shorter form is
+        // accepted: RFC 6455 §5.2 puts the minimal-encoding rule on the
+        // sender, and the size limit below applies to the value either way.
         let (payload_len, len_bytes) = match len7 {
             126 => {
-                let b = self.buf.get(2..4)?;
+                let b = buf.get(2..4)?;
                 (u64::from(u16::from_be_bytes([b[0], b[1]])), 2)
             }
             127 => {
-                let b = self.buf.get(2..10)?;
+                let b = buf.get(2..10)?;
                 (u64::from_be_bytes(b.try_into().ok()?), 8)
             }
             n => (u64::from(n), 0),
@@ -345,13 +357,17 @@ impl Parser {
         if payload_len >> 63 != 0 {
             return Some(Err(CloseCode::PROTOCOL));
         }
+        // The limit is on a message, so it counts data frames only. A control
+        // frame between fragments is not part of the message, and its size is
+        // limited to 125 bytes above.
+        let control = matches!(opcode, OP_CLOSE | OP_PING | OP_PONG);
         let open = self.message.as_ref().map_or(0, Vec::len);
-        if payload_len > (self.max_message_bytes - open) as u64 {
+        if !control && payload_len > (self.max_message_bytes - open) as u64 {
             return Some(Err(CloseCode::TOO_BIG));
         }
 
         let header_len = 2 + len_bytes + 4;
-        let mask: [u8; 4] = self.buf.get(2 + len_bytes..header_len)?.try_into().ok()?;
+        let mask: [u8; 4] = buf.get(2 + len_bytes..header_len)?.try_into().ok()?;
         Some(Ok(Header {
             fin,
             opcode,
@@ -382,23 +398,29 @@ fn close_event(payload: &[u8]) -> Result<Event, CloseCode> {
     }
 }
 
-/// Writes one unmasked, final frame.
+/// Writes one unmasked, final frame: the header, then the payload, which is
+/// not copied.
 fn write_frame(w: &mut impl Write, opcode: u8, payload: &[u8]) -> io::Result<()> {
-    let mut bytes = Vec::with_capacity(10 + payload.len());
-    bytes.push(0x80 | opcode);
-    match payload.len() {
-        n @ 0..=125 => bytes.push(n as u8),
+    let mut header = [0u8; 10];
+    header[0] = 0x80 | opcode;
+    let header_len = match payload.len() {
+        n @ 0..=125 => {
+            header[1] = n as u8;
+            2
+        }
         n @ 126..=0xFFFF => {
-            bytes.push(126);
-            bytes.extend_from_slice(&(n as u16).to_be_bytes());
+            header[1] = 126;
+            header[2..4].copy_from_slice(&(n as u16).to_be_bytes());
+            4
         }
         n => {
-            bytes.push(127);
-            bytes.extend_from_slice(&(n as u64).to_be_bytes());
+            header[1] = 127;
+            header[2..10].copy_from_slice(&(n as u64).to_be_bytes());
+            10
         }
-    }
-    bytes.extend_from_slice(payload);
-    w.write_all(&bytes)?;
+    };
+    w.write_all(&header[..header_len])?;
+    w.write_all(payload)?;
     w.flush()
 }
 
@@ -688,7 +710,10 @@ mod tests {
                 "Sec-WebSocket-Key: AAAAAAAAAAAAAAAAAAAAAA==\r\nHost:",
             ),
             GOOD_HEAD.replace("Host: server.example.com", "no colon here"),
-            GOOD_HEAD.replace("Host: server.example.com", "Host: a\r\n folded"),
+            GOOD_HEAD.replace("Host: server.example.com", "Host: a\r\n x: y"),
+            GOOD_HEAD.replace("HTTP/1.1\r\n", "HTTP/1.1 extra\r\n"),
+            GOOD_HEAD.replace("GET /chat ", "GET  "),
+            GOOD_HEAD.replace("Key: dGhlIHNhbXBsZSBub25jZQ==", "Key: "),
         ];
         for head in cases {
             assert_eq!(handshake_on(&head).0, Upgrade::Rejected, "head {head:?}");
@@ -704,7 +729,81 @@ mod tests {
         assert_eq!(handshake_on(&head).0, Upgrade::Accepted);
     }
 
+    #[test]
+    fn a_read_interrupted_once_is_retried() {
+        struct InterruptedOnce<'a> {
+            interrupted: bool,
+            input: &'a [u8],
+            output: Vec<u8>,
+        }
+        impl Read for InterruptedOnce<'_> {
+            fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+                if !self.interrupted {
+                    self.interrupted = true;
+                    return Err(io::ErrorKind::Interrupted.into());
+                }
+                self.input.read(buf)
+            }
+        }
+        impl Write for InterruptedOnce<'_> {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.output.write(buf)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut stream = InterruptedOnce {
+            interrupted: false,
+            input: GOOD_HEAD.as_bytes(),
+            output: Vec::new(),
+        };
+        assert_eq!(handshake(&mut stream).unwrap(), Upgrade::Accepted);
+        assert!(stream.interrupted);
+    }
+
     // Messages, over a real connection.
+
+    #[test]
+    fn a_ping_between_fragments_of_a_message_at_the_limit_is_answered_and_the_message_delivered() {
+        let max = frame::MIN_MESSAGE_LIMIT;
+        let (mut server, client) = upgraded(move |mut ws| {
+            let binary = OpCode::Data(Data::Binary);
+            let continuation = OpCode::Data(Data::Continue);
+            ws.write(Message::Frame(Frame::message(
+                vec![1u8; max - 4],
+                binary,
+                false,
+            )))
+            .unwrap();
+            ws.write(Message::Frame(Frame::ping(vec![9u8; 20])))
+                .unwrap();
+            ws.write(Message::Frame(Frame::message(
+                vec![2u8; 4],
+                continuation,
+                true,
+            )))
+            .unwrap();
+            ws.flush().unwrap();
+            loop {
+                if let Message::Pong(payload) = ws.read().unwrap() {
+                    return payload.to_vec();
+                }
+            }
+        });
+        let mut parser = Parser::new(max);
+        let Ok(Event::Ping(payload)) = read_event(&mut server, &mut parser) else {
+            panic!("expected a ping");
+        };
+        write_pong(&mut server, &payload).unwrap();
+        let mut expected = vec![1u8; max - 4];
+        expected.extend([2u8; 4]);
+        assert_eq!(
+            read_event(&mut server, &mut parser),
+            Ok(Event::Binary(expected))
+        );
+        assert_eq!(client.join().unwrap(), vec![9u8; 20]);
+    }
 
     #[test]
     fn a_binary_message_round_trips() {
@@ -947,7 +1046,7 @@ mod tests {
 
     #[test]
     fn frame_sequence_violations_close_with_1002() {
-        let cases: [(&str, Vec<u8>); 9] = [
+        let cases: [(&str, Vec<u8>); 11] = [
             ("a continuation with no message", masked(0x80, b"x")),
             (
                 "a binary frame inside a message",
@@ -957,7 +1056,9 @@ mod tests {
                 "a text frame inside a message",
                 [masked(0x02, b"a"), masked(0x81, b"b")].concat(),
             ),
-            ("a reserved bit set", masked(0xC2, b"x")),
+            ("reserved bit 1 set", masked(0xC2, b"x")),
+            ("reserved bit 2 set", masked(0xA2, b"x")),
+            ("reserved bit 3 set", masked(0x92, b"x")),
             ("a reserved opcode", masked(0x83, b"x")),
             ("a reserved control opcode", masked(0x8B, b"")),
             ("a fragmented ping", masked(0x09, b"x")),
@@ -975,6 +1076,40 @@ mod tests {
                 "{name}"
             );
         }
+    }
+
+    #[test]
+    fn close_codes_are_accepted_inside_each_range_and_refused_outside_it() {
+        for code in [1000u16, 1003, 1007, 1014, 3000, 4999] {
+            let bytes = masked(0x88, &code.to_be_bytes());
+            assert_eq!(
+                parse_all(1000, &bytes),
+                [Ok(Event::Close(Some(code)))],
+                "{code}"
+            );
+        }
+        for code in [999u16, 1004, 1006, 1015, 2999, 5000] {
+            let bytes = masked(0x88, &code.to_be_bytes());
+            assert_eq!(
+                parse_all(1000, &bytes),
+                [Err(CloseCode::PROTOCOL)],
+                "{code}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_125_byte_ping_is_accepted() {
+        let bytes = masked(0x89, &[4u8; 125]);
+        assert_eq!(parse_all(1000, &bytes), [Ok(Event::Ping(vec![4u8; 125]))]);
+    }
+
+    #[test]
+    fn a_close_after_a_large_first_fragment_is_a_close_not_1009() {
+        let max = frame::MIN_MESSAGE_LIMIT;
+        let mut bytes = masked(0x02, &vec![1u8; max - 1]);
+        bytes.extend(masked(0x88, &1000u16.to_be_bytes()));
+        assert_eq!(parse_all(max, &bytes), [Ok(Event::Close(Some(1000)))]);
     }
 
     #[test]
@@ -1005,6 +1140,19 @@ mod tests {
         let mut bytes = masked(0x88, b"");
         bytes.extend(masked(0x82, b"after"));
         assert_eq!(parse_all(1000, &bytes), [Ok(Event::Close(None))]);
+    }
+
+    #[test]
+    fn a_finished_parser_releases_its_bytes_and_keeps_no_more() {
+        let mut bytes = masked(0x02, b"open");
+        bytes.extend(masked(0x88, b""));
+        bytes.extend(masked(0x82, b"after"));
+        let mut parser = Parser::new(1000);
+        parser.feed(&bytes);
+        assert_eq!(parser.next(), Some(Ok(Event::Close(None))));
+        assert!(parser.buf.is_empty() && parser.message.is_none());
+        parser.feed(&[0u8; 100]);
+        assert!(parser.buf.is_empty());
     }
 
     #[test]
