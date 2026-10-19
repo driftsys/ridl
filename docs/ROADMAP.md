@@ -974,19 +974,27 @@ asked (§3.5).
 **Four stories keep their E12 identifiers**, because identifiers are identity —
 they are re-homed here, not renumbered.
 
-| ID    | Story                                                                                                                                                                       | Done when                                                                    | Size |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---- |
-| E12.1 | The TypeScript surface — generated types and faces, the codec reached through the package's own generated Rust compiled to `wasm32` against `ridl-rt` (ADR-0020 decision 7) | a Deno program constructs and validates a payload without a TypeScript codec | L    |
-| E12.4 | Emulator — a hand-written provider standing in for a component, driven by the contract                                                                                      | a consumer cannot distinguish the emulator from the real provider            | M    |
-| E12.2 | Observability server — subscribe by ordinal, render value, provenance and envelope                                                                                          | a live signal is displayed with its provenance distinguishable               | L    |
-| E12.5 | Test-harness drivers — drive a system under test, assert against contract terms                                                                                             | a `require` violation is reported against the contract, not the transport    | M    |
+| ID     | Story                                                                                                                                                                       | Done when                                                                          | Size |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---- |
+| E12.1  | The TypeScript surface — generated types and faces, the codec reached through the package's own generated Rust compiled to `wasm32` against `ridl-rt` (ADR-0020 decision 7) | a Deno program constructs and validates a payload without a TypeScript codec       | L    |
+| E12.4  | Emulator — a hand-written provider standing in for a component, driven by the contract                                                                                      | a consumer cannot distinguish the emulator from the real provider                  | M    |
+| E12.2  | Observability server — subscribe by ordinal, render value, provenance and envelope                                                                                          | a live signal is displayed with its provenance distinguishable                     | L    |
+| E12.5  | Test-harness drivers — drive a system under test, assert against contract terms                                                                                             | a `require` violation is reported against the contract, not the transport          | M    |
+| E12.11 | The TypeScript WebSocket transport package — the §11.1 WebSocket binding in TypeScript, for Deno and the browser, carrying payload bytes unread                             | a Deno program and a browser page each receive a live signal from the E11.9 server | M    |
 
 **E12.2 and E12.5 were reopened on 2026-10-19.** Both depend on E11.9, the
-WebSocket transport (driftsys/ridl#265), and on E12.1, the TypeScript surface
-(driftsys/ridl#287). E12.5 uses E12.4, the emulator (driftsys/ridl#290), for the
-providers it stands in for. The reopened stories decode with the package's own
-wasm codec (ADR-0020 decision 7), so they do not need E12.3, contract-generic
-decoding, which stays parked.
+WebSocket transport (driftsys/ridl#265), on E12.11, its TypeScript package, and
+on E12.1, the TypeScript surface (driftsys/ridl#287). E12.5 uses E12.4, the
+emulator (driftsys/ridl#290), for the providers it stands in for. The reopened
+stories decode with the package's own wasm codec (ADR-0020 decision 7), so they
+do not need E12.3, contract-generic decoding, which stays parked.
+
+**E12.11 is new on 2026-10-19** (driftsys/ridl#982). It is the separate
+transport package named above, which no story held: E11.9 binds the frame onto
+WebSocket in Rust, and E12.1 holds the types, the faces and the codec. E12.11
+depends on E11.9 alone, because it carries payload bytes without decoding them.
+E12.2 and E12.5 also depend on E12.11. It takes the next free identifier,
+because a parked row's identifier is never reused.
 
 **The encoding at the codec-in-wasm boundary is FlatBuffers.** ADR-0018 decision
 3 put proto3 on the wasm guest boundary because a guest updates independently of
