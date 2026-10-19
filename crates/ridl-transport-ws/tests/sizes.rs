@@ -30,6 +30,15 @@ fn target(kind: Kind) -> Target {
     }
 }
 
+/// Encodes `frame` into a buffer and checks the written length against both
+/// the returned length and `encoded_len`.
+fn written_len(frame: &Frame<'_>) -> usize {
+    let mut buf = vec![0u8; 1024];
+    let written = frame.encode(&mut buf).expect("the buffer is large enough");
+    assert_eq!(written, frame.encoded_len());
+    written
+}
+
 fn envelope() -> Envelope {
     Envelope {
         stamp: Timestamp(3),
@@ -49,7 +58,7 @@ fn the_largest_data_plane_message_is_header_plus_envelope_plus_payload() {
             correlation: 5,
             outcome: ResponseOutcome::Reply(&payload),
         };
-        assert_eq!(frame.encoded_len(), header + envelope_bytes + len);
+        assert_eq!(written_len(&frame), header + envelope_bytes + len);
     }
 }
 
@@ -77,7 +86,7 @@ fn every_other_data_plane_form_is_no_larger() {
             },
         ];
         for frame in frames {
-            assert!(frame.encoded_len() <= bound, "{frame:?} exceeds {bound}");
+            assert!(written_len(&frame) <= bound, "{frame:?} exceeds {bound}");
         }
     }
 }
@@ -86,6 +95,6 @@ fn every_other_data_plane_form_is_no_larger() {
 fn the_largest_attach_is_294_bytes() {
     let name = "a".repeat(255);
     let attach = Attach::new(1, 1, CatalogHash([0; 32]), &name).expect("a valid attach");
-    assert_eq!(Frame::Attach(attach).encoded_len(), MIN_MESSAGE_LIMIT);
+    assert_eq!(written_len(&Frame::Attach(attach)), MIN_MESSAGE_LIMIT);
     assert_eq!(MIN_MESSAGE_LIMIT, 294);
 }

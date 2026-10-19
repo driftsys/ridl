@@ -76,14 +76,14 @@ pub use contract::{
     text_file,
 };
 pub use deployment::{encoding_of, lower_deployment};
+pub use lower::{lower, lower_with};
+pub use unbounded::attribute as fb_unbounded;
 
 /// The transport bindings the toolchain knows, as the deployment section
 /// renders them.
 pub fn known_bindings() -> Vec<v1::Binding> {
     bindings::bindings()
 }
-pub use lower::{lower, lower_with};
-pub use unbounded::attribute as fb_unbounded;
 
 /// The error [`to_json_pretty`] and [`to_text_format`] return, on the two
 /// paths [`crate::v2::SerializeError`] has and for the same causes — the
