@@ -41,7 +41,9 @@ pub trait Connection: Read + Write {
     /// Sets how long one write waits for room in the stream before it fails
     /// with `WouldBlock` or `TimedOut`. `None` waits without limit.
     /// [`serve`] sets it to [`Config::liveness_timeout`], so that a client
-    /// that stops reading cannot hold the thread.
+    /// that stops reading cannot hold the thread. The timeout bounds each
+    /// write call, not a whole message: a message written in several calls
+    /// can take longer, as long as each call makes progress.
     ///
     /// # Errors
     ///
@@ -139,9 +141,11 @@ const LINGER: Duration = Duration::from_millis(100);
 /// [`Config::poll_interval`], handles each whole message read, polls the
 /// backend once and sends what changed, and sends a ping each
 /// [`Config::ping_interval`]. A change on the backend is sent at most one
-/// poll interval after it, plus the write. Each write has a write timeout of
-/// [`Config::liveness_timeout`]: a client that stops reading for that long
-/// ends the session with [`Ended::LivenessTimeout`].
+/// poll interval after it, plus the write. Each write call has a write
+/// timeout of [`Config::liveness_timeout`]: a client that reads nothing for
+/// that long, so that a write call makes no progress, ends the session with
+/// [`Ended::LivenessTimeout`]. A client that keeps reading, however slowly,
+/// does not.
 ///
 /// At every end, each backend call in flight is forgotten and `backend` is
 /// dropped, with its event subscriptions; then `conn` is dropped. After a

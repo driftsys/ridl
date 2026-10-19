@@ -84,12 +84,20 @@ pub struct Config {
     /// How long a socket read waits before the backend is polled.
     pub poll_interval: Duration,
     /// How long between two pings.
+    ///
+    /// Set it below [`Config::liveness_timeout`]. With a `ping_interval` at
+    /// or above it, the session of an idle client ends at the liveness
+    /// timeout before the first ping is sent, because a client that is not
+    /// pinged sends nothing (a browser sends no ping of its own).
     pub ping_interval: Duration,
     /// How long without any message from the client before the session is
     /// closed.
     pub liveness_timeout: Duration,
     /// How long a call whose outcome stays unknown is kept on the backend
     /// before it is forgotten.
+    ///
+    /// A zero duration forgets every call whose outcome is not known on the
+    /// first poll after the request, so that call gets no `response`.
     pub call_abandon_after: Duration,
     max_message_bytes: usize,
     record: Option<Record>,
