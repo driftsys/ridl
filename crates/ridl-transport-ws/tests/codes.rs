@@ -231,3 +231,22 @@ fn every_code_decodes_and_encodes_as_written() {
         );
     }
 }
+
+/// Every `Rule` of this `ridl-rt` has a tag: the six of frame specification
+/// §9.6, in its order.
+#[test]
+fn every_rule_has_its_tag() {
+    use ridl_rt::payload::Rule;
+    use ridl_transport_ws::frame::rule_tag;
+    let rules = [
+        Rule::Range,
+        Rule::Step,
+        Rule::Length,
+        Rule::Pattern,
+        Rule::Variant,
+        Rule::Unique,
+    ];
+    for (i, rule) in rules.into_iter().enumerate() {
+        assert_eq!(rule_tag(rule), Some(i as u8 + 1), "{rule:?}");
+    }
+}

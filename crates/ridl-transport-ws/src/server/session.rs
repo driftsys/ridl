@@ -507,7 +507,17 @@ impl<B: Backend> Session<B> {
         }
     }
 
+    /// Sends one `answer`. A `contract(InvalidValue)` whose rule the frame
+    /// cannot carry is sent as `contract(ContractBroken)` and recorded: the
+    /// `answer` form has no `corrupt` outcome.
     fn answer(&self, target: Target, outcome: AnswerOutcome, out: &mut Vec<Vec<u8>>) {
+        let outcome = match outcome {
+            AnswerOutcome::Contract(c) if !carried(c) => {
+                self.note(Note::RuleNotCarried { target });
+                AnswerOutcome::Contract(Contract::ContractBroken)
+            }
+            outcome => outcome,
+        };
         push(out, &Frame::Answer { target, outcome });
     }
 
@@ -728,7 +738,8 @@ impl<B: Backend> Session<B> {
 
     /// Sends one `response`, under the next response `seq` of the session
     /// and the backend's clock as the stamp, and keeps it for a repeat of
-    /// the request.
+    /// the request. A `contract(InvalidValue)` whose rule the frame cannot
+    /// carry is sent as `corrupt` and recorded.
     fn respond(
         &mut self,
         target: Target,
@@ -736,6 +747,13 @@ impl<B: Backend> Session<B> {
         outcome: ResponseOutcome<'_>,
         out: &mut Vec<Vec<u8>>,
     ) {
+        let outcome = match outcome {
+            ResponseOutcome::Contract(c) if !carried(c) => {
+                self.note(Note::RuleNotCarried { target });
+                ResponseOutcome::Corrupt
+            }
+            outcome => outcome,
+        };
         self.response_seq += 1;
         let stamp = self.backend.ports().now();
         push(
@@ -941,6 +959,17 @@ enum Fetch {
     Contract(Contract),
     /// The port cannot be read: the runtime behind it is gone.
     Gone,
+}
+
+/// Whether the frame can carry `c`: every contract error but an
+/// `InvalidValue` whose `Rule` frame version 1 has no code for (frame
+/// specification §9.6), which a backend built against a newer `ridl-rt`
+/// could report.
+fn carried(c: Contract) -> bool {
+    match c {
+        Contract::InvalidValue(v) => frame::rule_tag(v.rule).is_some(),
+        _ => true,
+    }
 }
 
 fn signal_target(key: Key) -> Target {

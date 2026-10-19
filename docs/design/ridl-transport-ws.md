@@ -131,9 +131,15 @@ a value:
 
 `Contract` is `ridl_rt::error::Contract`. A decoded `InvalidValue` carries the
 `Rule` from `detail` and `type_name: None`, as §9.6 states; an encoded one
-writes the rule code and drops the name. The common header fields are one
-`Target { kind, iface, ord }` with `ridl-rt`'s `Kind`, `InterfaceNo` and
-`Ordinal`; the envelope is `ridl-rt`'s `Envelope`.
+writes the rule code and drops the name. `Rule` is `#[non_exhaustive]`, and a
+new variant comes only with a new frame version (§9.6), so `frame::rule_tag`
+gives the code of a rule, or `None` for one this frame version has no code for;
+the codec writes `detail` 0 for such a rule, which no receiver accepts, and does
+not panic. The server checks the rule before it builds an outcome: a `response`
+with such a violation is sent as `corrupt`, an `answer` as
+`contract(ContractBroken)`, and `Note::RuleNotCarried` is recorded. The common
+header fields are one `Target { kind, iface, ord }` with `ridl-rt`'s `Kind`,
+`InterfaceNo` and `Ordinal`; the envelope is `ridl-rt`'s `Envelope`.
 
 **D-4. Decode reports two kinds of failure.** §11.1 item 4 treats them
 differently, so the error says which:
@@ -501,7 +507,8 @@ no hook nothing is recorded and recording costs nothing. A `Note` is one of:
 `Violation` (closes 1002), `MessageBeforeAttach` (closes 1002), `SecondAttach`
 (closes 1002), `UnexpectedDirection` (closes 1002), `KindNotAdmitted` (an
 `unsubscribe` of a kind the form does not admit; dropped), `ValueTooLarge`,
-`DuplicateDropped` and `CallAbandoned`.
+`DuplicateDropped`, `CallAbandoned` and `RuleNotCarried` (a violation's rule the
+frame has no code for; the outcome is replaced).
 
 ### `Config`
 

@@ -325,3 +325,49 @@ fn an_invalid_declared_publish_with_bytes_after_its_header_is_discarded() {
         Err(DecodeError::Discard(Discarded::UnexpectedPayload))
     );
 }
+
+const OCCURRENCE: [u8; 27] = [
+    0x08, 0x02, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0xff,
+];
+const ATTACH: [u8; 40] = [
+    0x01, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 1, b'v',
+];
+
+/// Every form cut one byte short of its header is `TooShort`, and not a
+/// panic on a slice past the message's end.
+#[test]
+fn every_form_cut_short_of_its_header_is_too_short() {
+    let mut request = OCCURRENCE;
+    request[0] = 0x09;
+    // An `attach` is cut inside its fixed part: with the fixed part whole and
+    // the name missing, the length mismatch is the finding, not `TooShort`.
+    assert!(decode(&ATTACH).is_ok());
+    for len in 1..39 {
+        assert_eq!(
+            decode_err(&ATTACH[..len]),
+            violation(ProtocolViolation::TooShort),
+            "attach cut to {len} bytes"
+        );
+    }
+    let whole: [&[u8]; 7] = [
+        &[0x02, 0x01, 0x00],
+        &SUBSCRIBE,
+        &ANSWER,
+        &PUBLISH_LIVE[..27],
+        &OCCURRENCE[..26],
+        &request[..26],
+        &RESPONSE_ACCEPTED,
+    ];
+    for m in whole {
+        assert!(decode(m).is_ok(), "the whole header decodes: {m:?}");
+        for len in 1..m.len() {
+            assert_eq!(
+                decode_err(&m[..len]),
+                violation(ProtocolViolation::TooShort),
+                "form {} cut to {len} bytes",
+                m[0]
+            );
+        }
+    }
+}

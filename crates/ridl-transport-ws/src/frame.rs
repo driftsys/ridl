@@ -345,19 +345,31 @@ fn kind_from(code: u8) -> Result<Kind, ProtocolViolation> {
     }
 }
 
-fn rule_code(rule: Rule) -> u8 {
+/// The `detail` code of a violation's rule: `Range` 1, `Step` 2, `Length` 3,
+/// `Pattern` 4, `Variant` 5, `Unique` 6 (frame specification §9.6), or
+/// `None` for a `Rule` variant frame version 1 has no code for. `Rule` is
+/// `#[non_exhaustive]`, and a new variant comes only with a new frame
+/// version, so a sender built against a newer `ridl-rt` checks here before
+/// it builds a `contract(InvalidValue)` outcome: the server answers such a
+/// violation `corrupt` instead.
+pub fn rule_tag(rule: Rule) -> Option<u8> {
     match rule {
-        Rule::Range => 1,
-        Rule::Step => 2,
-        Rule::Length => 3,
-        Rule::Pattern => 4,
-        Rule::Variant => 5,
-        Rule::Unique => 6,
-        // `Rule` is `#[non_exhaustive]`, and a new variant comes only with a
-        // new frame version (frame specification §9.6), so a variant this
-        // codec does not know is a programming error in the caller's build.
-        _ => unreachable!("a Rule variant that frame version 1 has no code for"),
+        Rule::Range => Some(1),
+        Rule::Step => Some(2),
+        Rule::Length => Some(3),
+        Rule::Pattern => Some(4),
+        Rule::Variant => Some(5),
+        Rule::Unique => Some(6),
+        _ => None,
     }
+}
+
+/// The `detail` byte written for a rule: its tag, or 0 for a rule with no
+/// tag, which no receiver accepts (`detail` 0 under `contract(InvalidValue)`
+/// is an unknown code). The codec does not panic on it; the sender keeps
+/// such a rule off the wire with [`rule_tag`].
+fn rule_code(rule: Rule) -> u8 {
+    rule_tag(rule).unwrap_or(0)
 }
 
 fn rule_from(code: u8) -> Result<Rule, ProtocolViolation> {
@@ -679,6 +691,10 @@ impl Frame<'_> {
     /// Writes the frame at the start of `out` and returns the number of bytes
     /// written. When `out` is too small, nothing is written and the error
     /// holds the length the frame needs.
+    ///
+    /// A `contract(InvalidValue)` outcome whose `Rule` has no tag
+    /// ([`rule_tag`] is `None`) is written with `detail` 0, which a receiver
+    /// refuses as an unknown code; check the rule before building the frame.
     pub fn encode(&self, out: &mut [u8]) -> Result<usize, Short> {
         let needed = self.encoded_len();
         if out.len() < needed {

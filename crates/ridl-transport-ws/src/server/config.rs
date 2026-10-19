@@ -50,6 +50,14 @@ pub enum Note {
         /// The `seq` of the abandoned request.
         seq: u64,
     },
+    /// The backend reported a `contract(InvalidValue)` whose `Rule` the
+    /// frame has no code for (frame specification §9.6), from a `ridl-rt`
+    /// newer than this crate. A `response` is sent as `corrupt` and an
+    /// `answer` as `contract(ContractBroken)` instead.
+    RuleNotCarried {
+        /// The interaction answered.
+        target: Target,
+    },
 }
 
 /// A `max_message_bytes` below [`MIN_MESSAGE_LIMIT`].
