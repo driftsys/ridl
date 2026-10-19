@@ -4,7 +4,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::frame::{Discarded, ProtocolViolation, Target, MIN_MESSAGE_LIMIT};
+use crate::frame::{ProtocolViolation, Target, MIN_MESSAGE_LIMIT};
 
 /// What the server records about a session: frames it dropped and events
 /// that no frame reports to the client. Recording is through
@@ -14,16 +14,15 @@ use crate::frame::{Discarded, ProtocolViolation, Target, MIN_MESSAGE_LIMIT};
 pub enum Note {
     /// A message the codec could not read. The session closes with 1002.
     Violation(ProtocolViolation),
-    /// A frame the codec read and dropped. The session continues.
-    Discarded(Discarded),
     /// A message that is not an `attach` arrived before the `attach`. The
     /// session closes with 1002.
     MessageBeforeAttach,
     /// A second `attach` arrived on an open session. The session closes
     /// with 1002.
     SecondAttach,
-    /// A provider-to-consumer form arrived from the client. The session
-    /// closes with 1002.
+    /// A provider-to-consumer form arrived from the client, with or without
+    /// bytes after its header that a consumer would discard it for. The
+    /// session closes with 1002.
     UnexpectedDirection,
     /// An `unsubscribe` named a kind the form does not admit. The frame is
     /// dropped.

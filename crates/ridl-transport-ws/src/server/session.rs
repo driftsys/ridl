@@ -235,9 +235,12 @@ impl<B: Backend> Session<B> {
                 self.note(Note::MessageBeforeAttach);
                 return Step::Close(CloseCode::PROTOCOL.0);
             }
-            Err(DecodeError::Discard(d)) => {
-                self.note(Note::Discarded(d));
-                return Step::Continue;
+            // Only a `publish` or a `response` decodes to a discard, and
+            // the server receives neither form: the client has the roles
+            // wrong whether or not the frame has bytes after its header.
+            Err(DecodeError::Discard(_)) => {
+                self.note(Note::UnexpectedDirection);
+                return Step::Close(CloseCode::PROTOCOL.0);
             }
         };
         if !self.attached {
@@ -1280,6 +1283,74 @@ mod tests {
         assert_eq!(step, Step::Close(1002));
         assert!(out.is_empty());
         assert_eq!(*notes.lock().unwrap(), vec![Note::UnexpectedDirection]);
+    }
+
+    /// Every provider-to-consumer form, not only `publish`.
+    #[test]
+    fn every_provider_to_consumer_form_from_the_client_closes_with_1002() {
+        let envelope = Envelope {
+            stamp: Timestamp(0),
+            seq: 1,
+        };
+        let frames = [
+            Frame::Attached(AttachOutcome::Accepted),
+            accepted(SIGNAL),
+            Frame::Occurrence {
+                target: target(Kind::Event, 2),
+                envelope,
+                payload: &[1],
+            },
+            Frame::Response {
+                target: target(Kind::Command, 3),
+                envelope,
+                correlation: 1,
+                outcome: ResponseOutcome::Accepted,
+            },
+        ];
+        for frame in frames {
+            let (mut s, _p, notes) = scanning();
+            open(&mut s);
+            let (step, out) = send(&mut s, &msg(frame));
+            assert_eq!(step, Step::Close(1002), "{frame:?}");
+            assert!(out.is_empty(), "{frame:?}");
+            assert_eq!(
+                *notes.lock().unwrap(),
+                vec![Note::UnexpectedDirection],
+                "{frame:?}"
+            );
+        }
+    }
+
+    /// A `publish` or a `response` with bytes after a header that carries
+    /// no payload, which a consumer would discard, is still a
+    /// provider-to-consumer form: the server closes with 1002, as for one
+    /// without them.
+    #[test]
+    fn a_discardable_frame_after_attach_closes_with_1002() {
+        let mut publish_init = msg(publish(SIGNAL, 0, 0, PublishState::Init));
+        publish_init.push(0);
+        let mut response_accepted = msg(Frame::Response {
+            target: target(Kind::Command, 3),
+            envelope: Envelope {
+                stamp: Timestamp(0),
+                seq: 1,
+            },
+            correlation: 1,
+            outcome: ResponseOutcome::Accepted,
+        });
+        response_accepted.push(0);
+        for m in [publish_init, response_accepted] {
+            let (mut s, _p, notes) = scanning();
+            open(&mut s);
+            let (step, out) = send(&mut s, &m);
+            assert_eq!(step, Step::Close(1002), "{m:?}");
+            assert!(out.is_empty(), "{m:?}");
+            assert_eq!(
+                *notes.lock().unwrap(),
+                vec![Note::UnexpectedDirection],
+                "{m:?}"
+            );
+        }
     }
 
     #[test]

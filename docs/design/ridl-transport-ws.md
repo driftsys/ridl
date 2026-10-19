@@ -146,8 +146,9 @@ differently, so the error says which:
   `interface` or `ordinal` 0; a `name_len` of 0 or one that does not match the
   message; a `name` that is not valid UTF-8.
 - `DecodeError::Discard(_)`: a `publish` or a `response` whose header says it
-  carries no payload and which has bytes after the header. The receiver records
-  it and drops it; the session continues.
+  carries no payload and which has bytes after the header. A consumer records it
+  and drops it, and its session continues; the server, which receives neither
+  form, closes 1002 (D-12).
 
 An `attach` whose encoding tag is outside §3's table (0, or 4 and above) is a
 code outside its table, so it is `Violation(UnknownCode)`, as §11.1 item 2 reads
@@ -280,10 +281,14 @@ does check is that the form admits the kind:
 | `unsubscribe` | `Signal`,`Event`  | discarded and recorded                         |
 
 A provider-to-consumer form (`attached`, `answer`, `publish`, `occurrence`,
-`response`) received by the server is a protocol violation, close 1002. §11.1
-item 4 names "a first provider-to-consumer message that is not `attached`" for
-the consumer; the server applies the mirror rule, because a client that sends
-one has the roles wrong.
+`response`) received by the server is a protocol violation, close 1002, in every
+shape: a `publish` or a `response` with bytes after a header that carries no
+payload, which the codec reports as a discard and a consumer would drop, closes
+1002 like one without them. The discard class of §11.1 item 4 is the consumer's;
+on the server it never lets a client frame through. §11.1 item 4 names "a first
+provider-to-consumer message that is not `attached`" for the consumer; the
+server applies the mirror rule, because a client that sends one has the roles
+wrong.
 
 **D-25. A reply to a form that does not admit the kind echoes the identity.**
 The `answer` or `response` that D-12 sends carries the `kind`, `interface` and
@@ -489,10 +494,10 @@ call ends the session with close 1001, because the provider is going away.
 
 The embedder may also receive `Note` values through `Config::with_record`; with
 no hook nothing is recorded and recording costs nothing. A `Note` is one of:
-`Violation` (closes 1002), `Discarded` (dropped), `MessageBeforeAttach` (closes
-1002), `SecondAttach` (closes 1002), `UnexpectedDirection` (closes 1002),
-`KindNotAdmitted` (an `unsubscribe` of a kind the form does not admit; dropped),
-`ValueTooLarge`, `DuplicateDropped` and `CallAbandoned`.
+`Violation` (closes 1002), `MessageBeforeAttach` (closes 1002), `SecondAttach`
+(closes 1002), `UnexpectedDirection` (closes 1002), `KindNotAdmitted` (an
+`unsubscribe` of a kind the form does not admit; dropped), `ValueTooLarge`,
+`DuplicateDropped` and `CallAbandoned`.
 
 ### `Config`
 
