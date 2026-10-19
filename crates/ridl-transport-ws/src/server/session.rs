@@ -221,6 +221,12 @@ impl<B: Backend> Session<B> {
                 self.note(Note::Violation(v));
                 return Step::Close(CloseCode::PROTOCOL.0);
             }
+            // A frame the codec drops is still a message before the
+            // `attach` (frame specification §11.1 item 4).
+            Err(DecodeError::Discard(_)) if !self.attached => {
+                self.note(Note::MessageBeforeAttach);
+                return Step::Close(CloseCode::PROTOCOL.0);
+            }
             Err(DecodeError::Discard(d)) => {
                 self.note(Note::Discarded(d));
                 return Step::Continue;
@@ -752,6 +758,11 @@ impl<B: Backend> Session<B> {
     /// and the session's `seq`: 0 under `Init`; otherwise the next one, or,
     /// unless `fresh`, the `seq` sent last when the sample equals the one
     /// sent last in every field.
+    ///
+    /// An `Init` sample on a channel the session holds no state for, which
+    /// only a `read` sends, is published without creating that state: its
+    /// `seq` is 0 whatever the channel holds, so a client cannot grow the
+    /// session by reading signals that were never published.
     fn publish_signal(
         &mut self,
         target: Target,
@@ -759,7 +770,22 @@ impl<B: Backend> Session<B> {
         fresh: bool,
         out: &mut Vec<Vec<u8>>,
     ) {
-        let ch = self.signals.entry((target.iface, target.ord)).or_default();
+        let key = (target.iface, target.ord);
+        if sample.provenance == Provenance::Init && !self.signals.contains_key(&key) {
+            push(
+                out,
+                &Frame::Publish {
+                    target,
+                    envelope: Envelope {
+                        stamp: sample.envelope.stamp,
+                        seq: 0,
+                    },
+                    state: PublishState::Init,
+                },
+            );
+            return;
+        }
+        let ch = self.signals.entry(key).or_default();
         let bytes = &self.buf[..sample.len];
         let seq = match sample.provenance {
             Provenance::Init => 0,
@@ -1075,6 +1101,19 @@ mod tests {
         assert_eq!(*notes.lock().unwrap(), vec![Note::MessageBeforeAttach]);
     }
 
+    /// A frame the codec would drop on an open session is still a message
+    /// before the `attach`, so it closes the session with 1002.
+    #[test]
+    fn a_discardable_frame_before_attach_closes_1002() {
+        let (mut s, _p, notes) = scanning();
+        let mut m = msg(publish(SIGNAL, 0, 0, PublishState::Init));
+        m.push(0);
+        let (step, out) = send(&mut s, &m);
+        assert_eq!(step, Step::Close(1002));
+        assert!(out.is_empty());
+        assert_eq!(*notes.lock().unwrap(), vec![Note::MessageBeforeAttach]);
+    }
+
     #[test]
     fn a_second_attach_is_a_violation() {
         let (mut s, _p, notes) = scanning();
@@ -1292,6 +1331,45 @@ mod tests {
         commit(&mut p, &[2]);
         let (_, out) = tick(&mut s);
         assert!(out.is_empty());
+    }
+
+    /// A `read` of a signal that was never published is answered `Init`
+    /// with `seq` 0 and leaves no channel state, so reads of many distinct
+    /// keys do not grow the session. A read after a publication then counts
+    /// from 1 on that channel.
+    #[test]
+    fn a_read_answered_init_keeps_no_channel_state() {
+        let (mut s, mut p, _n) = scanning();
+        open(&mut s);
+        for ord in 100..200 {
+            let t = target(Kind::Signal, ord);
+            let (step, out) = send(&mut s, &msg(Frame::Read(t)));
+            assert_eq!(step, Step::Continue);
+            assert_eq!(out.len(), 1);
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                publish(t, 0, 0, PublishState::Init)
+            );
+        }
+        let (_, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 0, 0, PublishState::Init)
+        );
+        assert_eq!(s.signals.len(), 0);
+        commit(&mut p, &[1]);
+        let (_, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 0, 1, PublishState::Live(&[1]))
+        );
+        commit(&mut p, &[2]);
+        let (_, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 0, 2, PublishState::Live(&[2]))
+        );
+        assert_eq!(s.signals.len(), 1);
     }
 
     #[test]
@@ -1592,6 +1670,30 @@ mod tests {
         assert_eq!(
             decode(&out[0]).unwrap(),
             publish(SIGNAL, 5, 2, PublishState::Live(&[1]))
+        );
+    }
+
+    /// The backend-`seq` half of the polling comparison: a `touch` committed
+    /// with the clock held has the same stamp, provenance and bytes, and a
+    /// new backend `seq`, and is a change.
+    #[test]
+    fn polling_publishes_a_touch_under_the_same_stamp_and_bytes() {
+        let (mut s, mut p, _n) = polling();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        commit(&mut p, &[1]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 0, 1, PublishState::Live(&[1]))
+        );
+        p.touch(IFACE, Ordinal(1)).unwrap();
+        p.commit();
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 0, 2, PublishState::Live(&[1]))
         );
     }
 

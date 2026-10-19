@@ -143,6 +143,15 @@ const LINGER: Duration = Duration::from_millis(100);
 /// the client to close the connection: the client waits for the server to
 /// close it (RFC 6455 §7.1.1).
 ///
+/// The session keeps state for each signal the client subscribes, and for
+/// each signal a `read` found published, for as long as the session lasts:
+/// the channel's session `seq` never restarts (frame specification §7). No
+/// limit in the crate bounds the number of these signals, so per-session
+/// memory, and in polling mode the work of each tick, grows with the
+/// distinct signals the client names. The embedder's access policy decides
+/// which clients may open a session; it must trust each one for that
+/// growth. A `read` of a signal that was never published keeps no state.
+///
 /// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and
 /// `serve` returns [`Ended::Io`] with `InvalidInput`.
