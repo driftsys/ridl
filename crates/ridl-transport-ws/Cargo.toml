@@ -22,3 +22,7 @@ server = []
 
 [dependencies]
 ridl-rt.workspace = true
+
+[dev-dependencies]
+# Path only, with no version: the package leaves out `tests/`, the only user.
+ridl-ir = { path = "../ridl-ir" }
