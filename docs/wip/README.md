@@ -123,6 +123,11 @@ L, and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
 stories of lane C (#318 and #246 to #255) are closed. The coordination issue
 #328 stays open.
 
+The release 0.11 plan (`2026-10-15-release-0.11-plan.md`) was archived on
+2026-10-19, once 0.11.0 was released and every issue it names was closed (#880,
+#884, #925, #919, #863, #874, #864, #877). Its durable records are the pull
+requests that closed those issues and the `v0.11.0` release.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)
