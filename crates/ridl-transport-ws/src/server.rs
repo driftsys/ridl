@@ -14,13 +14,20 @@ use std::time::{Duration, Instant};
 pub use backend::{Backend, Polling, Scanning};
 pub use config::{Config, LimitTooSmall, Note};
 
-use crate::ws::{self, CloseCode, Event, Parser, Upgrade};
+use crate::ws::{self, CloseCode, Event, FrameWriter, Parser, Upgrade};
 use session::{Session, Step};
 
 /// A connected stream that [`serve`] runs one session over.
 ///
 /// The embedder accepts the connection and applies its access policy before
 /// it calls [`serve`]; the crate binds, listens and connects nothing.
+///
+/// [`serve`] writes each WebSocket frame with one write, so a frame does not
+/// wait on Nagle's algorithm between its header and its payload. The crate
+/// sets no socket option: an embedder that wants each frame sent at once,
+/// without Nagle's algorithm holding a small frame back, may set
+/// `TCP_NODELAY` on the stream (`TcpStream::set_nodelay`) before it calls
+/// [`serve`].
 pub trait Connection: Read + Write {
     /// Sets how long one read waits for bytes before it fails with
     /// `WouldBlock` or `TimedOut`. `None` waits without limit.
@@ -191,6 +198,7 @@ fn run<C: Connection, B: Backend>(
     let mut parser = Parser::new(config.max_message_bytes());
     let mut buf = vec![0u8; READ_BUFFER];
     let mut out = Vec::new();
+    let mut writer = FrameWriter::default();
     let opened = Instant::now();
     let mut heard = opened;
     let mut pinged = opened;
@@ -207,7 +215,7 @@ fn run<C: Connection, B: Backend>(
             heard = now;
             let step = match event {
                 Ok(Event::Binary(msg)) => session.on_message(&msg, now, &mut out),
-                Ok(Event::Ping(payload)) => match ws::write_pong(conn, &payload) {
+                Ok(Event::Ping(payload)) => match writer.pong(conn, &payload) {
                     Ok(()) => continue,
                     Err(e) => return write_failed(&e),
                 },
@@ -215,26 +223,26 @@ fn run<C: Connection, B: Backend>(
                 Ok(Event::Close(code)) => {
                     // The session has ended whether or not the answer is
                     // written, so an error writing it is not reported.
-                    let _ = ws::write_close(conn, code.map_or(CloseCode::NORMAL, CloseCode));
+                    let _ = writer.close(conn, code.map_or(CloseCode::NORMAL, CloseCode));
                     return Ended::ClientClosed(code);
                 }
                 Err(code) => Step::Close(code.0),
             };
-            if let Some(ended) = flush(conn, &mut out, step) {
+            if let Some(ended) = flush(conn, &mut writer, &mut out, step) {
                 return ended;
             }
         }
 
         let now = Instant::now();
         let step = session.tick(now, &mut out);
-        if let Some(ended) = flush(conn, &mut out, step) {
+        if let Some(ended) = flush(conn, &mut writer, &mut out, step) {
             return ended;
         }
         if now.duration_since(heard) >= config.liveness_timeout {
             return Ended::LivenessTimeout;
         }
         if now.duration_since(pinged) >= config.ping_interval {
-            if let Err(e) = ws::write_ping(conn) {
+            if let Err(e) = writer.ping(conn) {
                 return write_failed(&e);
             }
             pinged = now;
@@ -245,9 +253,14 @@ fn run<C: Connection, B: Backend>(
 /// Writes each frame of `out` as one binary message, then, when `step` is a
 /// close, a close frame followed by [`linger`]. Returns why the session
 /// ended, when it did.
-fn flush<C: Connection>(conn: &mut C, out: &mut Vec<Vec<u8>>, step: Step) -> Option<Ended> {
+fn flush<C: Connection>(
+    conn: &mut C,
+    writer: &mut FrameWriter,
+    out: &mut Vec<Vec<u8>>,
+    step: Step,
+) -> Option<Ended> {
     for msg in out.drain(..) {
-        if let Err(e) = ws::write_binary(conn, &msg) {
+        if let Err(e) = writer.binary(conn, &msg) {
             return Some(write_failed(&e));
         }
     }
@@ -255,7 +268,7 @@ fn flush<C: Connection>(conn: &mut C, out: &mut Vec<Vec<u8>>, step: Step) -> Opt
         Step::Continue => None,
         Step::Close(code) => {
             // As for the answer to a client's close: the session has ended.
-            let _ = ws::write_close(conn, CloseCode(code));
+            let _ = writer.close(conn, CloseCode(code));
             linger(conn);
             Some(Ended::ServerClosed(code))
         }

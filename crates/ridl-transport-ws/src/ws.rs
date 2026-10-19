@@ -435,51 +435,56 @@ fn close_event(payload: &[u8]) -> Result<Event, CloseCode> {
     }
 }
 
-/// Writes one unmasked, final frame: the header, then the payload, which is
-/// not copied.
-fn write_frame(w: &mut impl Write, opcode: u8, payload: &[u8]) -> io::Result<()> {
-    let mut header = [0u8; 10];
-    header[0] = 0x80 | opcode;
-    let header_len = match payload.len() {
-        n @ 0..=125 => {
-            header[1] = n as u8;
-            2
+/// Writes unmasked, final server frames. Each frame is assembled, header
+/// and payload, in one buffer the writer keeps from frame to frame, and
+/// written with one `write_all`: a frame written as two writes could wait
+/// for the peer's delayed acknowledgement of the first (Nagle's algorithm)
+/// before the second is sent.
+#[derive(Debug, Default)]
+pub(crate) struct FrameWriter {
+    buf: Vec<u8>,
+}
+
+impl FrameWriter {
+    fn frame(&mut self, w: &mut impl Write, opcode: u8, payload: &[u8]) -> io::Result<()> {
+        self.buf.clear();
+        self.buf.push(0x80 | opcode);
+        match payload.len() {
+            n @ 0..=125 => self.buf.push(n as u8),
+            n @ 126..=0xFFFF => {
+                self.buf.push(126);
+                self.buf.extend_from_slice(&(n as u16).to_be_bytes());
+            }
+            n => {
+                self.buf.push(127);
+                self.buf.extend_from_slice(&(n as u64).to_be_bytes());
+            }
         }
-        n @ 126..=0xFFFF => {
-            header[1] = 126;
-            header[2..4].copy_from_slice(&(n as u16).to_be_bytes());
-            4
-        }
-        n => {
-            header[1] = 127;
-            header[2..10].copy_from_slice(&(n as u64).to_be_bytes());
-            10
-        }
-    };
-    w.write_all(&header[..header_len])?;
-    w.write_all(payload)?;
-    w.flush()
-}
+        self.buf.extend_from_slice(payload);
+        w.write_all(&self.buf)?;
+        w.flush()
+    }
 
-/// Writes `msg` as one binary message in one frame.
-pub(crate) fn write_binary(w: &mut impl Write, msg: &[u8]) -> io::Result<()> {
-    write_frame(w, OP_BINARY, msg)
-}
+    /// Writes `msg` as one binary message in one frame.
+    pub(crate) fn binary(&mut self, w: &mut impl Write, msg: &[u8]) -> io::Result<()> {
+        self.frame(w, OP_BINARY, msg)
+    }
 
-/// Writes a ping with an empty payload.
-pub(crate) fn write_ping(w: &mut impl Write) -> io::Result<()> {
-    write_frame(w, OP_PING, &[])
-}
+    /// Writes a ping with an empty payload.
+    pub(crate) fn ping(&mut self, w: &mut impl Write) -> io::Result<()> {
+        self.frame(w, OP_PING, &[])
+    }
 
-/// Writes a pong carrying `payload`, the payload of the ping it answers, which
-/// [`Parser`] limits to 125 bytes.
-pub(crate) fn write_pong(w: &mut impl Write, payload: &[u8]) -> io::Result<()> {
-    write_frame(w, OP_PONG, payload)
-}
+    /// Writes a pong carrying `payload`, the payload of the ping it answers,
+    /// which [`Parser`] limits to 125 bytes.
+    pub(crate) fn pong(&mut self, w: &mut impl Write, payload: &[u8]) -> io::Result<()> {
+        self.frame(w, OP_PONG, payload)
+    }
 
-/// Writes a close frame carrying `code` and no reason.
-pub(crate) fn write_close(w: &mut impl Write, code: CloseCode) -> io::Result<()> {
-    write_frame(w, OP_CLOSE, &code.0.to_be_bytes())
+    /// Writes a close frame carrying `code` and no reason.
+    pub(crate) fn close(&mut self, w: &mut impl Write, code: CloseCode) -> io::Result<()> {
+        self.frame(w, OP_CLOSE, &code.0.to_be_bytes())
+    }
 }
 
 #[cfg(test)]
@@ -881,7 +886,7 @@ mod tests {
         let Ok(Event::Ping(payload)) = read_event(&mut server, &mut parser) else {
             panic!("expected a ping");
         };
-        write_pong(&mut server, &payload).unwrap();
+        FrameWriter::default().pong(&mut server, &payload).unwrap();
         let mut expected = vec![1u8; max - 4];
         expected.extend([2u8; 4]);
         assert_eq!(
@@ -907,7 +912,9 @@ mod tests {
             panic!("expected a binary message");
         };
         assert_eq!(received, msg);
-        write_binary(&mut server, &received).unwrap();
+        FrameWriter::default()
+            .binary(&mut server, &received)
+            .unwrap();
         assert_eq!(client.join().unwrap(), msg);
     }
 
@@ -967,7 +974,7 @@ mod tests {
         let mut parser = Parser::new(frame::MIN_MESSAGE_LIMIT);
         let code = read_event(&mut server, &mut parser).unwrap_err();
         assert_eq!(code, CloseCode::UNSUPPORTED);
-        write_close(&mut server, code).unwrap();
+        FrameWriter::default().close(&mut server, code).unwrap();
         assert_eq!(client.join().unwrap(), Some(WsCloseCode::Unsupported));
     }
 
@@ -980,7 +987,7 @@ mod tests {
         let mut parser = Parser::new(frame::MIN_MESSAGE_LIMIT);
         let code = read_event(&mut server, &mut parser).unwrap_err();
         assert_eq!(code, CloseCode::PROTOCOL);
-        write_close(&mut server, code).unwrap();
+        FrameWriter::default().close(&mut server, code).unwrap();
         assert_eq!(client.join().unwrap(), Some(WsCloseCode::Protocol));
     }
 
@@ -999,7 +1006,9 @@ mod tests {
         server.read_exact(&mut header).unwrap();
         parser.feed(&header);
         assert_eq!(parser.next(), Some(Err(CloseCode::TOO_BIG)));
-        write_close(&mut server, CloseCode::TOO_BIG).unwrap();
+        FrameWriter::default()
+            .close(&mut server, CloseCode::TOO_BIG)
+            .unwrap();
         assert_eq!(client.join().unwrap(), Some(WsCloseCode::Size));
     }
 
@@ -1017,7 +1026,7 @@ mod tests {
         let Ok(Event::Ping(payload)) = read_event(&mut server, &mut parser) else {
             panic!("expected a ping");
         };
-        write_pong(&mut server, &payload).unwrap();
+        FrameWriter::default().pong(&mut server, &payload).unwrap();
         assert_eq!(client.join().unwrap(), b"are you there");
     }
 
@@ -1041,7 +1050,9 @@ mod tests {
             read_event(&mut server, &mut parser),
             Ok(Event::Close(Some(1000)))
         );
-        write_close(&mut server, CloseCode::NORMAL).unwrap();
+        FrameWriter::default()
+            .close(&mut server, CloseCode::NORMAL)
+            .unwrap();
         assert_eq!(parser.next(), None);
         // The server closes the connection after the close handshake (RFC 6455
         // §7.1.1), and `tungstenite` returns `ConnectionClosed` only when the
@@ -1062,9 +1073,9 @@ mod tests {
             ws.flush().unwrap();
             ws
         });
-        write_ping(&mut server).unwrap();
+        FrameWriter::default().ping(&mut server).unwrap();
         // Unblock the client's read with a message after the ping.
-        write_binary(&mut server, b"x").unwrap();
+        FrameWriter::default().binary(&mut server, b"x").unwrap();
         let mut parser = Parser::new(frame::MIN_MESSAGE_LIMIT);
         assert_eq!(read_event(&mut server, &mut parser), Ok(Event::Pong));
         drop(client.join().unwrap());
@@ -1184,6 +1195,49 @@ mod tests {
         }
     }
 
+    /// A writer that counts its `write` calls and keeps what they wrote.
+    #[derive(Default)]
+    struct Counting {
+        writes: usize,
+        bytes: Vec<u8>,
+    }
+
+    impl Write for Counting {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.writes += 1;
+            self.bytes.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Each frame is one `write` call, header and payload together, so that
+    /// no frame waits on Nagle's algorithm between its two halves.
+    #[test]
+    fn each_frame_is_written_with_one_write_call() {
+        // One writer for every frame: its buffer is reused, and a frame
+        // after a larger one carries none of the larger one's bytes.
+        let mut fw = FrameWriter::default();
+        let payloads: [&[u8]; 3] = [&[5u8; 200], &[6u8; 0x1_0000], b""];
+        for payload in payloads {
+            let mut w = Counting::default();
+            fw.binary(&mut w, payload).unwrap();
+            assert_eq!(w.writes, 1, "a payload of {} bytes", payload.len());
+            assert!(w.bytes.ends_with(payload));
+        }
+        let mut w = Counting::default();
+        fw.ping(&mut w).unwrap();
+        fw.pong(&mut w, b"p").unwrap();
+        fw.close(&mut w, CloseCode::GOING_AWAY).unwrap();
+        assert_eq!(w.writes, 3);
+        assert_eq!(
+            w.bytes,
+            [0x89, 0x00, 0x8A, 0x01, b'p', 0x88, 0x02, 0x03, 0xE9]
+        );
+    }
+
     #[test]
     fn a_125_byte_ping_is_accepted() {
         let bytes = masked(0x89, &[4u8; 125]);
@@ -1244,18 +1298,26 @@ mod tests {
     #[test]
     fn server_frames_are_unmasked_and_use_the_shortest_length() {
         let mut out = Vec::new();
-        write_binary(&mut out, &[5u8; 125]).unwrap();
+        FrameWriter::default()
+            .binary(&mut out, &[5u8; 125])
+            .unwrap();
         assert_eq!(out[..2], [0x82, 125]);
         out.clear();
-        write_binary(&mut out, &[5u8; 126]).unwrap();
+        FrameWriter::default()
+            .binary(&mut out, &[5u8; 126])
+            .unwrap();
         assert_eq!(out[..4], [0x82, 126, 0, 126]);
         out.clear();
-        write_binary(&mut out, &[5u8; 0x1_0000]).unwrap();
+        FrameWriter::default()
+            .binary(&mut out, &[5u8; 0x1_0000])
+            .unwrap();
         assert_eq!(out[..10], [0x82, 127, 0, 0, 0, 0, 0, 1, 0, 0]);
         out.clear();
-        write_ping(&mut out).unwrap();
-        write_pong(&mut out, b"p").unwrap();
-        write_close(&mut out, CloseCode::GOING_AWAY).unwrap();
+        FrameWriter::default().ping(&mut out).unwrap();
+        FrameWriter::default().pong(&mut out, b"p").unwrap();
+        FrameWriter::default()
+            .close(&mut out, CloseCode::GOING_AWAY)
+            .unwrap();
         assert_eq!(out, [0x89, 0, 0x8A, 1, b'p', 0x88, 2, 0x03, 0xE9]);
     }
 }
