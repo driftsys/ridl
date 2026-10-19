@@ -332,14 +332,18 @@ it (driftsys/ridl#984).
 - **With `ScannableSignals`** (`Backend::scannable` returns `Some`): the server
   keeps one `Watermark` per interface that has a subscribed signal, set to
   `generation(iface)` when the first signal of that interface is subscribed.
-  Each tick it calls `scan` with those marks and a buffer of `Changed` entries,
-  grows the buffer when `scan` returns 0 and a mark is still behind its
-  generation (the loop the port documentation describes), and reads and sends
-  each changed signal that is subscribed. Entries for signals that are not
-  subscribed are ignored. Every `Changed` entry of a subscribed signal is read
-  and published, with no `seq` filter, because the mark set at subscribe
-  excludes earlier commits; so a writer that restarts and reuses a `seq` is
-  still published. The cost of a tick with no change is one `scan` call.
+  Each tick it calls `scan` once with those marks and a buffer of `Changed`
+  entries, grows the buffer and scans again only when `scan` returned 0 while a
+  mark is still behind its generation (the loop the port documentation
+  describes), and reads and sends each changed signal that is subscribed, each
+  key once. One pass per tick: an interface whose changes did not fit behind the
+  ones written waits for the next tick, a provider that commits continuously
+  cannot hold the tick, and a commit between two scans is not sent twice.
+  Entries for signals that are not subscribed are ignored. Every `Changed` entry
+  of a subscribed signal is read and published, with no `seq` filter, because
+  the mark set at subscribe excludes earlier commits; so a writer that restarts
+  and reuses a `seq` is still published. The cost of a tick with no change is
+  one `scan` call.
 - **Without it**: each tick the server reads every subscribed signal and sends a
   `publish` when the sample differs from the last state sent for that signal. It
   compares the backend `seq`, the provenance, the `stamp` and the value bytes,
@@ -378,11 +382,16 @@ counter.
 `EventSource::subscribe(iface,
 &[ord])`; `Ok` is answered `accepted`,
 `Err(Contract(c))` is answered `contract(c)`. `unsubscribe` calls
-`EventSource::unsubscribe`. Each tick the server drains `EventSource::next` and
-sends one `occurrence` per occurrence, with the backend's `stamp` and the next
-session `seq` of that event channel (D-24), so a gap the client sees is a gap on
-this session. A `Short` read is retried with a larger buffer, as for signals.
-The occurrence's trace context is dropped: the frame does not carry one (§2).
+`EventSource::unsubscribe`. Each tick the server reads `EventSource::next` up to
+a budget and sends one `occurrence` per occurrence, with the backend's `stamp`
+and the next session `seq` of that event channel (D-24), so a gap the client
+sees is a gap on this session. The budget is 64 occurrences per tick, the
+dropped ones counted, and fewer once the occurrence bytes sent in the tick reach
+`max_message_bytes`; what is left waits for the next tick, so a provider that
+raises continuously cannot hold the tick, at the cost of up to one
+`poll_interval` more latency per budget on a busy channel. A `Short` read is
+retried with a larger buffer, as for signals. The occurrence's trace context is
+dropped: the frame does not carry one (§2).
 
 An occurrence larger than `max_message_bytes` is dropped and noted as
 `ValueTooLarge`, and the session `seq` of its channel is advanced, so the client

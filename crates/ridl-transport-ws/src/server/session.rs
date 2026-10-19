@@ -80,6 +80,10 @@ impl SignalChannel {
 const FIRST_BUFFER: usize = 1024;
 /// The number of `Changed` entries a scan starts with.
 const FIRST_SCAN: usize = 16;
+/// The most occurrences one tick reads from the backend, the ones it drops
+/// included, so that a provider that raises continuously cannot keep a tick
+/// from returning. The rest wait for the next tick.
+const OCCURRENCES_PER_TICK: usize = 64;
 
 /// One session over one backend.
 pub(crate) struct Session<B: Backend> {
@@ -95,6 +99,9 @@ pub(crate) struct Session<B: Backend> {
     occurrence_cap: usize,
     /// The same for one `response` under `reply`.
     reply_cap: usize,
+    /// The message limit, which also bounds the occurrence bytes one tick
+    /// sends.
+    message_limit: usize,
     call_abandon_after: Duration,
     record: Option<Record>,
     /// Whether an `attach` has been accepted.
@@ -153,6 +160,7 @@ impl<B: Backend> Session<B> {
             payload_cap: limit - empty_publish.encoded_len(),
             occurrence_cap: limit - empty_occurrence.encoded_len(),
             reply_cap: limit - empty_reply.encoded_len(),
+            message_limit: limit,
             call_abandon_after: config.call_abandon_after,
             record: config.record(),
             attached: false,
@@ -324,14 +332,20 @@ impl<B: Backend> Session<B> {
         Step::Continue
     }
 
-    /// Sends every waiting occurrence, each with the backend's stamp and the
-    /// next session `seq` of its channel. The trace context is dropped: the
-    /// frame does not carry one. An occurrence that does not fit one message
-    /// is read and dropped, and recorded, because `next` does not consume
-    /// what it cannot copy: left in the queue, it would block every
-    /// occurrence behind it.
+    /// Sends the waiting occurrences, each with the backend's stamp and the
+    /// next session `seq` of its channel, up to a budget: at most
+    /// [`OCCURRENCES_PER_TICK`] of them, and no more once the bytes sent in
+    /// this tick reach the message limit. What is left waits for the next
+    /// tick, so a provider that raises continuously cannot keep the tick
+    /// from returning. The trace context is dropped: the frame does not
+    /// carry one. An occurrence that does not fit one message is read and
+    /// dropped, and recorded, because `next` does not consume what it
+    /// cannot copy: left in the queue, it would block every occurrence
+    /// behind it.
     fn drain_occurrences(&mut self, out: &mut Vec<Vec<u8>>) -> Step {
-        loop {
+        let mut taken = 0;
+        let mut bytes = 0;
+        while taken < OCCURRENCES_PER_TICK && bytes < self.message_limit {
             let cap = self.occurrence_cap;
             let read = self.backend.ports().next(room(&mut self.buf, cap));
             let (occurrence, fits) = match read {
@@ -364,6 +378,7 @@ impl<B: Backend> Session<B> {
             // specification §5.2) rather than nothing.
             let counter = self.events.entry((target.iface, target.ord)).or_default();
             *counter += 1;
+            taken += 1;
             if !fits {
                 self.note(Note::ValueTooLarge {
                     target,
@@ -382,7 +397,9 @@ impl<B: Backend> Session<B> {
                     payload: &self.buf[..occurrence.len],
                 },
             );
+            bytes += out.last().map_or(0, Vec::len);
         }
+        Step::Continue
     }
 
     /// Reads the outcome of each call in flight. A known outcome is one
@@ -821,45 +838,50 @@ impl<B: Backend> Session<B> {
         );
     }
 
-    /// Scans every marked interface and returns the subscribed signals that
-    /// changed. The buffer grows when a scan writes nothing while a mark is
-    /// still behind its generation, as the port's documentation describes.
+    /// Scans the marked interfaces once and returns the subscribed signals
+    /// that changed, each key once. The scan is repeated only to grow the
+    /// buffer, when it wrote nothing while a mark is still behind its
+    /// generation, as the port's documentation describes; an interface whose
+    /// changes did not fit behind the ones written waits for the next tick.
+    /// One pass per tick keeps a provider that commits continuously from
+    /// holding the tick, and a commit between two scans from being sent twice.
     fn scan_changes(&mut self) -> Vec<Key> {
-        let mut keys = Vec::new();
         let Some(scannable) = self.backend.scannable() else {
-            return keys;
+            return Vec::new();
         };
         if self.marks.is_empty() {
-            return keys;
+            return Vec::new();
         }
-        loop {
+        let n = loop {
             let n = scannable.scan(&mut self.marks, &mut self.changes);
-            if n == 0 {
-                let behind = self
-                    .marks
-                    .iter()
-                    .any(|m| m.generation < scannable.generation(m.iface));
-                if !behind {
-                    return keys;
-                }
-                let len = self.changes.len() * 2;
-                self.changes.resize(
-                    len,
-                    Changed {
-                        iface: InterfaceNo(0),
-                        ord: Ordinal(0),
-                        seq: 0,
-                    },
-                );
-                continue;
+            if n > 0 {
+                break n;
             }
-            keys.extend(
-                self.changes[..n]
-                    .iter()
-                    .map(|c| (c.iface, c.ord))
-                    .filter(|key| self.signals.get(key).is_some_and(|ch| ch.subscribed)),
+            let behind = self
+                .marks
+                .iter()
+                .any(|m| m.generation < scannable.generation(m.iface));
+            if !behind {
+                return Vec::new();
+            }
+            let len = self.changes.len() * 2;
+            self.changes.resize(
+                len,
+                Changed {
+                    iface: InterfaceNo(0),
+                    ord: Ordinal(0),
+                    seq: 0,
+                },
             );
-        }
+        };
+        let mut keys: Vec<Key> = self.changes[..n]
+            .iter()
+            .map(|c| (c.iface, c.ord))
+            .filter(|key| self.signals.get(key).is_some_and(|ch| ch.subscribed))
+            .collect();
+        keys.sort_unstable();
+        keys.dedup();
+        keys
     }
 }
 
@@ -956,8 +978,9 @@ mod tests {
     use ridl_rt::error::{CallError, Contract, Transport};
     use ridl_rt::payload::{Rule, Violation};
     use ridl_rt::port::{
-        Attached, Caller, Claim, Clock, Correlation, Encoded, EventSink, EventSource, Handler,
-        RawOccurrence, RawSample, ReadError, SendError, SignalReader, SignalWriter, SubscribeError,
+        Attached, Caller, Changed, Claim, Clock, Correlation, Encoded, EventSink, EventSource,
+        Handler, RawOccurrence, RawSample, ReadError, ScannableSignals, SendError, SignalReader,
+        SignalWriter, SubscribeError, Watermark,
     };
     use ridl_rt::sample::{Cause, Duration, Envelope, Freshness, Provenance, Timestamp};
     use ridl_rt::trace::TraceContext;
@@ -2116,6 +2139,146 @@ mod tests {
                 target: EVENT,
                 needed: 2000
             }]
+        );
+    }
+
+    // -- Bounded work per tick ------------------------------------------------
+
+    /// The sequence numbers of the occurrences in `out`, in order.
+    fn occurrence_seqs(out: &[Vec<u8>]) -> Vec<u64> {
+        out.iter()
+            .map(|m| match decode(m).unwrap() {
+                Frame::Occurrence { envelope, .. } => envelope.seq,
+                other => panic!("not an occurrence: {other:?}"),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_tick_sends_at_most_64_occurrences_and_the_rest_on_the_next_tick() {
+        let (mut s, mut p, _n) = scanning();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(EVENT)));
+        for i in 0..100u8 {
+            raise(&mut p, EVENT, &[i]);
+        }
+        let (step, out) = tick(&mut s);
+        assert_eq!(step, Step::Continue);
+        assert_eq!(occurrence_seqs(&out), (1..=64).collect::<Vec<_>>());
+        let (_, out) = tick(&mut s);
+        assert_eq!(occurrence_seqs(&out), (65..=100).collect::<Vec<_>>());
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+    }
+
+    /// Occurrences of half the largest size stop the tick once the bytes
+    /// sent reach the message limit: two of them, not three.
+    #[test]
+    fn a_tick_stops_draining_once_it_has_sent_a_message_limit_of_occurrences() {
+        let (mut s, mut p, _n) = limited();
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(EVENT)));
+        for _ in 0..3 {
+            raise(&mut p, EVENT, &vec![1; occurrence_cap() / 2]);
+        }
+        let (_, out) = tick(&mut s);
+        assert_eq!(occurrence_seqs(&out), vec![1, 2]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(occurrence_seqs(&out), vec![3]);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+    }
+
+    /// A scanning backend that counts its `scan` calls and, when asked,
+    /// reports the first changed entry twice.
+    struct Counted {
+        inner: Loopback,
+        scans: Cell<usize>,
+        duplicate: bool,
+    }
+
+    impl Backend for Counted {
+        type Ports = Loopback;
+
+        fn ports(&mut self) -> &mut Loopback {
+            &mut self.inner
+        }
+
+        fn scannable(&self) -> Option<&dyn ScannableSignals> {
+            Some(self)
+        }
+    }
+
+    impl Attached for Counted {
+        fn catalog(&self) -> &CatalogRef {
+            self.inner.catalog()
+        }
+    }
+
+    impl SignalReader for Counted {
+        fn read(
+            &self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            out: &mut [u8],
+        ) -> Result<RawSample, ReadError> {
+            self.inner.read(iface, ord, out)
+        }
+    }
+
+    impl ScannableSignals for Counted {
+        fn generation(&self, iface: InterfaceNo) -> u64 {
+            self.inner.generation(iface)
+        }
+
+        fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize {
+            self.scans.set(self.scans.get() + 1);
+            let n = self.inner.scan(marks, out);
+            if self.duplicate && n > 0 && n < out.len() {
+                out[n] = out[0];
+                return n + 1;
+            }
+            n
+        }
+    }
+
+    fn counted(duplicate: bool) -> (Session<Counted>, Loopback) {
+        let rt = Loopback::new(CATALOG);
+        let provider = rt.attach();
+        let backend = Counted {
+            inner: rt,
+            scans: Cell::new(0),
+            duplicate,
+        };
+        (Session::new(backend, &Config::default()), provider)
+    }
+
+    #[test]
+    fn a_tick_scans_once_when_the_scan_buffer_holds_the_changes() {
+        let (mut s, mut p) = counted(false);
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        commit(&mut p, &[1]);
+        s.backend.scans.set(0);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(s.backend.scans.get(), 1);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        assert_eq!(s.backend.scans.get(), 2);
+    }
+
+    #[test]
+    fn a_key_a_scan_reports_twice_is_published_once_per_tick() {
+        let (mut s, mut p) = counted(true);
+        open(&mut s);
+        send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
+        commit(&mut p, &[1]);
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            publish(SIGNAL, 0, 1, PublishState::Live(&[1]))
         );
     }
 
