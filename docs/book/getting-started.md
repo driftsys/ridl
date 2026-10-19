@@ -445,7 +445,8 @@ satisfy the constant's own type constraints, and that is checked.
 
 The split between `signal` and `event` is the load-bearing distinction in ridl.
 It is a distinction in _meaning_, which the specification then turns into
-demands on a binding (see the note above — no binding is built yet):
+demands on a binding (see the note above; of the bindings, the WebSocket one
+is built):
 
 - A **signal** is continuous state. The latest sample is the truth, and an
   intermediate sample may be missed. The contract requires the channel never to
