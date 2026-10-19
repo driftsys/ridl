@@ -179,7 +179,10 @@ existed: `ridl-rt` (E11.0) and `ridl-loopback` (E11.15) have landed, and E11.9
 (driftsys/ridl#265) is the open transport it will run over. E12.5, the
 test-harness drivers (driftsys/ridl#291), was parked until a test plane had an
 owner: an external consumer's debug and test portal over the WebSocket transport
-has asked for it, and that portal has an owner.
+has asked for it, and that portal has an owner. The same day, E12.11, the
+TypeScript WebSocket transport package (driftsys/ridl#982), was filed as a new
+story, because no story held the transport package that the TypeScript framework
+names.
 
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
@@ -987,7 +990,10 @@ WebSocket transport (driftsys/ridl#265), on E12.11, its TypeScript package, and
 on E12.1, the TypeScript surface (driftsys/ridl#287). E12.5 uses E12.4, the
 emulator (driftsys/ridl#290), for the providers it stands in for. The reopened
 stories decode with the package's own wasm codec (ADR-0020 decision 7), so they
-do not need E12.3, contract-generic decoding, which stays parked.
+do not need E12.3, contract-generic decoding, which stays parked. E12.6 to
+E12.10 stay parked: the test plane that reopened E12.5 needs drivers only, so
+trace replay, the web UI, the emulation server, scenario scripting and the
+digital twin each wait until a test plane needs that story.
 
 **E12.11 is new on 2026-10-19** (driftsys/ridl#982). It is the separate
 transport package named above, which no story held: E11.9 binds the frame onto
