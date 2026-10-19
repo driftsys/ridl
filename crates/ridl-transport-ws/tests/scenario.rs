@@ -30,6 +30,11 @@ const PROVIDER_ENV: &str = "RIDL_TRANSPORT_WS_PROVIDER";
 /// How long the provider's process waits for its one connection.
 const ACCEPT_LIMIT: Duration = Duration::from_secs(10);
 
+/// How long the parent waits for the provider's process to start and print
+/// its port: a process start on a loaded runner takes longer than one step
+/// of the scenario, which [`LIMIT`] bounds.
+const START_LIMIT: Duration = Duration::from_secs(10);
+
 /// The in-process rig: the consumer's ports and the provider are two
 /// aggregates on one loopback store, and a step is one pass of the provider.
 struct LoopbackRig {
@@ -121,7 +126,7 @@ fn spawn_provider() -> (ChildGuard, SocketAddr) {
         }
     });
     let port = rx
-        .recv_timeout(LIMIT)
+        .recv_timeout(START_LIMIT)
         .expect("the provider's process prints its port within the limit");
     (child, SocketAddr::from(([127, 0, 0, 1], port)))
 }

@@ -657,7 +657,13 @@ The test targets `serve` and `scenario` require the `server` feature, so
 
 - `just wasm-check` checks the codec with `--no-default-features` for
   `wasm32-unknown-unknown` and for `thumbv7em-none-eabihf`, a target with no
-  standard library, which is the proof of D-1's "`core` only".
+  standard library, which is the proof of the `std` half of D-1's "`core` only".
+  The `alloc` half is `tests/constraints.rs`, which asserts that `src/frame.rs`
+  and `src/lib.rs` name no `alloc` crate outside comments.
+- `tests/constraints.rs` also asserts D-2 from the manifests: the only normal
+  dependency is `ridl-rt`, through a workspace entry that names no feature, and
+  the `server` feature is empty, so it turns on nothing in `ridl-rt`. The checks
+  are textual.
 - `just compat-check` requires the manifest's `rust-version` and edition to
   equal `ridl-rt`'s, and builds the packaged crate with that minimum toolchain
   with its default features and with none. The `tungstenite` dev-dependency

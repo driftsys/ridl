@@ -186,6 +186,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_default_durations_keep_the_ping_before_the_liveness_timeout() {
+        let config = Config::default();
+        assert_eq!(config.poll_interval, Duration::from_millis(20));
+        assert_eq!(config.ping_interval, Duration::from_secs(5));
+        assert_eq!(config.liveness_timeout, Duration::from_secs(15));
+        assert_eq!(config.call_abandon_after, Duration::from_secs(60));
+        assert!(config.ping_interval < config.liveness_timeout);
+    }
+
+    #[test]
     fn the_default_limit_is_one_mebibyte() {
         assert_eq!(Config::default().max_message_bytes(), 1024 * 1024);
     }

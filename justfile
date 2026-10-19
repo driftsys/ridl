@@ -206,8 +206,9 @@ wasm-check:
         cargo check --target wasm32-unknown-unknown -p ridl-rt --all-features
         # `ridl-transport-ws` with its `server` feature off is the frame codec
         # alone. Both targets check it, and the target with no standard library
-        # is the proof that the codec needs no standard library: the transport
-        # design's decision D-1 has it need `core` only, with no `alloc`.
+        # is the proof that the codec needs no standard library, the `std` half
+        # of the transport design's decision D-1 (`core` only, with no `alloc`);
+        # the `alloc` half is the crate's own tests/constraints.rs.
         cargo check --target wasm32-unknown-unknown -p ridl-transport-ws --no-default-features
         cargo check --target thumbv7em-none-eabihf -p ridl-transport-ws --no-default-features
     else
@@ -324,8 +325,9 @@ wasm-check:
 # The recipe also fails on: a ridl-descriptor manifest without a rust-version
 # line, or one that names a version newer than the pin; a workspace
 # dependency, other than a dev-dependency, of ridl-rt, ridl-rt-conformance,
-# ridl-loopback or ridl-transport-ws outside those four, or of ridl-ir or ridl-descriptor outside
-# those two; a packaged ridl-descriptor that names ridl-backend-rust; or a
+# ridl-loopback or ridl-transport-ws outside those four, or of ridl-ir or
+# ridl-descriptor outside those two; a packaged ridl-descriptor that names
+# ridl-backend-rust; or a
 # packaged ridl-descriptor test list that differs from the one the recipe
 # expects.
 compat-check: toolchain-check
@@ -460,9 +462,10 @@ compat-check: toolchain-check
     done
 
     # All six crates in one command: the packaged ridl-rt-conformance,
-    # ridl-loopback and ridl-transport-ws depend on ridl-rt, and ridl-descriptor on ridl-ir, at this
-    # version, which is not on the registry until the release publishes it, so
-    # the single-crate form fails while the version is unpublished.
+    # ridl-loopback and ridl-transport-ws depend on ridl-rt, and
+    # ridl-descriptor on ridl-ir, at this version, which is not on the
+    # registry until the release publishes it, so the single-crate form fails
+    # while the version is unpublished.
     echo "compat-check: packaging ridl-rt, ridl-rt-conformance, ridl-loopback, ridl-transport-ws, ridl-ir and ridl-descriptor $version"
     cargo package -p ridl-rt -p ridl-rt-conformance -p ridl-loopback -p ridl-transport-ws -p ridl-ir -p ridl-descriptor \
         --no-verify --allow-dirty
