@@ -1133,7 +1133,7 @@ reopening is an observation rather than an argument.
 | E7 (rxdl's ecosystem half and spellings) | rmdl — rxdl's backend and its domain spellings are reopened with it                   |
 | `ridl-engine`                            | rmdl — execution is its subject                                                       |
 | E12.3                                    | E4.5b, plus a contract-generic consumer                                               |
-| E12.6–E12.10                             | a test plane with an owner                                                            |
+| E12.6–E12.10                             | a test plane that needs that story                                                    |
 | E13 (the gateway)                        | a second consumer                                                                     |
 | E8 parked stories                        | a regression the kept six did not catch                                               |
 | The plugin protocol's wasm host          | the browser playground                                                                |
