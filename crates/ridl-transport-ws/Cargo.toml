@@ -26,6 +26,9 @@ ridl-rt.workspace = true
 [dev-dependencies]
 # Path only, with no version: the package leaves out `tests/`, the only user.
 ridl-ir = { path = "../ridl-ir" }
+# The backend of every session test. Path only, with no version: the packaged
+# crate does not run its tests.
+ridl-loopback = { path = "../ridl-loopback" }
 # An independent WebSocket client, so that the hand-written server side of
 # RFC 6455 is tested against an implementation this repository did not write.
 # A dev-dependency does not reach the build of a crate that depends on this
