@@ -184,13 +184,13 @@ connection, chooses a thread, builds one `Backend` value for the connection, and
 calls `serve`. `serve` returns when the session ends, with why. (As built:
 `serve` sets the write timeout to `liveness_timeout`, and a write that fails
 with `WouldBlock` or `TimedOut` ends the session as `Ended::LivenessTimeout`,
-because the client has stopped taking messages for the liveness period. The
-method is required, not provided, so that no embedder's connection is silently
-unbounded.) `Connection` is `Read + Write` plus `set_read_timeout`, a required
-`set_write_timeout` and a provided `shutdown_write` (as built; the default of
-`shutdown_write` does nothing), implemented here for `std::net::TcpStream` and,
-on Unix, `std::os::unix::net::UnixStream`. Nothing in the crate calls `bind`,
-`listen`, `spawn` or `connect`.
+because the client has stopped taking messages for the liveness period.
+`set_write_timeout` is required, not provided, so that no embedder's connection
+is silently unbounded.) `Connection` is `Read + Write` plus `set_read_timeout`,
+a required `set_write_timeout` and a provided `shutdown_write` (as built; the
+default of `shutdown_write` does nothing), implemented here for
+`std::net::TcpStream` and, on Unix, `std::os::unix::net::UnixStream`. Nothing in
+the crate calls `bind`, `listen`, `spawn` or `connect`.
 
 **D-8. The tick.** `serve` reads the socket with a read timeout of
 `config.poll_interval` (default 20 ms). Each pass of its loop: feed the bytes
@@ -319,15 +319,14 @@ not".
   `seq` is still published.) The cost of a tick with no change is one `scan`
   call.
 - **Without it**: each tick the server reads every subscribed signal and sends a
-  `publish` when the sample's backend `envelope.seq` or its provenance differs
-  from the one it last saw for that signal (as built: it compares the backend
-  `seq`, the provenance, the `stamp` and the value bytes with the last state
-  sent, which costs one stored copy per subscribed signal; a republish of
+  `publish` when the sample differs from the last state sent for that signal (as
+  built: it compares the backend `seq`, the provenance, the `stamp` and the
+  value bytes, which costs one stored copy per subscribed signal; a republish of
   identical bytes under an identical `seq`, provenance and `stamp` is
-  indistinguishable and harmless) ("differs", not "is greater": a backend's
-  counter may restart or interleave, D-24). The port contract makes `seq` count
-  every publication of a channel, an invalidation and a re-affirmation included
-  (the conformance test
+  indistinguishable and harmless). The test is "differs", not "is greater": a
+  backend's counter may restart or interleave (D-24). The port contract makes
+  `seq` count every publication of a channel, an invalidation and a
+  re-affirmation included (the conformance test
   `a_channel_sequence_number_counts_that_channel_publications`), so a changed
   `seq` is a change. The cost of a tick is one `read` per subscribed signal, and
   a backend with many subscribed signals and no `ScannableSignals` pays that on

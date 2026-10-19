@@ -25,8 +25,8 @@ to, not here.
 **Amended 2026-10-19 — decision 6, the WebSocket transport has no WebSocket
 dependency.** The `ridl-transport-ws` row said "`ridl-rt` and a WebSocket
 crate". The crate writes the server side of RFC 6455 itself, so its only
-dependency is `ridl-rt`. The embedder's build copies every dependency of a crate
-it links, and the server side of RFC 6455 is a small part of this crate: a
+dependency is `ridl-rt`. The embedder's build compiles every dependency of a
+crate it links, and the server side of RFC 6455 is a small part of this crate: a
 WebSocket crate would add its own dependency tree to that build for a few
 hundred lines of code. A WebSocket client is a dev-dependency of the crate's
 tests only. The row is changed in place.

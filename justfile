@@ -284,9 +284,9 @@ wasm-check:
 # the `suite!` test compiled.
 #
 # ridl-transport-ws is held to the same terms: its manifest must set the same
-# rust-version as ridl-rt and edition 2021, and the packaged crate, unchanged
-# apart from the appended tables, must build with the minimum toolchain with
-# its default features and with none.
+# rust-version as ridl-rt and edition 2021, and the packaged crate, with its
+# tungstenite dev-dependency table removed and the tables appended, must build
+# with the minimum toolchain with its default features and with none.
 #
 # The crate emitted for the veh-cluster corpus is built with cargo, not with
 # rustc as the cabin crate is, with every cargo feature on and with default
@@ -656,9 +656,10 @@ compat-check: toolchain-check
     echo "compat-check: $minimum, edition 2021 (packaged ridl-loopback, suite! expanded)"
     cargo "+$minimum" test --no-run --offline --manifest-path "$pkg_loopback/Cargo.toml"
 
-    # ridl-transport-ws as published: only the tables below are appended. Its
-    # tests are not run here (the package excludes them, and the pin runs them
-    # in the workspace). Its WebSocket client, tungstenite, is a
+    # ridl-transport-ws as published, except that its tungstenite
+    # dev-dependency table is removed and the tables below are appended. Its
+    # tests are not run here (the package excludes them, and the pin runs
+    # them in the workspace). Its WebSocket client, tungstenite, is a
     # dev-dependency, so building the package does not compile it, but cargo
     # still resolves it, and the offline build cannot: the recipe removes its
     # table first, and fails when the manifest has any other dev-dependency
