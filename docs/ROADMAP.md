@@ -171,6 +171,19 @@ driftsys/ridlc-gen-kotlin#8.
 new, with its own milestone; its stories are driftsys/ridl#715 to
 driftsys/ridl#720.
 
+**Reopened 2026-10-19, with the tooling plane.** Two parked Epic 12 stories are
+reopened and re-homed in the TypeScript framework of step 2, with their
+identifiers, story text, `Done when` and size unchanged. E12.2, the
+observability server (driftsys/ridl#288), was parked until the runtime library
+existed: `ridl-rt` (E11.0) and `ridl-loopback` (E11.15) have landed, and E11.9
+(driftsys/ridl#265) is the open transport it will run over. E12.5, the
+test-harness drivers (driftsys/ridl#291), was parked until a test plane had an
+owner: an external consumer's debug and test portal over the WebSocket transport
+has asked for it, and that portal has an owner. The same day, E12.11, the
+TypeScript WebSocket transport package (driftsys/ridl#982), was filed as a new
+story, because no story held the transport package that the TypeScript framework
+names.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
@@ -961,13 +974,33 @@ decision 7). The WebSocket transport is what the getting-started path uses and
 what a remote server or an emulator links by default; nothing links it unless
 asked (§3.5).
 
-**Two stories keep their E12 identifiers**, because identifiers are identity —
+**Four stories keep their E12 identifiers**, because identifiers are identity —
 they are re-homed here, not renumbered.
 
-| ID    | Story                                                                                                                                                                       | Done when                                                                    | Size |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---- |
-| E12.1 | The TypeScript surface — generated types and faces, the codec reached through the package's own generated Rust compiled to `wasm32` against `ridl-rt` (ADR-0020 decision 7) | a Deno program constructs and validates a payload without a TypeScript codec | L    |
-| E12.4 | Emulator — a hand-written provider standing in for a component, driven by the contract                                                                                      | a consumer cannot distinguish the emulator from the real provider            | M    |
+| ID     | Story                                                                                                                                                                       | Done when                                                                          | Size |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---- |
+| E12.1  | The TypeScript surface — generated types and faces, the codec reached through the package's own generated Rust compiled to `wasm32` against `ridl-rt` (ADR-0020 decision 7) | a Deno program constructs and validates a payload without a TypeScript codec       | L    |
+| E12.4  | Emulator — a hand-written provider standing in for a component, driven by the contract                                                                                      | a consumer cannot distinguish the emulator from the real provider                  | M    |
+| E12.2  | Observability server — subscribe by ordinal, render value, provenance and envelope                                                                                          | a live signal is displayed with its provenance distinguishable                     | L    |
+| E12.5  | Test-harness drivers — drive a system under test, assert against contract terms                                                                                             | a `require` violation is reported against the contract, not the transport          | M    |
+| E12.11 | The TypeScript WebSocket transport package — the §11.1 WebSocket binding in TypeScript, for Deno and the browser, carrying payload bytes unread                             | a Deno program and a browser page each receive a live signal from the E11.9 server | M    |
+
+**E12.2 and E12.5 were reopened on 2026-10-19.** Both depend on E11.9, the
+WebSocket transport (driftsys/ridl#265), on E12.11, its TypeScript package, and
+on E12.1, the TypeScript surface (driftsys/ridl#287). E12.5 uses E12.4, the
+emulator (driftsys/ridl#290), for the providers it stands in for. The reopened
+stories decode with the package's own wasm codec (ADR-0020 decision 7), so they
+do not need E12.3, contract-generic decoding, which stays parked. E12.6 to
+E12.10 stay parked: the test plane that reopened E12.5 needs drivers only, so
+trace replay, the web UI, the emulation server, scenario scripting and the
+digital twin each wait until a test plane needs that story.
+
+**E12.11 is new on 2026-10-19** (driftsys/ridl#982). It is the separate
+transport package named above, which no story held: E11.9 binds the frame onto
+WebSocket in Rust, and E12.1 holds the types, the faces and the codec. E12.11
+depends on E11.9 alone, because it carries payload bytes without decoding them.
+E12.2 and E12.5 also depend on E12.11. It takes the next free identifier,
+because a parked row's identifier is never reused.
 
 **The encoding at the codec-in-wasm boundary is FlatBuffers.** ADR-0018 decision
 3 put proto3 on the wasm guest boundary because a guest updates independently of
@@ -1099,9 +1132,8 @@ reopening is an observation rather than an argument.
 | E5 (rmdl implementation)                 | its draft finalised and rsdl shipped, or a consumer whose behaviour must be generated |
 | E7 (rxdl's ecosystem half and spellings) | rmdl — rxdl's backend and its domain spellings are reopened with it                   |
 | `ridl-engine`                            | rmdl — execution is its subject                                                       |
-| E12.2                                    | the runtime library — there is nothing to observe without it                          |
 | E12.3                                    | E4.5b, plus a contract-generic consumer                                               |
-| E12.5–E12.10                             | a test plane with an owner                                                            |
+| E12.6–E12.10                             | a test plane that needs that story                                                    |
 | E13 (the gateway)                        | a second consumer                                                                     |
 | E8 parked stories                        | a regression the kept six did not catch                                               |
 | The plugin protocol's wasm host          | the browser playground                                                                |
