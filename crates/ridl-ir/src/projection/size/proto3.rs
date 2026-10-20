@@ -532,6 +532,25 @@ mod tests {
         assert_eq!(varint_len(u64::MAX), 10);
     }
 
+    /// The boundaries `ridl_rt::proto3::tag_len` and the Rust backend's
+    /// generation-time `tag_len` are tested at as well: the three count
+    /// one rule, and this table is the tie between them.
+    #[test]
+    fn tag_lengths() {
+        for (number, len) in [
+            (1, 1),
+            (15, 1),
+            (16, 2),
+            (2047, 2),
+            (2048, 3),
+            (262_143, 3),
+            (262_144, 4),
+            (536_870_911, 5),
+        ] {
+            assert_eq!(tag_len(number), len, "field number {number}");
+        }
+    }
+
     #[test]
     fn a_struct_payload_is_the_message_itself() {
         // Point { x: Coord, y: Coord }, Coord = integer i16: two sint32
@@ -870,9 +889,23 @@ mod tests {
                 ("rows", 2, array_of(array_u8_max4(), 2)),
             ],
         ));
+        // A union arm of a type def with no bound: the arm's leaf is read
+        // by name, and a missing leaf of a type def is `NoBound` there too.
+        package.decls.push(union_decl(
+            "Choice",
+            &[("text", 1, "Free"), ("pt", 2, "Point")],
+        ));
         let others: [&Package; 0] = [];
         let ctx = Ctx::new(&package, &others);
-        for name in ["Free", "Note", "Inline", "Tags", "Holder", "NoBoundFirst"] {
+        for name in [
+            "Free",
+            "Note",
+            "Inline",
+            "Tags",
+            "Holder",
+            "NoBoundFirst",
+            "Choice",
+        ] {
             assert_eq!(
                 state_in(name, &ctx),
                 SizeState::Absent(AbsentCause::NoBound),

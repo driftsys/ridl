@@ -1227,6 +1227,17 @@ fn main() {
         Some(VerifyError::Contract(length)),
         "a bounded array over its count",
     );
+    // `reals: [float; 0..4]` at field 2 carries no range, so its packed
+    // run is counted by its length in doubles, not element by element:
+    // five doubles (40 bytes) are one past the count.
+    let mut buf = vec![0x12, 40];
+    buf.extend_from_slice(&[0u8; 40]);
+    buf.extend_from_slice(tail);
+    assert_eq!(<Lists as Payload<Proto3>>::verify(&buf).err(), Some(VerifyError::Contract(length)), "a packed fixed-width run over the count");
+    let mut buf = vec![0x12, 32];
+    buf.extend_from_slice(&[0u8; 32]);
+    buf.extend_from_slice(tail);
+    assert_eq!(<Lists as Payload<Proto3>>::verify(&buf).err(), None, "a packed fixed-width run at the count");
 
     let length = Violation { type_name: Some("Maps"), rule: Rule::Length };
     let long = Maps {
@@ -1496,4 +1507,31 @@ fn main() {
         "pb_zero_length_array",
         &format!("#![allow(dead_code)]\n{generated}\n{main}"),
     );
+}
+
+/// `encode` refuses an anonymous string one character past its length
+/// bound and an anonymous byte sequence one byte past its, with
+/// `EncodeError::Contract(Length)` naming the owner, and accepts each at
+/// the bound: the same check the FlatBuffers `encode` runs, which a named
+/// scalar's constructor runs instead.
+#[test]
+fn encode_refuses_an_anonymous_string_or_byte_sequence_one_past_its_bound() {
+    let main = r#"
+fn main() {
+    use ridl_rt::payload::{Rule, Violation};
+    let length = Violation { type_name: Some("Scalars"), rule: Rule::Length };
+    let mut out = vec![0u8; <Scalars as Payload<Proto3>>::MAX_SIZE];
+    // `text: string [0..16]`: sixteen characters fit, seventeen do not.
+    let at = Scalars { text: "\u{e9}".repeat(16), ..scalars() };
+    assert!(at.encode(&mut out).is_ok(), "a string at its bound encodes");
+    let over = Scalars { text: "\u{e9}".repeat(17), ..scalars() };
+    assert_eq!(over.encode(&mut out).err(), Some(EncodeError::Contract(length)), "a string one past its bound");
+    // `data: bytes [0..8]`: eight bytes fit, nine do not.
+    let at = Scalars { data: vec![7; 8], ..scalars() };
+    assert!(at.encode(&mut out).is_ok(), "a byte sequence at its bound encodes");
+    let over = Scalars { data: vec![7; 9], ..scalars() };
+    assert_eq!(over.encode(&mut out).err(), Some(EncodeError::Contract(length)), "a byte sequence one past its bound");
+}
+"#;
+    rustc::run_program("pb_inline_length", &program(main));
 }

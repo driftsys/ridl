@@ -615,6 +615,9 @@ mod tests {
                 available: 3
             })
         );
+        // The write past the end wrote what fit: the tag and the first two
+        // bytes of the four.
+        assert_eq!(out, [0x08, 1, 2]);
     }
 
     #[test]

@@ -385,15 +385,7 @@ impl Scalar {
 
     /// The `Value` variant the field's wire type is read as.
     fn value_variant(&self) -> Ident {
-        format_ident!(
-            "{}",
-            match self.scalar.wire_type() {
-                pb::WireType::Varint => "Varint",
-                pb::WireType::I32 => "I32",
-                pb::WireType::I64 => "I64",
-                pb::WireType::Len => "Len",
-            }
-        )
+        wire_variant(self.scalar.wire_type())
     }
 
     /// The language-layer value read from the raw wire value `__raw`, and
@@ -761,16 +753,18 @@ fn param_binding(name: &str, used: bool) -> Ident {
 /// shifted past the three wire-type bits. The same arithmetic as
 /// `ridl_rt::proto3::tag_len`, which this crate does not link; the emitted
 /// code reads `varint_len` from the runtime for every length it computes at
-/// run time, and this one is a generation-time literal.
-fn tag_len(number: u32) -> usize {
+/// run time, and this one is a generation-time literal. A test ties the two
+/// at every width boundary (`the_generation_time_tag_length_is_the_runtime_one`).
+pub(crate) fn tag_len(number: u32) -> usize {
     let tag = u64::from(number) << 3;
     let bits = 64 - (tag | 1).leading_zeros() as usize;
     bits.div_ceil(7)
 }
 
-/// The `WireType` variant of `ridl_rt::proto3` for a projection wire type.
-fn wire_type_tokens(wire: pb::WireType) -> TokenStream {
-    let variant = format_ident!(
+/// The variant name a projection wire type has in `ridl_rt::proto3`, the
+/// same in `WireType` and in `Value`.
+fn wire_variant(wire: pb::WireType) -> Ident {
+    format_ident!(
         "{}",
         match wire {
             pb::WireType::Varint => "Varint",
@@ -778,7 +772,12 @@ fn wire_type_tokens(wire: pb::WireType) -> TokenStream {
             pb::WireType::Len => "Len",
             pb::WireType::I32 => "I32",
         }
-    );
+    )
+}
+
+/// The `WireType` variant of `ridl_rt::proto3` for a projection wire type.
+fn wire_type_tokens(wire: pb::WireType) -> TokenStream {
+    let variant = wire_variant(wire);
     quote! { ::ridl_rt::proto3::WireType::#variant }
 }
 

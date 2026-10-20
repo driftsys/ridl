@@ -476,6 +476,30 @@ fn the_generated_crate_reaches_no_prost_crate() {
     }
 }
 
+/// The two manifests `just demo` generates from name `proto3`, so that the
+/// crates [`the_generated_crate_reaches_no_prost_crate`] walks carry the
+/// proto3 codec: dropping `proto3` from either list would leave that guard
+/// checking a crate with no proto3 codec at all.
+#[test]
+fn the_demo_inputs_name_the_proto3_encoding() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    for manifest in [
+        "examples/cabin/ridl.toml",
+        "crates/ridlc/tests/corpus/veh-cluster/ridl.toml",
+    ] {
+        let text = std::fs::read_to_string(root.join(manifest))
+            .unwrap_or_else(|error| panic!("read {manifest}: {error}"));
+        let encodings = text
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("encodings"))
+            .unwrap_or_else(|| panic!("{manifest} has an `encodings` list"));
+        assert!(
+            encodings.contains("\"proto3\""),
+            "{manifest}: `encodings` names `proto3`, got `{encodings}`"
+        );
+    }
+}
+
 /// The `cargo tree` listing of the normal dependency graph of
 /// `ridl-descriptor`, with the given extra arguments.
 ///

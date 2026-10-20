@@ -427,7 +427,7 @@ fn rust_for(decls: Vec<v2::Decl>) -> String {
 }
 
 /// The proto3 codec refuses a field number proto3 reserves (19000 to 19999)
-/// or does not admit (above 2^29 - 1), in a struct and in a union arm, as the
+/// or does not admit (0, or above 2^29 - 1), in a struct and in a union arm, as the
 /// proto backend does, and admits the highest number. The sizer answers
 /// `RefusedMember` for each, which the codec would refuse with the sizer's
 /// generic cause; its own check runs first, so the refusal names the field.
@@ -473,6 +473,7 @@ fn the_proto3_codec_refuses_a_field_number_the_proto_backend_refuses() {
             .map_err(|error| error.message)
     };
     for (decl, what) in [
+        (struct_at("Zero", 0), "`Zero.x` has field number 0"),
         (
             struct_at("Reserved", 19_000),
             "`Reserved.x` has field number 19000",
@@ -7429,4 +7430,18 @@ fn a_simple_foreign_link_keeps_its_explicit_module_path() {
         source.contains("Foreign [Thing](crate::other::pkg::Thing)."),
         "{source}"
     );
+}
+
+/// The tag length the proto3 codec computes at generation time is the one
+/// `ridl_rt::proto3::tag_len` computes at run time, at every width boundary
+/// of the shifted field number and at the highest number proto3 admits.
+#[test]
+fn the_generation_time_tag_length_is_the_runtime_one() {
+    for number in [1, 15, 16, 2047, 2048, 262_143, 262_144, 536_870_911] {
+        assert_eq!(
+            super::codec_proto3::tag_len(number),
+            ridl_rt::proto3::tag_len(number),
+            "field number {number}"
+        );
+    }
 }
