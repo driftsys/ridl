@@ -16,6 +16,11 @@ description = "The WebSocket binding of the ridl frame: a no_std codec and a ser
 # from the packaged crate.
 exclude = ["tests/", "examples/"]
 
+# The freeze check denies the major-level lints that cargo-semver-checks only
+# warns about by default (`[workspace.metadata.cargo-semver-checks.lints]`).
+[package.metadata.cargo-semver-checks.lints]
+workspace = true
+
 [features]
 default = ["server"]
 # The server side of the binding. It turns on `std` for this crate and nothing

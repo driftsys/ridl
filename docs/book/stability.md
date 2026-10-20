@@ -21,7 +21,8 @@ promise covers them from the first release that contains them.
 - **The generated Rust crate.** The domain types and the interaction face
   (`Client`, `Provider`, `Publisher`, `Event`, `serve` and `Bind`).
 - **The runtime crates.** The public API of `ridl-rt`, `ridl-rt-conformance`,
-  `ridl-loopback` and `ridl-descriptor`, and the names of their cargo features.
+  `ridl-loopback`, `ridl-descriptor` and `ridl-transport-ws`, and the names of
+  their cargo features.
 - **The codegen plugin protocol.** The messages `ridl.ir.v2` and
   `ridl.codegen.v1`, as a plugin reads and writes them. An enum of the protocol
   gains a value only in a minor release, such as 0.11, because a plugin rejects
@@ -31,12 +32,12 @@ promise covers them from the first release that contains them.
   the catalog hash, the emitted `.proto` and `.fbs` mapping and the encoding
   names.
 - **The minimum Rust version.** Rust 1.83 and edition 2021 for `ridl-rt`,
-  `ridl-rt-conformance` and `ridl-loopback`, and Rust 1.88 and edition 2024 for
-  `ridl-descriptor`. The generated crate compiles as edition 2021 with Rust 1.83
-  with every cargo feature on, and `ridl build` writes `edition = "2021"` in its
-  manifest, so cargo 1.83 reads that manifest as written. From release 0.11,
-  the generated crate also builds on Rust 1.83 with default features off. A
-  0.10.x release does not raise a minimum.
+  `ridl-rt-conformance`, `ridl-loopback` and `ridl-transport-ws`, and Rust 1.88
+  and edition 2024 for `ridl-descriptor`. The generated crate compiles as
+  edition 2021 with Rust 1.83 with every cargo feature on, and `ridl build`
+  writes `edition = "2021"` in its manifest, so cargo 1.83 reads that manifest
+  as written. From release 0.11, the generated crate also builds on Rust 1.83
+  with default features off. A 0.10.x release does not raise a minimum.
 
 The minimum covers the crates RIDL publishes and emits, not later releases of
 their dependencies. A dependency, such as `regex`, can publish a release that

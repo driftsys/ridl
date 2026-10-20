@@ -41,11 +41,11 @@ that removes a line is a break of the surface (see "Approve a break").
 Two surfaces are Rust APIs, compared with `cargo semver-checks` and not as
 lines. Neither has a `<surface>.txt`.
 
-- `runtime-crates`: `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback` and
-  `ridl-descriptor`, compared with the same crates at the baseline. Each crate's
-  own items are compared: the `ridl-ir` items that `ridl-descriptor` re-exports
-  or takes in its signatures are not, so a break in them is caught only by
-  review until driftsys/ridl#934 is fixed.
+- `runtime-crates`: `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback`,
+  `ridl-descriptor` and `ridl-transport-ws`, compared with the same crates at
+  the baseline. Each crate's own items are compared: the `ridl-ir` items that
+  `ridl-descriptor` re-exports or takes in its signatures are not, so a break in
+  them is caught only by review until driftsys/ridl#934 is fixed.
 - `generated-crate`: each directory `generated/<name>/` holds a crate that
   `ridl build --emit rust` writes, from the source packages under
   `xtask/tests/freeze-fixtures/generated/`. Those are frozen copies of

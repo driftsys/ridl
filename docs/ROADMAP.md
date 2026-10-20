@@ -550,10 +550,9 @@ half of driftsys/ridl#718. Its as-built record is
 Follow-ups: driftsys/ridl#984 (bound the per-session signal state),
 driftsys/ridl#985 (read the catalog descriptor), driftsys/ridl#986 (frame
 specification: retention of a settled response, §7 against §11.1 item 6),
-driftsys/ridl#987 (add the crate to the runtime-crates and msrv freeze
-surfaces), driftsys/ridl#988 (serve the stand-in ports) and driftsys/ridl#989
-(run `examples/cabin` over the transport). The row stays in the table above, as
-the rows of E11.1 and E11.15 do, because the epic is not complete.
+driftsys/ridl#988 (serve the stand-in ports) and driftsys/ridl#989 (run
+`examples/cabin` over the transport). The row stays in the table above, as the
+rows of E11.1 and E11.15 do, because the epic is not complete.
 
 **E11.13 landed in driftsys/ridl#418.** It is the MVP of the generated
 interaction face, taken deliberately out of sequence: ADR-0018 decision 15
