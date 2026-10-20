@@ -18,10 +18,10 @@ use std::path::Path;
 const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 
 /// The `[[version_files]]` entries `.git-std.toml` must hold, as (path,
-/// pattern): one pin in the README, four in the book chapters, and the skill's
-/// version. Each pattern must match exactly once, because `git std bump`
+/// pattern): one pin in the README, four in the book chapters, the skill's
+/// version, and the TypeScript package's version. Each pattern must match exactly once, because `git std bump`
 /// rewrites only the first match.
-const EXPECTED_ENTRIES: [(&str, &str); 6] = [
+const EXPECTED_ENTRIES: [(&str, &str); 7] = [
     (
         "crates/ridl-rt-conformance/README.md",
         r#"ridl-rt-conformance = "=([^"]+)""#,
@@ -42,6 +42,10 @@ const EXPECTED_ENTRIES: [(&str, &str); 6] = [
     (
         "docs/book/running-a-program.md",
         r#"(?m)^ridl-rt = \{ version = "([^"]+)""#,
+    ),
+    (
+        "packages/ridl-transport-ws/deno.json",
+        r#"(?m)^  "version": "([^"]+)""#,
     ),
 ];
 

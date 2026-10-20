@@ -22,6 +22,19 @@ placed behind a browser playground. The in-place amendments this record causes
 are listed in **Documents amended**; each is written into the record it belongs
 to, not here.
 
+**Amended 2026-10-20 — decision 6, the TypeScript WebSocket package depends on
+nothing until the runtime package exists.** The TypeScript WebSocket package row
+said it depends on "the runtime package". That package is not written, and its
+name is still open (open item 2). The TypeScript WebSocket package is built as
+`@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`, and it imports
+nothing: it carries payload bytes without decoding them, so it needs no port
+interface and no codec from a runtime package. A dependency on a package that
+does not exist would block the transport for no gain. When the runtime package
+exists, the transport may take its port interfaces as a dependency, and the row
+then says so. The row is changed in place. Open item 2 records the location. The
+package's as-built record is
+[`ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md).
+
 **Amended 2026-10-19 — decision 6, the WebSocket transport has no WebSocket
 dependency.** The `ridl-transport-ws` row said "`ridl-rt` and a WebSocket
 crate". The crate writes the server side of RFC 6455 itself, so its only
@@ -369,7 +382,7 @@ as its public contract.
    | `ridl-rt-conformance`                      | the port contract tests, generic over a runtime factory, which a runtime runs from its own tests; published (2026-10-08)                                    | `ridl-rt`                                                                                                                                                                                                                               |
    | `ridl-transport-ws`                        | the ports over a WebSocket, carrying the encoding the session names, proto3 by default (frame specification §11.1); the default of the getting-started path | `ridl-rt`                                                                                                                                                                                                                               |
    | the TypeScript runtime package (name open) | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec                                                          | nothing outside itself                                                                                                                                                                                                                  |
-   | the TypeScript WebSocket package           | the same binding for Deno and the browser                                                                                                                   | the runtime package                                                                                                                                                                                                                     |
+   | the TypeScript WebSocket package           | the same binding for Deno and the browser                                                                                                                   | nothing until the runtime package exists; built as `@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`, which carries payload bytes without decoding them                                                                    |
 
    Generated Rust links `ridl-rt`, generated TypeScript imports the runtime
    package, and neither ever names a transport.
@@ -591,7 +604,9 @@ as its public contract.
    tables, touches decision 2's matrix and is settled with the projection record
    of decision 4. That note's RA-X7 and RA-X8 are inputs to it.
 2. **Where the TypeScript packages live in this workspace, and what the runtime
-   package is called.** Decision 6 leaves both open.
+   package is called.** Decision 6 leaves both open. (Amended 2026-10-20: the
+   location is `packages/`, and the first package there is
+   `packages/ridl-transport-ws/`. The runtime package's name is still open.)
 3. **Which wasm runtime `ridlc` embeds** for the second host of decision 10, and
    whether the export signature can be identical to the process host's stdin and
    stdout framing.

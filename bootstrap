@@ -14,7 +14,8 @@
 # a choice this script should not make for them. It names each missing tool
 # with the command that installs it and exits non-zero, so a fresh clone
 # reports what the gate needs up front instead of failing part-way through a
-# gate run (ADR-0009).
+# gate run (ADR-0009). Deno is the exception: when `deno` is not on PATH, it
+# downloads the release that .deno-version names into ~/.deno/bin.
 
 set -euo pipefail
 
@@ -61,6 +62,57 @@ if command -v rustup >/dev/null 2>&1; then
   fi
 fi
 
+# Deno, for the TypeScript package's gates. The pinned version is in
+# .deno-version, which CI reads too. Unlike the tools checked below, Deno is
+# installed here when no `deno` is on PATH: the release zip of the pinned
+# version is downloaded from GitHub, the same file CI downloads, and its one
+# file, `deno`, is unzipped into ~/.deno/bin. Nothing else is written: no shell
+# profile is edited, so ~/.deno/bin has to be added to PATH by the contributor,
+# and the `require deno` check below fails until it is. The download is skipped
+# when ~/.deno/bin/deno is already the pinned version. A `deno` already on PATH
+# is left as it is, even at another version: replacing it would force a global
+# change on the contributor (ADR-0009 decision 8).
+deno_version="$(tr -d '[:space:]' < .deno-version)"
+deno_dir="$HOME/.deno/bin"
+deno_hint="add ~/.deno/bin to PATH in your shell profile, then run ./bootstrap again"
+deno_install_page="see https://docs.deno.com/runtime/getting_started/installation/ and install deno $deno_version"
+if command -v deno >/dev/null 2>&1; then
+  deno_running="$(deno --version | sed -n 's/^deno \([^ ]*\).*/\1/p')"
+  if [ "$deno_running" != "$deno_version" ]; then
+    log "note: deno $deno_running is installed, and .deno-version pins $deno_version; CI runs $deno_version"
+  fi
+elif [ -x "$deno_dir/deno" ] \
+  && [ "$("$deno_dir/deno" --version | sed -n 's/^deno \([^ ]*\).*/\1/p')" = "$deno_version" ]; then
+  log "deno $deno_version already installed in $deno_dir"
+else
+  case "$(uname -s) $(uname -m)" in
+    "Darwin arm64") deno_target=aarch64-apple-darwin ;;
+    "Darwin x86_64") deno_target=x86_64-apple-darwin ;;
+    "Linux x86_64") deno_target=x86_64-unknown-linux-gnu ;;
+    "Linux aarch64") deno_target=aarch64-unknown-linux-gnu ;;
+    *) deno_target="" ;;
+  esac
+  if [ -z "$deno_target" ]; then
+    log "no Deno release is downloaded for $(uname -s) $(uname -m)"
+    deno_hint="$deno_install_page"
+  elif ! command -v unzip >/dev/null 2>&1; then
+    log "unzip is not on PATH, so the Deno release cannot be unpacked"
+    deno_hint="install unzip with your package manager, then run ./bootstrap again; or $deno_install_page"
+  else
+    log "installing deno $deno_version ($deno_target) into $deno_dir"
+    deno_tmp="$(mktemp -d)"
+    # Remove the temp dir when curl or unzip fails and the script exits.
+    trap 'rm -rf "$deno_tmp"' EXIT
+    curl -fsSL -o "$deno_tmp/deno.zip" \
+      "https://github.com/denoland/deno/releases/download/v${deno_version}/deno-${deno_target}.zip"
+    mkdir -p "$deno_dir"
+    unzip -o -q "$deno_tmp/deno.zip" deno -d "$deno_dir"
+    chmod +x "$deno_dir/deno"
+    rm -r "$deno_tmp"
+    trap - EXIT
+  fi
+fi
+
 missing=0
 require() {
   if command -v "$1" >/dev/null 2>&1; then
@@ -75,6 +127,7 @@ log "checking the tools 'just build' requires"
 require just "see https://just.systems/man/en/packages.html"
 require rustup "see https://rustup.rs — it is what applies rust-toolchain.toml"
 require mdbook "cargo install mdbook --locked"
+require deno "$deno_hint"
 require jq "see https://jqlang.org/download/ — just demo filters clippy output with it"
 require cargo-semver-checks "cargo install cargo-semver-checks --locked --version 0.51.0 — just freeze-check compares the public API against a baseline"
 

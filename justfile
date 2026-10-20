@@ -2208,12 +2208,13 @@ doc-path-check root="":
 # comment.
 #
 # Scanned, as tracked files: crates/, xtask/, examples/, editors/vscode/src/,
-# the docs/book/, docs/design/ and docs/technotes/ trees, and each file of
-# docs/specification/ that a docs/book/ file names in an `{{#include}}`, because
-# the book renders it. Not scanned, because an id there is the record's own
-# subject: docs/ROADMAP.md, docs/BACKLOG.md, docs/decisions/ (a decision traces
-# to the story it serves), the rest of docs/specification/ (its overview is the
-# ledger of the plan), docs/archive/, docs/wip/, CHANGELOG.md and AGENTS.md.
+# packages/, the docs/book/, docs/design/ and docs/technotes/ trees, and each
+# file of docs/specification/ that a docs/book/ file names in an
+# `{{#include}}`, because the book renders it. Not scanned, because an id
+# there is the record's own subject: docs/ROADMAP.md, docs/BACKLOG.md,
+# docs/decisions/ (a decision traces to the story it serves), the rest of
+# docs/specification/ (its overview is the ledger of the plan), docs/archive/,
+# docs/wip/, CHANGELOG.md and AGENTS.md.
 # Files at the repository root, such as Cargo.toml, are outside the scanned
 # trees on purpose.
 #
@@ -2228,7 +2229,7 @@ story-id-check root="":
     export LC_ALL=C
     # The scanned trees. Each must match a tracked file, so a renamed tree
     # fails the gate instead of leaving it scanning nothing.
-    scanned=(crates xtask examples editors/vscode/src docs/book docs/design docs/technotes)
+    scanned=(crates xtask examples editors/vscode/src packages docs/book docs/design docs/technotes)
     # Printed by the fixtures when every case passed. The no-argument form
     # fails unless it saw this line, so removing or skipping the fixtures call
     # fails the recipe instead of passing unnoticed.
@@ -2286,7 +2287,7 @@ story-id-check root="":
         # a literal one.
         # The scanned list is stated again here, so removing a tree from it
         # fails this recipe: the cases below build their trees from the list.
-        if [ "${scanned[*]}" != "crates xtask examples editors/vscode/src docs/book docs/design docs/technotes" ]; then
+        if [ "${scanned[*]}" != "crates xtask examples editors/vscode/src packages docs/book docs/design docs/technotes" ]; then
             echo "story-id-check: the scanned trees changed; update the expectation in the fixtures with the list." >&2
             exit 1
         fi
@@ -2501,7 +2502,7 @@ gate-parity:
     # the `build:` line, so removing or adding one has to be done twice. Without
     # this list the check would read its expectation from the line under test,
     # and a member removed from that line would only shrink what is checked.
-    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check freeze-check compile test lint wasm-check compat-check demo check"
+    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check"
     removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
     added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
     duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
@@ -2755,9 +2756,113 @@ install-check:
         echo "install-check: install.ps1 rejects an unknown RIDL_INSTALL_BINARY"
     fi
 
+# Check the TypeScript package packages/ridl-transport-ws with Deno: formatting
+# and lint of its .ts files, a type check for Deno and a second one against the
+# browser's DOM library (browser.deno.json), the unit tests under tests/, and a
+# dry run of the publish. The unit tests are named by their directory, because
+# a bare `deno test` also runs the end-to-end tests under e2e/, which need the
+# server that `ts-e2e` builds. Needs no compilation, so `pre-push` runs it.
+#
+# Deno is guarded as ADR-0009 decision 10 requires: a missing `deno` fails with
+# the command that installs it, never a skip. The pinned version is in
+# .deno-version; CI installs that one, and `./bootstrap` installs it when no
+# `deno` is on PATH. A different local version is not refused, for the reason
+# ADR-0009 decision 8 gives for `just` and mdBook.
+ts-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v deno >/dev/null 2>&1; then
+        echo "ts-check: deno is required and is not on PATH." >&2
+        echo "ts-check: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
+        exit 1
+    fi
+    cd packages/ridl-transport-ws
+    deno fmt --check
+    deno lint
+    deno check mod.ts
+    deno check --config browser.deno.json mod.ts
+    deno test --allow-read tests/
+    deno publish --dry-run --allow-dirty
+
+# Build the loopback server example of `ridl-transport-ws` and run the Deno
+# end-to-end test of packages/ridl-transport-ws against it. The test starts the
+# server from the path in RIDL_TRANSPORT_WS_SERVER. The example is reached
+# through `CARGO_TARGET_DIR` where it is set, as `demo` reads it, and passed as
+# an absolute path because the test runs from the package directory.
+ts-e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v deno >/dev/null 2>&1; then
+        echo "ts-e2e: deno is required and is not on PATH." >&2
+        echo "ts-e2e: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
+        exit 1
+    fi
+    cargo build --locked -p ridl-transport-ws --example loopback_server
+    server="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/loopback_server"
+    cd packages/ridl-transport-ws
+    RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts
+
+# Build the same loopback server example and run the browser end-to-end test
+# of packages/ridl-transport-ws: a headless Chromium-family browser opens a
+# page that loads the package and receives a live signal from the server.
+#
+# Not a member of `build`, on purpose: a contributor's build needs no browser.
+# CI's `typescript` job runs it. Because it is outside `build`, `gate-parity`
+# does not cover it, so the CI step that runs it is checked by reading, as for
+# `vscode-verify`.
+#
+# The browser is looked up before anything is built, in the order
+# e2e/browser.ts uses: RIDL_BROWSER, then google-chrome, google-chrome-stable,
+# chromium and chromium-browser on PATH, then the Google Chrome application on
+# macOS. When none is found, or RIDL_BROWSER names no executable file, the
+# recipe fails and names RIDL_BROWSER. The browser found is passed to the test
+# in RIDL_BROWSER, so the test starts the one the recipe checked. On Linux,
+# RIDL_BROWSER_NO_SANDBOX=1 starts the browser with --no-sandbox.
+ts-browser-e2e:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v deno >/dev/null 2>&1; then
+        echo "ts-browser-e2e: deno is required and is not on PATH." >&2
+        echo "ts-browser-e2e: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
+        exit 1
+    fi
+    browser=""
+    if [ -n "${RIDL_BROWSER:-}" ]; then
+        if [ ! -f "$RIDL_BROWSER" ] || [ ! -x "$RIDL_BROWSER" ]; then
+            echo "ts-browser-e2e: RIDL_BROWSER is '$RIDL_BROWSER', which is not an executable file." >&2
+            echo "ts-browser-e2e: set RIDL_BROWSER to the path of a Chromium-family browser." >&2
+            exit 1
+        fi
+        browser="$RIDL_BROWSER"
+    else
+        for name in google-chrome google-chrome-stable chromium chromium-browser; do
+            if found="$(command -v "$name" 2>/dev/null)"; then
+                browser="$found"
+                break
+            fi
+        done
+        mac_chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        if [ -z "$browser" ] && [ -f "$mac_chrome" ]; then
+            browser="$mac_chrome"
+        fi
+    fi
+    if [ -z "$browser" ]; then
+        echo "ts-browser-e2e: no browser found." >&2
+        echo "ts-browser-e2e: set RIDL_BROWSER to the path of a Chromium-family browser, or install Google Chrome (https://www.google.com/chrome/) or Chromium (https://www.chromium.org/getting-involved/download-chromium/)." >&2
+        exit 1
+    fi
+    echo "ts-browser-e2e: browser: $browser"
+    cargo build --locked -p ridl-transport-ws --example loopback_server
+    server="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/loopback_server"
+    cd packages/ridl-transport-ws
+    RIDL_BROWSER="$browser" RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/browser_test.ts
+
 # Full local gate: confirm the toolchain and CI wiring, check Rust formatting,
-# build the docs book, compile the code, run the tests, lint the Rust, check the
-# wasm target builds, then run the connective-tissue lint checks.
+# build the docs book, check the TypeScript package, compile the code, run the
+# tests, lint the Rust, check the wasm target builds, run the TypeScript
+# package's end-to-end test in Deno, then run the connective-tissue lint checks.
+# The package's browser test, `ts-browser-e2e`, is not a member: it needs a
+# browser, and CI runs it.
 #
 # The members cover ADR-0008 decision 11's enumeration and the four CI checks
 # ADR-0009 brought back to this side. Two of decision 11's were absent until
@@ -2766,10 +2871,12 @@ install-check:
 # reachable from here, because a member that is not a dependency of `build` is
 # not covered by `gate-parity`'s CI-parity check.
 #
-# The four members that need no compilation run first, so a wrong toolchain, an
-# unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
-# report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check freeze-check compile test lint wasm-check compat-check demo check
+# The ten members before `compile` do not compile the workspace (freeze-check
+# compiles only xtask), so they run first: a wrong toolchain, an unwired CI job,
+# a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
+# TypeScript check all report before the workspace compiles rather than after a
+# full compile and test run.
+build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:
@@ -2816,11 +2923,12 @@ lint-commits base="main":
     fi
 
 # Lint and static-check gate before pushing — skips `freeze-check`, `compile`,
-# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, and `install-check`.
+# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-e2e`, and
+# `install-check`.
 # Wired as the pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs
 # the full `just build` gate on the PR; `just verify` runs that same gate
 # locally before opening one.
-pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-check story-id-check link-check book-check
+pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-check story-id-check link-check book-check ts-check
 
 # Commit-message lint over commits not yet on origin/main, then build.
 # Run before opening a PR.

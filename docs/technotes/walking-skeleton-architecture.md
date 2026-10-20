@@ -348,6 +348,18 @@ crate the workspace holds — see `AGENTS.md` for that.
   [the design record](../design/mcp-workspace-tools.md) and the decisions in
   [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md).
 
+- **`packages/ridl-transport-ws`** — the TypeScript client of the WebSocket
+  binding, `@driftsys/ridl-transport-ws`, for Deno and the browser. It is the
+  consuming side of a frame session: it opens one WebSocket with the subprotocol
+  `ridl-ws-v1`, sends `attach`, `subscribe`, `unsubscribe`, `read` and
+  `request`, and applies the consumer's rules that need no catalog. It has no
+  dependency and is not published. It carries a payload as bytes and does not
+  decode it. `packages/` is not a Cargo workspace member and holds TypeScript
+  only; Deno builds and tests it (`just ts-check`, `just ts-e2e`, and
+  `just ts-browser-e2e` in CI), at the version `.deno-version` pins. The version
+  in its `deno.json` follows the workspace version. See
+  [its design record](../design/ridl-transport-ws-ts.md).
+
 - **`evals/`** — the public corpus of translated upstream definitions, the
   calibration records and the eval tasks that set the design lints' levels. It
   is not a workspace member and holds no crate; see

@@ -20,20 +20,24 @@ Version: 0.2.0
 > written from it alone, without reading the code in this repository. Where this
 > document and an ADR disagree, the ADR wins and this document is corrected.
 
-> **As built.** One crate in this workspace, `ridl-transport-ws`, speaks this
-> frame over WebSocket (§11.1). It serves the observe and call ports of a
-> provider runtime, applies the exact-match rule of §6.1 at `attach`, and keeps
-> the last 64 settled responses of a session for duplicate suppression instead
-> of keeping each until its response bound has passed (§7). The runtime here,
-> `ridl-loopback`, runs in process: it carries bytes from a provider handle to a
-> consumer handle over one in-memory store, opens no socket, and has no wire
-> format ([its design record](../design/ridl-loopback.md)). Neither enforces a
-> timing rule or a contract clause on the provider side, so every sentence below
-> about those describes the specification, not behaviour a shipped runtime
-> performs. The first binding is the WebSocket transport (driftsys/ridl#265);
-> the second is a runtime's own binder contract on Android, outside this
-> repository (§11.2, which reverses an earlier AIDL binding generated per
-> interface).
+> **As built.** Two packages in this workspace speak this frame over WebSocket
+> (§11.1): the crate `ridl-transport-ws`, the serving side, and the TypeScript
+> package `@driftsys/ridl-transport-ws` (`packages/ridl-transport-ws/`), the
+> consuming side ([the crate's design record](../design/ridl-transport-ws.md),
+> [the package's design record](../design/ridl-transport-ws-ts.md)). The crate
+> serves the observe and call ports of a provider runtime, applies the
+> exact-match rule of §6.1 at `attach`, and keeps the last 64 settled responses
+> of a session for duplicate suppression instead of keeping each until its
+> response bound has passed (§7). The runtime here, `ridl-loopback`, runs in
+> process: it carries bytes from a provider handle to a consumer handle over one
+> in-memory store, opens no socket, and has no wire format
+> ([its design record](../design/ridl-loopback.md)). Neither the crate nor
+> `ridl-loopback` enforces a timing rule or a contract clause on the provider
+> side, so every sentence below about those describes the specification, not
+> behaviour a shipped runtime performs. The first binding is the WebSocket
+> transport (driftsys/ridl#265); the second is a runtime's own binder contract
+> on Android, outside this repository (§11.2, which reverses an earlier AIDL
+> binding generated per interface).
 >
 > The catalog descriptor carries the list of compatible earlier catalog hashes
 > that §6.1 names, and no runtime in this workspace reads it at `attach`.
@@ -883,8 +887,10 @@ payload rules of §9, or the control-plane operations and their answers.
 
 Two bindings are named: one by the transport that carries it, and one by the
 platform whose runtimes write their own. The WebSocket binding is specified in
-§11.1 and its Rust transport crate, `ridl-transport-ws`, is built; a binder
-contract is not written in this repository.
+§11.1 and its two transports are built: the Rust crate `ridl-transport-ws` and
+the TypeScript package `@driftsys/ridl-transport-ws` at
+`packages/ridl-transport-ws/`. A binder contract is not written in this
+repository.
 
 ### 11.1 WebSocket
 
@@ -892,8 +898,9 @@ The WebSocket binding carries this frame between a consuming runtime that opens
 a WebSocket connection and a providing runtime that accepts it.
 `ridl-transport-ws` (driftsys/ridl#265,
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 6) is its Rust crate, and the TypeScript WebSocket package of decision
-7 is the same binding for Deno and the browser, so the two ends of one
+decision 6) is its Rust crate, and `@driftsys/ridl-transport-ws`
+(`packages/ridl-transport-ws/`, decision 7) is the same binding for Deno and the
+browser; it carries payload bytes without decoding them, so the two ends of one
 connection may be a Rust runtime and a TypeScript one. This section is the
 binding document: it states the nine items of §10 and adds nothing to the frame.
 The binding is **version 1** and carries frame version 1. The reasoning behind

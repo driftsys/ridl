@@ -28,10 +28,12 @@ whose "The ports" section states the contract the server consumes.
 
 The first consumer is an external debug and test portal: a small daemon embeds
 the server, and a browser or Deno client (the TypeScript WebSocket package,
-driftsys/ridl#982) observes signals, receives events and sends calls through it.
-The TypeScript client, the wasm codec, the observability server and the
-test-harness drivers build on this crate's wire behaviour, so the wire behaviour
-is the part that must be right.
+[`packages/ridl-transport-ws`](../../packages/ridl-transport-ws/README.md),
+whose as-built record is [`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md))
+observes signals, receives events and sends calls through it. The TypeScript
+client, the wasm codec, the observability server and the test-harness drivers
+build on this crate's wire behaviour, so the wire behaviour is the part that
+must be right.
 
 **What the crate does.**
 
@@ -658,6 +660,10 @@ All under `crates/ridl-transport-ws/`.
   consumer-only port. The contract is a hand-written test catalog, not a
   generated face, because a generated face over a WebSocket client needs a
   public Rust client, which the crate does not ship (driftsys/ridl#989).
+- **The loopback server** (`examples/loopback_server.rs`). Serves the scenario's
+  test catalog and provider on `127.0.0.1:0`, one thread and one attachment per
+  connection, prints `port <n>`, and exits when its standard input ends. It
+  serves the TypeScript package's end-to-end tests. The package leaves it out.
 
 The test targets `serve` and `scenario` require the `server` feature, so
 `--no-default-features` still runs the codec's tests.

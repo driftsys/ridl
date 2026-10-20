@@ -668,3 +668,22 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decision 6 as amended 2026-10-19. The follow-ups are driftsys/ridl#984 to
   driftsys/ridl#989.
+
+- **2026-10-20-ts-transport-ws-design.md** and
+  **2026-10-20-ts-transport-ws-plan.md** — the TypeScript WebSocket package
+  `@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`
+  (driftsys/ridl#982): the consuming side of the frame specification §11.1 for
+  Deno and the browser, carrying payload bytes unread, the cargo example server
+  of `ridl-transport-ws` its end-to-end tests run against, and the gates
+  `ts-check`, `ts-e2e` and `ts-browser-e2e`. Both are archived verbatim; the
+  as-built behaviour differs from them in places (the call table in
+  `src/calls.ts`, the `unexpected-outcome` discard, an invalid call bound that
+  rejects rather than throws, listeners guarded with `reportError`, the
+  end-to-end tests attaching with FlatBuffers, and `./bootstrap` downloading the
+  Deno release zip). The as-built behaviour, with the decisions D-1 to D-18 and
+  the alternatives considered, is in
+  [the `ridl-transport-ws-ts` design record](../design/ridl-transport-ws-ts.md);
+  the dependency decision is
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decision 6 as amended 2026-10-20. The follow-ups are driftsys/ridl#991 and
+  driftsys/ridl#992.

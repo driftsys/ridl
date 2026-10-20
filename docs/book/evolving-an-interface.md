@@ -112,8 +112,11 @@ the two are separate questions: the hash identifies an exact version. A
 compatible change that reaches the hash makes a new version, and a change that
 leaves the hash unchanged makes none.
 
-The one transport in this workspace, `ridl-transport-ws`, reads no descriptor
-and accepts an `attach` on an exact match of the hash only, so it refuses an
+The one transport in this workspace is the WebSocket binding. The Rust crate
+`ridl-transport-ws` serves it, and the TypeScript package
+`@driftsys/ridl-transport-ws` (`packages/ridl-transport-ws/`) is its consuming
+side, for Deno and the browser. The crate reads no descriptor and accepts an
+`attach` on an exact match of the hash only, so it refuses an
 earlier hash from the list, which the last column shows as accepted. The last
 column states what the frame specification
 ([section 6.1](reference/frame.md#61-attach-and-attached)) specifies for an

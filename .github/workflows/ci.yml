@@ -42,6 +42,8 @@ env:
   # applies rust-toolchain.toml to a contributor too, but nothing applies these
   # two, so a contributor runs whatever their package manager gave them.
   # ADR-0009 decision 8 records that asymmetry and why it is not closed here.
+  # The Deno pin is not here: it is in .deno-version, because `./bootstrap`
+  # reads it too and installs that version when a contributor has no `deno`.
   JUST_VERSION: 1.38.0
   MDBOOK_VERSION: 0.4.40
 
@@ -59,11 +61,15 @@ jobs:
   # files under docs/specification/ directly, and a trigger list missed three of
   # those on its first draft.
   #
-  # Two jobs are path-filtered, and `book` is not:
-  #   - `rust` and `wasm` skip when every changed file is documentation or
-  #     editor tooling that no Rust test or recipe reads. docs/book/ and
-  #     docs/specification/ are not on the list: book_examples.rs compiles the
-  #     docs/book/ fences, and Rust code reads docs/specification/ files.
+  # Four jobs are path-filtered, and `book` is not:
+  #   - `rust`, `wasm` and `typescript` skip when every changed file is
+  #     documentation or editor tooling that no Rust test or recipe reads.
+  #     docs/book/ and docs/specification/ are not on the list:
+  #     book_examples.rs compiles the docs/book/ fences, and Rust code reads
+  #     docs/specification/ files. `typescript` reads the same `rust` flag: its
+  #     end-to-end tests build a Rust example, and its unit tests read
+  #     docs/specification/. packages/ is not on the list, so a change to the
+  #     TypeScript package runs it.
   #   - `markdown` (prim) skips when every changed file is Rust source. prim
   #     also covers JSON, YAML and TOML, so any other file runs it.
   #   - `book` always runs on a pull request: `just doc-path-check` scans Rust
@@ -249,6 +255,47 @@ jobs:
       - run: just wasm-check
       - run: just compat-check
 
+  # The TypeScript package packages/ridl-transport-ws. `ts-check` and `ts-e2e`
+  # are members of `just build`; `ts-browser-e2e` is not, because a
+  # contributor's build needs no browser, so `gate-parity` does not see its step
+  # here and it is checked by reading. ubuntu-latest has Google Chrome on PATH.
+  # RIDL_BROWSER_NO_SANDBOX starts it with --no-sandbox, which a runner may need
+  # and which is harmless where it is not.
+  typescript:
+    name: typescript
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install the pinned toolchain
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: install just
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" just
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/just" --version
+      # The version is read from .deno-version, the one place it is pinned.
+      - name: install deno
+        run: |
+          set -o pipefail
+          deno_version="$(tr -d '[:space:]' < .deno-version)"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$RUNNER_TEMP/deno.zip" \
+            "https://github.com/denoland/deno/releases/download/v${deno_version}/deno-x86_64-unknown-linux-gnu.zip"
+          unzip -o -q "$RUNNER_TEMP/deno.zip" -d "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/deno" --version
+      - run: just ts-check
+      - run: just ts-e2e
+      - run: just ts-browser-e2e
+        env:
+          RIDL_BROWSER_NO_SANDBOX: "1"
+
   commit-lint:
     name: commit-lint
     if: github.event_name == 'pull_request'
@@ -375,7 +422,7 @@ jobs:
     # Every job, so a red anywhere fails the aggregate. "skipped" is accepted:
     # commit-lint only runs on pull requests, and the path-filtered jobs skip
     # when `changes` finds nothing for them.
-    needs: [changes, markdown, book, rust, wasm, commit-lint]
+    needs: [changes, markdown, book, rust, wasm, typescript, commit-lint]
     runs-on: ubuntu-latest
     steps:
       - name: check required jobs
