@@ -172,6 +172,48 @@ test("corrupt and busy reject with their categories", async () => {
   ]);
 });
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+test("a command whose response arrives before its bound resolves", async () => {
+  const { socket, session } = await attached();
+  const call = session.command(1, 6, new Uint8Array(), { bound: 50 });
+  await sleep(10);
+  socket.deliver(response(COMMAND, 1n, { outcome: "accepted" }));
+  assert.equal(await call, undefined);
+});
+
+test("a query waits for its bound before it rejects timeout", async () => {
+  const { session } = await attached();
+  let settled = false;
+  const call = session.query(1, 7, new Uint8Array(), { bound: 30 });
+  const watched = call.then(
+    () => settled = true,
+    () => settled = true,
+  );
+  await sleep(10);
+  assert.equal(settled, false);
+  await assert.rejects(call, isFailure("timeout"));
+  await watched;
+});
+
+test("a contract response that echoes another kind settles the call", async () => {
+  const { socket, session, notes } = await attached();
+  const call = session.query(1, 7, new Uint8Array(), BOUND);
+  socket.deliver(
+    response(COMMAND, 1n, {
+      outcome: "contract",
+      contract: { category: "unknown-interaction" },
+    }),
+  );
+  await assert.rejects(call, (e: unknown) =>
+    e instanceof SessionError &&
+    e.failure.category === "contract" &&
+    e.failure.contract.category === "unknown-interaction");
+  assert.deepEqual(notes, []);
+});
+
 test("a command with no response within its bound rejects undelivered", async () => {
   const { session } = await attached();
   await assert.rejects(
@@ -271,10 +313,10 @@ test("a call after the session ended rejects down and sends nothing", async () =
   await session.closed;
 });
 
-test("a bound of 0 or NaN throws RangeError and sends nothing", async () => {
+test("a bound of 0 or NaN rejects with RangeError and sends nothing", async () => {
   const { socket, session } = await attached();
   const before = socket.sent.length;
-  for (const bound of [0, NaN, -1, Infinity]) {
+  for (const bound of [0, NaN, -1, Infinity, 2_147_483_648]) {
     await assert.rejects(
       session.command(1, 6, new Uint8Array(), { bound }),
       RangeError,
@@ -291,6 +333,14 @@ test("a bound of 0 or NaN throws RangeError and sends nothing", async () => {
   assert.equal(sent.form === "request" && sent.envelope.seq, 1n);
   socket.deliver(response(COMMAND, 1n, { outcome: "accepted" }));
   await call;
+  // The longest delay `setTimeout` takes is a valid bound.
+  const longest = session.query(1, 7, new Uint8Array(), {
+    bound: 2_147_483_647,
+  });
+  socket.deliver(
+    response(QUERY, 2n, { outcome: "reply", payload: Uint8Array.of(1) }),
+  );
+  assert.deepEqual(await longest, Uint8Array.of(1));
 });
 
 test("a response whose outcome does not fit the call's kind is discarded and the call stays in flight", async () => {
@@ -302,8 +352,8 @@ test("a response whose outcome does not fit the call's kind is discarded and the
     response(COMMAND, 2n, { outcome: "reply", payload: Uint8Array.of(1) }),
   );
   assert.deepEqual(notes.map((n) => n.note === "discarded" && n.reason), [
-    "unknown-correlation",
-    "unknown-correlation",
+    "unexpected-outcome",
+    "unexpected-outcome",
   ]);
   socket.deliver(
     response(QUERY, 1n, { outcome: "reply", payload: Uint8Array.of(2) }),

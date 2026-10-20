@@ -14,6 +14,9 @@ import { Kind } from "./frame.ts";
 import type { Frame } from "./frame.ts";
 import { SessionError } from "./errors.ts";
 
+/** The longest bound `setTimeout` can wait, in milliseconds: 2^31 - 1. */
+const MAX_BOUND = 2_147_483_647;
+
 type Response = Extract<Frame, { form: "response" }>;
 
 type Call =
@@ -73,29 +76,35 @@ export class Calls {
   }
 
   /**
-   * Settles the call a `response` names and forgets it. Returns `false`, and
-   * changes nothing, when `correlation` names no call in flight, or names a
-   * call whose kind the outcome does not fit: `accepted` settles only a
-   * command and `reply` only a query.
+   * Settles the call a `response` names and forgets it, and returns `null`.
+   * Returns why the response was not used, and changes nothing, when
+   * `correlation` names no call in flight (`unknown-correlation`) or names a
+   * call whose kind the outcome does not fit (`unexpected-outcome`):
+   * `accepted` settles only a command and `reply` only a query.
    */
-  settle(frame: Response): boolean {
+  settle(
+    frame: Response,
+  ): "unknown-correlation" | "unexpected-outcome" | null {
     const call = this.#inFlight.get(frame.correlation);
-    if (!call) return false;
+    if (!call) return "unknown-correlation";
     const outcome = frame.outcome;
+    // The outcome is compared with the call's kind, not with
+    // `frame.target.kind`: §6.4 lets a contract(UnknownInteraction) response
+    // echo another kind.
     if (
       (outcome.outcome === "accepted" && call.kind !== Kind.Command) ||
       (outcome.outcome === "reply" && call.kind !== Kind.Query)
     ) {
-      return false;
+      return "unexpected-outcome";
     }
     this.#forget(frame.correlation, call);
     switch (outcome.outcome) {
       case "accepted":
         if (call.kind === Kind.Command) call.resolve();
-        return true;
+        return null;
       case "reply":
         if (call.kind === Kind.Query) call.resolve(outcome.payload);
-        return true;
+        return null;
       case "contract":
         call.reject(
           new SessionError({
@@ -103,11 +112,11 @@ export class Calls {
             contract: outcome.contract,
           }),
         );
-        return true;
+        return null;
       case "corrupt":
       case "busy":
         call.reject(new SessionError({ category: outcome.outcome }));
-        return true;
+        return null;
     }
   }
 
@@ -131,10 +140,11 @@ export class Calls {
     reject: (e: unknown) => void,
     make: (timer: ReturnType<typeof setTimeout>) => Call,
   ): void {
-    if (!Number.isFinite(bound) || bound <= 0) {
+    // `setTimeout` takes a signed 32-bit delay; a longer one fires at once.
+    if (!Number.isFinite(bound) || bound <= 0 || bound > MAX_BOUND) {
       reject(
         new RangeError(
-          `a call bound must be a finite number of milliseconds greater than 0, not ${bound}`,
+          `a call bound must be a number of milliseconds greater than 0 and at most ${MAX_BOUND}, not ${bound}`,
         ),
       );
       return;

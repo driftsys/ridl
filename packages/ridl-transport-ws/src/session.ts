@@ -68,6 +68,7 @@ export type Note =
       | "stale"
       | "not-subscribed"
       | "unknown-correlation"
+      | "unexpected-outcome"
       | "unexpected-answer";
     /** The frame, when the codec could read it. */
     frame?: Frame;
@@ -446,15 +447,11 @@ export class Session {
       case "occurrence":
         this.#onOccurrence(frame);
         return;
-      case "response":
-        if (!this.#calls.settle(frame)) {
-          this.#note({
-            note: "discarded",
-            reason: "unknown-correlation",
-            frame,
-          });
-        }
+      case "response": {
+        const reason = this.#calls.settle(frame);
+        if (reason) this.#note({ note: "discarded", reason, frame });
         return;
+      }
       default:
         // A second `attached`, or a form only a consumer sends.
         this.#violate("unexpected-form");
