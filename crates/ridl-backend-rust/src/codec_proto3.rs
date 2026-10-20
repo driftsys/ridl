@@ -820,6 +820,56 @@ fn count_ident(index: usize) -> Ident {
     format_ident!("__c{}", index)
 }
 
+/// The statement inside a walk over a message's fields that runs the body of
+/// the known field `__field.number` names, and skips an unknown field, which
+/// the reader has already moved past. Two or more known fields are a
+/// `match`; one is an `if`, and none reads nothing, so the emitted code draws
+/// neither `clippy::single_match` nor `clippy::match_single_binding`.
+fn number_dispatch(arms: &[(Literal, TokenStream)]) -> TokenStream {
+    match arms {
+        [] => quote! { let _ = __field; },
+        [(number, body)] => quote! {
+            if __field.number == #number {
+                #body
+            }
+        },
+        _ => {
+            let arms = arms
+                .iter()
+                .map(|(number, body)| quote! { #number => { #body } });
+            quote! {
+                match __field.number {
+                    #(#arms)*
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+/// The check `verify` runs on the count `counter` of a bounded repeated
+/// field once the walk is over: the rule and the owner of the shared
+/// `count_check_of`, with a two-sided bound written as a range `contains`,
+/// because `counter` is a local the walk counts and a pair of comparisons on
+/// it draws `clippy::manual_range_contains`.
+fn counter_check(owner: &str, min: u64, max: u64, counter: &Ident) -> TokenStream {
+    if min == 0 || min == max || max == u64::MAX {
+        return count_check_of(owner, min, max, quote! { #counter });
+    }
+    let low = Literal::usize_suffixed(min as usize);
+    let high = Literal::usize_suffixed(max as usize);
+    quote! {
+        if !(#low..=#high).contains(&#counter) {
+            return ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(
+                ::ridl_rt::payload::Violation {
+                    type_name: ::core::option::Option::Some(#owner),
+                    rule: ::ridl_rt::payload::Rule::Length,
+                },
+            ));
+        }
+    }
+}
+
 /// The two fields of a map entry message: the key at 1 and the value at 2,
 /// reached as the two positions of the domain pair.
 fn entry_fields(key: &Wire, value: &Wire) -> [Field; 2] {
@@ -2081,7 +2131,7 @@ impl<'a> Codec<'a> {
         }
         let count = Literal::usize_suffixed(fields.len());
         let mut counters: Vec<TokenStream> = Vec::new();
-        let mut arms: Vec<TokenStream> = Vec::new();
+        let mut arms: Vec<(Literal, TokenStream)> = Vec::new();
         let mut after: Vec<TokenStream> = Vec::new();
         for (index, field) in fields.iter().enumerate() {
             let number = Literal::u32_suffixed(field.number);
@@ -2091,7 +2141,7 @@ impl<'a> Codec<'a> {
                 counters.push(quote! { let mut #counter = 0usize; });
             }
             let body = self.verify_arm(owner, field, index, buf)?;
-            arms.push(quote! { #number => { #body } });
+            arms.push((number, body));
             let when_absent = self.verify_absent(owner, field);
             if !when_absent.is_empty() {
                 after.push(quote! {
@@ -2102,22 +2152,19 @@ impl<'a> Codec<'a> {
             }
             match &field.wire {
                 Wire::Array { min, max, .. } | Wire::Map { min, max, .. } if !field.optional => {
-                    after.push(count_check_of(owner, *min, *max, quote! { #counter }));
+                    after.push(counter_check(owner, *min, *max, &counter));
                 }
                 _ => {}
             }
         }
+        let dispatch = number_dispatch(&arms);
         Ok(quote! {
             let mut __seen = [false; #count];
             #(#counters)*
             let mut __reader = ::ridl_rt::proto3::Reader::new(#buf);
             while let ::core::option::Option::Some(__field) = __reader.next() {
                 let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                match __field.number {
-                    #(#arms)*
-                    // An unknown field: the reader has moved past it.
-                    _ => {}
-                }
+                #dispatch
             }
             #(#after)*
         })
@@ -2340,35 +2387,34 @@ impl<'a> Codec<'a> {
 
     /// The walk of a union's bytes: exactly one arm, written once.
     fn union_verify_walk(&self, message: &Message) -> Result<TokenStream, GenerateError> {
-        let mut arms: Vec<TokenStream> = Vec::new();
+        let mut arms: Vec<(Literal, TokenStream)> = Vec::new();
         let duplicate = structure_error("Duplicate");
         let wrong_type = structure_error("WireType");
         for field in &message.fields {
             let number = Literal::u32_suffixed(field.number);
             let (pattern, checks) = self.present_checks(&message.owner, &field.wire)?;
-            arms.push(quote! {
-                #number => {
-                    if __arm {
-                        #duplicate
-                    }
-                    __arm = true;
-                    match __field.value {
-                        #pattern => { #checks }
-                        _ => { #wrong_type }
-                    }
-                }
-            });
+            arms.push((
+                number,
+                quote! {
+                        if __arm {
+                            #duplicate
+                        }
+                        __arm = true;
+                        match __field.value {
+                            #pattern => { #checks }
+                            _ => { #wrong_type }
+                        }
+                },
+            ));
         }
         let missing = missing_required();
+        let dispatch = number_dispatch(&arms);
         Ok(quote! {
             let mut __arm = false;
             let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
             while let ::core::option::Option::Some(__field) = __reader.next() {
                 let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                match __field.number {
-                    #(#arms)*
-                    _ => {}
-                }
+                #dispatch
             }
             // A union holds exactly one arm: no arm is no value.
             if !__arm {
@@ -2503,7 +2549,7 @@ impl<'a> Codec<'a> {
             return Ok(self.union_decode_fn(message, ty, &name));
         }
         let mut inits: Vec<TokenStream> = Vec::new();
-        let mut arms: Vec<TokenStream> = Vec::new();
+        let mut arms: Vec<(Literal, TokenStream)> = Vec::new();
         let mut builds: Vec<TokenStream> = Vec::new();
         for (index, field) in message.fields.iter().enumerate() {
             let binding = format_ident!("__f{}", index);
@@ -2515,7 +2561,7 @@ impl<'a> Codec<'a> {
             };
             inits.push(quote! { let mut #binding = #default; });
             let body = self.decode_arm(field, &binding)?;
-            arms.push(quote! { #number => { #body } });
+            arms.push((number, body));
             builds.push(match &field.wire {
                 // A fixed-length array is decoded into a `Vec` and moved into
                 // its `[T; N]`; `verify` has checked the count, so the
@@ -2533,15 +2579,13 @@ impl<'a> Codec<'a> {
             });
         }
         let walk = if used {
+            let dispatch = number_dispatch(&arms);
             quote! {
                 let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
                 while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) =
                     __reader.next()
                 {
-                    match __field.number {
-                        #(#arms)*
-                        _ => {}
-                    }
+                    #dispatch
                 }
             }
         } else {
@@ -2579,19 +2623,21 @@ impl<'a> Codec<'a> {
         let first = &message.fields[0];
         let first_variant = ident(&first.name);
         let first_default = self.decode_default(&first.wire);
-        let mut arms: Vec<TokenStream> = Vec::new();
+        let mut arms: Vec<(Literal, TokenStream)> = Vec::new();
         for field in &message.fields {
             let number = Literal::u32_suffixed(field.number);
             let variant = ident(&field.name);
             let (pattern, value) = self.decode_present(&field.wire);
-            arms.push(quote! {
-                #number => {
+            arms.push((
+                number,
+                quote! {
                     if let #pattern = __field.value {
                         __out = #ty::#variant(#value);
                     }
-                }
-            });
+                },
+            ));
         }
+        let dispatch = number_dispatch(&arms);
         quote! {
             #[allow(deprecated, non_snake_case)]
             pub(crate) fn #name(buf: &[::core::primitive::u8]) -> #ty {
@@ -2600,10 +2646,7 @@ impl<'a> Codec<'a> {
                 while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) =
                     __reader.next()
                 {
-                    match __field.number {
-                        #(#arms)*
-                        _ => {}
-                    }
+                    #dispatch
                 }
                 __out
             }
@@ -2907,7 +2950,7 @@ impl<'a> Codec<'a> {
 /// proto3 reserves or exceeds, a reference that does not resolve — before
 /// the state is read, so a `RefusedMember` that reaches here has no bound
 /// and nothing to refuse.
-fn bound_state(state: Option<&v1::SizeState>) -> Result<Option<u32>, &'static str> {
+pub(crate) fn bound_state(state: Option<&v1::SizeState>) -> Result<Option<u32>, &'static str> {
     match state.and_then(|state| state.state.as_ref()) {
         Some(v1::size_state::State::Bounded(bound)) => Ok(Some(*bound)),
         Some(v1::size_state::State::Absent(absent)) => {

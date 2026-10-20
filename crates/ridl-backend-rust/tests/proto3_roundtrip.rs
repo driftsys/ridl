@@ -548,8 +548,8 @@ fn main() {
 /// argument message of a call with two parameters each near the `u32`
 /// limit — gets a `Codec<Proto3>` with `BOUND = None` rather than a
 /// refusal, while the package's declarations, which all have a bound, keep
-/// their `Payload<Proto3>`. With `[Proto3]` alone no face and no size table
-/// is emitted, so nothing names the bound the root does not have.
+/// their `Payload<Proto3>`. The interface gets a `Bounds<Proto3>` and no
+/// `Sizes<Proto3>`, so nothing names the bound the root does not have.
 #[test]
 fn an_interaction_root_without_a_bound_gets_a_codec_without_a_size() {
     let package = ir::compile_fixture("proto3_unbounded_call.ridl");
@@ -580,6 +580,10 @@ fn an_interaction_root_without_a_bound_gets_a_codec_without_a_size() {
     assert!(
         !dense.contains("Sizes<::ridl_rt::encoding::Proto3>"),
         "no proto3 size table is emitted"
+    );
+    assert!(
+        dense.contains("impl::ridl_rt::contract::Bounds<::ridl_rt::encoding::Proto3>forProbe{"),
+        "the interface states its rows as `Bounds<Proto3>`"
     );
     let layout = ridl_backend_rust::proto3_layout(&package, &[]).expect("the layout does not size");
     assert!(

@@ -129,6 +129,7 @@ pub fn generate_face_with(
     if !emits_face(encodings) {
         return render(package_items(&ctx, &[], encodings)?);
     }
+    ctx.encodings = encodings.to_vec();
     // This entry point refuses rather than skips, so every named interface's
     // descriptors are emitted, and the face of every interface that has one,
     // and each one claims its names. A refusal returns before any output, so
@@ -229,6 +230,7 @@ pub(crate) fn generate_pipeline_over(
         // applies and nothing is refused.
         return render(package_items(&ctx, &[], encodings)?);
     }
+    ctx.encodings = encodings.to_vec();
     // A malformed catalog hash refuses the whole model here; inside the
     // per-interface walk below it would only skip each interface.
     descriptors::catalog_hash(&ctx)?;
@@ -283,16 +285,17 @@ pub(crate) fn generate_pipeline_over(
 }
 
 /// Whether `encodings` asks for the descriptors and the face beside the
-/// codec.
+/// codec: whenever it names a codec at all.
 ///
-/// The descriptors' size table and the face name
-/// `Sizes<::ridl_rt::encoding::FlatBuffers>` and `Payload<FlatBuffers>` at
-/// every site, so both are emitted only when the list names `flatbuffers`.
-/// A list that names `proto3` alone carries the domain types and the proto3
-/// codec, and no table and no face: the proto3 size table and the face over
-/// it are not emitted yet.
+/// The descriptors carry one size table per encoding in the list, and the
+/// face is generic over its port's encoding, so a list that names `proto3`
+/// alone carries the proto3 table and the same face as a list that names
+/// `flatbuffers`. An interface whose payload has no proto3 bound has no
+/// proto3 table (`docs/design/interaction-face.md`), so its face, which
+/// holds the table's buffers, cannot be bound to a proto3 port; the package
+/// still compiles.
 fn emits_face(encodings: &[WireEncoding]) -> bool {
-    encodings.contains(&WireEncoding::FlatBuffers)
+    !encodings.is_empty()
 }
 
 /// `indices`, positions in `model.interfaces`, as the `u32`s [`docs::Links`]
@@ -561,9 +564,9 @@ impl WireEncoding {
 
     /// Checks that every encoding asked for is one some emitter writes.
     ///
-    /// The descriptors and the face write the FlatBuffers path at their own
-    /// sites and are emitted only when the list names `flatbuffers`
-    /// ([`emits_face`]); each codec is emitted by its own module. A new
+    /// The descriptors write one size table per encoding of the list, and
+    /// the face is generic over its port's encoding ([`emits_face`]); each
+    /// codec is emitted by its own module. A new
     /// variant here would be asked for with no emitter behind it unless
     /// [`package_items`] learns to dispatch it, and this match is where that
     /// shows up as a compile error rather than as wrong output.
@@ -809,6 +812,11 @@ pub(crate) struct Ctx<'a> {
     /// ([`docs::Links`]). Empty unless the entry point emits a face: it sets
     /// the set before it renders any doc.
     faced: BTreeSet<u32>,
+    /// The encodings the entry point emits a codec for, which the
+    /// descriptors emit one size table each for. Empty unless the entry point
+    /// emits the descriptors: it sets the list before any descriptor is
+    /// built.
+    pub(crate) encodings: Vec<WireEncoding>,
 }
 
 impl<'a> Ctx<'a> {
@@ -840,6 +848,7 @@ impl<'a> Ctx<'a> {
             visiting: RefCell::new(HashSet::new()),
             _build_packages: BuildPackages::install(model),
             faced: BTreeSet::new(),
+            encodings: Vec::new(),
         }
     }
 

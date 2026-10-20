@@ -47,6 +47,17 @@ fn compile_face(
     consumer: &str,
     std: bool,
 ) -> (String, std::process::Output) {
+    compile_face_in(name, source, consumer, std, &[WireEncoding::FlatBuffers])
+}
+
+/// [`compile_face`], with the face emitted for `encodings`.
+fn compile_face_in(
+    name: &str,
+    source: &str,
+    consumer: &str,
+    std: bool,
+    encodings: &[WireEncoding],
+) -> (String, std::process::Output) {
     let output = ridlc::compile(&format!("{name}.ridl"), source);
     // Errors only: a call with no response bound draws RIDL-112, a warning,
     // and such a call is one of the shapes proven here.
@@ -59,7 +70,7 @@ fn compile_face(
         errors.is_empty(),
         "{name}.ridl must compile with no error, got: {errors:?}"
     );
-    let mut face = generate_face_with(&output.package, &[WireEncoding::FlatBuffers])
+    let mut face = generate_face_with(&output.package, encodings)
         .expect("generate_face_with")
         .rust_source;
     face.push_str(consumer);
@@ -1553,5 +1564,73 @@ pub mod consumer {
     }
 }
 "#,
+    );
+}
+
+/// A face over an interface a payload of which has no proto3 bound compiles
+/// as generic code, with the std cfg on and off: the interface has a
+/// `Bounds<Proto3>` and no `Sizes<Proto3>`, and every face item that holds a
+/// buffer is bound on `Sizes<P::Encoding>`, so nothing in the package names
+/// the table it does not have. Binding the face to a port whose encoding is
+/// proto3 is then a compile error at the user's site, while the same binding
+/// for an interface whose payloads are all bounded compiles.
+#[test]
+fn a_face_over_an_unbounded_proto3_payload_compiles_and_refuses_a_proto3_port() {
+    const SOURCE: &str = include_str!("fixtures/proto3_unbounded_face.ridl");
+    const BOUNDED_USE: &str = r#"
+pub fn read_gauge<P>(client: &gauge::Client<P>)
+where
+    P: ::ridl_rt::port::Encoded<Encoding = ::ridl_rt::encoding::Proto3>
+        + ::ridl_rt::port::SignalReader,
+{
+    let _ = client.count();
+}
+"#;
+    const UNBOUNDED_USE: &str = r#"
+pub fn read_probe<P>(client: &probe::Client<P>)
+where
+    P: ::ridl_rt::port::Encoded<Encoding = ::ridl_rt::encoding::Proto3>
+        + ::ridl_rt::port::SignalReader
+        + ::ridl_rt::port::Caller
+        + ::ridl_rt::port::Clock
+        + ::ridl_rt::port::Wakeable,
+{
+    let _ = client.count();
+}
+"#;
+    for std in [true, false] {
+        let (face, compiled) = compile_face_in(
+            "unbounded_face",
+            SOURCE,
+            BOUNDED_USE,
+            std,
+            &[WireEncoding::Proto3],
+        );
+        assert!(
+            compiled.status.success(),
+            "the package and a proto3 binding of its bounded interface compile, rustc said:\n{}\nsource:\n{face}",
+            String::from_utf8_lossy(&compiled.stderr)
+        );
+        let probe = &face[face.find("pub mod probe {").expect("`Probe` has a face")..];
+        assert!(
+            probe.contains("super::Probe: ::ridl_rt::contract::Sizes<P::Encoding>,"),
+            "the face of `Probe` is bound on its size table in the port's encoding"
+        );
+    }
+    let (face, compiled) = compile_face_in(
+        "unbounded_face_bound",
+        SOURCE,
+        UNBOUNDED_USE,
+        true,
+        &[WireEncoding::Proto3],
+    );
+    let stderr = String::from_utf8_lossy(&compiled.stderr);
+    assert!(
+        !compiled.status.success(),
+        "binding `Probe`'s face to a proto3 port must not compile, source:\n{face}"
+    );
+    assert!(
+        stderr.contains("E0599") && stderr.contains("doesn't satisfy `Probe: Sizes<Proto3>`"),
+        "the error is the missing `Sizes<Proto3>` of `Probe`, rustc said:\n{stderr}"
     );
 }
