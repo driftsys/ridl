@@ -246,18 +246,26 @@ needs the same number. An induced interaction tuple needs no such field: its
 bound is already the interaction's `request_sizes.proto3` or
 `reply_sizes.proto3` (D-1).
 
-A declaration whose state is not `Bounded` is refused with a `GenerateError`
-naming it and the cause (`RefusedMember`, `Unresolved`, `Overflow`, `NoBound`),
-per type, when proto3 is requested. That is the FlatBuffers rule (D-7 of its
-note). Unlike FlatBuffers, no type is withheld silently: the proto3 sizer
-resolves cross-package references through `others`, so there is no "cannot
-judge" case.
+**A declaration with no finite bound still gets a codec (D-22, an owner ruling
+of 2026-10-20).** When the state is `Absent` with the cause `NoBound` or
+`Overflow` — `type RosString : string [0..18446744073709551615]`, or a
+collection whose count has no useful maximum — the type gets a proto3 codec
+without a size: it implements `ridl_rt::payload::Codec<Proto3>`, not
+`Payload<Proto3>`, so it has no `MAX_SIZE`, no `Buffer` and no `BUFFER`. A
+declaration whose state is `Absent` for a reason of representability —
+`RefusedMember` (an optional array or map, a member the schema refuses) or
+`Unresolved` — is refused with a `GenerateError` naming it and the cause, per
+type, when proto3 is requested, as are the unwidthed integer and float of D-2.
+Unlike FlatBuffers, no type is withheld silently: the proto3 sizer resolves
+cross-package references through `others`, so there is no "cannot judge" case.
+The FlatBuffers codec keeps its refusal of an unbounded type; lifting it is a
+follow-up issue.
 
-A test pins each emitted `MAX_SIZE` to the sizer's number, and a worst-case
-value per fixture type (every collection at its maximum count, every string at
-its maximum length of four-byte characters, every varint at its widest) is
-encoded and checked to fit. If a worst case does not fit, the sizer is wrong and
-the fix goes there.
+For a bounded type, a test pins each emitted `MAX_SIZE` to the sizer's number,
+and a worst-case value per fixture type (every collection at its maximum count,
+every string at its maximum length of four-byte characters, every varint at its
+widest) is encoded and checked to fit. If a worst case does not fit, the sizer
+is wrong and the fix goes there.
 
 Cost if wrong: one field in a frozen protocol that cannot be removed later. The
 alternative, a second sizer in the Rust backend over the `Model`, is two sources
@@ -467,6 +475,12 @@ by the same length function before its prefix is written. This costs a
 recomputation per nesting level (the cost `prost` pays the same way); the depth
 is fixed at generation time. No allocation.
 
+The same two passes serve a type with no bound (D-22): `encode` asks for exactly
+the bytes the value needs, so any caller buffer at least that long works, and a
+shorter one gets `Capacity { needed }` with the exact length. The length
+arithmetic saturates, so a value too large for `usize` asks for `usize::MAX`
+rather than wrapping.
+
 Writing backwards, as FlatBuffers does, was rejected: a proto3 length prefix is
 a varint whose size depends on the length, so a backwards writer has to shift or
 reserve, and the forward writer gives an exact `needed`.
@@ -636,8 +650,10 @@ existed.
 - `wire`: unchanged (N-1).
 - `codegen-protocol`: lines added for `Declaration.proto3` (D-4); none removed.
   `cargo xtask freeze update` and the commit says why.
-- `runtime-crates`: additive — the `proto3` module under its feature and three
-  `Malformed` variants (D-9, D-15). `cargo semver-checks` must pass.
+- `runtime-crates`: additive — the `proto3` module under its feature, three
+  `Malformed` variants (D-9, D-15), the `Codec<E>` and `Bounds<E>` traits with
+  their blanket implementations, and `Ref`'s bound loosened to `Codec<E>`
+  (D-22). `cargo semver-checks` must pass.
 - `generated-crate`: unchanged; the frozen copies name `flatbuffers` only, and
   their regeneration must be byte-identical. `xtask/src/freeze/rust_api.rs`'s
   comment that the Rust backend refuses `proto3` is corrected.
@@ -663,6 +679,72 @@ the proto3 codec "is not built" and will be checked against `protoc`);
 documentation of `Declaration.proto3` in `docs/design/codegen-plugins.md` and
 the book's plugin chapter; `docs/ROADMAP.md`, `docs/BACKLOG.md` and
 `docs/archive/roadmap-landed-record.md`.
+
+Two follow-up issues are filed at the end: lifting the size-bound refusal in the
+FlatBuffers codec (D-22's ruling applied to the other encoding), and a face that
+can serve an unbounded payload. The design record also states the two facts the
+conformance suite pinned that a reader would otherwise not expect: five appends
+that `ridl diff` calls breaking (a non-optional struct, string, array, map and
+tuple field) still read an old payload under proto3, because proto3 reads an
+absent field of those kinds as empty (D-12); and the ros2 corpus generates under
+proto3 only since D-22, because its `RosString` has no length bound.
+
+### D-22. A type with no finite bound gets a codec without a size (owner ruling, 2026-10-20)
+
+**The ruling, as the owner gave it:** a declaration whose proto3 size state is
+not `Bounded` because of `NoBound` or `Overflow` (for example
+`RosString : string [0..u64::MAX]`, or a collection with an unbounded count)
+still gets a proto3 codec — proto3 itself has no size limit, and the encoder
+already computes the exact length before writing (D-14), so encoding needs only
+a caller buffer that is large enough (`Capacity { needed }` otherwise). Cost if
+wrong: a consumer that preallocates from `MAX_SIZE` must handle a type with no
+bound.
+
+**How it is built, additively in `ridl-rt`.** `Payload<E>` requires `MAX_SIZE`,
+`Buffer` and `BUFFER`, and an associated type cannot take a default on stable
+Rust, so an unbounded type cannot implement `Payload<E>` without stating a
+buffer it does not have. So:
+
+- `ridl_rt::payload::Codec<E: Encoding>` is a new trait holding what a codec
+  needs without a size: `type View<'a>`, `encode`, `verify`, `decode`, and
+  `const BOUND: Option<usize>`. A blanket implementation gives every
+  `T: Payload<E>` a `Codec<E>` that forwards to its `Payload` items, with
+  `BOUND = Some(MAX_SIZE)`. A generated unbounded proto3 type implements
+  `Codec<Proto3>` directly, with `BOUND = None`. (A local implementation beside
+  the blanket one is accepted by coherence because the generated type does not
+  implement `Payload<Proto3>`; measured on Rust 1.83 and on the pinned
+  toolchain.)
+- `Ref<'a, T, E>`'s bound is loosened from `T: Payload<E>` to `T: Codec<E>`, and
+  its view is `<T as Codec<E>>::View<'a>`, which for a `Payload` type normalizes
+  to the `Payload` view through the blanket implementation. Loosening a bound
+  breaks no caller.
+- `ridl_rt::contract::Bounds<E: Encoding>: Interface` is a new trait with
+  `const RESERVATION_BOUNDS: &'static [Option<u64>]`, one row per member in
+  `MEMBERS` order, `None` for a member whose payload has no bound. A blanket
+  implementation gives every `I: Sizes<E>` its rows from `RESERVATIONS`. An
+  interface with a payload that has no bound gets a generated `Bounds<Proto3>`
+  and no `Sizes<Proto3>`, so a data-driven runtime can register it and see which
+  members have no bound.
+
+**What each consumer does with "no bound".**
+
+| Consumer                                                    | What it does                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The generated face                                          | holds `<T as Payload<E>>::BUFFER` and the `Sizes<E>` buffers, so a face bound to a proto3 port over an interface with an unbounded payload does not compile (`Iface: Sizes<Proto3>` is not satisfied) — the same compile-time rule as for an encoding the package does not carry; a face that allocates its buffers under `std` is a follow-up |
+| `ridl-loopback`, `ridl-transport-ws`, `ridl-rt-conformance` | read no `MAX_SIZE` and no `Sizes`: they carry bytes in buffers of their own, so nothing changes                                                                                                                                                                                                                                                |
+| The codegen `Model`                                         | `Declaration.proto3` already says `Absent(NoBound)` or `Absent(Overflow)` for such a type, and a payload's `sizes.proto3` the same; no protocol change                                                                                                                                                                                         |
+| The catalog descriptor                                      | its proto3 row for such a payload is already the unbounded state; unchanged                                                                                                                                                                                                                                                                    |
+| The FlatBuffers codec                                       | still refuses an unbounded type (a follow-up issue lifts it); its output and the `generated-crate` dumps are unchanged                                                                                                                                                                                                                         |
+
+**Alternatives considered.**
+
+| Candidate                                                                                  | Verdict  | Reason                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Refuse the type, as FlatBuffers does (the first draft of D-4)                              | rejected | the owner's ruling: proto3 has no size limit and the encoder knows the exact length; the ros2 corpus could not use proto3                                |
+| Split `Payload<E>` into a size-free supertrait and move `encode`/`verify`/`decode` into it | rejected | the cleanest shape, but it removes items from `Payload<E>`, a break of the frozen `runtime-crates` surface                                               |
+| Implement `Payload<E>` with `MAX_SIZE = usize::MAX` (or 0) and an empty `Buffer`           | rejected | `MAX_SIZE` would no longer be the largest encoded size, and generic code holding `BUFFER` would compile and then fail at run time with `Capacity`        |
+| An `Option<usize>` constant added to `Payload<E>` itself                                   | rejected | still needs a `Buffer` type for the unbounded type, which is the item that cannot be defaulted                                                           |
+| A face that allocates a buffer for an unbounded payload under `std`                        | deferred | it changes every face site and the `no_std` story; the codec is usable directly through `Ref` today, and the binding-time compile error states the limit |
 
 ## 6. What is left to the builder
 

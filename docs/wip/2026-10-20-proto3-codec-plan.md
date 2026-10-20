@@ -488,7 +488,61 @@ Implements D-17 cases 3, 8, 9, 11 and the worst-case half of 12.
 - [ ] **Step 4: Commit**
       `test(ridl-backend-rust): add the proto3 property, robustness and corpus cases`.
 
-### Task 8: `Sizes<Proto3>`, the face over a proto3 port, and the generated crates
+### Task 8: a codec without a size for an unbounded type
+
+Implements D-22 (owner ruling R-OWN-1) and the D-4 change it makes.
+
+**Files:**
+
+- Modify: `crates/ridl-rt/src/payload.rs` (`Codec<E>`, its blanket
+  implementation, `Ref`'s bound), `crates/ridl-rt/src/contract.rs` (`Bounds<E>`
+  and its blanket implementation), `crates/ridl-rt` tests and rustdoc,
+  `crates/ridl-backend-rust/src/codec_proto3.rs` (an unbounded root implements
+  `Codec<Proto3>` with `BOUND = None` instead of being refused; `RefusedMember`
+  and `Unresolved` stay refusals), the generated-code tests that pinned the old
+  refusal
+- Test: `crates/ridl-rt/src/payload.rs` and `contract.rs` tests,
+  `crates/ridl-backend-rust/tests/proto3_roundtrip.rs`,
+  `tests/proto3_conformance.rs`
+
+**Interfaces — Produces:**
+
+- `pub trait Codec<E: Encoding>: Sized { type View<'a>; const BOUND: Option<usize>; fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Self::View<'o>>, EncodeError>; fn verify(buf: &[u8]) -> Result<Self::View<'_>, VerifyError>; fn decode(r: Ref<'_, Self, E>) -> Self; }`
+- `impl<T: Payload<E>, E: Encoding> Codec<E> for T` with
+  `BOUND = Some(<T as Payload<E>>::MAX_SIZE)`
+- `pub struct Ref<'a, T: Codec<E>, E: Encoding>`, every method unchanged in name
+- `pub trait Bounds<E: Encoding>: Interface { const RESERVATION_BOUNDS: &'static [Option<u64>]; }`
+  and `impl<I: Sizes<E>, E: Encoding> Bounds<E> for I`
+
+- [ ] **Step 1: Failing tests:** in `ridl-rt`,
+      `a_payload_is_a_codec_with_its_bound` (a test `Payload` type's
+      `<T as Codec<E>>::BOUND == Some(MAX_SIZE)` and a `Ref` built through it
+      round-trips), `a_codec_without_a_size_round_trips_through_ref` (a test
+      type implementing `Codec<E>` only, `BOUND == None`), and
+      `a_sized_interface_has_every_bound` (`Bounds` rows equal `RESERVATIONS` as
+      `Some`); the existing `Ref` doctests stay green on 1.83. In the Rust
+      backend, `an_unbounded_type_gets_a_codec_without_a_size` (a fixture
+      `type Free : string [0..18446744073709551615]` and a struct holding it:
+      `Codec<Proto3>` with `BOUND == None`, no `Payload<Proto3>`, round trip
+      through `Ref`, a short buffer gives `Capacity { needed }` with the exact
+      length), `a_refused_member_is_still_refused` (an optional array still
+      refuses), and `the_ros2_corpus_generates_with_proto3` (every ros2 corpus
+      package generates under `[Proto3]`, replacing the earlier test that pinned
+      the refusal) and `bytes_this_codec_writes_equal_prost_bytes` gains rows
+      for the unbounded fixture type if the prost oracle can carry it without
+      changing the checked-in oracle; otherwise a second small oracle file.
+- [ ] **Step 2: Run** `cargo test -p ridl-rt --all-features` and the backend
+      suites — FAIL.
+- [ ] **Step 3: Implement.** The FlatBuffers codec's emitted text must not
+      change.
+- [ ] **Step 4: Run** the suites, `cargo +1.83 test -p ridl-rt --all-features`
+      if the toolchain is installed, `cargo xtask freeze check` (runtime-crates
+      semver must pass: additive), clippy — PASS.
+- [ ] **Step 5: Commit** `feat(ridl-rt): add a codec trait without a size bound`
+      and
+      `feat(ridl-backend-rust): emit a proto3 codec for a type without a bound`.
+
+### Task 9: `Sizes<Proto3>` and `Bounds<Proto3>`, the face over a proto3 port, and the generated crates
 
 Implements D-1 (size table), D-18 (generated-crate half), D-19.
 
@@ -511,6 +565,15 @@ Implements D-1 (size table), D-18 (generated-crate half), D-19.
 - Test: `tests/interaction_face.rs`, `tests/descriptor_generation.rs`,
   `crates/ridlc/tests/cabin_example.rs`
 
+**Owner ruling R-OWN-1 (D-22):** an interface every payload of which has a
+proto3 bound gets `Sizes<Proto3>` (and `Bounds<Proto3>` through the blanket
+implementation); an interface with a payload that has no bound gets a generated
+`Bounds<Proto3>` with `None` in that member's row and no `Sizes<Proto3>`. Add
+`an_interface_with_an_unbounded_payload_has_bounds_and_no_size_table` to Step 1,
+and check that the generated face still compiles for such a package (its proto3
+binding is then a compile error at the user's site, which a `compile_fail`-style
+test or a rustc program pins).
+
 - [ ] **Step 1: Failing tests:**
       `the_proto3_size_table_is_built_from_proto3_bounds` (rows and maxima are
       expressions over `Payload<Proto3>::MAX_SIZE`);
@@ -526,7 +589,7 @@ Implements D-1 (size table), D-18 (generated-crate half), D-19.
 - [ ] **Step 5: Commit**
       `feat(ridl-backend-rust): emit the proto3 size table and run the face over it`.
 
-### Task 9: the records
+### Task 10: the records
 
 Implements D-21. No code.
 
