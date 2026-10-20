@@ -31,12 +31,13 @@ Version: 0.2.0
 > response bound has passed (§7). The runtime here, `ridl-loopback`, runs in
 > process: it carries bytes from a provider handle to a consumer handle over one
 > in-memory store, opens no socket, and has no wire format
-> ([its design record](../design/ridl-loopback.md)). Neither enforces a timing
-> rule or a contract clause on the provider side, so every sentence below about
-> those describes the specification, not behaviour a shipped runtime performs.
-> The first binding is the WebSocket transport (driftsys/ridl#265); the second
-> is a runtime's own binder contract on Android, outside this repository (§11.2,
-> which reverses an earlier AIDL binding generated per interface).
+> ([its design record](../design/ridl-loopback.md)). Neither the crate nor
+> `ridl-loopback` enforces a timing rule or a contract clause on the provider
+> side, so every sentence below about those describes the specification, not
+> behaviour a shipped runtime performs. The first binding is the WebSocket
+> transport (driftsys/ridl#265); the second is a runtime's own binder contract
+> on Android, outside this repository (§11.2, which reverses an earlier AIDL
+> binding generated per interface).
 >
 > The catalog descriptor carries the list of compatible earlier catalog hashes
 > that §6.1 names, and no runtime in this workspace reads it at `attach`.
