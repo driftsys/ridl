@@ -263,9 +263,11 @@ impl<'a> Reader<'a> {
     }
 
     fn read_field(&mut self) -> Result<Field<'a>, Malformed> {
-        let tag = read_varint(self.buf, &mut self.at)?;
-        let number = narrow_u32(tag >> 3)?;
-        let wire = WireType::from_tag(tag).ok_or(Malformed::WireType)?;
+        // A tag is a `uint32` varint, so the whole tag is narrowed before it
+        // is split, as a protobuf parser refuses it.
+        let tag = narrow_u32(read_varint(self.buf, &mut self.at)?)?;
+        let number = tag >> 3;
+        let wire = WireType::from_tag(u64::from(tag)).ok_or(Malformed::WireType)?;
         if number == 0 {
             return Err(Malformed::WireType);
         }
@@ -501,6 +503,9 @@ mod tests {
             let buf = [tag, 0x01];
             let mut r = Reader::new(&buf);
             assert_eq!(r.next(), Some(Err(Malformed::WireType)), "tag {tag:#04x}");
+            // After an error the reader is finished: the byte that follows the
+            // bad tag is not read as a field.
+            assert_eq!(r.next(), None, "tag {tag:#04x}");
         }
     }
 
@@ -538,6 +543,16 @@ mod tests {
         buf[9] = 0x01;
         let mut r = Reader::new(&buf);
         assert_eq!(r.next(), Some(Err(Malformed::Varint)));
+        // A tag of `1 << 32` with wire type 0: its field number `1 << 29`
+        // would fit a `u32`, but the tag as a whole does not, and a protobuf
+        // parser refuses it.
+        let mut out = [0u8; 10];
+        let mut w = Writer::new(&mut out);
+        w.varint(1 << 32);
+        let buf = w.finish().unwrap();
+        let mut r = Reader::new(buf);
+        assert_eq!(r.next(), Some(Err(Malformed::Varint)));
+        assert_eq!(r.next(), None);
     }
 
     #[test]
