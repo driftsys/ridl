@@ -506,6 +506,152 @@ fn the_proto3_codec_refuses_a_field_number_the_proto_backend_refuses() {
     );
 }
 
+/// An optional array or map field of a struct, and an optional array field
+/// of a tuple, are refused by the proto3 codec as the `.proto` emitter
+/// refuses them (ADR-0013 decision 7), naming the field; the types alone
+/// generate. The sizer gives each payload `RefusedMember`, so a codec that
+/// read only the size state would have emitted a codec without a size.
+#[test]
+fn the_proto3_codec_refuses_an_optional_array_or_map_field() {
+    // `integer [0..10]` and `string [0..8]`, inline.
+    let scalar = |backing: v2::PrimitiveType, constraint: v2::Constraint| v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(backing as i32)),
+            }),
+            constraint: Some(constraint),
+            declared_init: None,
+            init: None,
+            width: None,
+        }))),
+    };
+    let small = || {
+        scalar(
+            v2::PrimitiveType::Integer,
+            v2::Constraint {
+                min: Some("0".to_string()),
+                max: Some("10".to_string()),
+                ..Default::default()
+            },
+        )
+    };
+    let mut items = array_type(small(), 4);
+    items.optional = true;
+    let by_name = v2::FieldType {
+        optional: true,
+        kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+            key: Some(Box::new(scalar(
+                v2::PrimitiveType::String,
+                v2::Constraint {
+                    len_max: Some(8),
+                    ..Default::default()
+                },
+            ))),
+            value: Some(Box::new(small())),
+            min: 0,
+            max: 4,
+        }))),
+    };
+    let mut xs = array_type(small(), 4);
+    xs.optional = true;
+    let pair = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+            fields: vec![v2::TupleField {
+                name: "xs".to_string(),
+                r#type: Some(xs),
+            }],
+        })),
+    };
+    for (field, ty, expected) in [
+        (
+            "items",
+            items,
+            "`Holder.items` is an optional array, and proto3 cannot mark a repeated field absent",
+        ),
+        (
+            "byName",
+            by_name,
+            "`Holder.byName` is an optional map, and proto3 cannot mark a map field absent",
+        ),
+        (
+            "pair",
+            pair,
+            "`HolderPair.xs` is an optional array, and proto3 cannot mark a repeated field \
+             absent",
+        ),
+    ] {
+        let package = holder_over(vec![(field, ty)]);
+        let error = super::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+            .expect_err(expected)
+            .message;
+        assert!(
+            error.starts_with(expected) && error.contains("ADR-0013 decision 7"),
+            "the refusal names the field and the rule, got: {error}"
+        );
+        super::generate_pipeline(&package, &[], &[]).expect("the types alone generate");
+    }
+}
+
+/// `bound_state` maps every size state: a bound to `Some`, `NoBound` and
+/// `Overflow` — the size problems — to a codec without a size, and every
+/// other absent cause, the unbounded state's absence and a missing state to
+/// a refusal. The match over the causes names every variant, so a variant
+/// added to the protocol fails this test to compile until it is placed.
+#[test]
+fn bound_state_gives_a_codec_only_to_a_size_problem() {
+    use ridl_ir::codegen::v1::{self, AbsentCause, SizeAbsent, SizeState, size_state::State};
+    let absent = |cause: AbsentCause| SizeState {
+        state: Some(State::Absent(SizeAbsent {
+            cause: cause as i32,
+            detail: None,
+        })),
+    };
+    let every_cause = [
+        AbsentCause::Unspecified,
+        AbsentCause::EncodingUndefined,
+        AbsentCause::NoMessage,
+        AbsentCause::RefusedMember,
+        AbsentCause::NoBound,
+        AbsentCause::Overflow,
+        AbsentCause::Unresolved,
+    ];
+    for cause in every_cause {
+        let verdict = super::codec_proto3::bound_state(Some(&absent(cause)));
+        let codec = match cause {
+            AbsentCause::NoBound | AbsentCause::Overflow => true,
+            AbsentCause::Unspecified
+            | AbsentCause::EncodingUndefined
+            | AbsentCause::NoMessage
+            | AbsentCause::RefusedMember
+            | AbsentCause::Unresolved => false,
+        };
+        assert_eq!(
+            verdict.is_ok(),
+            codec,
+            "{cause:?}: a codec without a size only for a size problem, got {verdict:?}"
+        );
+        if codec {
+            assert_eq!(verdict, Ok(None));
+        } else {
+            assert!(!verdict.unwrap_err().is_empty(), "{cause:?} names a cause");
+        }
+    }
+    let bounded = SizeState {
+        state: Some(State::Bounded(12)),
+    };
+    assert_eq!(
+        super::codec_proto3::bound_state(Some(&bounded)),
+        Ok(Some(12))
+    );
+    assert!(super::codec_proto3::bound_state(None).is_err());
+    let unbounded = SizeState {
+        state: Some(State::Unbounded(v1::FbUnbounded::default())),
+    };
+    assert_eq!(super::codec_proto3::bound_state(Some(&unbounded)), Ok(None));
+}
+
 /// The contract accepts `proto3`, alone and beside `flatbuffers`, and still
 /// refuses `repr-c` with the issue that builds its codec.
 #[test]

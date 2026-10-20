@@ -35,12 +35,16 @@
 //! `Codec` alone when that state has no bound. A tuple reached only from a
 //! field is encoded inside its owner.
 //!
-//! A declaration whose proto3 size state is absent for a reason of
-//! representability — a member the proto backend refuses, or a declaration
-//! the sizer did not resolve — is refused with a [`GenerateError`] naming it
-//! and the cause, and so is an interaction whose induced root is. An
-//! optional array element and an optional map value are refused as the
-//! FlatBuffers codec refuses them: the schema emits neither with presence.
+//! A declaration whose proto3 size state is absent for any reason other
+//! than a size problem — a member the proto backend refuses, a declaration
+//! the sizer did not resolve, no message at all — is refused with a
+//! [`GenerateError`] naming it and the cause, and so is an interaction whose
+//! induced root is. The codec's own walk refuses the same members the proto
+//! backend refuses, naming the field: an optional array or map field of a
+//! struct or a tuple (ADR-0013 decision 7), an optional array element and an
+//! optional map value, a nested collection, a map key outside the integral
+//! and string scalars, an enum value outside int32, and a field number
+//! proto3 reserves or exceeds.
 //!
 //! # The wire mapping
 //!
@@ -1180,6 +1184,7 @@ impl<'a> Codec<'a> {
                             message: format!("`{owner}.{name}` carries no type"),
                         });
                     };
+                    refuse_optional_repeated(owner, name, false, ty)?;
                     fields.push(Field {
                         number: field_number(owner, name, slot.ordinal)?,
                         name: snake_of(field.name.as_ref()).to_string(),
@@ -1304,6 +1309,7 @@ impl<'a> Codec<'a> {
                     "`{owner}` has more tuple fields than a proto3 field number holds"
                 ),
             })?;
+            refuse_optional_repeated(owner, name, true, ty)?;
             fields.push(Field {
                 number: field_number(owner, name, number)?,
                 name: snake_of(field.name.as_ref()).to_string(),
@@ -2947,28 +2953,28 @@ impl<'a> Codec<'a> {
     }
 }
 
-/// The bound a proto3 size state carries: `Some` of the bound, `None` when
-/// the state is absent for want of a bound, and the cause as the refusal
-/// states it when the state is absent for a reason of representability: a
-/// declaration the sizer did not resolve, or no proto3 message at all.
-///
-/// The sizer's `RefusedMember` is `None` too, because that cause covers a
-/// member with no bound and a sum that does not fit beside the members the
-/// proto backend refuses, and the model does not say which. The codec's own
-/// walk of the message refuses every member the proto backend refuses — an
-/// optional array or map, a nested collection, a map key outside the
-/// integral and string scalars, an enum value outside int32, a field number
-/// proto3 reserves or exceeds, a reference that does not resolve — before
-/// the state is read, so a `RefusedMember` that reaches here has no bound
-/// and nothing to refuse.
+/// The bound a proto3 size state carries: `Some` of the bound; `None` for a
+/// size problem alone — `NoBound` (a member with no finite bound) or
+/// `Overflow` (a bound past `u32::MAX`, a sum or product that does not fit,
+/// a nesting past the sizer's depth limit) — which gets a codec without a
+/// size; and the cause as the refusal states it for every other absent
+/// state: `RefusedMember` (a member proto3 cannot represent), `Unresolved`,
+/// `NoMessage`, `EncodingUndefined`, an unspecified cause, and a model that
+/// carries no state. Only a size problem is a codec; everything else is a
+/// refusal, naming the declaration and the cause.
 pub(crate) fn bound_state(state: Option<&v1::SizeState>) -> Result<Option<u32>, &'static str> {
     match state.and_then(|state| state.state.as_ref()) {
         Some(v1::size_state::State::Bounded(bound)) => Ok(Some(*bound)),
         Some(v1::size_state::State::Absent(absent)) => {
             match v1::AbsentCause::try_from(absent.cause).unwrap_or(v1::AbsentCause::Unspecified) {
-                v1::AbsentCause::NoBound
-                | v1::AbsentCause::Overflow
-                | v1::AbsentCause::RefusedMember => Ok(None),
+                v1::AbsentCause::NoBound | v1::AbsentCause::Overflow => Ok(None),
+                v1::AbsentCause::RefusedMember => Err(
+                    "a member of it is one proto3 cannot represent: an optional array or map, \
+                     an array of arrays or of maps, a map whose value is a collection, a map \
+                     key outside the integral and string scalars, a field number proto3 \
+                     reserves or exceeds, a name that does not resolve, or an enum value \
+                     outside int32",
+                ),
                 v1::AbsentCause::Unresolved => {
                     Err("it names a declaration the sizer did not resolve")
                 }
@@ -2995,6 +3001,41 @@ fn field_number(owner: &str, name: &str, number: u32) -> Result<u32, GenerateErr
         });
     }
     Ok(number)
+}
+
+/// Refuses an optional array or map field of a struct or a tuple, as the
+/// proto backend's `refuse_optional_repeated` does: proto3 cannot mark a
+/// `repeated` or `map` field absent, and no value is spare to carry the fact
+/// in-band, so ADR-0013 decision 7's last clause applies. Any other type
+/// passes, optional or not. The sizer gives such a payload `RefusedMember`;
+/// this check runs first, so the refusal names the field.
+fn refuse_optional_repeated(
+    owner: &str,
+    name: &str,
+    tuple: bool,
+    ty: &v1::Type,
+) -> Result<(), GenerateError> {
+    let (kind, proto_field) = match ty.kind.as_ref() {
+        Some(v1::r#type::Kind::Array(_)) if ty.optional => ("array", "repeated"),
+        Some(v1::r#type::Kind::Map(_)) if ty.optional => ("map", "map"),
+        _ => return Ok(()),
+    };
+    let advice = if tuple {
+        format!(
+            "Remove the `?` from the tuple field, or declare a struct that holds the {kind} \
+             and give the tuple field that struct's type, whose absence proto3 can track."
+        )
+    } else {
+        format!("Remove the `?`, or wrap the {kind} in a struct, whose absence proto3 can track.")
+    };
+    Err(GenerateError {
+        message: format!(
+            "`{owner}.{name}` is an optional {kind}, and proto3 cannot mark a {proto_field} \
+             field absent: an absent {kind} is indistinguishable from an empty one, and no \
+             value is spare to carry the fact in-band, so this backend refuses rather than \
+             choosing silently (ADR-0013 decision 7). {advice}"
+        ),
+    })
 }
 
 /// An `optional` marker is a field's property. A proto3 `repeated` field

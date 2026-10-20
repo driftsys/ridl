@@ -2164,8 +2164,8 @@ fn a_member_of_an_unknown_kind_is_unsized_and_not_zero() {
 #[test]
 fn each_encoding_lands_in_its_own_column() {
     // `Tagged` holds a `string` with no length bound. Under proto3 that is a
-    // member no leaf bounds, so the state is absent with `REFUSED_MEMBER`;
-    // under FlatBuffers the same declaration is unbounded. The two states
+    // member no leaf bounds, so the state is absent with `NO_BOUND`; under
+    // FlatBuffers the same declaration is unbounded. The two states
     // differ in kind, so a lowering that filled one column with the other
     // encoding's sizer fails here.
     let model = lower(&sized_package(), &[]);
@@ -2173,7 +2173,7 @@ fn each_encoding_lands_in_its_own_column() {
     assert_eq!(
         state(&tagged.sizes, true),
         &v1::size_state::State::Absent(v1::SizeAbsent {
-            cause: v1::AbsentCause::RefusedMember as i32,
+            cause: v1::AbsentCause::NoBound as i32,
             detail: None,
         })
     );
