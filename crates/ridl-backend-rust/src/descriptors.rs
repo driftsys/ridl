@@ -9,9 +9,9 @@
 //!   carrying `CATALOG`, `NUMBER`, `PROVISIONAL`, `NAME` and `MEMBERS`, and
 //!   one size table per encoding of the list — a `Sizes<E>` impl, every item
 //!   a const expression over the codec's own `<T as Payload<E>>::MAX_SIZE`,
-//!   which the face reads for its claim and event buffers. In proto3, an
-//!   interface a payload of which has no bound gets a `Bounds<Proto3>` impl
-//!   instead, with no bound in that member's row, and no `Sizes<Proto3>`;
+//!   which the face reads for its claim and event buffers. Every payload has
+//!   that bound in every encoding of the list: a codec refuses the package
+//!   otherwise, before any descriptor is rendered;
 //! - one unit struct per interaction with an `Interaction` impl (the three
 //!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
 //!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
@@ -173,19 +173,8 @@ fn one_interface_public(
         table_docs.push(table_doc(iface_name, "FlatBuffers", "FlatBuffers"));
     }
     if ctx.encodings.contains(&WireEncoding::Proto3) {
-        let bounded = sizes.proto3_bounded(ctx, iface_name)?;
-        if bounded.iter().all(|row| *row) {
-            tables.push(sizes_table(&iface_ident, WireEncoding::Proto3, &sizes));
-            table_docs.push(table_doc(iface_name, "proto3", "Proto3"));
-        } else {
-            tables.push(bounds_table(&iface_ident, &sizes, &bounded));
-            table_docs.push(format!(
-                "It has no size table in proto3, because the payload of a member has \
-                 no proto3 bound: `<{iface_name} as Bounds<Proto3>>` states the space \
-                 each member reserves, and no bound for that member. Its face cannot \
-                 be bound to a proto3 port."
-            ));
-        }
+        tables.push(sizes_table(&iface_ident, WireEncoding::Proto3, &sizes));
+        table_docs.push(table_doc(iface_name, "proto3", "Proto3"));
     }
     let mut interface_doc = format!(
         "Descriptor for interface `{iface_name}`: its catalog, number, name and \
@@ -223,50 +212,18 @@ fn one_interface_public(
     Ok(())
 }
 
-/// One payload of a member: its type name, and the proto3 size state the
-/// model carries for it.
-type RowPayload = (String, Option<v1::SizeState>);
-
 /// The payloads an interface's size tables are computed over, by type name,
 /// gathered once and rendered once per encoding.
 #[derive(Default)]
 struct TablePayloads {
-    /// One row per member of `MEMBERS`, in order: the member's name and its
-    /// payloads — one for most kinds, the request and then the reply for a
-    /// query, none for a fixed — each with the proto3 size state the model
-    /// carries for it.
-    rows: Vec<(String, Vec<RowPayload>)>,
+    /// One row per member of `MEMBERS`, in order: the member's payloads —
+    /// one for most kinds, the request and then the reply for a query, none
+    /// for a fixed.
+    rows: Vec<Vec<String>>,
     /// The call argument and reply payloads, which the claim buffer holds.
     calls: Vec<String>,
     /// The event payloads, which the event buffer holds.
     events: Vec<String>,
-}
-
-impl TablePayloads {
-    /// Whether each row has a proto3 bound: every payload of it has one. A
-    /// payload with no proto3 message at all is refused, as the proto3 codec
-    /// refuses it.
-    fn proto3_bounded(&self, ctx: &Ctx, iface_name: &str) -> Result<Vec<bool>, GenerateError> {
-        self.rows
-            .iter()
-            .map(|(member, payloads)| {
-                payloads
-                    .iter()
-                    .try_fold(true, |bounded, (type_name, state)| {
-                        match crate::codec_proto3::bound_state(state.as_ref()) {
-                            Ok(bound) => Ok(bounded && bound.is_some()),
-                            Err(cause) => Err(GenerateError {
-                                message: format!(
-                                    "`{}.{iface_name}.{member}`'s payload `{type_name}` has no \
-                                     proto3 codec: {cause}",
-                                    ctx.package_name()
-                                ),
-                            }),
-                        }
-                    })
-            })
-            .collect()
-    }
 }
 
 /// The path of `encoding`'s marker type, as every site of the output names it.
@@ -304,10 +261,10 @@ fn sizes_table(
     let reservations: Vec<TokenStream> = sizes
         .rows
         .iter()
-        .map(|(_, payloads)| {
+        .map(|payloads| {
             let paths: Vec<TokenStream> = payloads
                 .iter()
-                .map(|(name, _)| max_size_path(encoding, name))
+                .map(|name| max_size_path(encoding, name))
                 .collect();
             reservation_row(&paths)
         })
@@ -340,45 +297,6 @@ fn sizes_table(
             type EventBuffer = [::core::primitive::u8; #table::EVENT_SOURCE_BUFFER_SIZE];
             const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; #table::MAX_BUFFER_SIZE];
             const EVENT_BUFFER: Self::EventBuffer = [0u8; #table::EVENT_SOURCE_BUFFER_SIZE];
-        }
-    }
-}
-
-/// The `Bounds<Proto3>` implementation of an interface a payload of which has
-/// no proto3 bound: `None` in the row of each member such a payload belongs
-/// to, and in every other row the reservation `Sizes<Proto3>` would state.
-/// A row past `MEMBERS` panics, as the trait states.
-fn bounds_table(
-    iface_ident: &proc_macro2::Ident,
-    sizes: &TablePayloads,
-    bounded: &[bool],
-) -> TokenStream {
-    let rows: Vec<TokenStream> = sizes
-        .rows
-        .iter()
-        .zip(bounded)
-        .map(|((_, payloads), bounded)| {
-            if !bounded {
-                return quote! { ::core::option::Option::None };
-            }
-            let paths: Vec<TokenStream> = payloads
-                .iter()
-                .map(|(name, _)| max_size_path(WireEncoding::Proto3, name))
-                .collect();
-            let row = reservation_row(&paths);
-            quote! { ::core::option::Option::Some(#row) }
-        })
-        .collect();
-    quote! {
-        impl ::ridl_rt::contract::Bounds<::ridl_rt::encoding::Proto3> for #iface_ident {
-            fn reservation_bound(
-                row: ::core::primitive::usize,
-            ) -> ::core::option::Option<::core::primitive::u64> {
-                const ROWS: &[::core::option::Option<::core::primitive::u64>] = &[
-                    #(#rows),*
-                ];
-                ROWS[row]
-            }
         }
     }
 }
@@ -464,13 +382,7 @@ fn interaction_item(
     sizes: &mut TablePayloads,
 ) -> Result<TokenStream, GenerateError> {
     let member = declared(interaction.name.as_ref());
-    let proto3_of = |payload: Option<&v1::Payload>| {
-        payload
-            .and_then(|payload| payload.sizes.as_ref())
-            .and_then(|sizes| sizes.proto3.clone())
-    };
-    let proto3_in = |sizes: Option<&v1::PayloadSizes>| sizes.and_then(|sizes| sizes.proto3.clone());
-    let mut row: Vec<RowPayload> = Vec::new();
+    let mut row: Vec<String> = Vec::new();
     let struct_ident = descriptor_ident(iface_ident, interaction);
     let index = Literal::usize_unsuffixed(row_index);
 
@@ -478,7 +390,7 @@ fn interaction_item(
         Some(v1::interaction::Shape::Signal(signal)) => {
             let reference = payload_reference(signal.payload.as_ref());
             let payload = type_path(reference);
-            row.push((reference.to_string(), proto3_of(signal.payload.as_ref())));
+            row.push(reference.to_string());
             // `init()` returns the payload type's default, which is the
             // channel init (ridl §4.4) for a signal with no `= value`
             // override — the fixture's case. A declared init override is a
@@ -497,7 +409,7 @@ fn interaction_item(
         Some(v1::interaction::Shape::Event(event)) => {
             let reference = payload_reference(event.payload.as_ref());
             let payload = type_path(reference);
-            row.push((reference.to_string(), proto3_of(event.payload.as_ref())));
+            row.push(reference.to_string());
             sizes.events.push(reference.to_string());
             quote! {
                 impl ::ridl_rt::contract::Event for #struct_ident {
@@ -518,10 +430,7 @@ fn interaction_item(
         Some(v1::interaction::Shape::Command(command)) => {
             let arg_name = single_param_type(ctx, command, member)?;
             let args = type_path(arg_name);
-            row.push((
-                arg_name.to_string(),
-                proto3_in(command.request_sizes.as_ref()),
-            ));
+            row.push(arg_name.to_string());
             sizes.calls.push(arg_name.to_string());
             let require = clauses::translate(
                 ctx,
@@ -549,14 +458,8 @@ fn interaction_item(
             let reply_name = query_reply_type(ctx, query, member)?;
             let args = type_path(arg_name);
             let reply = type_path(reply_name);
-            row.push((
-                arg_name.to_string(),
-                proto3_in(query.request_sizes.as_ref()),
-            ));
-            row.push((
-                reply_name.to_string(),
-                proto3_in(query.reply_sizes.as_ref()),
-            ));
+            row.push(arg_name.to_string());
+            row.push(reply_name.to_string());
             sizes.calls.push(arg_name.to_string());
             sizes.calls.push(reply_name.to_string());
 
@@ -603,7 +506,7 @@ fn interaction_item(
         }
         None => return Err(not_an_interaction(member)),
     };
-    sizes.rows.push((member.to_string(), row));
+    sizes.rows.push(row);
 
     // A member descriptor is an internal: a user's code names the interface
     // descriptor and the face, not this. It stays `pub`, under
@@ -788,8 +691,9 @@ pub(crate) fn query_param_type<'a>(
 ///
 /// With `flatbuffers` in the list, a tuple with no finite FlatBuffers bound
 /// is refused, because the FlatBuffers codec emits no `Payload` for it. The
-/// proto3 codec emits one for every root, bounded or not, so a list without
-/// `flatbuffers` refuses nothing here.
+/// proto3 codec refuses the whole package for a root with no finite proto3
+/// bound, naming the interaction, so a list without `flatbuffers` refuses
+/// nothing here.
 fn induced_name<'a>(
     ctx: &Ctx<'a>,
     reference: Option<&v1::TupleRef>,

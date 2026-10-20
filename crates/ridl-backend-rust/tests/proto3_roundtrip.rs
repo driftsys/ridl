@@ -427,10 +427,10 @@ fn main() {{
 }
 
 /// A declaration one of whose members the proto backend refuses — an enum
-/// value outside int32 — has no proto3 message, so it is still refused with
-/// an error naming the declaration and the cause, for the declaration itself
-/// and for one that reaches it. A missing bound alone is not a refusal
-/// ([`an_unbounded_type_gets_a_codec_without_a_size`]).
+/// value outside int32 — has no proto3 message, so it is refused with an
+/// error naming the declaration and the cause, for the declaration itself
+/// and for one that reaches it, by the codec's own walk, which names the
+/// value, before the size state is read.
 #[test]
 fn a_refused_member_is_still_refused() {
     let package = ir::compile_fixture("proto3_unbounded.ridl");
@@ -452,138 +452,69 @@ fn a_refused_member_is_still_refused() {
     ridl_backend_rust::generate_pipeline(&package, &[], &[]).expect("the types alone generate");
 }
 
-/// The generated source for `proto3_free.ridl` with a harness `main`
-/// appended and no shared prelude, since the prelude's helpers name the
-/// round-trip fixture's types.
-fn free_program(main: &str) -> (String, String) {
+/// A type with no finite proto3 bound — a string with no length bound, and
+/// a struct that holds one — is refused under proto3 with an error naming
+/// the declaration and `NoBound`; an interaction whose argument message is
+/// the sum of two bounds that does not fit a `u32` is refused naming the
+/// interaction and `Overflow`. Every `MAX_SIZE` the codec emits is finite:
+/// the size limit lives in the type, so the source declares the bound. The
+/// same packages generate with no encoding.
+#[test]
+fn an_unbounded_type_is_refused_under_proto3() {
+    // `Free` and `Note`, which holds it, in declaration order: the first
+    // refusal names `Free`.
     let package = ir::compile_fixture("proto3_free.ridl");
-    let generated = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
-        .expect("the fixture generates")
-        .rust_source;
-    let dense: String = generated.chars().filter(|c| !c.is_whitespace()).collect();
-    (format!("#![allow(dead_code)]\n{generated}\n{main}"), dense)
-}
-
-/// A type whose proto3 size state has no bound — a string with no length
-/// bound, an array with no count bound, and a struct that reaches either —
-/// gets a `Codec<Proto3>` with `BOUND = None` and no `Payload<Proto3>`,
-/// while a bounded type of the same package keeps its `Payload<Proto3>`. The
-/// codec round-trips through `Ref` into a buffer the caller sizes, and a
-/// buffer too short is `Capacity { needed }` with the exact length.
-#[test]
-fn an_unbounded_type_gets_a_codec_without_a_size() {
-    let main = r#"
-use ridl_rt::encoding::Proto3;
-use ridl_rt::payload::{Codec, EncodeError, Payload, Ref};
-
-fn main() {
-    assert_eq!(<Free as Codec<Proto3>>::BOUND, None);
-    assert_eq!(<Note as Codec<Proto3>>::BOUND, None);
-    assert_eq!(<Measured as Codec<Proto3>>::BOUND, None);
-    assert_eq!(<Count as Codec<Proto3>>::BOUND, Some(<Count as Payload<Proto3>>::MAX_SIZE));
-
-    let value = Measured {
-        count: Count::new_unchecked(7),
-        note: Note {
-            text: Free::new_unchecked(String::from("a text with no bound")),
-            tags: vec![Free::new_unchecked(String::from("x")), Free::new_unchecked(String::new())],
-        },
-    };
-    // Sized by the codec itself: the empty buffer reports the exact length.
-    let needed = match Ref::<Measured, Proto3>::encode(&value, &mut []) {
-        Err(EncodeError::Capacity { needed, available: 0 }) => needed,
-        other => panic!("an empty buffer reports the length, got {:?}", other.map(|r| r.bytes().len())),
-    };
-    let mut out = vec![0xABu8; needed + 5];
-    let proof = Ref::<Measured, Proto3>::encode(&value, &mut out).expect("the buffer holds it");
-    let bytes = proof.bytes().to_vec();
-    assert_eq!(bytes.len(), needed, "the length reported is the length written");
-    // count = 7: tag 1 varint; note: tag 2 len, holding text (tag 1) and two
-    // tag-2 records, the empty one written as a record of length 0.
-    let expected = [
-        &[0x08, 0x07, 0x12, 0x1b, 0x0a, 0x14][..],
-        b"a text with no bound",
-        &[0x12, 0x01, b'x', 0x12, 0x00][..],
-    ]
-    .concat();
-    assert_eq!(bytes, expected);
-    let back = Ref::<Measured, Proto3>::verify(&bytes).expect("verify").decode();
-    assert_eq!(back, value);
-    assert_eq!(
-        Ref::<Measured, Proto3>::encode(&value, &mut out[..needed - 1]).err(),
-        Some(EncodeError::Capacity { needed, available: needed - 1 })
-    );
-
-    // The box message of the named scalar, on its own.
-    let free = Free::new_unchecked(String::from("hé"));
-    let mut out = [0u8; 8];
-    let proof = Ref::<Free, Proto3>::encode(&free, &mut out).expect("8 bytes is enough");
-    assert_eq!(proof.bytes(), &[0x0a, 0x03, b'h', 0xc3, 0xa9]);
-    assert_eq!(Ref::<Free, Proto3>::verify(&[0x0a, 0x03, b'h', 0xc3, 0xa9]).expect("verify").decode(), free);
-}
-"#;
-    let (program, dense) = free_program(main);
-    for name in ["Free", "Note", "Measured"] {
-        assert!(
-            dense.contains(&format!(
-                "impl::ridl_rt::payload::Codec<::ridl_rt::encoding::Proto3>for{name}{{"
-            )),
-            "`{name}` carries a `Codec<Proto3>`"
-        );
-        assert!(
-            !dense.contains(&format!(
-                "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>for{name}{{"
-            )),
-            "`{name}` carries no `Payload<Proto3>`"
-        );
-    }
+    let err = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+        .expect_err("a string with no length bound is refused");
     assert!(
-        dense.contains("impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>forCount{"),
-        "`Count` keeps its `Payload<Proto3>`"
+        err.message
+            .starts_with("`pb.free.Free` has no proto3 codec: ")
+            && err.message.contains("(NoBound)"),
+        "the refusal names the declaration and the cause, got: {}",
+        err.message
     );
-    rustc::run_program("pb_free", &program);
-}
+    ridl_backend_rust::generate_pipeline(&package, &[], &[]).expect("the types alone generate");
 
-/// An induced interaction root whose payload has no proto3 bound — the
-/// argument message of a call with two parameters each near the `u32`
-/// limit — gets a `Codec<Proto3>` with `BOUND = None` rather than a
-/// refusal, while the package's declarations, which all have a bound, keep
-/// their `Payload<Proto3>`. The interface gets a `Bounds<Proto3>` and no
-/// `Sizes<Proto3>`, so nothing names the bound the root does not have.
-#[test]
-fn an_interaction_root_without_a_bound_gets_a_codec_without_a_size() {
+    // The struct first, so that the refusal names the struct that holds the
+    // string rather than the string.
+    let source = "package pb.held\n\n\
+                  struct Note {\n  text : Free\n}\n\n\
+                  type Free : string [0..18446744073709551615]\n";
+    let output = ridlc::compile("proto3_held.ridl", source);
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|d| !matches!(d.severity, ridl_core::diag::Severity::Error)),
+        "the source compiles, got: {:?}",
+        output.diagnostics
+    );
+    let err = ridl_backend_rust::generate_pipeline(&output.package, &[WireEncoding::Proto3], &[])
+        .expect_err("a struct that holds a string with no length bound is refused");
+    assert!(
+        err.message
+            .starts_with("`pb.held.Note` has no proto3 codec: ")
+            && err.message.contains("(NoBound)"),
+        "the refusal names the struct and the cause, got: {}",
+        err.message
+    );
+
+    // Every declaration has a bound; the call's argument message does not.
     let package = ir::compile_fixture("proto3_unbounded_call.ridl");
-    let generated = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
-        .expect("an interaction whose argument message has no proto3 bound generates")
-        .rust_source;
-    let dense: String = generated.chars().filter(|c| !c.is_whitespace()).collect();
-    assert!(
-        dense.contains(
-            "impl::ridl_rt::payload::Codec<::ridl_rt::encoding::Proto3>forProbeSetParams{"
+    let err = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+        .expect_err("an interaction whose argument message overflows is refused");
+    assert_eq!(
+        err.message.split(": ").next(),
+        Some(
+            "`pb.unbounded.call.Probe.set`'s argument message `ProbeSetParams` has no proto3 codec"
         ),
-        "the induced root carries a `Codec<Proto3>`"
+        "the refusal names the interaction, got: {}",
+        err.message
     );
     assert!(
-        !dense.contains(
-            "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>forProbeSetParams{"
-        ),
-        "the induced root carries no `Payload<Proto3>`"
-    );
-    for name in ["Count", "Big", "Inner"] {
-        assert!(
-            dense.contains(&format!(
-                "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>for{name}{{"
-            )),
-            "`{name}` keeps its `Payload<Proto3>`"
-        );
-    }
-    assert!(
-        !dense.contains("Sizes<::ridl_rt::encoding::Proto3>"),
-        "no proto3 size table is emitted"
-    );
-    assert!(
-        dense.contains("impl::ridl_rt::contract::Bounds<::ridl_rt::encoding::Proto3>forProbe{"),
-        "the interface states its rows as `Bounds<Proto3>`"
+        err.message.contains("(Overflow)"),
+        "the refusal names the cause, got: {}",
+        err.message
     );
     let layout = ridl_backend_rust::proto3_layout(&package, &[]).expect("the layout does not size");
     assert!(

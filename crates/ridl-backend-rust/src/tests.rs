@@ -429,8 +429,8 @@ fn rust_for(decls: Vec<v2::Decl>) -> String {
 /// The proto3 codec refuses a field number proto3 reserves (19000 to 19999)
 /// or does not admit (above 2^29 - 1), in a struct and in a union arm, as the
 /// proto backend does, and admits the highest number. The sizer answers
-/// `RefusedMember` for each, which is "no bound" to the codec, so without its
-/// own check such a declaration would get a `Codec<Proto3>` instead.
+/// `RefusedMember` for each, which the codec would refuse with the sizer's
+/// generic cause; its own check runs first, so the refusal names the field.
 #[test]
 fn the_proto3_codec_refuses_a_field_number_the_proto_backend_refuses() {
     let struct_at = |name: &str, ordinal: u32| {
@@ -498,10 +498,8 @@ fn the_proto3_codec_refuses_a_field_number_the_proto_backend_refuses() {
     }
     let highest = generate(struct_at("Highest", 536_870_911)).expect("the highest number");
     assert!(
-        highest.contains("impl ::ridl_rt::payload::Codec<::ridl_rt::encoding::Proto3> for Highest")
-            || highest.contains(
-                "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Highest"
-            ),
+        highest
+            .contains("impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Highest"),
         "`Highest` gets a proto3 codec"
     );
 }
@@ -510,7 +508,8 @@ fn the_proto3_codec_refuses_a_field_number_the_proto_backend_refuses() {
 /// of a tuple, are refused by the proto3 codec as the `.proto` emitter
 /// refuses them (ADR-0013 decision 7), naming the field; the types alone
 /// generate. The sizer gives each payload `RefusedMember`, so a codec that
-/// read only the size state would have emitted a codec without a size.
+/// read only the size state would refuse with the sizer's generic cause
+/// rather than name the field.
 #[test]
 fn the_proto3_codec_refuses_an_optional_array_or_map_field() {
     // `integer [0..10]` and `string [0..8]`, inline.
@@ -594,13 +593,12 @@ fn the_proto3_codec_refuses_an_optional_array_or_map_field() {
     }
 }
 
-/// `bound_state` maps every size state: a bound to `Some`, `NoBound` and
-/// `Overflow` — the size problems — to a codec without a size, and every
-/// other absent cause, the unbounded state's absence and a missing state to
-/// a refusal. The match over the causes names every variant, so a variant
+/// `bound_state` gives a codec only to a `Bounded` state: every absent
+/// cause, the unbounded state and a missing state are refusals, each naming
+/// its cause. The match over the causes names every variant, so a variant
 /// added to the protocol fails this test to compile until it is placed.
 #[test]
-fn bound_state_gives_a_codec_only_to_a_size_problem() {
+fn bound_state_gives_a_codec_only_to_a_bounded_type() {
     use ridl_ir::codegen::v1::{self, AbsentCause, SizeAbsent, SizeState, size_state::State};
     let absent = |cause: AbsentCause| SizeState {
         state: Some(State::Absent(SizeAbsent {
@@ -619,37 +617,31 @@ fn bound_state_gives_a_codec_only_to_a_size_problem() {
     ];
     for cause in every_cause {
         let verdict = super::codec_proto3::bound_state(Some(&absent(cause)));
-        let codec = match cause {
-            AbsentCause::NoBound | AbsentCause::Overflow => true,
-            AbsentCause::Unspecified
-            | AbsentCause::EncodingUndefined
-            | AbsentCause::NoMessage
-            | AbsentCause::RefusedMember
-            | AbsentCause::Unresolved => false,
+        // Exhaustive: a new cause must be placed here, and is a refusal.
+        let named = match cause {
+            AbsentCause::Unspecified => "Unspecified",
+            AbsentCause::EncodingUndefined => "EncodingUndefined",
+            AbsentCause::NoMessage => "NoMessage",
+            AbsentCause::RefusedMember => "RefusedMember",
+            AbsentCause::NoBound => "NoBound",
+            AbsentCause::Overflow => "Overflow",
+            AbsentCause::Unresolved => "Unresolved",
         };
-        assert_eq!(
-            verdict.is_ok(),
-            codec,
-            "{cause:?}: a codec without a size only for a size problem, got {verdict:?}"
+        let refusal = verdict.expect_err("every absent cause is a refusal");
+        assert!(
+            refusal.contains(&format!("({named})")),
+            "{cause:?}: the refusal names its cause, got: {refusal}"
         );
-        if codec {
-            assert_eq!(verdict, Ok(None));
-        } else {
-            assert!(!verdict.unwrap_err().is_empty(), "{cause:?} names a cause");
-        }
     }
     let bounded = SizeState {
         state: Some(State::Bounded(12)),
     };
-    assert_eq!(
-        super::codec_proto3::bound_state(Some(&bounded)),
-        Ok(Some(12))
-    );
+    assert_eq!(super::codec_proto3::bound_state(Some(&bounded)), Ok(12));
     assert!(super::codec_proto3::bound_state(None).is_err());
     let unbounded = SizeState {
         state: Some(State::Unbounded(v1::FbUnbounded::default())),
     };
-    assert_eq!(super::codec_proto3::bound_state(Some(&unbounded)), Ok(None));
+    assert!(super::codec_proto3::bound_state(Some(&unbounded)).is_err());
 }
 
 /// The contract accepts `proto3`, alone and beside `flatbuffers`, and still

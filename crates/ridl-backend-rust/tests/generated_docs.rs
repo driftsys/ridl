@@ -99,24 +99,25 @@ fn assert_clean(label: &str, source: &str) {
 const WORKSPACE_MEMBERS: [&str; 2] = ["proto3_conformance.ridl", "proto3_conformance_other.ridl"];
 
 /// The fixtures the FlatBuffers codec refuses by design, each with the text
-/// its refusal must carry: a string with no length bound, which that codec
-/// still refuses (the proto3 codec gives it a codec without a size).
+/// its refusal must carry: a string with no length bound.
 const FLATBUFFERS_REFUSED: [(&str, &str); 1] =
     [("proto3_free.ridl", "` has no finite FlatBuffers bound")];
 
 /// The fixtures the proto3 codec refuses by design, each with the text its
 /// refusal must carry — a map keyed by a float and one keyed by bytes, which
-/// proto3 does not admit as a key, and a declaration with an enum value
-/// outside int32, a member the proto backend refuses — so `generate_pipeline`
-/// with `proto3` has no output to scan for them, and must refuse for that
-/// reason rather than generate. A declaration with no proto3 bound is not
-/// refused: it gets a codec without a size, and its doc lines are scanned.
-const PROTO3_REFUSED: [(&str, &str); 2] = [
+/// proto3 does not admit as a key; a declaration with an enum value outside
+/// int32, a member the proto backend refuses; a string with no length bound;
+/// and a call whose argument message overflows a `u32` bound — so
+/// `generate_pipeline` with `proto3` has no output to scan for them, and
+/// must refuse for that reason rather than generate.
+const PROTO3_REFUSED: [(&str, &str); 4] = [
     (
         "payload_constraints.ridl",
         "a map key must be an integral or string type",
     ),
     ("proto3_unbounded.ridl", "` has no proto3 codec: "),
+    ("proto3_free.ridl", "` has no proto3 codec: "),
+    ("proto3_unbounded_call.ridl", "` has no proto3 codec: "),
 ];
 
 fn fixtures() -> Vec<String> {

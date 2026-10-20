@@ -290,10 +290,7 @@ pub(crate) fn generate_pipeline_over(
 /// The descriptors carry one size table per encoding in the list, and the
 /// face is generic over its port's encoding, so a list that names `proto3`
 /// alone carries the proto3 table and the same face as a list that names
-/// `flatbuffers`. An interface whose payload has no proto3 bound has no
-/// proto3 table (`docs/design/interaction-face.md`), so its face, which
-/// holds the table's buffers, cannot be bound to a proto3 port; the package
-/// still compiles.
+/// `flatbuffers`.
 fn emits_face(encodings: &[WireEncoding]) -> bool {
     !encodings.is_empty()
 }
@@ -1176,14 +1173,6 @@ fn emit_type_def(
     let check_param_ty = check_param_type(sc);
     let check_shadow = check_deref_shadow(sc);
     let check_body = constraint_checks(sc, type_name, quote! { value });
-    // A constraint whose every bound rustc could fold — `string [0..u64::MAX]`
-    // — leaves no check, and `check` then reads its parameter once so that
-    // the consumer's build does not warn on an unused variable.
-    let check_body = if check_body.is_empty() {
-        quote! { let _ = value; }
-    } else {
-        check_body
-    };
     let getter = scalar_getter(sc, vis.clone(), inner.clone());
 
     quote! {
@@ -1479,10 +1468,7 @@ fn constraint_checks_with_precision(
                 }
             });
         }
-        // The same rule for a maximum of `u64::MAX`: the length is a `u64`,
-        // so `(… as u64) > u64::MAX` is never true either. A string or bytes
-        // declared with that maximum has no length to check.
-        if let Some(max) = c.len_max.filter(|max| *max < u64::MAX) {
+        if let Some(max) = c.len_max {
             let lit = proc_macro2::Literal::u64_unsuffixed(max);
             checks.push(quote! {
                 if #len > #lit {

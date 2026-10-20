@@ -2,8 +2,7 @@
 //! `generate_face_with` emits the `Interface` and `Interaction` descriptors and the
 //! interaction-kind traits over the runtime crate when `encodings` names a
 //! codec, that each interface carries one size table per encoding
-//! (`Sizes<FlatBuffers>`, `Sizes<Proto3>`, or `Bounds<Proto3>` for an
-//! interface with an unbounded proto3 payload) with every number a const
+//! (`Sizes<FlatBuffers>`, `Sizes<Proto3>`) with every number a const
 //! expression over the codec's `MAX_SIZE`, that the
 //! buffer constants are sized from the right payloads, that an empty
 //! `encodings` emits the domain types only, and that the pipeline `generate`
@@ -324,8 +323,6 @@ fn the_proto3_size_table_is_built_from_proto3_bounds() {
              assert_eq!(<Cabin as Sizes<Proto3>>::EVENT_SOURCE_BUFFER_SIZE,\n\
                  <Warning as Payload<Proto3>>::MAX_SIZE);\n\
              assert_eq!(<Wiper as Sizes<Proto3>>::RESERVATIONS[0], 0);\n\
-             assert_eq!(<Cabin as ::ridl_rt::contract::Bounds<Proto3>>::reservation_bound(3),\n\
-                 Some(rows[3]));\n\
          }}\n"
     );
     rustc::run_program("proto3_size_table", &program);
@@ -368,56 +365,22 @@ fn a_proto3_only_package_has_a_face() {
     );
 }
 
-/// An interface a member of which has a payload with no proto3 bound gets a
-/// `Bounds<Proto3>` implementation of its own, with `None` in that member's
-/// row and the bound in every other row, and no `Sizes<Proto3>`; an
-/// interface whose payloads are all bounded keeps its `Sizes<Proto3>`. The
-/// output compiles as a program, which reads the rows back.
+/// An interface a member of which has a payload with no proto3 bound is
+/// refused with the face, as with the codec alone: the refusal names the
+/// interaction, and no descriptor is emitted without its size table.
 #[test]
-fn an_interface_with_an_unbounded_payload_has_bounds_and_no_size_table() {
-    let package = ir::compile_fixture("proto3_unbounded_face.ridl");
-    let source = generate_face_with(&package, &[WireEncoding::Proto3])
-        .expect("an interface with an unbounded payload generates")
-        .rust_source;
-    let d = dense(&source);
+fn an_interface_with_an_unbounded_payload_is_refused() {
+    let package = ir::compile_fixture("proto3_unbounded_call.ridl");
+    let error = generate_face_with(&package, &[WireEncoding::Proto3])
+        .expect_err("an interface with an unbounded payload is refused");
     assert!(
-        d.contains("impl::ridl_rt::contract::Bounds<::ridl_rt::encoding::Proto3>forProbe{"),
-        "`Probe` carries its own `Bounds<Proto3>`, got:\n{source}"
+        error
+            .message
+            .starts_with("`pb.unbounded.call.Probe.set`'s argument message `ProbeSetParams`")
+            && error.message.contains("(Overflow)"),
+        "the refusal names the interaction and the cause, got: {}",
+        error.message
     );
-    assert!(
-        !d.contains("Sizes<::ridl_rt::encoding::Proto3>forProbe"),
-        "`Probe` carries no `Sizes<Proto3>`"
-    );
-    assert!(
-        d.contains("impl::ridl_rt::contract::Sizes<::ridl_rt::encoding::Proto3>forGauge{"),
-        "`Gauge`, whose payloads are all bounded, keeps its `Sizes<Proto3>`"
-    );
-    assert!(
-        !d.contains("Bounds<::ridl_rt::encoding::Proto3>forGauge"),
-        "`Gauge` takes its `Bounds<Proto3>` from the blanket implementation"
-    );
-    assert!(
-        source.contains("It has no size table in proto3"),
-        "`Probe`'s doc says it has no proto3 size table"
-    );
-    let program = format!(
-        "#![allow(dead_code)]\n{source}\n\
-         fn main() {{\n\
-             use ::ridl_rt::contract::{{Bounds, Interface}};\n\
-             use ::ridl_rt::encoding::Proto3;\n\
-             use ::ridl_rt::payload::{{Codec, Payload}};\n\
-             assert_eq!(<Probe as Interface>::MEMBERS.len(), 3);\n\
-             assert_eq!(<Probe as Bounds<Proto3>>::reservation_bound(0),\n\
-                 Some(<Count as Payload<Proto3>>::MAX_SIZE as u64));\n\
-             assert_eq!(<Probe as Bounds<Proto3>>::reservation_bound(1), None);\n\
-             assert_eq!(<ProbeSetParams as Codec<Proto3>>::BOUND, None);\n\
-             assert_eq!(<Probe as Bounds<Proto3>>::reservation_bound(2),\n\
-                 Some(2 * <Count as Payload<Proto3>>::MAX_SIZE as u64));\n\
-             assert_eq!(<Gauge as Bounds<Proto3>>::reservation_bound(0),\n\
-                 Some(<Count as Payload<Proto3>>::MAX_SIZE as u64));\n\
-         }}\n"
-    );
-    rustc::run_program("proto3_unbounded_face", &program);
 }
 
 /// Every interaction descriptor's `ROW` indexes, in its interface's

@@ -18,33 +18,29 @@
 //! - `__ridl_pb_decode_<Name>(&[u8]) -> T`, which is total;
 //! - the `Payload<::ridl_rt::encoding::Proto3>` implementation, whose view
 //!   is `::ridl_rt::proto3::Verified`, the verified bytes with no accessor,
-//!   for a type whose proto3 size state is bounded; or, for a type whose
-//!   state has no bound — a string or bytes with no length bound, a
-//!   collection whose count has none, or a bound past `u32::MAX` — the
-//!   `Codec<::ridl_rt::encoding::Proto3>` implementation alone, with
-//!   `BOUND = None`, the same view and the same three operations, and no
-//!   `MAX_SIZE`, `Buffer` or `BUFFER`. proto3 itself has no size limit, and
-//!   `encode` knows the exact length before it writes, so a caller buffer
-//!   that is long enough is all such a type needs.
+//!   and whose `MAX_SIZE` is the finite bound the model carries for the
+//!   declaration's root message.
 //!
-//! An induced tuple gets the four functions, and the `Payload` or `Codec`
+//! An induced tuple gets the four functions, and the `Payload`
 //! implementation only when it crosses the wire on its own: the argument
 //! message of a call with zero or several parameters, and the reply message
 //! of a query whose reply is a tuple (driftsys/ridl#713). Its `MAX_SIZE` is
-//! the bound the model carries for that interaction's payload, and it is a
-//! `Codec` alone when that state has no bound. A tuple reached only from a
-//! field is encoded inside its owner.
+//! the bound the model carries for that interaction's payload. A tuple
+//! reached only from a field is encoded inside its owner.
 //!
-//! A declaration whose proto3 size state is absent for any reason other
-//! than a size problem — a member the proto backend refuses, a declaration
-//! the sizer did not resolve, no message at all — is refused with a
+//! A declaration whose proto3 size state is not bounded is refused with a
 //! [`GenerateError`] naming it and the cause, and so is an interaction whose
-//! induced root is. The codec's own walk refuses the same members the proto
-//! backend refuses, naming the field: an optional array or map field of a
-//! struct or a tuple (ADR-0013 decision 7), an optional array element and an
-//! optional map value, a nested collection, a map key outside the integral
-//! and string scalars, an enum value outside int32, and a field number
-//! proto3 reserves or exceeds.
+//! induced root is: a member with no finite bound — a string or bytes with
+//! no length bound, a collection whose count has none — a bound or a sum
+//! past `u32::MAX`, a member proto3 cannot represent, a declaration the sizer
+//! did not resolve, or no message at all. The size limit lives in the type:
+//! a source that needs a proto3 codec declares a finite bound on every string,
+//! bytes and collection its payloads reach. The codec's own walk refuses the
+//! same members the proto backend refuses, naming the field: an optional
+//! array or map field of a struct or a tuple (ADR-0013 decision 7), an
+//! optional array element and an optional map value, a nested collection, a
+//! map key outside the integral and string scalars, an enum value outside
+//! int32, and a field number proto3 reserves or exceeds.
 //!
 //! # The wire mapping
 //!
@@ -95,7 +91,7 @@
 //! `encode` sizes the value first, with the length function, and returns
 //! `EncodeError::Capacity` carrying that exact `needed` before it writes a
 //! byte; what it then writes is a prefix of the output buffer. The length
-//! arithmetic saturates, so a value of a type with no bound that is too
+//! arithmetic saturates, so a value past its declared bound that is too
 //! large for a `usize` asks for `usize::MAX` rather than wrapping. `verify`
 //! applies no size ceiling: a buffer from a newer writer may carry fields
 //! this version skips.
@@ -670,14 +666,11 @@ enum Source {
     /// The declaration at this index of the model.
     Declaration(u32),
     /// An induced tuple of the model, with its bound when an interaction
-    /// names it as a payload of its own (`None` when that payload has no
-    /// bound) — or the refusal to raise when that interaction's payload
-    /// cannot be represented, raised when the codec is emitted and not when
-    /// it is laid out, so the layout of a package whose interaction is
-    /// refused is still a layout.
-    Tuple {
-        root: Option<Result<Option<u32>, String>>,
-    },
+    /// names it as a payload of its own — or the refusal to raise when that
+    /// interaction's payload has no finite bound or cannot be represented,
+    /// raised when the codec is emitted and not when it is laid out, so the
+    /// layout of a package whose interaction is refused is still a layout.
+    Tuple { root: Option<Result<u32, String>> },
 }
 
 #[derive(Debug, Clone)]
@@ -962,14 +955,11 @@ impl<'a> Codec<'a> {
     /// The induced tuples the interactions of this package send on their
     /// own — a call's argument message, a query's tuple reply — each with
     /// its bound, the proto3 state the model carries for that interaction's
-    /// payload (`None` when that state has no bound), or with the refusal
-    /// naming the interaction when that state is absent for a reason of
-    /// representability. An interface the model leaves nameless is an
-    /// error, because no refusal could name it.
-    fn interaction_roots(
-        &self,
-    ) -> Result<HashMap<u32, Result<Option<u32>, String>>, GenerateError> {
-        let mut roots: HashMap<u32, Result<Option<u32>, String>> = HashMap::new();
+    /// payload, or with the refusal naming the interaction when that state
+    /// is not bounded. An interface the model leaves nameless is an error,
+    /// because no refusal could name it.
+    fn interaction_roots(&self) -> Result<HashMap<u32, Result<u32, String>>, GenerateError> {
+        let mut roots: HashMap<u32, Result<u32, String>> = HashMap::new();
         for interface in &self.ctx.model.interfaces {
             let interface_name = declared_name(interface)
                 .map(str::to_string)
@@ -1032,7 +1022,7 @@ impl<'a> Codec<'a> {
     /// tuple a struct field, a tuple field, an array element or a map value
     /// holds. Only a reached tuple gets functions, so no dead code reaches a
     /// consumer's build.
-    fn reachable_tuples(&self, roots: &HashMap<u32, Result<Option<u32>, String>>) -> Vec<u32> {
+    fn reachable_tuples(&self, roots: &HashMap<u32, Result<u32, String>>) -> Vec<u32> {
         let mut found: Vec<u32> = Vec::new();
         let mut seen: HashSet<u32> = HashSet::new();
         let mut queue: Vec<&'a v1::Type> = Vec::new();
@@ -1108,8 +1098,7 @@ impl<'a> Codec<'a> {
         for message in self.messages()? {
             // `None`: a tuple encoded only inside its owner, which crosses
             // the wire on its own in no encoding and gets no implementation.
-            // `Some(None)`: a type with no bound, which gets `Codec` alone.
-            let bound: Option<Option<u32>> = match &message.source {
+            let bound: Option<u32> = match &message.source {
                 Source::Declaration(index) => {
                     let decl = self.ctx.declaration(*index).ok_or_else(|| GenerateError {
                         message: "the proto3 codec names a declaration the lowered model does \
@@ -1131,10 +1120,8 @@ impl<'a> Codec<'a> {
                 self.verify_fn(&message)?,
                 self.decode_fn(&message, &ty)?,
             ];
-            match bound {
-                Some(Some(bound)) => functions.push(self.payload_impl(owner, &ty, bound)),
-                Some(None) => functions.push(self.codec_impl(owner, &ty)),
-                None => {}
+            if let Some(bound) = bound {
+                functions.push(self.payload_impl(owner, &ty, bound));
             }
             items.extend(
                 functions
@@ -1145,10 +1132,9 @@ impl<'a> Codec<'a> {
         Ok(items)
     }
 
-    /// The proto3 bound of the declaration's root message, `None` for a
-    /// declaration whose state has no bound, or the refusal for one whose
-    /// state is absent for a reason of representability.
-    fn bound(&self, decl: &v1::Declaration) -> Result<Option<u32>, GenerateError> {
+    /// The proto3 bound of the declaration's root message, or the refusal
+    /// for a declaration whose state is not bounded.
+    fn bound(&self, decl: &v1::Declaration) -> Result<u32, GenerateError> {
         let pkg = self.ctx.package_name();
         let name = declared(decl.name.as_ref());
         bound_state(decl.proto3.as_ref()).map_err(|cause| GenerateError {
@@ -1276,7 +1262,7 @@ impl<'a> Codec<'a> {
     fn tuple_message(
         &self,
         induced: &v1::InducedTuple,
-        root: Option<Result<Option<u32>, String>>,
+        root: Option<Result<u32, String>>,
     ) -> Result<Message, GenerateError> {
         let owner = induced
             .name
@@ -2891,99 +2877,50 @@ impl<'a> Codec<'a> {
             }
         }
     }
-
-    /// The `Codec<Proto3>` implementation of a type whose proto3 size state
-    /// has no bound: the same view and the same three operations as the
-    /// `Payload<Proto3>` implementation, `BOUND = None`, and no `MAX_SIZE`.
-    /// `encode` still sizes the value first, so a buffer too short is
-    /// reported with the exact length before anything is written.
-    fn codec_impl(&self, owner: &str, ty: &Ident) -> TokenStream {
-        let len = len_ident(owner);
-        let encode = encode_ident(owner);
-        let verify = verify_ident(owner);
-        let decode = decode_ident(owner);
-        let bound_doc = format!(
-            " `None`: no legal `{owner}` has a largest proto3 message, so a caller sizes the \
-             buffer it encodes into, and a buffer too short reports the exact length needed."
-        );
-        quote! {
-            #[allow(deprecated)]
-            impl ::ridl_rt::payload::Codec<::ridl_rt::encoding::Proto3> for #ty {
-                #[doc = #bound_doc]
-                const BOUND: ::core::option::Option<::core::primitive::usize> =
-                    ::core::option::Option::None;
-
-                type View<'a> = ::ridl_rt::proto3::Verified<'a>;
-
-                fn encode<'o>(
-                    &self,
-                    out: &'o mut [::core::primitive::u8],
-                ) -> ::core::result::Result<
-                    ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
-                    ::ridl_rt::payload::EncodeError,
-                > {
-                    let __needed = #len(self);
-                    ::ridl_rt::proto3::check_capacity(__needed, out)?;
-                    let mut __writer = ::ridl_rt::proto3::Writer::new(out);
-                    #encode(self, &mut __writer)?;
-                    let bytes = __writer.finish()?;
-                    ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
-                        bytes,
-                        view: ::ridl_rt::proto3::Verified::new(bytes),
-                    })
-                }
-
-                fn verify(
-                    buf: &[::core::primitive::u8],
-                ) -> ::core::result::Result<
-                    ::ridl_rt::proto3::Verified<'_>,
-                    ::ridl_rt::payload::VerifyError,
-                > {
-                    #verify(buf)?;
-                    ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
-                }
-
-                fn decode(
-                    r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
-                ) -> Self {
-                    #decode(::ridl_rt::payload::View::bytes(r.view()))
-                }
-            }
-        }
-    }
 }
 
-/// The bound a proto3 size state carries: `Some` of the bound; `None` for a
-/// size problem alone — `NoBound` (a member with no finite bound) or
-/// `Overflow` (a bound past `u32::MAX`, a sum or product that does not fit,
-/// a nesting past the sizer's depth limit) — which gets a codec without a
-/// size; and the cause as the refusal states it for every other absent
-/// state: `RefusedMember` (a member proto3 cannot represent), `Unresolved`,
-/// `NoMessage`, `EncodingUndefined`, an unspecified cause, and a model that
-/// carries no state. Only a size problem is a codec; everything else is a
-/// refusal, naming the declaration and the cause.
-pub(crate) fn bound_state(state: Option<&v1::SizeState>) -> Result<Option<u32>, &'static str> {
+/// The bound a proto3 size state carries, or the cause of its absence as
+/// the refusal states it. Only a `Bounded` state gives a codec: every
+/// absent cause — `NoBound` (a member with no finite bound), `Overflow` (a
+/// bound past `u32::MAX`, a sum or product that does not fit, a nesting past
+/// the sizer's depth limit), `RefusedMember` (a member proto3 cannot
+/// represent), `Unresolved`, `NoMessage`, `EncodingUndefined` and an
+/// unspecified cause — the unbounded state, and a model that carries no
+/// state are refusals, each naming its cause, so that every emitted
+/// `MAX_SIZE` is finite and the size limit stays in the type.
+pub(crate) fn bound_state(state: Option<&v1::SizeState>) -> Result<u32, &'static str> {
     match state.and_then(|state| state.state.as_ref()) {
-        Some(v1::size_state::State::Bounded(bound)) => Ok(Some(*bound)),
-        Some(v1::size_state::State::Absent(absent)) => {
+        Some(v1::size_state::State::Bounded(bound)) => Ok(*bound),
+        Some(v1::size_state::State::Absent(absent)) => Err(
             match v1::AbsentCause::try_from(absent.cause).unwrap_or(v1::AbsentCause::Unspecified) {
-                v1::AbsentCause::NoBound | v1::AbsentCause::Overflow => Ok(None),
-                v1::AbsentCause::RefusedMember => Err(
-                    "a member of it is one proto3 cannot represent: an optional array or map, \
-                     an array of arrays or of maps, a map whose value is a collection, a map \
-                     key outside the integral and string scalars, a field number proto3 \
-                     reserves or exceeds, a name that does not resolve, or an enum value \
-                     outside int32",
-                ),
-                v1::AbsentCause::Unresolved => {
-                    Err("it names a declaration the sizer did not resolve")
+                v1::AbsentCause::NoBound => {
+                    "a member of it has no finite bound (NoBound): a string or bytes with no \
+                     length bound, or a collection whose count has none; declare the bound in \
+                     the type"
                 }
-                v1::AbsentCause::NoMessage
-                | v1::AbsentCause::EncodingUndefined
-                | v1::AbsentCause::Unspecified => Err("no proto3 message defines it"),
-            }
-        }
-        Some(v1::size_state::State::Unbounded(_)) => Ok(None),
+                v1::AbsentCause::Overflow => {
+                    "its bound does not fit a u32 (Overflow): a bound past u32::MAX, a sum or \
+                     product of bounds that does not fit, or a nesting past the sizer's depth \
+                     limit; lower the bounds in the type"
+                }
+                v1::AbsentCause::RefusedMember => {
+                    "a member of it is one proto3 cannot represent (RefusedMember): an optional \
+                     array or map, an array of arrays or of maps, a map whose value is a \
+                     collection, a map key outside the integral and string scalars, a field \
+                     number proto3 reserves or exceeds, a name that does not resolve, or an \
+                     enum value outside int32"
+                }
+                v1::AbsentCause::Unresolved => {
+                    "it names a declaration the sizer did not resolve (Unresolved)"
+                }
+                v1::AbsentCause::NoMessage => "no proto3 message defines it (NoMessage)",
+                v1::AbsentCause::EncodingUndefined => {
+                    "no proto3 message defines it (EncodingUndefined)"
+                }
+                v1::AbsentCause::Unspecified => "no proto3 message defines it (Unspecified)",
+            },
+        ),
+        Some(v1::size_state::State::Unbounded(_)) => Err("no finite bound exists for it"),
         None => Err("the lowered model carries no proto3 size state for it"),
     }
 }

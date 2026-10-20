@@ -2,9 +2,9 @@
 // backend refuses: `Free` is a string with no length bound, `Note` holds one
 // and an array of them with no count bound, and `Measured` holds a `Note`
 // beside a bounded field. The proto3 sizer answers `NoBound` or `Overflow`
-// for each, so each gets a proto3 codec without a size — a `Codec<Proto3>`
-// implementation with `BOUND = None` — rather than a `Payload<Proto3>`.
-// `Count` keeps its bound, so one package carries both kinds.
+// for each, so the proto3 codec refuses the package, naming the first
+// declaration in order (`Free`) and the cause; the FlatBuffers codec refuses
+// it too. `Count` keeps its bound. The types alone generate.
 
 package pb.free
 

@@ -38,8 +38,6 @@
 //! entry), and the determinism and bound cases pin one encoding, encode into
 //! a dirty buffer, and encode a worst-case value per message.
 
-#[path = "support/ir.rs"]
-mod ir;
 #[path = "support/proto3.rs"]
 mod proto3;
 #[path = "support/rustc.rs"]
@@ -735,17 +733,19 @@ fn the_corpus_generates_with_proto3() {
     }
 }
 
-/// Every package of the ros2 corpus generates under `[Proto3]`. Its
-/// `RosString` is a string with no length bound, so it and every type that
-/// reaches it get a `Codec<Proto3>` with no size and no `Payload<Proto3>`,
-/// while a type that does not reach it keeps its `Payload<Proto3>`.
+/// The ros2 corpus under `[Proto3]`: every package that declares a
+/// `RosString` — a string with no length bound — is refused, with the
+/// refusal naming that declaration and `NoBound`; `builtininterfaces`,
+/// which declares no string, generates. Every package generates with no
+/// encoding. The corpus pass leaves the workspace out ([`PROTO3_CORPUS`]).
 #[test]
-fn the_ros2_corpus_generates_with_proto3() {
+fn the_ros2_corpus_is_refused_under_proto3() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let std_ir = ridlc::std_ir();
     let packages = proto3::compile_workspace(&root.join("evals/corpus/ros2"));
     assert!(packages.len() > 1, "the ros2 corpus holds several packages");
-    let mut generated: BTreeMap<String, String> = BTreeMap::new();
+    let mut refused: BTreeMap<String, String> = BTreeMap::new();
+    let mut generated: Vec<String> = Vec::new();
     for (at, package) in packages.iter().enumerate() {
         let mut others: Vec<&v2::Package> = packages
             .iter()
@@ -754,44 +754,52 @@ fn the_ros2_corpus_generates_with_proto3() {
             .map(|(_, other)| other)
             .collect();
         others.push(&std_ir);
-        let source = ridl_backend_rust::generate_pipeline(
+        ridl_backend_rust::generate_pipeline(package, &[], &others).unwrap_or_else(|error| {
+            panic!(
+                "evals/corpus/ros2: `{}` generates with no encoding: {}",
+                package.name, error.message
+            )
+        });
+        match ridl_backend_rust::generate_pipeline(
             package,
             &[ridl_backend_rust::WireEncoding::Proto3],
             &others,
-        )
-        .unwrap_or_else(|error| {
-            panic!(
-                "evals/corpus/ros2: `{}` generates with proto3: {}",
-                package.name, error.message
-            )
-        })
-        .rust_source;
-        generated.insert(
-            package.name.clone(),
-            source.chars().filter(|c| !c.is_whitespace()).collect(),
+        ) {
+            Ok(_) => generated.push(package.name.clone()),
+            Err(error) => {
+                // The first declaration without a bound, in model order, is
+                // named: `RosString` itself, or a struct that reaches it.
+                assert!(
+                    error.message.starts_with(&format!("`{}.", package.name))
+                        && error.message.contains("` has no proto3 codec: ")
+                        && error.message.contains("(NoBound)"),
+                    "evals/corpus/ros2: `{}` is refused for a missing bound, got: {}",
+                    package.name,
+                    error.message
+                );
+                refused.insert(package.name.clone(), error.message);
+            }
+        }
+    }
+    assert_eq!(generated, ["builtininterfaces"]);
+    for name in ["stdmsgs", "stdsrvs"] {
+        assert!(
+            refused[name].starts_with(&format!("`{name}.RosString` has no proto3 codec: ")),
+            "`{name}`'s refusal names `RosString`, got: {}",
+            refused[name]
         );
     }
-    let stdsrvs = &generated["stdsrvs"];
-    for codec_only in ["RosString", "SetBoolResponse", "TriggerResponse"] {
+    for name in [
+        "stdmsgs",
+        "stdsrvs",
+        "geometrymsgs",
+        "sensormsgs",
+        "navmsgs",
+        "nav2msgs",
+    ] {
         assert!(
-            stdsrvs.contains(&format!(
-                "impl::ridl_rt::payload::Codec<::ridl_rt::encoding::Proto3>for{codec_only}{{"
-            )),
-            "`stdsrvs.{codec_only}` carries a `Codec<Proto3>`"
-        );
-        assert!(
-            !stdsrvs.contains(&format!(
-                "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>for{codec_only}{{"
-            )),
-            "`stdsrvs.{codec_only}` carries no `Payload<Proto3>`"
-        );
-    }
-    for bounded in ["RosBoolean", "EmptyRequest", "SetBoolRequest"] {
-        assert!(
-            stdsrvs.contains(&format!(
-                "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>for{bounded}{{"
-            )),
-            "`stdsrvs.{bounded}` keeps its `Payload<Proto3>`"
+            refused.contains_key(name),
+            "`{name}` is refused: {refused:?}"
         );
     }
 }
@@ -2929,14 +2937,14 @@ fn messages_with_a_record_field_or_a_map() -> BTreeSet<String> {
 // The corpus pass
 // ---------------------------------------------------------------------------
 
-/// The corpus entries, each built as one program over all of its packages,
-/// keyed by full name. The ros2 corpus holds types with no proto3 bound,
-/// whose `Codec<Proto3>` the program dispatches like a `Payload<Proto3>`.
+/// The corpus entries whose every package generates under proto3 — the
+/// ros2 corpus is refused by its declarations
+/// ([`the_ros2_corpus_is_refused_under_proto3`]) — each built as one program
+/// over all of its packages, keyed by full name.
 const PROTO3_CORPUS: &[&str] = &[
     "examples/cabin",
     "crates/ridlc/tests/corpus/veh-cluster",
     "evals/corpus/mavlink",
-    "evals/corpus/ros2",
     "evals/corpus/vss",
 ];
 
@@ -3004,129 +3012,6 @@ fn corpus_defaults_round_trip_through_prost_reflect() {
     println!("{compared} corpus messages compared, {non_empty} with a non-empty default");
     assert!(compared > 50, "{compared} corpus messages compared");
     assert!(non_empty > 0, "some corpus default encodes to something");
-}
-
-/// The bytes this codec writes for a type with no proto3 bound are the
-/// bytes `prost` writes, in both directions, with `prost-reflect` over the
-/// emitted `.proto` of `proto3_free.ridl` as the oracle, so that the
-/// checked-in `prost` oracle of the main fixture, whose every message has a
-/// bound, stays as it is. Each value is built as a `DynamicMessage`, encoded
-/// by `prost`, read and re-encoded here (`decode-encode`), and the value
-/// encoded here (`encode-named`) is read and re-encoded by `prost-reflect`.
-#[test]
-fn unbounded_values_round_trip_through_prost_reflect_byte_for_byte() {
-    use protox::prost_reflect::{DynamicMessage, ReflectMessage, Value};
-
-    let package = ir::compile_fixture("proto3_free.ridl");
-    let pool = proto3::compile_protos(&proto3::emit_protos(std::slice::from_ref(&package), &[]))
-        .descriptor_pool();
-    let long = "x".repeat(300);
-    // The "long" case holds the text three times over, so its encoding is
-    // well past any small buffer a codec with a bound would have used.
-    assert!(long.len() * 3 > 600);
-    let prelude = format!(
-        r#"
-fn free(s: &str) -> Free {{ Free::new_unchecked(String::from(s)) }}
-fn long() -> String {{ "x".repeat({}) }}
-"#,
-        long.len()
-    );
-    let named = [
-        proto3::NamedValue {
-            message: "Note",
-            name: "empty",
-            expr: "Note { text: free(\"\"), tags: vec![] }",
-        },
-        proto3::NamedValue {
-            message: "Note",
-            name: "long",
-            expr: "Note { text: free(&long()), tags: vec![free(\"a\"), free(\"\"), free(&long())] }",
-        },
-        proto3::NamedValue {
-            message: "Measured",
-            name: "nested",
-            expr: "Measured { count: Count::new_unchecked(200), note: Note { text: free(\"t\"), tags: vec![free(&long())] } }",
-        },
-        proto3::NamedValue {
-            message: "FreeBox",
-            name: "long",
-            expr: "free(&long())",
-        },
-    ];
-    let program = proto3::Program::build_over(&[package], proto3::Key::Bare, &prelude, &named);
-    assert_eq!(
-        program.messages().into_iter().collect::<BTreeSet<_>>(),
-        BTreeSet::from(["CountBox", "FreeBox", "Measured", "Note"]),
-        "every message of the fixture is dispatched, with or without a bound"
-    );
-
-    let note = pool.get_message_by_name("pb.free.Note").expect("Note");
-    let measured = pool
-        .get_message_by_name("pb.free.Measured")
-        .expect("Measured");
-    let free_box = pool
-        .get_message_by_name("pb.free.FreeBox")
-        .expect("FreeBox");
-    let note_value = |text: &str, tags: &[&str]| {
-        let mut m = DynamicMessage::new(note.clone());
-        m.set_field_by_name("text", Value::String(text.to_string()));
-        m.set_field_by_name(
-            "tags",
-            Value::List(tags.iter().map(|t| Value::String(t.to_string())).collect()),
-        );
-        m
-    };
-    let theirs: Vec<(&str, &str, DynamicMessage)> = vec![
-        ("Note", "empty", note_value("", &[])),
-        ("Note", "long", note_value(&long, &["a", "", &long])),
-        ("Measured", "nested", {
-            let mut m = DynamicMessage::new(measured.clone());
-            m.set_field_by_name("count", Value::U32(200));
-            m.set_field_by_name("note", Value::Message(note_value("t", &[&long])));
-            m
-        }),
-        ("FreeBox", "long", {
-            let mut m = DynamicMessage::new(free_box.clone());
-            m.set_field_by_name("value", Value::String(long.clone()));
-            m
-        }),
-    ];
-    let lines: Vec<String> = theirs
-        .iter()
-        .flat_map(|(message, name, dynamic)| {
-            [
-                format!("{message} encode-named {name}"),
-                format!(
-                    "{message} decode-encode {}",
-                    to_hex(&prost::Message::encode_to_vec(dynamic))
-                ),
-                format!("{message} max-size"),
-            ]
-        })
-        .collect();
-    let answers = program.run(&lines);
-    for ((message, name, dynamic), answer) in theirs.iter().zip(answers.chunks(3)) {
-        let [ours, re_encoded, bound] = answer else {
-            panic!("three answers per value");
-        };
-        let prost_bytes = to_hex(&prost::Message::encode_to_vec(dynamic));
-        assert_eq!(
-            ours, &prost_bytes,
-            "{message}/{name}: the bytes this codec writes are prost's"
-        );
-        assert_eq!(
-            re_encoded, &prost_bytes,
-            "{message}/{name}: prost's bytes are read here and re-encode to themselves"
-        );
-        assert_eq!(bound, "none", "{message}/{name}: no bound");
-        let read = DynamicMessage::decode(dynamic.descriptor(), from_hex(ours).as_slice())
-            .unwrap_or_else(|error| panic!("{message}/{name}: prost-reflect reads: {error}"));
-        assert_eq!(
-            to_hex(&prost::Message::encode_to_vec(&read)),
-            prost_bytes,
-            "{message}/{name}: prost-reflect re-encodes what this codec wrote to the same bytes"
-        );
-    }
 }
 
 // ---------------------------------------------------------------------------
