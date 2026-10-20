@@ -1016,6 +1016,26 @@ depends on E11.9 alone, because it carries payload bytes without decoding them.
 E12.2 and E12.5 also depend on E12.11. It takes the next free identifier,
 because a parked row's identifier is never reused.
 
+**E12.11 landed** (driftsys/ridl#982, PR #TBD). `packages/ridl-transport-ws` is
+`@driftsys/ridl-transport-ws`, the consuming side of the §11.1 WebSocket binding
+in TypeScript, for Deno and the browser, with no dependency: a codec for the ten
+frame forms that reproduces every test vector of §11.1, and a session that
+attaches, subscribes, reads, sends commands and queries, and applies the
+consumer's rules that need no catalog. It carries payload bytes without decoding
+them. A Deno test and a headless-browser test each receive a live signal from a
+cargo example of E11.9's crate that serves the crate's test provider;
+`just
+ts-check` and `just ts-e2e` join `just build`, and `just ts-browser-e2e`
+runs in CI only. The package is not published. It takes over the location half
+of ADR-0020 open item 2 (`packages/`), and ADR-0020 decision 6 was amended on
+2026-10-20 so that the package depends on nothing until the runtime package
+exists. Its as-built record is
+[the `ridl-transport-ws-ts` design record](design/ridl-transport-ws-ts.md).
+Follow-ups: driftsys/ridl#991 (frame specification: the close code and the
+liveness of a client that cannot choose a close code or see pings) and
+driftsys/ridl#992 (publish the package to JSR). The row stays in the table
+above, as the row of E11.9 does, because the epic is not complete.
+
 **The encoding at the codec-in-wasm boundary is FlatBuffers.** ADR-0018 decision
 3 put proto3 on the wasm guest boundary because a guest updates independently of
 its host, but a codec compiled to wasm and its TypeScript host are generated

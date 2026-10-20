@@ -10,6 +10,13 @@ Since the review, #275, #367 and #377 to #382 have closed: lane E16 and E6.17
 landed on 2026-10-04, and #275 closed with E16.2. The counts below are those of
 the review date.
 
+**Also changed on 2026-10-20:** #982 (E12.11, the TypeScript WebSocket transport
+package) landed in PR #TBD. The package carries payload bytes without decoding
+them; #288 and #291 still depend on #287. Its row below marks it as landed.
+Follow-ups: #991 (the frame specification's close code and liveness for a client
+that cannot choose a close code or see pings) and #992 (publish the package to
+JSR).
+
 **Changed on 2026-10-20:** #265 (E11.9, the WebSocket transport) landed in PR
 #990. It carries the check of the `websocket` row of #718 against a frame the
 transport writes, so #718 (E17.3) is done and Epic 17 is complete. The rows
@@ -85,6 +92,7 @@ These estimates help planning and do not set delivery dates.
    (PR #990). The frame specification, loopback runtime and plugin protocol are
    available.
 6. **Step 2:** deliver the TypeScript/wasm surface #287 and emulator #290. The
+   TypeScript WebSocket transport package #982 has landed (PR #TBD). The
    attribute registry #268, its enforcement #269 and boundary IR #270, plus
    agent tooling, run in the threads the roadmap assigns to them.
 
@@ -198,7 +206,7 @@ does not override roadmap dependencies or maintainer decisions.
 | [#75](https://github.com/driftsys/ridl/issues/75) E8.3 — Skill extended to the ridl interact core — 5-kind selection table, timing, errors-as-data / T\|E, mistakes table      | `enhancement`                  | M    | The RIDL authoring skill follows #74; its original rxdl acceptance wording is partly stale.                                                                                                                                                                                               |
 | [#290](https://github.com/driftsys/ridl/issues/290) E12.4 — Emulator: a hand-written provider standing in for a component, driven by the contract                              | `enhancement`                  | M    | The emulator follows transport/runtime consumer seams; the original body contains retired story dependencies.                                                                                                                                                                             |
 | [#291](https://github.com/driftsys/ridl/issues/291) E12.5 — Test-harness drivers: drive a system under test, assert against contract terms                                     | `enhancement`                  | M    | Reopened on 2026-10-19 for an external consumer's debug and test portal; depends on #265, #982 and #287, and uses #290 for the providers it stands in for.                                                                                                                                |
-| [#982](https://github.com/driftsys/ridl/issues/982) E12.11 — The TypeScript WebSocket transport package                                                                        | `enhancement`                  | M    | New on 2026-10-19: the TypeScript side of the WebSocket binding, for Deno and the browser; depends on #265 alone.                                                                                                                                                                         |
+| [#982](https://github.com/driftsys/ridl/issues/982) E12.11 — The TypeScript WebSocket transport package                                                                        | `enhancement`                  | M    | Landed 2026-10-20 (PR #TBD); follow-ups #991 and #992. Reason at review: New on 2026-10-19: the TypeScript side of the WebSocket binding, for Deno and the browser; depends on #265 alone.                                                                                                |
 | [#428](https://github.com/driftsys/ridl/issues/428) doc-path-check does not check a directory citation                                                                         | `debt`, `enhancement`          | M    | The directory-citation item is done: a directory citation ending with `/` is checked, and the slashless form (`docs/book`) is not. The other items of #428 stay open.                                                                                                                     |
 | [#135](https://github.com/driftsys/ridl/issues/135) debt(E1): consolidated minor findings from the typl + tooling-spine reviews                                                | `debt`                         | L    | Reconcile remaining compiler, resolver and LSP debt with current code. Many bullets are accepted or fixed; historical C-header, IR JSON and catalogue claims are partly superseded.                                                                                                       |
 | [#287](https://github.com/driftsys/ridl/issues/287) E12.1 — The TypeScript surface: generated types and faces, the codec reached through the wasm build of the runtime library | `enhancement`                  | L    | Step 2 TypeScript/wasm surface follows the codec and transport work. Original E10.9 dependency wording is obsolete; use the roadmap.                                                                                                                                                      |
