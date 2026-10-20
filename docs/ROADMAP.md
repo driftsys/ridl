@@ -1024,8 +1024,7 @@ attaches, subscribes, reads, sends commands and queries, and applies the
 consumer's rules that need no catalog. It carries payload bytes without decoding
 them. A Deno test and a headless-browser test each receive a live signal from a
 cargo example of E11.9's crate that serves the crate's test provider;
-`just
-ts-check` and `just ts-e2e` join `just build`, and `just ts-browser-e2e`
+`just ts-check` and `just ts-e2e` join `just build`, and `just ts-browser-e2e`
 runs in CI only. The package is not published. It takes over the location half
 of ADR-0020 open item 2 (`packages/`), and ADR-0020 decision 6 was amended on
 2026-10-20 so that the package depends on nothing until the runtime package
