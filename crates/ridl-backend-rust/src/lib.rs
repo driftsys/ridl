@@ -1167,6 +1167,14 @@ fn emit_type_def(
     let check_param_ty = check_param_type(sc);
     let check_shadow = check_deref_shadow(sc);
     let check_body = constraint_checks(sc, type_name, quote! { value });
+    // A constraint whose every bound rustc could fold — `string [0..u64::MAX]`
+    // — leaves no check, and `check` then reads its parameter once so that
+    // the consumer's build does not warn on an unused variable.
+    let check_body = if check_body.is_empty() {
+        quote! { let _ = value; }
+    } else {
+        check_body
+    };
     let getter = scalar_getter(sc, vis.clone(), inner.clone());
 
     quote! {
@@ -1462,7 +1470,10 @@ fn constraint_checks_with_precision(
                 }
             });
         }
-        if let Some(max) = c.len_max {
+        // The same rule for a maximum of `u64::MAX`: the length is a `u64`,
+        // so `(… as u64) > u64::MAX` is never true either. A string or bytes
+        // declared with that maximum has no length to check.
+        if let Some(max) = c.len_max.filter(|max| *max < u64::MAX) {
             let lit = proc_macro2::Literal::u64_unsuffixed(max);
             checks.push(quote! {
                 if #len > #lit {

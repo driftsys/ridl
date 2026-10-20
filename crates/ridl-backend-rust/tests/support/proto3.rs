@@ -181,16 +181,18 @@ pub struct NamedValue {
 ///   of that name, written into a zeroed buffer;
 /// - `encode-named-dirty <name>`: the same, written into a buffer filled
 ///   with `0xAB`, so a byte the writer leaves untouched shows;
-/// - `max-size`: the type's `MAX_SIZE`, in decimal.
+/// - `max-size`: the type's `MAX_SIZE`, in decimal, or `none` for a type
+///   with no bound.
 ///
 /// An empty hexadecimal argument is the empty buffer.
 pub struct Program {
     binary: PathBuf,
     /// The key of every message the program dispatches — every message the
-    /// codec emits with a `Payload<Proto3>`, in every generated package —
-    /// and whether its generated type has a `Default` value. The key is the
-    /// `.proto` message name, bare or qualified by its package, as
-    /// [`Program::build_over`] was asked.
+    /// codec emits with a `Payload<Proto3>` or, for a type with no bound, a
+    /// `Codec<Proto3>`, in every generated package — and whether its
+    /// generated type has a `Default` value. The key is the `.proto` message
+    /// name, bare or qualified by its package, as [`Program::build_over`]
+    /// was asked.
     messages: Vec<(String, bool)>,
     /// Keeps the binary's directory alive as long as the program.
     _dir: tempfile::TempDir,
@@ -212,9 +214,10 @@ impl Program {
     /// the proto3 encoding and composed as `crate::pb::conformance` and
     /// `crate::pb::parts`, `prelude` (helper items the named values use),
     /// and the harness `main`, keyed by bare name. Every message the codec
-    /// emits with a `Payload<Proto3>`, in either package, is dispatched; a
-    /// message it does not emit, or a tuple message encoded only inside its
-    /// owner, is unknown to the program, so a request over one fails the run.
+    /// emits with a `Payload<Proto3>` or a `Codec<Proto3>`, in either
+    /// package, is dispatched; a message it does not emit, or a tuple
+    /// message encoded only inside its owner, is unknown to the program, so
+    /// a request over one fails the run.
     pub fn build(prelude: &str, named: &[NamedValue]) -> Program {
         let (main, others) = fixture();
         let mut packages = vec![main];
@@ -227,8 +230,9 @@ impl Program {
     /// corpus that names the standard package passes it among `packages`,
     /// since its generated code names `crate::ridl::std::` items. The
     /// harness imports the first package's items for `prelude` and the
-    /// named values. Every message the codec emits with a `Payload<Proto3>`,
-    /// in any of `packages`, is dispatched under its `key`.
+    /// named values. Every message the codec emits with a `Payload<Proto3>`
+    /// or a `Codec<Proto3>`, in any of `packages`, is dispatched under its
+    /// `key`.
     pub fn build_over(
         packages: &[v2::Package],
         key: Key,
@@ -260,9 +264,10 @@ impl Program {
             // that impl, no message is found to have a `Default`, and the
             // test that requires `Default` on every message but three fails
             // loudly rather than silently checking fewer messages. The
-            // `Payload<Proto3>` implementation is read the same way: a
-            // message whose type has none — a tuple reached only from a
-            // field — is encoded inside its owner and is not dispatched.
+            // `Payload<Proto3>` implementation, or the `Codec<Proto3>` one
+            // of a type with no bound, is read the same way: a message whose
+            // type has neither — a tuple reached only from a field — is
+            // encoded inside its owner and is not dispatched.
             let dense: String = generated.chars().filter(|c| !c.is_whitespace()).collect();
             let layout = ridl_backend_rust::proto3_layout(package, &others)
                 .unwrap_or_else(|error| panic!("{} lays out: {}", package.name, error.message));
@@ -271,10 +276,12 @@ impl Program {
             let path = format!("crate::{}", package.name.replace('.', "::"));
             let model = ridl_ir::codegen::lower(package, &others);
             for (message, ty) in message_types(package, &model) {
-                let has_payload = dense.contains(&format!(
+                let has_codec = dense.contains(&format!(
                     "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>for{ty}{{"
+                )) || dense.contains(&format!(
+                    "impl::ridl_rt::payload::Codec<::ridl_rt::encoding::Proto3>for{ty}{{"
                 ));
-                if emitted.contains(message.as_str()) && has_payload {
+                if emitted.contains(message.as_str()) && has_codec {
                     let has_default =
                         dense.contains(&format!("impl::core::default::Defaultfor{ty}{{"));
                     let key = match key {
@@ -330,36 +337,49 @@ impl Program {
             r#"
 use std::io::BufRead;
 use ridl_rt::encoding::Proto3;
-use ridl_rt::payload::{{Payload, Ref}};
+use ridl_rt::payload::{{Codec, EncodeError, Ref}};
+// The glob import lets the prelude and the named values spell the package's
+// types bare, so a package that declares a `String` (ros2's `stdmsgs`) or a
+// `Vec` shadows the standard one: the harness's own items spell `::std`.
 #[allow(unused_imports)]
 use {main_path}::*;
 
 {prelude}
 
-fn hex(bytes: &[u8]) -> String {{
+fn hex(bytes: &[u8]) -> ::std::string::String {{
     bytes.iter().map(|byte| format!("{{byte:02x}}")).collect()
 }}
 
-fn unhex(text: &str) -> Vec<u8> {{
+fn unhex(text: &str) -> ::std::vec::Vec<u8> {{
     (0..text.len())
         .step_by(2)
         .map(|at| u8::from_str_radix(&text[at..at + 2], 16).expect("a hexadecimal byte"))
         .collect()
 }}
 
-fn encode_into<T: Payload<Proto3>>(fill: u8, value: &T) -> Vec<u8> {{
-    let mut out = vec![fill; <T as Payload<Proto3>>::MAX_SIZE];
-    value.encode(&mut out).expect("encode").bytes.to_vec()
+/// Encodes into a buffer of `BOUND` bytes, or, for a type with no bound,
+/// into the empty buffer first and then into one of the exact length the
+/// codec reported.
+fn encode_into<T: Codec<Proto3>>(fill: u8, value: &T) -> ::std::vec::Vec<u8> {{
+    let mut out = vec![fill; <T as Codec<Proto3>>::BOUND.unwrap_or(0)];
+    match <T as Codec<Proto3>>::encode(value, &mut out) {{
+        Ok(encoded) => encoded.bytes.to_vec(),
+        Err(EncodeError::Capacity {{ needed, .. }}) if <T as Codec<Proto3>>::BOUND.is_none() => {{
+            let mut out = vec![fill; needed];
+            <T as Codec<Proto3>>::encode(value, &mut out).expect("encode").bytes.to_vec()
+        }}
+        Err(error) => panic!("encode: {{error:?}}"),
+    }}
 }}
 
-fn encode<T: Payload<Proto3>>(value: &T) -> Vec<u8> {{
+fn encode<T: Codec<Proto3>>(value: &T) -> ::std::vec::Vec<u8> {{
     encode_into(0, value)
 }}
 
-fn dispatch<T: Payload<Proto3>>(op: &str, arg: &str) -> String {{
+fn dispatch<T: Codec<Proto3>>(op: &str, arg: &str) -> ::std::string::String {{
     match op {{
-        "verify" => match <T as Payload<Proto3>>::verify(&unhex(arg)) {{
-            Ok(_) => String::from("ok"),
+        "verify" => match <T as Codec<Proto3>>::verify(&unhex(arg)) {{
+            Ok(_) => ::std::string::String::from("ok"),
             Err(error) => format!("{{error:?}}"),
         }},
         "decode-encode" => {{
@@ -369,18 +389,21 @@ fn dispatch<T: Payload<Proto3>>(op: &str, arg: &str) -> String {{
                 Err(error) => format!("{{error:?}}"),
             }}
         }}
-        "max-size" => format!("{{}}", <T as Payload<Proto3>>::MAX_SIZE),
+        "max-size" => match <T as Codec<Proto3>>::BOUND {{
+            Some(bound) => format!("{{bound}}"),
+            None => ::std::string::String::from("none"),
+        }},
         _ => panic!("unknown op `{{op}}`"),
     }}
 }}
 
-fn encode_default(message: &str) -> String {{
+fn encode_default(message: &str) -> ::std::string::String {{
     match message {{
 {default_arms}        _ => panic!("`{{message}}` has no Default value"),
     }}
 }}
 
-fn named(message: &str, name: &str, fill: u8) -> Option<String> {{
+fn named(message: &str, name: &str, fill: u8) -> ::std::option::Option<::std::string::String> {{
     // Unused by a program with no named value.
     let _ = fill;
     match (message, name) {{

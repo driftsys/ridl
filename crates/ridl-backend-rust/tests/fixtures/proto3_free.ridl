@@ -1,0 +1,27 @@
+// A package whose types have no finite proto3 bound, and nothing the proto
+// backend refuses: `Free` is a string with no length bound, `Note` holds one
+// and an array of them with no count bound, and `Measured` holds a `Note`
+// beside a bounded field. The proto3 sizer answers `NoBound` or `Overflow`
+// for each, so each gets a proto3 codec without a size — a `Codec<Proto3>`
+// implementation with `BOUND = None` — rather than a `Payload<Proto3>`.
+// `Count` keeps its bound, so one package carries both kinds.
+
+package pb.free
+
+/// A count with a bound.
+type Count : integer [0..200]
+
+/// A string with no length bound.
+type Free : string [0..18446744073709551615]
+
+/// A struct that holds the string, and an array of it with no count bound.
+struct Note {
+  text : Free
+  tags : [Free; 0..18446744073709551615]
+}
+
+/// A struct that reaches `Note` through a field, beside a bounded field.
+struct Measured {
+  count : Count
+  note  : Note
+}

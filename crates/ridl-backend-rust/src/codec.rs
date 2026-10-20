@@ -2950,7 +2950,9 @@ fn count_check(owner: &str, min: u64, max: u64) -> TokenStream {
 /// collection's element count from: the vector header's field here, a
 /// counter the proto3 verifier keeps per repeated field.
 pub(crate) fn count_check_of(owner: &str, min: u64, max: u64, len: TokenStream) -> TokenStream {
-    let condition = count_condition(&Length::field(len), min, max);
+    let Some(condition) = count_condition(&Length::field(len), min, max) else {
+        return TokenStream::new();
+    };
     quote! {
         if #condition {
             return ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(
@@ -3027,7 +3029,9 @@ pub(crate) fn inline_length_check(
 }
 
 fn encode_length_check(owner: &str, min: u64, max: u64, length: &Length) -> TokenStream {
-    let condition = count_condition(length, min, max);
+    let Some(condition) = count_condition(length, min, max) else {
+        return TokenStream::new();
+    };
     quote! {
         if #condition {
             return ::core::result::Result::Err(::ridl_rt::payload::EncodeError::Contract(
@@ -3072,21 +3076,30 @@ impl Length {
 /// The condition under which a collection of that length breaks its declared
 /// bound. The one place the comparisons are written, so the encoder and the
 /// verifier cannot drift apart.
-fn count_condition(length: &Length, min: u64, max: u64) -> TokenStream {
+/// The condition under which a length is outside `min..=max`, or `None`
+/// when rustc could fold every comparison: a maximum of `u64::MAX` is a
+/// count no `usize` exceeds, so `len > usize::MAX` is never true and draws
+/// `unused_comparisons` in a consumer's build, as `len < 0` would for a
+/// minimum of zero. A collection with neither bound draws no check.
+fn count_condition(length: &Length, min: u64, max: u64) -> Option<TokenStream> {
     let len = &length.len;
     let high = Literal::usize_suffixed(max as usize);
+    let above = (max < u64::MAX).then(|| quote! { #len > #high });
     if min == max {
-        return quote! { #len != #high };
+        return Some(quote! { #len != #high });
     }
     if min == 0 {
-        return quote! { #len > #high };
+        return above;
     }
     let low = Literal::usize_suffixed(min as usize);
     let below = match (min, length.is_empty.as_ref()) {
         (1, Some(is_empty)) => quote! { #is_empty },
         _ => quote! { #len < #low },
     };
-    quote! { #below || #len > #high }
+    Some(match above {
+        Some(above) => quote! { #below || #above },
+        None => below,
+    })
 }
 
 fn scalar_repr(named: Option<NamedScalar>, backing: ScalarBacking) -> Repr {

@@ -17,20 +17,30 @@
 //!   the same generated `check` functions and the same inline checks;
 //! - `__ridl_pb_decode_<Name>(&[u8]) -> T`, which is total;
 //! - the `Payload<::ridl_rt::encoding::Proto3>` implementation, whose view
-//!   is `::ridl_rt::proto3::Verified`, the verified bytes with no accessor.
+//!   is `::ridl_rt::proto3::Verified`, the verified bytes with no accessor,
+//!   for a type whose proto3 size state is bounded; or, for a type whose
+//!   state has no bound — a string or bytes with no length bound, a
+//!   collection whose count has none, or a bound past `u32::MAX` — the
+//!   `Codec<::ridl_rt::encoding::Proto3>` implementation alone, with
+//!   `BOUND = None`, the same view and the same three operations, and no
+//!   `MAX_SIZE`, `Buffer` or `BUFFER`. proto3 itself has no size limit, and
+//!   `encode` knows the exact length before it writes, so a caller buffer
+//!   that is long enough is all such a type needs.
 //!
-//! An induced tuple gets the four functions, and the `Payload`
+//! An induced tuple gets the four functions, and the `Payload` or `Codec`
 //! implementation only when it crosses the wire on its own: the argument
 //! message of a call with zero or several parameters, and the reply message
 //! of a query whose reply is a tuple (driftsys/ridl#713). Its `MAX_SIZE` is
-//! the bound the model carries for that interaction's payload. A tuple
-//! reached only from a field is encoded inside its owner.
+//! the bound the model carries for that interaction's payload, and it is a
+//! `Codec` alone when that state has no bound. A tuple reached only from a
+//! field is encoded inside its owner.
 //!
-//! A declaration whose proto3 size state is not bounded is refused with a
-//! [`GenerateError`] naming it and the cause, and so is an interaction whose
-//! induced root has no bound. An optional array element and an optional map
-//! value are refused as the FlatBuffers codec refuses them: the schema emits
-//! neither with presence.
+//! A declaration whose proto3 size state is absent for a reason of
+//! representability — a member the proto backend refuses, or a declaration
+//! the sizer did not resolve — is refused with a [`GenerateError`] naming it
+//! and the cause, and so is an interaction whose induced root is. An
+//! optional array element and an optional map value are refused as the
+//! FlatBuffers codec refuses them: the schema emits neither with presence.
 //!
 //! # The wire mapping
 //!
@@ -80,7 +90,9 @@
 //!
 //! `encode` sizes the value first, with the length function, and returns
 //! `EncodeError::Capacity` carrying that exact `needed` before it writes a
-//! byte; what it then writes is a prefix of the output buffer. `verify`
+//! byte; what it then writes is a prefix of the output buffer. The length
+//! arithmetic saturates, so a value of a type with no bound that is too
+//! large for a `usize` asks for `usize::MAX` rather than wrapping. `verify`
 //! applies no size ceiling: a buffer from a newer writer may carry fields
 //! this version skips.
 
@@ -654,11 +666,14 @@ enum Source {
     /// The declaration at this index of the model.
     Declaration(u32),
     /// An induced tuple of the model, with its bound when an interaction
-    /// names it as a payload of its own — or the refusal to raise when that
-    /// interaction's payload has no bound, raised when the codec is emitted
-    /// and not when it is laid out, so the layout of a package whose
-    /// interaction cannot be sized is still a layout.
-    Tuple { root: Option<Result<u32, String>> },
+    /// names it as a payload of its own (`None` when that payload has no
+    /// bound) — or the refusal to raise when that interaction's payload
+    /// cannot be represented, raised when the codec is emitted and not when
+    /// it is laid out, so the layout of a package whose interaction is
+    /// refused is still a layout.
+    Tuple {
+        root: Option<Result<Option<u32>, String>>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -892,11 +907,14 @@ impl<'a> Codec<'a> {
     /// The induced tuples the interactions of this package send on their
     /// own — a call's argument message, a query's tuple reply — each with
     /// its bound, the proto3 state the model carries for that interaction's
-    /// payload, or with the refusal naming the interaction when that state
-    /// is not bounded. An interface the model leaves nameless is an error,
-    /// because no refusal could name it.
-    fn interaction_roots(&self) -> Result<HashMap<u32, Result<u32, String>>, GenerateError> {
-        let mut roots: HashMap<u32, Result<u32, String>> = HashMap::new();
+    /// payload (`None` when that state has no bound), or with the refusal
+    /// naming the interaction when that state is absent for a reason of
+    /// representability. An interface the model leaves nameless is an
+    /// error, because no refusal could name it.
+    fn interaction_roots(
+        &self,
+    ) -> Result<HashMap<u32, Result<Option<u32>, String>>, GenerateError> {
+        let mut roots: HashMap<u32, Result<Option<u32>, String>> = HashMap::new();
         for interface in &self.ctx.model.interfaces {
             let interface_name = declared_name(interface)
                 .map(str::to_string)
@@ -943,7 +961,7 @@ impl<'a> Codec<'a> {
                     let bound = bound_state(state).map_err(|cause| {
                         format!(
                             "`{}.{interface_name}.{name}`'s {what} message `{tuple}` has no \
-                             proto3 bound: {cause}",
+                             proto3 codec: {cause}",
                             self.ctx.package_name()
                         )
                     });
@@ -959,7 +977,7 @@ impl<'a> Codec<'a> {
     /// tuple a struct field, a tuple field, an array element or a map value
     /// holds. Only a reached tuple gets functions, so no dead code reaches a
     /// consumer's build.
-    fn reachable_tuples(&self, roots: &HashMap<u32, Result<u32, String>>) -> Vec<u32> {
+    fn reachable_tuples(&self, roots: &HashMap<u32, Result<Option<u32>, String>>) -> Vec<u32> {
         let mut found: Vec<u32> = Vec::new();
         let mut seen: HashSet<u32> = HashSet::new();
         let mut queue: Vec<&'a v1::Type> = Vec::new();
@@ -1033,7 +1051,10 @@ impl<'a> Codec<'a> {
     fn items(&self) -> Result<Vec<TokenStream>, GenerateError> {
         let mut items: Vec<TokenStream> = Vec::new();
         for message in self.messages()? {
-            let bound = match &message.source {
+            // `None`: a tuple encoded only inside its owner, which crosses
+            // the wire on its own in no encoding and gets no implementation.
+            // `Some(None)`: a type with no bound, which gets `Codec` alone.
+            let bound: Option<Option<u32>> = match &message.source {
                 Source::Declaration(index) => {
                     let decl = self.ctx.declaration(*index).ok_or_else(|| GenerateError {
                         message: "the proto3 codec names a declaration the lowered model does \
@@ -1055,8 +1076,10 @@ impl<'a> Codec<'a> {
                 self.verify_fn(&message)?,
                 self.decode_fn(&message, &ty)?,
             ];
-            if let Some(bound) = bound {
-                functions.push(self.payload_impl(owner, &ty, bound));
+            match bound {
+                Some(Some(bound)) => functions.push(self.payload_impl(owner, &ty, bound)),
+                Some(None) => functions.push(self.codec_impl(owner, &ty)),
+                None => {}
             }
             items.extend(
                 functions
@@ -1067,13 +1090,14 @@ impl<'a> Codec<'a> {
         Ok(items)
     }
 
-    /// The proto3 bound of the declaration's root message, or the refusal
-    /// for a declaration whose state is not bounded.
-    fn bound(&self, decl: &v1::Declaration) -> Result<u32, GenerateError> {
+    /// The proto3 bound of the declaration's root message, `None` for a
+    /// declaration whose state has no bound, or the refusal for one whose
+    /// state is absent for a reason of representability.
+    fn bound(&self, decl: &v1::Declaration) -> Result<Option<u32>, GenerateError> {
         let pkg = self.ctx.package_name();
         let name = declared(decl.name.as_ref());
         bound_state(decl.proto3.as_ref()).map_err(|cause| GenerateError {
-            message: format!("`{pkg}.{name}` has no proto3 bound: {cause}"),
+            message: format!("`{pkg}.{name}` has no proto3 codec: {cause}"),
         })
     }
 
@@ -1106,7 +1130,7 @@ impl<'a> Codec<'a> {
                         });
                     };
                     fields.push(Field {
-                        number: slot.ordinal,
+                        number: field_number(owner, name, slot.ordinal)?,
                         name: snake_of(field.name.as_ref()).to_string(),
                         wire: self.wire(ty)?,
                         optional: ty.optional,
@@ -1146,7 +1170,7 @@ impl<'a> Codec<'a> {
                         });
                     };
                     fields.push(Field {
-                        number: arm.ordinal,
+                        number: field_number(owner, name, arm.ordinal)?,
                         name: crate::camel_of(arm.name.as_ref()).to_string(),
                         wire: self.declaration_wire(decl, arm_owner, &reference.reference)?,
                         optional: false,
@@ -1196,7 +1220,7 @@ impl<'a> Codec<'a> {
     fn tuple_message(
         &self,
         induced: &v1::InducedTuple,
-        root: Option<Result<u32, String>>,
+        root: Option<Result<Option<u32>, String>>,
     ) -> Result<Message, GenerateError> {
         let owner = induced
             .name
@@ -1402,6 +1426,32 @@ impl<'a> Codec<'a> {
                         ),
                     });
                 };
+                // proto3 enum and reserved values are int32; the proto
+                // backend refuses a value outside it, so the codec cannot
+                // carry one either.
+                let outside = def
+                    .values
+                    .iter()
+                    .map(|value| (declared(value.name.as_ref()), value.value))
+                    .chain(def.retired.iter().filter_map(|retired| {
+                        retired
+                            .value
+                            .map(|value| (declared(retired.name.as_ref()), value))
+                    }))
+                    .find(|(_, value)| i32::try_from(*value).is_err());
+                if let Some((member, value)) = outside {
+                    let full = if owner.contains('.') {
+                        owner.clone()
+                    } else {
+                        format!("{}.{owner}", self.ctx.package_name())
+                    };
+                    return Err(GenerateError {
+                        message: format!(
+                            "`{full}` has no proto3 codec: its value `{member}` is {value}, \
+                             outside int32, which the proto backend refuses"
+                        ),
+                    });
+                }
                 let zero = def
                     .zero_member
                     .and_then(|index| def.values.get(index as usize))
@@ -1661,7 +1711,7 @@ impl<'a> Codec<'a> {
                 let raw = scalar.raw(scalar.language(quote! { __s }));
                 let value_len = scalar.value_len();
                 let action = match pass {
-                    Pass::Len => quote! { __n += #tag_len + #value_len; },
+                    Pass::Len => quote! { __n = __n.saturating_add(#tag_len + #value_len); },
                     Pass::Encode => {
                         let write = scalar.write();
                         quote! {
@@ -1699,9 +1749,12 @@ impl<'a> Codec<'a> {
                 };
                 let action = match pass {
                     Pass::Len => quote! {
-                        __n += #tag_len
-                            + ::ridl_rt::proto3::varint_len(__s.len() as ::core::primitive::u64)
-                            + __s.len();
+                        __n = __n
+                            .saturating_add(#tag_len)
+                            .saturating_add(::ridl_rt::proto3::varint_len(
+                                __s.len() as ::core::primitive::u64,
+                            ))
+                            .saturating_add(__s.len());
                     },
                     Pass::Encode => {
                         let check =
@@ -1730,9 +1783,12 @@ impl<'a> Codec<'a> {
                 let len = owner_path(name, len_ident);
                 let action = match pass {
                     Pass::Len => quote! {
-                        __n += #tag_len
-                            + ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64)
-                            + __l;
+                        __n = __n
+                            .saturating_add(#tag_len)
+                            .saturating_add(::ridl_rt::proto3::varint_len(
+                                __l as ::core::primitive::u64,
+                            ))
+                            .saturating_add(__l);
                     },
                     Pass::Encode => {
                         let encode = owner_path(name, encode_ident);
@@ -1803,22 +1859,25 @@ impl<'a> Codec<'a> {
                 let run_len = match scalar.fixed_width() {
                     Some(width) => {
                         let width = Literal::usize_suffixed(width);
-                        quote! { let __l = __c.len() * #width; }
+                        quote! { let __l = __c.len().saturating_mul(#width); }
                     }
                     None => quote! {
                         let mut __l = 0usize;
                         for __e in __c.iter() {
                             let __s = *__e;
                             let __r = #raw;
-                            __l += ::ridl_rt::proto3::varint_len(__r);
+                            __l = __l.saturating_add(::ridl_rt::proto3::varint_len(__r));
                         }
                     },
                 };
                 let action = match pass {
                     Pass::Len => quote! {
-                        __n += #tag_len
-                            + ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64)
-                            + __l;
+                        __n = __n
+                            .saturating_add(#tag_len)
+                            .saturating_add(::ridl_rt::proto3::varint_len(
+                                __l as ::core::primitive::u64,
+                            ))
+                            .saturating_add(__l);
                     },
                     Pass::Encode => quote! {
                         writer.tag(#number, ::ridl_rt::proto3::WireType::Len);
@@ -1912,9 +1971,12 @@ impl<'a> Codec<'a> {
             Pass::Len => (
                 quote! {},
                 quote! {
-                    __n += #tag_len
-                        + ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64)
-                        + __l;
+                    __n = __n
+                        .saturating_add(#tag_len)
+                        .saturating_add(::ridl_rt::proto3::varint_len(
+                            __l as ::core::primitive::u64,
+                        ))
+                        .saturating_add(__l);
                 },
             ),
             Pass::Encode => {
@@ -2769,37 +2831,116 @@ impl<'a> Codec<'a> {
             }
         }
     }
+
+    /// The `Codec<Proto3>` implementation of a type whose proto3 size state
+    /// has no bound: the same view and the same three operations as the
+    /// `Payload<Proto3>` implementation, `BOUND = None`, and no `MAX_SIZE`.
+    /// `encode` still sizes the value first, so a buffer too short is
+    /// reported with the exact length before anything is written.
+    fn codec_impl(&self, owner: &str, ty: &Ident) -> TokenStream {
+        let len = len_ident(owner);
+        let encode = encode_ident(owner);
+        let verify = verify_ident(owner);
+        let decode = decode_ident(owner);
+        let bound_doc = format!(
+            " `None`: no legal `{owner}` has a largest proto3 message, so a caller sizes the \
+             buffer it encodes into, and a buffer too short reports the exact length needed."
+        );
+        quote! {
+            #[allow(deprecated)]
+            impl ::ridl_rt::payload::Codec<::ridl_rt::encoding::Proto3> for #ty {
+                #[doc = #bound_doc]
+                const BOUND: ::core::option::Option<::core::primitive::usize> =
+                    ::core::option::Option::None;
+
+                type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+
+                fn encode<'o>(
+                    &self,
+                    out: &'o mut [::core::primitive::u8],
+                ) -> ::core::result::Result<
+                    ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+                    ::ridl_rt::payload::EncodeError,
+                > {
+                    let __needed = #len(self);
+                    ::ridl_rt::proto3::check_capacity(__needed, out)?;
+                    let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+                    #encode(self, &mut __writer)?;
+                    let bytes = __writer.finish()?;
+                    ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+                        bytes,
+                        view: ::ridl_rt::proto3::Verified::new(bytes),
+                    })
+                }
+
+                fn verify(
+                    buf: &[::core::primitive::u8],
+                ) -> ::core::result::Result<
+                    ::ridl_rt::proto3::Verified<'_>,
+                    ::ridl_rt::payload::VerifyError,
+                > {
+                    #verify(buf)?;
+                    ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+                }
+
+                fn decode(
+                    r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+                ) -> Self {
+                    #decode(::ridl_rt::payload::View::bytes(r.view()))
+                }
+            }
+        }
+    }
 }
 
-/// The bound a proto3 size state carries, or the cause of its absence as
-/// the refusal states it.
-fn bound_state(state: Option<&v1::SizeState>) -> Result<u32, &'static str> {
+/// The bound a proto3 size state carries: `Some` of the bound, `None` when
+/// the state is absent for want of a bound, and the cause as the refusal
+/// states it when the state is absent for a reason of representability: a
+/// declaration the sizer did not resolve, or no proto3 message at all.
+///
+/// The sizer's `RefusedMember` is `None` too, because that cause covers a
+/// member with no bound and a sum that does not fit beside the members the
+/// proto backend refuses, and the model does not say which. The codec's own
+/// walk of the message refuses every member the proto backend refuses — an
+/// optional array or map, a nested collection, a map key outside the
+/// integral and string scalars, an enum value outside int32, a field number
+/// proto3 reserves or exceeds, a reference that does not resolve — before
+/// the state is read, so a `RefusedMember` that reaches here has no bound
+/// and nothing to refuse.
+fn bound_state(state: Option<&v1::SizeState>) -> Result<Option<u32>, &'static str> {
     match state.and_then(|state| state.state.as_ref()) {
-        Some(v1::size_state::State::Bounded(bound)) => Ok(*bound),
-        Some(v1::size_state::State::Absent(absent)) => Err(
+        Some(v1::size_state::State::Bounded(bound)) => Ok(Some(*bound)),
+        Some(v1::size_state::State::Absent(absent)) => {
             match v1::AbsentCause::try_from(absent.cause).unwrap_or(v1::AbsentCause::Unspecified) {
-                v1::AbsentCause::RefusedMember => {
-                    "a member of it is one the proto backend refuses: an enum value outside \
-                     int32, a field number proto3 reserves or exceeds, an optional array or \
-                     map, an array of arrays or of maps, a map whose value is a collection, \
-                     or a map key outside the integral and string scalars"
+                v1::AbsentCause::NoBound
+                | v1::AbsentCause::Overflow
+                | v1::AbsentCause::RefusedMember => Ok(None),
+                v1::AbsentCause::Unresolved => {
+                    Err("it names a declaration the sizer did not resolve")
                 }
-                v1::AbsentCause::NoBound => {
-                    "a member of it is a string or bytes with no length bound, or a scalar \
-                     with no width"
-                }
-                v1::AbsentCause::Overflow => {
-                    "its bound exceeds u32::MAX, or its nesting passes the sizer's depth limit"
-                }
-                v1::AbsentCause::Unresolved => "it names a declaration the sizer did not resolve",
                 v1::AbsentCause::NoMessage
                 | v1::AbsentCause::EncodingUndefined
-                | v1::AbsentCause::Unspecified => "no proto3 message defines it",
-            },
-        ),
-        Some(v1::size_state::State::Unbounded(_)) => Err("no finite bound exists for it"),
+                | v1::AbsentCause::Unspecified => Err("no proto3 message defines it"),
+            }
+        }
+        Some(v1::size_state::State::Unbounded(_)) => Ok(None),
         None => Err("the lowered model carries no proto3 size state for it"),
     }
+}
+
+/// The field number `number` of `owner.name`, or the refusal for one proto3
+/// reserves (19000 to 19999) or does not admit (0, or above 2^29 - 1), as
+/// the proto backend refuses it.
+fn field_number(owner: &str, name: &str, number: u32) -> Result<u32, GenerateError> {
+    if number == 0 || pb::PROTO_RESERVED.contains(&number) || number > pb::PROTO_MAX_FIELD_NUMBER {
+        return Err(GenerateError {
+            message: format!(
+                "`{owner}.{name}` has field number {number}, which proto3 reserves or does not \
+                 admit, as the proto backend refuses it"
+            ),
+        });
+    }
+    Ok(number)
 }
 
 /// An `optional` marker is a field's property. A proto3 `repeated` field
