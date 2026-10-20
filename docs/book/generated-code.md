@@ -60,11 +60,13 @@ The package module holds:
   codec is `encode`, `verify`, `decode` and a `MAX_SIZE` bound; with no list
   the module holds the types only. Each payload type also has a
   `<T as Payload<FlatBuffers>>::Buffer` type and a zeroed `BUFFER` value, sized
-  by that type's own `MAX_SIZE`, and the same in `Proto3`. In proto3 a type
-  whose encoding has no bound, such as a `string` with no length bound, gets a
-  codec without a size: it implements `ridl_rt::payload::Codec<Proto3>`, with
-  no `MAX_SIZE` and no `BUFFER`, and the caller supplies a buffer that is large
-  enough. The face calls the codec; an application calls it only when it moves
+  by that type's own `MAX_SIZE`, and the same in `Proto3`. Every `MAX_SIZE` is
+  finite: a type whose encoding has no finite bound, such as a `string` with no
+  length bound, is refused in either encoding, and `ridl build` fails with an
+  error that names the type and the cause. A platform-wide payload ceiling
+  that caps such a bound is driftsys/ridl#996; until it lands, a package such
+  as one of the ros2 corpus, whose strings have no length bound, does not
+  generate a codec. The face calls the codec; an application calls it only when it moves
   payloads by itself.
 - **The interaction descriptors**: one unit type per interface (here
   `api::Cabin`) that implements `ridl_rt::contract::Interface` and carries the
@@ -72,9 +74,7 @@ The package module holds:
   `ridl_rt::contract::Sizes<E>` for each encoding the package carries, the
   size table of that codec for the interface: its reservations, its largest
   buffer (`MAX_BUFFER_SIZE`), and the claim and event buffers the face holds.
-  An interface with a payload that has no proto3 bound implements
-  `ridl_rt::contract::Bounds<Proto3>` instead of `Sizes<Proto3>`, and its face
-  cannot be bound to a proto3 port. Like the codecs, the descriptors are
+  Like the codecs, the descriptors are
   present only when the manifest names an encoding under
   `[backend.rust] encodings`.
 - **The face**: one module per interface that has one, named after it (here
@@ -119,9 +119,9 @@ tables under the names assigned by lowering. When the manifest names
 `flatbuffers` and an induced payload has no finite FlatBuffers bound, its
 interface is skipped with the refusal constant described above rather than
 emitting a descriptor that names a missing codec. The proto3 codec skips no
-interface: an induced payload with no proto3 bound gets a codec without a size,
-and one proto3 cannot represent at all makes `ridl build` fail with an error
-that names it.
+interface: an induced payload with no finite proto3 bound, or one proto3 cannot
+represent, makes `ridl build` fail with an error that names the interaction and
+the cause.
 
 The face opens no socket and holds no runtime. Each `Client`, `Publisher` and
 `serve` runs over a _port_ that the application passes in, and a port comes from

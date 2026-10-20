@@ -31,9 +31,9 @@ adds:
 | Module        | Contents                                                                                                                                                                                                                                                                        |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `ReprC`                                                                                                                                                                                                                           |
-| `payload`     | `Payload<E>`, `Codec<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`                                                                                                                                                          |
+| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`                                                                                                                                                                      |
 | `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                                    |
-| `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `Sizes<E>`, `Bounds<E>`, `reservation`, `table_budget`                              |
+| `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `Sizes<E>`, `reservation`, `table_budget`                                           |
 | `port`        | `Attached`, `Encoded`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
 | `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                           |
 | `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                            |
@@ -356,28 +356,12 @@ pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64;
   descriptors it emits and every encoding the package carries; the two sizes are
   reached only as `<I as Sizes<E>>::MAX_BUFFER_SIZE` and
   `<I as Sizes<E>>::EVENT_SOURCE_BUFFER_SIZE`, the descriptor has no inherent
-  constant of either name.
-- **A table with a row that has no bound** (since 2026-10-20, ADR-0021 decision
-  10 as amended): `Bounds<E>` is the reservation table with each row an
-  `Option<u64>`, reached one row at a time through
-  `fn reservation_bound(row: usize) -> Option<u64>`, which panics on a row past
-  `MEMBERS` as indexing `RESERVATIONS` does. Every `Sizes<E>` is a `Bounds<E>`
-  through a blanket implementation, each row `Some` of its `RESERVATIONS` row.
-  The Rust backend implements `Bounds<Proto3>` directly, and no `Sizes<Proto3>`,
-  for an interface a payload of which has no proto3 bound
-  ([the proto3 codec record](proto3-codec.md)): the row of each member such a
-  payload belongs to is `None`, so a runtime driven by data can register the
-  interface and see which members have no bound, while a face, which holds the
-  `Sizes` buffers, cannot be bound to a proto3 port over it. The rows are a
-  function rather than a constant slice, because a blanket implementation cannot
-  state a slice whose length is that of a generic `RESERVATIONS` on stable Rust;
-  a runtime cannot read them in a `const` context.
-
-`Continuity` is exhaustive, like `Freshness`: it is not an error enum, so
-ADR-0021 decision 9 does not cover it, and a caller is meant to handle every
-case it names. `TrackerFull` is a unit struct with no `#[non_exhaustive]`, like
-the encoding markers, because a caller compares it as a value; under ADR-0021
-decision 10 a field added to it is a breaking change.
+  constant of either name. `Continuity` is exhaustive, like `Freshness`: it is
+  not an error enum, so ADR-0021 decision 9 does not cover it, and a caller is
+  meant to handle every case it names. `TrackerFull` is a unit struct with no
+  `#[non_exhaustive]`, like the encoding markers, because a caller compares it
+  as a value; under ADR-0021 decision 10 a field added to it is a breaking
+  change.
 
 These public items are recorded in ADR-0021 decision 17, its 2026-09-26
 amendment. That amendment also recorded `Encoding::max_size`,
@@ -405,21 +389,12 @@ pub trait Payload<E: Encoding>: Sized {
     fn decode(r: Ref<'_, Self, E>) -> Self;
 }
 
-pub trait Codec<E: Encoding>: Sized { // every Payload<E> is one, BOUND = Some(MAX_SIZE)
-    type View<'a>;
-    const BOUND: Option<usize>; // None for a type whose encoding has no bound
-    fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Self::View<'o>>, EncodeError>;
-    fn verify(buf: &[u8]) -> Result<Self::View<'_>, VerifyError>;
-    fn decode(r: Ref<'_, Self, E>) -> Self;
-}
-impl<T: Payload<E>, E: Encoding> Codec<E> for T { /* forwards to Payload */ }
-
 pub struct Encoded<'a, V> { pub bytes: &'a [u8], pub view: V } // data, not a proof; bytes is a subslice of out
 
 pub trait View<'a> { fn bytes(&self) -> &'a [u8]; } // what a generated view implements; the verified bytes it reads
 
-pub struct Ref<'a, T: Codec<E>, E: Encoding> { /* private fields */ }
-impl<'a, T: Codec<E>, E: Encoding> Ref<'a, T, E> {
+pub struct Ref<'a, T: Payload<E>, E: Encoding> { /* private fields */ }
+impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
     pub fn verify(buf: &'a [u8]) -> Result<Self, VerifyError>;    // calls T::verify
     pub fn encode(value: &T, out: &'a mut [u8]) -> Result<Self, EncodeError>; // calls T::encode
     pub fn bytes(&self) -> &'a [u8];
@@ -453,21 +428,6 @@ or a wire type the known field's type does not take; `Duplicate` is a field that
 is not repeated written twice, or a union message with two arms. The rustdoc of
 `Duplicate` states that refusing it deviates on purpose from protobuf's "last
 one wins" and merge rules ([the proto3 codec record](proto3-codec.md)).
-
-**`Codec<E>` is the codec without a size** (since 2026-10-20). `Payload<E>`
-requires `MAX_SIZE`, `Buffer` and `BUFFER`, and an associated type cannot take a
-default on stable Rust, so a type whose encoding has no bound — a proto3 string
-with no length bound, or a collection whose count has none — cannot implement
-it. Such a type implements `Codec<E>` alone, with `BOUND = None`, and a caller
-gives `Ref::encode` a buffer of its own; an encoder that sizes before it writes,
-as the proto3 one does, reports the exact length in
-`EncodeError::Capacity { needed }` when the buffer is short. Every `Payload<E>`
-is a `Codec<E>` through a blanket implementation, and `Ref` is bounded by
-`Codec<E>`, so its three operations work the same way for both kinds of type.
-Code that writes both bounds names the view as `<T as Payload<E>>::View<'a>`,
-because `T::View` is then ambiguous. A generated type implements `Codec<E>`
-directly only when it does not implement `Payload<E>`, which is what lets
-coherence accept the local implementation beside the blanket one.
 
 `Encoding` is sealed: `FlatBuffers`, `Proto3` and `ReprC` are the only encodings
 a payload type can implement, and the marker types carry no cargo feature of

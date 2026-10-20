@@ -193,13 +193,12 @@ runtime crates. Items 15, 16 and 17 are decisions 12, 11 and 13.
 
 **Amendment (2026-10-20) — decisions 8 and 10, and open item 3: the proto3
 codec's items.** The `proto3` feature now enables a `proto3` module, the wire
-helpers every generated `Payload<Proto3>` implementation shares. `payload` gains
-the `Codec<E>` trait, for a type whose encoding has no bound, and `contract`
-gains the `Bounds<E>` trait, the size table of an interface with such a payload.
-`Malformed` gains three variants. Every item is additive under decision 10, the
-crate still has no dependency in any feature combination, and the view a proto3
-codec returns is the verified bytes (open item 3). Each decision carries the
-amendment in place; the as-built records are
+helpers every generated `Payload<Proto3>` implementation shares, and `Malformed`
+gains three variants. `Payload` and `Sizes` do not change: a proto3 type with no
+finite size bound is refused at generation, as a FlatBuffers one is. Every item
+is additive under decision 10, the crate still has no dependency in any feature
+combination, and the view a proto3 codec returns is the verified bytes (open
+item 3). Each decision carries the amendment in place; the as-built records are
 [the `ridl-rt` design record](../design/ridl-rt.md) and
 [the proto3 codec design record](../design/proto3-codec.md).
 
@@ -654,31 +653,17 @@ trusted with no `unsafe` and no second verification pass.
 
     - the `proto3` module, under the `proto3` feature (decision 8's amendment of
       the same date);
-    - `payload::Codec<E>`: `type View<'a>`, `const BOUND: Option<usize>`,
-      `encode`, `verify` and `decode`, with a blanket implementation for every
-      `T: Payload<E>` whose `BOUND` is `Some(MAX_SIZE)`. A type whose encoding
-      has no bound implements `Codec<E>` alone, with `BOUND = None` and no
-      `MAX_SIZE`, `Buffer` or `BUFFER`;
-    - `payload::Ref<'a, T, E>`'s bound loosened from `T: Payload<E>` to
-      `T: Codec<E>`, which breaks no caller, because every `Payload<E>` is a
-      `Codec<E>`;
-    - `contract::Bounds<E>`, with
-      `fn reservation_bound(row: usize) -> Option<u64>` and a blanket
-      implementation for every `I: Sizes<E>`. An interface with a payload that
-      has no bound in `E` implements `Bounds<E>` and not `Sizes<E>`, so a face,
-      which holds the `Sizes<E>` buffers, cannot be bound to a port of that
-      encoding. The rows are a function rather than a constant slice, because a
-      blanket implementation cannot state a slice of a generic length on stable
-      Rust;
     - `payload::Malformed::Varint`, `Malformed::WireType` and
       `Malformed::Duplicate`. `Malformed` is `#[non_exhaustive]`, and a frame
       carries the stratum only, not the variant.
 
     The 2026-10-10 sentence that "a payload with no bound makes the backend
-    refuse to generate" still holds for FlatBuffers. For proto3 it no longer
-    holds: such a payload gets a `Codec<Proto3>`, and its interface a
-    `Bounds<Proto3>` and no `Sizes<Proto3>`. `reservation::<X, E>()` and
-    `table_budget::<I, E>()` still require `Sizes<E>` and still cannot fail.
+    refuse to generate" holds for both codecs: a proto3 type whose size state is
+    not bounded is refused, naming the declaration and the cause, as the
+    FlatBuffers codec refuses one. `Payload`, `Sizes`, `reservation::<X, E>()`
+    and `table_budget::<I, E>()` do not change, and every `MAX_SIZE` is finite.
+    A platform-wide payload ceiling for both codecs, which would cap such a
+    bound instead of refusing it, is driftsys/ridl#996.
 
     `ridl-rt` supports Rust 1.83 or newer: `rust-version = "1.83"` in
     `crates/ridl-rt/Cargo.toml`. The crate's manifest compiles as edition 2021,
@@ -1301,14 +1286,13 @@ trusted with no `unsafe` and no second verification pass.
    value) — story E11.8's, not fixed here.
 
    **Answered 2026-10-20: the bytes.** The view of every generated
-   `Payload<Proto3>` and `Codec<Proto3>` implementation is
-   `ridl_rt::proto3::Verified<'a>`, which holds the verified bytes, implements
-   `payload::View`, and has no field accessors. proto3 is not a random-access
-   format, so an accessor would be a scan of the message, and the generated face
-   reads every payload through `decode`, which already returns the owned value.
-   Accessors can be added later without a break, as inherent methods of a
-   generated type that does not exist yet
-   ([the proto3 codec design record](../design/proto3-codec.md)).
+   `Payload<Proto3>` implementation is `ridl_rt::proto3::Verified<'a>`, which
+   holds the verified bytes, implements `payload::View`, and has no field
+   accessors. proto3 is not a random-access format, so an accessor would be a
+   scan of the message, and the generated face reads every payload through
+   `decode`, which already returns the owned value. Accessors can be added later
+   without a break, as inherent methods of a generated type that does not exist
+   yet ([the proto3 codec design record](../design/proto3-codec.md)).
 4. **How a generated binding keeps a signal's last good value with no `alloc`**
    — the Rust codegen's question, once it starts consuming this crate.
 5. **`Box<P>` forwarding** (decision 11), deferred until a cargo feature brings

@@ -61,8 +61,7 @@ emitter writes:
   `PROVISIONAL`, `NAME` and `MEMBERS`, and one `Sizes<E>` impl per encoding the
   package carries, the interface's size table in that encoding, whose
   `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE` items size the claim buffer
-  and the next-event buffer (in proto3, an interface a payload of which has no
-  bound gets a `Bounds<Proto3>` impl instead, below);
+  and the next-event buffer;
 - a unit struct per interaction with an `Interaction` impl (`type Iface`,
   `const MEMBER`, `const ROW`) and the kind's trait — `Signal`, `Event`,
   `Command`, `Query` or `Fixed`.
@@ -113,19 +112,13 @@ descriptor has no inherent constant of either name.
   has no `None` and no reading of one. The proto3 table is `Sizes<Proto3>`,
   emitted beside it when `encodings` names `proto3` and built from
   `<T as Payload<Proto3>>::MAX_SIZE` in the same way. A proto3 payload with no
-  bound is not refused: it gets a codec without a size, and its interface gets a
-  `Bounds<Proto3>` implementation, whose row for each member such a payload
-  belongs to is `None`, and no `Sizes<Proto3>`
-  ([the proto3 codec record](proto3-codec.md)). The face holds the `Sizes`
-  buffers, so binding it to a proto3 port over such an interface is a compile
-  error at the binding, the same rule as for an encoding the package does not
-  carry; the package itself still compiles. A face that can serve an unbounded
-  payload is not built (driftsys/ridl#TBD-face-unbounded). A `repr(C)` table
-  arrives when the backend emits that codec (driftsys/ridl#317). The face reads
-  buffers from `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of its
-  port `P`, and from the `CLAIM_BUFFER` and `EVENT_BUFFER` of
-  `Sizes<P::Encoding>`; `reservation::<X, E>()` and `table_budget::<I, E>()` in
-  `ridl_rt::contract` serve a runtime that sizes a store.
+  finite bound is refused too, so a `Sizes<Proto3>` table has no `None` either
+  ([the proto3 codec record](proto3-codec.md)). A `repr(C)` table arrives when
+  the backend emits that codec (driftsys/ridl#317). The face reads buffers from
+  `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of its port `P`, and
+  from the `CLAIM_BUFFER` and `EVENT_BUFFER` of `Sizes<P::Encoding>`;
+  `reservation::<X, E>()` and `table_budget::<I, E>()` in `ridl_rt::contract`
+  serve a runtime that sizes a store.
 
 ## The contract-clause translator
 
@@ -186,12 +179,13 @@ lowering wrote, and the backend never builds one. A fallible `T | E` reply, an
 untyped position and a stream are still refused (driftsys/ridl#943). When
 `encodings` names `flatbuffers`, an induced payload with no finite FlatBuffers
 bound is also refused before its descriptor is accepted: the codec cannot
-implement `Payload<FlatBuffers>` for it. A proto3 induced root with no bound
-gets a codec without a size and is not refused here; one whose proto3 state is
-absent for another reason, such as a member proto3 cannot represent, fails the
-package's proto3 generation with a `GenerateError` rather than skipping the
-interface. The pipeline skips that interface with the same refusal marker,
-leaving the package's domain types and its other interfaces unaffected.
+implement `Payload<FlatBuffers>` for it. The pipeline skips that interface with
+the same refusal marker, leaving the package's domain types and its other
+interfaces unaffected. When `encodings` names `proto3`, an induced root whose
+proto3 size state is not bounded — no finite bound, a bound that does not fit,
+or a member proto3 cannot represent — is not skipped: it fails the package's
+proto3 generation with a `GenerateError` that names the interaction and the
+cause.
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
 one member the face covers, one `pub mod` named after the interface. Its
@@ -1088,12 +1082,11 @@ is built.
 
 ## What is provisional
 
-| Placeholder                                                                                                      | Replaced by                                  |
-| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| The `repr(C)` `Sizes<E>` table (`flatbuffers` and `proto3` are built; this backend emits no other codec)         | driftsys/ridl#317                            |
-| A face that can serve a proto3 payload with no bound (the interface has `Bounds<Proto3>` and no `Sizes<Proto3>`) | driftsys/ridl#TBD-face-unbounded             |
-| The narrow contract-clause translator (`src/clauses.rs`)                                                         | driftsys/ridl#704                            |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion                   | a test over `ridl-loopback`, not yet written |
+| Placeholder                                                                                              | Replaced by                                  |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| The `repr(C)` `Sizes<E>` table (`flatbuffers` and `proto3` are built; this backend emits no other codec) | driftsys/ridl#317                            |
+| The narrow contract-clause translator (`src/clauses.rs`)                                                 | driftsys/ridl#704                            |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion           | a test over `ridl-loopback`, not yet written |
 
 **The hand-written payload row was retired on 2026-09-21**, by design note D-11
 of [the FlatBuffers codec record](flatbuffers-codec.md). It read "the

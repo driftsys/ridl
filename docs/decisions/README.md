@@ -327,9 +327,9 @@ other entry below is Accepted.
   implemented `Encoded` for a shared reference to a type that itself implements
   `Encoded` (driftsys/ridl#855). Its 2026-10-20 amendment, on decisions 8 and 10
   and open item 3, records the proto3 codec's additive items: the `proto3`
-  module, `payload::Codec<E>` for a type with no size bound, `Ref` bounded by
-  `Codec<E>`, `contract::Bounds<E>`, and the `Malformed` variants `Varint`,
-  `WireType` and `Duplicate`; the proto3 view is the verified bytes.
+  module and the `Malformed` variants `Varint`, `WireType` and `Duplicate`; the
+  proto3 view is the verified bytes, and a proto3 type with no finite size bound
+  is refused, so `Payload` and `Sizes` do not change.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact

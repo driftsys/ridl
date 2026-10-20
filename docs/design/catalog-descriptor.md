@@ -395,15 +395,14 @@ The Rust backend's `Payload<FlatBuffers>::MAX_SIZE` is the codegen model's
 `Payload<Proto3>::MAX_SIZE` (since 2026-10-20) is the proto3 state the codegen
 model carries for the payload's root message: `Declaration.proto3` for a
 declaration, and the interaction's `request_sizes.proto3` or
-`reply_sizes.proto3` for an induced argument or reply tuple. A state that is
-`Absent` with the cause `NoBound` or `Overflow` gives the type a codec without a
-size, `Codec<Proto3>` with `BOUND = None`. A state absent for any other cause,
-`RefusedMember` and `Unresolved` among them, is a generation error that gives
-the refusal the `.proto` emitter gives
-([the proto3 codec record](proto3-codec.md)). A type whose only problem is a
-member with no bound is `NoBound` or `Overflow`, not `RefusedMember`, so this
-descriptor and the model say `NoBound` or `Overflow` for it, and the type has a
-codec.
+`reply_sizes.proto3` for an induced argument or reply tuple. Only a `Bounded`
+state gives a codec: a state that is absent, whatever its cause (`NoBound`,
+`Overflow`, `RefusedMember` or `Unresolved`), is a generation error that names
+the declaration and the cause, as the FlatBuffers codec refuses a type with no
+finite bound ([the proto3 codec record](proto3-codec.md)). The sizer gives a
+type whose only problem is a member with no finite bound `NoBound`, and one
+whose bound does not fit `Overflow`, not `RefusedMember`, so this descriptor,
+the model and the refusal name the same cause.
 
 **The codegen model carries the same states.** The model (`ridl.codegen.v1`)
 writes a `PayloadSizes` message, one `SizeState` per encoding, on every payload
@@ -451,10 +450,10 @@ where the runtime holds the same per-payload sizes the model holds. Since
 2026-10-20 the Rust backend emits a `Sizes<E>` table for each encoding the
 package carries, FlatBuffers and proto3, and each table's rows are built from
 the `MAX_SIZE` the codec emitted from the model's state, so both columns have a
-runtime counterpart. An interface with a payload that has no proto3 bound has no
-`Sizes<Proto3>` but a `Bounds<Proto3>`, whose row for that member is `None`
-where the model's reservation is `unsized`. The catalog descriptor this record
-describes is a different artifact, and it writes a proto3 row too (`lower.rs` in
+runtime counterpart. A package with a payload that has no proto3 bound is
+refused under proto3, so no `Sizes<Proto3>` row stands where the model's
+reservation is `unsized`. The catalog descriptor this record describes is a
+different artifact, and it writes a proto3 row too (`lower.rs` in
 `ridl-descriptor`).
 
 ## Verification before access, and `ridl describe`

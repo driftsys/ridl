@@ -158,8 +158,9 @@ reads these two fields and does not add the payload sizes itself. Each
 under [ADR-0029](../decisions/ADR-0029-stability-policy.md)): the proto3 size
 state of the declaration's root message, absent on a constant. The Rust
 backend's proto3 codec reads it as its `MAX_SIZE`, because the plugin path has
-no IR to size from ([the proto3 codec record](proto3-codec.md)). The sums and
-the states they read are described in
+no IR to size from, and refuses a declaration whose state is not bounded
+([the proto3 codec record](proto3-codec.md)). The sums and the states they read
+are described in
 [the catalog descriptor](catalog-descriptor.md#the-size-states).
 
 **Documentation fields.** Every doc carrier of the model (`Declaration`,

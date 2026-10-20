@@ -662,7 +662,7 @@ fn proto3_layout_matches_the_emitted_schema() {
 /// the veh-cluster corpus, whose interfaces induce argument and reply
 /// messages — and every type gets a `Payload<Proto3>`. The ros2 corpus,
 /// whose `RosString` has no length bound, is
-/// [`the_ros2_corpus_generates_with_proto3`].
+/// [`the_ros2_corpus_is_refused_under_proto3`].
 #[test]
 fn the_corpus_generates_with_proto3() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -738,6 +738,8 @@ fn the_corpus_generates_with_proto3() {
 /// refusal naming that declaration and `NoBound`; `builtininterfaces`,
 /// which declares no string, generates. Every package generates with no
 /// encoding. The corpus pass leaves the workspace out ([`PROTO3_CORPUS`]).
+/// The refusal is the known limit until the platform-wide payload ceiling
+/// of driftsys/ridl#996 lands.
 #[test]
 fn the_ros2_corpus_is_refused_under_proto3() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
