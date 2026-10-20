@@ -250,8 +250,12 @@ design in each:
      The generated crates are committed under `freeze/generated/` from the
      frozen fixtures named in the Context, and each is compared with the same
      crate in the baseline's `freeze/generated/`. The check first runs
-     `cargo fetch --locked` once with the network allowed, then runs the
-     comparison offline and with the release type `minor`. Ten lints of
+     `cargo fetch --locked` once with the network allowed, and for the runtime
+     crates also against the baseline's tree when its `Cargo.lock` differs from
+     the working tree's. It then runs the comparison offline and with the
+     release type `minor`. The runtime-crates comparison is skipped when no
+     runtime crate, `crates/ridl-ir`, `Cargo.toml` or `Cargo.lock` differs
+     between the baseline and the working tree. Ten lints of
      `cargo semver-checks` that require a major version but report only a
      warning are raised to `deny`, so the break they find fails the check.
 
@@ -381,7 +385,8 @@ design in each:
   not in `required`.
 - Before the Rust API comparison, the check runs `cargo fetch --locked` with the
   network allowed, so its first run on a machine with an empty cargo cache needs
-  the network. The comparison itself runs offline.
+  the network. The comparison itself runs offline. A passing check says which
+  comparisons ran and which were skipped.
 - The workflow that publishes to crates.io runs `just build` in its verify job,
   so it installs `cargo-semver-checks` at the version `ci.yml` names, as CI
   does.

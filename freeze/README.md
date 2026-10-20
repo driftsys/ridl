@@ -60,7 +60,10 @@ lines. Neither has a `<surface>.txt`.
   directory of each of these crates, in `crates/ridl-ir`, in the root
   `Cargo.toml` and in `Cargo.lock`, because then no break is possible. The
   working tree is compared, so an edit that is not committed yet is still
-  compared. The passing line of the check says so.
+  compared. `rust-toolchain.toml` and the sources of `xtask` are not inputs: the
+  comparison reads the rustdoc of the crates, and neither changes an item of
+  them. A file that git ignores under these paths is not an input either. The
+  passing line of the check says so.
 - `generated-crate`: each directory `generated/<name>/` holds a crate that
   `ridl build --emit rust` writes, from the source packages under
   `xtask/tests/freeze-fixtures/generated/`. Those are frozen copies of
@@ -91,6 +94,9 @@ The baseline can pin a package that HEAD's `Cargo.lock` no longer names, so the
 check also extracts the baseline's tree into
 `${CARGO_TARGET_DIR:-target}/freeze-api/baseline-tree/` and runs
 `cargo fetch --locked` there, with the network allowed, before the comparison.
+It does this only when the baseline's `Cargo.lock` differs from the working
+tree's, because an equal lockfile names the same packages that HEAD's fetch
+already downloaded.
 
 The passing line of the check says which Rust API comparisons ran. For each API
 surface it names one of three results: compared with its baseline, skipped (with

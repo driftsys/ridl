@@ -718,6 +718,44 @@ mod tests {
         );
     }
 
+    fn stub_skip_none(_: &Path, _: &Row) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+
+    fn stub_skip_error(_: &Path, row: &Row) -> Result<Option<String>, String> {
+        Err(format!("cannot read the baseline `{}`", row.baseline))
+    }
+
+    #[test]
+    fn check_api_surfaces_compares_when_the_skip_step_gives_no_reason() {
+        const SURFACE: ApiSurface = ApiSurface {
+            skip: Some(stub_skip_none),
+            ..STUB
+        };
+        let rows = [Row {
+            surface: "stub".into(),
+            baseline: "v1".into(),
+        }];
+        let checks = check_api_surfaces(&[(&SURFACE, false)], &rows, Path::new("."));
+        assert_eq!(checks.failures, vec!["break since `v1`"]);
+        assert_eq!(checks.outcomes, vec![("stub", ApiOutcome::Compared)]);
+    }
+
+    #[test]
+    fn check_api_surfaces_fails_when_the_skip_step_fails() {
+        const SURFACE: ApiSurface = ApiSurface {
+            skip: Some(stub_skip_error),
+            ..STUB
+        };
+        let rows = [Row {
+            surface: "stub".into(),
+            baseline: "v1".into(),
+        }];
+        let checks = check_api_surfaces(&[(&SURFACE, false)], &rows, Path::new("."));
+        assert_eq!(checks.failures, vec!["cannot read the baseline `v1`"]);
+        assert!(checks.outcomes.is_empty());
+    }
+
     #[test]
     fn check_api_surfaces_records_a_compared_surface() {
         let rows = [Row {

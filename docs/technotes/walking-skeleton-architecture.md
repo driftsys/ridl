@@ -154,16 +154,16 @@ crate the workspace holds — see `AGENTS.md` for that.
   crate because three artifacts carry the hash — the codegen model's
   `Catalog.hash`, which the Rust backend writes into every generated
   `Interface::CATALOG`; the catalog descriptor, whose crate `ridl-descriptor`
-  depends on `ridl-ir` when its own `std` feature is on (the default),
-  re-exports the hash as `ridl_descriptor::hash`, and copies the interface
-  numbers from the IR in `ridl_descriptor::number`; and each `Region` of the
-  lowered rsdl system, where `ridlc` embeds it (`embed_catalog_hashes`).
-  `ridl_ir::codegen` holds the codegen request's deployment section:
-  `lower_deployment` in `codegen/deployment.rs` is an emitter over the lowered
-  system IR, and `codegen/bindings.rs` holds the table of transport binding
-  overheads, whose one row is the `websocket` binding of the frame specification
-  §11.1 ([the codegen plugin design](../design/codegen-plugins.md), "The
-  deployment section").
+  depends on `ridl-ir` when its own `std` feature is on (the default), wraps the
+  hash as `ridl_descriptor::hash`, and copies the interface numbers from the IR
+  in `ridl_descriptor::number`; and each `Region` of the lowered rsdl system,
+  where `ridlc` embeds it (`embed_catalog_hashes`). `ridl_ir::codegen` holds the
+  codegen request's deployment section: `lower_deployment` in
+  `codegen/deployment.rs` is an emitter over the lowered system IR, and
+  `codegen/bindings.rs` holds the table of transport binding overheads, whose
+  one row is the `websocket` binding of the frame specification §11.1
+  ([the codegen plugin design](../design/codegen-plugins.md), "The deployment
+  section").
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source }`. Rust is built as a `quote` token stream and
