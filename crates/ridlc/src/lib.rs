@@ -1738,12 +1738,12 @@ fn refuse_overwrite(
 /// with default features off. The backend's compile proofs build the emitted
 /// source as edition 2024 as well.
 ///
-/// The `ridl-rt = "0.11"` requirement is a literal, not read from
+/// The `ridl-rt = "0.12"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
 /// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.
 fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String]) -> String {
-    const RIDL_RT_REQUIREMENT: &str = "0.11";
+    const RIDL_RT_REQUIREMENT: &str = "0.12";
     let ridl_rt = if encodings.is_empty() {
         format!(r#"ridl-rt = {{ version = "{RIDL_RT_REQUIREMENT}" }}"#)
     } else {

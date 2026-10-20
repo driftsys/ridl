@@ -6,7 +6,7 @@ description: >-
   editing .typl, .ridl or .rsdl files or a ridl.toml, when turning a
   requirement into an interface or a type, or when reviewing such a change.
 metadata:
-  version: "0.11.0"
+  version: "0.12.0"
 ---
 
 ## What RIDL is

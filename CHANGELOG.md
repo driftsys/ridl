@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.12.0] (2026-10-20)
+
+### Features
+
+- **ridl-backend-rust:** add the proto3 payload codec ([#998]) ([925946f]), refs
+  [#264], [#264], [#264], [#264], [#264], [#264]
+- **ts-transport-ws:** add the TypeScript WebSocket transport package ([#993])
+  ([fd4808c])
+- **ridl-transport-ws:** add the WebSocket transport crate ([#990]) ([0c03255]),
+  refs [#265], [#265], [#718], [#718], [#265], [#265]
+
+### Bug Fixes
+
+- **ridl-diff:** report distribution membership changes ([#999]) ([fe2f7ad]),
+  closes [#974]
+
+### Documentation
+
+- **roadmap:** reopen E12.2 and E12.5, add E12.11 ([#983]) ([f41e8f9])
+- **repo:** garden the release 0.11 plan ([#981]) ([3871f5c])
+
+[0.12.0]: https://github.com/driftsys/ridl/compare/v0.11.0...v0.12.0
+[925946f]: https://github.com/driftsys/ridl/commit/925946f
+[#998]: https://github.com/driftsys/ridl/issues/998
+[#264]: https://github.com/driftsys/ridl/issues/264
+[fd4808c]: https://github.com/driftsys/ridl/commit/fd4808c
+[#993]: https://github.com/driftsys/ridl/issues/993
+[0c03255]: https://github.com/driftsys/ridl/commit/0c03255
+[#990]: https://github.com/driftsys/ridl/issues/990
+[#265]: https://github.com/driftsys/ridl/issues/265
+[#718]: https://github.com/driftsys/ridl/issues/718
+[fe2f7ad]: https://github.com/driftsys/ridl/commit/fe2f7ad
+[#999]: https://github.com/driftsys/ridl/issues/999
+[#974]: https://github.com/driftsys/ridl/issues/974
+[f41e8f9]: https://github.com/driftsys/ridl/commit/f41e8f9
+[#983]: https://github.com/driftsys/ridl/issues/983
+[3871f5c]: https://github.com/driftsys/ridl/commit/3871f5c
+[#981]: https://github.com/driftsys/ridl/issues/981
+
 ## [0.11.0] (2026-10-16)
 
 ### Refactoring
