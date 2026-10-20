@@ -2232,11 +2232,10 @@ fn ratio() -> BoxedStrategy<f32> {
     (0u32..=500).prop_map(|k| k as f32 * 0.5).boxed()
 }
 
-/// Any `double` but `-0.0`, the listed exception, and NaN, whose payload
-/// bits are a property of the platform rather than of either codec.
+/// Any `double` but `-0.0`, the listed exception: NaN included, since both
+/// writers carry the bits as they are and the comparison is on bytes.
 fn real() -> BoxedStrategy<f64> {
-    use proptest::num::f64::{INFINITE, NEGATIVE, NORMAL, POSITIVE, SUBNORMAL, ZERO};
-    (POSITIVE | NEGATIVE | NORMAL | SUBNORMAL | ZERO | INFINITE)
+    proptest::num::f64::ANY
         .prop_filter("-0.0 is the listed exception", |x| {
             !(*x == 0.0 && x.is_sign_negative())
         })
@@ -2812,14 +2811,15 @@ fn verify_never_panics_and_is_no_looser_than_prost() {
     // `BTreeMap` sorts. So prost's canonical form is read here and written
     // again, and that re-encoding and this codec's re-encoding of the input
     // — both bytes this codec wrote — are compared as prost reads them: the
-    // first normalizes absence, the second the entry order. The count of
-    // inputs both readers re-encode byte for byte is reported and held
-    // above half.
+    // first normalizes absence, the second the entry order. A pair of
+    // re-encodings that differ is then allowed only for a message that
+    // holds one of the two forms, read from the schema; a third form fails.
     let lines: Vec<String> = accepted
         .iter()
         .map(|(message, _, _, theirs)| format!("{message} decode-encode {theirs}"))
         .collect();
     let through_this_codec = program().run(&lines);
+    let admits_difference = messages_with_a_record_field_or_a_map();
     let mut byte_identical = 0usize;
     for ((message, how, ours, theirs), of_theirs) in accepted.iter().zip(&through_this_codec) {
         let read = |bytes: &str| {
@@ -2833,7 +2833,16 @@ fn verify_never_panics_and_is_no_looser_than_prost() {
             "{how}: prost's canonical form ({theirs}) must read here as the value this codec \
              read from the input"
         );
-        byte_identical += usize::from(ours == theirs);
+        if ours == theirs {
+            byte_identical += 1;
+        } else {
+            assert!(
+                admits_difference.contains(*message),
+                "{how}: this codec re-encodes {ours} and prost {theirs}, and `{message}` holds \
+                 neither a non-optional record field nor a map, the two forms the writers \
+                 differ on"
+            );
+        }
     }
     println!(
         "accepted {} of {} malformed or random inputs, {byte_identical} re-encoded byte for byte \
@@ -2841,10 +2850,27 @@ fn verify_never_panics_and_is_no_looser_than_prost() {
         accepted.len(),
         inputs.len()
     );
-    assert!(
-        byte_identical * 2 > accepted.len(),
-        "most accepted inputs re-encode byte for byte on both sides"
-    );
+}
+
+/// The bare name of every fixture message with a field whose absence this
+/// codec and `prost` write back differently — a non-optional field of
+/// message type outside a `oneof` — or a map field, read from the emitted
+/// schema.
+fn messages_with_a_record_field_or_a_map() -> BTreeSet<String> {
+    proto3::descriptor_pool()
+        .all_messages()
+        .filter(|message| !message.is_map_entry())
+        .filter(|message| {
+            message.fields().any(|field| {
+                field.is_map()
+                    || (matches!(field.kind(), Kind::Message(_))
+                        && !field.is_list()
+                        && field.containing_oneof().is_none()
+                        && !field.field_descriptor_proto().proto3_optional())
+            })
+        })
+        .map(|message| message.name().to_string())
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -2884,7 +2910,7 @@ fn corpus_defaults_round_trip_through_prost_reflect() {
         let mut packages = proto3::compile_workspace(&root.join(entry));
         packages.push(std_ir.clone());
         let pool = proto3::compile_protos(&proto3::emit_protos(&packages, &[])).descriptor_pool();
-        let program = proto3::Program::build_over(&packages, &[], proto3::Key::Qualified, "", &[]);
+        let program = proto3::Program::build_over(&packages, proto3::Key::Qualified, "", &[]);
         let messages = program.messages_with_default();
         assert!(!messages.is_empty(), "{entry}: a message with a Default");
         let lines: Vec<String> = messages
@@ -3034,8 +3060,12 @@ fn the_worst_case_value_fits_max_size() {
     // on it, which names the type and the two numbers.
     let answers = match program.try_run(&lines) {
         Ok(answers) => answers,
-        Err(abort) => panic!(
+        Err(abort) if abort.stderr.contains("Capacity") => panic!(
             "a worst-case value does not fit its MAX_SIZE, which is a sizer defect, on `{}`:\n{}",
+            lines[abort.request], abort.stderr
+        ),
+        Err(abort) => panic!(
+            "the generated codec aborted on `{}`:\n{}",
             lines[abort.request], abort.stderr
         ),
     };

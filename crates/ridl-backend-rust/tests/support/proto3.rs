@@ -219,18 +219,18 @@ impl Program {
         let (main, others) = fixture();
         let mut packages = vec![main];
         packages.extend(others);
-        Program::build_over(&packages, &[], Key::Bare, prelude, named)
+        Program::build_over(&packages, Key::Bare, prelude, named)
     }
 
     /// Builds the program over `packages`, each generated with every other
-    /// one and `context` (the standard package, for a corpus that names it)
-    /// as its resolution context, composed into one module tree. The
+    /// one as its resolution context, composed into one module tree. A
+    /// corpus that names the standard package passes it among `packages`,
+    /// since its generated code names `crate::ridl::std::` items. The
     /// harness imports the first package's items for `prelude` and the
     /// named values. Every message the codec emits with a `Payload<Proto3>`,
     /// in any of `packages`, is dispatched under its `key`.
     pub fn build_over(
         packages: &[v2::Package],
-        context: &[&v2::Package],
         key: Key,
         prelude: &str,
         named: &[NamedValue],
@@ -240,13 +240,12 @@ impl Program {
         // whether that type has a `Default` value.
         let mut dispatch: Vec<(String, String, bool)> = Vec::new();
         for (at, package) in packages.iter().enumerate() {
-            let mut others: Vec<&v2::Package> = packages
+            let others: Vec<&v2::Package> = packages
                 .iter()
                 .enumerate()
                 .filter(|(other, _)| *other != at)
                 .map(|(_, other)| other)
                 .collect();
-            others.extend_from_slice(context);
             let generated = ridl_backend_rust::generate_pipeline(
                 package,
                 &[ridl_backend_rust::WireEncoding::Proto3],
