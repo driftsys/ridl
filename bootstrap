@@ -14,7 +14,8 @@
 # a choice this script should not make for them. It names each missing tool
 # with the command that installs it and exits non-zero, so a fresh clone
 # reports what the gate needs up front instead of failing part-way through a
-# gate run (ADR-0009).
+# gate run (ADR-0009). Deno is the exception: when `deno` is not on PATH, it
+# installs the version in .deno-version into ~/.deno/bin.
 
 set -euo pipefail
 
@@ -59,6 +60,26 @@ if command -v rustup >/dev/null 2>&1; then
     log "installing the $minimum toolchain"
     rustup toolchain install "$minimum" --profile minimal
   fi
+fi
+
+# Deno, for the TypeScript package's gates. The pinned version is in
+# .deno-version, which CI reads too. Unlike the tools checked below, Deno is
+# installed here when it is missing, with Deno's official installer, which
+# writes only to ~/.deno. A `deno` already on PATH is left as it is, even at
+# another version: replacing it would force a global change on the contributor
+# (ADR-0009 decision 8).
+deno_version="$(tr -d '[:space:]' < .deno-version)"
+if command -v deno >/dev/null 2>&1; then
+  deno_running="$(deno --version | sed -n 's/^deno \([^ ]*\).*/\1/p')"
+  if [ "$deno_running" = "$deno_version" ]; then
+    log "deno $deno_running found: $(command -v deno)"
+  else
+    log "note: deno $deno_running is installed, and .deno-version pins $deno_version; CI runs $deno_version"
+  fi
+else
+  log "installing deno $deno_version into ~/.deno/bin"
+  curl -fsSL https://deno.land/install.sh | sh -s -- -y "v$deno_version"
+  log "note: add ~/.deno/bin to PATH in your shell profile — the TypeScript gates run 'deno'"
 fi
 
 missing=0
