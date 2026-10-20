@@ -252,6 +252,14 @@ Deno.test("attach refuses an unknown encoding", () => {
   }
 });
 
+Deno.test("attach refuses an encoding that is not an integer", () => {
+  const hash = new Uint8Array(32);
+  assert.throws(
+    () => attach(1, 2.5, hash, "v"),
+    (e: unknown) => e instanceof AttachError && e.reason === "unknown-encoding",
+  );
+});
+
 Deno.test("attach refuses a hash that is not 32 bytes", () => {
   assert.throws(() => attach(1, 1, new Uint8Array(31), "v"), RangeError);
   assert.throws(() => attach(1, 1, new Uint8Array(33), "v"), RangeError);
