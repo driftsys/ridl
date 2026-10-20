@@ -178,7 +178,8 @@ pub struct NamedValue {
 ///   value, for a message whose generated type has one
 ///   ([`Program::messages_with_default`]);
 /// - `encode-named <name>`: the hexadecimal encoding of the [`NamedValue`]
-///   of that name.
+///   of that name;
+/// - `max-size`: the type's `MAX_SIZE`, in decimal.
 ///
 /// An empty hexadecimal argument is the empty buffer.
 pub struct Program {
@@ -318,6 +319,7 @@ fn dispatch<T: Payload<Proto3>>(op: &str, arg: &str) -> String {{
                 Err(error) => format!("{{error:?}}"),
             }}
         }}
+        "max-size" => format!("{{}}", <T as Payload<Proto3>>::MAX_SIZE),
         _ => panic!("unknown op `{{op}}`"),
     }}
 }}

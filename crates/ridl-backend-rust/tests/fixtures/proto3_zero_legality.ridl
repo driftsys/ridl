@@ -1,0 +1,118 @@
+// Whether an absent proto3 field reads as its default (driftsys/ridl#472, in
+// proto3 terms).
+//
+// Every struct here has the same wire shape: a field at number 1 and a `Label`
+// at number 2. So one buffer that carries only the label — what a conforming
+// proto3 writer emits when the first field is at its default — is read here
+// as each of them, and what differs is only the type of the absent field.
+// The FlatBuffers suite has the same fixture for the scalar rows; this one
+// adds the rows proto3 omits as well: a string, a collection and a union.
+
+package pb.zero
+
+/// A label, as in the conformance fixture.
+type Label : string [0..16]
+
+/// A count; 0 is a legal value.
+type Count : integer [0..200]
+
+/// A float whose grid is -1.5, -0.5, 0.5 and 1.5: 0 lies inside the range
+/// but not on the grid, so 0 is not a legal value.
+type Odd : float [-1.5..1.5 step 1.0]
+
+/// A float whose grid is -1.0, 0.0 and 1.0: 0 is on the grid.
+type Even : float [-1.0..1.0 step 1.0]
+
+/// A string whose length excludes the empty string.
+type Short : string [1..8]
+
+/// An enum whose zero member is not its first.
+enum Mode {
+  ON  = 1
+  OFF = 0
+}
+
+/// An enum with no zero member.
+enum Gear {
+  PARK  = 1
+  DRIVE = 2
+}
+
+/// A union: its empty message holds no arm.
+union Choice {
+  count : Count
+  label : Label
+}
+
+/// An inline range that excludes 0.
+struct ValueRange {
+  value : integer [1..10]
+  label : Label
+}
+
+/// An inline range that includes 0.
+struct ValueZero {
+  value : integer [0..10]
+  label : Label
+}
+
+/// A named type whose step excludes 0.
+struct ValueOdd {
+  value : Odd
+  label : Label
+}
+
+/// A named type whose step includes 0.
+struct ValueEven {
+  value : Even
+  label : Label
+}
+
+/// An enum whose zero member is declared second.
+struct ValueMode {
+  value : Mode
+  label : Label
+}
+
+/// An enum with no zero member.
+struct ValueGear {
+  value : Gear
+  label : Label
+}
+
+/// A bare `integer`, with no constraint at all: every value is legal, 0
+/// included, so an absent field reads as 0.
+struct ValueBareInteger {
+  value : integer
+  label : Label
+}
+
+/// A bare `float`, with no constraint at all, read the same way.
+struct ValueBareFloat {
+  value : float
+  label : Label
+}
+
+/// A named string whose length excludes the empty string.
+struct ValueShort {
+  value : Short
+  label : Label
+}
+
+/// An inline string whose length excludes the empty string.
+struct ValueInlineShort {
+  value : string [1..8]
+  label : Label
+}
+
+/// An array whose count excludes the empty array.
+struct ValueList {
+  value : [Count; 1..4]
+  label : Label
+}
+
+/// A union field: absent, its message holds no arm.
+struct ValueChoice {
+  value : Choice
+  label : Label
+}
