@@ -1,0 +1,9 @@
+{
+  "name": "@driftsys/ridl-transport-ws",
+  "version": "0.11.0",
+  "license": "MIT",
+  "exports": "./mod.ts",
+  "fmt": { "include": ["**/*.ts"] },
+  "lint": { "include": ["**/*.ts"] },
+  "publish": { "include": ["mod.ts", "src/", "README.md", "LICENSE"] }
+}
