@@ -426,6 +426,90 @@ fn rust_for(decls: Vec<v2::Decl>) -> String {
         .rust_source
 }
 
+/// The contract accepts `proto3`, alone and beside `flatbuffers`, and still
+/// refuses `repr-c` with the issue that builds its codec.
+#[test]
+fn the_contract_accepts_proto3() {
+    use ridl_ir::codegen::v1::{BackendOption, CodegenRequest};
+
+    let package = package("veh.common", vec![speed_decl()]);
+    let respond = |value: &str| {
+        let request = CodegenRequest {
+            model: Some(ridl_ir::codegen::lower(&package, &[])),
+            options: vec![BackendOption {
+                key: super::ENCODINGS_OPTION.to_string(),
+                value: value.to_string(),
+            }],
+            artifact_base: "veh.common".to_string(),
+            ..Default::default()
+        };
+        ridl_ir::codegen::Backend::generate(&crate::Backend, &request)
+    };
+    for value in ["proto3", "flatbuffers,proto3"] {
+        let response = respond(value);
+        assert!(
+            response.diagnostics.is_empty(),
+            "`{value}` builds, got: {:?}",
+            response.diagnostics
+        );
+        let text = response
+            .files
+            .iter()
+            .find_map(|file| match &file.content {
+                Some(ridl_ir::codegen::v1::generated_file::Content::Text(text)) => {
+                    Some(text.clone())
+                }
+                _ => None,
+            })
+            .expect("one text file");
+        assert!(
+            text.contains(
+                "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Speed"
+            ),
+            "`{value}` carries the proto3 codec, got:\n{text}"
+        );
+        assert_eq!(
+            text.contains(
+                "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed"
+            ),
+            value.contains("flatbuffers"),
+            "`{value}` carries the FlatBuffers codec exactly when it names it"
+        );
+    }
+    let response = respond("repr-c");
+    assert_eq!(response.diagnostics.len(), 1);
+    assert!(
+        response.diagnostics[0]
+            .message
+            .contains("driftsys/ridl#317"),
+        "got: {}",
+        response.diagnostics[0].message
+    );
+}
+
+/// The range and step table is `ridl_ir::zero`'s; this pins only that the
+/// codecs hand the constraint's three texts to it, and that no constraint
+/// holds 0.
+#[test]
+fn zero_is_legal_reads_the_shared_predicate() {
+    use ridl_ir::codegen::v1;
+
+    let constraint = |min: &str, max: &str, step: Option<&str>| v1::Constraint {
+        min: Some(min.to_string()),
+        max: Some(max.to_string()),
+        step: step.map(String::from),
+        ..Default::default()
+    };
+    assert!(super::zero_is_legal(None), "no constraint holds 0");
+    assert!(super::zero_is_legal(Some(&constraint("0", "10", None))));
+    assert!(!super::zero_is_legal(Some(&constraint("1", "10", None))));
+    assert!(!super::zero_is_legal(Some(&constraint(
+        "-1.5",
+        "1.5",
+        Some("1.0")
+    ))));
+}
+
 #[test]
 fn scalar_unit_type_with_doc() {
     insta::assert_snapshot!(rust_with_codec(vec![speed_decl()]));

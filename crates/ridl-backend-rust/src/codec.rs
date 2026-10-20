@@ -73,7 +73,7 @@ use ridl_ir::codegen::v1;
 use crate::{
     Ctx, GenerateError, ScalarBacking, allow_dead_code_if_internal, check_flatbuffers_bound,
     class_backing, declared, ident, model_type_tokens, pascal_of, tuple_name, type_path,
-    vis_tokens,
+    vis_tokens, zero_is_legal,
 };
 
 /// The alignment every buffer this codec writes is finished at: eight, the
@@ -174,13 +174,14 @@ impl Wire {
     }
 }
 
-/// A named scalar the codec constructs on the way back.
+/// A named scalar the codec constructs on the way back. Shared with the
+/// proto3 codec (`crate::codec_proto3`), which reads the same two facts.
 #[derive(Debug, Clone)]
-struct NamedScalar {
-    name: String,
+pub(crate) struct NamedScalar {
+    pub(crate) name: String,
     /// `new_unchecked` for a constrained type, `new` for a vacuous one whose
     /// `new` is infallible and `const` (`crate::scalar_ctor`).
-    ctor: &'static str,
+    pub(crate) ctor: &'static str,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -458,13 +459,14 @@ impl Scalar {
 /// which of the two a given position hands over depends on where it sits: a
 /// struct field is a place, a vector element is already a reference. Carrying
 /// both keeps every generated expression free of a `&*` or a `*&` that rustc
-/// warns about in a consumer's build.
+/// warns about in a consumer's build. Shared with the proto3 codec
+/// (`crate::codec_proto3`), whose positions are the same two.
 #[derive(Clone)]
-struct Operand {
+pub(crate) struct Operand {
     /// A place expression of the value's own type.
-    place: TokenStream,
+    pub(crate) place: TokenStream,
     /// An expression of type `&T`.
-    reference: TokenStream,
+    pub(crate) reference: TokenStream,
     /// Whether the value is reached through a binding that is already a
     /// reference, rather than as a place of its own type.
     borrowed: bool,
@@ -475,7 +477,7 @@ impl Operand {
     /// place for an owned value, the binding for a reference. `get`,
     /// `as_str` and `as_slice` already return references, so a `&` before
     /// the call draws `clippy::needless_borrow`.
-    fn receiver(&self) -> &TokenStream {
+    pub(crate) fn receiver(&self) -> &TokenStream {
         if self.borrowed {
             &self.reference
         } else {
@@ -485,7 +487,7 @@ impl Operand {
 
     /// A place and the reference taken from it: a struct field, or a
     /// position of a map entry's pair.
-    fn owned(place: TokenStream) -> Self {
+    pub(crate) fn owned(place: TokenStream) -> Self {
         Operand {
             reference: quote! { &#place },
             place,
@@ -495,7 +497,7 @@ impl Operand {
 
     /// A binding that is already a reference: a vector element, or the inside
     /// of an `Option`.
-    fn borrowed(reference: TokenStream) -> Self {
+    pub(crate) fn borrowed(reference: TokenStream) -> Self {
         Operand {
             place: quote! { *#reference },
             reference,
@@ -678,28 +680,11 @@ fn decode_path(owner: &str) -> TokenStream {
     owner_path(owner, decode_ident)
 }
 
-/// Whether 0 is a value of a numeric scalar's declared range and step,
-/// decided at generation time from the IR's exact decimal text
-/// (driftsys/ridl#472). No constraint at all holds 0.
-///
-/// The rule is [`ridl_ir::zero::range_holds_zero`], the one definition this
-/// codec and `ridl diff` share: `ridl diff` classifies appending a
-/// non-optional scalar field as compatible only when this answer is `true`
-/// for its type (driftsys/ridl#598).
-fn zero_is_legal(constraint: Option<&v1::Constraint>) -> bool {
-    constraint.is_none_or(|constraint| {
-        ridl_ir::zero::range_holds_zero(
-            constraint.min.as_deref(),
-            constraint.max.as_deref(),
-            constraint.step.as_deref(),
-        )
-    })
-}
-
 /// The `verify` statement for an absent field that carries no value: a
 /// non-optional string, bytes, table, union or collection, or a scalar or
-/// enum whose type excludes 0 ([`Scalar::verify_absent`]).
-fn missing_required() -> TokenStream {
+/// enum whose type excludes 0 ([`Scalar::verify_absent`]). The proto3 codec
+/// writes the same statement for the same rule.
+pub(crate) fn missing_required() -> TokenStream {
     quote! {
         return ::core::result::Result::Err(
             ::ridl_rt::payload::VerifyError::Structure(
@@ -752,7 +737,10 @@ fn verify_field(field: &TokenStream, present: &TokenStream, absent: &TokenStream
 /// exactly [`NamedScalar::ctor`]'s two cases — `"new_unchecked"` (a
 /// constrained type, which does emit `check`) and `"new"` (a vacuous one,
 /// which does not).
-fn named_scalar_check(named: &NamedScalar, value: TokenStream) -> Option<TokenStream> {
+///
+/// Shared with the proto3 codec, which checks a named scalar at the same
+/// positions through the same generated `check`.
+pub(crate) fn named_scalar_check(named: &NamedScalar, value: TokenStream) -> Option<TokenStream> {
     if named.ctor != "new_unchecked" {
         return None;
     }
@@ -767,7 +755,8 @@ fn named_scalar_check(named: &NamedScalar, value: TokenStream) -> Option<TokenSt
 
 /// Checks an anonymous scalar without requiring a generated newtype. Numeric
 /// wire values use their received precision for the step reconstruction check.
-fn scalar_constraint_check(
+/// Shared with the proto3 codec.
+pub(crate) fn scalar_constraint_check(
     sc: &v1::Scalar,
     owner: &str,
     value: TokenStream,
@@ -2994,7 +2983,9 @@ fn encode_count_check(owner: &str, min: u64, max: u64, collection: &TokenStream)
 
 /// Checks the length of an anonymous string or byte sequence before writing it.
 /// Named scalars retain their constructor checks and explicit unchecked opt-out.
-fn inline_length_check(
+/// Shared with the proto3 codec, whose `encode` runs the same check before it
+/// writes the same two shapes.
+pub(crate) fn inline_length_check(
     owner: &str,
     anonymous: bool,
     scalar: Option<&v1::Scalar>,
@@ -3109,31 +3100,5 @@ fn int_prim(width: i32) -> Option<Prim> {
         v1::IntWidth::U64 => Some(Prim::U64),
         v1::IntWidth::I64 => Some(Prim::I64),
         v1::IntWidth::Unspecified => None,
-    }
-}
-
-#[cfg(test)]
-mod zero_tests {
-    use super::{v1, zero_is_legal};
-
-    /// The range and step table is `ridl_ir::zero`'s; this pins only that
-    /// the codec hands the constraint's three texts to it, and that no
-    /// constraint holds 0.
-    #[test]
-    fn zero_is_legal_reads_the_shared_predicate() {
-        let constraint = |min: &str, max: &str, step: Option<&str>| v1::Constraint {
-            min: Some(min.to_string()),
-            max: Some(max.to_string()),
-            step: step.map(String::from),
-            ..Default::default()
-        };
-        assert!(zero_is_legal(None), "no constraint holds 0");
-        assert!(zero_is_legal(Some(&constraint("0", "10", None))));
-        assert!(!zero_is_legal(Some(&constraint("1", "10", None))));
-        assert!(!zero_is_legal(Some(&constraint(
-            "-1.5",
-            "1.5",
-            Some("1.0")
-        ))));
     }
 }

@@ -1,0 +1,151 @@
+// The proto3 codec round-trip fixture.
+//
+// One declaration per shape the codec carries today: a named scalar over each
+// backing, every integer and float width at an inline field, bare `integer`
+// and `float`, a boolean, a bounded string and bytes, an enum with a zero
+// member, one without, one with a negative value, an enum set, a nested
+// struct, optional fields, and a struct whose every field is legal at its
+// proto3 default. `Count`, `Health`, `Gear` and `WarningFlags` are box roots in
+// their own right.
+//
+// `WithList` holds an array and `ReachesList` reaches one through a field:
+// the codec emits neither yet, and the test that pins the skip reads both.
+//
+// Kept self-contained, with no cross-package import, because the compile path
+// this fixture is read through (`ridlc::compile`) wraps one file as a
+// single-file synthetic package.
+
+package pb.demo
+
+// ---------- Named scalars ----------
+
+/// A count, narrow enough that the projection picks `u8`, which proto3
+/// widens to `uint32`.
+type Count : integer [0..200]
+
+/// A ratio whose step gives it a 32-bit float width.
+type Ratio : float [0.0..250.0 step 0.5]
+
+/// A label.
+type Label : string [0..16]
+
+/// A small blob.
+type Blob : bytes [0..8]
+
+/// A boolean scalar: its constraint checks nothing, so its constructor is the
+/// infallible `new`.
+type Engaged : boolean
+
+/// A level that excludes 0, so an absent field of this type is refused.
+type Level : integer [1..10]
+
+// ---------- Enums and the enum set ----------
+
+enum Health {
+  OK   = 0
+  WARN = 1
+  FAIL = 2
+}
+
+/// No zero member: a field of this type is always written, and an absent one
+/// is refused.
+enum Gear {
+  FIRST  = 1
+  SECOND = 2
+}
+
+/// A negative value, which proto3 writes as a ten-byte varint.
+enum Trend {
+  DOWN = -1
+  FLAT = 0
+  UP   = 1
+}
+
+enumset WarningFlags {
+  LOW  = 0
+  HIGH = 1
+}
+
+// ---------- Structs ----------
+
+struct Inner {
+  speed : Count
+  label : Label
+}
+
+/// Every scalar kind at a field position.
+struct Scalars {
+  unsigned8  : integer [0..255]
+  unsigned16 : integer [0..65535]
+  unsigned32 : integer [0..4294967295]
+  unsigned64 : integer [0..9223372036854775807]
+  signed8    : integer [-128..127]
+  signed16   : integer [-32768..32767]
+  signed32   : integer [-2147483648..2147483647]
+  signed64   : integer [-4294967296..4294967296]
+  plain      : integer
+  narrow     : float [0.0..250.0 step 0.5]
+  broad      : float [-1.0..1.0]
+  real       : float
+  flag       : boolean
+  text       : string [0..16]
+  data       : bytes [0..8]
+  count      : Count
+  ratio      : Ratio
+  label      : Label
+  blob       : Blob
+  engaged    : Engaged
+  health     : Health
+  gear       : Gear
+  trend      : Trend
+  flags      : WarningFlags
+}
+
+/// Every field optional, so each is written when present at any value and
+/// omitted when absent.
+struct Optionals {
+  count  : Count?
+  label  : Label?
+  flag   : boolean?
+  health : Health?
+  inner  : Inner?
+}
+
+struct Nested {
+  inner : Inner
+  count : Count
+}
+
+/// Every field's type admits its proto3 default, so the all-default value
+/// encodes to the empty buffer.
+struct Zeroable {
+  count  : Count
+  flag   : boolean
+  label  : Label
+  blob   : Blob
+  health : Health
+  flags  : WarningFlags
+  real   : float
+}
+
+/// A field whose type excludes 0 (`Level`) and one whose enum has no zero
+/// member (`Gear`): each is always written, and refused when absent.
+struct Required {
+  level : Level
+  gear  : Gear
+}
+
+/// The second field is a `double` at field number 2, so a value at `-0.0`
+/// encodes to its tag `11` followed by the eight bytes of `-0.0`.
+struct Signs {
+  ignored : integer
+  value   : float
+}
+
+struct WithList {
+  items : [Count; 0..3]
+}
+
+struct ReachesList {
+  list : WithList
+}
