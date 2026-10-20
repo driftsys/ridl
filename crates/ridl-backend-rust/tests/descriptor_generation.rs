@@ -1,8 +1,9 @@
 //! Descriptor-layer generation over the interaction-face fixture. Asserts that
 //! `generate_face_with` emits the `Interface` and `Interaction` descriptors and the
 //! interaction-kind traits over the runtime crate when `encodings` names a
-//! codec, that each interface carries its size table (`Sizes<FlatBuffers>`)
-//! with every number a const expression over the codec's `MAX_SIZE`, that the
+//! codec, that each interface carries one size table per encoding
+//! (`Sizes<FlatBuffers>`, `Sizes<Proto3>`) with every number a const
+//! expression over the codec's `MAX_SIZE`, that the
 //! buffer constants are sized from the right payloads, that an empty
 //! `encodings` emits the domain types only, and that the pipeline `generate`
 //! stays clean of the face.
@@ -185,6 +186,203 @@ fn the_size_table_derives_from_max_size() {
             "the descriptor has no inherent `{constant}`"
         );
     }
+}
+
+/// The `<T as Payload<::ridl_rt::encoding::Proto3>>` marker, whitespace-stripped:
+/// [`max_size_path`] in proto3.
+fn proto3_max_size_path(type_name: &str) -> String {
+    dense(&format!(
+        "<{type_name} as ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3"
+    ))
+}
+
+/// The `Sizes<Proto3>` implementation of `iface`, whitespace-stripped:
+/// [`sizes_impl`] in proto3.
+fn proto3_sizes_impl<'a>(dense_source: &'a str, iface: &str) -> &'a str {
+    let header = format!("impl::ridl_rt::contract::Sizes<::ridl_rt::encoding::Proto3>for{iface}{{");
+    let at = dense_source
+        .find(&header)
+        .unwrap_or_else(|| panic!("{iface} has a Sizes<Proto3> implementation"));
+    let body = &dense_source[at + header.len()..];
+    &body[..body.find("impl").unwrap_or(body.len())]
+}
+
+/// With `proto3` in the list, each interface carries a second size table,
+/// `Sizes<Proto3>`, whose rows and maxima are const expressions over
+/// `<T as Payload<Proto3>>::MAX_SIZE`, the proto3 codec's own bound, and
+/// never over the FlatBuffers one. The FlatBuffers table beside it is the one
+/// a FlatBuffers-only list emits, item for item, and the interface's doc
+/// names both tables. A program compiled from the output reads the proto3
+/// rows back as the sums of the proto3 bounds.
+#[test]
+fn the_proto3_size_table_is_built_from_proto3_bounds() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let both = generate_face_with(&package, &[WireEncoding::FlatBuffers, WireEncoding::Proto3])
+        .expect("generate_face_with")
+        .rust_source;
+    let only = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source;
+    let d = dense(&both);
+    let without_trailing_commas = |text: &str| text.replace(",>", ">").replace(",]", "]");
+
+    for iface in ["Cabin", "Horn", "Siren", "Valve", "Wiper"] {
+        let proto3 = proto3_sizes_impl(&d, iface);
+        assert!(
+            !proto3.contains("encoding::FlatBuffers"),
+            "{iface}'s proto3 table names no FlatBuffers item: {proto3}"
+        );
+        // The table ends at its last item; what follows it differs, because
+        // the proto3 table comes next in one output and not in the other.
+        let table = |text: &str| -> String {
+            let end = text
+                .find("EVENT_SOURCE_BUFFER_SIZE];}")
+                .expect("the table ends with its event buffer");
+            text[..end].to_string()
+        };
+        assert_eq!(
+            table(sizes_impl(&d, iface)),
+            table(sizes_impl(&dense(&only), iface)),
+            "{iface}'s FlatBuffers table does not change when proto3 joins the list"
+        );
+    }
+
+    let cabin = proto3_sizes_impl(&d, "Cabin");
+    let rows = sizes_item(cabin, "RESERVATIONS", "constMAX_BUFFER_SIZE");
+    let expected_rows = format!(
+        "&'static[::core::primitive::u64]=&[\
+         {temperature}>>::MAX_SIZEas::core::primitive::u64,\
+         {warning}>>::MAX_SIZEas::core::primitive::u64,\
+         {level}>>::MAX_SIZEas::core::primitive::u64,\
+         {window}>>::MAX_SIZEas::core::primitive::u64\
+         +{average}>>::MAX_SIZEas::core::primitive::u64,\
+         ];",
+        temperature = proto3_max_size_path("Temperature"),
+        warning = proto3_max_size_path("Warning"),
+        level = proto3_max_size_path("Level"),
+        window = proto3_max_size_path("Window"),
+        average = proto3_max_size_path("Average"),
+    );
+    assert_eq!(
+        without_trailing_commas(rows),
+        without_trailing_commas(&expected_rows),
+        "Cabin's proto3 rows are the four members' sums over the proto3 MAX_SIZE"
+    );
+    let claim = sizes_item(cabin, "MAX_BUFFER_SIZE", "constEVENT_SOURCE_BUFFER_SIZE");
+    for name in ["Level", "Window", "Average"] {
+        assert!(
+            claim.contains(&proto3_max_size_path(name)),
+            "the proto3 claim buffer is sized over `{name}`'s proto3 bound: {claim}"
+        );
+    }
+    let event = sizes_item(cabin, "EVENT_SOURCE_BUFFER_SIZE", "typeClaimBuffer");
+    assert!(
+        event.contains(&proto3_max_size_path("Warning")),
+        "the proto3 event buffer is sized over `Warning`'s proto3 bound: {event}"
+    );
+    let table = dense("<Self as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::Proto3>>");
+    let cabin = without_trailing_commas(cabin);
+    for item in [
+        format!("typeClaimBuffer=[::core::primitive::u8;{table}::MAX_BUFFER_SIZE];"),
+        format!("typeEventBuffer=[::core::primitive::u8;{table}::EVENT_SOURCE_BUFFER_SIZE];"),
+        format!("constCLAIM_BUFFER:Self::ClaimBuffer=[0u8;{table}::MAX_BUFFER_SIZE];"),
+        format!("constEVENT_BUFFER:Self::EventBuffer=[0u8;{table}::EVENT_SOURCE_BUFFER_SIZE];"),
+    ] {
+        assert!(
+            cabin.contains(&item),
+            "the proto3 buffers are sized over the proto3 table's own maxima: `{item}`"
+        );
+    }
+
+    assert!(
+        both.contains("Its size table in proto3 is `<Cabin as Sizes<Proto3>>`"),
+        "the interface doc names the proto3 table"
+    );
+    assert!(
+        both.contains("Its size table in FlatBuffers is `<Cabin as Sizes<FlatBuffers>>`"),
+        "the interface doc still names the FlatBuffers table"
+    );
+
+    let program = format!(
+        "#![allow(dead_code)]\n{both}\n\
+         fn main() {{\n\
+             use ::ridl_rt::contract::Sizes;\n\
+             use ::ridl_rt::encoding::Proto3;\n\
+             use ::ridl_rt::payload::Payload;\n\
+             let rows = <Cabin as Sizes<Proto3>>::RESERVATIONS;\n\
+             assert_eq!(rows.len(), 4);\n\
+             assert_eq!(rows[0], <Temperature as Payload<Proto3>>::MAX_SIZE as u64);\n\
+             assert_eq!(rows[1], <Warning as Payload<Proto3>>::MAX_SIZE as u64);\n\
+             assert_eq!(rows[2], <Level as Payload<Proto3>>::MAX_SIZE as u64);\n\
+             assert_eq!(rows[3], (<Window as Payload<Proto3>>::MAX_SIZE\n\
+                 + <Average as Payload<Proto3>>::MAX_SIZE) as u64);\n\
+             let claim = <Level as Payload<Proto3>>::MAX_SIZE\n\
+                 .max(<Window as Payload<Proto3>>::MAX_SIZE)\n\
+                 .max(<Average as Payload<Proto3>>::MAX_SIZE);\n\
+             assert_eq!(<Cabin as Sizes<Proto3>>::MAX_BUFFER_SIZE, claim);\n\
+             assert_eq!(<Cabin as Sizes<Proto3>>::EVENT_SOURCE_BUFFER_SIZE,\n\
+                 <Warning as Payload<Proto3>>::MAX_SIZE);\n\
+             assert_eq!(<Wiper as Sizes<Proto3>>::RESERVATIONS[0], 0);\n\
+         }}\n"
+    );
+    rustc::run_program("proto3_size_table", &program);
+}
+
+/// A list that names `proto3` alone carries the descriptors, the proto3 size
+/// table and the face, and nothing of FlatBuffers; the output compiles as a
+/// program.
+#[test]
+fn a_proto3_only_package_has_a_face() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let source = generate_face_with(&package, &[WireEncoding::Proto3])
+        .expect("generate_face_with")
+        .rust_source;
+    let d = dense(&source);
+    for marker in [
+        "impl::ridl_rt::contract::InterfaceforCabin",
+        "impl::ridl_rt::contract::Sizes<::ridl_rt::encoding::Proto3>forCabin",
+        "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>forLevel",
+        "pubmodcabin{",
+        "pubmodvalve{",
+    ] {
+        assert!(
+            d.contains(marker),
+            "a proto3-only package carries `{marker}`, got:\n{source}"
+        );
+    }
+    assert!(
+        !d.contains("encoding::FlatBuffers"),
+        "a proto3-only package names no FlatBuffers item"
+    );
+    assert!(
+        source.contains("Its size table in proto3 is `<Cabin as Sizes<Proto3>>`")
+            && !source.contains("Its size table in FlatBuffers"),
+        "the interface doc names the one table the package carries"
+    );
+    rustc::run_program(
+        "proto3_only_face",
+        &format!("#![allow(dead_code)]\n{source}\nfn main() {{}}\n"),
+    );
+}
+
+/// An interface a member of which has an induced payload with no proto3
+/// bound is refused by this entry point, which refuses rather than skips:
+/// the refusal names the induced message and the cause, and no descriptor
+/// is emitted without its size table. The pipeline skips the interface
+/// instead (`tests/induced_call_refusals.rs`).
+#[test]
+fn an_interface_with_an_unbounded_payload_is_refused() {
+    let package = ir::compile_fixture("proto3_unbounded_call.ridl");
+    let error = generate_face_with(&package, &[WireEncoding::Proto3])
+        .expect_err("an interface with an unbounded payload is refused");
+    assert!(
+        error
+            .message
+            .starts_with("`pb.unbounded.call.ProbeSetParams` has no finite proto3 bound: ")
+            && error.message.contains("(Overflow)"),
+        "the refusal names the induced message and the cause, got: {}",
+        error.message
+    );
 }
 
 /// Every interaction descriptor's `ROW` indexes, in its interface's
@@ -771,18 +969,44 @@ fn an_unknown_key_is_refused() {
     );
 }
 
+/// `proto3` is accepted through the contract. Alone, it emits the domain
+/// types, the proto3 codec, the proto3 size table and the face, and nothing
+/// of FlatBuffers; with `flatbuffers`, both codecs and both size tables are
+/// emitted side by side under one face.
+#[test]
+fn proto3_is_accepted_through_the_contract() {
+    let alone = backend_response(vec![encodings_option("proto3")]).expect("a file is written");
+    let d = dense(&alone);
+    assert!(
+        d.contains("Payload<::ridl_rt::encoding::Proto3>for"),
+        "the proto3 codec is emitted, got:\n{alone}"
+    );
+    assert!(
+        d.contains("Sizes<::ridl_rt::encoding::Proto3>for"),
+        "the proto3 size table is emitted, got:\n{alone}"
+    );
+    assert!(
+        alone.contains("pub mod valve"),
+        "the face is emitted, got:\n{alone}"
+    );
+    assert!(
+        !d.contains("encoding::FlatBuffers"),
+        "nothing of FlatBuffers without `flatbuffers`, got:\n{alone}"
+    );
+
+    let both =
+        backend_response(vec![encodings_option("flatbuffers,proto3")]).expect("a file is written");
+    let d = dense(&both);
+    assert!(d.contains("Payload<::ridl_rt::encoding::Proto3>for"));
+    assert!(d.contains("Payload<::ridl_rt::encoding::FlatBuffers>for"));
+    assert!(d.contains("Sizes<::ridl_rt::encoding::FlatBuffers>for"));
+    assert!(d.contains("Sizes<::ridl_rt::encoding::Proto3>for"));
+    assert!(both.contains("pub mod valve"));
+}
+
 /// An encoding this backend has no codec for yet is refused with the issue
 /// that builds the codec, so a manifest author knows the name is right and
 /// the codec is pending.
-#[test]
-fn proto3_is_refused_naming_its_issue() {
-    let message = refused_options(vec![encodings_option("proto3")]);
-    assert!(
-        message.contains("`proto3`") && message.contains("driftsys/ridl#264"),
-        "got: {message}"
-    );
-}
-
 #[test]
 fn repr_c_is_refused_naming_its_issue() {
     let message = refused_options(vec![encodings_option("repr-c")]);

@@ -207,7 +207,9 @@ other entry below is Accepted.
   decisions 6 to 8 from the review of the emitted mapping before 0.10 freezes
   it: a named scalar, an enum and an enum set are rooted in
   `message <Name>Box { <type> value = 1; }`, an optional tuple field takes
-  `optional`, and a bare `integer` projects to `sint64`.
+  `optional`, and a bare `integer` projects to `sint64`. Amended 2026-10-20 on
+  decision 7: the proto3 payload codec is built and refuses an optional array
+  element and an optional map value, as decision 7 said it would.
 
 - **ADR-0018 — The runtime core, two encodings, and what the backends emit.**
   _Proposed._ Retracts the interaction layer the language backends shipped and
@@ -223,7 +225,10 @@ other entry below is Accepted.
   emits the domain types only. Amended 2026-10-12 on decision 15: the generated
   face takes its encoding from its port type (`port::Encoded`, `P::Encoding`),
   carries the size and payload bounds as generated `where` clauses, and gains no
-  type parameter.
+  type parameter. Amended 2026-10-20 on decision 4 and open item 3: the proto3
+  codec's byte-level conformance is checked against `prost` generated through
+  `protox`, not `protoc`, and the generated Rust codec skips and drops unknown
+  fields.
 
 - **ADR-0019 — The FlatBuffers projection.** Seven rules the second wire backend
   needed: a union isolated in a wrapper table, a non-table union arm boxed,
@@ -241,7 +246,9 @@ other entry below is Accepted.
   field append is compatible is qualified, and its rule does not change. Amended
   2026-10-12: the `.proto` and `.fbs` mapping both backends emit is reviewed and
   frozen for 0.10; the status lists the review's rulings, and the FlatBuffers
-  decisions do not change.
+  decisions do not change. Amended 2026-10-20: review rulings 6, 7 and 18 are
+  discharged by the proto3 codec, and ruling 14 is out of date since
+  driftsys/ridl#713.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
   plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a
@@ -318,7 +325,11 @@ other entry below is Accepted.
   0.9.0, the next release. Its 2026-10-12 amendment, on decision 11, adds the
   forwarding impl of `Encoded` for `&P`, a breaking change for a crate that
   implemented `Encoded` for a shared reference to a type that itself implements
-  `Encoded` (driftsys/ridl#855).
+  `Encoded` (driftsys/ridl#855). Its 2026-10-20 amendment, on decisions 8 and 10
+  and open item 3, records the proto3 codec's additive items: the `proto3`
+  module and the `Malformed` variants `Varint`, `WireType` and `Duplicate`; the
+  proto3 view is the verified bytes, and a proto3 type with no finite size bound
+  is refused, so `Payload` and `Sizes` do not change.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact

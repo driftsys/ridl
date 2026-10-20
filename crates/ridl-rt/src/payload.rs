@@ -244,6 +244,26 @@ pub enum Malformed {
     TooManyTables,
     /// The buffer is larger than the verifier's limit.
     TooLarge,
+    /// A varint is longer than ten bytes, has a tenth byte above 1, or holds
+    /// a value wider than the scalar of its field: a `uint32` above
+    /// `u32::MAX`, or a `sint32` or an enum outside `i32`.
+    ///
+    /// Protobuf parsers truncate an over-wide varint to the field's width.
+    /// The generated proto3 codec refuses it, through this crate's narrowing
+    /// helpers, because the bytes do not hold a value of the field's type.
+    Varint,
+    /// A tag names field number 0, a wire type that proto3 does not have (3,
+    /// 4, 6 or 7), or a wire type that the known field's type does not take.
+    WireType,
+    /// A field that is not repeated appears twice, or a union message carries
+    /// two arms, or one arm twice.
+    ///
+    /// Protobuf's own rule reads a repeated singular field as "last one wins",
+    /// a repeated message field as a merge of every occurrence, and two
+    /// `oneof` arms as "last one wins". The generated proto3 codec refuses all
+    /// three, with this variant, because a payload is one value written once
+    /// and no generated writer emits a field twice.
+    Duplicate,
 }
 
 /// A value that breaks a typl constraint.
@@ -288,7 +308,7 @@ pub enum Rule {
 mod tests {
     use core::marker::PhantomData;
 
-    use super::{EncodeError, Encoded, Payload, Ref, Rule, VerifyError};
+    use super::{EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError};
     use crate::encoding::ReprC;
 
     /// A payload for this test only: its view is the bytes.
@@ -344,5 +364,19 @@ mod tests {
         }
         all(Rule::Range);
         all(Rule::Unique);
+    }
+
+    /// The three variants the proto3 codec adds exist on every feature set:
+    /// `Malformed` is not gated, so a crate that matches on it sees the same
+    /// enum whichever encodings it enables.
+    #[test]
+    fn malformed_has_the_three_proto3_variants() {
+        let added = [Malformed::Varint, Malformed::WireType, Malformed::Duplicate];
+        for (i, a) in added.iter().enumerate() {
+            for (j, b) in added.iter().enumerate() {
+                assert_eq!(a == b, i == j);
+            }
+            assert_ne!(*a, Malformed::OutOfBounds);
+        }
     }
 }

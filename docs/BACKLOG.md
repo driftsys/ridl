@@ -10,6 +10,14 @@ Since the review, #275, #367 and #377 to #382 have closed: lane E16 and E6.17
 landed on 2026-10-04, and #275 closed with E16.2. The counts below are those of
 the review date.
 
+**Changed on 2026-10-20, the proto3 codec:** #264 (E11.8, the proto3 payload
+codec) landed in PR driftsys/ridl#998. The Rust backend emits a proto3 codec
+when `encodings` names `proto3`, checked byte for byte against `prost` generated
+through `protox`, and a type with no finite size bound is refused, as under
+FlatBuffers. Its row below marks it as landed. Follow-ups: #996 (a platform-wide
+payload ceiling for both codecs) and #997 (the codec does not reproduce the
+`.proto` emitter's name-collision refusals).
+
 **Also changed on 2026-10-20:** #982 (E12.11, the TypeScript WebSocket transport
 package) landed in PR #993. The package carries payload bytes without decoding
 them; #288 and #291 still depend on #287. Its row below marks it as landed.
@@ -87,10 +95,10 @@ These estimates help planning and do not set delivery dates.
    records and diff classification #255, and grammar/attribute work #276.
    Finalize reference status #320 after its prerequisites and remaining
    normative defects are disposed of.
-5. **Remaining Rust release work:** implement proto3 #264 and `repr(C)` #317,
-   with its projection-layout record. The WebSocket transport #265 has landed
-   (PR #990). The frame specification, loopback runtime and plugin protocol are
-   available.
+5. **Remaining Rust release work:** implement `repr(C)` #317, with its
+   projection-layout record. The proto3 codec #264 and the WebSocket transport
+   #265 have landed (PR #990 for #265). The frame specification, loopback
+   runtime and plugin protocol are available.
 6. **Step 2:** deliver the TypeScript/wasm surface #287 and emulator #290. The
    TypeScript WebSocket transport package #982 has landed (PR #993). The
    attribute registry #268, its enforcement #269 and boundary IR #270, plus
@@ -169,7 +177,7 @@ does not override roadmap dependencies or maintainer decisions.
 | [#275](https://github.com/driftsys/ridl/issues/275) E9.10 — The schema hash over the IR, not over the emitted schema                                                                                                                             | `enhancement`                  | M    | Closed 2026-10-04 with #378 (PR #676). Reason at review: Cross-target schema identity is a remaining Step 1 deliverable; coordinate the hash definition with #378 to avoid competing identities.                                                    |
 | [#255](https://github.com/driftsys/ridl/issues/255) E10.10 — Amend ADR-0013 and typl §5.7; verify the ridl-diff classification                                                                                                                   | `documentation`, `enhancement` | S    | Finalize ADR-0013 and constraint-change classification after the delivered value objects and #654 validation rules. PR #654 amends initialization/NaN records but does not establish that this entire E10.10 story is complete; #320 depends on it. |
 | [#276](https://github.com/driftsys/ridl/issues/276) E9.12 — General-form R5 postfix order contradicts the shipped grammar; InterfaceDef/ServiceDef gain an AttrBlock                                                                             | `bug`, `documentation`         | S    | Normative postfix order still differs from grammar, and interface/service attributes are needed by the registry. Coordinate with #268.                                                                                                              |
-| [#264](https://github.com/driftsys/ridl/issues/264) E11.8 — The proto3 payload codec plus byte-level conformance against a protoc-generated implementation                                                                                       | `enhancement`                  | L    | Step 1 exit criterion requires a proto3 payload codec with independent bidirectional conformance.                                                                                                                                                   |
+| [#264](https://github.com/driftsys/ridl/issues/264) E11.8 — The proto3 payload codec plus byte-level conformance against a protoc-generated implementation                                                                                       | `enhancement`                  | L    | Landed 2026-10-20 (PR driftsys/ridl#998); follow-ups #996 and #997. Reason at review: Step 1 exit criterion requires a proto3 payload codec with independent bidirectional conformance.                                                             |
 | [#317](https://github.com/driftsys/ridl/issues/317) E11.12 — The repr(C) payload codec: a layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type | `enhancement`                  | L    | The third payload encoding is a Step 1 exit criterion. First settle layout rules in its projection record.                                                                                                                                          |
 | [#265](https://github.com/driftsys/ridl/issues/265) E11.9 — ridl-transport-ws: the WebSocket transport crate                                                                                                                                     | `enhancement`                  | M    | Landed 2026-10-20 (PR #990); follow-ups #984 to #989. Reason at review: The first real transport enables external consumers and the TypeScript plane. Frame/async contracts are now available; loopback is already split out and delivered.         |
 | [#320](https://github.com/driftsys/ridl/issues/320) E14.3 — Both references drop "Draft"; the rxdl reference gains its status line                                                                                                               | `documentation`                | S    | Finish reference status only after #255 and remaining normative defects are disposed of; dropping Draft alone is insufficient.                                                                                                                      |

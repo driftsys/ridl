@@ -35,8 +35,11 @@ pub const RUNTIME_CRATES: [&str; 4] = [
 /// source package `ridl build` compiles, relative to the repository root. The
 /// sources are copies of `examples/cabin` and of
 /// `crates/ridlc/tests/corpus/veh-cluster`, taken when the check was added.
-/// Their manifests name `flatbuffers`, the one encoding the Rust backend emits
-/// a codec for; it rejects `proto3` and `repr-c`.
+/// Their manifests name `flatbuffers` alone, as they did when the copies were
+/// taken, so the frozen dumps stay the FlatBuffers ones. The Rust backend
+/// emits a codec for `flatbuffers` and for `proto3`, and rejects `repr-c`;
+/// `examples/cabin` and the corpus name both codecs, and the copies do
+/// not follow them.
 const GENERATED: [(&str, &str); 2] = [
     ("cabin", "xtask/tests/freeze-fixtures/generated/cabin"),
     (

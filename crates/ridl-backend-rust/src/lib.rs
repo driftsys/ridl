@@ -33,6 +33,7 @@ use std::collections::{BTreeSet, HashSet};
 mod claims;
 mod clauses;
 mod codec;
+mod codec_proto3;
 mod contract;
 mod defaults;
 mod derives;
@@ -41,6 +42,7 @@ mod docs;
 mod face;
 mod scalar_step;
 
+pub use codec_proto3::{Label as Proto3Label, MessageLayout as Proto3MessageLayout};
 pub use contract::{Backend, ENCODINGS_OPTION};
 
 /// The generated artifact for one package: Rust source.
@@ -124,9 +126,10 @@ pub fn generate_face_with(
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
     let mut ctx = Ctx::new(package, &model);
-    if encodings.is_empty() {
+    if !emits_face(encodings) {
         return render(package_items(&ctx, &[], encodings)?);
     }
+    ctx.encodings = encodings.to_vec();
     // This entry point refuses rather than skips, so every named interface's
     // descriptors are emitted, and the face of every interface that has one,
     // and each one claims its names. A refusal returns before any output, so
@@ -221,11 +224,13 @@ pub(crate) fn generate_pipeline_over(
     encodings: &[WireEncoding],
 ) -> Result<Generated, GenerateError> {
     let mut ctx = Ctx::over(model);
-    if encodings.is_empty() {
-        // Types only: no descriptor reads the catalog hash and no interface
-        // is walked, so nothing below applies and nothing is refused.
+    if !emits_face(encodings) {
+        // Types only: the list is empty, so no codec, no descriptor and no
+        // face is emitted, the catalog hash is not read and no interface is
+        // walked, so nothing below applies and nothing is refused.
         return render(package_items(&ctx, &[], encodings)?);
     }
+    ctx.encodings = encodings.to_vec();
     // A malformed catalog hash refuses the whole model here; inside the
     // per-interface walk below it would only skip each interface.
     descriptors::catalog_hash(&ctx)?;
@@ -277,6 +282,17 @@ pub(crate) fn generate_pipeline_over(
     let mut items = package_items(&ctx, &faced, encodings)?;
     items.extend(interface_items);
     render(items)
+}
+
+/// Whether `encodings` asks for the descriptors and the face beside the
+/// codec: whenever it names a codec at all.
+///
+/// The descriptors carry one size table per encoding in the list, and the
+/// face is generic over its port's encoding, so a list that names `proto3`
+/// alone carries the proto3 table and the same face as a list that names
+/// `flatbuffers`.
+fn emits_face(encodings: &[WireEncoding]) -> bool {
+    !encodings.is_empty()
 }
 
 /// `indices`, positions in `model.interfaces`, as the `u32`s [`docs::Links`]
@@ -460,11 +476,14 @@ fn face_gap(ctx: &Ctx, interface: &v1::Interface, err: &GenerateError) -> FaceGa
 /// The domain types, and the codec over them when `encodings` names one —
 /// what [`generate`] emits (types only), and what a face is appended to.
 ///
-/// There is one codec emitter and one call to it, which is why the face
-/// compiles over the codec emitted here rather than over one written for
-/// it (design note D-11). The codec is emitted only when `encodings` is not
-/// empty: a types-only package carries no `Payload<_>` implementation, no
-/// `*FbView` type and no `__ridl_fb_*` helper.
+/// There is one emitter per codec and one call to each, which is why the
+/// face compiles over the codec emitted here rather than over one written
+/// for it (the FlatBuffers codec design note,
+/// `docs/archive/2026-09-20-flatbuffers-codec-design.md`, D-11). A codec is
+/// emitted only when `encodings` names
+/// it: a types-only package carries no `Payload<_>` implementation, no
+/// `*FbView` type and no `__ridl_fb_*` or `__ridl_pb_*` helper, and a list
+/// that names both encodings carries both codecs side by side.
 ///
 /// The claim tables run first, before the domain types and the codec
 /// (`claims::check`). `interfaces` are the interfaces whose descriptors and
@@ -477,18 +496,22 @@ fn package_items(
 ) -> Result<Vec<TokenStream>, GenerateError> {
     claims::check(ctx, interfaces)?;
     let mut items = domain_items(ctx)?;
-    if !encodings.is_empty() {
-        for encoding in encodings {
-            encoding.check_emitted();
-        }
+    for encoding in encodings {
+        encoding.check_emitted();
+    }
+    if encodings.contains(&WireEncoding::FlatBuffers) {
         items.extend(codec::package_items(ctx)?);
+    }
+    if encodings.contains(&WireEncoding::Proto3) {
+        items.extend(codec_proto3::package_items(ctx)?);
     }
     Ok(items)
 }
 
 /// A payload encoding a generated package carries a codec for, and that its
-/// face encodes and verifies over (design note D-11; ADR-0020 decision 1
-/// names the three encodings).
+/// face encodes and verifies over (the FlatBuffers codec design note,
+/// `docs/archive/2026-09-20-flatbuffers-codec-design.md`, D-11; ADR-0020
+/// decision 1 names the three encodings).
 ///
 /// It is a per-package build-time choice rather than a type parameter on the
 /// face: the alternative would put an `E: Encoding` on every descriptor, every
@@ -498,11 +521,9 @@ fn package_items(
 /// as the [`ENCODINGS_OPTION`] request option; there is no default, and a
 /// package whose list is empty carries the domain types only.
 ///
-/// One variant today. `ridl-backend-rust` emits a `Payload` implementation for
-/// one encoding — the FlatBuffers codec — so naming another
-/// here would emit a face over implementations that do not exist. `repr(C)`
-/// and proto3 join when the Rust backend emits their codecs, which is what
-/// `#[non_exhaustive]` says to a caller that matches on this.
+/// Two variants today, the two codecs `ridl-backend-rust` emits a `Payload`
+/// implementation for. `repr(C)` joins when the Rust backend emits its codec,
+/// which is what `#[non_exhaustive]` says to a caller that matches on this.
 ///
 /// The encoding reaches the output as the full path
 /// `::ridl_rt::encoding::FlatBuffers` at every site that names it — the
@@ -516,15 +537,19 @@ pub enum WireEncoding {
     /// The FlatBuffers codec, emitted into a package's own output when the
     /// package's `encodings` names `flatbuffers`.
     FlatBuffers,
+    /// The proto3 codec, emitted into a package's own output when the
+    /// package's `encodings` names `proto3`.
+    Proto3,
 }
 
 impl WireEncoding {
     /// The encoding `name` spells, as `ridl_rt::encoding::Encoding::NAME`
-    /// spells it (`flatbuffers`), or `None` for every other string — an
-    /// encoding this backend has no codec for (`proto3`, `repr-c`) included.
+    /// spells it (`flatbuffers`, `proto3`), or `None` for every other string
+    /// — an encoding this backend has no codec for (`repr-c`) included.
     pub fn parse(name: &str) -> Option<Self> {
         match name {
             "flatbuffers" => Some(WireEncoding::FlatBuffers),
+            "proto3" => Some(WireEncoding::Proto3),
             _ => None,
         }
     }
@@ -533,19 +558,21 @@ impl WireEncoding {
     pub fn name(self) -> &'static str {
         match self {
             WireEncoding::FlatBuffers => "flatbuffers",
+            WireEncoding::Proto3 => "proto3",
         }
     }
 
-    /// Checks that the encoding asked for is the one every emitter writes.
+    /// Checks that every encoding asked for is one some emitter writes.
     ///
-    /// The codec, the descriptors and the face all write the FlatBuffers path
-    /// at their own sites, so a second variant here would emit a face over
-    /// implementations that do not exist unless every one of those sites
-    /// learns to read it. This match is where that shows up as a compile
-    /// error rather than as wrong output.
+    /// The descriptors write one size table per encoding of the list, and
+    /// the face is generic over its port's encoding ([`emits_face`]); each
+    /// codec is emitted by its own module. A new
+    /// variant here would be asked for with no emitter behind it unless
+    /// [`package_items`] learns to dispatch it, and this match is where that
+    /// shows up as a compile error rather than as wrong output.
     fn check_emitted(self) {
         match self {
-            WireEncoding::FlatBuffers => {}
+            WireEncoding::FlatBuffers | WireEncoding::Proto3 => {}
         }
     }
 }
@@ -559,8 +586,10 @@ impl WireEncoding {
 /// this walk used to and names with `InducedName.rust`.
 ///
 /// This does not emit the codec. [`package_items`] appends it, for both entry
-/// points: the codec is `generate`'s output (design note D-1 as amended), and
-/// the face compiles over that same output (D-11).
+/// points: the codec is `generate`'s output, and the face compiles over that
+/// same output (the FlatBuffers codec design note,
+/// `docs/archive/2026-09-20-flatbuffers-codec-design.md`, D-1 as amended and
+/// D-11).
 fn domain_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items: Vec<TokenStream> = Vec::new();
     for decl in &ctx.model.declarations {
@@ -710,6 +739,38 @@ pub(crate) fn check_flatbuffers_bound(ctx: &Ctx, index: u32) -> Result<(), Gener
     }
 }
 
+/// Whether 0 is a value of a numeric scalar's declared range and step,
+/// decided at generation time from the IR's exact decimal text
+/// (driftsys/ridl#472). No constraint at all holds 0.
+///
+/// The rule is [`ridl_ir::zero::range_holds_zero`], the one definition the
+/// two codecs and `ridl diff` share: the FlatBuffers codec and the proto3
+/// codec read an absent non-optional scalar as 0 only when this answers
+/// `true` for its type, and `ridl diff` classifies appending such a field as
+/// compatible only then (driftsys/ridl#598).
+pub(crate) fn zero_is_legal(constraint: Option<&v1::Constraint>) -> bool {
+    constraint.is_none_or(|constraint| {
+        ridl_ir::zero::range_holds_zero(
+            constraint.min.as_deref(),
+            constraint.max.as_deref(),
+            constraint.step.as_deref(),
+        )
+    })
+}
+
+/// The proto3 message layout the codec emits `package` from, for the test
+/// that compares it with the emitted `.proto` schema: one entry per message,
+/// keyed by the `.proto` message name. Not part of the backend's API.
+#[doc(hidden)]
+pub fn proto3_layout(
+    package: &v2::Package,
+    others: &[&v2::Package],
+) -> Result<Vec<Proto3MessageLayout>, GenerateError> {
+    let model = ridl_ir::codegen::lower(package, others);
+    let ctx = Ctx::with_others(package, others, &model);
+    codec_proto3::layout(&ctx)
+}
+
 /// Parses the assembled items as a bare `syn::File` (no inner attribute, so an
 /// `include!` of the output stays legal) and formats them with prettyplease.
 fn render(items: Vec<TokenStream>) -> Result<Generated, GenerateError> {
@@ -753,6 +814,11 @@ pub(crate) struct Ctx<'a> {
     /// ([`docs::Links`]). Empty unless the entry point emits a face: it sets
     /// the set before it renders any doc.
     faced: BTreeSet<u32>,
+    /// The encodings the entry point emits a codec for, which the
+    /// descriptors emit one size table each for. Empty unless the entry point
+    /// emits the descriptors: it sets the list before any descriptor is
+    /// built.
+    pub(crate) encodings: Vec<WireEncoding>,
 }
 
 impl<'a> Ctx<'a> {
@@ -784,6 +850,7 @@ impl<'a> Ctx<'a> {
             visiting: RefCell::new(HashSet::new()),
             _build_packages: BuildPackages::install(model),
             faced: BTreeSet::new(),
+            encodings: Vec::new(),
         }
     }
 

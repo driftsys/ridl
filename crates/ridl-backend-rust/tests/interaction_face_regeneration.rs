@@ -2,7 +2,7 @@
 //! (`docs/design/interaction-face.md`).
 //!
 //! `tests/generated/interaction_face.rs` is `generate_face_with`'s output for
-//! `tests/fixtures/interaction_face.ridl`, checked in and `include!`d by
+//! `tests/fixtures/interaction_face.ridl` with both encodings, checked in and `include!`d by
 //! `tests/interaction_face.rs`. This guard lives in its own test target, apart
 //! from the tests that consume the fixture, so that when a change to the
 //! emitter changes the face's shape and those tests no longer compile against
@@ -13,6 +13,14 @@
 #[path = "support/ir.rs"]
 mod ir;
 
+/// The encodings the fixture is generated with: both codecs, so the face
+/// tests run every payload-carrying kind over a FlatBuffers port and over a
+/// proto3 port.
+const ENCODINGS: &[ridl_backend_rust::WireEncoding] = &[
+    ridl_backend_rust::WireEncoding::FlatBuffers,
+    ridl_backend_rust::WireEncoding::Proto3,
+];
+
 /// Regenerates the fixture through `generate_face_with`, using the crate's own
 /// compile helper rather than a new cargo subprocess, and compares it
 /// byte-for-byte against the checked-in file. `RIDL_UPDATE_GENERATED=1`
@@ -20,12 +28,9 @@ mod ir;
 #[test]
 fn generated_interaction_face_matches_the_emitter() {
     let package = ir::compile_fixture("interaction_face.ridl");
-    let face = ridl_backend_rust::generate_face_with(
-        &package,
-        &[ridl_backend_rust::WireEncoding::FlatBuffers],
-    )
-    .expect("generate_face_with")
-    .rust_source;
+    let face = ridl_backend_rust::generate_face_with(&package, ENCODINGS)
+        .expect("generate_face_with")
+        .rust_source;
 
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/generated/interaction_face.rs");
@@ -47,8 +52,8 @@ fn generated_interaction_face_matches_the_emitter() {
 
 /// The fixture declares public interfaces only, and the guard above pins what
 /// `generate_face_with` emits for them. `ridl build --emit rust`, with
-/// `flatbuffers` in `[backend.rust] encodings`, goes through the backend
-/// contract (`src/contract.rs`), which calls `generate_pipeline_over`, the
+/// `flatbuffers` and `proto3` in `[backend.rust] encodings`, goes through the
+/// backend contract (`src/contract.rs`), which calls `generate_pipeline_over`, the
 /// function `generate_pipeline` wraps; it emits the same items in another
 /// order. This test compares the two outputs as sorted lists of
 /// top-level items, so the checked-in fixture pins the pipeline's item set for
@@ -58,13 +63,9 @@ fn generated_interaction_face_matches_the_emitter() {
 #[test]
 fn the_pipeline_emits_the_items_of_the_checked_in_face() {
     let package = ir::compile_fixture("interaction_face.ridl");
-    let pipeline = ridl_backend_rust::generate_pipeline(
-        &package,
-        &[ridl_backend_rust::WireEncoding::FlatBuffers],
-        &[],
-    )
-    .expect("generate_pipeline")
-    .rust_source;
+    let pipeline = ridl_backend_rust::generate_pipeline(&package, ENCODINGS, &[])
+        .expect("generate_pipeline")
+        .rust_source;
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/generated/interaction_face.rs");
     let checked_in = std::fs::read_to_string(&path)

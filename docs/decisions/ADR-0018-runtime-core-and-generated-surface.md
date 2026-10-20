@@ -84,6 +84,16 @@ The generated face takes its encoding from its port type
 generated `where` clauses; it gains no type parameter and names no encoding. The
 decision carries the amendment in place. The record stays Proposed.
 
+**Amended 2026-10-20 — decision 4's conformance obligation is met for proto3,
+and open item 3 is answered for the generated Rust codec.** The Rust backend
+emits a proto3 codec when `[backend.rust] encodings` names `proto3`, and its
+bytes are checked against `prost` code generated through `protox` from the
+emitted `.proto`, with no `protoc`. A decoded payload drops the fields this
+version does not know. Decision 4 and open item 3 carry the amendment in place;
+the codec is described in
+[the proto3 codec design record](../design/proto3-codec.md). The record stays
+Proposed.
+
 ## Context
 
 The Rust backend has shipped an interaction layer since E2 — consumer and
@@ -191,6 +201,21 @@ be generated, and in what order", which is what this record answers.
    architecture: byte-level conformance against a `protoc`-generated
    implementation, covering packed repeated scalars, canonical field ordering
    and malformed-input robustness.
+
+   **Amendment (2026-10-20) — the obligation is met against `prost`, not
+   `protoc`.** The oracle is `prost` code that `prost-build` generates from the
+   `.proto` this toolchain emits, compiled by `protox`, so `protoc` stays out of
+   every gate ([ADR-0006](ADR-0006-walking-skeleton-execution.md) decision 3).
+   The suite `crates/ridl-backend-rust/tests/proto3_conformance.rs` covers the
+   three named properties: packed repeated scalars, canonical field ordering
+   (the codec's bytes equal `prost`'s for every value of the fixture, with one
+   listed exception, a float at `-0.0`, which this codec writes and `prost`
+   omits), and malformed-input robustness (truncations, byte replacements and
+   seeded random buffers never make `verify` panic, and every buffer it accepts
+   `prost` accepts as the same value). `prost` is a dev-dependency of the Rust
+   backend only and is reachable from neither `ridl-rt` nor a generated package,
+   checked by `xtask/tests/oracle_boundary.rs`. The cases are in
+   [the proto3 codec design record](../design/proto3-codec.md).
 
    This does not reintroduce the second-source-of-truth problem
    [ADR-0013](ADR-0013-codegen-backend-scope.md) rejects for widths. The single
@@ -474,8 +499,10 @@ be generated, and in what order", which is what this record answers.
     it did not write names an encoding only where it builds that runtime, and a
     program that writes its own port names it in that port's `Encoded`
     implementation instead. The face is still emitted only when the manifest
-    names `flatbuffers`, which is the one codec the Rust backend emits.
-    `ridl-loopback` is the port side of this:
+    names `flatbuffers`, which is the one codec the Rust backend emits. (Amended
+    2026-10-20: the proto3 codec is built, and the face is emitted when the
+    manifest names `flatbuffers` or `proto3`, alone or together;
+    `docs/design/proto3-codec.md`.) `ridl-loopback` is the port side of this:
     `Loopback<E: Encoding = FlatBuffers>` and each of its six role handles
     implement `Encoded`, so `Loopback::new(catalog)` carries FlatBuffers and
     `Loopback::<E>::with_encoding(catalog)` names another encoding
@@ -689,6 +716,18 @@ be generated, and in what order", which is what this record answers.
 3. **Unknown fields on decode.** proto3 preserves them for proxy round-trip;
    carrying fields the contract does not describe is arguably wrong for an SSOT,
    and dropping them breaks the gateway case decision 13 supports.
+
+   **Answered for the generated Rust codec, 2026-10-20.** The proto3 codec skips
+   a field this version does not know, whether a newer writer appended it or it
+   is a retired ordinal, and does not keep it: the decoded value has no place to
+   hold it, and holding it would need an allocator in `no_std`. A gateway that
+   must forward fields it does not know forwards the bytes without decoding
+   them, as `ridl-transport-ws` does. `verify` applies no size ceiling to a
+   proto3 payload, because a newer writer's skipped fields can take a payload
+   past this version's `MAX_SIZE`
+   ([the proto3 codec design record](../design/proto3-codec.md)). What stays
+   open is the question for any other codec, and for a consumer that must keep
+   the unknown fields of a value it decodes.
 4. **Whose envelope an invalid sample carries** — the rejected publication's or
    the last good value's. ridl §4.5 implies the former and states neither.
 5. **Whether `async fn` on a `command` is a conformance defect** — narrowed by

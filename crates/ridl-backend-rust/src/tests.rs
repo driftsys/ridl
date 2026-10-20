@@ -426,6 +426,309 @@ fn rust_for(decls: Vec<v2::Decl>) -> String {
         .rust_source
 }
 
+/// The proto3 codec refuses a field number proto3 reserves (19000 to 19999)
+/// or does not admit (0, or above 2^29 - 1), in a struct and in a union arm, as the
+/// proto backend does, and admits the highest number. The sizer answers
+/// `RefusedMember` for each, which the codec would refuse with the sizer's
+/// generic cause; its own check runs first, so the refusal names the field.
+#[test]
+fn the_proto3_codec_refuses_a_field_number_the_proto_backend_refuses() {
+    let struct_at = |name: &str, ordinal: u32| {
+        public_decl(
+            name,
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(named_field(
+                    "x",
+                    ordinal,
+                    "Speed",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            }),
+        )
+    };
+    let union_at = |name: &str, ordinal: u32| {
+        public_decl(
+            name,
+            v2::decl::Kind::UnionDef(v2::UnionDef {
+                arms: vec![v2::UnionArm {
+                    name: "a".to_string(),
+                    ordinal,
+                    type_ref: "Speed".to_string(),
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
+                }],
+                is_result: false,
+                reserved: Vec::new(),
+            }),
+        )
+    };
+    let generate = |decl: v2::Decl| {
+        let package = package("veh.common", vec![speed_decl(), decl]);
+        super::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+            .map(|generated| generated.rust_source)
+            .map_err(|error| error.message)
+    };
+    for (decl, what) in [
+        (struct_at("Zero", 0), "`Zero.x` has field number 0"),
+        (
+            struct_at("Reserved", 19_000),
+            "`Reserved.x` has field number 19000",
+        ),
+        (
+            struct_at("Reserved2", 19_999),
+            "`Reserved2.x` has field number 19999",
+        ),
+        (
+            struct_at("TooHigh", 536_870_912),
+            "`TooHigh.x` has field number 536870912",
+        ),
+        (
+            union_at("ArmReserved", 19_500),
+            "`ArmReserved.a` has field number 19500",
+        ),
+    ] {
+        let error = generate(decl).expect_err(what);
+        assert!(
+            error.starts_with(what) && error.contains("proto3 reserves or does not admit"),
+            "the refusal names the position and the cause, got: {error}"
+        );
+    }
+    let highest = generate(struct_at("Highest", 536_870_911)).expect("the highest number");
+    assert!(
+        highest
+            .contains("impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Highest"),
+        "`Highest` gets a proto3 codec"
+    );
+}
+
+/// An optional array or map field of a struct, and an optional array field
+/// of a tuple, are refused by the proto3 codec as the `.proto` emitter
+/// refuses them (ADR-0013 decision 7), naming the field; the types alone
+/// generate. The sizer gives each payload `RefusedMember`, so a codec that
+/// read only the size state would refuse with the sizer's generic cause
+/// rather than name the field.
+#[test]
+fn the_proto3_codec_refuses_an_optional_array_or_map_field() {
+    // `integer [0..10]` and `string [0..8]`, inline.
+    let scalar = |backing: v2::PrimitiveType, constraint: v2::Constraint| v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(backing as i32)),
+            }),
+            constraint: Some(constraint),
+            declared_init: None,
+            init: None,
+            width: None,
+        }))),
+    };
+    let small = || {
+        scalar(
+            v2::PrimitiveType::Integer,
+            v2::Constraint {
+                min: Some("0".to_string()),
+                max: Some("10".to_string()),
+                ..Default::default()
+            },
+        )
+    };
+    let mut items = array_type(small(), 4);
+    items.optional = true;
+    let by_name = v2::FieldType {
+        optional: true,
+        kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+            key: Some(Box::new(scalar(
+                v2::PrimitiveType::String,
+                v2::Constraint {
+                    len_max: Some(8),
+                    ..Default::default()
+                },
+            ))),
+            value: Some(Box::new(small())),
+            min: 0,
+            max: 4,
+        }))),
+    };
+    let mut xs = array_type(small(), 4);
+    xs.optional = true;
+    let pair = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+            fields: vec![v2::TupleField {
+                name: "xs".to_string(),
+                r#type: Some(xs),
+            }],
+        })),
+    };
+    for (field, ty, expected) in [
+        (
+            "items",
+            items,
+            "`Holder.items` is an optional array, and proto3 cannot mark a repeated field absent",
+        ),
+        (
+            "byName",
+            by_name,
+            "`Holder.byName` is an optional map, and proto3 cannot mark a map field absent",
+        ),
+        (
+            "pair",
+            pair,
+            "`HolderPair.xs` is an optional array, and proto3 cannot mark a repeated field \
+             absent",
+        ),
+    ] {
+        let package = holder_over(vec![(field, ty)]);
+        let error = super::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+            .expect_err(expected)
+            .message;
+        assert!(
+            error.starts_with(expected) && error.contains("ADR-0013 decision 7"),
+            "the refusal names the field and the rule, got: {error}"
+        );
+        super::generate_pipeline(&package, &[], &[]).expect("the types alone generate");
+    }
+}
+
+/// `bound_state` gives a codec only to a `Bounded` state: every absent
+/// cause, the unbounded state and a missing state are refusals, each naming
+/// its cause. The match over the causes names every variant, so a variant
+/// added to the protocol fails this test to compile until it is placed.
+#[test]
+fn bound_state_gives_a_codec_only_to_a_bounded_type() {
+    use ridl_ir::codegen::v1::{self, AbsentCause, SizeAbsent, SizeState, size_state::State};
+    let absent = |cause: AbsentCause| SizeState {
+        state: Some(State::Absent(SizeAbsent {
+            cause: cause as i32,
+            detail: None,
+        })),
+    };
+    let every_cause = [
+        AbsentCause::Unspecified,
+        AbsentCause::EncodingUndefined,
+        AbsentCause::NoMessage,
+        AbsentCause::RefusedMember,
+        AbsentCause::NoBound,
+        AbsentCause::Overflow,
+        AbsentCause::Unresolved,
+    ];
+    for cause in every_cause {
+        let verdict = super::codec_proto3::bound_state(Some(&absent(cause)));
+        // Exhaustive: a new cause must be placed here, and is a refusal.
+        let named = match cause {
+            AbsentCause::Unspecified => "Unspecified",
+            AbsentCause::EncodingUndefined => "EncodingUndefined",
+            AbsentCause::NoMessage => "NoMessage",
+            AbsentCause::RefusedMember => "RefusedMember",
+            AbsentCause::NoBound => "NoBound",
+            AbsentCause::Overflow => "Overflow",
+            AbsentCause::Unresolved => "Unresolved",
+        };
+        let refusal = verdict.expect_err("every absent cause is a refusal");
+        assert!(
+            refusal.contains(&format!("({named})")),
+            "{cause:?}: the refusal names its cause, got: {refusal}"
+        );
+    }
+    let bounded = SizeState {
+        state: Some(State::Bounded(12)),
+    };
+    assert_eq!(super::codec_proto3::bound_state(Some(&bounded)), Ok(12));
+    assert!(super::codec_proto3::bound_state(None).is_err());
+    let unbounded = SizeState {
+        state: Some(State::Unbounded(v1::FbUnbounded::default())),
+    };
+    assert!(super::codec_proto3::bound_state(Some(&unbounded)).is_err());
+}
+
+/// The contract accepts `proto3`, alone and beside `flatbuffers`, and still
+/// refuses `repr-c` with the issue that builds its codec.
+#[test]
+fn the_contract_accepts_proto3() {
+    use ridl_ir::codegen::v1::{BackendOption, CodegenRequest};
+
+    let package = package("veh.common", vec![speed_decl()]);
+    let respond = |value: &str| {
+        let request = CodegenRequest {
+            model: Some(ridl_ir::codegen::lower(&package, &[])),
+            options: vec![BackendOption {
+                key: super::ENCODINGS_OPTION.to_string(),
+                value: value.to_string(),
+            }],
+            artifact_base: "veh.common".to_string(),
+            ..Default::default()
+        };
+        ridl_ir::codegen::Backend::generate(&crate::Backend, &request)
+    };
+    for value in ["proto3", "flatbuffers,proto3"] {
+        let response = respond(value);
+        assert!(
+            response.diagnostics.is_empty(),
+            "`{value}` builds, got: {:?}",
+            response.diagnostics
+        );
+        let text = response
+            .files
+            .iter()
+            .find_map(|file| match &file.content {
+                Some(ridl_ir::codegen::v1::generated_file::Content::Text(text)) => {
+                    Some(text.clone())
+                }
+                _ => None,
+            })
+            .expect("one text file");
+        assert!(
+            text.contains(
+                "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Speed"
+            ),
+            "`{value}` carries the proto3 codec, got:\n{text}"
+        );
+        assert_eq!(
+            text.contains(
+                "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed"
+            ),
+            value.contains("flatbuffers"),
+            "`{value}` carries the FlatBuffers codec exactly when it names it"
+        );
+    }
+    let response = respond("repr-c");
+    assert_eq!(response.diagnostics.len(), 1);
+    assert!(
+        response.diagnostics[0]
+            .message
+            .contains("driftsys/ridl#317"),
+        "got: {}",
+        response.diagnostics[0].message
+    );
+}
+
+/// The range and step table is `ridl_ir::zero`'s; this pins only that the
+/// codecs hand the constraint's three texts to it, and that no constraint
+/// holds 0.
+#[test]
+fn zero_is_legal_reads_the_shared_predicate() {
+    use ridl_ir::codegen::v1;
+
+    let constraint = |min: &str, max: &str, step: Option<&str>| v1::Constraint {
+        min: Some(min.to_string()),
+        max: Some(max.to_string()),
+        step: step.map(String::from),
+        ..Default::default()
+    };
+    assert!(super::zero_is_legal(None), "no constraint holds 0");
+    assert!(super::zero_is_legal(Some(&constraint("0", "10", None))));
+    assert!(!super::zero_is_legal(Some(&constraint("1", "10", None))));
+    assert!(!super::zero_is_legal(Some(&constraint(
+        "-1.5",
+        "1.5",
+        Some("1.0")
+    ))));
+}
+
 #[test]
 fn scalar_unit_type_with_doc() {
     insta::assert_snapshot!(rust_with_codec(vec![speed_decl()]));
@@ -7127,4 +7430,18 @@ fn a_simple_foreign_link_keeps_its_explicit_module_path() {
         source.contains("Foreign [Thing](crate::other::pkg::Thing)."),
         "{source}"
     );
+}
+
+/// The tag length the proto3 codec computes at generation time is the one
+/// `ridl_rt::proto3::tag_len` computes at run time, at every width boundary
+/// of the shifted field number and at the highest number proto3 admits.
+#[test]
+fn the_generation_time_tag_length_is_the_runtime_one() {
+    for number in [1, 15, 16, 2047, 2048, 262_143, 262_144, 536_870_911] {
+        assert_eq!(
+            super::codec_proto3::tag_len(number),
+            ridl_rt::proto3::tag_len(number),
+            "field number {number}"
+        );
+    }
 }

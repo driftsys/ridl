@@ -14,6 +14,7 @@
 //! the backend refuses a field number outside them (`check_field_number`),
 //! and the sizer answers no bound for the same field.
 
+use crate::codegen::v1;
 use crate::v2;
 
 /// The field numbers protobuf reserves for its own use (the proto3 language
@@ -35,6 +36,21 @@ pub enum Scalar {
     Double,
     String,
     Bytes,
+}
+
+/// A protobuf wire type: how the bytes after a tag are delimited (the
+/// protobuf encoding guide, "Message structure"). The two group wire types
+/// are not listed: proto3 has no groups.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WireType {
+    /// Wire type 0: a varint.
+    Varint,
+    /// Wire type 1: eight fixed bytes.
+    I64,
+    /// Wire type 2: a varint length, then that many bytes.
+    Len,
+    /// Wire type 5: four fixed bytes.
+    I32,
 }
 
 impl Scalar {
@@ -70,6 +86,32 @@ impl Scalar {
             | Self::String => true,
             Self::Float | Self::Double | Self::Bytes => false,
         }
+    }
+
+    /// The wire type a value of this scalar is written with: a varint for
+    /// `bool` and every integer, four fixed bytes for `float`, eight for
+    /// `double`, and a length-delimited run for `string` and `bytes`.
+    #[must_use]
+    pub fn wire_type(self) -> WireType {
+        match self {
+            Self::Bool
+            | Self::Int64
+            | Self::Uint32
+            | Self::Uint64
+            | Self::Sint32
+            | Self::Sint64 => WireType::Varint,
+            Self::Float => WireType::I32,
+            Self::Double => WireType::I64,
+            Self::String | Self::Bytes => WireType::Len,
+        }
+    }
+
+    /// Whether a `repeated` field of this scalar is packed, which proto3
+    /// does by default for every scalar but `string` and `bytes` (the proto3
+    /// language guide, "Specifying field labels").
+    #[must_use]
+    pub fn packable(self) -> bool {
+        !matches!(self, Self::String | Self::Bytes)
     }
 
     /// The scalar's spelling in a `.proto` file.
@@ -125,17 +167,18 @@ impl Scalar {
 #[must_use]
 pub fn scalar(td: &v2::TypeDef) -> Scalar {
     match &td.width {
-        Some(v2::type_def::Width::IntWidth(width)) => match v2::IntWidth::try_from(*width) {
-            Ok(v2::IntWidth::U8 | v2::IntWidth::U16 | v2::IntWidth::U32) => Scalar::Uint32,
-            Ok(v2::IntWidth::U64) => Scalar::Uint64,
-            Ok(v2::IntWidth::I8 | v2::IntWidth::I16 | v2::IntWidth::I32) => Scalar::Sint32,
-            Ok(v2::IntWidth::I64) => Scalar::Sint64,
-            _ => Scalar::Int64,
-        },
-        Some(v2::type_def::Width::FloatWidth(width)) => match v2::FloatWidth::try_from(*width) {
-            Ok(v2::FloatWidth::F32) => Scalar::Float,
-            _ => Scalar::Double,
-        },
+        // The IR and the `Model` number their width tags alike, and
+        // `the_model_width_table_is_the_ir_width_table` pins that by name.
+        // The unspecified tag, or a tag neither defines, projects to `int64`
+        // for an integer width and to `double` for a float width.
+        Some(v2::type_def::Width::IntWidth(width)) => v1::IntWidth::try_from(*width)
+            .ok()
+            .and_then(int_width_scalar)
+            .unwrap_or(Scalar::Int64),
+        Some(v2::type_def::Width::FloatWidth(width)) => v1::FloatWidth::try_from(*width)
+            .ok()
+            .and_then(float_width_scalar)
+            .unwrap_or(Scalar::Double),
         None => match td
             .backing
             .as_ref()
@@ -150,6 +193,32 @@ pub fn scalar(td: &v2::TypeDef) -> Scalar {
             }
             _ => Scalar::String,
         },
+    }
+}
+
+/// The proto3 scalar for an integer width as the codegen `Model` spells it:
+/// the one table [`scalar`] also reads. `None` for
+/// [`v1::IntWidth::Unspecified`], which has no scalar of its own.
+#[must_use]
+pub fn int_width_scalar(width: v1::IntWidth) -> Option<Scalar> {
+    match width {
+        v1::IntWidth::U8 | v1::IntWidth::U16 | v1::IntWidth::U32 => Some(Scalar::Uint32),
+        v1::IntWidth::U64 => Some(Scalar::Uint64),
+        v1::IntWidth::I8 | v1::IntWidth::I16 | v1::IntWidth::I32 => Some(Scalar::Sint32),
+        v1::IntWidth::I64 => Some(Scalar::Sint64),
+        v1::IntWidth::Unspecified => None,
+    }
+}
+
+/// The proto3 scalar for a float width as the codegen `Model` spells it:
+/// the one table [`scalar`] also reads. `None` for
+/// [`v1::FloatWidth::Unspecified`], which has no scalar of its own.
+#[must_use]
+pub fn float_width_scalar(width: v1::FloatWidth) -> Option<Scalar> {
+    match width {
+        v1::FloatWidth::F32 => Some(Scalar::Float),
+        v1::FloatWidth::F64 => Some(Scalar::Double),
+        v1::FloatWidth::Unspecified => None,
     }
 }
 
@@ -367,6 +436,69 @@ mod tests {
             ]
         );
         assert_eq!(Scalar::ALL.len(), 10, "every scalar is listed");
+    }
+
+    /// The `Model` spells a width as `v1::IntWidth` / `v1::FloatWidth`, the
+    /// IR as `v2::IntWidth` / `v2::FloatWidth`. Each pair below is matched by
+    /// name, so a table that read one tag under the other's meaning fails.
+    #[test]
+    fn the_model_width_table_is_the_ir_width_table() {
+        use crate::codegen::v1;
+        let ints = [
+            (v1::IntWidth::U8, IntWidth::U8),
+            (v1::IntWidth::I8, IntWidth::I8),
+            (v1::IntWidth::U16, IntWidth::U16),
+            (v1::IntWidth::I16, IntWidth::I16),
+            (v1::IntWidth::U32, IntWidth::U32),
+            (v1::IntWidth::I32, IntWidth::I32),
+            (v1::IntWidth::U64, IntWidth::U64),
+            (v1::IntWidth::I64, IntWidth::I64),
+        ];
+        for (model, ir) in ints {
+            assert_eq!(
+                int_width_scalar(model),
+                Some(scalar(&with_int_width(ir as i32))),
+                "{model:?}"
+            );
+        }
+        assert_eq!(int_width_scalar(v1::IntWidth::Unspecified), None);
+        let floats = [
+            (v1::FloatWidth::F32, FloatWidth::F32),
+            (v1::FloatWidth::F64, FloatWidth::F64),
+        ];
+        for (model, ir) in floats {
+            assert_eq!(
+                float_width_scalar(model),
+                Some(scalar(&with_float_width(ir as i32))),
+                "{model:?}"
+            );
+        }
+        assert_eq!(float_width_scalar(v1::FloatWidth::Unspecified), None);
+    }
+
+    #[test]
+    fn every_scalar_has_its_wire_type() {
+        let expected = [
+            (Scalar::Bool, WireType::Varint),
+            (Scalar::Int64, WireType::Varint),
+            (Scalar::Uint32, WireType::Varint),
+            (Scalar::Uint64, WireType::Varint),
+            (Scalar::Sint32, WireType::Varint),
+            (Scalar::Sint64, WireType::Varint),
+            (Scalar::Float, WireType::I32),
+            (Scalar::Double, WireType::I64),
+            (Scalar::String, WireType::Len),
+            (Scalar::Bytes, WireType::Len),
+        ];
+        assert_eq!(expected.len(), Scalar::ALL.len(), "every scalar is listed");
+        for (scalar, wire_type) in expected {
+            assert_eq!(scalar.wire_type(), wire_type, "{scalar:?}");
+            assert_eq!(
+                scalar.packable(),
+                !matches!(scalar, Scalar::String | Scalar::Bytes),
+                "{scalar:?}"
+            );
+        }
     }
 
     #[test]

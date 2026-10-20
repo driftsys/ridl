@@ -333,9 +333,29 @@ crates.io and pushing its tag are maintainer acts
 Two items are out of 0.1 by decision, each with its own issue: `Inline` payloads
 (RA-X7, which waits for typl §17.11) and streams (RA-X1, driftsys/ridl#336).
 
-| ID    | Story                                                                                                                       | Done when                                                              | Size |
-| ----- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---- |
-| E11.0 | `ridl-rt` — identity, the envelope, `Provenance`/`Freshness`/`Sample`, `Payload<E>`, the interaction descriptors, the ports | a hand-written program links it and reads a sample with its provenance | L    |
+| ID    | Story                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Done when                                                              | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---- |
+| E11.0 | `ridl-rt` — identity, the envelope, `Provenance`/`Freshness`/`Sample`, `Payload<E>`, the interaction descriptors, the ports                                                                                                                                                                                                                                                                                                                                                                                                                                               | a hand-written program links it and reads a sample with its provenance | L    |
+| E11.8 | The proto3 payload codec plus byte-level conformance against a `prost`-generated implementation through `protox` (driftsys/ridl#264; the guard that keeps `prost` out of `ridl-rt` and generated packages is part of it); it reads an absent non-optional field as its default unless the default is not a legal value of the field's type, in which case the field is refused with `MissingRequired` (driftsys/ridl#472, ADR-0019 decision 9); it arrives as a `Sizes<Proto3>` implementation and a `Payload<Proto3>` with its buffer **Landed (PR driftsys/ridl#998).** | our bytes parse there and its bytes parse here                         | L    |
+
+**E11.8 delivered 2026-10-20.** The proto3 payload codec of the Rust backend
+landed for driftsys/ridl#264, built test-first from
+[`2026-10-20-proto3-codec-design.md`](2026-10-20-proto3-codec-design.md) and
+[its plan](2026-10-20-proto3-codec-plan.md). Its story sits in the Rust codegen
+section of the forward plan, and its row stays there too, because that section
+is not complete; the row is copied here as the record of what shipped. The
+generated codec writes the bytes of the `.proto` that `ridl build --emit proto`
+writes; `prost` code generated through `protox` from that `.proto` is the
+oracle, in both directions, with one listed exception, a float at `-0.0`, which
+this codec writes and `prost` omits. `ridl-rt`'s `proto3` feature now enables
+the wire helpers, `Malformed` gains `Varint`, `WireType` and `Duplicate`, and
+the codegen protocol gains `Declaration.proto3`. A type whose proto3 size state
+is not bounded is refused at generation, as under FlatBuffers (the owner's final
+ruling of 2026-10-20). The as-built record is
+[the proto3 codec design record](../design/proto3-codec.md), and the amendments
+are those of ADR-0017, ADR-0018, ADR-0019 and ADR-0021 dated 2026-10-20.
+Follow-ups: driftsys/ridl#996 (a platform-wide payload ceiling for both codecs)
+and driftsys/ridl#997 (the name-collision refusals of the `.proto` emitter).
 
 ## Epic 17 — layout inputs for backend plugins, the landed part
 

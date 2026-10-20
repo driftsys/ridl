@@ -299,7 +299,11 @@ FlatBuffers only), or absent with a cause. The model also sums them:
 `Interaction.reservation` is the memory a call table reserves for one member,
 and `Interface.table_budget` (the key `tableBudget`) is the memory for the whole interface, each as a
 byte count or as `unsized`, naming the first payload or member that has no
-bounded size.
+bounded size. Each `Declaration` carries one more size, `proto3`: the proto3
+size state of the declaration's root message — its own message for a struct or
+a union, its `<Name>Box` message for a named scalar, an enum and an enum set.
+A constant has none. A proto3 codec reads it as the declaration's largest
+encoded size, as the Rust backend does.
 
 **A plugin reads these sizes; it does not compute them.** The sizes of the
 `warning` event's payload in `examples/cabin`, and its reservation:

@@ -2,4 +2,4 @@
 members = ["common", "cluster"]
 
 [backend.rust]
-encodings = ["flatbuffers"]
+encodings = ["flatbuffers", "proto3"]

@@ -143,6 +143,12 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
               interaction face: it is baseline domain-type emission every backend \
               consumer shares, not face- or descriptor-specific."
 )]
+#[allow(
+    clippy::collapsible_if,
+    reason = "the emitted code targets edition 2021, the edition of the crate `ridl build` \
+              writes, where an `if` and an `if let` inside it cannot be joined; this test \
+              crate is edition 2024, where clippy proposes a let chain"
+)]
 mod generated {
     // The fixture's `Zone` members are `@deprecated`. The generated code that
     // calls their methods allows the lint, so the face draws no `deprecated`
@@ -3337,10 +3343,10 @@ fn every_hand_written_port_states_its_encoding() {
 /// The face modules of the checked-in fixture: its text from the first line
 /// that starts with `pub mod` to the end.
 ///
-/// The emitted codec comes first in the file and keeps the concrete encoding
-/// it is written for — `Payload<FlatBuffers>` for each payload type and
-/// `Sizes<FlatBuffers>` for each interface. The face is the part that must
-/// name no encoding of its own.
+/// The emitted codecs come first in the file and keep the concrete encoding
+/// each is written for — `Payload<FlatBuffers>` and `Payload<Proto3>` for each
+/// payload type, and `Sizes<FlatBuffers>` and `Sizes<Proto3>` for each
+/// interface. The face is the part that must name no encoding of its own.
 fn face_modules() -> &'static str {
     const FIXTURE: &str = include_str!("generated/interaction_face.rs");
     let start = FIXTURE
@@ -3372,10 +3378,12 @@ fn face_module(name: &str) -> &'static str {
 #[test]
 fn the_face_names_no_concrete_encoding() {
     let face = face_modules();
-    assert!(
-        !face.contains("encoding::FlatBuffers"),
-        "the face still names a concrete encoding"
-    );
+    for encoding in ["encoding::FlatBuffers", "encoding::Proto3"] {
+        assert!(
+            !face.contains(encoding),
+            "the face names the concrete encoding `{encoding}`"
+        );
+    }
     for needle in [
         "::ridl_rt::port::Encoded",
         "P::Encoding",
@@ -3404,265 +3412,125 @@ fn a_signal_only_face_bounds_only_its_own_payload() {
     }
 }
 
-/// Per-payload counters for the second codec, one pair for each payload type:
-/// how many times its `Proto3` `encode` ran, and how many times its `Proto3`
-/// `decode` ran.
-///
-/// A round trip that still encoded or decoded with FlatBuffers on one leg
-/// leaves that leg's counter at zero, which no assertion on the value that
-/// came back can see, because both ends of such a leg agree on the same wrong
-/// encoding and the runtime carries the payload as opaque bytes.
-trait Proto3Counts {
-    fn encodes() -> &'static std::sync::atomic::AtomicUsize;
-
-    fn decodes() -> &'static std::sync::atomic::AtomicUsize;
-
-    fn count_encode() {
-        Self::encodes().fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    fn count_decode() {
-        Self::decodes().fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    /// The pair `(encodes, decodes)` since the last reset.
-    fn counts() -> (usize, usize) {
-        (
-            Self::encodes().load(std::sync::atomic::Ordering::Relaxed),
-            Self::decodes().load(std::sync::atomic::Ordering::Relaxed),
-        )
-    }
-
-    fn reset() {
-        Self::encodes().store(0, std::sync::atomic::Ordering::Relaxed);
-        Self::decodes().store(0, std::sync::atomic::Ordering::Relaxed);
-    }
+/// The encoded bytes of `value` under encoding `E`, copied out of the codec's
+/// own buffer.
+fn encoded<T, E>(value: &T) -> Vec<u8>
+where
+    T: ridl_rt::payload::Payload<E>,
+    E: ridl_rt::encoding::Encoding,
+{
+    let mut scratch = <T as ridl_rt::payload::Payload<E>>::BUFFER;
+    ridl_rt::payload::Ref::<T, E>::encode(value, scratch.as_mut())
+        .expect("encode")
+        .bytes()
+        .to_vec()
 }
 
-/// A second codec for the fixture's payload types, written under the `Proto3`
-/// marker: the FlatBuffers bytes of the same value, reversed.
+/// The fixture is generated with both codecs, and one round trip of each
+/// kind that carries a payload — a signal, an event, a command and a query —
+/// runs over a `Loopback` typed with `Proto3`, with no type annotation at any
+/// binding: the face takes the encoding from its port, and the proto3 size
+/// table and codec it then needs are the generated ones.
 ///
-/// It is not proto3. It is a codec whose bytes differ from the FlatBuffers
-/// ones for every value, carried by a marker a port can be typed with, so that
-/// a face which still encoded or decoded with FlatBuffers anywhere would be
-/// caught by the bytes seen on the port. Reversing keeps the length, so every
-/// size the interface's table states is the one FlatBuffers states, and the
-/// bytes are written at the end of the output buffer, so `Encoded::bytes` is a
-/// subslice and not a prefix, as it is for FlatBuffers.
-///
-/// Each payload also carries its own pair of `Proto3Counts` counters, raised
-/// by this codec's `encode` and `decode`, so that a test can state which leg
-/// of a round trip went through this codec and in which direction.
-macro_rules! reversed_codec {
-    ($($payload:ident),* $(,)?) => {
-        $(
-            impl Proto3Counts for generated::$payload {
-                fn encodes() -> &'static std::sync::atomic::AtomicUsize {
-                    static COUNT: std::sync::atomic::AtomicUsize =
-                        std::sync::atomic::AtomicUsize::new(0);
-                    &COUNT
-                }
-
-                fn decodes() -> &'static std::sync::atomic::AtomicUsize {
-                    static COUNT: std::sync::atomic::AtomicUsize =
-                        std::sync::atomic::AtomicUsize::new(0);
-                    &COUNT
-                }
-            }
-
-            impl ridl_rt::payload::Payload<ridl_rt::encoding::Proto3> for generated::$payload {
-                const MAX_SIZE: usize = <generated::$payload as ridl_rt::payload::Payload<
-                    ridl_rt::encoding::FlatBuffers,
-                >>::MAX_SIZE;
-
-                type Buffer = <generated::$payload as ridl_rt::payload::Payload<
-                    ridl_rt::encoding::FlatBuffers,
-                >>::Buffer;
-
-                const BUFFER: Self::Buffer = <generated::$payload as ridl_rt::payload::Payload<
-                    ridl_rt::encoding::FlatBuffers,
-                >>::BUFFER;
-
-                type View<'a> = &'a [u8];
-
-                fn encode<'o>(
-                    &self,
-                    out: &'o mut [u8],
-                ) -> Result<ridl_rt::payload::Encoded<'o, &'o [u8]>, ridl_rt::payload::EncodeError>
-                {
-                    <generated::$payload as Proto3Counts>::count_encode();
-                    let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
-                        ridl_rt::encoding::FlatBuffers,
-                    >>::BUFFER;
-                    let mut reversed = <generated::$payload as ridl_rt::payload::Payload<
-                        ridl_rt::encoding::FlatBuffers,
-                    >>::BUFFER;
-                    let len = {
-                        let encoded = ridl_rt::payload::Ref::<
-                            generated::$payload,
-                            ridl_rt::encoding::FlatBuffers,
-                        >::encode(self, scratch.as_mut())?;
-                        let bytes = encoded.bytes();
-                        for (slot, byte) in
-                            reversed.as_mut().iter_mut().zip(bytes.iter().rev())
-                        {
-                            *slot = *byte;
-                        }
-                        bytes.len()
-                    };
-                    if out.len() < len {
-                        return Err(ridl_rt::payload::EncodeError::Capacity {
-                            needed: len,
-                            available: out.len(),
-                        });
-                    }
-                    let start = out.len() - len;
-                    out[start..].copy_from_slice(&reversed.as_ref()[..len]);
-                    let bytes: &'o [u8] = &out[start..];
-                    Ok(ridl_rt::payload::Encoded { bytes, view: bytes })
-                }
-
-                fn verify(buf: &[u8]) -> Result<&[u8], ridl_rt::payload::VerifyError> {
-                    let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
-                        ridl_rt::encoding::FlatBuffers,
-                    >>::BUFFER;
-                    if buf.len() > scratch.as_ref().len() {
-                        return Err(ridl_rt::payload::VerifyError::Structure(
-                            ridl_rt::payload::Malformed::TooLarge,
-                        ));
-                    }
-                    for (slot, byte) in scratch.as_mut().iter_mut().zip(buf.iter().rev()) {
-                        *slot = *byte;
-                    }
-                    ridl_rt::payload::Ref::<
-                        generated::$payload,
-                        ridl_rt::encoding::FlatBuffers,
-                    >::verify(&scratch.as_ref()[..buf.len()])?;
-                    Ok(buf)
-                }
-
-                fn decode(
-                    proof: ridl_rt::payload::Ref<'_, Self, ridl_rt::encoding::Proto3>,
-                ) -> Self {
-                    <generated::$payload as Proto3Counts>::count_decode();
-                    let buf = proof.bytes();
-                    let mut scratch = <generated::$payload as ridl_rt::payload::Payload<
-                        ridl_rt::encoding::FlatBuffers,
-                    >>::BUFFER;
-                    for (slot, byte) in scratch.as_mut().iter_mut().zip(buf.iter().rev()) {
-                        *slot = *byte;
-                    }
-                    ridl_rt::payload::Ref::<
-                        generated::$payload,
-                        ridl_rt::encoding::FlatBuffers,
-                    >::verify(&scratch.as_ref()[..buf.len()])
-                        .expect("the bytes were checked before they were decoded")
-                        .decode()
-                }
-            }
-        )*
-    };
-}
-
-reversed_codec!(Temperature, Level, Window, Average, Health, Warning);
-
-/// `Cabin`'s size table under the second codec. Reversing keeps the length of
-/// every encoding, so every item repeats the FlatBuffers one.
-impl ridl_rt::contract::Sizes<ridl_rt::encoding::Proto3> for generated::Cabin {
-    const RESERVATIONS: &'static [u64] = <generated::Cabin as ridl_rt::contract::Sizes<
-        ridl_rt::encoding::FlatBuffers,
-    >>::RESERVATIONS;
-    const MAX_BUFFER_SIZE: usize = <generated::Cabin as ridl_rt::contract::Sizes<
-        ridl_rt::encoding::FlatBuffers,
-    >>::MAX_BUFFER_SIZE;
-    const EVENT_SOURCE_BUFFER_SIZE: usize = <generated::Cabin as ridl_rt::contract::Sizes<
-        ridl_rt::encoding::FlatBuffers,
-    >>::EVENT_SOURCE_BUFFER_SIZE;
-    type ClaimBuffer =
-        <generated::Cabin as ridl_rt::contract::Sizes<ridl_rt::encoding::FlatBuffers>>::ClaimBuffer;
-    type EventBuffer =
-        <generated::Cabin as ridl_rt::contract::Sizes<ridl_rt::encoding::FlatBuffers>>::EventBuffer;
-    const CLAIM_BUFFER: Self::ClaimBuffer = <generated::Cabin as ridl_rt::contract::Sizes<
-        ridl_rt::encoding::FlatBuffers,
-    >>::CLAIM_BUFFER;
-    const EVENT_BUFFER: Self::EventBuffer = <generated::Cabin as ridl_rt::contract::Sizes<
-        ridl_rt::encoding::FlatBuffers,
-    >>::EVENT_BUFFER;
-}
-
-/// The face encodes and decodes with the codec its port's type states, and two
-/// codecs live in one binary.
-///
-/// A `Loopback` typed with `Proto3` carries the reversed codec above; a face
-/// bound over it, with no type annotation at any binding, publishes a signal
-/// whose bytes on the port are the reversed ones and reads that signal back,
-/// and serves a command and a query over a handler held by `&mut`. A
-/// `Loopback` built with `new` beside it carries FlatBuffers, the default, and
-/// its bytes on the port are the FlatBuffers ones.
+/// The runtime carries a payload as opaque bytes, so a leg whose two ends
+/// both used FlatBuffers would still round trip. Two checks give the test
+/// force against that: the signal's bytes on the port are the proto3 bytes of
+/// the value and not the FlatBuffers ones, and the command reaches the
+/// provider from bytes encoded with the proto3 codec and sent on the raw
+/// port, which the dispatch decodes. A `Loopback` built with `new` beside it
+/// carries FlatBuffers, and its bytes on the port are the FlatBuffers ones.
 #[test]
-fn a_second_codec_is_read_from_the_port_type() {
+fn signal_event_command_query_round_trip_over_a_proto3_loopback() {
     use ridl_rt::contract::Interaction;
     use ridl_rt::encoding::{FlatBuffers, Proto3};
-    use ridl_rt::payload::{Payload, Ref};
+    use ridl_rt::payload::Payload;
     use ridl_rt::port::SignalReader;
 
     let ordinal = <generated::CabinTemperature as Interaction>::MEMBER.ordinal;
     let value = generated::Temperature::new_unchecked(21);
-
-    // The FlatBuffers bytes of the published value, and this codec's bytes
-    // for it: the same bytes, reversed.
-    let mut scratch = <generated::Temperature as Payload<FlatBuffers>>::BUFFER;
-    let flatbuffers: Vec<u8> =
-        Ref::<generated::Temperature, FlatBuffers>::encode(&value, scratch.as_mut())
-            .expect("encode")
-            .bytes()
-            .to_vec();
-    let reversed: Vec<u8> = flatbuffers.iter().rev().copied().collect();
-
-    // 1. The signal round trip over the Proto3 runtime. No binding names an
-    //    encoding.
-    let rt = Loopback::<Proto3>::with_encoding(CATALOG);
-    let mut publisher = generated::cabin::Publisher::new(rt.attach());
-    let mut client = generated::cabin::Client::new(rt.attach());
-    publisher.temperature(value).expect("set");
-    publisher.commit();
-    let sample = client.temperature().expect("read");
-    assert_eq!(sample.value.get(), 21);
-    assert_eq!(sample.provenance, Provenance::Live);
-
-    // 2. The bytes the port carries are this codec's and not FlatBuffers'.
-    let reader = rt.attach();
-    let mut on_the_port = <generated::Temperature as Payload<FlatBuffers>>::BUFFER;
-    let raw = reader
-        .read(CABIN, ordinal, on_the_port.as_mut())
-        .expect("read");
-    let written = &on_the_port.as_ref()[..raw.len];
-    assert_eq!(
-        written,
-        reversed.as_slice(),
-        "the signal was published with the port's own codec"
-    );
+    let flatbuffers = encoded::<_, FlatBuffers>(&value);
+    let proto3 = encoded::<_, Proto3>(&value);
     assert_ne!(
-        written,
-        flatbuffers.as_slice(),
-        "the two codecs produce different bytes, so the check above has force"
+        proto3, flatbuffers,
+        "the two codecs produce different bytes, so the byte checks below have force"
     );
 
-    // 3. A command and a query, served over a handler held by `&mut`. The
-    //    counters are reset first, so what they hold afterwards is what the
-    //    call legs did, not what the signal leg above did.
-    for reset in [
-        <generated::Temperature as Proto3Counts>::reset,
-        <generated::Level as Proto3Counts>::reset,
-        <generated::Window as Proto3Counts>::reset,
-        <generated::Average as Proto3Counts>::reset,
-    ] {
-        reset();
+    // The signal.
+    let mut rt = Loopback::<Proto3>::with_encoding(CATALOG);
+    {
+        let mut publisher = generated::cabin::Publisher::new(&mut rt);
+        publisher.temperature(value).expect("set");
+        publisher.commit();
     }
+    {
+        let client = generated::cabin::Client::new(&mut rt);
+        let sample = client.temperature().expect("read");
+        assert_eq!(sample.value.get(), 21);
+        assert_eq!(sample.provenance, Provenance::Live);
+    }
+    let mut on_the_port = <generated::Temperature as Payload<Proto3>>::BUFFER;
+    let raw = rt.read(CABIN, ordinal, on_the_port.as_mut()).expect("read");
+    assert_eq!(
+        &on_the_port.as_ref()[..raw.len],
+        proto3.as_slice(),
+        "the signal was published with the proto3 codec"
+    );
+
+    // The event.
+    {
+        let mut client = generated::cabin::Client::new(&mut rt);
+        client.subscribe_warning().expect("subscribe");
+    }
+    let warning = generated::Warning {
+        code: generated::Level::new_unchecked(5),
+        health: generated::Health::Warn,
+    };
+    let warning_proto3 = encoded::<_, Proto3>(&warning);
+    assert_ne!(
+        warning_proto3,
+        encoded::<_, FlatBuffers>(&warning),
+        "the two codecs produce different bytes for the event payload too"
+    );
+    // The first occurrence is read off the port as bytes, the second
+    // through the face.
+    for _ in 0..2 {
+        let mut publisher = generated::cabin::Publisher::new(&mut rt);
+        publisher.warning(warning).expect("raise");
+    }
+    {
+        use ridl_rt::port::EventSource;
+        let mut on_the_port = <generated::Warning as Payload<Proto3>>::BUFFER;
+        let raw = rt
+            .next(on_the_port.as_mut())
+            .expect("next")
+            .expect("an occurrence is waiting");
+        assert_eq!(
+            &on_the_port.as_ref()[..raw.len],
+            warning_proto3.as_slice(),
+            "the event was raised with the proto3 codec"
+        );
+    }
+    {
+        let mut client = generated::cabin::Client::new(&mut rt);
+        let mut next = client.next_event();
+        let Poll::Ready(event) = poll_once(&mut next) else {
+            panic!("an occurrence is waiting, so the future is ready on its first poll");
+        };
+        match event.expect("next_event") {
+            generated::cabin::Event::Warning(occurrence) => {
+                let warning = occurrence.payload.expect("payload verifies");
+                assert_eq!(warning.code.get(), 5);
+                assert!(matches!(warning.health, generated::Health::Warn));
+            }
+        }
+    }
+
+    // The command and the query, served over a handler held by `&mut`.
     let mut handler = rt.handler();
     let mut provider = TestProvider::new(7);
     {
         let mut serve = generated::cabin::serve(&mut handler, &mut provider);
+        let mut client = generated::cabin::Client::new(&mut rt);
         {
             let mut call = client.set_level(generated::Level::new_unchecked(3));
             assert!(poll_once(&mut call).is_pending());
@@ -3681,84 +3549,46 @@ fn a_second_codec_is_read_from_the_port_type() {
     }
     assert_eq!(provider.set_level_calls, vec![3]);
 
-    // 4. Each leg of those two calls went through this codec, in the
-    //    direction that leg uses. A leg left on FlatBuffers would hold zero
-    //    here, and the round trip above would still have passed, because both
-    //    of its ends would agree on FlatBuffers and the runtime carries the
-    //    payload as opaque bytes.
-    assert_eq!(
-        <generated::Level as Proto3Counts>::counts(),
-        (1, 1),
-        "the command's argument was encoded by the client and decoded by the dispatch \
-         with the port's own codec"
+    // A command whose argument is encoded with the proto3 codec and sent on
+    // the raw port reaches the provider with its value: the dispatch decodes
+    // with the port's codec.
+    let level = encoded::<_, Proto3>(&generated::Level::new_unchecked(9));
+    assert_ne!(
+        level,
+        encoded::<_, FlatBuffers>(&generated::Level::new_unchecked(9)),
+        "the two codecs produce different bytes for the argument too"
     );
-    assert_eq!(
-        <generated::Window as Proto3Counts>::counts(),
-        (1, 1),
-        "the query's argument was encoded by the client and decoded by the dispatch \
-         with the port's own codec"
-    );
-    assert_eq!(
-        <generated::Average as Proto3Counts>::counts(),
-        (1, 1),
-        "the query's reply was encoded by the provider side and decoded by the client \
-         with the port's own codec"
-    );
-    assert_eq!(
-        <generated::Temperature as Proto3Counts>::counts(),
-        (0, 0),
-        "the call legs carry no signal payload, so the counters above count only those legs"
-    );
+    let correlation = rt
+        .command(
+            CABIN,
+            <generated::CabinSetLevel as Interaction>::MEMBER.ordinal,
+            &level,
+            None,
+        )
+        .expect("send");
+    let mut claim = <generated::Cabin as ridl_rt::contract::Sizes<Proto3>>::CLAIM_BUFFER;
+    let settled =
+        generated::cabin::dispatch(&mut rt, &mut provider, claim.as_mut(), &mut no_bound());
+    assert_eq!(settled, Ok(1), "the dispatch settles the one claim");
+    assert_eq!(provider.set_level_calls, vec![3, 9]);
+    assert_eq!(rt.ack(correlation).expect("settled"), Ok(()));
 
-    // 5. A FlatBuffers runtime beside it, in the same binary: `Loopback::new`
-    //    is the default encoding, and its bytes are the unreversed ones. The
-    //    counters are reset first, so that what they hold at the end states
-    //    whether this runtime reached the second codec at all.
-    for reset in [
-        <generated::Temperature as Proto3Counts>::reset,
-        <generated::Level as Proto3Counts>::reset,
-        <generated::Window as Proto3Counts>::reset,
-        <generated::Average as Proto3Counts>::reset,
-    ] {
-        reset();
+    // A FlatBuffers runtime beside it, in the same binary.
+    let mut rt_fb = Loopback::new(CATALOG);
+    {
+        let mut publisher = generated::cabin::Publisher::new(&mut rt_fb);
+        publisher.temperature(value).expect("set");
+        publisher.commit();
     }
-    let rt_fb = Loopback::new(CATALOG);
-    let mut publisher_fb = generated::cabin::Publisher::new(rt_fb.attach());
-    let client_fb = generated::cabin::Client::new(rt_fb.attach());
-    publisher_fb.temperature(value).expect("set");
-    publisher_fb.commit();
-    let sample = client_fb.temperature().expect("read");
-    assert_eq!(sample.value.get(), 21);
-    assert_eq!(sample.provenance, Provenance::Live);
-
-    let reader_fb = rt_fb.attach();
-    let mut on_the_port_fb = <generated::Temperature as Payload<FlatBuffers>>::BUFFER;
-    let raw_fb = reader_fb
-        .read(CABIN, ordinal, on_the_port_fb.as_mut())
+    let mut on_the_port = <generated::Temperature as Payload<FlatBuffers>>::BUFFER;
+    let raw = rt_fb
+        .read(CABIN, ordinal, on_the_port.as_mut())
         .expect("read");
     assert_eq!(
-        &on_the_port_fb.as_ref()[..raw_fb.len],
+        &on_the_port.as_ref()[..raw.len],
         flatbuffers.as_slice(),
         "the loopback's default encoding is FlatBuffers"
     );
-
-    // 6. The face over the FlatBuffers runtime reached no part of the second
-    //    codec.
-    for (name, counts) in [
-        (
-            "Temperature",
-            <generated::Temperature as Proto3Counts>::counts(),
-        ),
-        ("Level", <generated::Level as Proto3Counts>::counts()),
-        ("Window", <generated::Window as Proto3Counts>::counts()),
-        ("Average", <generated::Average as Proto3Counts>::counts()),
-    ] {
-        assert_eq!(
-            counts,
-            (0, 0),
-            "the FlatBuffers runtime used the second codec for `{name}`"
-        );
-    }
 }
 
 // ---------------------------------------------------------------------------

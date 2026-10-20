@@ -55,19 +55,26 @@ The package module holds:
   checks the typl constraints and returns an error when the value breaks one;
   `new_unchecked` skips the check and is for a value already known to satisfy
   them. `get` returns the value of a named scalar.
-- **The FlatBuffers codec** of each payload type: `encode`, `verify`, `decode`
-  and a `MAX_SIZE` bound. It is present when the manifest names `flatbuffers`
-  under `[backend.rust] encodings`; with no list the module holds the types only.
-  Each payload type also has a `<T as Payload<FlatBuffers>>::Buffer` type and a
-  zeroed `BUFFER` value, sized by that type's own `MAX_SIZE`. The face calls the
-  codec; an application calls it only when it moves payloads by itself.
+- **The codecs** of each payload type, one per encoding the manifest names
+  under `[backend.rust] encodings`: `flatbuffers`, `proto3`, or both. Each
+  codec is `encode`, `verify`, `decode` and a `MAX_SIZE` bound; with no list
+  the module holds the types only. Each payload type also has a
+  `<T as Payload<FlatBuffers>>::Buffer` type and a zeroed `BUFFER` value, sized
+  by that type's own `MAX_SIZE`, and the same in `Proto3`. Every `MAX_SIZE` is
+  finite: a declared type whose encoding has no finite bound, such as a
+  `string` with no length bound, is refused in either encoding, and
+  `ridl build` fails with an error that names the type and the cause; the
+  [proto3 codec record's known gaps][proto3-gaps] give the limit this sets
+  and its tracking issue. The face calls the codec; an application calls it only when it moves
+  payloads by itself.
 - **The interaction descriptors**: one unit type per interface (here
   `api::Cabin`) that implements `ridl_rt::contract::Interface` and carries the
   interface's `CATALOG`, `NUMBER` and `NAME`. Each interface also implements
-  `ridl_rt::contract::Sizes<FlatBuffers>`, the size table of that codec for the
-  interface: its reservations, its largest buffer (`MAX_BUFFER_SIZE`), and the
-  claim and event buffers the face holds. Like the codec, the descriptors are
-  present only when the manifest names `flatbuffers` under
+  `ridl_rt::contract::Sizes<E>` for each encoding the package carries, the
+  size table of that codec for the interface: its reservations, its largest
+  buffer (`MAX_BUFFER_SIZE`), and the claim and event buffers the face holds.
+  Like the codecs, the descriptors are
+  present only when the manifest names an encoding under
   `[backend.rust] encodings`.
 - **The face**: one module per interface that has one, named after it (here
   `api::cabin`), present under the same condition. The face is what the
@@ -108,7 +115,9 @@ generated types of the package module, and the face methods take and return
 them like any other payload.
 The wire backends emit the matching positional `.proto` messages and `.fbs`
 tables under the names assigned by lowering. When an induced payload has no
-finite FlatBuffers bound, its interface is skipped with the refusal constant
+finite bound in an encoding the manifest names — no finite FlatBuffers bound
+under `flatbuffers`; no finite proto3 bound, or a member proto3 cannot
+represent, under `proto3` — its interface is skipped with the refusal constant
 described above rather than emitting a descriptor that names a missing codec.
 
 The face opens no socket and holds no runtime. Each `Client`, `Publisher` and
@@ -254,15 +263,15 @@ veh_cabin = { path = "generated", default-features = false }
 ```
 
 The generated crate depends on `ridl-rt` with one feature per encoding that the
-manifest names: `flatbuffers` when `[backend.rust] encodings` names it, which
-the codec needs, and no feature for a types-only build. An application that names `ridl-rt` itself, for example to use
+manifest names under `[backend.rust] encodings` — `flatbuffers`, `proto3`, or
+both, which the codecs need — and no feature for a types-only build. An application that names `ridl-rt` itself, for example to use
 `ridl_rt::task::noop_waker` or the error types, selects from its features:
 
 | `ridl-rt` feature | Default | Enables                                                                                                                                                                           |
 | ----------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `flatbuffers`     | off     | The `flatbuffers` module the generated codec calls.                                                                                                                               |
 | `std`             | off     | The standard library; the `task` module: `block_on`, `noop_waker` and `flag_waker`; the `face::Timeout` trait; and the propagation hook of the `trace` module, `set_propagation`. |
-| `proto3`          | off     | Nothing yet. It names the proto3 encoding.                                                                                                                                        |
+| `proto3`          | off     | The `proto3` module the generated proto3 codec calls.                                                                                                                             |
 | `repr-c`          | off     | Nothing yet. It names the `repr(C)` encoding.                                                                                                                                     |
 
 `ridl-rt` has no dependency in any feature combination. It builds for `wasm32`,
@@ -450,8 +459,8 @@ In the Rust column:
   `serve` evaluates them before it calls the `Provider`, and evaluates the
   `ensure` clauses on the reply before it sends the reply. The `Client` does not
   evaluate `ensure`.
-- `verify` and the face exist only when the manifest names `flatbuffers` under
-  `[backend.rust] encodings` (see
+- `verify` and the face exist only when the manifest names `flatbuffers` or
+  `proto3` under `[backend.rust] encodings` (see
   [What the crate contains](#what-the-crate-contains)).
 
 The TypeScript module holds types, constants, the `<Name>Bits` objects and init
@@ -477,3 +486,4 @@ a reader of the generated source; rustdoc does not show them.
 [face]: https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md
 [consumer-face]: https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md#the-consumer-face
 [ridl-rt]: https://github.com/driftsys/ridl/blob/main/docs/design/ridl-rt.md
+[proto3-gaps]: https://github.com/driftsys/ridl/blob/main/docs/design/proto3-codec.md#known-gaps

@@ -1,0 +1,17 @@
+// A package with no proto3 bound for one declaration: `Wide` holds an enum
+// value outside int32, which the proto backend refuses and the proto3 sizer
+// therefore gives no bound (`RefusedMember`). `Holder` reaches it through a
+// field, so it has no bound either. The proto3 codec refuses both.
+
+package pb.unbounded
+
+/// An enum with a value outside int32.
+enum Wide {
+  ZERO = 0
+  BIG  = 4294967296
+}
+
+/// A struct that reaches `Wide`.
+struct Holder {
+  wide : Wide
+}

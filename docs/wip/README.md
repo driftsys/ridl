@@ -128,6 +128,16 @@ The release 0.11 plan (`2026-10-15-release-0.11-plan.md`) was archived on
 #884, #925, #919, #863, #874, #864, #877). Its durable records are the pull
 requests that closed those issues and the `v0.11.0` release.
 
+The proto3 payload codec design and plan
+(`2026-10-20-proto3-codec-{design,plan}.md`) were archived on 2026-10-20, once
+the codec landed (#264);
+[the proto3 codec design record](../design/proto3-codec.md) and the 2026-10-20
+amendments of [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md),
+[ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md),
+[ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) and
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) are their
+durable records.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)

@@ -138,6 +138,35 @@ const ALLOWED: &[Allowed] = &[
         why: "a test asserting how many named interfaces one fixture lowers to",
     },
     Allowed {
+        path: "crates/ridl-backend-rust/src/codec_proto3.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, for the \
+              reason the descriptor layer's is: the proto3 codec's root walk \
+              over the lowered model, which visits an inline shape as well, \
+              because the FlatBuffers projection roots every induced tuple \
+              that crosses the wire whatever its interface's identity",
+    },
+    Allowed {
+        path: "crates/ridl-backend-rust/tests/induced_call_refusals.rs",
+        lines: 1,
+        why: "a test fixture: a compiled package's named interface is moved \
+              into a service's inline shape to build the service-shape case",
+    },
+    Allowed {
+        path: "crates/ridl-backend-rust/tests/proto3_conformance.rs",
+        lines: 1,
+        why: "a test asserting which named interfaces the conformance fixture \
+              declares; the fixture declares no service, so the named store \
+              is the complete set",
+    },
+    Allowed {
+        path: "crates/ridl-backend-rust/tests/proto3_roundtrip.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, \
+              collecting every interaction root the lowered model names, \
+              which holds an inline shape already",
+    },
+    Allowed {
         path: "crates/ridl-core/src/package.rs",
         lines: 1,
         why: "`package_names` collects the names a type reference can bind to. \

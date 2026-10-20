@@ -65,11 +65,13 @@ ridl-loopback = { path = "../ridl-loopback" }
 # The `flatbuffers` feature is what makes `::ridl_rt::flatbuffers` exist, and
 # the generated codec the face is compiled over names it at every read and
 # every write. It is enabled here, on the dev-dependency, and nowhere else:
-# this crate's library links no runtime at all.
+# this crate's library links no runtime at all. The `proto3` feature is the
+# same for `::ridl_rt::proto3`: the checked-in face is generated with both
+# codecs, and its round trips run over a proto3 port as well.
 # The `std` feature is what makes `::ridl_rt::task` exist: the round trips
 # through the generated async client poll its futures by hand with
 # `ridl_rt::task::noop_waker`, the way a frame loop does.
-ridl-rt = { path = "../ridl-rt", features = ["flatbuffers", "std"] }
+ridl-rt = { path = "../ridl-rt", features = ["flatbuffers", "proto3", "std"] }
 # The independent FlatBuffers implementation the conformance test round trips
 # against (design note D-8), and the code generator that turns the
 # emitted `.fbs` into the Rust reader that test drives. `planus-codegen` runs
@@ -95,6 +97,25 @@ ridl-diff = { path = "../ridl-diff" }
 planus = { workspace = true, features = ["std"] }
 planus-codegen.workspace = true
 planus-translation.workspace = true
+# The proto3 conformance test's oracle is `prost`, the same way planus is the
+# FlatBuffers one. `ridl-backend-proto` emits the `.proto` of the conformance
+# fixture from the same IR as the codec under test, so the schema and the codec
+# cannot drift apart; `protox` compiles that `.proto` to a descriptor set with
+# no `protoc` (ADR-0006 decision 3); `prost-build` turns the descriptor set
+# into the Rust oracle, in the one test that regenerates the checked-in copy
+# under `tests/generated/` and compares it byte for byte; `prost` is the runtime
+# that checked-in code links. Every one of them is a dev-dependency only: this
+# crate emits a codec and links none, and ADR-0020 decision 9 makes a backend
+# an executable rather than a library other crates link. `ridl-rt` and every
+# generated package must never reach a prost crate; `xtask/tests/oracle_boundary.rs`
+# checks that, and checks that these edges stay test-time only.
+ridl-backend-proto = { path = "../ridl-backend-proto" }
+protox.workspace = true
+prost-build.workspace = true
+prost.workspace = true
+# The seeded value generator of the proto3 conformance property: `std` for
+# the strategy builders and the test runner, as the other backends enable it.
+proptest = { workspace = true, features = ["std"] }
 # The propagation hook spike. The design of generated observation gives
 # `ridl_rt::trace::Propagation` to the application, and the tests in
 # `otel_propagation.rs` prove the hook's call order by implementing it with

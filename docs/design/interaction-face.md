@@ -58,9 +58,10 @@ not a single Rust identifier, and descriptors for one are a follow-up), the
 emitter writes:
 
 - a unit struct with an `Interface` impl carrying `CATALOG`, `NUMBER`,
-  `PROVISIONAL`, `NAME` and `MEMBERS`, and a `Sizes<FlatBuffers>` impl, the
-  interface's size table, whose `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE`
-  items size the claim buffer and the next-event buffer;
+  `PROVISIONAL`, `NAME` and `MEMBERS`, and one `Sizes<E>` impl per encoding the
+  package carries, the interface's size table in that encoding, whose
+  `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE` items size the claim buffer
+  and the next-event buffer;
 - a unit struct per interaction with an `Interaction` impl (`type Iface`,
   `const MEMBER`, `const ROW`) and the kind's trait — `Signal`, `Event`,
   `Command`, `Query` or `Fixed`.
@@ -71,23 +72,24 @@ carries no `interfaces.lock`, so `Interface::NUMBER` and
 (`Interface.number`, `Interface.provisional`, added by the lock design's L4).
 
 **The table's two buffer sizes are computed, not counted.** `MAX_BUFFER_SIZE` is
-the maximum over every argument and reply
-`<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE` the interface's
-calls use — arguments alone would under-size the claim buffer whenever a query's
-reply is larger than its argument, because a reply is encoded into the same
-buffer. `EVENT_SOURCE_BUFFER_SIZE` is the maximum over event payload sizes only,
-because `EventSource::next`'s payload type is not known until the occurrence's
-ordinal is read. Both are emitted as a const-evaluable block (a `while` loop
-over an array), not as a folded literal, so the maximum is computed by the same
-code a consumer compiles, not precomputed and trusted by the emitter.
+the maximum over every argument and reply `<T as Payload<E>>::MAX_SIZE` the
+interface's calls use, in the table's own encoding `E` — arguments alone would
+under-size the claim buffer whenever a query's reply is larger than its
+argument, because a reply is encoded into the same buffer.
+`EVENT_SOURCE_BUFFER_SIZE` is the maximum over event payload sizes only, because
+`EventSource::next`'s payload type is not known until the occurrence's ordinal
+is read. Both are emitted as a const-evaluable block (a `while` loop over an
+array), not as a folded literal, so the maximum is computed by the same code a
+consumer compiles, not precomputed and trusted by the emitter.
 
 The face holds no array whose length it computes. A site that knows the payload
-type holds that payload's own buffer, `<T as Payload<FlatBuffers>>::BUFFER`: a
-signal read, a publisher's send, a call argument and a reply. The two sites that
-read before they know the type hold a buffer of the table: the server's claim
-buffer is `<Iface as Sizes<FlatBuffers>>::CLAIM_BUFFER` and the next-event
-buffer is `EVENT_BUFFER`. The const-evaluable rule applies to the table's items;
-the descriptor has no inherent constant of either name.
+type holds that payload's own buffer in the encoding of its port,
+`<T as Payload<P::Encoding>>::BUFFER`: a signal read, a publisher's send, a call
+argument and a reply. The two sites that read before they know the type hold a
+buffer of the table: the server's claim buffer is
+`<Iface as Sizes<P::Encoding>>::CLAIM_BUFFER` and the next-event buffer is
+`EVENT_BUFFER`. The const-evaluable rule applies to the table's items; the
+descriptor has no inherent constant of either name.
 
 **The catalog hash, and one placeholder until its replacing story lands:**
 
@@ -105,15 +107,19 @@ the descriptor has no inherent constant of either name.
   in member order, each a `u64` computed by a const-evaluable expression from
   the payloads' `<T as Payload<FlatBuffers>>::MAX_SIZE`, which the codec emitter
   writes from the codegen model's bound, so the table recomputes nothing. A
-  payload whose projection has no bound makes the backend refuse to generate,
-  rather than leaving a missing value, so there is no `None` and no reading of
-  one. A proto3 or `repr(C)` table arrives as a `Sizes<E>` implementation when
-  the backend emits that codec; until then the interface has no such table
-  (driftsys/ridl#264, driftsys/ridl#317). The face reads buffers from
-  `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER` and the table's
-  `CLAIM_BUFFER` and `EVENT_BUFFER`; `reservation::<X, E>()` and
-  `table_budget::<I, E>()` in `ridl_rt::contract` serve a runtime that sizes a
-  store.
+  declared payload whose FlatBuffers projection has no bound makes the backend
+  refuse to generate, and an induced tuple with none skips its interface and its
+  table (rule 2), rather than leaving a missing value, so a `Sizes<FlatBuffers>`
+  table has no `None` and no reading of one. The proto3 table is
+  `Sizes<Proto3>`, emitted beside it when `encodings` names `proto3` and built
+  from `<T as Payload<Proto3>>::MAX_SIZE` in the same way. A proto3 payload with
+  no finite bound is refused or skipped the same way, so a `Sizes<Proto3>` table
+  has no `None` either ([the proto3 codec record](proto3-codec.md)). A `repr(C)`
+  table arrives when the backend emits that codec (driftsys/ridl#317). The face
+  reads buffers from `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of
+  its port `P`, and from the `CLAIM_BUFFER` and `EVENT_BUFFER` of
+  `Sizes<P::Encoding>`; `reservation::<X, E>()` and `table_budget::<I, E>()` in
+  `ridl_rt::contract` serve a runtime that sizes a store.
 
 ## The contract-clause translator
 
@@ -172,10 +178,15 @@ induce a reply struct. The rule is held by
 the one place the backend asks what a call sends. They read the name the
 lowering wrote, and the backend never builds one. A fallible `T | E` reply, an
 untyped position and a stream are still refused (driftsys/ridl#943). An induced
-payload with no finite FlatBuffers bound is also refused before its descriptor
-is accepted: the codec cannot implement `Payload<FlatBuffers>` for it. The
+payload with no finite bound in an encoding `encodings` names is also refused
+before its descriptor is accepted, because that encoding's codec cannot
+implement `Payload<E>` for it: under `flatbuffers`, a tuple whose FlatBuffers
+root has no finite bound; under `proto3`, a tuple whose proto3 size state is not
+bounded — no finite bound, a bound that does not fit, or a member proto3 cannot
+represent — with the refusal naming the tuple and the sizer's cause. The
 pipeline skips that interface with the same refusal marker, leaving the
-package's domain types and its other interfaces unaffected.
+package's domain types and its other interfaces unaffected
+(`tests/induced_call_refusals.rs`).
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
 one member the face covers, one `pub mod` named after the interface. Its
@@ -514,9 +525,9 @@ the generated code.
 
 **`EncodeError::Capacity` is a provider-side invariant violation, never a
 manufactured contract error.** Every buffer the face encodes into is the
-payload's own `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER`,
-`MAX_SIZE` bytes, the largest encoded size of any legal value, so a legal value
-cannot exceed it. If `Ref::encode` still returns `Capacity`, the provider
+payload's own `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of its
+port, `MAX_SIZE` bytes, the largest encoded size of any legal value, so a legal
+value cannot exceed it. If `Ref::encode` still returns `Capacity`, the provider
 returned a value outside its own type's range, or a `Payload` implementation
 does not honor `MAX_SIZE` — a defect the generated code has no vocabulary to
 describe as one of the five settlement outcomes, because `EncodeError::Capacity`
@@ -692,14 +703,15 @@ The codecs a package carries are listed in the manifest:
 `[backend.rust]
 encodings = [...]` (MANI-015), which `ridl build` sends the
 backend as the request option `encodings`. `ridl_backend_rust::WireEncoding` is
-the parsed element and has one variant, `FlatBuffers`, because this backend
-emits a `Payload` implementation for one encoding. The option reaches the entry
-points as a slice, `generate_face_with(package, encodings)` and
-`generate_pipeline`, and a slice that is empty emits the domain types alone,
-with no codec, no descriptor and no face. `repr(C)` and proto3 join the enum
-when the Rust backend emits their codecs; until then the backend refuses those
-names, so a second encoding cannot produce a face over implementations that do
-not exist.
+the parsed element and has two variants, `FlatBuffers` and, since 2026-10-20,
+`Proto3`, one per codec this backend emits. The option reaches the entry points
+as a slice, `generate_face_with(package, encodings)` and `generate_pipeline`,
+and a slice that is empty emits the domain types alone, with no codec, no
+descriptor and no face. A slice that names either encoding, or both, emits the
+descriptors and the same face, because the face reads its encoding from the
+port. `repr(C)` joins the enum when the Rust backend emits its codec; until then
+the backend refuses that name, so it cannot produce a face over implementations
+that do not exist.
 
 `generate_face_with` with a non-empty list emits the codec, the descriptors and
 the face beside the items `generate` emits, and `generate_pipeline` does the
@@ -777,14 +789,14 @@ path is covered instead by a hand-built-IR unit test in `src/descriptors.rs`.
 
 **The generated face is checked in, not regenerated at test time.**
 `tests/generated/interaction_face.rs` is the output of
-`generate_face_with(package, &[WireEncoding::FlatBuffers])` for the fixture,
-brought into `tests/interaction_face.rs` with `include!` under a handwritten
-module carrying only outer `#[allow(...)]` lint attributes — the emitter itself
-must never emit an inner attribute, because one inside an `include!`d file is a
-hard compile error. A test in its own target,
-`tests/interaction_face_regeneration.rs`, regenerates the fixture and compares
-the result byte-for-byte against the checked-in file, failing with the
-instruction to regenerate
+`generate_face_with(package, &[WireEncoding::FlatBuffers, WireEncoding::Proto3])`
+for the fixture, so it carries both codecs and both size tables, brought into
+`tests/interaction_face.rs` with `include!` under a handwritten module carrying
+only outer `#[allow(...)]` lint attributes — the emitter itself must never emit
+an inner attribute, because one inside an `include!`d file is a hard compile
+error. A test in its own target, `tests/interaction_face_regeneration.rs`,
+regenerates the fixture and compares the result byte-for-byte against the
+checked-in file, failing with the instruction to regenerate
 (`RIDL_UPDATE_GENERATED=1 cargo test -p
 ridl-backend-rust --test interaction_face_regeneration`)
 when it drifts. This is what makes the generated face genuinely compiled and
@@ -815,8 +827,12 @@ panics when polled again after either; the blocking client over `Valve` answers
 kind, forgetting a sent call once; a client timeout shorter than `max` is
 accepted; `blocking::next_event` returns `Ok(None)` at the timeout and the
 occurrence when one is raised from another thread; and `blocking::serve` returns
-`Ok(())` at its timeout and a refusal at once. Four test files exercise the
-layers before the round trip: `tests/descriptor_generation.rs`,
+`Ok(())` at its timeout and a refusal at once; and
+`signal_event_command_query_round_trip_over_a_proto3_loopback` runs a signal, an
+event, a command and a query over `Loopback::<Proto3>::with_encoding`, with the
+same face and no type annotation naming the encoding, which is what shows the
+face generic over its port's encoding. Four test files exercise the layers
+before the round trip: `tests/descriptor_generation.rs`,
 `tests/face_generation.rs`, `tests/dispatch_generation.rs` (source-text
 assertions on the generated code) and `tests/face_compile.rs` (the emitted face
 compiled with a bare `rustc`, the `blocking` module included, over shapes the
@@ -1067,11 +1083,11 @@ is built.
 
 ## What is provisional
 
-| Placeholder                                                                                            | Replaced by                                  |
-| ------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
-| The `repr(C)` and proto3 `Sizes<E>` tables (`flatbuffers` is built; this backend emits no other codec) | driftsys/ridl#317, driftsys/ridl#264         |
-| The narrow contract-clause translator (`src/clauses.rs`)                                               | driftsys/ridl#704                            |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion         | a test over `ridl-loopback`, not yet written |
+| Placeholder                                                                                              | Replaced by                                  |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| The `repr(C)` `Sizes<E>` table (`flatbuffers` and `proto3` are built; this backend emits no other codec) | driftsys/ridl#317                            |
+| The narrow contract-clause translator (`src/clauses.rs`)                                                 | driftsys/ridl#704                            |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion           | a test over `ridl-loopback`, not yet written |
 
 **The hand-written payload row was retired on 2026-09-21**, by design note D-11
 of [the FlatBuffers codec record](flatbuffers-codec.md). It read "the

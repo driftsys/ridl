@@ -14,6 +14,10 @@
 
 #[path = "support/ir.rs"]
 mod ir;
+#[path = "support/proto3.rs"]
+mod proto3;
+#[path = "support/rustc.rs"]
+mod rustc;
 
 use proc_macro2::{TokenStream, TokenTree};
 
@@ -88,13 +92,42 @@ fn assert_clean(label: &str, source: &str) {
     );
 }
 
+/// The two members of the proto3 conformance fixture, which reference each
+/// other across a package boundary; a single-file compile cannot resolve the
+/// import, so [`generate_over_the_conformance_workspace_cites_no_issue`]
+/// reads them as the workspace `support/proto3.rs` builds.
+const WORKSPACE_MEMBERS: [&str; 2] = ["proto3_conformance.ridl", "proto3_conformance_other.ridl"];
+
+/// The fixtures the FlatBuffers codec refuses by design, each with the text
+/// its refusal must carry: a string with no length bound.
+const FLATBUFFERS_REFUSED: [(&str, &str); 1] =
+    [("proto3_free.ridl", "` has no finite FlatBuffers bound")];
+
+/// The fixtures the proto3 codec refuses by design, each with the text its
+/// refusal must carry — a map keyed by a float and one keyed by bytes, which
+/// proto3 does not admit as a key; a declaration with an enum value outside
+/// int32, a member the proto backend refuses; and a string with no length
+/// bound — so `generate_pipeline` with `proto3` has no output to scan for
+/// them, and must refuse for that reason rather than generate. A call whose
+/// argument message overflows a `u32` bound (`proto3_unbounded_call.ridl`)
+/// is not refused: its interface is skipped with a note, which is scanned
+/// like any other output.
+const PROTO3_REFUSED: [(&str, &str); 3] = [
+    (
+        "payload_constraints.ridl",
+        "a map key must be an integral or string type",
+    ),
+    ("proto3_unbounded.ridl", "` has no proto3 codec: "),
+    ("proto3_free.ridl", "` has no proto3 codec: "),
+];
+
 fn fixtures() -> Vec<String> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let mut names: Vec<String> = std::fs::read_dir(&dir)
         .unwrap_or_else(|error| panic!("read {}: {error}", dir.display()))
         .map(|entry| entry.expect("a fixture entry").file_name())
         .filter_map(|name| name.into_string().ok())
-        .filter(|name| name.ends_with(".ridl"))
+        .filter(|name| name.ends_with(".ridl") && !WORKSPACE_MEMBERS.contains(&name.as_str()))
         .collect();
     names.sort();
     assert!(!names.is_empty(), "no fixture in {}", dir.display());
@@ -139,18 +172,83 @@ fn generate_over_every_fixture_cites_no_issue() {
     }
 }
 
+/// `generate_pipeline` over every fixture with FlatBuffers and with proto3,
+/// each for every fixture but the ones that codec refuses by design, which
+/// must refuse with the cause [`FLATBUFFERS_REFUSED`] or [`PROTO3_REFUSED`]
+/// names; a name listed there that is not a fixture is stale and fails.
 #[test]
 fn generate_pipeline_over_every_fixture_cites_no_issue() {
-    for name in fixtures() {
+    use ridl_backend_rust::WireEncoding;
+    let names = fixtures();
+    for (refused, _) in FLATBUFFERS_REFUSED.iter().chain(&PROTO3_REFUSED) {
+        assert!(
+            names.iter().any(|name| name == refused),
+            "`{refused}` is listed as refused but is not a fixture"
+        );
+    }
+    for name in names {
         let package = ir::compile_fixture(&name);
-        let source = ridl_backend_rust::generate_pipeline(
-            &package,
-            &[ridl_backend_rust::WireEncoding::FlatBuffers],
-            &[],
-        )
-        .unwrap_or_else(|error| panic!("generate_pipeline {name}: {error:?}"))
-        .rust_source;
-        assert_clean(&format!("generate_pipeline({name})"), &source);
+        for (encoding, label, refused) in [
+            (WireEncoding::FlatBuffers, "", &FLATBUFFERS_REFUSED[..]),
+            (WireEncoding::Proto3, ", proto3", &PROTO3_REFUSED[..]),
+        ] {
+            let generated = ridl_backend_rust::generate_pipeline(&package, &[encoding], &[]);
+            if let Some((_, cause)) = refused
+                .iter()
+                .find(|(refused, _)| *refused == name.as_str())
+            {
+                let error = generated
+                    .err()
+                    .unwrap_or_else(|| panic!("{name} is refused with {encoding:?} by design"));
+                assert!(
+                    error.message.contains(cause),
+                    "{name} is refused for the cause {cause:?}, got: {}",
+                    error.message
+                );
+                continue;
+            }
+            let source = generated
+                .unwrap_or_else(|error| {
+                    panic!("generate_pipeline {name} with {encoding:?}: {error:?}")
+                })
+                .rust_source;
+            assert_clean(&format!("generate_pipeline({name}{label})"), &source);
+        }
+    }
+}
+
+/// The two-member conformance fixture, read as a workspace: each member
+/// generated with the other as its resolution context, with FlatBuffers and
+/// with proto3, so the proto3 codec's own doc lines — one `MAX_SIZE` line per
+/// `Payload` implementation — are scanned too.
+#[test]
+fn generate_over_the_conformance_workspace_cites_no_issue() {
+    use ridl_backend_rust::WireEncoding;
+    let (main, others) = proto3::fixture();
+    let mut packages = vec![main];
+    packages.extend(others);
+    assert_eq!(packages.len(), WORKSPACE_MEMBERS.len());
+    for (at, package) in packages.iter().enumerate() {
+        let others: Vec<&ridl_ir::v2::Package> = packages
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != at)
+            .map(|(_, other)| other)
+            .collect();
+        for encoding in [WireEncoding::FlatBuffers, WireEncoding::Proto3] {
+            let source = ridl_backend_rust::generate_pipeline(package, &[encoding], &others)
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "generate_pipeline {} with {encoding:?}: {error:?}",
+                        package.name
+                    )
+                })
+                .rust_source;
+            assert_clean(
+                &format!("generate_pipeline({}, {encoding:?})", package.name),
+                &source,
+            );
+        }
     }
 }
 

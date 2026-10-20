@@ -1,0 +1,24 @@
+// The second package of the proto3 conformance fixture: what
+// `proto3_conformance.ridl` references across a package boundary.
+//
+// Small on purpose. A struct and an enum are the two kinds a field names
+// through an `import "pb.parts.proto";` in the emitted schema, and a named
+// scalar is the kind that inlines instead (the proto backend's module
+// documentation). The conformance suite reads this file beside the main one
+// as a two-member workspace.
+
+package pb.parts
+
+/// A wheel.
+struct Wheel {
+  radius : integer [0..100]
+}
+
+/// A grade.
+enum Grade {
+  A = 0
+  B = 1
+}
+
+/// A torque, inlined as `uint32` wherever a field names it.
+type Torque : integer [0..5000]

@@ -1,0 +1,20 @@
+// A package whose declarations all have a proto3 bound and whose one call
+// does not: `Big`'s box message fits a u32 bound (one billion four-byte
+// characters, plus the tag and the length), and the argument message of a
+// call with two of them does not, so the induced message has no finite bound
+// while every declaration keeps one. The refusal names the interaction, not a
+// type.
+
+package pb.unbounded.call
+
+type Count : integer [0..200]
+
+type Big : string [0..1000000000]
+
+struct Inner {
+  count : Count
+}
+
+interface Probe {
+  command set(first: Big, second: Big)
+}

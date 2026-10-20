@@ -359,6 +359,14 @@ impl<'a> Lowering<'a> {
             rules: model_rules(home, &self.deps, ItemRef::Decl(decl)),
             closure: (!is_constant).then(|| self.closures.declaration(home, decl)),
             init: (!is_constant).then(|| self.inits.declaration(home, decl)),
+            proto3: (!is_constant).then(|| {
+                self.size_state(
+                    home,
+                    &PayloadShape::Named(&decl.name),
+                    Some(&decl.name),
+                    Encoding::Proto3,
+                )
+            }),
             kind: self.declaration_kind(home, decl, path),
         }
     }

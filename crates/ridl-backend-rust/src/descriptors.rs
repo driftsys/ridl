@@ -6,11 +6,14 @@
 //! `ridl-rt` runtime crate named by its absolute path (`::ridl_rt::…`):
 //!
 //! - one unit struct per interface with an [`Interface`](::ridl_rt) impl
-//!   carrying `CATALOG`, `NUMBER`, `PROVISIONAL`, `NAME` and `MEMBERS`, a
-//!   `Sizes<FlatBuffers>` impl — the interface's size table in the one codec
-//!   this backend emits, every item a const expression over the codec's own
-//!   `<T as Payload<FlatBuffers>>::MAX_SIZE`, which the face reads for its
-//!   claim and event buffers;
+//!   carrying `CATALOG`, `NUMBER`, `PROVISIONAL`, `NAME` and `MEMBERS`, and
+//!   one size table per encoding of the list — a `Sizes<E>` impl, every item
+//!   a const expression over the codec's own `<T as Payload<E>>::MAX_SIZE`,
+//!   which the face reads for its claim and event buffers. Every payload has
+//!   that bound in every encoding of the list: a declaration without one
+//!   refuses the package before any descriptor is rendered, and an induced
+//!   tuple without one refuses its interface ([`single_param_type`],
+//!   [`query_reply_type`]);
 //! - one unit struct per interaction with an `Interaction` impl (the three
 //!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
 //!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
@@ -23,7 +26,7 @@
 //! the entry points' own documentation).
 
 use crate::clauses::{self, ClauseKind};
-use crate::{Ctx, GenerateError, camel_of as camel, declared, ident, type_path};
+use crate::{Ctx, GenerateError, WireEncoding, camel_of as camel, declared, ident, type_path};
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
 use ridl_ir::codegen::v1;
@@ -141,9 +144,7 @@ fn one_interface_public(
     let interactions = interactions(interface);
 
     let mut member_rows: Vec<TokenStream> = Vec::new();
-    let mut reservations: Vec<TokenStream> = Vec::new();
-    let mut call_sizes: Vec<TokenStream> = Vec::new();
-    let mut event_sizes: Vec<TokenStream> = Vec::new();
+    let mut sizes = TablePayloads::default();
     let mut interaction_items: Vec<TokenStream> = Vec::new();
 
     for (ordinal, interaction) in &interactions {
@@ -153,30 +154,38 @@ fn one_interface_public(
             &iface_ident,
             interaction,
             interaction.row as usize,
-            &mut reservations,
-            &mut call_sizes,
-            &mut event_sizes,
+            &mut sizes,
         )?);
     }
 
     let catalog_hash = catalog_hash(ctx)?;
     let number = Literal::u32_unsuffixed(interface.number);
     let provisional = interface.provisional;
-    let max_buffer = max_size_const(&call_sizes);
-    let event_buffer = max_size_const(&event_sizes);
 
-    // The size table is one reservation row per member of `MEMBERS`, in
-    // order, and the two buffer sizes, every one a const expression over
-    // `<T as Payload<FlatBuffers>>::MAX_SIZE`, the codec's own bound; the face
-    // holds the table's claim and event buffers. The doc states what the
-    // descriptor is for its user, not how the table is computed.
-    let interface_doc = format!(
+    // One size table per encoding of the list, FlatBuffers first. Each is one
+    // reservation row per member of `MEMBERS`, in order, and the two buffer
+    // sizes, every one a const expression over `<T as Payload<E>>::MAX_SIZE`,
+    // the codec's own bound; the face holds the table's claim and event
+    // buffers. The doc states what the descriptor is for its user, not how
+    // the table is computed.
+    let mut tables: Vec<TokenStream> = Vec::new();
+    let mut table_docs: Vec<String> = Vec::new();
+    if ctx.encodings.contains(&WireEncoding::FlatBuffers) {
+        tables.push(sizes_table(&iface_ident, WireEncoding::FlatBuffers, &sizes));
+        table_docs.push(table_doc(iface_name, "FlatBuffers", "FlatBuffers"));
+    }
+    if ctx.encodings.contains(&WireEncoding::Proto3) {
+        tables.push(sizes_table(&iface_ident, WireEncoding::Proto3, &sizes));
+        table_docs.push(table_doc(iface_name, "proto3", "Proto3"));
+    }
+    let mut interface_doc = format!(
         "Descriptor for interface `{iface_name}`: its catalog, number, name and \
-         members, as `ridl_rt::contract::Interface`.\n\n\
-         Its size table in FlatBuffers is `<{iface_name} as Sizes<FlatBuffers>>`: \
-         the space each member reserves, and the largest buffer a call or an \
-         event of this interface needs."
+         members, as `ridl_rt::contract::Interface`."
     );
+    for paragraph in &table_docs {
+        interface_doc.push_str("\n\n");
+        interface_doc.push_str(paragraph);
+    }
 
     items.push(quote! {
         #[doc = #interface_doc]
@@ -200,19 +209,87 @@ fn one_interface_public(
         }
     });
 
-    // The size table in the one codec this backend emits. The rows and the
-    // two maxima are const expressions over the codec's `MAX_SIZE`, never a
-    // number this emitter would have to keep equal to it.
-    //
-    // A size this table names in an array length is reached through the whole
-    // path `<Self as Sizes<FlatBuffers>>::`, not through `Self::`: a program
-    // may implement `Sizes` for this interface in a second encoding, and then
-    // `Self::MAX_BUFFER_SIZE` names no one table (rustc E0283).
+    items.extend(tables);
+    items.extend(interaction_items);
+    Ok(())
+}
+
+/// The payloads an interface's size tables are computed over, by type name,
+/// gathered once and rendered once per encoding.
+#[derive(Default)]
+struct TablePayloads {
+    /// One row per member of `MEMBERS`, in order: the member's payloads —
+    /// one for most kinds, the request and then the reply for a query, none
+    /// for a fixed.
+    rows: Vec<Vec<String>>,
+    /// The call argument and reply payloads, which the claim buffer holds.
+    calls: Vec<String>,
+    /// The event payloads, which the event buffer holds.
+    events: Vec<String>,
+}
+
+/// The path of `encoding`'s marker type, as every site of the output names it.
+fn encoding_path(encoding: WireEncoding) -> TokenStream {
+    match encoding {
+        WireEncoding::FlatBuffers => quote! { ::ridl_rt::encoding::FlatBuffers },
+        WireEncoding::Proto3 => quote! { ::ridl_rt::encoding::Proto3 },
+    }
+}
+
+/// The interface doc's paragraph for its size table in one encoding, named
+/// `label` in prose and `marker` in the path.
+fn table_doc(iface_name: &str, label: &str, marker: &str) -> String {
+    format!(
+        "Its size table in {label} is `<{iface_name} as Sizes<{marker}>>`: \
+         the space each member reserves, and the largest buffer a call or an \
+         event of this interface needs."
+    )
+}
+
+/// The `Sizes<E>` implementation of one interface in `encoding`. The rows and
+/// the two maxima are const expressions over the codec's `MAX_SIZE`, never a
+/// number this emitter would have to keep equal to it.
+///
+/// A size this table names in an array length is reached through the whole
+/// path `<Self as Sizes<E>>::`, not through `Self::`: the interface may
+/// implement `Sizes` in a second encoding, and then `Self::MAX_BUFFER_SIZE`
+/// names no one table (rustc E0283).
+fn sizes_table(
+    iface_ident: &proc_macro2::Ident,
+    encoding: WireEncoding,
+    sizes: &TablePayloads,
+) -> TokenStream {
+    let marker = encoding_path(encoding);
+    let reservations: Vec<TokenStream> = sizes
+        .rows
+        .iter()
+        .map(|payloads| {
+            let paths: Vec<TokenStream> = payloads
+                .iter()
+                .map(|name| max_size_path(encoding, name))
+                .collect();
+            reservation_row(&paths)
+        })
+        .collect();
+    let max_buffer = max_size_const(
+        &sizes
+            .calls
+            .iter()
+            .map(|name| max_size_path(encoding, name))
+            .collect::<Vec<_>>(),
+    );
+    let event_buffer = max_size_const(
+        &sizes
+            .events
+            .iter()
+            .map(|name| max_size_path(encoding, name))
+            .collect::<Vec<_>>(),
+    );
     let table = quote! {
-        <Self as ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers>>
+        <Self as ::ridl_rt::contract::Sizes<#marker>>
     };
-    items.push(quote! {
-        impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::FlatBuffers> for #iface_ident {
+    quote! {
+        impl ::ridl_rt::contract::Sizes<#marker> for #iface_ident {
             const RESERVATIONS: &'static [::core::primitive::u64] = &[
                 #(#reservations),*
             ];
@@ -223,10 +300,7 @@ fn one_interface_public(
             const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; #table::MAX_BUFFER_SIZE];
             const EVENT_BUFFER: Self::EventBuffer = [0u8; #table::EVENT_SOURCE_BUFFER_SIZE];
         }
-    });
-
-    items.extend(interaction_items);
-    Ok(())
+    }
 }
 
 /// The name of one interaction's descriptor, `<Interface><Member>`: the
@@ -300,18 +374,17 @@ fn member_row(
 
 /// One interaction's unit struct, its `Interaction` impl, and its kind trait
 /// impl. Appends the interaction's reservation row to the interface's size
-/// table, and its argument, reply and event payload sizes to the two
+/// tables, and its argument, reply and event payloads to the two
 /// buffer-constant worklists.
 fn interaction_item(
     ctx: &Ctx,
     iface_ident: &proc_macro2::Ident,
     interaction: &v1::Interaction,
     row_index: usize,
-    reservations: &mut Vec<TokenStream>,
-    call_sizes: &mut Vec<TokenStream>,
-    event_sizes: &mut Vec<TokenStream>,
+    sizes: &mut TablePayloads,
 ) -> Result<TokenStream, GenerateError> {
     let member = declared(interaction.name.as_ref());
+    let mut row: Vec<String> = Vec::new();
     let struct_ident = descriptor_ident(iface_ident, interaction);
     let index = Literal::usize_unsuffixed(row_index);
 
@@ -319,7 +392,7 @@ fn interaction_item(
         Some(v1::interaction::Shape::Signal(signal)) => {
             let reference = payload_reference(signal.payload.as_ref());
             let payload = type_path(reference);
-            reservations.push(reservation_row(&[max_size_path(reference)]));
+            row.push(reference.to_string());
             // `init()` returns the payload type's default, which is the
             // channel init (ridl §4.4) for a signal with no `= value`
             // override — the fixture's case. A declared init override is a
@@ -338,8 +411,8 @@ fn interaction_item(
         Some(v1::interaction::Shape::Event(event)) => {
             let reference = payload_reference(event.payload.as_ref());
             let payload = type_path(reference);
-            reservations.push(reservation_row(&[max_size_path(reference)]));
-            event_sizes.push(max_size_path(reference));
+            row.push(reference.to_string());
+            sizes.events.push(reference.to_string());
             quote! {
                 impl ::ridl_rt::contract::Event for #struct_ident {
                     type Payload = #payload;
@@ -348,8 +421,8 @@ fn interaction_item(
         }
         Some(v1::interaction::Shape::Fixed(fixed)) => {
             let payload = type_path(payload_reference(Some(fixed_payload(fixed, member)?)));
-            // A fixed is provisioned, never in flight, so it reserves nothing.
-            reservations.push(reservation_row(&[]));
+            // A fixed is provisioned, never in flight, so it reserves nothing:
+            // its row has no payload.
             quote! {
                 impl ::ridl_rt::contract::Fixed for #struct_ident {
                     type Payload = #payload;
@@ -359,8 +432,8 @@ fn interaction_item(
         Some(v1::interaction::Shape::Command(command)) => {
             let arg_name = single_param_type(ctx, command, member)?;
             let args = type_path(arg_name);
-            reservations.push(reservation_row(&[max_size_path(arg_name)]));
-            call_sizes.push(max_size_path(arg_name));
+            row.push(arg_name.to_string());
+            sizes.calls.push(arg_name.to_string());
             let require = clauses::translate(
                 ctx,
                 &command.clauses,
@@ -387,12 +460,10 @@ fn interaction_item(
             let reply_name = query_reply_type(ctx, query, member)?;
             let args = type_path(arg_name);
             let reply = type_path(reply_name);
-            reservations.push(reservation_row(&[
-                max_size_path(arg_name),
-                max_size_path(reply_name),
-            ]));
-            call_sizes.push(max_size_path(arg_name));
-            call_sizes.push(max_size_path(reply_name));
+            row.push(arg_name.to_string());
+            row.push(reply_name.to_string());
+            sizes.calls.push(arg_name.to_string());
+            sizes.calls.push(reply_name.to_string());
 
             let require = clauses::translate(
                 ctx,
@@ -437,6 +508,7 @@ fn interaction_item(
         }
         None => return Err(not_an_interaction(member)),
     };
+    sizes.rows.push(row);
 
     // A member descriptor is an internal: a user's code names the interface
     // descriptor and the face, not this. It stays `pub`, under
@@ -488,17 +560,18 @@ fn reservation_row(sizes: &[TokenStream]) -> TokenStream {
     quote! { #(#sizes as ::core::primitive::u64)+* }
 }
 
-/// The `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE`
-/// const-evaluable path for a payload type. Buffer sizes are written in terms
-/// of it, never as a literal, so a buffer is sized by the codec's own bound
-/// rather than by a number this emitter would have to keep equal to it. The
-/// encoding is named by its full path at each site, as the codec names it in
-/// its own implementations; the package carries no alias for it (the
+/// The `<T as Payload<E>>::MAX_SIZE` const-evaluable path for a payload type
+/// in `encoding`. Buffer sizes are written in terms of it, never as a
+/// literal, so a buffer is sized by the codec's own bound rather than by a
+/// number this emitter would have to keep equal to it. The encoding is named
+/// by its full path at each site, as the codec names it in its own
+/// implementations; the package carries no alias for it (the
 /// `docs/technotes/rust-backend-name-collisions.md`, decision 5).
-fn max_size_path(type_name: &str) -> TokenStream {
+fn max_size_path(encoding: WireEncoding, type_name: &str) -> TokenStream {
     let path = type_path(type_name);
+    let marker = encoding_path(encoding);
     quote! {
-        <#path as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE
+        <#path as ::ridl_rt::payload::Payload<#marker>>::MAX_SIZE
     }
 }
 
@@ -599,8 +672,12 @@ pub(crate) fn single_param_type<'a>(
     if let Some(payload) = command.request.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
-    induced_name(ctx, command.request_tuple.as_ref())?
-        .ok_or_else(|| no_single_param(&command.params, member))
+    induced_name(
+        ctx,
+        command.request_tuple.as_ref(),
+        command.request_sizes.as_ref(),
+    )?
+    .ok_or_else(|| no_single_param(&command.params, member))
 }
 
 /// [`single_param_type`] for a query, which carries the same request shape.
@@ -612,35 +689,62 @@ pub(crate) fn query_param_type<'a>(
     if let Some(payload) = query.request.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
-    induced_name(ctx, query.request_tuple.as_ref())?
-        .ok_or_else(|| no_single_param(&query.params, member))
+    induced_name(
+        ctx,
+        query.request_tuple.as_ref(),
+        query.request_sizes.as_ref(),
+    )?
+    .ok_or_else(|| no_single_param(&query.params, member))
 }
 
 /// The Rust name of the induced tuple `reference` names, when it names one.
+///
+/// A tuple with no finite bound in an encoding the list names is refused,
+/// because that encoding's codec emits no `Payload` for it, and a
+/// descriptor row would name a `MAX_SIZE` that does not exist. The refusal
+/// is per interface: the pipeline skips the interface with a note and
+/// generates the rest of the package (interaction-face design rule 2). With
+/// `flatbuffers` in the list the bound read is the FlatBuffers root's; with
+/// `proto3` in the list it is the proto3 size state of the interaction's
+/// payload, `sizes`, and the refusal names the cause the sizer gave.
 fn induced_name<'a>(
     ctx: &Ctx<'a>,
     reference: Option<&v1::TupleRef>,
+    sizes: Option<&v1::PayloadSizes>,
 ) -> Result<Option<&'a str>, GenerateError> {
     let Some(reference) = reference else {
         return Ok(None);
     };
     let name = ctx.tuple_name(reference.index);
-    let root = ctx.model.flatbuffers.as_ref().and_then(|projection| {
-        projection
-            .roots
-            .iter()
-            .find(|root| root.tuple == Some(reference.index))
-    });
-    if !matches!(
-        root.and_then(|root| root.bound.as_ref()),
-        Some(v1::fb_root::Bound::MaxSize(_))
-    ) {
-        return Err(GenerateError {
-            message: format!(
-                "`{}.{name}` has no finite FlatBuffers bound",
-                ctx.package_name()
-            ),
+    if ctx.encodings.contains(&WireEncoding::FlatBuffers) {
+        let root = ctx.model.flatbuffers.as_ref().and_then(|projection| {
+            projection
+                .roots
+                .iter()
+                .find(|root| root.tuple == Some(reference.index))
         });
+        if !matches!(
+            root.and_then(|root| root.bound.as_ref()),
+            Some(v1::fb_root::Bound::MaxSize(_))
+        ) {
+            return Err(GenerateError {
+                message: format!(
+                    "`{}.{name}` has no finite FlatBuffers bound",
+                    ctx.package_name()
+                ),
+            });
+        }
+    }
+    if ctx.encodings.contains(&WireEncoding::Proto3) {
+        let state = sizes.and_then(|sizes| sizes.proto3.as_ref());
+        if let Err(cause) = crate::codec_proto3::bound_state(state) {
+            return Err(GenerateError {
+                message: format!(
+                    "`{}.{name}` has no finite proto3 bound: {cause}",
+                    ctx.package_name()
+                ),
+            });
+        }
     }
     Ok((!name.is_empty()).then_some(name))
 }
@@ -705,7 +809,7 @@ pub(crate) fn query_reply_type<'a>(
     if let Some(payload) = query.reply_payload.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
-    if let Some(name) = induced_name(ctx, query.reply_tuple.as_ref())? {
+    if let Some(name) = induced_name(ctx, query.reply_tuple.as_ref(), query.reply_sizes.as_ref())? {
         return Ok(name);
     }
     match query.reply.as_ref().and_then(|reply| reply.kind.as_ref()) {

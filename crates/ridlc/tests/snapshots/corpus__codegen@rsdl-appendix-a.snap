@@ -485,6 +485,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "see": [],
         "since": [],
         "rules": [],
+        "proto3": {
+          "bounded": 2
+        },
         "scalar": {
           "class": "SCALAR_CLASS_BOOLEAN",
           "vacuous": true
@@ -540,6 +543,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "unit": "km/h"
           }
         ],
+        "proto3": {
+          "bounded": 5
+        },
         "scalar": {
           "class": "SCALAR_CLASS_FLOAT",
           "unit": "km/h",
@@ -585,6 +591,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "see": [],
         "since": [],
         "rules": [],
+        "proto3": {
+          "bounded": 2
+        },
         "enum": {
           "values": [
             {
@@ -710,6 +719,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "unit": "km/h"
         }
       ],
+      "proto3": {
+        "bounded": 5
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "km/h",
@@ -753,6 +765,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 2
+      },
       "scalar": {
         "class": "SCALAR_CLASS_BOOLEAN",
         "vacuous": true
@@ -788,6 +803,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 2
+      },
       "enum": {
         "values": [
           {
@@ -870,6 +888,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 6
+      },
       "struct": {
         "slots": [
           {
@@ -1302,6 +1323,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "see": [],
         "since": [],
         "rules": [],
+        "proto3": {
+          "bounded": 6
+        },
         "struct": {
           "slots": [
             {

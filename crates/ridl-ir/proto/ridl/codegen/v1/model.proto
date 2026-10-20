@@ -173,6 +173,11 @@ message Declaration {
   // The rules of the item, in the order `ridl_ir::rules::rules` returns
   // them (ADR-0028).
   repeated Rule rules = 23;
+  // The proto3 size state of the declaration's root message: its own
+  // message for a struct or a union, its `<Name>Box` message for a named
+  // scalar, an enum and an enum set. Absent on a constant, which has no
+  // message.
+  SizeState proto3 = 24;
 }
 
 // A named scalar, and the shape of an inline one.
@@ -612,18 +617,19 @@ enum AbsentCause {
   // box message `<Name>Box` the proto backend emits for them. The value is
   // kept so that the codegen protocol keeps its numbering.
   ABSENT_CAUSE_NO_MESSAGE = 2;
-  // proto3 only: every failure inside the message other than the depth
-  // limit — a member the proto backend refuses, a name inside the message
-  // that does not resolve, a member no proto3 leaf bounds, an enum value
-  // outside int32, and a `u64` sum or product inside the walk that does not
-  // fit. The normative statement is the rustdoc of
+  // proto3 only: a member proto3 cannot represent — a member the proto
+  // backend refuses, a name inside the message that does not resolve, an
+  // enum value outside int32. Never a size problem, which is NO_BOUND or
+  // OVERFLOW. The normative statement is the rustdoc of
   // `ridl_ir::projection::size::AbsentCause::RefusedMember`.
   ABSENT_CAUSE_REFUSED_MEMBER = 3;
-  // A string or bytes with no length bound, or a type def with no width.
+  // A string or bytes with no length bound, or a type def with no width;
+  // under proto3 also a message or a collection that holds one.
   ABSENT_CAUSE_NO_BOUND = 4;
-  // proto3 only: the bound exceeds `u32::MAX`, or the nesting passes the
-  // sizer's depth limit. The FlatBuffers sizer reports a bound it cannot
-  // derive as unbounded, so it never writes this cause.
+  // proto3 only: the bound exceeds `u32::MAX`, the nesting passes the
+  // sizer's depth limit, or a `u64` sum or product inside the walk does not
+  // fit. The FlatBuffers sizer reports a bound it cannot derive as
+  // unbounded, so it never writes this cause.
   ABSENT_CAUSE_OVERFLOW = 5;
   // A name that does not resolve, or a declaration with no root form under
   // the encoding. Under FlatBuffers that is a declaration with no root

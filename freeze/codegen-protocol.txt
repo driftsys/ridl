@@ -135,6 +135,7 @@ ridl.codegen.v1.Declaration.is_error = 3 singular bool
 ridl.codegen.v1.Declaration.labels = 5 repeated string
 ridl.codegen.v1.Declaration.links = 20 repeated ridl.codegen.v1.DocLink
 ridl.codegen.v1.Declaration.name = 1 singular ridl.codegen.v1.Spellings
+ridl.codegen.v1.Declaration.proto3 = 24 singular ridl.codegen.v1.SizeState
 ridl.codegen.v1.Declaration.rules = 23 repeated ridl.codegen.v1.Rule
 ridl.codegen.v1.Declaration.scalar = 10 singular ridl.codegen.v1.Scalar oneof=kind
 ridl.codegen.v1.Declaration.see = 21 repeated ridl.codegen.v1.DocLink

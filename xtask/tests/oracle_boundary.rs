@@ -24,12 +24,23 @@
 //! This guard also covers the test-time edges of `ridl-backend-rust`.
 //! `ridl-backend-rust`'s FlatBuffers conformance test drives planus's
 //! runtime and code generator, and emits the `.fbs` it feeds them with
-//! `ridl-backend-flatbuffers`. All four edges are test-time only, for the
-//! same reason and one more: ADR-0020 decision 9 makes a backend an
-//! executable rather than a library other crates link.
+//! `ridl-backend-flatbuffers`; its proto3 conformance test emits the
+//! `.proto` with `ridl-backend-proto`, compiles it with `protox` and
+//! generates the `prost` oracle with `prost-build`. All seven edges are
+//! test-time only, for the same reason and one more: ADR-0020 decision 9
+//! makes a backend an executable rather than a library other crates link.
+//! `prost` and `prost-reflect` are not [`BOUNDARIES`] rows of
+//! `ridl-backend-rust`: `ridl-ir` depends on both normally, for the IR's
+//! own messages, so each is in `ridl-backend-rust`'s normal closure by
+//! design and a closure rule over either would fail on that legitimate
+//! edge. The dev-only rule for them, and for the three rows, is enforced
+//! on the backend's **direct** edges instead, by
+//! [`the_rust_backend_takes_its_oracles_as_dev_dependencies_only`]. What
+//! must stay out of reach of `prost` is `ridl-rt` and a generated package,
+//! which [`the_runtime_reaches_no_prost_crate`] covers for `ridl-rt`.
 //!
 //! **Which record each rule rests on.** The test-time-only rule for
-//! `ridl-backend-rust`'s four edges rests on ADR-0020 decision 9. The FlatBuffers
+//! `ridl-backend-rust`'s seven edges rests on ADR-0020 decision 9. The FlatBuffers
 //! design note's D-12 says that `ridl-rt`'s `flatbuffers` feature takes no
 //! external dependency, so the FlatBuffers runtime crate ADR-0020 decision 5
 //! permits there is not used and ADR-0020's RA-01 dependency ceiling stays
@@ -50,11 +61,12 @@
 //! cannot see it: `ridl build` writes it into `examples/cabin/generated/`,
 //! and a second crate into `examples/cabin/generated-corpus/`, neither of
 //! which is in git, and `examples/cabin` is its own cargo workspace
-//! (`AGENTS.md`). [`the_generated_crate_reaches_no_planus_crate`] reads that
-//! workspace's resolved graph, so it can run only after both crates are
-//! generated. It is `#[ignore]`d for a plain `cargo test`, and `just demo`
-//! runs it right after `ridl build` writes them, so `just build` and CI
-//! run it on every change.
+//! (`AGENTS.md`). [`the_generated_crate_reaches_no_planus_crate`] and
+//! [`the_generated_crate_reaches_no_prost_crate`] read that workspace's
+//! resolved graph, so they can run only after both crates are generated.
+//! They are `#[ignore]`d for a plain `cargo test`, and `just demo` runs them
+//! right after `ridl build` writes them, so `just build` and CI run them on
+//! every change.
 //!
 //! This guard reads the resolved dependency graph instead, via
 //! `cargo metadata --format-version 1`, because that is the one place the
@@ -119,16 +131,61 @@ const BOUNDARIES: &[Boundary] = &[
         package: "ridl-backend-rust",
         oracle: "ridl-backend-flatbuffers",
     },
+    // The proto3 counterparts: the schema backend that emits the `.proto`
+    // the conformance test's oracle is generated from, the compiler that
+    // turns it into a descriptor set, and the generator that writes the
+    // `prost` oracle. `prost` and `prost-reflect` are not listed; the module
+    // documentation says why, and `RUST_BACKEND_DEV_ONLY` covers them.
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "ridl-backend-proto",
+    },
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "protox",
+    },
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "prost-build",
+    },
 ];
 
 /// The planus crates: the FlatBuffers runtime, the code generator and the
 /// schema compiler.
 const PLANUS_CRATES: &[&str] = &["planus", "planus-codegen", "planus-translation"];
 
+/// The prost crates: the protobuf runtime and its derive, the code
+/// generator, the well-known types, the reflection library, and the `.proto`
+/// compiler with its parser.
+const PROST_CRATES: &[&str] = &[
+    "prost",
+    "prost-derive",
+    "prost-build",
+    "prost-types",
+    "prost-reflect",
+    "protox",
+    "protox-parse",
+];
+
+/// The crates `ridl-backend-rust` may name in its own manifest only under
+/// `[dev-dependencies]`: its proto3 conformance test's oracle and the crates
+/// that produce it. `prost` and `prost-reflect` are here and not in
+/// [`BOUNDARIES`] because `ridl-ir` reaches both normally, so only the
+/// backend's own direct edge can say which kind the backend uses them as.
+/// `prost-reflect` is listed before any test needs it, so that adding it
+/// under the wrong table fails on the day it is added.
+const RUST_BACKEND_DEV_ONLY: &[&str] = &[
+    "prost",
+    "prost-build",
+    "prost-reflect",
+    "protox",
+    "ridl-backend-proto",
+];
+
 /// The packages under the stronger boundary of lane E16 (driver section 4,
-/// answer 8): none of them may reach any of [`PLANUS_CRATES`] through any
-/// kind of dependency edge, dev included, because a generated package links
-/// them.
+/// answer 8): none of them may reach any of [`PLANUS_CRATES`] or
+/// [`PROST_CRATES`] through any kind of dependency edge, dev included,
+/// because a generated package links them.
 const RUNTIME_PACKAGES: &[&str] = &["ridl-rt"];
 
 /// Every package reachable from `package` by NORMAL dependency edges only,
@@ -257,6 +314,96 @@ fn the_runtime_reaches_no_planus_crate() {
     }
 }
 
+/// Every direct dependency of `ridl-backend-rust` named in
+/// [`RUST_BACKEND_DEV_ONLY`] is a dev-dependency and nothing else.
+///
+/// A closure walk cannot state this for `prost` or `prost-reflect`, because
+/// `ridl-ir` brings both normally: `prost` moved into `ridl-backend-rust`'s
+/// `[dependencies]` changes no closure at all. `cargo metadata` records the
+/// kind of every direct edge in `packages[].dependencies[].kind` — JSON
+/// null for a normal dependency, `"dev"`, or `"build"` — and a crate named
+/// under two tables appears as two entries, so every entry is checked. The
+/// four the conformance test uses today must be present, or the check
+/// proves nothing.
+#[test]
+fn the_rust_backend_takes_its_oracles_as_dev_dependencies_only() {
+    let metadata = cargo_metadata(None, false);
+    let id = member_id(&metadata, "ridl-backend-rust");
+    let package = metadata["packages"]
+        .as_array()
+        .expect("cargo metadata carries a `packages` array")
+        .iter()
+        .find(|package| package["id"].as_str() == Some(id))
+        .expect("`ridl-backend-rust` is a package of the workspace");
+    let mut seen: Vec<&str> = Vec::new();
+    for dependency in package["dependencies"]
+        .as_array()
+        .expect("a package carries a `dependencies` array")
+    {
+        let name = dependency["name"]
+            .as_str()
+            .expect("a dependency has a name");
+        if !RUST_BACKEND_DEV_ONLY.contains(&name) {
+            continue;
+        }
+        seen.push(name);
+        let kind = dependency["kind"].as_str().unwrap_or("normal");
+        assert_eq!(
+            kind, "dev",
+            "\n\
+             `{name}` is a {kind} dependency of `ridl-backend-rust`.\n\
+             \n\
+             `{name}` is test-time only for `ridl-backend-rust`: the proto3 \
+             conformance test's oracle, or a crate that produces it. A normal or \
+             build edge ships it with the backend (ADR-0020 decision 9 makes a \
+             backend an executable, not a library other crates link). Move it \
+             back to `[dev-dependencies]`.\n"
+        );
+    }
+    for required in ["prost", "prost-build", "protox", "ridl-backend-proto"] {
+        assert!(
+            seen.contains(&required),
+            "`{required}` is a dev-dependency of `ridl-backend-rust`, or this \
+             check has nothing to check: {seen:?}"
+        );
+    }
+}
+
+/// Every package in [`RUNTIME_PACKAGES`] holds: no crate of [`PROST_CRATES`]
+/// is reachable from it through any dependency edge, dev included.
+///
+/// `ridl-rt`'s `proto3` feature takes no external dependency, as its
+/// `flatbuffers` feature takes none (ADR-0021 decision 8): the proto3 wire
+/// helpers are its own. The graph is resolved with `--all-features`, for
+/// the reason [`the_runtime_reaches_no_planus_crate`] gives. The generated
+/// package's half of this rule is
+/// [`the_generated_crate_reaches_no_prost_crate`], which `just demo` runs
+/// over `examples/cabin`.
+#[test]
+fn the_runtime_reaches_no_prost_crate() {
+    let metadata = cargo_metadata(None, true);
+    let names = package_names(&metadata);
+    for &package in RUNTIME_PACKAGES {
+        let reached = runtime_closure(&metadata, package);
+        for &forbidden in PROST_CRATES {
+            let path = path_to(&names, &reached, forbidden);
+            assert!(
+                path.is_none(),
+                "\n\
+                 `{forbidden}` is in `{package}`'s dependency closure: {path}\n\
+                 \n\
+                 `{package}` is the crate every generated package links, so it \
+                 must not depend on a prost crate in any way, not even as a \
+                 dev-dependency: its proto3 codec support is its own (ADR-0021 \
+                 decision 8). The toolchain reaches prost through `ridl-ir`, and \
+                 the proto3 conformance test of `ridl-backend-rust` reaches it \
+                 as a dev-dependency only.\n",
+                path = path.unwrap_or_default(),
+            );
+        }
+    }
+}
+
 /// No planus crate is in the resolved graph of `examples/cabin`, the
 /// workspace that holds the crate `ridl build` generates for `cabin.ridl` and
 /// the program that links it (lane E16 driver, section 4, answer 8).
@@ -291,6 +438,64 @@ fn the_generated_crate_reaches_no_planus_crate() {
              package must not depend on planus in any way (lane E16 driver, \
              section 4, answer 8): look for the edge in the generated \
              manifest, in `ridl-rt`, or in `ridl-loopback`.\n",
+        );
+    }
+}
+
+/// No prost crate is in the resolved graph of `examples/cabin`, whose
+/// generated crates carry the proto3 codec (`examples/cabin/ridl.toml` and
+/// the veh-cluster corpus manifest name `proto3`): the codec a generated
+/// package carries is its own, over `ridl-rt`'s `proto3` module, and links no
+/// prost crate (ADR-0021 decision 8).
+///
+/// Ignored for a plain `cargo test` for the reason
+/// [`the_generated_crate_reaches_no_planus_crate`] gives, and run by
+/// `just demo` beside it. The graph is resolved with `--all-features`.
+#[test]
+#[ignore = "needs examples/cabin/generated and generated-corpus, which `just demo` writes; `just demo` runs it"]
+fn the_generated_crate_reaches_no_prost_crate() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/cabin/Cargo.toml");
+    let metadata = cargo_metadata(Some(&manifest), true);
+    let names = package_names(&metadata);
+    assert!(
+        names.values().any(|&name| name == "veh_cabin"),
+        "the resolved graph of `examples/cabin` has no `veh_cabin` package — \
+         did `ridl build` write `examples/cabin/generated/` and \
+         `examples/cabin/generated-corpus/`?"
+    );
+    for forbidden in PROST_CRATES {
+        assert!(
+            !names.values().any(|name| name == forbidden),
+            "\n\
+             `{forbidden}` is in the resolved graph of `examples/cabin`, the \
+             workspace of the crate `ridl build` generates. A generated \
+             package must not depend on prost in any way: its proto3 codec is \
+             its own (ADR-0021 decision 8). Look for the edge in the generated \
+             manifest, in `ridl-rt`, or in `ridl-loopback`.\n",
+        );
+    }
+}
+
+/// The two manifests `just demo` generates from name `proto3`, so that the
+/// crates [`the_generated_crate_reaches_no_prost_crate`] walks carry the
+/// proto3 codec: dropping `proto3` from either list would leave that guard
+/// checking a crate with no proto3 codec at all.
+#[test]
+fn the_demo_inputs_name_the_proto3_encoding() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    for manifest in [
+        "examples/cabin/ridl.toml",
+        "crates/ridlc/tests/corpus/veh-cluster/ridl.toml",
+    ] {
+        let text = std::fs::read_to_string(root.join(manifest))
+            .unwrap_or_else(|error| panic!("read {manifest}: {error}"));
+        let encodings = text
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("encodings"))
+            .unwrap_or_else(|| panic!("{manifest} has an `encodings` list"));
+        assert!(
+            encodings.contains("\"proto3\""),
+            "{manifest}: `encodings` names `proto3`, got `{encodings}`"
         );
     }
 }

@@ -41,10 +41,16 @@
 //! by driftsys/ridl#690.
 //!
 //! proto3 has no unbounded state: typl bounds every collection, so a message
-//! is bounded or, when the projection refuses a member, absent. Every
-//! addition and multiplication is checked, so a bound the `u64` arithmetic
-//! cannot hold is absent, and so is a bound above `u32::MAX`, as in the
-//! FlatBuffers projection's `MAX_ENCODABLE`.
+//! is bounded or absent, and the cause of an absence says why. A member the
+//! projection refuses is [`AbsentCause::RefusedMember`]. A member that has
+//! no finite bound — a `string` or `bytes` with no length maximum, a type def
+//! with no width, or a collection of such a member — is
+//! [`AbsentCause::NoBound`]. Every addition and multiplication is checked, so
+//! a bound the `u64` arithmetic cannot hold is [`AbsentCause::Overflow`], and
+//! so is a bound above `u32::MAX`, as in the FlatBuffers projection's
+//! `MAX_ENCODABLE`, and a nesting past the depth limit. The walk stops at its
+//! first failure, so the cause is that of the first member, in field order,
+//! that has no bound.
 
 use std::collections::HashMap;
 
@@ -106,9 +112,13 @@ struct Walk<'a, 'c> {
     /// for the path that reached it rather than a property of the type, and
     /// that answer does not generalize to another path.
     memo: HashMap<(&'a str, &'a str), u64>,
-    /// Set when the walk stopped at `MAX_DEPTH`, so that `state` reports the
-    /// depth limit as `Overflow` rather than as a refused member.
-    too_deep: bool,
+    /// The cause of the first failure the walk met, when that failure is a
+    /// size problem: `NoBound` for a member with no finite bound, `Overflow`
+    /// for arithmetic that does not fit or a nesting past `MAX_DEPTH`. A
+    /// refusal records nothing, so a walk that fails with no cause failed on
+    /// a refused member. The walk stops at its first failure, so the first
+    /// cause recorded is the cause of the whole.
+    cause: Option<AbsentCause>,
     /// How many times `remembered` ran its body: the number of struct and
     /// union messages the walk derived rather than reused. A test counts
     /// these, because a memo regression on a deep diamond would otherwise
@@ -139,6 +149,63 @@ impl<'a> Walk<'a, '_> {
         self.memo.insert(key, bound);
         Some(bound)
     }
+
+    /// Fails the walk for a size problem, recording `cause` when no cause is
+    /// recorded yet.
+    fn fail(&mut self, cause: AbsentCause) -> Option<u64> {
+        self.cause.get_or_insert(cause);
+        None
+    }
+
+    /// `value`, or the walk failed with `Overflow`: the checked arithmetic
+    /// of a bound did not fit.
+    fn fits(&mut self, value: Option<u64>) -> Option<u64> {
+        match value {
+            Some(value) => Some(value),
+            None => self.fail(AbsentCause::Overflow),
+        }
+    }
+
+    /// The leaf at a field position ([`leaf_of_field_type`]), or the walk
+    /// failed: `NoBound` for a bare `string` or `bytes` and for an inline or
+    /// named type def no leaf bounds; a refusal for a field with no type, a
+    /// stream, a name that does not resolve or a declaration with no leaf.
+    fn leaf_of(&mut self, ty: &'a FieldType, home: &'a Package) -> Option<Leaf<'a>> {
+        let leaf = leaf_of_field_type(ty, home, self.ctx);
+        if leaf.is_none() {
+            let no_bound = match ty.kind.as_ref() {
+                Some(field_type::Kind::Primitive(primitive)) => matches!(
+                    proto3_projection::primitive(*primitive),
+                    Scalar::String | Scalar::Bytes
+                ),
+                Some(field_type::Kind::InlineScalar(_)) => true,
+                Some(field_type::Kind::Named(name)) => self.names_a_type_def(name, home),
+                _ => false,
+            };
+            if no_bound {
+                self.fail(AbsentCause::NoBound);
+            }
+        }
+        leaf
+    }
+
+    /// The leaf of the name `name` written in `home` ([`leaf_of_name`]),
+    /// with the causes [`Walk::leaf_of`] gives.
+    fn leaf_of_named(&mut self, name: &str, home: &'a Package) -> Option<Leaf<'a>> {
+        let leaf = leaf_of_name(name, home, self.ctx);
+        if leaf.is_none() && self.names_a_type_def(name, home) {
+            self.fail(AbsentCause::NoBound);
+        }
+        leaf
+    }
+
+    /// Whether `name` resolves to a type def: the one declaration kind whose
+    /// missing leaf means no bound rather than a refusal.
+    fn names_a_type_def(&self, name: &str, home: &'a Package) -> bool {
+        self.ctx
+            .resolve(home, name)
+            .is_some_and(|(decl, _)| matches!(decl.kind, Some(decl::Kind::TypeDef(_))))
+    }
 }
 
 /// The proto3 state of the named type `type_name`, read from `home`: its
@@ -146,15 +213,15 @@ impl<'a> Walk<'a, '_> {
 /// a named scalar, an enum or an enum set, and absent otherwise, with the
 /// cause of the absence. No declaration kind gives `NoMessage`.
 ///
-/// `NoBound` for a named scalar that no proto3 leaf bounds: a `string` or
-/// `bytes` with no length bound, a type def with no width. `Unresolved` for
-/// a name that does not resolve and for a declaration that has no message at
-/// all, such as a constant or an interaction. `Overflow` when the nesting
-/// passes `MAX_DEPTH` or the bound is above `u32::MAX`. `RefusedMember` for
-/// every other failure inside the message: a member the proto backend
-/// refuses, a name inside the message that does not resolve, a member no
-/// proto3 leaf bounds, an enum value outside int32, and a `u64` sum or
-/// product that does not fit.
+/// `NoBound` for a named scalar that no proto3 leaf bounds — a `string` or
+/// `bytes` with no length bound, a type def with no width — and for a message
+/// whose first failing member is one, or a collection of one. `Unresolved`
+/// for a name that does not resolve and for a declaration that has no message
+/// at all, such as a constant or an interaction. `Overflow` when the nesting
+/// passes `MAX_DEPTH`, the bound is above `u32::MAX`, or a `u64` sum or
+/// product inside the walk does not fit. `RefusedMember` for every other
+/// failure inside the message: a member the proto backend refuses, a name
+/// inside the message that does not resolve, and an enum value outside int32.
 pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> SizeState {
     let Some((decl, declaring)) = ctx.resolve(home, type_name) else {
         return SizeState::Absent(AbsentCause::Unresolved);
@@ -162,7 +229,7 @@ pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> Si
     let mut walk = Walk {
         ctx,
         memo: HashMap::new(),
-        too_deep: false,
+        cause: None,
         #[cfg(test)]
         bodies: 0,
     };
@@ -198,8 +265,7 @@ pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> Si
             Ok(bytes) => SizeState::Bounded(bytes),
             Err(_) => SizeState::Absent(AbsentCause::Overflow),
         },
-        None if walk.too_deep => SizeState::Absent(AbsentCause::Overflow),
-        None => SizeState::Absent(AbsentCause::RefusedMember),
+        None => SizeState::Absent(walk.cause.unwrap_or(AbsentCause::RefusedMember)),
     }
 }
 
@@ -209,7 +275,7 @@ pub(crate) fn tuple_state<'a>(home: &'a Package, tuple: &'a TupleType, ctx: &Ctx
     let mut walk = Walk {
         ctx,
         memo: HashMap::new(),
-        too_deep: false,
+        cause: None,
         #[cfg(test)]
         bodies: 0,
     };
@@ -218,11 +284,14 @@ pub(crate) fn tuple_state<'a>(home: &'a Package, tuple: &'a TupleType, ctx: &Ctx
             Ok(bytes) => SizeState::Bounded(bytes),
             Err(_) => SizeState::Absent(AbsentCause::Overflow),
         },
-        None if walk.too_deep => SizeState::Absent(AbsentCause::Overflow),
-        None => SizeState::Absent(AbsentCause::RefusedMember),
+        None => SizeState::Absent(walk.cause.unwrap_or(AbsentCause::RefusedMember)),
     }
 }
 
+/// The field `number` of type `ty`. A field number the proto backend refuses
+/// is `RefusedMember` whatever the field's type: it is checked before the
+/// type is read, so a leaf with no bound behind a refused number does not
+/// turn the refusal into `NoBound`.
 fn field_size<'a>(
     number: u32,
     ty: &'a FieldType,
@@ -230,7 +299,11 @@ fn field_size<'a>(
     walk: &mut Walk<'a, '_>,
     depth: u32,
 ) -> Option<u64> {
-    leaf_field(number, leaf_of_field_type(ty, home, walk.ctx)?, walk, depth)
+    if PROTO_RESERVED.contains(&number) || number > PROTO_MAX_FIELD_NUMBER {
+        return None;
+    }
+    let leaf = walk.leaf_of(ty, home)?;
+    leaf_field(number, leaf, walk, depth)
 }
 
 /// The largest encoding of one enum value: a negative member encodes as a
@@ -252,36 +325,40 @@ fn enum_len(min: i64, max: i64, retired_in_int32: bool) -> Option<u64> {
 
 fn leaf_field<'a>(number: u32, leaf: Leaf<'a>, walk: &mut Walk<'a, '_>, depth: u32) -> Option<u64> {
     if depth > MAX_DEPTH {
-        walk.too_deep = true;
-        return None;
+        return walk.fail(AbsentCause::Overflow);
     }
     if PROTO_RESERVED.contains(&number) || number > PROTO_MAX_FIELD_NUMBER {
         return None;
     }
     match leaf {
-        Leaf::Scalar(s) => plain(number, s.max_encoded_len().expect(SCALAR_IS_BOUNDED)),
-        Leaf::Blob(bytes) => delimited(number, bytes),
+        Leaf::Scalar(s) => {
+            let len = plain(number, s.max_encoded_len().expect(SCALAR_IS_BOUNDED));
+            walk.fits(len)
+        }
+        Leaf::Blob(bytes) => walk.fits(delimited(number, bytes)),
         Leaf::Enum {
             min,
             max,
             retired_in_int32,
-        } => plain(number, enum_len(min, max, retired_in_int32)?),
+        } => {
+            let len = plain(number, enum_len(min, max, retired_in_int32)?);
+            walk.fits(len)
+        }
         Leaf::Struct { name, def, home } => {
-            delimited(number, struct_size(name, def, home, walk, depth + 1)?)
+            let payload = struct_size(name, def, home, walk, depth + 1)?;
+            walk.fits(delimited(number, payload))
         }
         Leaf::Union { name, def, home } => {
-            delimited(number, union_size(name, def, home, walk, depth + 1)?)
+            let payload = union_size(name, def, home, walk, depth + 1)?;
+            walk.fits(delimited(number, payload))
         }
-        Leaf::Tuple { def, home } => delimited(number, tuple_size(def, home, walk, depth + 1)?),
+        Leaf::Tuple { def, home } => {
+            let payload = tuple_size(def, home, walk, depth + 1)?;
+            walk.fits(delimited(number, payload))
+        }
         Leaf::Array { def, home } => array_field(number, def, home, walk, depth + 1),
         Leaf::Map { def, home } => map_field(number, def, home, walk, depth + 1),
     }
-}
-
-/// The sum of the fields of a message; `None` when a field is, or when the
-/// sum does not fit.
-fn message_size(mut fields: impl Iterator<Item = Option<u64>>) -> Option<u64> {
-    fields.try_fold(0u64, |sum, field| sum.checked_add(field?))
 }
 
 /// The message of the struct `name` declared in `home`: the sum of its
@@ -294,18 +371,23 @@ fn struct_size<'a>(
     depth: u32,
 ) -> Option<u64> {
     walk.remembered(home, name, |walk| {
-        message_size(def.members.iter().map(|member| match &member.member {
-            Some(struct_member::Member::Field(field)) => {
-                let ty = field.r#type.as_ref()?;
-                // The proto backend refuses an optional array or map
-                // (`emit_struct`, ADR-0013 decision 7).
-                if proto3_projection::optional_repeated(ty).is_some() {
-                    return None;
+        let mut sum = 0u64;
+        for member in &def.members {
+            let field = match &member.member {
+                Some(struct_member::Member::Field(field)) => {
+                    let ty = field.r#type.as_ref()?;
+                    // The proto backend refuses an optional array or map
+                    // (`emit_struct`, ADR-0013 decision 7).
+                    if proto3_projection::optional_repeated(ty).is_some() {
+                        return None;
+                    }
+                    field_size(field.ordinal, ty, home, walk, depth)?
                 }
-                field_size(field.ordinal, ty, home, walk, depth)
-            }
-            Some(struct_member::Member::Reserved(_)) | None => Some(0),
-        }))
+                Some(struct_member::Member::Reserved(_)) | None => 0,
+            };
+            sum = walk.fits(sum.checked_add(field))?;
+        }
+        Some(sum)
     })
 }
 
@@ -324,7 +406,7 @@ fn union_size<'a>(
     walk.remembered(home, name, |walk| {
         let mut largest = 0;
         for arm in &def.arms {
-            let leaf = leaf_of_name(&arm.type_ref, home, walk.ctx)?;
+            let leaf = walk.leaf_of_named(&arm.type_ref, home)?;
             largest = largest.max(leaf_field(arm.ordinal, leaf, walk, depth)?);
         }
         Some(largest)
@@ -340,13 +422,16 @@ fn tuple_size<'a>(
     walk: &mut Walk<'a, '_>,
     depth: u32,
 ) -> Option<u64> {
-    message_size(tuple.fields.iter().enumerate().map(|(i, f)| {
+    let mut sum = 0u64;
+    for (i, f) in tuple.fields.iter().enumerate() {
         let ty = f.r#type.as_ref()?;
         if proto3_projection::optional_repeated(ty).is_some() {
             return None;
         }
-        field_size(u32::try_from(i + 1).ok()?, ty, home, walk, depth)
-    }))
+        let field = field_size(u32::try_from(i + 1).ok()?, ty, home, walk, depth)?;
+        sum = walk.fits(sum.checked_add(field))?;
+    }
+    Some(sum)
 }
 
 /// `repeated`: a scalar and an enum are packed (one tag, one length, the
@@ -360,23 +445,26 @@ fn array_field<'a>(
     walk: &mut Walk<'a, '_>,
     depth: u32,
 ) -> Option<u64> {
-    let element = leaf_of_field_type(array.element.as_ref()?, home, walk.ctx)?;
+    let element = walk.leaf_of(array.element.as_ref()?, home)?;
     let n = array.max;
     match element {
-        Leaf::Scalar(s) => delimited(
-            number,
-            n.checked_mul(s.max_encoded_len().expect(SCALAR_IS_BOUNDED))?,
-        ),
+        Leaf::Scalar(s) => {
+            let run = walk.fits(n.checked_mul(s.max_encoded_len().expect(SCALAR_IS_BOUNDED)))?;
+            walk.fits(delimited(number, run))
+        }
         Leaf::Enum {
             min,
             max,
             retired_in_int32,
-        } => delimited(
-            number,
-            n.checked_mul(enum_len(min, max, retired_in_int32)?)?,
-        ),
+        } => {
+            let run = walk.fits(n.checked_mul(enum_len(min, max, retired_in_int32)?))?;
+            walk.fits(delimited(number, run))
+        }
         Leaf::Array { .. } | Leaf::Map { .. } => None,
-        other => n.checked_mul(leaf_field(number, other, walk, depth)?),
+        other => {
+            let each = leaf_field(number, other, walk, depth)?;
+            walk.fits(n.checked_mul(each))
+        }
     }
 }
 
@@ -418,9 +506,11 @@ fn map_field<'a>(
     {
         return None;
     }
-    let entry = field_size(1, key, home, walk, depth)?
-        .checked_add(field_size(2, value, home, walk, depth)?)?;
-    map.max.checked_mul(delimited(number, entry)?)
+    let key = field_size(1, key, home, walk, depth)?;
+    let value = field_size(2, value, home, walk, depth)?;
+    let entry = walk.fits(key.checked_add(value))?;
+    let each = walk.fits(delimited(number, entry))?;
+    walk.fits(map.max.checked_mul(each))
 }
 
 #[cfg(test)]
@@ -440,6 +530,28 @@ mod tests {
         assert_eq!(varint_len(127), 1);
         assert_eq!(varint_len(128), 2);
         assert_eq!(varint_len(u64::MAX), 10);
+    }
+
+    /// The three copies of the tag-length rule — this one, the Rust
+    /// backend's generation-time `tag_len` and `ridl_rt::proto3::tag_len` —
+    /// count one rule. The backend's test
+    /// `the_generation_time_tag_length_is_the_runtime_one` ties its copy to
+    /// the runtime's over this table; this crate links neither, so this
+    /// table, the same one, is what ties its copy to them.
+    #[test]
+    fn tag_lengths() {
+        for (number, len) in [
+            (1, 1),
+            (15, 1),
+            (16, 2),
+            (2047, 2),
+            (2048, 3),
+            (262_143, 3),
+            (262_144, 4),
+            (536_870_911, 5),
+        ] {
+            assert_eq!(tag_len(number), len, "field number {number}");
+        }
     }
 
     #[test]
@@ -727,6 +839,104 @@ mod tests {
         );
     }
 
+    /// A size problem is `NoBound` or `Overflow`, never `RefusedMember`: a
+    /// struct holding a string with no length bound, through a named scalar
+    /// or inline, an array of such strings, and an array of a bounded
+    /// element with no useful count maximum. The walk stops at its first
+    /// failing member, so a refused member before one with no bound decides,
+    /// and one after it does not.
+    #[test]
+    fn a_member_with_no_bound_is_no_bound_and_not_a_refused_member() {
+        let mut package = fixture();
+        let free = TypeDef {
+            backing: Some(Backing {
+                kind: Some(backing::Kind::Primitive(PrimitiveType::String as i32)),
+            }),
+            ..Default::default()
+        };
+        package.decls.push(Decl {
+            name: "Free".to_owned(),
+            kind: Some(decl::Kind::TypeDef(free.clone())),
+            ..Default::default()
+        });
+        package
+            .decls
+            .push(struct_decl("Note", vec![("text", 1, named("Free"))]));
+        package.decls.push(struct_decl(
+            "Inline",
+            vec![("text", 1, inline(free.clone()))],
+        ));
+        package.decls.push(struct_decl(
+            "Tags",
+            vec![("tags", 1, array_of(named("Free"), u64::MAX))],
+        ));
+        package.decls.push(struct_decl(
+            "Many",
+            vec![("pts", 1, array_of(named("Point"), u64::MAX))],
+        ));
+        package.decls.push(struct_decl(
+            "Holder",
+            vec![("note", 1, named("Note")), ("pt", 2, named("Point"))],
+        ));
+        package.decls.push(struct_decl(
+            "RefusedFirst",
+            vec![
+                ("rows", 1, array_of(array_u8_max4(), 2)),
+                ("text", 2, named("Free")),
+            ],
+        ));
+        package.decls.push(struct_decl(
+            "NoBoundFirst",
+            vec![
+                ("text", 1, named("Free")),
+                ("rows", 2, array_of(array_u8_max4(), 2)),
+            ],
+        ));
+        // A union arm of a type def with no bound: the arm's leaf is read
+        // by name, and a missing leaf of a type def is `NoBound` there too.
+        package.decls.push(union_decl(
+            "Choice",
+            &[("text", 1, "Free"), ("pt", 2, "Point")],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        for name in [
+            "Free",
+            "Note",
+            "Inline",
+            "Tags",
+            "Holder",
+            "NoBoundFirst",
+            "Choice",
+        ] {
+            assert_eq!(
+                state_in(name, &ctx),
+                SizeState::Absent(AbsentCause::NoBound),
+                "{name}"
+            );
+        }
+        assert_eq!(
+            state_in("Many", &ctx),
+            SizeState::Absent(AbsentCause::Overflow)
+        );
+        assert_eq!(
+            state_in("RefusedFirst", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        // A union arm naming a type that does not resolve: no leaf, and no
+        // type def behind the name, so a refusal and not `NoBound`.
+        let mut package = fixture();
+        package
+            .decls
+            .push(union_decl("Lost", &[("x", 1, "Missing")]));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(
+            state_in("Lost", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+    }
+
     #[test]
     fn a_bound_above_u32_max_is_absent() {
         // `bytes [0..u32::MAX]` plus its tag and length exceeds `u32::MAX`.
@@ -773,7 +983,7 @@ mod tests {
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
             state_in("Huge", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
+            SizeState::Absent(AbsentCause::Overflow)
         );
     }
 
@@ -788,7 +998,7 @@ mod tests {
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
             state_in("Vast", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
+            SizeState::Absent(AbsentCause::Overflow)
         );
     }
 
@@ -1094,6 +1304,62 @@ mod tests {
         assert_eq!(state_in("Highest", &ctx), SizeState::Bounded(10));
     }
 
+    /// A member proto3 cannot represent is `RefusedMember` whatever else the
+    /// message holds: a stream field, a field naming a declaration that does
+    /// not resolve, and a field naming a constant. A refused field number is
+    /// checked before the field's type is read, so a field with no bound
+    /// behind a reserved number is `RefusedMember` rather than `NoBound`.
+    #[test]
+    fn a_stream_an_unresolved_name_a_constant_and_a_refused_number_are_refused_members() {
+        let mut package = fixture();
+        let free = TypeDef {
+            backing: Some(Backing {
+                kind: Some(backing::Kind::Primitive(PrimitiveType::String as i32)),
+            }),
+            ..Default::default()
+        };
+        package.decls.push(Decl {
+            name: "Free".to_owned(),
+            kind: Some(decl::Kind::TypeDef(free)),
+            ..Default::default()
+        });
+        let stream = field(field_type::Kind::Stream(crate::v2::StreamType {
+            element: Some(crate::v2::stream_type::Element::Named("Point".to_owned())),
+        }));
+        package
+            .decls
+            .push(struct_decl("Streamed", vec![("pts", 1, stream)]));
+        package
+            .decls
+            .push(struct_decl("Dangling", vec![("x", 1, named("Missing"))]));
+        // `LIMIT` is the fixture's constant: it projects no type.
+        package
+            .decls
+            .push(struct_decl("Limited", vec![("x", 1, named("LIMIT"))]));
+        package.decls.push(struct_decl(
+            "ReservedFree",
+            vec![("text", 19_000, named("Free"))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        for name in ["Streamed", "Dangling", "Limited", "ReservedFree"] {
+            assert_eq!(
+                state_in(name, &ctx),
+                SizeState::Absent(AbsentCause::RefusedMember),
+                "{name}"
+            );
+        }
+        // The same leaf behind an admitted number is the size problem.
+        package
+            .decls
+            .push(struct_decl("PlainFree", vec![("text", 1, named("Free"))]));
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(
+            state_in("PlainFree", &ctx),
+            SizeState::Absent(AbsentCause::NoBound)
+        );
+    }
+
     fn union_decl(name: &str, arms: &[(&str, u32, &str)]) -> Decl {
         Decl {
             name: name.to_owned(),
@@ -1142,7 +1408,7 @@ mod tests {
         let mut walk = Walk {
             ctx,
             memo: HashMap::new(),
-            too_deep: false,
+            cause: None,
             bodies: 0,
         };
         let bound = match leaf_of_name(type_name, ctx.packages().package, ctx) {
@@ -1276,7 +1542,7 @@ mod tests {
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
             state_in("Both", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
+            SizeState::Absent(AbsentCause::Overflow)
         );
     }
 
@@ -1300,7 +1566,7 @@ mod tests {
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
             state_in("Wrapped", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
+            SizeState::Absent(AbsentCause::Overflow)
         );
     }
 
@@ -1318,7 +1584,7 @@ mod tests {
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
             state_in("Wrapped", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
+            SizeState::Absent(AbsentCause::Overflow)
         );
     }
 
@@ -1335,7 +1601,7 @@ mod tests {
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
             state_in("Wrapped", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
+            SizeState::Absent(AbsentCause::Overflow)
         );
     }
 
@@ -1354,7 +1620,7 @@ mod tests {
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
             state_in("Wrapped", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
+            SizeState::Absent(AbsentCause::Overflow)
         );
     }
 
@@ -1374,7 +1640,7 @@ mod tests {
         let ctx = Ctx::new(&package, &others);
         assert_eq!(
             state_in("Wrapped", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
+            SizeState::Absent(AbsentCause::Overflow)
         );
     }
 
@@ -1536,7 +1802,7 @@ mod tests {
         assert_eq!(state_in("q.Thing", &ctx), SizeState::Bounded(4));
         assert_eq!(
             state_in("q.Loose", &ctx),
-            SizeState::Absent(AbsentCause::RefusedMember)
+            SizeState::Absent(AbsentCause::NoBound)
         );
         assert_eq!(
             state_in("Inner", &ctx),

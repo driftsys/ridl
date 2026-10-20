@@ -436,7 +436,7 @@ fn last_segment(path: &str) -> String {
 
 /// The generated face reads its payload encoding from its port, and the
 /// generated package carries the encoding tables of the encodings it was
-/// built with — for the cabin example, FlatBuffers alone. So a port that
+/// built with — for the cabin example, FlatBuffers and proto3. So a port that
 /// carries `ReprC` has no table in that package, and binding a face over it
 /// must be refused.
 ///
@@ -447,7 +447,8 @@ fn last_segment(path: &str) -> String {
 /// missing item is the package's `Sizes<ReprC>` table.
 ///
 /// The same program over `Loopback::new(CATALOG)`, whose encoding is
-/// FlatBuffers, compiles. Without that twin a refusal could come from a
+/// FlatBuffers, compiles, and so does the same program over a proto3
+/// loopback. Without that twin a refusal could come from a
 /// broken compile command rather than from the bound.
 #[test]
 fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
@@ -470,10 +471,14 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
         "binding a face over a port whose encoding the package lacks must not compile, rustc said:\n{rendered}"
     );
 
-    // One diagnostic carries the whole refusal: the code, the unsatisfied
+    // A diagnostic carries the whole refusal: the code, the unsatisfied
     // predicate and the span. Reading the three off the same diagnostic is
     // what ties them together; three independent searches of the output
-    // would be satisfied by three unrelated diagnostics.
+    // would be satisfied by three unrelated diagnostics. With two tables in
+    // the package, rustc reports the predicate once for the constructor path
+    // and once for its argument, both inside the binding statement, so every
+    // diagnostic naming the predicate must point at that statement, and
+    // there are one or two of them.
     let expected = Predicate {
         self_type: "Cabin".to_owned(),
         trait_name: "Sizes".to_owned(),
@@ -488,14 +493,19 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
         .filter(|diagnostic| {
             diagnostic.code.as_deref() == Some("E0277")
                 && predicates(&diagnostic.message).contains(&expected)
-                && diagnostic.primary_spans.iter().any(|span| span == binding)
         })
         .collect();
-    assert_eq!(
-        refusals.len(),
-        1,
-        "exactly one diagnostic must be an E0277 naming the predicate {expected:?} with a primary span on `{binding}`, rustc said:\n{rendered}"
+    assert!(
+        (1..=2).contains(&refusals.len()),
+        "one or two diagnostics must be an E0277 naming the predicate {expected:?}, got {}, rustc said:\n{rendered}",
+        refusals.len()
     );
+    for refusal in &refusals {
+        assert!(
+            refusal.primary_spans.iter().any(|span| span == binding),
+            "every E0277 naming the predicate {expected:?} must have a primary span on `{binding}`, rustc said:\n{rendered}"
+        );
+    }
 
     // The port is `Encoded`; what the package lacks is its `Sizes` table. So
     // no unsatisfied-bound diagnostic may report a predicate whose trait is
@@ -528,6 +538,17 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
     assert!(
         accepted.status.success(),
         "the same program over the package's own encoding must compile, rustc said:\n{}",
+        String::from_utf8_lossy(&accepted.stderr)
+    );
+    let accepted = compile_against_cabin(
+        &built,
+        "the_second_encoding_the_package_carries",
+        &binding_program("Loopback::<ridl_rt::encoding::Proto3>::with_encoding(CATALOG)"),
+        ErrorFormat::Human,
+    );
+    assert!(
+        accepted.status.success(),
+        "the same program over proto3, the package's second encoding, must compile, rustc said:\n{}",
         String::from_utf8_lossy(&accepted.stderr)
     );
 }

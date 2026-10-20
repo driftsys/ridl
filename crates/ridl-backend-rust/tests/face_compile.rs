@@ -47,6 +47,17 @@ fn compile_face(
     consumer: &str,
     std: bool,
 ) -> (String, std::process::Output) {
+    compile_face_in(name, source, consumer, std, &[WireEncoding::FlatBuffers])
+}
+
+/// [`compile_face`], with the face emitted for `encodings`.
+fn compile_face_in(
+    name: &str,
+    source: &str,
+    consumer: &str,
+    std: bool,
+    encodings: &[WireEncoding],
+) -> (String, std::process::Output) {
     let output = ridlc::compile(&format!("{name}.ridl"), source);
     // Errors only: a call with no response bound draws RIDL-112, a warning,
     // and such a call is one of the shapes proven here.
@@ -59,7 +70,7 @@ fn compile_face(
         errors.is_empty(),
         "{name}.ridl must compile with no error, got: {errors:?}"
     );
-    let mut face = generate_face_with(&output.package, &[WireEncoding::FlatBuffers])
+    let mut face = generate_face_with(&output.package, encodings)
         .expect("generate_face_with")
         .rust_source;
     face.push_str(consumer);

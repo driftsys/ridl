@@ -226,19 +226,24 @@ pub enum AbsentCause {
     /// scalar, an enum and an enum set each have the root box message
     /// `<Name>Box` the proto backend emits for them.
     NoMessage,
-    /// proto3 only: a failure inside the message other than the depth limit
-    /// and an overflowing bound, which are [`AbsentCause::Overflow`]. Every
-    /// case: a member the proto backend refuses, a name inside the message
-    /// that does not resolve, a member no proto3 leaf bounds, an enum value
-    /// outside int32, and a `u64` sum or product inside the walk that does
-    /// not fit. This variant's text is the normative statement of the cause;
-    /// the proto3 sizer's `state` implements it.
+    /// proto3 only: a member of the message that proto3 cannot represent.
+    /// Every case: a member the proto backend refuses (an optional array or
+    /// map, a nested array or map, a map value that is a collection, a map key
+    /// outside the integral and string scalars, a field number proto3
+    /// reserves or exceeds, a stream, a field with no type), a name inside
+    /// the message that does not resolve, and an enum value outside int32. A
+    /// size problem is never this cause: it is [`AbsentCause::NoBound`] or
+    /// [`AbsentCause::Overflow`]. This variant's text is the normative
+    /// statement of the cause; the proto3 sizer's `state` implements it.
     RefusedMember,
     /// A `string` or `bytes` with no length bound, or a type def with no
-    /// width: the value itself has no size.
+    /// width: the value itself has no size. Under proto3 also a message or a
+    /// collection whose first failing member is one, so a type that holds an
+    /// unbounded string is `NoBound`, not `RefusedMember`.
     NoBound,
     /// The bound does not fit in a `u32`, or the nesting passes the sizer's
-    /// depth limit.
+    /// depth limit, or, under proto3, a `u64` sum or product inside the walk
+    /// does not fit (a collection whose count is near `u64::MAX`).
     Overflow,
     /// The name does not resolve, or the declaration it names has no root
     /// form under the encoding: under FlatBuffers a declaration with no root
