@@ -674,6 +674,53 @@ fn a_moved_instance_is_listed_under_placement_changed() {
     assert!(value.get("composition_changed").is_none());
 }
 
+/// A package whose two distributions hold `first` and `second`, the member
+/// line in `D` carrying a backend key.
+fn distributed_workspace(dir: &TempDir, root: &str, first: &str, second: &str) -> PathBuf {
+    dir.write(
+        &format!("{root}/ridl.toml"),
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        &format!("{root}/main.rsdl"),
+        &format!(
+            "package app\n\n\
+             component A {{}}\n\
+             component B {{}}\n\
+             system S {{ A, B }}\n\
+             distribution D {{ {first} [ sign.key = \"release\" ] }}\n\
+             distribution E {{ {second} }}\n"
+        ),
+    );
+    dir.path().join(root)
+}
+
+/// rsdl reference §14: a component moved between two distributions leaves
+/// the contracts untouched, so the verdict is `identical` and the exit code
+/// 0, and each member line added or removed is listed under "composition
+/// changed" with its backend key compared with an empty side.
+#[test]
+fn a_member_moved_between_distributions_is_listed_under_composition_changed() {
+    let dir = TempDir::new("distribution");
+    let old = distributed_workspace(&dir, "old", "A", "B");
+    let new = distributed_workspace(&dir, "new", "B", "A");
+    let expected = "identical\n\
+                    composition changed\n\
+                    \x20 app.D/app.B: (absent) -> member\n\
+                    \x20 app.D/app.B/attributes: [] -> [ sign.key = \"release\" ]\n\
+                    \x20 app.D/app.A: member -> (removed)\n\
+                    \x20 app.D/app.A/attributes: [ sign.key = \"release\" ] -> []\n\
+                    \x20 app.E/app.A: (absent) -> member\n\
+                    \x20 app.E/app.B: member -> (removed)\n";
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "a composition change has no verdict, stderr:\n{stderr}"
+    );
+    assert_eq!(stdout, expected);
+}
+
 /// `--format json` prints the stable schema and still keys the exit code on
 /// the verdict.
 #[test]
