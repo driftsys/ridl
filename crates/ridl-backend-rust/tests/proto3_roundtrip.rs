@@ -443,7 +443,10 @@ fn a_declaration_without_a_proto3_bound_is_refused() {
         err.message
     );
     assert!(
-        err.message.contains("refuse") || err.message.contains("int32"),
+        err.message.starts_with(
+            "`pb.unbounded.Wide` has no proto3 bound: a member of it is one the proto backend \
+             refuses: an enum value outside int32"
+        ),
         "the refusal names the cause, got: {}",
         err.message
     );
@@ -589,7 +592,7 @@ fn the_generated_proto3_codec_checks_for_wasm32() {
 #[test]
 fn the_layout_names_each_message_and_its_fields() {
     let package = ir::compile_fixture("proto3_roundtrip.ridl");
-    let layout = ridl_backend_rust::proto3_layout(&package, &[]);
+    let layout = ridl_backend_rust::proto3_layout(&package, &[]).expect("the fixture lays out");
     let nested = layout
         .iter()
         .find(|message| message.name == "Nested")
@@ -628,4 +631,141 @@ fn the_layout_names_each_message_and_its_fields() {
             .all(|field| field.2 == ridl_backend_rust::Proto3Label::Optional)
     );
     assert!(!layout.iter().any(|message| message.name == "WithList"));
+    // An enum field is named by the enum, as the `.proto` names it; an enum
+    // set is inlined as its scalar.
+    let scalars = layout
+        .iter()
+        .find(|message| message.name == "Scalars")
+        .expect("`Scalars` is laid out");
+    let field = |name: &str| {
+        let number = package
+            .decls
+            .iter()
+            .find(|decl| decl.name == "Scalars")
+            .and_then(|decl| match decl.kind.as_ref() {
+                Some(ridl_ir::v2::decl::Kind::StructDef(def)) => {
+                    def.members
+                        .iter()
+                        .find_map(|member| match member.member.as_ref() {
+                            Some(ridl_ir::v2::struct_member::Member::Field(field))
+                                if field.name == name =>
+                            {
+                                Some(field.ordinal)
+                            }
+                            _ => None,
+                        })
+                }
+                _ => None,
+            })
+            .expect("the field is declared");
+        scalars
+            .fields
+            .iter()
+            .find(|field| field.0 == number)
+            .map(|field| field.1.clone())
+            .expect("the field is laid out")
+    };
+    assert_eq!(field("health"), "Health");
+    assert_eq!(field("trend"), "Trend");
+    assert_eq!(field("flags"), "uint32");
+    let health = layout
+        .iter()
+        .find(|message| message.name == "HealthBox")
+        .expect("`HealthBox` is laid out");
+    assert_eq!(
+        health.fields,
+        vec![(
+            1,
+            "Health".to_string(),
+            ridl_backend_rust::Proto3Label::Implicit
+        )]
+    );
+}
+
+/// A string or bytes field whose length lower bound excludes the empty
+/// value is written even at its shortest legal value, and refused when
+/// absent: the empty default is not a legal value of its type.
+#[test]
+fn a_field_whose_empty_value_is_illegal_is_written_and_required() {
+    let main = r#"
+fn main() {
+    let value = Lengths {
+        text: String::from("a"),
+        code: Code::new_unchecked(String::from("ab")),
+        data: vec![0],
+    };
+    let bytes = round_trip("lengths", &value);
+    assert_eq!(hex(&bytes), "0a0161120261621a0100", "each field is written at its shortest legal value");
+    assert_eq!(
+        <Lengths as Payload<Proto3>>::verify(&[]).err(),
+        Some(VerifyError::Structure(Malformed::MissingRequired)),
+        "every field absent",
+    );
+    // `code` alone absent: the named scalar's lower bound refuses the
+    // empty default.
+    assert_eq!(
+        <Lengths as Payload<Proto3>>::verify(&[0x0a, 0x01, 0x61, 0x1a, 0x01, 0x00]).err(),
+        Some(VerifyError::Structure(Malformed::MissingRequired)),
+        "the named string absent",
+    );
+    // `data` alone absent: the inline bytes bound refuses the empty default.
+    assert_eq!(
+        <Lengths as Payload<Proto3>>::verify(&[0x0a, 0x01, 0x61, 0x12, 0x02, 0x61, 0x62]).err(),
+        Some(VerifyError::Structure(Malformed::MissingRequired)),
+        "the inline bytes absent",
+    );
+    // `text` alone absent: the inline string bound refuses the empty default.
+    assert_eq!(
+        <Lengths as Payload<Proto3>>::verify(&[0x12, 0x02, 0x61, 0x62, 0x1a, 0x01, 0x00]).err(),
+        Some(VerifyError::Structure(Malformed::MissingRequired)),
+        "the inline string absent",
+    );
+    // An empty value that is present is refused by the length check, as a
+    // contract violation rather than an absence.
+    assert!(matches!(
+        <Lengths as Payload<Proto3>>::verify(&[0x0a, 0x00, 0x12, 0x02, 0x61, 0x62, 0x1a, 0x01, 0x00]).err(),
+        Some(VerifyError::Contract(_)),
+    ), "a present empty string outside its bound");
+}
+"#;
+    rustc::run_program("pb_lengths", &program(main));
+}
+
+/// A string field whose empty value is legal by length but which declares a
+/// pattern: an absent field is checked as a present empty one, so under
+/// `validate-pattern` both are refused by the pattern, and without the
+/// feature both are accepted.
+#[test]
+fn an_absent_string_is_checked_against_its_pattern_as_an_empty_one() {
+    let main = r#"
+fn main() {
+    let value = Patterned {
+        tag: Tag::new_unchecked(String::from("ab")),
+        text: String::from("cd"),
+    };
+    round_trip("patterned", &value);
+    let absent = <Patterned as Payload<Proto3>>::verify(&[]).map(|_| ());
+    // Both fields present and empty.
+    let present = <Patterned as Payload<Proto3>>::verify(&[0x0a, 0x00, 0x12, 0x00]).map(|_| ());
+    // Only the named `tag` absent, and only the inline `text` absent.
+    let tag_absent = <Patterned as Payload<Proto3>>::verify(&[0x12, 0x02, 0x63, 0x64]).map(|_| ());
+    let text_absent = <Patterned as Payload<Proto3>>::verify(&[0x0a, 0x02, 0x61, 0x62]).map(|_| ());
+    if cfg!(feature = "validate-pattern") {
+        for (name, verdict) in [("absent", absent), ("present", present), ("tag_absent", tag_absent), ("text_absent", text_absent)] {
+            assert!(
+                matches!(verdict, Err(VerifyError::Contract(v)) if v.rule == ridl_rt::payload::Rule::Pattern),
+                "{name}: the pattern refuses the empty string, got {verdict:?}",
+            );
+        }
+    } else {
+        assert_eq!(absent, Ok(()));
+        assert_eq!(present, Ok(()));
+        assert_eq!(tag_absent, Ok(()));
+        assert_eq!(text_absent, Ok(()));
+    }
+}
+"#;
+    let source = program(main);
+    rustc::run_program("pb_pattern_off", &source);
+    rustc::run_program_with_pattern("pb_pattern_on", &source, true);
 }

@@ -78,14 +78,15 @@ pub(crate) fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError
 }
 
 /// The layout the codec emits from, per emitted message, for the test that
-/// compares it with the emitted `.proto` schema field by field.
-pub(crate) fn layout(ctx: &Ctx) -> Vec<MessageLayout> {
-    Codec { ctx }
-        .messages()
-        .unwrap_or_default()
+/// compares it with the emitted `.proto` schema field by field. A
+/// classification the codec refuses is the test's error, not an empty
+/// layout.
+pub(crate) fn layout(ctx: &Ctx) -> Result<Vec<MessageLayout>, GenerateError> {
+    Ok(Codec { ctx }
+        .messages()?
         .into_iter()
         .map(|message| message.layout())
-        .collect()
+        .collect())
 }
 
 /// The presence label of one field, as the `.proto` states it.
@@ -159,9 +160,15 @@ impl Wire {
         }
     }
 
-    /// The scalar's spelling or the message's name, for [`MessageLayout`].
+    /// The scalar's spelling or the message's name, for [`MessageLayout`]:
+    /// the `.proto` names an enum by its name (the bare name when local,
+    /// `pkg.Name` when foreign) and inlines an enum set as its scalar.
     fn layout_name(&self) -> String {
         match self {
+            Wire::Scalar(Scalar {
+                repr: Repr::Enum { name, .. },
+                ..
+            }) => name.clone(),
             Wire::Scalar(scalar) => scalar.scalar.as_str().to_string(),
             Wire::Text(..) => pb::Scalar::String.as_str().to_string(),
             Wire::Bytes(..) => pb::Scalar::Bytes.as_str().to_string(),
@@ -280,6 +287,11 @@ impl Scalar {
                 },
                 true,
             ),
+            // A wire value above `i64::MAX` wraps to a negative `i64`. A
+            // `uint64` field has a declared range inside `i64` with a
+            // non-negative minimum (the width is derived from the range), so
+            // the range check that follows refuses the wrapped value as
+            // `Contract(Range)`.
             pb::Scalar::Uint64 => (quote! { __raw as ::core::primitive::i64 }, false),
             pb::Scalar::Sint32 => (
                 quote! {
@@ -1200,7 +1212,7 @@ impl<'a> Codec<'a> {
                     #present
                 }
             });
-            let when_absent = self.verify_absent(field);
+            let when_absent = self.verify_absent(&message.owner, field);
             if !when_absent.is_empty() {
                 absent.push(quote! {
                     if !__seen[#seen] {
@@ -1336,8 +1348,11 @@ impl<'a> Codec<'a> {
     /// What `verify` does with an absent non-optional field: nothing when
     /// the proto3 default is a legal value of its type, `MissingRequired`
     /// when it is not, and for a nested struct the verification of the empty
-    /// message, which decides by the same rule over its own fields.
-    fn verify_absent(&self, field: &Field) -> TokenStream {
+    /// message, which decides by the same rule over its own fields. A string
+    /// whose empty value is legal by length but which declares a pattern has
+    /// that pattern checked on the empty string, so an absent field reads
+    /// exactly as a present empty one would.
+    fn verify_absent(&self, owner: &str, field: &Field) -> TokenStream {
         if field.optional {
             return quote! {};
         }
@@ -1345,6 +1360,25 @@ impl<'a> Codec<'a> {
             Wire::Message(name) => {
                 let verify = owner_path(name, verify_ident);
                 quote! { #verify(&[])?; }
+            }
+            Wire::Text(named, constraint) if field.wire.default_is_legal() => {
+                let has_pattern = constraint
+                    .as_ref()
+                    .and_then(|sc| sc.constraint.as_ref())
+                    .is_some_and(|c| c.pattern.is_some() || c.pattern_const.is_some());
+                if !has_pattern {
+                    return quote! {};
+                }
+                named
+                    .as_ref()
+                    .and_then(|named| named_scalar_check(named, quote! { "" }))
+                    .or_else(|| {
+                        constraint
+                            .as_ref()
+                            .filter(|_| named.is_none())
+                            .map(|sc| scalar_constraint_check(sc, owner, quote! { "" }, false))
+                    })
+                    .unwrap_or_default()
             }
             wire if wire.default_is_legal() => quote! {},
             _ => missing_required(),

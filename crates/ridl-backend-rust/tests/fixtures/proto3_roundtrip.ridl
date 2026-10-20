@@ -39,6 +39,13 @@ type Engaged : boolean
 /// A level that excludes 0, so an absent field of this type is refused.
 type Level : integer [1..10]
 
+/// A code whose length excludes the empty string.
+type Code : string [2..4]
+
+/// A tag: the empty string is legal by length, and the pattern needs at
+/// least one letter.
+type Tag : string [0..8 match /[a-z]+/]
+
 // ---------- Enums and the enum set ----------
 
 enum Health {
@@ -140,6 +147,21 @@ struct Required {
 struct Signs {
   ignored : integer
   value   : float
+}
+
+/// Fields whose default is not a legal value by length: each is written at
+/// its shortest legal value, and refused when absent.
+struct Lengths {
+  text : string [1..8]
+  code : Code
+  data : bytes [1..4]
+}
+
+/// Fields whose empty value is legal by length but not by pattern: an absent
+/// one is checked as a present empty one.
+struct Patterned {
+  tag  : Tag
+  text : string [0..8 match /[a-z]+/]
 }
 
 struct WithList {

@@ -757,7 +757,10 @@ pub(crate) fn zero_is_legal(constraint: Option<&v1::Constraint>) -> bool {
 /// that compares it with the emitted `.proto` schema: one entry per message,
 /// keyed by the `.proto` message name. Not part of the backend's API.
 #[doc(hidden)]
-pub fn proto3_layout(package: &v2::Package, others: &[&v2::Package]) -> Vec<Proto3MessageLayout> {
+pub fn proto3_layout(
+    package: &v2::Package,
+    others: &[&v2::Package],
+) -> Result<Vec<Proto3MessageLayout>, GenerateError> {
     let model = ridl_ir::codegen::lower(package, others);
     let ctx = Ctx::with_others(package, others, &model);
     codec_proto3::layout(&ctx)
