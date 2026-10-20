@@ -24,12 +24,20 @@
 //! This guard also covers the test-time edges of `ridl-backend-rust`.
 //! `ridl-backend-rust`'s FlatBuffers conformance test drives planus's
 //! runtime and code generator, and emits the `.fbs` it feeds them with
-//! `ridl-backend-flatbuffers`. All four edges are test-time only, for the
-//! same reason and one more: ADR-0020 decision 9 makes a backend an
-//! executable rather than a library other crates link.
+//! `ridl-backend-flatbuffers`; its proto3 conformance test emits the
+//! `.proto` with `ridl-backend-proto`, compiles it with `protox` and
+//! generates the `prost` oracle with `prost-build`. All seven edges are
+//! test-time only, for the same reason and one more: ADR-0020 decision 9
+//! makes a backend an executable rather than a library other crates link.
+//! `prost` itself is not a boundary of `ridl-backend-rust`: `ridl-ir`
+//! depends on it normally, for the IR's own messages, so it is in
+//! `ridl-backend-rust`'s normal closure by design and a dev-only rule over
+//! it would fail on that legitimate edge. What must stay out of reach of
+//! `prost` is `ridl-rt` and a generated package, which
+//! [`the_runtime_reaches_no_prost_crate`] covers for `ridl-rt`.
 //!
 //! **Which record each rule rests on.** The test-time-only rule for
-//! `ridl-backend-rust`'s four edges rests on ADR-0020 decision 9. The FlatBuffers
+//! `ridl-backend-rust`'s seven edges rests on ADR-0020 decision 9. The FlatBuffers
 //! design note's D-12 says that `ridl-rt`'s `flatbuffers` feature takes no
 //! external dependency, so the FlatBuffers runtime crate ADR-0020 decision 5
 //! permits there is not used and ADR-0020's RA-01 dependency ceiling stays
@@ -119,16 +127,46 @@ const BOUNDARIES: &[Boundary] = &[
         package: "ridl-backend-rust",
         oracle: "ridl-backend-flatbuffers",
     },
+    // The proto3 counterparts: the schema backend that emits the `.proto`
+    // the conformance test's oracle is generated from, the compiler that
+    // turns it into a descriptor set, and the generator that writes the
+    // `prost` oracle. `prost` itself is not listed; the module
+    // documentation says why.
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "ridl-backend-proto",
+    },
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "protox",
+    },
+    Boundary {
+        package: "ridl-backend-rust",
+        oracle: "prost-build",
+    },
 ];
 
 /// The planus crates: the FlatBuffers runtime, the code generator and the
 /// schema compiler.
 const PLANUS_CRATES: &[&str] = &["planus", "planus-codegen", "planus-translation"];
 
+/// The prost crates: the protobuf runtime and its derive, the code
+/// generator, the well-known types, the reflection library, and the `.proto`
+/// compiler with its parser.
+const PROST_CRATES: &[&str] = &[
+    "prost",
+    "prost-derive",
+    "prost-build",
+    "prost-types",
+    "prost-reflect",
+    "protox",
+    "protox-parse",
+];
+
 /// The packages under the stronger boundary of lane E16 (driver section 4,
-/// answer 8): none of them may reach any of [`PLANUS_CRATES`] through any
-/// kind of dependency edge, dev included, because a generated package links
-/// them.
+/// answer 8): none of them may reach any of [`PLANUS_CRATES`] or
+/// [`PROST_CRATES`] through any kind of dependency edge, dev included,
+/// because a generated package links them.
 const RUNTIME_PACKAGES: &[&str] = &["ridl-rt"];
 
 /// Every package reachable from `package` by NORMAL dependency edges only,
@@ -251,6 +289,41 @@ fn the_runtime_reaches_no_planus_crate() {
                  must not depend on planus in any way, not even as a \
                  dev-dependency (lane E16 driver, section 4, answer 8). The \
                  toolchain may reach planus through `ridl-descriptor` instead.\n",
+                path = path.unwrap_or_default(),
+            );
+        }
+    }
+}
+
+/// Every package in [`RUNTIME_PACKAGES`] holds: no crate of [`PROST_CRATES`]
+/// is reachable from it through any dependency edge, dev included.
+///
+/// `ridl-rt`'s `proto3` feature takes no external dependency, as its
+/// `flatbuffers` feature takes none (ADR-0021 decision 8): the proto3 wire
+/// helpers are its own. The graph is resolved with `--all-features`, for
+/// the reason [`the_runtime_reaches_no_planus_crate`] gives. The generated
+/// package's half of this rule is checked by `just demo` over
+/// `examples/cabin` once a crate carrying the proto3 codec is generated
+/// there.
+#[test]
+fn the_runtime_reaches_no_prost_crate() {
+    let metadata = cargo_metadata(None, true);
+    let names = package_names(&metadata);
+    for &package in RUNTIME_PACKAGES {
+        let reached = runtime_closure(&metadata, package);
+        for &forbidden in PROST_CRATES {
+            let path = path_to(&names, &reached, forbidden);
+            assert!(
+                path.is_none(),
+                "\n\
+                 `{forbidden}` is in `{package}`'s dependency closure: {path}\n\
+                 \n\
+                 `{package}` is the crate every generated package links, so it \
+                 must not depend on a prost crate in any way, not even as a \
+                 dev-dependency: its proto3 codec support is its own (ADR-0021 \
+                 decision 8). The toolchain reaches prost through `ridl-ir`, and \
+                 the proto3 conformance test of `ridl-backend-rust` reaches it \
+                 as a dev-dependency only.\n",
                 path = path.unwrap_or_default(),
             );
         }
