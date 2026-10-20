@@ -96,8 +96,10 @@ pub trait Interaction {
 /// [`Payload::MAX_SIZE`](crate::payload::Payload::MAX_SIZE), which is the one
 /// source of a payload's bound, so a table cannot drift from its codec. An
 /// encoding the package does not carry has no table, so naming it is a
-/// compile error at the call site (`Cabin: Sizes<Proto3>` is not satisfied),
-/// not a run-time error.
+/// compile error at the call site (`Cabin: Sizes<ReprC>` is not satisfied,
+/// because no backend emits a `repr(C)` codec), not a run-time error. An
+/// interface with a payload that has no bound in `E` has no table either: it
+/// implements [`Bounds<E>`] alone.
 ///
 /// Two buffers are interface-wide because the face fills them before it
 /// knows the payload type: a server reads a claim into one buffer and then
