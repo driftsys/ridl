@@ -967,15 +967,22 @@ mod tests {
         };
         let signed = || vec![backend("sign", "key", Some("release"))];
         let mut old = base();
-        // `Hmi` keeps its member unchanged, so a member is paired by its
-        // distribution's qualified name and not by the component alone.
+        old.components
+            .push(component("Cluster", &["Unit"], &[], &[]));
+        old.components.push(component("Gauge", &["Unit"], &[], &[]));
+        // Each component is in one distribution. `Gauge` stays in `Adas` and
+        // `Cluster` stays in `Hmi` with its key unchanged, so a paired member
+        // line is compared with its own earlier line and lists nothing.
         old.distributions = vec![
-            distribution("Adas", vec![member("Cruise", signed())]),
+            distribution(
+                "Adas",
+                vec![member("Cruise", signed()), member("Gauge", Vec::new())],
+            ),
             distribution("Body", vec![member("Panel", Vec::new())]),
-            distribution("Hmi", vec![member("Panel", Vec::new())]),
+            distribution("Hmi", vec![member("Cluster", signed())]),
         ];
         let mut new = old.clone();
-        new.distributions[0].members = vec![member("Panel", signed())];
+        new.distributions[0].members = vec![member("Panel", signed()), member("Gauge", Vec::new())];
         new.distributions[1].members = vec![member("Cruise", Vec::new())];
         assert_eq!(
             lines(&diff_systems(&old, &new)),
@@ -1005,16 +1012,20 @@ mod tests {
         );
 
         // The members of an added or removed distribution are listed with it,
-        // and a member line's keys are compared with an empty side.
+        // in the order of their lines, and a member line's keys are compared
+        // with an empty side.
         let mut absent = old.clone();
         absent.distributions.remove(0);
-        let added = [
-            "composition changed: veh.topology.Adas: (absent) -> distribution",
-            "composition changed: veh.topology.Adas/veh.topology.Cruise: (absent) -> member",
-            "composition changed: veh.topology.Adas/veh.topology.Cruise/attributes: \
-             [] -> [ sign.key = release ]",
-        ];
-        assert_eq!(lines(&diff_systems(&absent, &old)), added);
+        assert_eq!(
+            lines(&diff_systems(&absent, &old)),
+            [
+                "composition changed: veh.topology.Adas: (absent) -> distribution",
+                "composition changed: veh.topology.Adas/veh.topology.Cruise: (absent) -> member",
+                "composition changed: veh.topology.Adas/veh.topology.Cruise/attributes: \
+                 [] -> [ sign.key = release ]",
+                "composition changed: veh.topology.Adas/veh.topology.Gauge: (absent) -> member",
+            ]
+        );
         assert_eq!(
             lines(&diff_systems(&old, &absent)),
             [
@@ -1022,6 +1033,7 @@ mod tests {
                 "composition changed: veh.topology.Adas/veh.topology.Cruise: member -> (removed)",
                 "composition changed: veh.topology.Adas/veh.topology.Cruise/attributes: \
                  [ sign.key = release ] -> []",
+                "composition changed: veh.topology.Adas/veh.topology.Gauge: member -> (removed)",
             ]
         );
     }

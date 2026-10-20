@@ -1611,8 +1611,9 @@ contract changes, under two headings and with no verdict (rsdl reference §14):
 **placement changed** for a deployment or a machine added or removed, a machine
 made `external`, or an instance moved to another machine; **composition
 changed** for a component added to or removed from the system, an `offers` or
-`requires` line added or removed, `instances` changed, or a component made
-`external`. The verdict and the exit code are the contracts' alone.
+`requires` line added or removed, `instances` changed, a component made
+`external`, a distribution added or removed, or a member line added to or
+removed from a distribution. The verdict and the exit code are the contracts' alone.
 
 Moving `Panel` from machine `Front` to machine `Rear` in deployment `Desk`:
 
