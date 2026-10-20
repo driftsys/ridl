@@ -46,7 +46,7 @@ export class Calls {
    * `contract`, `corrupt` or `busy`; `undelivered` when `bound` milliseconds
    * pass with no `response`; `down` when the session ends. It rejects with a
    * `RangeError`, before `send` is called, when `bound` is not a finite number
-   * greater than 0.
+   * greater than 0 and at most 2147483647.
    */
   command(bound: number, send: (seq: bigint) => void): Promise<void> {
     return new Promise((resolve, reject) => {

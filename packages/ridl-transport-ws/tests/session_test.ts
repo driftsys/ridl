@@ -271,17 +271,17 @@ Deno.test("subscribe rejects with contract unknown-interaction on a refusing ans
   ]);
 });
 
-Deno.test("a publish whose seq is not greater than the held one is discarded as stale", async () => {
+Deno.test("a publish whose seq is below the held one is discarded as stale, and one equal to it is dropped", async () => {
   const h = await attached();
   await subscribed(h, SIGNAL);
   h.socket.deliver(live(SIGNAL, 3n, [1]));
-  const same = live(SIGNAL, 3n, [2]);
-  h.socket.deliver(same);
+  // The server reuses a seq only for an identical sample: a seq equal to the
+  // held one is dropped and not recorded.
+  h.socket.deliver(live(SIGNAL, 3n, [2]));
   const older = live(SIGNAL, 2n, [3]);
   h.socket.deliver(older);
   assert.deepEqual(h.session.sample(1, 2)?.payload, Uint8Array.from([1]));
   assert.deepEqual(h.notes, [
-    { note: "discarded", reason: "stale", frame: same },
     { note: "discarded", reason: "stale", frame: older },
   ]);
   h.socket.deliver(live(SIGNAL, 4n, [4]));
@@ -730,4 +730,203 @@ Deno.test("connect rejects, and does not throw, when the platform refuses the UR
     pending!,
     (e: unknown) => e instanceof Error && e.name === "SyntaxError",
   );
+});
+
+Deno.test("a refused attach closes with 1000 when the server does not close, and closed resolves on the close event", async () => {
+  const h = start();
+  const socket = h.sockets[0];
+  socket.open(SUBPROTOCOL);
+  socket.deliver({
+    form: "attached",
+    outcome: { outcome: "refused", reason: "encoding-unsupported" },
+  });
+  let refusal: AttachRefused | undefined;
+  await h.pending.catch((e) => {
+    refusal = e;
+  });
+  assert.ok(refusal instanceof AttachRefused);
+  // The client closes the connection itself.
+  assert.deepEqual(socket.closes, [{ code: 1000 }]);
+  // The closing handshake the client started completes.
+  socket.serverClose(1000);
+  assert.deepEqual(await refusal.closed, {
+    code: 1000,
+    reason: "",
+    refused: "encoding-unsupported",
+  });
+});
+
+Deno.test("a refused attach ends the session: a later message records nothing", async () => {
+  const h = start();
+  const socket = h.sockets[0];
+  socket.open(SUBPROTOCOL);
+  socket.deliver({
+    form: "attached",
+    outcome: { outcome: "refused", reason: "catalog-mismatch" },
+  });
+  await assert.rejects(h.pending, AttachRefused);
+  socket.deliver("hello");
+  socket.deliver({ form: "attached", outcome: { outcome: "accepted" } });
+  assert.deepEqual(h.notes, []);
+  assert.deepEqual(socket.closes, [{ code: 1000 }]);
+  socket.serverClose(1000);
+});
+
+Deno.test("a read of a subscribed signal settled by a live publish ignores its own reply with the same seq", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(live(SIGNAL, 6n, [6]));
+  // The read's own reply: the server reuses the seq of the identical sample.
+  h.socket.deliver(live(SIGNAL, 6n, [6]));
+  const sample = await reading;
+  assert.equal(sample.envelope.seq, 6n);
+  assert.equal(h.session.sample(1, 2)?.envelope.seq, 6n);
+  assert.equal(h.publishes.length, 1);
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("two different operations waiting on one identity are answered in order", async () => {
+  const h = await attached();
+  const subscribing = h.session.subscribe(SIGNAL);
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(accepted(SIGNAL));
+  h.socket.deliver(refusedAnswer(SIGNAL));
+  assert.deepEqual(h.notes, []);
+  await subscribing;
+  await assert.rejects(reading, unknownInteraction);
+});
+
+Deno.test("a frame that arrives after close records nothing and leaves the violation unset", async () => {
+  const h = await attached();
+  h.session.close();
+  h.socket.deliver("hello");
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  assert.deepEqual(h.notes, []);
+  assert.deepEqual(h.socket.closes, [{ code: 1000 }]);
+  h.socket.serverClose(1000);
+  assert.deepEqual(await h.session.closed, { code: 1000, reason: "" });
+});
+
+Deno.test("the default request stamp is the wall clock in microseconds", async () => {
+  const h = await attached();
+  const before = BigInt(Date.now()) * 1000n;
+  const calling = h.session.command(1, 9, new Uint8Array(0), { bound: 60_000 });
+  const after = BigInt(Date.now()) * 1000n;
+  const sent = lastSent(h.socket);
+  assert.equal(sent.form, "request");
+  const stamp = sent.form === "request" ? sent.envelope.stamp : -1n;
+  assert.ok(
+    before <= stamp && stamp <= after,
+    `stamp ${stamp} is not between ${before} and ${after}`,
+  );
+  h.session.close();
+  await assert.rejects(calling, isFailure("down"));
+});
+
+Deno.test("a discard as the first message, before attached, rejects connect with unexpected-form", async () => {
+  const h = start();
+  const socket = h.sockets[0];
+  socket.open(SUBPROTOCOL);
+  // An `Init` publish, which carries no payload, with one byte too many: the
+  // codec discards it.
+  const init = encode(publish(SIGNAL, 1n, { provenance: "init" }));
+  const message = new Uint8Array(init.length + 1);
+  message.set(init);
+  socket.deliver(message);
+  await assert.rejects(
+    h.pending,
+    (e: unknown) => e instanceof ProtocolError && e.cause === "unexpected-form",
+  );
+  assert.deepEqual(socket.closes, [{}]);
+});
+
+Deno.test("unsubscribe after the session ended sends nothing", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.serverClose(1001);
+  const sent = h.socket.sent.length;
+  assert.doesNotThrow(() => h.session.unsubscribe(SIGNAL));
+  assert.equal(h.socket.sent.length, sent);
+});
+
+Deno.test("a second close, or a close after a violation, sends no second close", async () => {
+  const h = await attached();
+  h.session.close();
+  h.session.close();
+  assert.deepEqual(h.socket.closes, [{ code: 1000 }]);
+
+  const v = await attached();
+  v.socket.deliver("hello");
+  v.session.close();
+  assert.deepEqual(v.socket.closes, [{}]);
+});
+
+Deno.test("the waiting queue is per kind: a read of a fixed and a subscribe of a signal with the same numbers are answered separately", async () => {
+  const h = await attached();
+  const fixed: Target = { kind: Kind.Fixed, iface: 1, ord: 5 };
+  const signal: Target = { kind: Kind.Signal, iface: 1, ord: 5 };
+  const reading = h.session.read(fixed);
+  const subscribing = h.session.subscribe(signal);
+  h.socket.deliver(accepted(signal));
+  h.socket.deliver(live(fixed, 0n, [0x0f]));
+  assert.deepEqual(h.notes, []);
+  await subscribing;
+  assert.deepEqual((await reading).payload, Uint8Array.from([0x0f]));
+  assert.equal(h.session.sample(1, 5), undefined);
+});
+
+Deno.test("the end of the session clears the held samples", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  assert.equal(h.session.sample(1, 2)?.envelope.seq, 1n);
+  h.socket.serverClose(1001);
+  assert.equal(h.session.sample(1, 2), undefined);
+});
+
+Deno.test("the encoding option sets the attach's encoding tag", () => {
+  for (const [encoding, tag] of [["flatbuffers", 1], ["repr-c", 3]] as const) {
+    const h = start("veh.cabin", { encoding });
+    h.sockets[0].open(SUBPROTOCOL);
+    const sent = lastSent(h.sockets[0]);
+    assert.equal(sent.form === "attach" && sent.encoding, tag, encoding);
+    h.sockets[0].serverClose(1000);
+    h.pending.catch(() => {});
+  }
+});
+
+Deno.test("an interface number or an ordinal outside 1 to 4294967295 is a RangeError and sends nothing", async () => {
+  const h = await attached();
+  const sent = h.socket.sent.length;
+  const bad: Target[] = [
+    { kind: Kind.Signal, iface: 0, ord: 2 },
+    { kind: Kind.Signal, iface: 1, ord: 2.5 },
+    { kind: Kind.Signal, iface: -1, ord: 2 },
+    { kind: Kind.Signal, iface: 1, ord: 4_294_967_296 },
+    { kind: Kind.Signal, iface: Number.NaN, ord: 2 },
+  ];
+  for (const t of bad) {
+    await assert.rejects(h.session.subscribe(t), RangeError);
+    await assert.rejects(h.session.read(t), RangeError);
+    assert.throws(() => h.session.unsubscribe(t), RangeError);
+    await assert.rejects(
+      h.session.command(t.iface, t.ord, new Uint8Array(0), { bound: 1000 }),
+      RangeError,
+    );
+    await assert.rejects(
+      h.session.query(t.iface, t.ord, new Uint8Array(0), { bound: 1000 }),
+      RangeError,
+    );
+  }
+  assert.equal(h.socket.sent.length, sent);
+  // The largest numbers are accepted.
+  const reading = h.session.read({
+    kind: Kind.Fixed,
+    iface: 4_294_967_295,
+    ord: 4_294_967_295,
+  });
+  assert.equal(h.socket.sent.length, sent + 1);
+  h.session.close();
+  await assert.rejects(reading, isFailure("down"));
 });

@@ -147,7 +147,8 @@ Deno.test("form 0 and form 11 are unknown codes", () => {
   assert.equal(violation([11]), "unknown-code");
 });
 
-Deno.test("kind 6 is an unknown code", () => {
+Deno.test("kind 0 and kind 6 are unknown codes", () => {
+  assert.equal(violation(patched(SUBSCRIBE, 1, 0)), "unknown-code");
   assert.equal(violation(patched(SUBSCRIBE, 1, 6)), "unknown-code");
 });
 
@@ -306,6 +307,33 @@ Deno.test("an answer outcome the form does not allow is an outcome not allowed",
       violation(patched(ANSWER, 10, outcome)),
       "outcome-not-allowed",
       `outcome ${outcome}`,
+    );
+  }
+});
+
+Deno.test("an attached outcome the form does not allow is an outcome not allowed", () => {
+  for (const outcome of [2, 3, 4, 5, 6, 7, 8]) {
+    assert.equal(
+      violation([0x02, outcome, 0]),
+      "outcome-not-allowed",
+      `outcome ${outcome}`,
+    );
+  }
+});
+
+Deno.test("encode refuses an attach whose hash is not 32 bytes", () => {
+  for (const length of [31, 33]) {
+    assert.throws(
+      () =>
+        encode({
+          form: "attach",
+          frameVersion: 1,
+          encoding: 1,
+          hash: new Uint8Array(length),
+          name: "v",
+        }),
+      RangeError,
+      `hash of ${length} bytes`,
     );
   }
 });

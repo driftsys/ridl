@@ -179,14 +179,21 @@ unit tests use to pass a fake one; the default is
   `attach` once the connection is open, and resolves with a `Session` on
   `attached(accepted)`. It rejects with `AttachRefused` (carrying the `reason`
   and a `closed` promise) on `attached(refused)`; with `ProtocolError` when the
-  server selected no subprotocol or broke the binding before `attached`; and
-  with `SessionError` `down` when the connection closed or failed first. A URL
-  the platform refuses rejects the promise; `connect` does not throw.
+  server broke the binding before `attached`; and with `SessionError` `down`
+  when the connection closed or failed first. A server that selected no
+  subprotocol is seen differently on the two platforms: in Deno, `connect`
+  rejects with `ProtocolError('no-subprotocol')`; in a browser, the platform
+  fails the handshake itself, so `connect` rejects with `SessionError` `down`
+  (close 1006). A URL the platform refuses rejects the promise; `connect` does
+  not throw.
 - `subscribe(target)` resolves on `answer(accepted)` and rejects with a
   `contract` `SessionError` on a refusing `answer`. `unsubscribe(target)` sends
   the frame and drops what the session held for the interaction. `read(target)`
   resolves with the sample of the next `publish` of that interaction.
-  `sample(iface, ord)` returns the held sample of a subscribed signal.
+  `sample(iface, ord)` returns the held sample of a subscribed signal. An
+  interface number or an ordinal that is not an integer from 1 to 4294967295
+  makes `subscribe`, `read`, `command` and `query` reject with a `RangeError`,
+  and `unsubscribe` throw one, and nothing is sent.
 - A `Sample` is
   `{ provenance: "init" | "live" | "invalid", envelope, payload }`, with
   `payload` a `Uint8Array` under `live` and `null` otherwise. `invalid` is
@@ -213,13 +220,17 @@ listeners later without a break.
 no catalog and no payload decoding:
 
 - **Signals (§5.1, §7).** One held sample per subscribed signal. A `publish`
-  whose `seq` is not greater than the held sample's is discarded and recorded
-  (`stale`). `unsubscribe` drops the held sample, and a `publish` of an
-  interaction that is not subscribed and has no `read` waiting is discarded and
-  recorded (`not-subscribed`), which covers frames in flight after an
-  `unsubscribe` (§6.2). `onPublish` is called for a `publish` that becomes the
-  held sample of a subscribed signal; a `publish` that only answers a `read` of
-  an unsubscribed signal settles the read and is not passed to `onPublish`.
+  whose `seq` is less than the held sample's is discarded and recorded
+  (`stale`). A `publish` whose `seq` equals the held sample's is dropped and not
+  recorded: the server reuses a session `seq` only for an identical sample (the
+  crate's D-24), so such a `publish` is the reply to a `read` that an earlier
+  `publish` already settled, or a duplicate. `unsubscribe` drops the held
+  sample, and a `publish` of an interaction that is not subscribed and has no
+  `read` waiting is discarded and recorded (`not-subscribed`), which covers
+  frames in flight after an `unsubscribe` (§6.2). `onPublish` is called for a
+  `publish` that becomes the held sample of a subscribed signal; a `publish`
+  that only answers a `read` of an unsubscribed signal settles the read and is
+  not passed to `onPublish`.
 - **Events (§5.2, §7).** Occurrences of a subscribed event are delivered in
   arrival order. A `seq` not greater than the last accepted one is discarded
   (`stale`); a gap between two accepted occurrences of one channel is recorded
@@ -251,7 +262,9 @@ no catalog and no payload decoding:
   `contract(unknown-interaction)`. A `publish` that answers a `read` of a
   subscribed signal with a `seq` equal to the held one settles the read and is
   not recorded as stale, because the crate reuses the session `seq` for a read
-  (the crate's D-24).
+  (the crate's D-24). When a live `publish` of the subscription settles the
+  `read` first, the read's own reply then arrives with the same `seq` and is
+  dropped, as the signals rule above says.
 - **An `unsubscribe` before its `subscribe`'s answer.** The accepted answer
   settles the `subscribe`, and the interaction is not subscribed, for a signal
   and for an event: frames in flight after an `unsubscribe` are discarded
@@ -264,8 +277,11 @@ no catalog and no payload decoding:
   violation, or the loss tracking.
 - **The end of a session (§3).** On a close or an error, every waiting operation
   and every call in flight rejects with `down`, every later operation rejects
-  with `down`, and `closed` resolves. A refused `attach` resolves `closed` after
-  the server's close 1000.
+  with `down`, and `closed` resolves. On a refused `attach` the client records
+  the refusal and closes with 1000 at once, so a provider that does not close
+  leaves no connection open; `AttachRefused.closed` resolves on the close event.
+  When the platform reports an `error` event, the session ends with 1006, and
+  the code and reason of the `close` event that follows are not reported.
 
 **D-10. A protocol violation closes without a code, because the platform cannot
 send 1002.** §11.1 item 4 has the receiver close with 1002, and 1003 for a text
@@ -273,14 +289,15 @@ message. The browser's `WebSocket.close` and Deno's accept only 1000 and 3000 to
 4999, and throw `InvalidAccessError` for 1002. The binding defines no code of
 its own, so a private code in 4000 to 4999 is not used. On a violation of the
 codec, a text message (`text-message`), a server that selected no subprotocol
-(`no-subprotocol`), or a form the provider must not send at that point
-(`unexpected-form`: a first message other than `attached`, a second `attached`,
-a consumer form) the session calls `close()` with no code, which sends a close
-frame with no status (the server sees 1005), records the violation through
-`onNote`, and ends with `violation` set in `Ended`. A message larger than a
-limit is not checked: the platform sets the limit, and the client cannot close
-with 1009. driftsys/ridl#991 asks the frame specification to state the close of
-a client that cannot choose a close code.
+(`no-subprotocol`, which Deno reports; a browser fails the handshake itself and
+the session ends with 1006, see D-8), or a form the provider must not send at
+that point (`unexpected-form`: a first message other than `attached`, a second
+`attached`, a consumer form) the session calls `close()` with no code, which
+sends a close frame with no status (the server sees 1005), records the violation
+through `onNote`, and ends with `violation` set in `Ended`. A message larger
+than a limit is not checked: the platform sets the limit, and the client cannot
+close with 1009. driftsys/ridl#991 asks the frame specification to state the
+close of a client that cannot choose a close code.
 
 **D-11. No client liveness timer.** §11.1 item 1 has either end treat no message
 of any kind within its liveness timeout as the end of the session. A browser's
@@ -291,8 +308,9 @@ timer would end healthy sessions. The session therefore ends on the platform's
 D-22) is the one that runs. A server that is gone is detected when the
 platform's connection fails; a server host that vanished without a TCP reset is
 detected only at the operating system's timeout, and every call still ends at
-its bound. driftsys/ridl#991 also asks the specification to state what a client
-that cannot see pings does.
+its bound. `connect`, `subscribe` and `read` have no bound: each waits until its
+answer arrives or the session ends. driftsys/ridl#991 also asks the
+specification to state what a client that cannot see pings does.
 
 **D-12. The default request stamp is wall-clock UTC in microseconds.** A
 `request`'s `stamp` is in the platform's synchronized time base, TAI (ridl

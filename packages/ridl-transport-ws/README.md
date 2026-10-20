@@ -17,7 +17,14 @@ The wire format is in the
 - On a protocol violation, the client closes the socket without a close code,
   because the platform cannot send the codes 1002, 1003 or 1009.
 - The client has no liveness timer, because a page cannot see the pings of the
-  server.
+  server. `connect`, `subscribe` and `read` have no time limit: each waits until
+  its answer arrives or the session ends.
+- When the server selects no subprotocol, `connect` rejects with
+  `ProtocolError('no-subprotocol')` in Deno. In a browser, the platform fails
+  the handshake itself, so `connect` rejects with `SessionError` `down` (close
+  1006).
+- When the server refuses the `attach`, the client closes the connection with
+  code 1000. `AttachRefused.closed` resolves on the close event.
 - The default request stamp is UTC from `Date.now()`, not TAI. To use a TAI
   clock, pass it with the `clock` option. The clock returns microseconds as a
   `bigint`.

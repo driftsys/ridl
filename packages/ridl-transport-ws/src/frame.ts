@@ -146,8 +146,10 @@ export type Frame =
   };
 
 /**
- * A message the receiver cannot read: the receiver records the frame and closes
- * the connection with code 1002.
+ * A message the receiver cannot read. The frame specification has the receiver
+ * record the frame and close the connection with code 1002; this package
+ * closes with no code, because the platform cannot send 1002 (see the
+ * session module).
  */
 export type Violation =
   | "too-short"
@@ -541,7 +543,7 @@ function encodedLength(frame: Frame, nameBytes: Uint8Array): number {
  * `contract(invalid-value)` and 0 everywhere else.
  *
  * @throws {RangeError} for an `attach` frame whose name is empty or longer
- * than 255 UTF-8 bytes.
+ * than 255 UTF-8 bytes, or whose hash is not 32 bytes long.
  */
 export function encode(frame: Frame): Uint8Array {
   const nameBytes = frame.form === "attach"
@@ -553,6 +555,9 @@ export function encode(frame: Frame): Uint8Array {
     case "attach":
       if (nameBytes.length === 0 || nameBytes.length > 255) {
         throw new RangeError("the unit name must hold 1 to 255 UTF-8 bytes");
+      }
+      if (frame.hash.length !== 32) {
+        throw new RangeError("the catalog hash must be 32 bytes long");
       }
       out[0] = FORM_ATTACH;
       view.setUint32(1, frame.frameVersion, true);

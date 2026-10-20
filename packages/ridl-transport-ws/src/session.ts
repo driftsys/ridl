@@ -126,9 +126,14 @@ export interface Ended {
  * - an `AttachError` or a `RangeError` from `attach`, before any socket is
  *   created, for an empty name, a name longer than 255 UTF-8 bytes, an
  *   unknown encoding or a hash that is not 32 bytes long;
- * - a {@link ProtocolError} when the server selected no subprotocol or broke
- *   the binding before `attached`;
- * - an {@link AttachRefused} when the provider refused the `attach`;
+ * - a {@link ProtocolError} when the server broke the binding before
+ *   `attached`. In Deno, a connection on which the server selected no
+ *   subprotocol rejects with `ProtocolError('no-subprotocol')`; in a browser,
+ *   the platform fails the handshake itself, so the promise rejects with a
+ *   {@link SessionError} `down` (close 1006);
+ * - an {@link AttachRefused} when the provider refused the `attach`. The
+ *   client then closes the connection with code 1000, and
+ *   {@link AttachRefused.closed} resolves on the close event;
  * - a {@link SessionError} with category `down` when the connection closed or
  *   failed first.
  */
@@ -190,6 +195,26 @@ function identity(t: Target): string {
   return `${t.kind}:${t.iface}:${t.ord}`;
 }
 
+/** The largest interface number and member ordinal: 2^32 - 1. */
+const MAX_NUMBER = 4_294_967_295;
+
+/**
+ * Throws a `RangeError` when `iface` or `ord` is not an integer from 1 to
+ * 4294967295, the numbers a frame can carry (frame specification §4).
+ */
+function checkNumbers(iface: number, ord: number): void {
+  checkNumber("interface number", iface);
+  checkNumber("ordinal", ord);
+}
+
+function checkNumber(name: string, n: number): void {
+  if (!Number.isInteger(n) || n < 1 || n > MAX_NUMBER) {
+    throw new RangeError(
+      `the ${name} must be an integer from 1 to ${MAX_NUMBER}, not ${n}`,
+    );
+  }
+}
+
 /** An open session. Created by {@link connect}. */
 export class Session {
   /**
@@ -246,10 +271,13 @@ export class Session {
   /**
    * Subscribes a signal or an event. Resolves on `answer(accepted)`; rejects
    * with a `contract` {@link SessionError} on a refusing `answer`. A target of
-   * another kind is sent as given, and the provider refuses it.
+   * another kind is sent as given, and the provider refuses it. Rejects with a
+   * `RangeError`, and sends nothing, when the interface number or the ordinal
+   * is not an integer from 1 to 4294967295.
    */
   subscribe(target: Target): Promise<void> {
     return new Promise((resolve, reject) => {
+      checkNumbers(target.iface, target.ord);
       if (this.#ended) return reject(new SessionError(DOWN));
       this.#enqueue(target, {
         op: "subscribe",
@@ -268,8 +296,12 @@ export class Session {
    * interaction still waiting for its answer resolves on that answer, but does
    * not make the interaction subscribed. Does nothing once the session has
    * ended.
+   *
+   * @throws {RangeError} when the interface number or the ordinal is not an
+   * integer from 1 to 4294967295; nothing is sent.
    */
   unsubscribe(target: Target): void {
+    checkNumbers(target.iface, target.ord);
     if (this.#ended) return;
     this.#send({ form: "unsubscribe", target });
     for (const w of this.#waiting.get(identity(target)) ?? []) {
@@ -289,10 +321,13 @@ export class Session {
    * Reads a signal or a `fixed` once. Resolves with the sample of the next
    * `publish` of that interaction; rejects with a `contract`
    * {@link SessionError} on a refusing `answer`. A read does not subscribe:
-   * the sample is held only when the signal is already subscribed.
+   * the sample is held only when the signal is already subscribed. Rejects
+   * with a `RangeError`, and sends nothing, when the interface number or the
+   * ordinal is not an integer from 1 to 4294967295.
    */
   read(target: Target): Promise<Sample> {
     return new Promise((resolve, reject) => {
+      checkNumbers(target.iface, target.ord);
       if (this.#ended) return reject(new SessionError(DOWN));
       this.#enqueue(target, { op: "read", resolve, reject });
       this.#send({ form: "read", target });
@@ -312,7 +347,8 @@ export class Session {
    * answered, `undelivered` when `opts.bound` milliseconds pass with no
    * `response`, `down` when the session has ended or ends first. Rejects with
    * a `RangeError`, and sends nothing, when `opts.bound` is not a finite number
-   * greater than 0.
+   * of milliseconds greater than 0 and at most 2147483647, or when `iface` or
+   * `ord` is not an integer from 1 to 4294967295.
    */
   command(
     iface: number,
@@ -320,6 +356,11 @@ export class Session {
     args: Uint8Array,
     opts: { bound: number },
   ): Promise<void> {
+    try {
+      checkNumbers(iface, ord);
+    } catch (e) {
+      return Promise.reject(e);
+    }
     return this.#calls.command(
       opts.bound,
       (seq) => this.#request(Kind.Command, iface, ord, seq, args),
@@ -329,8 +370,9 @@ export class Session {
   /**
    * Sends a query, as {@link Session.command} sends a command. Resolves with
    * the payload of the `reply`, an empty `Uint8Array` when the reply has no
-   * bytes. Rejects as a command does, except that a passed bound rejects with
-   * `timeout`.
+   * bytes. Rejects as a command does, including the `RangeError` for a bound
+   * that is not greater than 0 and at most 2147483647 milliseconds, except
+   * that a passed bound rejects with `timeout`.
    */
   query(
     iface: number,
@@ -338,6 +380,11 @@ export class Session {
     args: Uint8Array,
     opts: { bound: number },
   ): Promise<Uint8Array> {
+    try {
+      checkNumbers(iface, ord);
+    } catch (e) {
+      return Promise.reject(e);
+    }
     return this.#calls.query(
       opts.bound,
       (seq) => this.#request(Kind.Query, iface, ord, seq, args),
@@ -472,6 +519,12 @@ export class Session {
     }
     this.#refused = frame.outcome.reason;
     this.#ended = true;
+    // The client closes the connection itself, so that a provider that does
+    // not close leaves no connection open.
+    if (!this.#closeSent) {
+      this.#closeSent = true;
+      this.#socket.close(1000);
+    }
     opening?.reject(new AttachRefused(frame.outcome.reason, this.closed));
   }
 
@@ -532,7 +585,12 @@ export class Session {
       return;
     }
     const held = this.#held.get(ch);
-    if (held && frame.envelope.seq <= held.envelope.seq) {
+    // The server reuses a session `seq` only for an identical sample (the
+    // crate's D-24), so a `seq` equal to the held one is the reply to a read
+    // that a live publish already settled, or a duplicate: it is dropped and
+    // not recorded.
+    if (held && frame.envelope.seq === held.envelope.seq) return;
+    if (held && frame.envelope.seq < held.envelope.seq) {
       // A frame that answered a read is not a discard, though it changes nothing.
       if (reads.length === 0) {
         this.#note({ note: "discarded", reason: "stale", frame });
