@@ -127,18 +127,20 @@ design in each:
   WebSocket binding (the frame specification §11.1), which cover the frame
   envelope and the `attach` handshake.
 - The minimum of Rust 1.83 and edition 2021 applies to `ridl-rt`,
-  `ridl-rt-conformance` and `ridl-loopback`. `ridl-descriptor` has its own
-  minimum, Rust 1.88 and edition 2024, because `planus` 1.3.0 declares 1.88. The
-  generated crate compiles as edition 2021 with Rust 1.83 with every cargo
-  feature on, and its emitted manifest declares edition 2021 and no
-  `rust-version`. `just compat-check` checks this for the crate emitted for the
-  `veh-cluster` corpus with every feature on, and for the crate emitted for
-  `examples/cabin` with its `std` feature on; `just freeze-check` does not.
+  `ridl-rt-conformance`, `ridl-loopback` and, from 0.12.0, `ridl-transport-ws`.
+  `ridl-descriptor` has its own minimum, Rust 1.88 and edition 2024, because
+  `planus` 1.3.0 declares 1.88. The generated crate compiles as edition 2021
+  with Rust 1.83 with every cargo feature on, and its emitted manifest declares
+  edition 2021 and no `rust-version`. `just compat-check` checks this for the
+  crate emitted for the `veh-cluster` corpus with every feature on, and for the
+  crate emitted for `examples/cabin` with its `std` feature on;
+  `just freeze-check` does not.
 
 ## Decision
 
 1. **Ten surfaces are frozen from 0.10.0.** A change that removes or alters what
-   a user depends on in one of them is a break.
+   a user depends on in one of them is a break. A crate added to a surface later
+   is frozen from the first release that publishes it.
 
    | Surface                 | What a user depends on                                                                                                                                                        |
    | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -275,29 +277,29 @@ design in each:
      same two steps.
 
 5. **The minimum supported Rust version is a frozen surface.** Raising the
-   `rust-version` of `ridl-rt`, `ridl-rt-conformance` or `ridl-loopback`, or
-   dropping edition 2021 for them, is a break. Raising the `rust-version` of
-   `ridl-descriptor` above 1.88, or changing its edition, is a break. The `msrv`
-   dump checks all four crates and fails on any change of a value, a lower
-   `rust-version` included, so such a change also needs the approval of
-   decision 4. The generated crate must compile as edition 2021 with Rust 1.83
-   with every cargo feature on, and `ridl build` writes `edition = "2021"` in
-   its manifest, so a Rust 1.83 user builds it without editing the manifest. The
-   manifest declares no `rust-version`. `just compat-check` checks the crate
-   emitted for the `veh-cluster` corpus with every feature on and with default
-   features off, and fails when its emitted manifest does not declare edition
-   2021. It also checks the crate emitted for `examples/cabin` with its `std`
-   feature on. The default-features-off check was added for release 0.11 when
-   driftsys/ridl#874 was fixed; the 0.10.0 generated crate did not compile on
-   Rust 1.83 in that combination. The minimum covers the crates RIDL publishes
-   and emits, not later releases of their dependencies: a release of a
-   dependency, such as `regex`, can require a later Rust. A Rust 1.83 user
-   therefore resolves dependencies with a resolver that reads `rust-version` —
-   cargo 1.84 or later with `CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback`
-   and a `rust-version` of 1.83 on the user's own package, or a lockfile
-   resolved that way — and `just compat-check` resolves its lockfiles the same
-   way. This restates ADR-0021 decision 10 as a frozen surface and adds the
-   `msrv` check.
+   `rust-version` of `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback` or
+   `ridl-transport-ws`, or dropping edition 2021 for them, is a break. Raising
+   the `rust-version` of `ridl-descriptor` above 1.88, or changing its edition,
+   is a break. The `msrv` dump checks every runtime crate and fails on any
+   change of a value, a lower `rust-version` included, so such a change also
+   needs the approval of decision 4. The generated crate must compile as edition
+   2021 with Rust 1.83 with every cargo feature on, and `ridl build` writes
+   `edition = "2021"` in its manifest, so a Rust 1.83 user builds it without
+   editing the manifest. The manifest declares no `rust-version`.
+   `just compat-check` checks the crate emitted for the `veh-cluster` corpus
+   with every feature on and with default features off, and fails when its
+   emitted manifest does not declare edition 2021. It also checks the crate
+   emitted for `examples/cabin` with its `std` feature on. The
+   default-features-off check was added for release 0.11 when driftsys/ridl#874
+   was fixed; the 0.10.0 generated crate did not compile on Rust 1.83 in that
+   combination. The minimum covers the crates RIDL publishes and emits, not
+   later releases of their dependencies: a release of a dependency, such as
+   `regex`, can require a later Rust. A Rust 1.83 user therefore resolves
+   dependencies with a resolver that reads `rust-version` — cargo 1.84 or later
+   with `CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback` and a
+   `rust-version` of 1.83 on the user's own package, or a lockfile resolved that
+   way — and `just compat-check` resolves its lockfiles the same way. This
+   restates ADR-0021 decision 10 as a frozen surface and adds the `msrv` check.
 
 6. **The gate table says which gate covers which surface.** The `baseline`
    column was empty on the day this record was accepted. A blank cell means that
@@ -312,7 +314,7 @@ design in each:
    | Diagnostics and lints   | `diagnostics`                                                                  | the language lane                    | `2a6a94a8`             |
    | CLI                     | `cli`                                                                          | the developer-experience lane        | `4edf558a`             |
    | Generated Rust crate    | `generated-crate` (`cargo semver-checks`)                                      | the codegen lane                     | `2e3a3c9c`             |
-   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            | `69d23ab7`             |
+   | Runtime crates          | `runtime-crates` (`cargo semver-checks`)                                       | the wire and runtime lane            | `v0.12.0`              |
    | Codegen plugin protocol | `codegen-protocol`                                                             | the codegen lane                     | `a3a0ac21`             |
    | MCP tools               | `mcp`                                                                          | the release and policy lane, at once | `3c3301df`             |
    | Wire format             | `wire`: encoding names, `.proto` and `.fbs` lines, catalog hash, frame vectors | the wire and runtime lane            | `e6620b0e`             |

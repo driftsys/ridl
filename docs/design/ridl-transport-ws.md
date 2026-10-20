@@ -687,10 +687,9 @@ The test targets `serve` and `scenario` require the `server` feature, so
   dev-dependency table. The recipe also fails when the crate gains a workspace
   dependency outside `ridl-rt`, `ridl-rt-conformance` and `ridl-loopback`.
 - The crate is published after `ridl-rt` by `crates-io-release.yml`.
-- The crate does not opt into the `cargo-semver-checks` lint metadata and is not
-  a freeze surface: `xtask/src/freeze/rust_api.rs` asserts that the crates
-  opting in are exactly `RUNTIME_CRATES`, and the crate has no release to
-  compare against. Adding it after its first release is driftsys/ridl#987.
+- The crate is in the `runtime-crates` and `msrv` freeze surfaces from 0.12.0,
+  its first release, and opts into the `cargo-semver-checks` lint metadata
+  (ADR-0029).
 
 ## Adding the stand-in ports later
 
@@ -726,7 +725,6 @@ What the crate already does so that the addition is local:
   weighs against.
 - The retention of a settled response for a provider without bounds, a question
   for the frame specification (driftsys/ridl#986).
-- The freeze surfaces (driftsys/ridl#987).
 - The stand-in ports (driftsys/ridl#988).
 - A public Rust client, and `examples/cabin` over the transport
   (driftsys/ridl#989).
