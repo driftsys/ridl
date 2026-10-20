@@ -3,4 +3,4 @@ name = "veh.cabin"
 version = "1.0.0"
 
 [backend.rust]
-encodings = ["flatbuffers"]
+encodings = ["flatbuffers", "proto3"]

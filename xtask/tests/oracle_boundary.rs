@@ -61,11 +61,12 @@
 //! cannot see it: `ridl build` writes it into `examples/cabin/generated/`,
 //! and a second crate into `examples/cabin/generated-corpus/`, neither of
 //! which is in git, and `examples/cabin` is its own cargo workspace
-//! (`AGENTS.md`). [`the_generated_crate_reaches_no_planus_crate`] reads that
-//! workspace's resolved graph, so it can run only after both crates are
-//! generated. It is `#[ignore]`d for a plain `cargo test`, and `just demo`
-//! runs it right after `ridl build` writes them, so `just build` and CI
-//! run it on every change.
+//! (`AGENTS.md`). [`the_generated_crate_reaches_no_planus_crate`] and
+//! [`the_generated_crate_reaches_no_prost_crate`] read that workspace's
+//! resolved graph, so they can run only after both crates are generated.
+//! They are `#[ignore]`d for a plain `cargo test`, and `just demo` runs them
+//! right after `ridl build` writes them, so `just build` and CI run them on
+//! every change.
 //!
 //! This guard reads the resolved dependency graph instead, via
 //! `cargo metadata --format-version 1`, because that is the one place the
@@ -375,9 +376,9 @@ fn the_rust_backend_takes_its_oracles_as_dev_dependencies_only() {
 /// `flatbuffers` feature takes none (ADR-0021 decision 8): the proto3 wire
 /// helpers are its own. The graph is resolved with `--all-features`, for
 /// the reason [`the_runtime_reaches_no_planus_crate`] gives. The generated
-/// package's half of this rule is checked by `just demo` over
-/// `examples/cabin` once a crate carrying the proto3 codec is generated
-/// there.
+/// package's half of this rule is
+/// [`the_generated_crate_reaches_no_prost_crate`], which `just demo` runs
+/// over `examples/cabin`.
 #[test]
 fn the_runtime_reaches_no_prost_crate() {
     let metadata = cargo_metadata(None, true);
@@ -436,6 +437,40 @@ fn the_generated_crate_reaches_no_planus_crate() {
              workspace of the crate `ridl build` generates. A generated \
              package must not depend on planus in any way (lane E16 driver, \
              section 4, answer 8): look for the edge in the generated \
+             manifest, in `ridl-rt`, or in `ridl-loopback`.\n",
+        );
+    }
+}
+
+/// No prost crate is in the resolved graph of `examples/cabin`, whose
+/// generated crates carry the proto3 codec (`examples/cabin/ridl.toml` and
+/// the veh-cluster corpus manifest name `proto3`): the codec a generated
+/// package carries is its own, over `ridl-rt`'s `proto3` module, and links no
+/// prost crate (ADR-0021 decision 8).
+///
+/// Ignored for a plain `cargo test` for the reason
+/// [`the_generated_crate_reaches_no_planus_crate`] gives, and run by
+/// `just demo` beside it. The graph is resolved with `--all-features`.
+#[test]
+#[ignore = "needs examples/cabin/generated and generated-corpus, which `just demo` writes; `just demo` runs it"]
+fn the_generated_crate_reaches_no_prost_crate() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/cabin/Cargo.toml");
+    let metadata = cargo_metadata(Some(&manifest), true);
+    let names = package_names(&metadata);
+    assert!(
+        names.values().any(|&name| name == "veh_cabin"),
+        "the resolved graph of `examples/cabin` has no `veh_cabin` package — \
+         did `ridl build` write `examples/cabin/generated/` and \
+         `examples/cabin/generated-corpus/`?"
+    );
+    for forbidden in PROST_CRATES {
+        assert!(
+            !names.values().any(|name| name == forbidden),
+            "\n\
+             `{forbidden}` is in the resolved graph of `examples/cabin`, the \
+             workspace of the crate `ridl build` generates. A generated \
+             package must not depend on prost in any way: its proto3 codec is \
+             its own (ADR-0021 decision 8). Look for the edge in the generated \
              manifest, in `ridl-rt`, or in `ridl-loopback`.\n",
         );
     }

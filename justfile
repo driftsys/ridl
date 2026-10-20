@@ -541,9 +541,12 @@ compat-check: toolchain-check
     echo "compat-check: $minimum, edition 2021 (the emitted cabin crate)"
     # `std` is on for both: the emitted crate's `blocking` module is under its
     # `std` feature and names `ridl_rt::task::block_on`, which `ridl-rt`'s
-    # `std` feature gates, so the cell covers that module too.
+    # `std` feature gates, so the cell covers that module too. `ridl-rt`'s
+    # `flatbuffers` and `proto3` features are the two codecs cabin's manifest
+    # names; the emitted manifest turns both on for `ridl-rt`. The crate has
+    # no feature of that name, and its code carries no `cfg` on either codec.
     rustup run "$minimum" rustc --edition 2021 --crate-type rlib --crate-name ridl_rt \
-        --cfg 'feature="flatbuffers"' --cfg 'feature="std"' \
+        --cfg 'feature="flatbuffers"' --cfg 'feature="proto3"' --cfg 'feature="std"' \
         "$pkg/src/lib.rs" -o "$cabin/libridl_rt.rlib"
     rustup run "$minimum" rustc --edition 2021 --crate-type lib --crate-name veh_cabin \
         --emit=metadata -D warnings --cfg 'feature="std"' \
@@ -826,19 +829,23 @@ compat-check: toolchain-check
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
 # corpus drawing a clippy diagnostic, with default features or without them, or
 # cargo finishing no build there; `cargo doc` on either generated crate drawing
-# a broken or private intra-doc link; a planus crate in the resolved graph of
-# `examples/cabin`; the planus check running no test or more than one, which is
-# what a renamed test or a changed filter does.
+# a broken or private intra-doc link; a planus or a prost crate in the
+# resolved graph of `examples/cabin`; the planus and prost checks running other
+# than exactly two tests, which is what a renamed test or a changed filter
+# does.
 #
 # The generated rustdoc of both crates is built with `cargo doc` and the flags
 # denying broken intra-doc links, private intra-doc links and redundant
 # explicit links. An unresolved link, a private target or an explicit target
 # already resolved by its text fails the run.
 #
-# The planus check is `xtask/tests/oracle_boundary.rs`'s
-# `the_generated_crate_reaches_no_planus_crate`, which is ignored for a plain
-# `cargo test` because it needs the generated crate this recipe writes. A
-# generated package must not depend on planus (ADR-0014 decision 15).
+# The planus and prost checks are `xtask/tests/oracle_boundary.rs`'s
+# `the_generated_crate_reaches_no_planus_crate` and
+# `the_generated_crate_reaches_no_prost_crate`, which are ignored for a plain
+# `cargo test` because they need the generated crates this recipe writes. A
+# generated package must not depend on planus (ADR-0014 decision 15) or on
+# prost (ADR-0021 decision 8); both generated crates carry the FlatBuffers
+# and the proto3 codecs.
 #
 # The lock pins `ridl-rt`, whose version this recipe does not own, and the
 # generated crate, whose dependencies come from the emitter. A version bump or
@@ -859,17 +866,17 @@ demo:
     # string, bytes, array, map or pattern, and this workspace has each of them.
     "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
         --out-dir examples/cabin/generated-corpus
-    # This line is the only one that runs the generated crate's planus check,
-    # which is ignored for a plain `cargo test`. A filter that matches no test
-    # exits 0, so a renamed test would pass here unseen: the result line must
-    # say that exactly one test ran and passed.
-    if ! planus_check="$(cargo test --locked -p xtask --test oracle_boundary -- --ignored --exact the_generated_crate_reaches_no_planus_crate 2>&1)"; then
-        printf '%s\n' "$planus_check"
+    # This line is the only one that runs the generated crate's planus and
+    # prost checks, which are ignored for a plain `cargo test`. A filter that
+    # matches no test exits 0, so a renamed test would pass here unseen: the
+    # result line must say that exactly two tests ran and passed.
+    if ! oracle_check="$(cargo test --locked -p xtask --test oracle_boundary -- --ignored --exact the_generated_crate_reaches_no_planus_crate the_generated_crate_reaches_no_prost_crate 2>&1)"; then
+        printf '%s\n' "$oracle_check"
         exit 1
     fi
-    printf '%s\n' "$planus_check"
-    if ! printf '%s\n' "$planus_check" | grep -q '^test result: ok\. 1 passed; 0 failed'; then
-        echo "demo: the generated crate's planus check did not run exactly one test" >&2
+    printf '%s\n' "$oracle_check"
+    if ! printf '%s\n' "$oracle_check" | grep -q '^test result: ok\. 2 passed; 0 failed'; then
+        echo "demo: the generated crate's planus and prost checks did not run exactly two tests" >&2
         exit 1
     fi
     # The emitted `lib.rs` allows the emitter's own lints; `expect` makes both a
