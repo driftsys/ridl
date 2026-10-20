@@ -339,9 +339,9 @@ a test target instead.
   both tests can then assert `Init` first, in any order (builder check, settled
   as the author's call).
 - **Cost.** GitHub's `ubuntu-latest` image ships Google Chrome, so CI downloads
-  no browser. Locally the gate needs Deno and a Chromium-family browser; a
-  missing one fails the recipe with the way to install it (ADR-0009 decision
-  10). The run adds about 10 s plus the example's build to the gate.
+  no browser. The Deno test needs Deno and the pinned Rust and adds a few
+  seconds plus the example's build to `just build`. The browser test runs in CI
+  only (D-16), so no contributor needs a browser to pass `just build`.
 
 A browser proof that runs no browser — type-checking the package against the DOM
 library and bundling it — was considered and is kept as a second check, but it
@@ -363,34 +363,48 @@ hand-written bytes.**
   that the test drives frame by frame.
 - `tests/version_test.ts`: `deno.json`'s version equals the workspace version.
 
-**D-16. The gates.** Two recipes, both members of `build`, both in the
-`gate-parity` expected list, and both run by CI:
+**D-16. The gates.** Three recipes. Two are members of `build`, in the
+`gate-parity` expected list, and run by CI; the third runs in CI only:
 
-| Recipe     | Runs                                                                                                                                                       | Needs                            |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| `ts-check` | `deno fmt --check`, `deno lint`, `deno check` of the package for Deno and against the DOM library, `deno test` of the unit tests, `deno publish --dry-run` | Deno                             |
-| `ts-e2e`   | `cargo build` of the example, then the Deno and browser tests against it                                                                                   | Deno, the pinned Rust, a browser |
+| Recipe           | Runs                                                                                                                                                       | Needs                            | In `build` |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------- |
+| `ts-check`       | `deno fmt --check`, `deno lint`, `deno check` of the package for Deno and against the DOM library, `deno test` of the unit tests, `deno publish --dry-run` | Deno                             | yes        |
+| `ts-e2e`         | `cargo build` of the example, then the Deno end-to-end test against it                                                                                     | Deno, the pinned Rust            | yes        |
+| `ts-browser-e2e` | `cargo build` of the example, then the headless-browser test against it                                                                                    | Deno, the pinned Rust, a browser | no         |
 
-`ts-check` is a static check and joins `pre-push`; `ts-e2e` does not, as
-`compile` and `test` do not. In CI both run in a new `typescript` job that
-installs Deno at a pinned `DENO_VERSION` in the workflow's `env:` (as
-`JUST_VERSION` and `MDBOOK_VERSION` are, ADR-0009 decision 8), the pinned Rust
+Ruling (main session, 2026-10-20): the browser proof runs in CI only — a
+contributor's `just build` must not need a browser — at the cost that a
+browser-only regression is first seen in CI, not locally. `ts-browser-e2e` is
+outside `build`, as `vscode-verify` is, so `gate-parity` does not cover it; the
+CI step that runs it is checked by reading, and the recipe's comment says so.
+AGENTS.md's command list and CONTRIBUTING's description of the gates state it.
+
+`ts-check` is a static check and joins `pre-push`; `ts-e2e` and `ts-browser-e2e`
+do not, as `compile` and `test` do not. In CI the three run in a new
+`typescript` job that installs Deno at the pinned version, the pinned Rust
 toolchain with the cache, and `just`. The job is path-filtered with the `rust`
 flag, which already runs for any path outside the skip list, `packages/`
-included. `./bootstrap` adds Deno and a browser to the tools it names.
+included.
+
+**The Deno pin.** The version is in one file, `.deno-version` at the root
+(`2.9.5`). The CI job reads it to download that release. `./bootstrap` installs
+that release with Deno's official installer when `deno` is not on `PATH`, and
+prints a note, without replacing it, when a different version is installed — the
+reasoning of ADR-0009 decision 8 for not forcing a global downgrade.
+
 `deno fmt` and `deno lint` are limited to `.ts` files in `deno.json`, so prim
 stays the formatter of the Markdown and JSON (AGENTS.md "prim owns the
 connective tissue"). `just story-id-check` gains `packages` as a scanned tree.
-_Cost if wrong:_ a contributor without a browser cannot pass `just build`; the
-alternative is a recipe outside `build`, run by a separate workflow as
-`vscode-verify` is, which ADR-0009 permits but which leaves the browser proof
-off the local gate.
+_Cost if wrong:_ see the ruling above.
 
 **D-17. The commit scope is `ts-transport-ws`.** The crate already holds the
 scope `ridl-transport-ws`, and `.git-std.toml` lists one scope per crate or
 package. _Cost if wrong:_ one line in `.git-std.toml`.
 
-**D-18. Records.** The as-built description goes to a new design record,
+**D-18. Records.** The design record and the package README state the two limits
+of D-10 and D-11 (no close code on a violation, no client liveness timer), and
+the README states D-12's UTC default and the `clock` option (main session
+ruling, 2026-10-20). The as-built description goes to a new design record,
 `docs/design/ridl-transport-ws-ts.md`, at gardening, beside the crate's. The
 frame specification's §11.1 opening, which names "the TypeScript WebSocket
 package of decision 7", is updated to name the package and its path. ADR-0020
@@ -414,7 +428,7 @@ the package is not published and no generated code uses it yet.
 | Node-first, an npm package with `package.json` and `tsc`                                    | rejected | the roadmap names Deno and the browser; a Node toolchain adds `node_modules` and a lockfile to the gate for no target in scope; JSR produces an npm build when one is wanted             |
 | Puppeteer, Playwright or Astral to drive the browser                                        | rejected | each fetches a dependency tree, and Playwright and Astral download a browser; the DevTools Protocol over Deno's `WebSocket` needs none, and CI's image already has Chrome                |
 | the browser proof as type-checking and bundling only                                        | rejected | shows that the package compiles for a browser, not that a page receives a signal (kept as part of `ts-check`)                                                                            |
-| the browser test in a recipe outside `build`, in its own workflow                           | rejected | ADR-0009's point is that the local gate and CI run the same checks; kept as the fallback if a browser on every contributor's machine is refused                                          |
+| the browser test in `build`, with a browser required on every contributor's machine         | rejected | ruled by the main session: a contributor's `just build` must not need a browser (D-16)                                                                                                   |
 | reuse the crate's `provider_process` test as the server                                     | rejected | it serves one connection and runs only as an ignored test through `cargo test`; an example serves the Deno and the browser test from one process and is a plain binary                   |
 | a new Rust crate or an `xtask` subcommand as the test server                                | rejected | a new crate is a new publication question and scope; `xtask` does not depend on the loopback or the transport                                                                            |
 | `stamp` and `seq` as `number`                                                               | rejected | not exact past 2^53 (D-6)                                                                                                                                                                |

@@ -106,10 +106,15 @@ does", read that file.
 - [ ] **Step 2: Run it before `deno.json` exists**:
       `cd packages/ridl-transport-ws && deno test --allow-read tests/version_test.ts`
       — expected: FAIL (file not found).
-- [ ] **Step 3: Create `deno.json`, `mod.ts`, `README.md` (a short description:
-      what the package is, that it carries payload bytes unread, the Deno and
-      browser targets, that it is not yet published, and a link to
-      `docs/specification/frame-specification.md` §11.1), `LICENSE`.**
+- [ ] **Step 3: Create `deno.json`, `mod.ts`, `README.md` (the README also
+      states three limits: on a protocol violation the client closes with no
+      code, because the platform cannot send 1002, 1003 or 1009; there is no
+      client liveness timer, because a page cannot see the server's pings; the
+      default request stamp is UTC from `Date.now()`, not TAI, and a TAI clock
+      is passed with the `clock` option, in microseconds as a `bigint`. Then a
+      short description: what the package is, that it carries payload bytes
+      unread, the Deno and browser targets, that it is not yet published, and a
+      link to `docs/specification/frame-specification.md` §11.1), `LICENSE`.**
 - [ ] **Step 4: Run** the test again — expected: PASS. Run
       `deno fmt --check && deno lint` in the package — expected: clean.
 - [ ] **Step 5: Commit** `feat(ts-transport-ws): add the package skeleton` (the
@@ -520,8 +525,10 @@ Behaviour (design D-9):
 - [ ] **Step 3: Build the example and run both**:
       `cargo build -p ridl-transport-ws --example loopback_server` then, in the
       package,
-      `RIDL_TRANSPORT_WS_SERVER=<abs path to target/debug/examples/loopback_server> deno test --allow-all e2e/`
-      — expected: 2 passed.
+      `RIDL_TRANSPORT_WS_SERVER=<abs path to target/debug/examples/loopback_server> deno test --allow-all e2e/deno_test.ts`
+      and the same with `e2e/browser_test.ts` — expected: 1 passed each. The two
+      test files are run separately because the browser test is a CI-only gate
+      (Task 7).
 - [ ] **Step 4: Prove the tests can fail** (do not commit): make the example's
       `provider_step` command branch set the signal to the argument with its
       first byte changed — both tests fail on the payload; restore.
@@ -530,57 +537,77 @@ Behaviour (design D-9):
 
 ### Task 7: The gates, CI and bootstrap
 
+Ruling (main session, 2026-10-20): the browser proof runs in CI only — a
+contributor's `just build` must not need a browser. See design D-16.
+
 **Files:**
 
-- Modify: `justfile` — add recipes `ts-check` and `ts-e2e`; add both to `build`;
-  add both to `gate-parity`'s `expected` list; add `ts-check` to `pre-push`; add
-  `packages` to `story-id-check`'s `scanned` array and to the literal it is
-  compared against, and to the comment listing the scanned trees.
-- Modify: `.github/workflows/ci.yml` — `DENO_VERSION: 2.9.5` in `env:` beside
-  `JUST_VERSION`; a new job `typescript` (`needs: changes`,
+- Create: `.deno-version` at the root, one line `2.9.5`.
+- Modify: `justfile` — add recipes `ts-check`, `ts-e2e` and `ts-browser-e2e`;
+  add `ts-check` and `ts-e2e` (not `ts-browser-e2e`) to `build` and to
+  `gate-parity`'s `expected` list; add `ts-check` to `pre-push`; add `packages`
+  to `story-id-check`'s `scanned` array, to the literal it is compared against,
+  and to the comment listing the scanned trees. The comment above
+  `ts-browser-e2e` says it is outside `build` on purpose (a contributor's build
+  needs no browser), that CI's `typescript` job runs it, and that `gate-parity`
+  does not cover it, so its CI step is checked by reading.
+- Modify: `.github/workflows/ci.yml` — a new job `typescript` (`needs: changes`,
   `if: needs.changes.outputs.rust == 'true'`, ubuntu-latest): checkout,
   `rustup show`, `Swatinem/rust-cache@v2`, install `just` as the other jobs do,
-  install Deno by downloading
-  `https://github.com/denoland/deno/releases/download/v${DENO_VERSION}/deno-x86_64-unknown-linux-gnu.zip`
-  into `$HOME/.local/bin`, then `run: just ts-check` and `run: just ts-e2e`; add
-  `typescript` to the `ci` aggregate's `needs`; extend the comment on the
-  `changes` job to say `typescript` uses the `rust` flag.
-- Modify: `bootstrap` —
-  `require deno "see https://docs.deno.com/runtime/getting_started/installation/ — just ts-check and just ts-e2e run the TypeScript package"`;
-  a browser check that passes when `RIDL_BROWSER` is set or one of the Task 6
-  names is found, and otherwise names the requirement.
-- Modify: `AGENTS.md` — the Commands block gains `just ts-check` and
-  `just ts-e2e` lines, the `build` line names them, and the opening paragraph
-  that lists the workspace's directories names `packages/` and the package.
+  install Deno by reading `.deno-version` and downloading
+  `https://github.com/denoland/deno/releases/download/v<version>/deno-x86_64-unknown-linux-gnu.zip`
+  into `$HOME/.local/bin`, then `run: just ts-check`, `run: just ts-e2e` and
+  `run: just ts-browser-e2e`; add `typescript` to the `ci` aggregate's `needs`;
+  extend the comment on the `changes` job to say `typescript` uses the `rust`
+  flag; extend the comment on the `env:` pins to say the Deno pin lives in
+  `.deno-version`, because `./bootstrap` reads it too.
+- Modify: `bootstrap` — when `deno` is not on `PATH`, install the release named
+  by `.deno-version` with Deno's official installer
+  (`curl -fsSL https://deno.land/install.sh | sh -s -- -y v<version>`, which
+  installs into `~/.deno/bin`) and tell the contributor to add `~/.deno/bin` to
+  `PATH`; when `deno` is present at another version, print a note naming both
+  versions and do not replace it. No browser check.
+- Modify: `AGENTS.md` — the Commands block gains `just ts-check`, `just ts-e2e`
+  and `just ts-browser-e2e` lines (the last saying it runs in CI and needs a
+  Chromium-family browser, and is not a member of `build`); the `build` line
+  names the two members; the `pre-push` line names `ts-check`; the opening
+  paragraph that lists the workspace's directories names `packages/` and the
+  package.
+- Modify: `CONTRIBUTING.md` — where the gates are described, say that
+  `just build` needs Deno (installed by `./bootstrap`) and that the browser
+  test, `just ts-browser-e2e`, runs in CI and can be run locally with a
+  Chromium-family browser (`RIDL_BROWSER` names one).
 
 Recipes (each guards its tools as ADR-0009 decision 10 requires — a missing tool
 exits 1 with the install command, never skips):
 
 ```text
-ts-check:  in packages/ridl-transport-ws:
-           deno fmt --check; deno lint; deno check mod.ts;
-           deno check --config browser.deno.json mod.ts;
-           deno test --allow-read tests/;
-           deno publish --dry-run --allow-dirty
-ts-e2e:    cargo build --locked -p ridl-transport-ws --example loopback_server;
-           RIDL_TRANSPORT_WS_SERVER=$PWD/target/debug/examples/loopback_server
-           deno test --allow-all e2e/   (in the package)
+ts-check:        in packages/ridl-transport-ws:
+                 deno fmt --check; deno lint; deno check mod.ts;
+                 deno check --config browser.deno.json mod.ts;
+                 deno test --allow-read tests/;
+                 deno publish --dry-run --allow-dirty
+ts-e2e:          cargo build --locked -p ridl-transport-ws --example loopback_server;
+                 RIDL_TRANSPORT_WS_SERVER=$PWD/target/debug/examples/loopback_server
+                 deno test --allow-all e2e/deno_test.ts   (in the package)
+ts-browser-e2e:  the same build; then deno test --allow-all e2e/browser_test.ts
 ```
 
-`ts-e2e` checks for a browser before it builds, with the Task 6 lookup, and
-fails naming `RIDL_BROWSER` when none is found.
+`ts-browser-e2e` checks for a browser before it builds, with the Task 6 lookup,
+and fails naming `RIDL_BROWSER` when none is found.
 
-- [ ] **Step 1: Add the recipes and run them**: `just ts-check` and
-      `just ts-e2e` — expected: both pass.
+- [ ] **Step 1: Add the recipes and run them**: `just ts-check`, `just ts-e2e`
+      and `just ts-browser-e2e` — expected: all pass.
 - [ ] **Step 2: Run** `just gate-parity` before the CI change — expected: FAIL
       naming `ts-check ts-e2e`; make the CI change; run again — expected: PASS.
 - [ ] **Step 3: Prove the guards**: `PATH=/usr/bin:/bin just ts-check` exits 1
-      naming Deno; `RIDL_BROWSER=/nonexistent just ts-e2e` exits 1 naming the
-      browser.
+      naming Deno; `RIDL_BROWSER=/nonexistent just ts-browser-e2e` exits 1
+      naming the browser.
 - [ ] **Step 4: Run** `just story-id-check`, `just check`, `just link-check`,
       `just doc-path-check`, `./bootstrap` — expected: all pass.
 - [ ] **Step 5: Commit** `ci(repo): run the TypeScript package's gates` (the
-      justfile, workflow, bootstrap and AGENTS.md together).
+      justfile, workflow, `.deno-version`, bootstrap, AGENTS.md and
+      CONTRIBUTING.md together).
 
 ### Task 8: The records
 
