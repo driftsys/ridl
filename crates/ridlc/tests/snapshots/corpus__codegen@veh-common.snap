@@ -69,6 +69,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "unit": "km/h"
         }
       ],
+      "proto3": {
+        "bounded": 5
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "km/h",
@@ -128,6 +131,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "unit": "Cel"
         }
       ],
+      "proto3": {
+        "bounded": 5
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "Cel",
@@ -187,6 +193,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "unit": "/min"
         }
       ],
+      "proto3": {
+        "bounded": 5
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "/min",
@@ -246,6 +255,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "unit": "%"
         }
       ],
+      "proto3": {
+        "bounded": 5
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "%",
@@ -297,6 +309,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           }
         }
       ],
+      "proto3": {
+        "bounded": 6
+      },
       "scalar": {
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
@@ -350,6 +365,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "step": "0.01"
         }
       ],
+      "proto3": {
+        "bounded": 5
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "constraint": {
@@ -496,6 +514,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 2
+      },
       "enum": {
         "values": [
           {
@@ -594,6 +615,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 2
+      },
       "enum": {
         "values": [
           {
@@ -692,6 +716,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 6
+      },
       "enumSet": {
         "backingEnum": {
           "reference": "Warning",
@@ -797,6 +824,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 10
+      },
       "struct": {
         "slots": [
           {
@@ -935,6 +965,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 531
+      },
       "struct": {
         "slots": [
           {
@@ -1163,6 +1196,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 29054
+      },
       "struct": {
         "slots": [
           {
@@ -1387,6 +1423,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 1036
+      },
       "union": {
         "arms": [
           {
@@ -1472,6 +1511,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 16
+      },
       "struct": {
         "slots": [
           {
@@ -1602,6 +1644,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 1033
+      },
       "struct": {
         "slots": [
           {
@@ -1727,6 +1772,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 16
+      },
       "struct": {
         "slots": [
           {
@@ -2512,6 +2560,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "pattern": "/^[\\x20-\\x7E]+$/"
           }
         ],
+        "proto3": {
+          "bounded": 515
+        },
         "scalar": {
           "class": "SCALAR_CLASS_STRING",
           "constraint": {
@@ -2568,6 +2619,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "pattern": "/^[\\x20-\\x7E]+$/"
           }
         ],
+        "proto3": {
+          "bounded": 259
+        },
         "scalar": {
           "class": "SCALAR_CLASS_STRING",
           "constraint": {
@@ -2621,6 +2675,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             }
           }
         ],
+        "proto3": {
+          "bounded": 11
+        },
         "scalar": {
           "class": "SCALAR_CLASS_INTEGER",
           "constraint": {
@@ -2676,6 +2733,9 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "pattern": "/^[\\x20-\\x7E]+$/"
           }
         ],
+        "proto3": {
+          "bounded": 1027
+        },
         "scalar": {
           "class": "SCALAR_CLASS_STRING",
           "constraint": {

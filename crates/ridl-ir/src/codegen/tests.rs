@@ -4322,3 +4322,98 @@ fn an_unbounded_induced_argument_struct_is_rooted_unbounded() {
     assert_eq!(unbounded.cause, v1::FbUnboundedCause::Member as i32);
     assert_eq!(unbounded.member.as_deref(), Some("tagged"));
 }
+
+/// `state` as the codegen protocol spells it. A proto3 state is bounded or
+/// absent, never unbounded.
+fn proto3_state(state: crate::projection::size::SizeState) -> v1::SizeState {
+    use crate::projection::size::SizeState;
+    let state = match state {
+        SizeState::Bounded(size) => v1::size_state::State::Bounded(size),
+        SizeState::Absent(cause) => v1::size_state::State::Absent(v1::SizeAbsent {
+            cause: super::lower::absent_cause(cause) as i32,
+            detail: None,
+        }),
+        SizeState::Unbounded(cause) => panic!("a proto3 state is never unbounded: {cause:?}"),
+    };
+    v1::SizeState { state: Some(state) }
+}
+
+#[test]
+fn a_declaration_carries_its_proto3_root_bound() {
+    use crate::projection::size::{Ctx, Encoding, PayloadShape, size_state};
+    let package = package_a();
+    let model = lower(&package, &[]);
+    let ctx = Ctx::new(&package, &[]);
+    let mut kinds = Vec::new();
+    for (decl, lowered) in package.decls.iter().zip(&model.declarations) {
+        let kind = lowered.kind.as_ref().expect("a kind");
+        if matches!(kind, v1::declaration::Kind::Constant(_)) {
+            assert_eq!(
+                lowered.proto3, None,
+                "{}: a constant has no message",
+                decl.name
+            );
+        } else {
+            let expected = proto3_state(size_state(
+                &package,
+                &PayloadShape::Named(&decl.name),
+                &ctx,
+                Encoding::Proto3,
+            ));
+            assert!(
+                matches!(expected.state, Some(v1::size_state::State::Bounded(size)) if size > 0),
+                "{}: the fixture declaration is bounded",
+                decl.name
+            );
+            assert_eq!(lowered.proto3.as_ref(), Some(&expected), "{}", decl.name);
+        }
+        kinds.push(std::mem::discriminant(kind));
+    }
+    kinds.sort_by_key(|kind| format!("{kind:?}"));
+    kinds.dedup();
+    assert_eq!(kinds.len(), 6, "the fixture holds each declaration kind");
+}
+
+#[test]
+fn a_declaration_with_an_optional_array_has_no_proto3_bound() {
+    let mut package = package_a();
+    package.decls.push(v2::Decl {
+        name: "Maybe".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![member(
+                1,
+                "smalls",
+                v2::FieldType {
+                    optional: true,
+                    kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                        element: Some(Box::new(named("Small"))),
+                        min: 0,
+                        max: 2,
+                    }))),
+                },
+            )],
+            ..Default::default()
+        })),
+        ..Default::default()
+    });
+    let model = lower(&package, &[]);
+    let maybe = model
+        .declarations
+        .iter()
+        .find(|decl| {
+            decl.name
+                .as_ref()
+                .is_some_and(|name| name.declared == "Maybe")
+        })
+        .expect("the declaration is lowered");
+    assert_eq!(
+        maybe.proto3,
+        Some(v1::SizeState {
+            state: Some(v1::size_state::State::Absent(v1::SizeAbsent {
+                cause: v1::AbsentCause::RefusedMember as i32,
+                detail: None,
+            })),
+        })
+    );
+}

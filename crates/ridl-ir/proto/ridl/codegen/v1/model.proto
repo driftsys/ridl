@@ -173,6 +173,11 @@ message Declaration {
   // The rules of the item, in the order `ridl_ir::rules::rules` returns
   // them (ADR-0028).
   repeated Rule rules = 23;
+  // The proto3 size state of the declaration's root message: its own
+  // message for a struct or a union, its `<Name>Box` message for a named
+  // scalar, an enum and an enum set. Absent on a constant, which has no
+  // message.
+  SizeState proto3 = 24;
 }
 
 // A named scalar, and the shape of an inline one.

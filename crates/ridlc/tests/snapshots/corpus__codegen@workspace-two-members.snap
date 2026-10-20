@@ -69,6 +69,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
           "unit": "km/h"
         }
       ],
+      "proto3": {
+        "bounded": 5
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "km/h",
@@ -128,6 +131,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
           "unit": "Cel"
         }
       ],
+      "proto3": {
+        "bounded": 5
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "Cel",
@@ -255,6 +261,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       "see": [],
       "since": [],
       "rules": [],
+      "proto3": {
+        "bounded": 5
+      },
       "struct": {
         "slots": [
           {
@@ -401,6 +410,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
             "unit": "km/h"
           }
         ],
+        "proto3": {
+          "bounded": 5
+        },
         "scalar": {
           "class": "SCALAR_CLASS_FLOAT",
           "unit": "km/h",
