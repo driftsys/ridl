@@ -132,6 +132,29 @@ what it costs if wrong:
     the existing `protox` and `planus` checks already guard validity — until
     then, a `prost`-level regression in the schema is caught only by `protox`.
 
+**Note (2026-10-20) — rulings 6, 7 and 18 are discharged, and ruling 14 is out
+of date.** The proto3 codec is built
+([the proto3 codec design record](../design/proto3-codec.md)), and the mapping
+rulings above did not change: the `wire` dump is byte-identical.
+
+- Ruling 6: the proto3 codec refuses an optional array element and an optional
+  map value with a `GenerateError`, as the FlatBuffers codec does.
+- Ruling 7: the proto3 codec refuses an undeclared enum value, and an enum set
+  with an undeclared bit, as `Contract(Rule::Variant)` in `verify`.
+- Ruling 18: the `prost` oracle exists. `prost` code that `prost-build`
+  generates through `protox` from the emitted `.proto` is checked in under
+  `crates/ridl-backend-rust/tests/generated/`, and the conformance suite
+  compares the codec's bytes with it. A drift test also compiles the emitted
+  `.proto` of every corpus package with `protox` and compares it field by field
+  with the layout the codec emits from.
+- Ruling 14: "the face refuses it today" is no longer true for a call. Since
+  driftsys/ridl#713 the argument of a call with zero or several parameters, and
+  a tuple reply, is an induced tuple with its own message in both schemas, and
+  both codecs and the face carry it. A `fixed` whose value is an inline
+  collection still has no root, because a `fixed` value is never in flight; the
+  proto3 schema emits a message for the tuple element of such an array, and no
+  codec encodes it.
+
 Written from roadmap story E9.9, which built `crates/ridl-backend-flatbuffers`.
 The reasoning trail is
 [`docs/archive/2026-08-08-flatbuffers-projection-design.md`](../archive/2026-08-08-flatbuffers-projection-design.md)

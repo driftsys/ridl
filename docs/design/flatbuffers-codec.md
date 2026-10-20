@@ -299,6 +299,15 @@ emits no codec. The reasoning, and why the face takes no `E: Encoding` type
 parameter, is design note D-11 and
 [the interaction-face design record](interaction-face.md).
 
+**Amended 2026-10-20 — the face is not this codec's alone.** The paragraphs
+above describe the face as it was before the change that made it read its
+encoding from its port (ADR-0018 decision 15 as amended 2026-10-12): the face
+now names no concrete encoding, and every buffer and every `Ref` it builds names
+`P::Encoding` (or `W::Encoding`, `H::Encoding`) of its port. The face is emitted
+when `encodings` names `flatbuffers`, `proto3` or both, and the same face runs
+over this codec or over [the proto3 codec](proto3-codec.md), whichever the port
+carries.
+
 **One consequence of the codec building at the tail reaches every consumer.**
 `Encoded.bytes` is a subslice of the output buffer, so a caller that
 reconstructs `&buf[..len]` sends leading bytes the encoder never wrote. The face
@@ -385,10 +394,12 @@ Rust randomizes a `HashMap`'s iteration order per process.
 **Conformance is a round trip through a second implementation, not byte equality
 with one.** FlatBuffers fixes no canonical encoding: vtable sharing, field
 ordering and alignment slack are all writer choices, and two conforming writers
-differ. This is a weaker claim than the one planned for the proto3 payload
-codec, which is not built (driftsys/ridl#264): its acceptance check will be
-byte-level conformance against `protoc`. The difference is in the formats, not
-in the rigor of the two checks.
+differ. This is a weaker claim than the one the proto3 payload codec makes,
+which is byte equality with `prost` code generated through `protox` from the
+emitted `.proto` (amended 2026-10-20: the codec is built, and its check is
+against `prost`, not `protoc`; see
+[the proto3 codec record](proto3-codec.md#conformance)). The difference is in
+the formats, not in the rigor of the two checks.
 
 The second implementation is `planus`, already this repository's FlatBuffers
 oracle. `planus-codegen` turns the `.fbs` the schema backend emits for the
@@ -539,9 +550,14 @@ types against the new snapshot and the built-in `ridl.std`. The codec and the
 diff read one definition of "0 is legal", `ridl_ir::zero`: `zero_is_legal` in
 `codec.rs` calls `ridl_ir::zero::range_holds_zero`, and the lowering's enum zero
 member comes from `ridl_ir::zero::enum_zero_member`. Case 12 ties the two
-together over one fixture. The proto3 side, when its codec is built
-(driftsys/ridl#264), will meet the same reader rule in proto3 terms, where it is
-forced: proto3 gives a non-optional scalar no presence, so an absent one is 0.
+together over one fixture. The proto3 codec (built 2026-10-20,
+[its record](proto3-codec.md)) applies the same reader rule in proto3 terms,
+where it is forced, and further: proto3 gives no non-optional field presence, so
+it also reads an absent string, bytes, collection or nested message as the empty
+value when that is legal. It therefore reads five appends that this rule calls
+breaking — a non-optional struct, string, array, map and tuple field — and
+`ridl diff` keeps calling them breaking, because the rule is held to the
+stricter of the two codecs.
 
 **A foreign reader does not refuse.** The emitted `.fbs` gives a field such as
 `c : Level [1..10]` no default annotation — FlatBuffers has no way to mark a

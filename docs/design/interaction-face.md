@@ -58,9 +58,11 @@ not a single Rust identifier, and descriptors for one are a follow-up), the
 emitter writes:
 
 - a unit struct with an `Interface` impl carrying `CATALOG`, `NUMBER`,
-  `PROVISIONAL`, `NAME` and `MEMBERS`, and a `Sizes<FlatBuffers>` impl, the
-  interface's size table, whose `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE`
-  items size the claim buffer and the next-event buffer;
+  `PROVISIONAL`, `NAME` and `MEMBERS`, and one `Sizes<E>` impl per encoding the
+  package carries, the interface's size table in that encoding, whose
+  `MAX_BUFFER_SIZE` and `EVENT_SOURCE_BUFFER_SIZE` items size the claim buffer
+  and the next-event buffer (in proto3, an interface a payload of which has no
+  bound gets a `Bounds<Proto3>` impl instead, below);
 - a unit struct per interaction with an `Interaction` impl (`type Iface`,
   `const MEMBER`, `const ROW`) and the kind's trait — `Signal`, `Event`,
   `Command`, `Query` or `Fixed`.
@@ -105,13 +107,22 @@ the descriptor has no inherent constant of either name.
   in member order, each a `u64` computed by a const-evaluable expression from
   the payloads' `<T as Payload<FlatBuffers>>::MAX_SIZE`, which the codec emitter
   writes from the codegen model's bound, so the table recomputes nothing. A
-  payload whose projection has no bound makes the backend refuse to generate,
-  rather than leaving a missing value, so there is no `None` and no reading of
-  one. A proto3 or `repr(C)` table arrives as a `Sizes<E>` implementation when
-  the backend emits that codec; until then the interface has no such table
-  (driftsys/ridl#264, driftsys/ridl#317). The face reads buffers from
-  `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER` and the table's
-  `CLAIM_BUFFER` and `EVENT_BUFFER`; `reservation::<X, E>()` and
+  payload whose FlatBuffers projection has no bound makes the backend refuse to
+  generate, rather than leaving a missing value, so a `Sizes<FlatBuffers>` table
+  has no `None` and no reading of one. The proto3 table is `Sizes<Proto3>`,
+  emitted beside it when `encodings` names `proto3` and built from
+  `<T as Payload<Proto3>>::MAX_SIZE` in the same way. A proto3 payload with no
+  bound is not refused: it gets a codec without a size, and its interface gets a
+  `Bounds<Proto3>` implementation, whose row for each member such a payload
+  belongs to is `None`, and no `Sizes<Proto3>`
+  ([the proto3 codec record](proto3-codec.md)). The face holds the `Sizes`
+  buffers, so binding it to a proto3 port over such an interface is a compile
+  error at the binding, the same rule as for an encoding the package does not
+  carry; the package itself still compiles. A face that can serve an unbounded
+  payload is not built (driftsys/ridl#TBD-face-unbounded). A `repr(C)` table
+  arrives when the backend emits that codec (driftsys/ridl#317). The face reads
+  buffers from `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER` and
+  the table's `CLAIM_BUFFER` and `EVENT_BUFFER`; `reservation::<X, E>()` and
   `table_budget::<I, E>()` in `ridl_rt::contract` serve a runtime that sizes a
   store.
 
@@ -171,11 +182,13 @@ induce a reply struct. The rule is held by
 `descriptors::single_param_type`, `query_param_type` and `query_reply_type` are
 the one place the backend asks what a call sends. They read the name the
 lowering wrote, and the backend never builds one. A fallible `T | E` reply, an
-untyped position and a stream are still refused (driftsys/ridl#943). An induced
-payload with no finite FlatBuffers bound is also refused before its descriptor
-is accepted: the codec cannot implement `Payload<FlatBuffers>` for it. The
-pipeline skips that interface with the same refusal marker, leaving the
-package's domain types and its other interfaces unaffected.
+untyped position and a stream are still refused (driftsys/ridl#943). When
+`encodings` names `flatbuffers`, an induced payload with no finite FlatBuffers
+bound is also refused before its descriptor is accepted: the codec cannot
+implement `Payload<FlatBuffers>` for it. The proto3 codec emits a codec for
+every induced root, bounded or not, so a list without `flatbuffers` refuses
+nothing here. The pipeline skips that interface with the same refusal marker,
+leaving the package's domain types and its other interfaces unaffected.
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
 one member the face covers, one `pub mod` named after the interface. Its
@@ -692,14 +705,15 @@ The codecs a package carries are listed in the manifest:
 `[backend.rust]
 encodings = [...]` (MANI-015), which `ridl build` sends the
 backend as the request option `encodings`. `ridl_backend_rust::WireEncoding` is
-the parsed element and has one variant, `FlatBuffers`, because this backend
-emits a `Payload` implementation for one encoding. The option reaches the entry
-points as a slice, `generate_face_with(package, encodings)` and
-`generate_pipeline`, and a slice that is empty emits the domain types alone,
-with no codec, no descriptor and no face. `repr(C)` and proto3 join the enum
-when the Rust backend emits their codecs; until then the backend refuses those
-names, so a second encoding cannot produce a face over implementations that do
-not exist.
+the parsed element and has two variants, `FlatBuffers` and, since 2026-10-20,
+`Proto3`, one per codec this backend emits. The option reaches the entry points
+as a slice, `generate_face_with(package, encodings)` and `generate_pipeline`,
+and a slice that is empty emits the domain types alone, with no codec, no
+descriptor and no face. A slice that names either encoding, or both, emits the
+descriptors and the same face, because the face reads its encoding from the
+port. `repr(C)` joins the enum when the Rust backend emits its codec; until then
+the backend refuses that name, so it cannot produce a face over implementations
+that do not exist.
 
 `generate_face_with` with a non-empty list emits the codec, the descriptors and
 the face beside the items `generate` emits, and `generate_pipeline` does the
@@ -777,14 +791,14 @@ path is covered instead by a hand-built-IR unit test in `src/descriptors.rs`.
 
 **The generated face is checked in, not regenerated at test time.**
 `tests/generated/interaction_face.rs` is the output of
-`generate_face_with(package, &[WireEncoding::FlatBuffers])` for the fixture,
-brought into `tests/interaction_face.rs` with `include!` under a handwritten
-module carrying only outer `#[allow(...)]` lint attributes — the emitter itself
-must never emit an inner attribute, because one inside an `include!`d file is a
-hard compile error. A test in its own target,
-`tests/interaction_face_regeneration.rs`, regenerates the fixture and compares
-the result byte-for-byte against the checked-in file, failing with the
-instruction to regenerate
+`generate_face_with(package, &[WireEncoding::FlatBuffers, WireEncoding::Proto3])`
+for the fixture, so it carries both codecs and both size tables, brought into
+`tests/interaction_face.rs` with `include!` under a handwritten module carrying
+only outer `#[allow(...)]` lint attributes — the emitter itself must never emit
+an inner attribute, because one inside an `include!`d file is a hard compile
+error. A test in its own target, `tests/interaction_face_regeneration.rs`,
+regenerates the fixture and compares the result byte-for-byte against the
+checked-in file, failing with the instruction to regenerate
 (`RIDL_UPDATE_GENERATED=1 cargo test -p
 ridl-backend-rust --test interaction_face_regeneration`)
 when it drifts. This is what makes the generated face genuinely compiled and
@@ -815,8 +829,12 @@ panics when polled again after either; the blocking client over `Valve` answers
 kind, forgetting a sent call once; a client timeout shorter than `max` is
 accepted; `blocking::next_event` returns `Ok(None)` at the timeout and the
 occurrence when one is raised from another thread; and `blocking::serve` returns
-`Ok(())` at its timeout and a refusal at once. Four test files exercise the
-layers before the round trip: `tests/descriptor_generation.rs`,
+`Ok(())` at its timeout and a refusal at once; and
+`signal_event_command_query_round_trip_over_a_proto3_loopback` runs a signal, an
+event, a command and a query over `Loopback::<Proto3>::with_encoding`, with the
+same face and no type annotation naming the encoding, which is what shows the
+face generic over its port's encoding. Four test files exercise the layers
+before the round trip: `tests/descriptor_generation.rs`,
 `tests/face_generation.rs`, `tests/dispatch_generation.rs` (source-text
 assertions on the generated code) and `tests/face_compile.rs` (the emitted face
 compiled with a bare `rustc`, the `blocking` module included, over shapes the
@@ -1067,11 +1085,12 @@ is built.
 
 ## What is provisional
 
-| Placeholder                                                                                            | Replaced by                                  |
-| ------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
-| The `repr(C)` and proto3 `Sizes<E>` tables (`flatbuffers` is built; this backend emits no other codec) | driftsys/ridl#317, driftsys/ridl#264         |
-| The narrow contract-clause translator (`src/clauses.rs`)                                               | driftsys/ridl#704                            |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion         | a test over `ridl-loopback`, not yet written |
+| Placeholder                                                                                                      | Replaced by                                  |
+| ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| The `repr(C)` `Sizes<E>` table (`flatbuffers` and `proto3` are built; this backend emits no other codec)         | driftsys/ridl#317                            |
+| A face that can serve a proto3 payload with no bound (the interface has `Bounds<Proto3>` and no `Sizes<Proto3>`) | driftsys/ridl#TBD-face-unbounded             |
+| The narrow contract-clause translator (`src/clauses.rs`)                                                         | driftsys/ridl#704                            |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion                   | a test over `ridl-loopback`, not yet written |
 
 **The hand-written payload row was retired on 2026-09-21**, by design note D-11
 of [the FlatBuffers codec record](flatbuffers-codec.md). It read "the

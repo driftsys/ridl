@@ -859,12 +859,13 @@ encodings = ["flatbuffers"]
 ```
 
 The names are `flatbuffers`, `proto3` and `repr-c`. An absent table, an absent
-key and an empty list all mean types only. The Rust backend builds only
-`flatbuffers`: it refuses `proto3` ([driftsys/ridl#264][i264]) and `repr-c`
+key and an empty list all mean types only. The Rust backend builds
+`flatbuffers` and `proto3`, alone or together, and refuses `repr-c`
 ([driftsys/ridl#317][i317]). The generated `Cargo.toml` enables one `ridl-rt`
 feature per named encoding, and none for types only. A single-file build has no
-manifest, so it is types only. The emitted codec names the encoding as
-`::ridl_rt::encoding::FlatBuffers`; the face takes its encoding from its port
+manifest, so it is types only. Each emitted codec names its encoding, as
+`::ridl_rt::encoding::FlatBuffers` or `::ridl_rt::encoding::Proto3`; the face
+takes its encoding from its port
 type instead, so a consumer that binds a generated face to a runtime it did not
 write names an encoding only where it builds that runtime — over
 `ridl-loopback`, `Loopback::new` for FlatBuffers and
@@ -2547,7 +2548,6 @@ argument.
 
 [adr-0007]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0007-e1-execution.md
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md
-[i264]: https://github.com/driftsys/ridl/issues/264
 [i317]: https://github.com/driftsys/ridl/issues/317
 [adr-0014]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0014-ir-encodings.md
 [adr-0020]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md

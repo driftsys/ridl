@@ -55,6 +55,19 @@ choices, see [`../decisions/`](../decisions/).
   [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) and
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 2, 5, 6 and 7.
+- **proto3-codec.md** — the generated `Payload<Proto3>` implementation a package
+  carries, and the `Codec<Proto3>` of a type with no size bound: where the code
+  is, what is emitted and when, the wire mapping and how it is held to the
+  emitted `.proto`, presence and absence, what the reader accepts and refuses (a
+  singular field written twice among them, a deliberate deviation from
+  protobuf), the `Bounds<Proto3>` table and the face's compile-time limit,
+  determinism, and conformance against `prost` generated through `protox`, with
+  the cases and the mutations measured. The decisions behind its choices are
+  [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md),
+  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
+  decisions 3 to 5 and
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 8
+  and 10, as amended 2026-10-20.
 - **catalog-descriptor.md** — the FlatBuffers catalog descriptor per unit as
   built: the `RDLC` file `--emit catalog` writes, the append-only schema and its
   generated planus accessors, what a catalog contains, the catalog hash and the

@@ -391,8 +391,19 @@ is not safe for a size bound (driftsys/ridl#665). A `string` or `bytes` with no
 always carries `len_max`.
 
 The Rust backend's `Payload<FlatBuffers>::MAX_SIZE` is the codegen model's
-`Payload.flatbuffers_max_size`, the same `max_size` value. It writes no proto3
-size, because that backend emits no proto3 codec.
+`Payload.flatbuffers_max_size`, the same `max_size` value. Its
+`Payload<Proto3>::MAX_SIZE` (since 2026-10-20) is the proto3 state the codegen
+model carries for the payload's root message: `Declaration.proto3` for a
+declaration, and the interaction's `request_sizes.proto3` or
+`reply_sizes.proto3` for an induced argument or reply tuple. A state that is
+`Absent` with the cause `NoBound` or `Overflow` gives the type a codec without a
+size, `Codec<Proto3>` with `BOUND = None`. A state absent for any other cause,
+`RefusedMember` and `Unresolved` among them, is a generation error that gives
+the refusal the `.proto` emitter gives
+([the proto3 codec record](proto3-codec.md)). A type whose only problem is a
+member with no bound is `NoBound` or `Overflow`, not `RefusedMember`, so this
+descriptor and the model say `NoBound` or `Overflow` for it, and the type has a
+codec.
 
 **The codegen model carries the same states.** The model (`ridl.codegen.v1`)
 writes a `PayloadSizes` message, one `SizeState` per encoding, on every payload
@@ -402,8 +413,12 @@ absent state, and the model writes the state, `absent` with an `AbsentCause`
 (the sizer's own causes, unchanged), so that a plugin can tell a shape that no
 codec defines from a toolchain too old to report a size. A query whose reply has
 no return type takes the same absent state, with the cause
-`ABSENT_CAUSE_ENCODING_UNDEFINED`. The model sums these states into two totals,
-both per encoding:
+`ABSENT_CAUSE_ENCODING_UNDEFINED`. Each `Declaration` also carries `proto3`
+(field 24, since 2026-10-20), the proto3 state of the declaration's root message
+— its own message for a struct or a union, its `<Name>Box` message for a named
+scalar, an enum and an enum set — and none on a constant; it is the
+per-declaration counterpart of `FbRoot.max_size`. The model sums these states
+into two totals, both per encoding:
 
 - **`Interaction.reservation`** is the saturating `u64` sum, in bytes, of the
   bounded sizes of the member's payloads, in order: a signal or an event has its
@@ -432,13 +447,15 @@ The two sides agree for a `fixed` member: the runtime row of a `fixed` is `0`,
 because a fixed value is never in flight, and the model's reservation and table
 budget count it as `0` for the same reason, whatever its payload
 (driftsys/ridl#852). For every other kind of member the two sides agree only
-where the runtime holds the same per-payload sizes the model holds. Today the
-Rust backend emits a `Sizes<E>` table for FlatBuffers alone, so only that column
-has a runtime counterpart; the model's proto3 column can carry a byte count with
-no table to compare it with. The catalog descriptor this record describes is a
-different artifact, and it does write a proto3 row (`lower.rs` in
-`ridl-descriptor`). The FlatBuffers column is the one where the runtime table
-and the model read the same number for a member.
+where the runtime holds the same per-payload sizes the model holds. Since
+2026-10-20 the Rust backend emits a `Sizes<E>` table for each encoding the
+package carries, FlatBuffers and proto3, and each table's rows are built from
+the `MAX_SIZE` the codec emitted from the model's state, so both columns have a
+runtime counterpart. An interface with a payload that has no proto3 bound has no
+`Sizes<Proto3>` but a `Bounds<Proto3>`, whose row for that member is `None`
+where the model's reservation is `unsized`. The catalog descriptor this record
+describes is a different artifact, and it writes a proto3 row too (`lower.rs` in
+`ridl-descriptor`).
 
 ## Verification before access, and `ridl describe`
 
@@ -549,8 +566,12 @@ inline shape, although the catalog descriptor carries that shape
 The FlatBuffers bound is also checked against an encoder: the round trip in
 `crates/ridl-backend-rust/tests/flatbuffers_roundtrip.rs` encodes the largest
 legal value within `MAX_SIZE`, and `codec_agreement.rs` ties `MAX_SIZE` to the
-descriptor. No proto3 bound is checked against an encoder, because no proto3
-codec exists yet.
+descriptor. Since 2026-10-20 the proto3 bound is checked against an encoder too:
+`max_size_is_the_shared_bound` in
+`crates/ridl-backend-rust/tests/proto3_roundtrip.rs` pins each emitted
+`MAX_SIZE` to the sizer's number, and `the_worst_case_value_fits_max_size` in
+`proto3_conformance.rs` encodes a worst-case value of every fixture message
+within it.
 
 ## The design's decisions, as built
 
@@ -564,7 +585,7 @@ the status in the code and the rejected alternatives in short form.
 | D-3 Hand-written, versioned, append-only schemas             | Built for the one schema, `catalog.fbs`. The CI check that compiles the schemas with both `flatc` and `flatcc` is not built; it waits for a C engine.                                                                                                                                                       | A descriptor schema generated from the IR schema.                                                                                                                             |
 | D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states, including the `compatible` list appended to the catalog table. Of the member's bounds and quality-of-service terms, only the timing is carried, because it is the only one the IR has for an interaction. No `stream` flag (driftsys/ridl#336).                 | —                                                                                                                                                                             |
 | D-5 What the system descriptor contains                      | Not built.                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
-| D-6 A size state per payload and encoding                    | Built for proto3 and FlatBuffers, as "The size states" states. `repr(C)` has no rows (driftsys/ridl#317). The max-size conformance test is built for FlatBuffers only.                                                                                                                                      | One number per payload; a number per type rather than per interaction; an induced message, request message or `ok`/`err` union for a payload that is not a struct or a union. |
+| D-6 A size state per payload and encoding                    | Built for proto3 and FlatBuffers, as "The size states" states. `repr(C)` has no rows (driftsys/ridl#317). The max-size conformance test is built for FlatBuffers and, since 2026-10-20, for proto3.                                                                                                         | One number per payload; a number per type rather than per interaction; an induced message, request message or `ok`/`err` union for a payload that is not a struct or a union. |
 | D-7 Not in version 1                                         | Holds: no `.bfbs` payload layouts, no transport per crossing, no envelope or framing overhead.                                                                                                                                                                                                              | —                                                                                                                                                                             |
 | D-8 Readers verify before access                             | Built: `verify`, and `ridl describe` exits 2 with the cause named.                                                                                                                                                                                                                                          | —                                                                                                                                                                             |
 | D-9 Emission and inspection                                  | The catalog emit and `ridl describe` are built. The system descriptor's emission is not built. `ridl describe`'s view differs from `flatc`'s in key order and in `null` for an absent field, where the design said the two views are the same.                                                              | —                                                                                                                                                                             |

@@ -28,6 +28,11 @@ declaration is corrected in place by decision 6. Decision 2's rejection of a
 wrapper message still holds: it is about a field position, and decision 6's
 message is never referenced from one.
 
+**Amended 2026-10-20 — decision 7: the proto3 payload codec is built.** The
+proto3 codec of the Rust backend (driftsys/ridl#264) now refuses what decision 7
+said it would refuse, and it changed no emitted line. Decision 7 carries the
+amendment in place.
+
 This ADR was accepted under the delegated authority recorded in
 [ADR-0005](ADR-0005-agent-enablement.md)'s working model.
 
@@ -208,6 +213,17 @@ distinct reachable cases.
    does; the codec refuses the shape (the FlatBuffers codec already does, and
    the proto3 codec is to do the same), so no program this toolchain builds
    writes it.
+
+   **Amended 2026-10-20 — the proto3 codec is built, and it refuses the shape.**
+   An optional array element and an optional map value are a `GenerateError`
+   from the Rust backend's proto3 codec, as from its FlatBuffers codec, so the
+   sentence above holds for both codecs. The codec follows this record's mapping
+   without changing it: the `wire` dump is byte-identical. The codec's wire
+   mapping, and where it must agree with this projection, is
+   [the proto3 codec design record](../design/proto3-codec.md). An optional
+   array or map **field** of a struct or a tuple is refused by the codec with
+   the refusal the `.proto` emitter gives (ADR-0013 decision 7 and the paragraph
+   above).
 
 8. **A bare `integer` projects to `sint64`** — added 2026-10-12. A field written
    `a : integer`, with no constraint, projected to `int64`, while
