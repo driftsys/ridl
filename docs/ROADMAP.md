@@ -1016,7 +1016,7 @@ depends on E11.9 alone, because it carries payload bytes without decoding them.
 E12.2 and E12.5 also depend on E12.11. It takes the next free identifier,
 because a parked row's identifier is never reused.
 
-**E12.11 landed** (driftsys/ridl#982, PR #TBD). `packages/ridl-transport-ws` is
+**E12.11 landed** (driftsys/ridl#982, PR #993). `packages/ridl-transport-ws` is
 `@driftsys/ridl-transport-ws`, the consuming side of the §11.1 WebSocket binding
 in TypeScript, for Deno and the browser, with no dependency: a codec for the ten
 frame forms that reproduces every test vector of §11.1, and a session that
