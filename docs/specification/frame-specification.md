@@ -883,8 +883,10 @@ payload rules of §9, or the control-plane operations and their answers.
 
 Two bindings are named: one by the transport that carries it, and one by the
 platform whose runtimes write their own. The WebSocket binding is specified in
-§11.1 and its Rust transport crate, `ridl-transport-ws`, is built; a binder
-contract is not written in this repository.
+§11.1 and its two transports are built: the Rust crate `ridl-transport-ws` and
+the TypeScript package `@driftsys/ridl-transport-ws` at
+`packages/ridl-transport-ws/`. A binder contract is not written in this
+repository.
 
 ### 11.1 WebSocket
 
@@ -892,8 +894,9 @@ The WebSocket binding carries this frame between a consuming runtime that opens
 a WebSocket connection and a providing runtime that accepts it.
 `ridl-transport-ws` (driftsys/ridl#265,
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 6) is its Rust crate, and the TypeScript WebSocket package of decision
-7 is the same binding for Deno and the browser, so the two ends of one
+decision 6) is its Rust crate, and `@driftsys/ridl-transport-ws`
+(`packages/ridl-transport-ws/`, decision 7) is the same binding for Deno and the
+browser; it carries payload bytes without decoding them, so the two ends of one
 connection may be a Rust runtime and a TypeScript one. This section is the
 binding document: it states the nine items of §10 and adds nothing to the frame.
 The binding is **version 1** and carries frame version 1. The reasoning behind
