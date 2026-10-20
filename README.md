@@ -58,6 +58,7 @@ crates/                         The compiler workspace (typl + ridl)
 ├── ridl-rt/                    The runtime library generated code links (no_std, no dependency)
 ├── ridl-loopback/              The in-process reference runtime over those ports (ADR-0020 decision 6)
 └── ridl-transport-ws/          The WebSocket binding of the frame: a no_std codec and a server over the ridl-rt ports
+packages/                       TypeScript packages — ridl-transport-ws, the Deno and browser client of the WebSocket binding
 editors/vscode/                 VS Code extension (TextMate grammars + LSP client)
 examples/                       Worked examples — a schema and a program against the crate built from it
 evals/                          Public evaluation corpus, calibration records and eval tasks (evals/README.md)
@@ -85,7 +86,8 @@ docs/
 │   └── …                           Design notes feeding the roadmap; see wip/README.md
 ├── design/                      Architecture records — a crate/component, as built
 │   ├── ridl-rt.md               The ridl-rt 0.1 runtime library: modules, types, traits
-│   └── ridl-transport-ws.md     The ridl-transport-ws crate: the frame codec and the WebSocket server
+│   ├── ridl-transport-ws.md     The ridl-transport-ws crate: the frame codec and the WebSocket server
+│   └── ridl-transport-ws-ts.md  The @driftsys/ridl-transport-ws package: the WebSocket client in TypeScript
 ├── technotes/                  Informative architecture notes (bind nothing)
 │   └── walking-skeleton-architecture.md   The RIDL toolchain, as built
 ├── archive/                    Superseded documents + landed epic plans
@@ -156,9 +158,10 @@ This repository follows the driftsys house style. After cloning, run
 (conventional commits, versioning, changelog, and git hooks) and
 [prim](https://github.com/driftsys/prim) (the connective-tissue formatter for
 Markdown/JSON/YAML/TOML), then wires up the repo-local hooks in `.githooks/`. It
-also installs the Rust toolchain `rust-toolchain.toml` pins, and reports any
-other tool the gate needs — `just`, `rustup`, mdBook, `jq` — that it cannot
-find.
+also installs the Rust toolchain `rust-toolchain.toml` pins and, when `deno` is
+not on `PATH`, the [Deno](https://deno.com) release `.deno-version` pins, and
+reports any other tool the gate needs — `just`, `rustup`, mdBook, `jq` — that it
+cannot find.
 
 The task runner is [`just`](https://github.com/casey/just):
 
@@ -177,9 +180,12 @@ The task runner is [`just`](https://github.com/casey/just):
 | `just wasm-check`      | `cargo check` for wasm32, `--no-default-features`; and `ridl-descriptor` with its default features off, and with only `dedup` on, for a target with no standard library, and with its features on for wasm32; and the `ridl-transport-ws` codec with its default features off, for wasm32 and for a target with no standard library                                                                                                                |
 | `just compat-check`    | build and test the packaged `ridl-rt` and `ridl-rt-conformance` as edition 2021 with the minimum supported Rust version and as edition 2024 with the `rust-toolchain.toml` pin; build `ridl-loopback` and `ridl-transport-ws` (default features on and off) at that minimum, `ridl-ir` and `ridl-descriptor` at the `ridl-descriptor` minimum, and the crates emitted for the cabin example and the veh-cluster test corpus (ADR-0021 decision 10) |
 | `just demo`            | generate the cabin example's crate and run the program that links it — each round trip's value is matched, and a missing one or a non-zero exit fails; it also checks the generated crate, and one generated from the veh-cluster corpus, with their default features off for a target with no standard library                                                                                                                                    |
-| `just build`           | `toolchain-check` + `gate-parity` + `install-check` + `fmt-check` + `book-check` + `link-check` + `doc-path-check` + `story-id-check` + `freeze-check` + `compile` + `test` + `lint` + `wasm-check` + `compat-check` + `demo` + `check` — the local gate, which is what CI runs on `main`                                                                                                                                                          |
+| `just ts-check`        | in `packages/ridl-transport-ws`, with Deno: `deno fmt --check`, `deno lint`, `deno check` for Deno and against the DOM library, the unit tests under `tests/`, and `deno publish --dry-run`                                                                                                                                                                                                                                                        |
+| `just ts-e2e`          | build the `loopback_server` example of `ridl-transport-ws` and run the package's Deno end-to-end test against it                                                                                                                                                                                                                                                                                                                                   |
+| `just ts-browser-e2e`  | the same build, then the package's end-to-end test in a headless Chromium-family browser (`RIDL_BROWSER` names one); runs in CI, and is not a member of `just build`                                                                                                                                                                                                                                                                               |
+| `just build`           | `toolchain-check` + `gate-parity` + `install-check` + `fmt-check` + `book-check` + `link-check` + `doc-path-check` + `story-id-check` + `ts-check` + `freeze-check` + `compile` + `test` + `lint` + `wasm-check` + `compat-check` + `demo` + `ts-e2e` + `check` — the local gate, which is what CI runs on `main`                                                                                                                                  |
 | `just lint-commits`    | `git std lint` over the commits on top of a base branch                                                                                                                                                                                                                                                                                                                                                                                            |
-| `just pre-push`        | `lint-commits` + the static-check members of `build`, skips `freeze-check`, `compile`, `lint`, `test`, `wasm-check`, `compat-check`, `demo`, and `install-check` — wired as the pre-push hook                                                                                                                                                                                                                                                      |
+| `just pre-push`        | `lint-commits` + the static-check members of `build`, `ts-check` included; skips `freeze-check`, `compile`, `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-e2e`, and `install-check` — wired as the pre-push hook                                                                                                                                                                                                                       |
 | `just verify`          | `lint-commits` + `build` — run before a PR                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `just book`            | serve the mdBook docs locally                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `just book-build`      | render the book to `./book` — what CI publishes to Pages                                                                                                                                                                                                                                                                                                                                                                                           |

@@ -117,3 +117,7 @@ regex = '(?m)^ridl-loopback = "([^"]+)"'
 [[version_files]]
 path = "docs/book/running-a-program.md"
 regex = '(?m)^ridl-rt = \{ version = "([^"]+)"'
+
+[[version_files]]
+path = "packages/ridl-transport-ws/deno.json"
+regex = '(?m)^  "version": "([^"]+)"'
