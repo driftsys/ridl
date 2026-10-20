@@ -1242,6 +1242,18 @@ fn main() {
         Some(VerifyError::Contract(length)),
         "four distinct entries in a map of at most three",
     );
+    // The fourth entry repeats the first key. The count is checked before
+    // the entry's key is compared with the earlier ones, so the refusal is
+    // `Length`, not `Unique`: an entry past the maximum never starts the
+    // uniqueness walk, which bounds that walk by the declared count.
+    assert_eq!(
+        <Maps as Payload<Proto3>>::verify(&[
+            0x0a, 0x03, 0x0a, 0x01, 0x61, 0x0a, 0x03, 0x0a, 0x01, 0x62,
+            0x0a, 0x03, 0x0a, 0x01, 0x63, 0x0a, 0x03, 0x0a, 0x01, 0x61,
+        ]).err(),
+        Some(VerifyError::Contract(length)),
+        "an over-count entry is refused for its count before its key is examined",
+    );
 }
 "#
     );

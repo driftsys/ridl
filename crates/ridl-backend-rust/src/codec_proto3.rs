@@ -794,6 +794,19 @@ fn structure_error(variant: &str) -> TokenStream {
     }
 }
 
+/// The `verify` statement for a map entry past the map's declared count,
+/// the same violation `counter_check` raises after the walk.
+fn length_error(owner: &str) -> TokenStream {
+    quote! {
+        return ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(
+            ::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some(#owner),
+                rule: ::ridl_rt::payload::Rule::Length,
+            },
+        ));
+    }
+}
+
 /// The `verify` statement for a map key that an earlier entry already
 /// holds, the typl uniqueness rule the FlatBuffers codec refuses by the same
 /// violation.
@@ -2187,9 +2200,11 @@ impl<'a> Codec<'a> {
                     }
                 }
             }
-            Wire::Map { key, value, .. } => {
+            Wire::Map {
+                key, value, max, ..
+            } => {
                 let entry =
-                    self.map_entry_verify(owner, field.number, key, value, &counter, buf)?;
+                    self.map_entry_verify(owner, field.number, key, value, *max, &counter, buf)?;
                 quote! {
                     __seen[#seen] = true;
                     match __field.value {
@@ -2293,24 +2308,46 @@ impl<'a> Codec<'a> {
     }
 
     /// The statements that verify one map entry `__b` of the field
-    /// `number`, counted in `counter`: the entry's own walk, then its key
-    /// against the keys of the entries before it in the message `buf`.
+    /// `number`, counted in `counter`: the entry's own walk, the count
+    /// against the declared maximum `max`, then its key against the keys of
+    /// the entries before it in the message `buf`.
+    ///
+    /// The count check comes before the uniqueness walk, so an entry past
+    /// the maximum is refused for its count before any earlier entry is
+    /// re-read: the uniqueness walk re-reads at most `max` entries per
+    /// entry, so its cost is bounded by the declared maximum, quadratic in
+    /// it, and not by the buffer.
+    #[allow(clippy::too_many_arguments)]
     fn map_entry_verify(
         &self,
         owner: &str,
         number: u32,
         key: &Wire,
         value: &Wire,
+        max: u64,
         counter: &Ident,
         buf: &TokenStream,
     ) -> Result<TokenStream, GenerateError> {
         let number = Literal::u32_suffixed(number);
         let entry_walk = self.message_walk(owner, &entry_fields(key, value), &quote! { __b })?;
+        let over_count = match usize::try_from(max) {
+            Ok(max) => {
+                let max = Literal::usize_suffixed(max);
+                let length = length_error(owner);
+                quote! {
+                    if #counter >= #max {
+                        #length
+                    }
+                }
+            }
+            Err(_) => quote! {},
+        };
         let key_of_this = self.key_of(key, &quote! { __b });
         let key_of_previous = self.key_of(key, &quote! { __pb });
         let unique = unique_error(owner);
         Ok(quote! {
             { #entry_walk }
+            #over_count
             // The entries before this one have passed; their keys are read
             // again rather than kept, so no index is allocated from an
             // untrusted count.
