@@ -37,7 +37,7 @@ baseline = "v0.10.0"
 
 [[surface]]
 name = "wire"
-baseline = "v0.10.0"
+baseline = "e5e59bd1"
 
 [[surface]]
 name = "codegen-protocol"
