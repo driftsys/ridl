@@ -56,7 +56,11 @@ declares a union. The dump therefore holds a proto3 `oneof` and a FlatBuffers
 order, and every other field carries its number or its `id`, so a reorder of
 arms or fields removes a line. The FlatBuffers backend refuses the ros2 corpus,
 so ros2 has no `.fbs` line, and its FlatBuffers mapping is frozen by policy
-only. The Context bullet on the wire dump and decision 3 are changed in place.
+only. Appending an arm to a union also changes its one line, so it is reported
+as a removed line. The `wire` row's baseline predates these lines, so the union
+mapping is frozen by policy only until a follow-up pull request moves the
+baseline to the merge commit that added them. The Context bullet on the wire
+dump and decision 3 are changed in place.
 
 **Amended 2026-10-12 — the wire dump holds the frame vectors.** The `wire` dump
 gains one `frame-vector <id> <hex>` line per row of the vector table of the
@@ -262,9 +266,10 @@ design in each:
    payload-presence rule of §11.1 for a `publish` under `Init` or
    `Invalid(Declared)` and for a `response` under `reply`, which no vector
    shows, and the codes of §4 and §9.6 that no vector carries, among them the
-   `kind` values 2 and 5 and the `attach` encodings 2 and 3, are in no dump;
-   they are frozen by policy only. This record is the one that states the status
-   of `ridl diff` and of the `ridl-diff` categories.
+   `kind` values 2 and 5 and the `attach` encodings 2 and 3, and the FlatBuffers
+   mapping of the ros2 corpus, which the FlatBuffers backend refuses, are in no
+   dump; they are frozen by policy only. This record is the one that states the
+   status of `ridl diff` and of the `ridl-diff` categories.
 
 4. **A break of a frozen surface is approved by removing its row, then adding
    the row again.** `git show <baseline>:freeze/<surface>.txt` must read a dump
