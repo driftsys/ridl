@@ -1,0 +1,262 @@
+// The proto3 conformance fixture: the package the `prost` oracle is generated
+// from, read beside `proto3_conformance_other.ridl` as a two-member workspace.
+//
+// It holds every shape the proto3 codec is specified to carry, whether or not
+// the codec emits it yet, so that the checked-in oracle under
+// `tests/generated/` is generated once and does not change as the codec grows:
+// each scalar width, each enum kind (with a zero member, without one, with a
+// negative value), an enum set of width u8 and of width u64, nested structs, a
+// tuple, a union with a scalar arm, a string arm, an enum arm, an enum-set arm
+// and a struct arm, each `?` kind, packed arrays of every numeric, of booleans
+// and of enums, arrays of strings, bytes, structs and unions, a map for each
+// admitted key kind with scalar, enum, string and struct values, each root box
+// kind, a reference into the second package, and an interface with a command
+// of two parameters, a query of no parameter and a query whose reply is a
+// tuple.
+//
+// The declarations the codec carries today reach no array, map, tuple or
+// union; `Optionals` and `OptionalComposites` are split along that line so
+// that the optional scalar kinds are checked now and the optional composites
+// later.
+
+package pb.conformance
+
+import pb.parts.Wheel
+import pb.parts.Grade
+import pb.parts.Torque
+
+// ---------- Named scalars ----------
+
+/// A count, narrow enough that the projection picks `u8`, which proto3
+/// widens to `uint32`.
+type Count : integer [0..200]
+
+/// A count whose range needs 64 bits, `uint64` on the wire.
+type Wide : integer [0..9223372036854775807]
+
+/// A ratio whose step gives it a 32-bit float width.
+type Ratio : float [0.0..250.0 step 0.5]
+
+/// A label.
+type Label : string [0..16]
+
+/// A small blob.
+type Blob : bytes [0..8]
+
+/// A boolean scalar: its constraint checks nothing, so its constructor is the
+/// infallible `new`.
+type Engaged : boolean
+
+/// A level that excludes 0, so an absent field of this type is refused.
+type Level : integer [1..10]
+
+/// A code whose length excludes the empty string.
+type Code : string [2..4]
+
+/// A map key.
+type Key : string [1..8]
+
+// ---------- Enums and the enum sets ----------
+
+enum Health {
+  OK   = 0
+  WARN = 1
+  FAIL = 2
+}
+
+/// No zero member: a field of this type is always written, and an absent one
+/// is refused.
+enum Gear {
+  FIRST  = 1
+  SECOND = 2
+}
+
+/// A negative value, which proto3 writes as a ten-byte varint.
+enum Trend {
+  DOWN = -1
+  FLAT = 0
+  UP   = 1
+}
+
+/// Width u8.
+enumset WarningFlags {
+  LOW  = 0
+  HIGH = 1
+}
+
+/// Width u64: bit 63 is a declared member.
+enumset WideFlags {
+  FIRST  = 0
+  MIDDLE = 32
+  LAST   = 63
+}
+
+// ---------- Structs the codec carries today ----------
+
+struct Inner {
+  speed : Count
+  label : Label
+}
+
+/// Every scalar kind at a field position.
+struct Scalars {
+  unsigned8  : integer [0..255]
+  unsigned16 : integer [0..65535]
+  unsigned32 : integer [0..4294967295]
+  unsigned64 : integer [0..9223372036854775807]
+  signed8    : integer [-128..127]
+  signed16   : integer [-32768..32767]
+  signed32   : integer [-2147483648..2147483647]
+  signed64   : integer [-4294967296..4294967296]
+  plain      : integer
+  narrow     : float [0.0..250.0 step 0.5]
+  real       : float
+  flag       : boolean
+  text       : string [0..16]
+  data       : bytes [0..8]
+  count      : Count
+  wide       : Wide
+  ratio      : Ratio
+  label      : Label
+  blob       : Blob
+  engaged    : Engaged
+  health     : Health
+  gear       : Gear
+  trend      : Trend
+  flags      : WarningFlags
+  wideFlags  : WideFlags
+}
+
+/// Every optional kind the codec carries today: written when present at any
+/// value and omitted when absent.
+struct Optionals {
+  count  : Count?
+  label  : Label?
+  blob   : Blob?
+  flag   : boolean?
+  real   : float?
+  health : Health?
+  flags  : WarningFlags?
+  inner  : Inner?
+}
+
+struct Nested {
+  inner : Inner
+  count : Count
+}
+
+/// Every field's type admits its proto3 default, so the all-default value
+/// encodes to the empty buffer.
+struct Zeroable {
+  count  : Count
+  flag   : boolean
+  label  : Label
+  blob   : Blob
+  health : Health
+  flags  : WarningFlags
+  real   : float
+}
+
+/// A field whose type excludes 0 (`Level`) and one whose enum has no zero
+/// member (`Gear`): each is always written, and refused when absent.
+struct Required {
+  level : Level
+  gear  : Gear
+}
+
+/// The second field is a `double` at field number 2, so a value at `-0.0`
+/// encodes to its tag `11` followed by the eight bytes of `-0.0`.
+struct Signs {
+  ignored : integer
+  value   : float
+}
+
+/// Fields whose default is not a legal value by length: each is written at
+/// its shortest legal value, and refused when absent.
+struct Lengths {
+  text : string [1..8]
+  code : Code
+  data : bytes [1..4]
+}
+
+/// A reference into the second package of each kind: a struct and an enum,
+/// which the schema imports, and a named scalar, which it inlines.
+struct Axle {
+  wheel  : Wheel
+  grade  : Grade
+  torque : Torque
+}
+
+// ---------- The shapes the codec does not carry yet ----------
+
+/// An arm of each kind: a scalar, a string, an enum, an enum set, a struct.
+union Outcome {
+  number : Count
+  text   : Label
+  health : Health
+  flags  : WarningFlags
+  inner  : Inner
+}
+
+struct Tuples {
+  range : (min: Count, max: Count)
+  pair  : (lo: Count, inner: Inner)
+}
+
+/// A packed array of every numeric width, of booleans, of each enum kind and
+/// of an enum set, and a fixed-length array.
+struct Packed {
+  unsigned8s  : [integer [0..255]; 0..4]
+  unsigned16s : [integer [0..65535]; 0..4]
+  unsigned32s : [integer [0..4294967295]; 0..4]
+  unsigned64s : [integer [0..9223372036854775807]; 0..4]
+  signed8s    : [integer [-128..127]; 0..4]
+  signed16s   : [integer [-32768..32767]; 0..4]
+  signed32s   : [integer [-2147483648..2147483647]; 0..4]
+  signed64s   : [integer [-4294967296..4294967296]; 0..4]
+  plains      : [integer; 0..4]
+  narrows     : [Ratio; 0..4]
+  reals       : [float; 0..4]
+  flags       : [boolean; 0..4]
+  healths     : [Health; 0..4]
+  trends      : [Trend; 0..4]
+  sets        : [WarningFlags; 0..4]
+  three       : [Count; 3]
+}
+
+/// An array of each length-delimited element kind.
+struct Records {
+  labels   : [Label; 0..3]
+  blobs    : [Blob; 0..3]
+  inners   : [Inner; 0..3]
+  outcomes : [Outcome; 0..3]
+  points   : [(x: Count, y: Count); 0..2]
+}
+
+/// A map for each admitted key kind, with a scalar, a string, an enum and a
+/// struct value.
+struct Maps {
+  byString  : [Key : Count; 0..3]
+  byUint32  : [integer [0..4294967295] : Label; 0..3]
+  byUint64  : [integer [0..9223372036854775807] : Health; 0..3]
+  bySint32  : [integer [-100..100] : Inner; 0..3]
+  bySint64  : [integer : Count; 0..3]
+  byBoolean : [boolean : Count; 0..2]
+}
+
+/// The optional composite kinds.
+struct OptionalComposites {
+  pair    : (lo: Count, hi: Count)?
+  outcome : Outcome?
+}
+
+// ---------- The interface whose calls induce messages ----------
+
+interface Probe {
+  /// Two parameters: the argument type is an induced message.
+  command setBoth(level: Level, count: Count)
+  /// No parameter: the argument type is an induced message with no field.
+  query status(): Health
+  /// A tuple reply: the reply type is an induced message.
+  query span(): (lo: Count, hi: Count)
+}

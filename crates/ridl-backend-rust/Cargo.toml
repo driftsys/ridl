@@ -95,6 +95,22 @@ ridl-diff = { path = "../ridl-diff" }
 planus = { workspace = true, features = ["std"] }
 planus-codegen.workspace = true
 planus-translation.workspace = true
+# The proto3 conformance test's oracle is `prost`, the same way planus is the
+# FlatBuffers one. `ridl-backend-proto` emits the `.proto` of the conformance
+# fixture from the same IR as the codec under test, so the schema and the codec
+# cannot drift apart; `protox` compiles that `.proto` to a descriptor set with
+# no `protoc` (ADR-0006 decision 3); `prost-build` turns the descriptor set
+# into the Rust oracle, in the one test that regenerates the checked-in copy
+# under `tests/generated/` and compares it byte for byte; `prost` is the runtime
+# that checked-in code links. Every one of them is a dev-dependency only: this
+# crate emits a codec and links none, and ADR-0020 decision 9 makes a backend
+# an executable rather than a library other crates link. `ridl-rt` and every
+# generated package must never reach a prost crate; `xtask/tests/oracle_boundary.rs`
+# checks that, and checks that these edges stay test-time only.
+ridl-backend-proto = { path = "../ridl-backend-proto" }
+protox.workspace = true
+prost-build.workspace = true
+prost.workspace = true
 # The propagation hook spike. The design of generated observation gives
 # `ridl_rt::trace::Propagation` to the application, and the tests in
 # `otel_propagation.rs` prove the hook's call order by implementing it with
