@@ -6,8 +6,8 @@
 #![forbid(unsafe_code)]
 
 use ridl_rt::contract::{
-    reservation, table_budget, CatalogHash, CatalogRef, Interaction, Interface, InterfaceNo, Kind,
-    Member, Ordinal, PayloadInfo, Sizes,
+    reservation, table_budget, Bounds, CatalogHash, CatalogRef, Interaction, Interface,
+    InterfaceNo, Kind, Member, Ordinal, PayloadInfo, Sizes,
 };
 use ridl_rt::encoding::{Encoding, FlatBuffers};
 use ridl_rt::payload::{EncodeError, Encoded, Malformed, Payload, Ref, VerifyError};
@@ -354,4 +354,27 @@ fn a_data_driven_runtime_registers_the_slice() {
         register(Cabin::MEMBERS, <Cabin as Sizes<FlatBuffers>>::RESERVATIONS),
         64
     );
+}
+
+/// Every `Sizes<E>` is a `Bounds<E>` through the blanket implementation: row
+/// `i` of the bounds is `Some` of row `i` of `RESERVATIONS`, for every
+/// member, and an interface with no member has no row.
+#[test]
+fn a_sized_interface_has_every_bound() {
+    fn bounds<I: Bounds<E>, E: Encoding>() -> Vec<Option<u64>> {
+        (0..I::MEMBERS.len()).map(I::reservation_bound).collect()
+    }
+    assert_eq!(
+        bounds::<Cabin, FlatBuffers>(),
+        <Cabin as Sizes<FlatBuffers>>::RESERVATIONS
+            .iter()
+            .map(|row| Some(*row))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        bounds::<Cabin, FlatBuffers>(),
+        vec![Some(8), Some(32), Some(24)]
+    );
+    assert_eq!(bounds::<Huge, FlatBuffers>(), vec![Some(u64::MAX), Some(1)]);
+    assert_eq!(bounds::<Empty, FlatBuffers>(), vec![]);
 }

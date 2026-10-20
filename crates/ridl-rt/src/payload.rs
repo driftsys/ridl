@@ -1,20 +1,24 @@
 //! Encoding, verifying and decoding a payload.
 //!
-//! A generated payload type implements [`Payload<E>`] once for each encoding.
-//! Its `verify` checks the structure of the bytes and the typl constraints of
-//! the value before decoding. Map uniqueness can require repeated key reads.
-//! Its `decode` takes a [`Ref`], and only
-//! [`Ref::verify`] and [`Ref::encode`] build a `Ref`. So a value is decoded
-//! only from bytes that were checked, or that its own encoder wrote.
+//! A generated payload type implements [`Payload<E>`] once for each encoding
+//! in which its largest encoding has a bound, and [`Codec<E>`] alone for an
+//! encoding in which it has none. Every `Payload<E>` is a `Codec<E>` through
+//! a blanket implementation. A codec's `verify` checks the structure of the
+//! bytes and the typl constraints of the value before decoding. Map
+//! uniqueness can require repeated key reads. Its `decode` takes a [`Ref`],
+//! and only [`Ref::verify`] and [`Ref::encode`] build a `Ref`. So a value is
+//! decoded only from bytes that were checked, or that its own encoder wrote.
 
 use core::marker::PhantomData;
 
 use crate::encoding::Encoding;
 
-/// A type that can be carried as a payload in the encoding `E`.
+/// A type that can be carried as a payload in the encoding `E`, whose
+/// largest encoding has a bound.
 ///
 /// Generated code implements this trait and never calls its methods directly:
-/// it calls [`Ref::verify`], [`Ref::encode`] and [`Ref::decode`].
+/// it calls [`Ref::verify`], [`Ref::encode`] and [`Ref::decode`]. A type
+/// whose encoding has no bound implements [`Codec<E>`] instead.
 pub trait Payload<E: Encoding>: Sized {
     /// The largest encoded size of any legal value, in bytes.
     const MAX_SIZE: usize;
@@ -46,6 +50,62 @@ pub trait Payload<E: Encoding>: Sized {
     /// Builds the value from a proof. It cannot fail, because the proof shows
     /// that the bytes were checked or encoded.
     fn decode(r: Ref<'_, Self, E>) -> Self;
+}
+
+/// A type that can be encoded, verified and decoded in the encoding `E`,
+/// with or without a bound on its largest encoding.
+///
+/// Every [`Payload<E>`] is a `Codec<E>`, with [`BOUND`](Codec::BOUND) equal
+/// to `Some(MAX_SIZE)`, through a blanket implementation. A type whose
+/// encoding has no bound — a proto3 string with no length bound, or a
+/// collection whose count has none — implements `Codec<E>` directly, with
+/// `BOUND` equal to `None`: it has no `MAX_SIZE`, no `Buffer` and no
+/// `BUFFER`, so generic code that holds a buffer on the stack cannot name
+/// it, and a caller gives [`Ref::encode`] a buffer of its own. An encoder
+/// that knows its size before it writes reports the exact length in
+/// [`EncodeError::Capacity`] when the buffer is too short.
+///
+/// [`Ref`] is bounded by this trait, so the three operations work the same
+/// way for a type with a bound and for one without.
+pub trait Codec<E: Encoding>: Sized {
+    /// What a successful check or encode leaves behind: the bytes, an
+    /// accessor over the bytes, or a parsed value.
+    type View<'a>;
+
+    /// The largest encoded size of any legal value, in bytes, or `None` when
+    /// no such bound exists.
+    const BOUND: Option<usize>;
+
+    /// Writes `self` into `out` and returns the bytes written. The bytes are
+    /// a subslice of `out`, not necessarily a prefix of it; see
+    /// [`Payload::encode`].
+    fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Self::View<'o>>, EncodeError>;
+
+    /// Checks the structure of `buf` and the typl constraints of the value it
+    /// holds.
+    fn verify(buf: &[u8]) -> Result<Self::View<'_>, VerifyError>;
+
+    /// Builds the value from a proof. It cannot fail, because the proof shows
+    /// that the bytes were checked or encoded.
+    fn decode(r: Ref<'_, Self, E>) -> Self;
+}
+
+impl<T: Payload<E>, E: Encoding> Codec<E> for T {
+    type View<'a> = <T as Payload<E>>::View<'a>;
+
+    const BOUND: Option<usize> = Some(<T as Payload<E>>::MAX_SIZE);
+
+    fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Self::View<'o>>, EncodeError> {
+        <T as Payload<E>>::encode(self, out)
+    }
+
+    fn verify(buf: &[u8]) -> Result<Self::View<'_>, VerifyError> {
+        <T as Payload<E>>::verify(buf)
+    }
+
+    fn decode(r: Ref<'_, Self, E>) -> Self {
+        <T as Payload<E>>::decode(r)
+    }
 }
 
 /// A view that holds the verified bytes it reads.
@@ -87,8 +147,8 @@ pub trait View<'a> {
     fn bytes(&self) -> &'a [u8];
 }
 
-/// The result of [`Payload::encode`]: the bytes written and their view. It is
-/// data, not a proof.
+/// The result of [`Payload::encode`] or [`Codec::encode`]: the bytes written
+/// and their view. It is data, not a proof.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Encoded<'a, V> {
     /// The encoded bytes, a subslice of the output buffer.
@@ -100,7 +160,9 @@ pub struct Encoded<'a, V> {
 /// A proof that some bytes passed `T::verify` or were written by `T::encode`.
 ///
 /// The fields are private and [`Ref::verify`] and [`Ref::encode`] are the only
-/// constructors. A crate outside `ridl-rt` builds a `Ref` by checking:
+/// constructors. `T` is any [`Codec<E>`], so a `Ref` serves a type with a
+/// bound on its encoding and one without alike. A crate outside `ridl-rt`
+/// builds a `Ref` by checking:
 ///
 /// ```
 /// use ridl_rt::encoding::ReprC;
@@ -128,16 +190,16 @@ pub struct Encoded<'a, V> {
 ///     Ref { bytes, view: bytes, _e: PhantomData }
 /// }
 /// ```
-pub struct Ref<'a, T: Payload<E>, E: Encoding> {
+pub struct Ref<'a, T: Codec<E>, E: Encoding> {
     bytes: &'a [u8],
-    view: T::View<'a>,
+    view: <T as Codec<E>>::View<'a>,
     _e: PhantomData<E>,
 }
 
-impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
+impl<'a, T: Codec<E>, E: Encoding> Ref<'a, T, E> {
     /// Checks `buf` with `T::verify` and returns the proof.
     pub fn verify(buf: &'a [u8]) -> Result<Self, VerifyError> {
-        let view = T::verify(buf)?;
+        let view = <T as Codec<E>>::verify(buf)?;
         Ok(Ref {
             bytes: buf,
             view,
@@ -151,7 +213,7 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
     /// performs no additional verification. Received bytes are checked by
     /// [`Self::verify`].
     pub fn encode(value: &T, out: &'a mut [u8]) -> Result<Self, EncodeError> {
-        let Encoded { bytes, view } = value.encode(out)?;
+        let Encoded { bytes, view } = <T as Codec<E>>::encode(value, out)?;
         Ok(Ref {
             bytes,
             view,
@@ -165,18 +227,18 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
     }
 
     /// Lends the view.
-    pub fn view(&self) -> &T::View<'a> {
+    pub fn view(&self) -> &<T as Codec<E>>::View<'a> {
         &self.view
     }
 
     /// Moves the view out.
-    pub fn into_view(self) -> T::View<'a> {
+    pub fn into_view(self) -> <T as Codec<E>>::View<'a> {
         self.view
     }
 
     /// Builds the value with `T::decode`.
     pub fn decode(self) -> T {
-        T::decode(self)
+        <T as Codec<E>>::decode(self)
     }
 }
 
@@ -196,7 +258,8 @@ pub enum EncodeError {
         /// `available + 1` and at most the whole encoding. Either way a
         /// caller that grows the buffer to `needed` has made progress, and
         /// one that wants a buffer that always suffices uses
-        /// [`Payload::MAX_SIZE`].
+        /// [`Payload::MAX_SIZE`] — when the type has one: for a type whose
+        /// [`Codec::BOUND`] is `None`, growing to `needed` is the only way.
         needed: usize,
         /// The bytes the output buffer has.
         available: usize,
