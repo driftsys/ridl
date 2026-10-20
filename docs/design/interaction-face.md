@@ -107,18 +107,19 @@ descriptor has no inherent constant of either name.
   in member order, each a `u64` computed by a const-evaluable expression from
   the payloads' `<T as Payload<FlatBuffers>>::MAX_SIZE`, which the codec emitter
   writes from the codegen model's bound, so the table recomputes nothing. A
-  payload whose FlatBuffers projection has no bound makes the backend refuse to
-  generate, rather than leaving a missing value, so a `Sizes<FlatBuffers>` table
-  has no `None` and no reading of one. The proto3 table is `Sizes<Proto3>`,
-  emitted beside it when `encodings` names `proto3` and built from
-  `<T as Payload<Proto3>>::MAX_SIZE` in the same way. A proto3 payload with no
-  finite bound is refused too, so a `Sizes<Proto3>` table has no `None` either
-  ([the proto3 codec record](proto3-codec.md)). A `repr(C)` table arrives when
-  the backend emits that codec (driftsys/ridl#317). The face reads buffers from
-  `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of its port `P`, and
-  from the `CLAIM_BUFFER` and `EVENT_BUFFER` of `Sizes<P::Encoding>`;
-  `reservation::<X, E>()` and `table_budget::<I, E>()` in `ridl_rt::contract`
-  serve a runtime that sizes a store.
+  declared payload whose FlatBuffers projection has no bound makes the backend
+  refuse to generate, and an induced tuple with none skips its interface and its
+  table (rule 2), rather than leaving a missing value, so a `Sizes<FlatBuffers>`
+  table has no `None` and no reading of one. The proto3 table is
+  `Sizes<Proto3>`, emitted beside it when `encodings` names `proto3` and built
+  from `<T as Payload<Proto3>>::MAX_SIZE` in the same way. A proto3 payload with
+  no finite bound is refused or skipped the same way, so a `Sizes<Proto3>` table
+  has no `None` either ([the proto3 codec record](proto3-codec.md)). A `repr(C)`
+  table arrives when the backend emits that codec (driftsys/ridl#317). The face
+  reads buffers from `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of
+  its port `P`, and from the `CLAIM_BUFFER` and `EVENT_BUFFER` of
+  `Sizes<P::Encoding>`; `reservation::<X, E>()` and `table_budget::<I, E>()` in
+  `ridl_rt::contract` serve a runtime that sizes a store.
 
 ## The contract-clause translator
 

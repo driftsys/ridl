@@ -40,10 +40,13 @@
 //! finite bound on every string and bytes its payloads reach, and a
 //! collection count that fits. The codec's own walk refuses the
 //! same members the proto backend refuses, naming the field: an optional
-//! array or map field of a struct or a tuple (ADR-0013 decision 7), an
-//! optional array element and an optional map value, a nested collection, a
-//! map key outside the integral and string scalars, an enum value outside
-//! int32, and a field number proto3 reserves or exceeds.
+//! array or map field of a struct or of a tuple a declaration holds
+//! (ADR-0013 decision 7), an optional array element and an optional map
+//! value, a nested collection, a map key outside the integral and string
+//! scalars, an enum value outside int32, and a field number proto3 reserves
+//! or exceeds. A tuple only an interaction reaches is never walked when its
+//! root is not bounded, so such a member in it is the sizer's
+//! `RefusedMember`, named by the interface's note without the field.
 //!
 //! # The wire mapping
 //!
@@ -2311,9 +2314,11 @@ impl<'a> Codec<'a> {
     ///
     /// The count check comes before the uniqueness walk, so an entry past
     /// the maximum is refused for its count before any earlier entry is
-    /// re-read: the uniqueness walk re-reads at most `max` entries per
-    /// entry, so its cost is bounded by the declared maximum, quadratic in
-    /// it, and not by the buffer.
+    /// re-read: the uniqueness walk compares at most `max` earlier entries
+    /// per entry. Each re-read starts at the message's first byte and
+    /// passes over every field before those entries, unknown fields
+    /// included, so the walk costs `max` times the fields before the
+    /// entries, per entry, and is quadratic in the declared maximum.
     #[allow(clippy::too_many_arguments)]
     fn map_entry_verify(
         &self,
@@ -2967,7 +2972,10 @@ fn field_number(owner: &str, name: &str, number: u32) -> Result<u32, GenerateErr
 /// `repeated` or `map` field absent, and no value is spare to carry the fact
 /// in-band, so ADR-0013 decision 7's last clause applies. Any other type
 /// passes, optional or not. The sizer gives such a payload `RefusedMember`;
-/// this check runs first, so the refusal names the field.
+/// this check runs first, so the refusal names the field, for a struct and
+/// for a tuple a declaration holds. A tuple only an interaction reaches is
+/// not walked when its root is not bounded, so the field is never reached
+/// here and the interface's note carries the sizer's cause alone.
 fn refuse_optional_repeated(
     owner: &str,
     name: &str,

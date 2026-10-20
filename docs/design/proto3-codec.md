@@ -120,10 +120,13 @@ states (design rule 2 and "The consumer face"), so the package's other
 interfaces and its types still generate. The descriptor emitter judges the tuple
 in each encoding the list names (`descriptors::induced_name`), and the note
 names the tuple and the sizer's cause.
-`an_unbounded_type_is_refused_under_proto3` pins the skip for `Overflow`, and
-`tests/induced_call_refusals.rs` pins it under `proto3` alone and beside
-`flatbuffers`, with the other interface faced; `generate_face_with`, which
-refuses rather than skips, refuses with the same message
+`an_unbounded_induced_call_is_skipped_under_proto3` pins the skip for
+`Overflow`, and `tests/induced_call_refusals.rs` pins it for a request and for a
+query's tuple reply whose proto3 state is `RefusedMember` and whose FlatBuffers
+bound is finite — faced under `flatbuffers` alone, skipped under `proto3` alone
+and under both, the output compiling — and for a bare `string` request, with the
+other interface faced in each case; `generate_face_with`, which refuses rather
+than skips, refuses with the same message
 (`an_interface_with_an_unbounded_payload_is_refused`). One difference from the
 FlatBuffers codec remains: that codec withholds the codec of a type whose bound
 it cannot judge, while the proto3 sizer resolves cross-package references
@@ -146,11 +149,14 @@ type, so a field with a refused number is `RefusedMember` whatever its type. The
 codec's own walk runs before the size state is read, and refuses an optional
 array or map field, a refused field number and an enum value outside int32 with
 a message that names the field or the value (`a_refused_member_is_still_refused`
-pins the last). The codec alone refuses an optional array element and an
-optional map value, which the schema emits without presence (ADR-0019 review
-ruling 6), as the FlatBuffers codec does. An integer with no width, an enum with
-no value and a union with no arm are refused as malformed IR; the compiler
-produces none of them.
+pins the last) — in a declaration, and in a tuple a declaration holds. A tuple
+only an interaction reaches is not walked when its root is not bounded, so such
+a member in it skips the interface with the sizer's `RefusedMember` and no field
+name. The codec alone refuses an optional array element and an optional map
+value, which the schema emits without presence (ADR-0019 review ruling 6), as
+the FlatBuffers codec does. An integer with no width, an enum with no value and
+a union with no arm are refused as malformed IR; the compiler produces none of
+them.
 
 **The ros2 corpus does not generate with proto3.** Every ros2 package that
 declares or reaches `RosString` is refused under `[Proto3]` with `NoBound`, and
@@ -323,10 +329,13 @@ receiver is the buffer its port reads into. `verify` is linear in the bytes it
 reads, except map key uniqueness, which compares each entry's key with the keys
 of the entries before it and so is quadratic in the map's entry count, as the
 FlatBuffers codec's is; the count is checked before each entry's key is
-compared, so the walk is bounded by the declared maximum and not by the buffer.
-`verify` needs no run-time depth limit: a type is not recursive, so the
-generated functions nest to a depth fixed at generation time, and skipping an
-unknown length-delimited field does not recurse.
+compared, so at most the declared maximum of entries is compared per entry. Each
+comparison re-reads the message from its first byte, so the walk also passes
+over every field before the entries, unknown fields included: its cost is the
+declared maximum times the fields before the entries, per entry. `verify` needs
+no run-time depth limit: a type is not recursive, so the generated functions
+nest to a depth fixed at generation time, and skipping an unknown
+length-delimited field does not recurse.
 
 What `verify` refuses as malformed:
 

@@ -399,10 +399,11 @@ declaration, and the interaction's `request_sizes.proto3` or
 state gives a codec: a state that is absent, whatever its cause (`NoBound`,
 `Overflow`, `RefusedMember` or `Unresolved`), is a generation error that names
 the declaration and the cause, as the FlatBuffers codec refuses a type with no
-finite bound ([the proto3 codec record](proto3-codec.md)). The sizer gives a
-type whose only problem is a member with no finite bound `NoBound`, and one
-whose bound does not fit `Overflow`, not `RefusedMember`, so this descriptor,
-the model and the refusal name the same cause.
+finite bound, and for an induced tuple is a skip of its interface with a note,
+as the FlatBuffers codec skips one ([the proto3 codec record](proto3-codec.md)).
+The sizer gives a type whose only problem is a member with no finite bound
+`NoBound`, and one whose bound does not fit `Overflow`, not `RefusedMember`, so
+this descriptor, the model and the refusal name the same cause.
 
 **The codegen model carries the same states.** The model (`ridl.codegen.v1`)
 writes a `PayloadSizes` message, one `SizeState` per encoding, on every payload
@@ -450,11 +451,11 @@ where the runtime holds the same per-payload sizes the model holds. Since
 2026-10-20 the Rust backend emits a `Sizes<E>` table for each encoding the
 package carries, FlatBuffers and proto3, and each table's rows are built from
 the `MAX_SIZE` the codec emitted from the model's state, so both columns have a
-runtime counterpart. A package with a payload that has no proto3 bound is
-refused under proto3, so no `Sizes<Proto3>` row stands where the model's
-reservation is `unsized`. The catalog descriptor this record describes is a
-different artifact, and it writes a proto3 row too (`lower.rs` in
-`ridl-descriptor`).
+runtime counterpart. A declaration with no proto3 bound refuses the package
+under proto3, and an induced tuple with none skips its interface and its table,
+so no `Sizes<Proto3>` row stands where the model's reservation is `unsized`. The
+catalog descriptor this record describes is a different artifact, and it writes
+a proto3 row too (`lower.rs` in `ridl-descriptor`).
 
 ## Verification before access, and `ridl describe`
 
