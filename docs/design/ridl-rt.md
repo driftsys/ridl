@@ -628,9 +628,10 @@ Each transport's default and its override:
 | WebSocket (driftsys/ridl#265) | proto3      | `ws::connect_with::<E>(url)`; `ws::connect(url)` is proto3 |
 | shared memory (later)         | `repr(C)`   | likewise                                                   |
 
-The loopback row is built. The WebSocket and shared-memory rows are the
-specification: neither transport is implemented in this repository, and the
-names in their override column are the shape planned for them, not an API.
+The loopback row is built. The server side of the WebSocket row is built as
+`ridl-transport-ws`; its client side (`ws::connect`) and the shared-memory row
+are the specification, and the names in their override column are the shape
+planned for them, not an API.
 
 `Watermark`'s generation counter field is named `generation`, not `gen`: `gen`
 is a reserved keyword in the 2024 edition, so the field name the crate's earlier
@@ -963,9 +964,9 @@ wire tag values — the frame specification fixed the values, 1 FlatBuffers, 2
 proto3, 3 `repr(C)`; the constant itself is a later 0.x minor); `Access` (the
 trust constant the Rust codegen generates once the rsdl lowering exists); the
 three payload codecs; the runtimes — `ridl-loopback` is its own crate
-([its design record](ridl-loopback.md)) and `ridl-transport-ws` is
-driftsys/ridl#265; and the engine. `Family` returns as a `Member` field, which
-is a breaking change (ADR-0021 decision 10); streams have no story yet.
+([its design record](ridl-loopback.md)) and `ridl-transport-ws` is its own
+crate, built; and the engine. `Family` returns as a `Member` field, which is a
+breaking change (ADR-0021 decision 10); streams have no story yet.
 
 ## Versioning
 

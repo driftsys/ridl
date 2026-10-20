@@ -79,6 +79,12 @@ pub use deployment::{encoding_of, lower_deployment};
 pub use lower::{lower, lower_with};
 pub use unbounded::attribute as fb_unbounded;
 
+/// The transport bindings the toolchain knows, as the deployment section
+/// renders them.
+pub fn known_bindings() -> Vec<v1::Binding> {
+    bindings::bindings()
+}
+
 /// The error [`to_json_pretty`] and [`to_text_format`] return, on the two
 /// paths [`crate::v2::SerializeError`] has and for the same causes — the
 /// model is written in the same dialect, through the same machinery.

@@ -33,11 +33,11 @@ is TypeScript and is not a workspace member.
 
 The crates below arrived in three waves: seven from the E1 spine, grown in place
 through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
-`ridl-mcp`, most recently. `ridl-rt`, `ridl-loopback` and `ridl-rt-conformance`
-landed after those three waves, from the runtime-library work rather than from
-E1 or E2, and are listed with the others because a newcomer will look for them
-here. This list is not a standing count of every crate the workspace holds — see
-`AGENTS.md` for that.
+`ridl-mcp`, most recently. `ridl-rt`, `ridl-loopback`, `ridl-rt-conformance` and
+`ridl-transport-ws` landed after those three waves, from the runtime-library
+work rather than from E1 or E2, and are listed with the others because a
+newcomer will look for them here. This list is not a standing count of every
+crate the workspace holds — see `AGENTS.md` for that.
 
 - **`crates/ridl-syntax`** — the surface layer, and the one grammar. A `logos`
   lexer over the full family token set; a hand-written recursive-descent parser
@@ -313,6 +313,17 @@ here. This list is not a standing count of every crate the workspace holds — s
   from its own tests with the crate's `suite!` macro, naming the extensions it
   implements — the two signal extensions and `Wakeable` — and `trace` when it
   carries the trace context; `ridl-loopback` is the one runtime that does.
+
+- **`crates/ridl-transport-ws`** — the WebSocket binding of the frame. A
+  `no_std` codec for the frame (`frame`) and, under the default `server`
+  feature, a blocking server: `serve` takes a connection the embedder accepted
+  and a `Backend` made of `ridl-rt` ports, and runs one session on it. The
+  server side of RFC 6455 is written in the crate, so `ridl-rt` is its only
+  dependency; the embedder binds the socket and chooses the thread. It serves
+  the observe and call ports, applies the exact-match rule at `attach`, and
+  keeps the last 64 settled responses of a session. Its tests run it against
+  `tungstenite` as the client and over `ridl-loopback`. See frame specification
+  §11.1 and [its design record](../design/ridl-transport-ws.md).
 
 - **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and
   unpublished: `--emit codegen-model` as a process, over the backend contract

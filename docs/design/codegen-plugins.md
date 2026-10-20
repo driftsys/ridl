@@ -585,6 +585,10 @@ frame header at most 20 bytes, envelope 16 bytes), from
 [the frame specification](../specification/frame-specification.md) §11.1. The
 emitter writes one entry per row of the table of known bindings
 (`crates/ridl-ir/src/codegen/bindings.rs`), in name order.
+`ridl_ir::codegen::known_bindings()` returns the same rows, and the binding
+sizes test of `ridl-transport-ws` (`crates/ridl-transport-ws/tests/sizes.rs`)
+checks the `websocket` row's sum against frames that crate writes
+([its design record](ridl-transport-ws.md)).
 
 The overhead of a binding is not part of any payload size. A plugin that sizes a
 socket message adds the frame header and the envelope of the binding the message

@@ -22,6 +22,15 @@ placed behind a browser playground. The in-place amendments this record causes
 are listed in **Documents amended**; each is written into the record it belongs
 to, not here.
 
+**Amended 2026-10-19 — decision 6, the WebSocket transport has no WebSocket
+dependency.** The `ridl-transport-ws` row said "`ridl-rt` and a WebSocket
+crate". The crate writes the server side of RFC 6455 itself, so its only
+dependency is `ridl-rt`. The embedder's build compiles every dependency of a
+crate it links, and the server side of RFC 6455 is a small part of this crate: a
+WebSocket crate would add its own dependency tree to that build for a few
+hundred lines of code. A WebSocket client is a dev-dependency of the crate's
+tests only. The row is changed in place.
+
 **Amended 2026-09-22 — decision 11, the parity test.** The parity test runs over
 the in-tree Rust backend, not the TypeScript one: Kotlin precedes TypeScript in
 the sequence (the lane P driver's D-P1), so the TypeScript backend is not the
@@ -358,7 +367,7 @@ as its public contract.
    | `ridl-rt`                                  | the library of decision 5                                                                                                                                   | the FlatBuffers runtime, only under its feature — permitted, and not taken: since 2026-09-20 (story E11.7, stage K3) the `flatbuffers` feature gates the crate's own helpers and `ridl-rt` has no dependency in any feature combination |
    | `ridl-loopback`                            | the in-process reference runtime — every port over a queue and a map, and no IO                                                                             | `ridl-rt`                                                                                                                                                                                                                               |
    | `ridl-rt-conformance`                      | the port contract tests, generic over a runtime factory, which a runtime runs from its own tests; published (2026-10-08)                                    | `ridl-rt`                                                                                                                                                                                                                               |
-   | `ridl-transport-ws`                        | the ports over a WebSocket, carrying the encoding the session names, proto3 by default (frame specification §11.1); the default of the getting-started path | `ridl-rt` and a WebSocket crate                                                                                                                                                                                                         |
+   | `ridl-transport-ws`                        | the ports over a WebSocket, carrying the encoding the session names, proto3 by default (frame specification §11.1); the default of the getting-started path | `ridl-rt`                                                                                                                                                                                                                               |
    | the TypeScript runtime package (name open) | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec                                                          | nothing outside itself                                                                                                                                                                                                                  |
    | the TypeScript WebSocket package           | the same binding for Deno and the browser                                                                                                                   | the runtime package                                                                                                                                                                                                                     |
 

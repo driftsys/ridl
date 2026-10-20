@@ -7,25 +7,25 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: twenty crates
-under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`,
+(ADRs), the implementation roadmap, and the compiler workspace: twenty-one
+crates under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`,
 `ridl-descriptor` (the catalog descriptor's schema, accessors and verifier),
 `ridlc`, `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
 `ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`,
-`ridl-rt`, `ridl-loopback`, `ridl-rt-conformance` (the port contract tests any
-runtime runs, published for runtimes outside this repository), and
-`ridlc-gen-model` and `ridlc-gen-rust` (the reference codegen plugins,
-test-only) — plus `xtask` at the root, the `editors/vscode` extension, `skills/`
-(the `ridl-authoring` agent skill, which the extension and the editor release
-package), `evals/` (the public corpus, the calibration records and the eval
-tasks for design evaluation, which `cargo xtask eval` runs, outside the
-published crates and the book), and `examples/`, whose worked examples are
-compiled and run by the test suite rather than being prose. The typl v0.1
-toolchain (epic E1), the ridl interface layer over it (epic E2) and rsdl's
-checks, lowering and `ridl diff` at the system (epic E6) are built; the boundary
-model (epic E3) is sequenced in the roadmap, and `rmdl` stays a Proposed draft
-with no implementation. See `docs/technotes/walking-skeleton-architecture.md`
-for the as-built map.
+`ridl-rt`, `ridl-loopback`, `ridl-transport-ws` (the WebSocket binding of the
+frame), `ridl-rt-conformance` (the port contract tests any runtime runs,
+published for runtimes outside this repository), and `ridlc-gen-model` and
+`ridlc-gen-rust` (the reference codegen plugins, test-only) — plus `xtask` at
+the root, the `editors/vscode` extension, `skills/` (the `ridl-authoring` agent
+skill, which the extension and the editor release package), `evals/` (the public
+corpus, the calibration records and the eval tasks for design evaluation, which
+`cargo xtask eval` runs, outside the published crates and the book), and
+`examples/`, whose worked examples are compiled and run by the test suite rather
+than being prose. The typl v0.1 toolchain (epic E1), the ridl interface layer
+over it (epic E2) and rsdl's checks, lowering and `ridl diff` at the system
+(epic E6) are built; the boundary model (epic E3) is sequenced in the roadmap,
+and `rmdl` stays a Proposed draft with no implementation. See
+`docs/technotes/walking-skeleton-architecture.md` for the as-built map.
 
 **Start from the map for your task, then read what the task touches.**
 
@@ -66,6 +66,7 @@ for the as-built map.
     codegen plugin protocol; read its **Documents amended** table first.
   - ADR-0021 and `docs/design/ridl-rt.md` — before changing `ridl-rt` or
     anything that consumes it.
+  - `docs/design/ridl-transport-ws.md` — before changing `ridl-transport-ws`.
   - ADR-0022 and `docs/technotes/rsdl-implementation.md` — before changing the
     IR's system artifact, the `ridl build` contract, or `ridl diff`.
   - ADR-0023 and `docs/design/interaction-face.md` — before extending the Rust
@@ -169,13 +170,16 @@ member; rsdl is the apex.
                          and ridl-descriptor with its default features off,
                          and with only dedup on, for a
                          target with no standard library, and with its
-                         features on for wasm32
+                         features on for wasm32, and the ridl-transport-ws
+                         codec (default features off) for wasm32 and for
+                         thumbv7em-none-eabihf
     just compat-check    build and test the packaged ridl-rt and
                          ridl-rt-conformance crates as edition
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
                          and as edition 2024 with the rust-toolchain.toml pin,
                          check both crates' LICENSE files, build the packaged
-                         ridl-loopback at that rust-version, build the packaged
+                         ridl-loopback and ridl-transport-ws (with its default
+                         features on and off) at that rust-version, build the packaged
                          ridl-ir and ridl-descriptor at the rust-version in
                          crates/ridl-descriptor/Cargo.toml, and check the crate
                          ridl build emits for examples/cabin (built with

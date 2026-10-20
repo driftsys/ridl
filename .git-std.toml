@@ -57,6 +57,9 @@ scopes = [
   # the in-process reference runtime (docs/ROADMAP.md, E11.15;
   # ADR-0020 decision 6)
   "ridl-loopback",
+  # the WebSocket binding of the ridl frame (docs/ROADMAP.md, E11.9;
+  # docs/design/ridl-transport-ws.md)
+  "ridl-transport-ws",
   # the port contract tests any runtime runs (docs/ROADMAP.md,
   # E11.20; ADR-0020 decision 6)
   "ridl-rt-conformance",

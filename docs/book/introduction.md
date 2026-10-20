@@ -38,7 +38,10 @@ generated ridl package links and a runtime implements: identity, time
 and the envelope, samples, the payload traits, the interaction descriptors,
 the ports, and the contract and transport errors. It has no dependency in any
 feature combination. `ridl-loopback` implements its ports in
-process, and nothing else does: no transport reaches a second process. Of the
+process, and `ridl-transport-ws` carries the observe and call ports to a second
+process over WebSocket, as the providing side of a frame session on a
+connection the program that embeds it accepted; no other transport is built. Of
+the
 payload codecs, only FlatBuffers is built: the Rust backend emits a FlatBuffers
 codec for the payload types of a package when the manifest names it, and proto3
 and `repr(C)` have no codec.
@@ -52,8 +55,10 @@ this book describes them as usable. rmdl is parked, with no implementation
 scheduled; rxdl keeps only its unrestricted profile, narrowed to types,
 interfaces and wiring, scheduled in step 2.
 
-**There is no runtime you can run a contract over.** The transport bindings and
-the delivery semantics are specified and not implemented. Provider-side contract
+**There is no runtime you can run a contract over from a command in this
+book.** Of the transport bindings, the WebSocket one is implemented, by
+`ridl-transport-ws`, which a program embeds; the delivery semantics of the
+others are specified and not implemented. Provider-side contract
 enforcement is: the generated `serve` evaluates a `require` and an `ensure`
 clause and settles the contract error, and the Rust backend's tests run that
 over the in-process runtime below. Nothing the compiler emits links a runtime,

@@ -112,8 +112,10 @@ the two are separate questions: the hash identifies an exact version. A
 compatible change that reaches the hash makes a new version, and a change that
 leaves the hash unchanged makes none.
 
-No runtime in this workspace performs the check at `attach`. The last column
-states what the frame specification
+The one transport in this workspace, `ridl-transport-ws`, reads no descriptor
+and accepts an `attach` on an exact match of the hash only, so it refuses an
+earlier hash from the list, which the last column shows as accepted. The last
+column states what the frame specification
 ([section 6.1](reference/frame.md#61-attach-and-attached)) specifies for an
 older consumer, built against the version before the change.
 

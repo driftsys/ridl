@@ -653,3 +653,18 @@ provenance. Nothing here is normative — the current references live in
   baseline move (#962), with the alternatives considered. All landed in
   `v0.11.0`. The plan's order and the rejected scope options are the only
   content not recorded elsewhere.
+
+- **2026-10-19-ridl-transport-ws-design.md** and
+  **2026-10-19-ridl-transport-ws-plan.md** — the WebSocket transport crate
+  `ridl-transport-ws` (driftsys/ridl#265): the `no_std` codec of the frame
+  specification §11.1, the server side of RFC 6455 written in the crate, the
+  sans-IO session core over a backend's observe-and-call ports, the blocking
+  `serve`, and the done-when test across processes. Both are archived verbatim;
+  the design carries the "(as built)" edits made during implementation. The
+  as-built behaviour, with the decisions D-1 to D-25 and the alternatives
+  considered, is in
+  [the `ridl-transport-ws` design record](../design/ridl-transport-ws.md); the
+  dependency decision is
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decision 6 as amended 2026-10-19. The follow-ups are driftsys/ridl#984 to
+  driftsys/ridl#989.

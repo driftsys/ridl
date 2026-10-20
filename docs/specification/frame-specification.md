@@ -20,22 +20,25 @@ Version: 0.2.0
 > written from it alone, without reading the code in this repository. Where this
 > document and an ADR disagree, the ADR wins and this document is corrected.
 
-> **As built.** Nothing in this workspace speaks this frame. The one runtime
-> here, `ridl-loopback`, runs in process: it carries bytes from a provider
-> handle to a consumer handle over one in-memory store, opens no socket, and has
-> no wire format ([its design record](../design/ridl-loopback.md)). So every
-> sentence below about delivery, timing enforcement, duplicate suppression, and
-> the provider-side enforcement of a contract clause describes the
-> specification, not behaviour a shipped runtime performs. The first binding is
-> the WebSocket transport (driftsys/ridl#265); the second is a runtime's own
-> binder contract on Android, outside this repository (§11.2, which reverses an
-> earlier AIDL binding generated per interface).
+> **As built.** One crate in this workspace, `ridl-transport-ws`, speaks this
+> frame over WebSocket (§11.1). It serves the observe and call ports of a
+> provider runtime, applies the exact-match rule of §6.1 at `attach`, and keeps
+> the last 64 settled responses of a session for duplicate suppression instead
+> of keeping each until its response bound has passed (§7). The runtime here,
+> `ridl-loopback`, runs in process: it carries bytes from a provider handle to a
+> consumer handle over one in-memory store, opens no socket, and has no wire
+> format ([its design record](../design/ridl-loopback.md)). Neither enforces a
+> timing rule or a contract clause on the provider side, so every sentence below
+> about those describes the specification, not behaviour a shipped runtime
+> performs. The first binding is the WebSocket transport (driftsys/ridl#265);
+> the second is a runtime's own binder contract on Android, outside this
+> repository (§11.2, which reverses an earlier AIDL binding generated per
+> interface).
 >
 > The catalog descriptor carries the list of compatible earlier catalog hashes
-> that §6.1 names, and no runtime in this workspace reads it at `attach`. The
-> first WebSocket provider (driftsys/ridl#265) holds no descriptor and applies
-> the exact-match rule of §6.1, so it does not meet conformance item 1 of §12
-> until it reads one.
+> that §6.1 names, and no runtime in this workspace reads it at `attach`.
+> `ridl-transport-ws` holds no descriptor, so it applies only the exact-match
+> rule of §6.1 and does not meet conformance item 1 of §12 until it reads one.
 
 ---
 
@@ -643,6 +646,11 @@ between peers, `Contract::UnknownInteraction`:
 - a `publish`, an `occurrence`, a `response` or an `unsubscribe` is discarded
   and recorded; nothing is sent back.
 
+An `answer` or a `response` that refuses a frame carries the `interface`,
+`ordinal` and `kind` of that frame as received. So a `response` carrying
+`contract(UnknownInteraction)` may carry a `kind` other than `Command` or
+`Query`, and a receiver accepts it.
+
 An interface the catalog retires, and a `reserved` ordinal, are unknown for this
 purpose: the descriptors hold no row for either. On a session attached under an
 earlier hash (§6.1), a `subscribe`, a `read` or a `request` naming an
@@ -694,8 +702,12 @@ The retransmission budget is bounded by the response bound
 decision 18): a caller's runtime retrying with backoff exhausts its attempts
 within the declared `max`, and reaching it is the Stratum 3 detection (§8).
 
-No shipped runtime retransmits or suppresses anything: `ridl-loopback` delivers
-each call once because nothing in a process is lost.
+No shipped runtime retransmits. `ridl-loopback` delivers each call once because
+nothing in a process is lost. `ridl-transport-ws` suppresses a duplicate
+`request`: it keeps the last 64 settled responses of a session, and sends the
+kept response again for a `request` whose `seq` is among them. It does not know
+the response bound, because it holds no descriptor, so it fixes a count instead
+of retaining each response until the bound has passed.
 
 ## 8. Timing
 
@@ -871,8 +883,8 @@ payload rules of §9, or the control-plane operations and their answers.
 
 Two bindings are named: one by the transport that carries it, and one by the
 platform whose runtimes write their own. The WebSocket binding is specified in
-§11.1 and its transport crate is not built yet; a binder contract is not written
-in this repository.
+§11.1 and its Rust transport crate, `ridl-transport-ws`, is built; a binder
+contract is not written in this repository.
 
 ### 11.1 WebSocket
 

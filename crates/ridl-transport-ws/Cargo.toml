@@ -1,0 +1,46 @@
+[package]
+name = "ridl-transport-ws"
+version.workspace = true
+# Edition 2021 and rust-version 1.83 as literals, the same as `ridl-rt`:
+# edition 2024 cannot build before Rust 1.85.
+edition = "2021"
+rust-version = "1.83"
+license.workspace = true
+repository.workspace = true
+description = "The WebSocket binding of the ridl frame: a no_std codec and a server for ridl-rt ports."
+# The package leaves out `tests/`: `tests/vectors.rs` reads
+# `docs/specification/frame-specification.md`, a file of the repository that
+# the package does not contain, so that test cannot run from the packaged
+# crate. The tests run here, in the workspace.
+exclude = ["tests/"]
+
+[features]
+default = ["server"]
+# The server side of the binding. It turns on `std` for this crate and nothing
+# else; it turns on no `ridl-rt` feature.
+server = []
+
+[dependencies]
+ridl-rt.workspace = true
+
+[dev-dependencies]
+# Path only, with no version: the package leaves out `tests/`, the only user.
+ridl-ir = { path = "../ridl-ir" }
+# The backend of every session test. Path only, with no version: the packaged
+# crate does not run its tests.
+ridl-loopback = { path = "../ridl-loopback" }
+# An independent WebSocket client, so that the hand-written server side of
+# RFC 6455 is tested against an implementation this repository did not write.
+# A dev-dependency does not reach the build of a crate that depends on this
+# one. 0.29 is the newest release whose rust-version is not above this crate's.
+tungstenite = "0.29.0"
+
+# The two test targets that run `serve` need the `server` feature. With it off,
+# they are skipped, and the codec's test targets still run.
+[[test]]
+name = "serve"
+required-features = ["server"]
+
+[[test]]
+name = "scenario"
+required-features = ["server"]
