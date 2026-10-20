@@ -532,9 +532,12 @@ mod tests {
         assert_eq!(varint_len(u64::MAX), 10);
     }
 
-    /// The boundaries `ridl_rt::proto3::tag_len` and the Rust backend's
-    /// generation-time `tag_len` are tested at as well: the three count
-    /// one rule, and this table is the tie between them.
+    /// The three copies of the tag-length rule — this one, the Rust
+    /// backend's generation-time `tag_len` and `ridl_rt::proto3::tag_len` —
+    /// count one rule. The backend's test
+    /// `the_generation_time_tag_length_is_the_runtime_one` ties its copy to
+    /// the runtime's over this table; this crate links neither, so this
+    /// table, the same one, is what ties its copy to them.
     #[test]
     fn tag_lengths() {
         for (number, len) in [
@@ -918,6 +921,18 @@ mod tests {
         );
         assert_eq!(
             state_in("RefusedFirst", &ctx),
+            SizeState::Absent(AbsentCause::RefusedMember)
+        );
+        // A union arm naming a type that does not resolve: no leaf, and no
+        // type def behind the name, so a refusal and not `NoBound`.
+        let mut package = fixture();
+        package
+            .decls
+            .push(union_decl("Lost", &[("x", 1, "Missing")]));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(
+            state_in("Lost", &ctx),
             SizeState::Absent(AbsentCause::RefusedMember)
         );
     }

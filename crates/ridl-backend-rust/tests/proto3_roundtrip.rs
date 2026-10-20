@@ -498,12 +498,16 @@ fn an_unbounded_type_is_refused_under_proto3() {
         "the refusal names the struct and the cause, got: {}",
         err.message
     );
+}
 
-    // Every declaration has a bound; the call's argument message does not.
-    // The package generates: the argument message gets no codec and its
-    // interface is skipped, as under the FlatBuffers codec
-    // (`tests/induced_call_refusals.rs` pins the note), and the layout
-    // holds no message for the tuple, which no declaration reaches.
+/// Every declaration of the fixture has a bound; the call's argument
+/// message does not, because its sum of bounds overflows a `u32`. The
+/// package generates: the argument message gets no codec and its interface
+/// is skipped, as under the FlatBuffers codec
+/// (`tests/induced_call_refusals.rs` pins the note), and the layout holds no
+/// message for the tuple, which no declaration reaches.
+#[test]
+fn an_unbounded_induced_call_is_skipped_under_proto3() {
     let package = ir::compile_fixture("proto3_unbounded_call.ridl");
     let source = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
         .expect("the package generates with the interface skipped")
