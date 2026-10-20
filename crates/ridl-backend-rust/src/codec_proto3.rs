@@ -2259,16 +2259,24 @@ impl<'a> Codec<'a> {
                     quote! { #counter += __run.len() / #width; }
                 } else {
                     quote! {
-                        for __chunk in __chunks {
+                        for __chunk in __run.chunks(#width) {
                             #read
                             #checks
                             #counter += 1usize;
                         }
                     }
                 };
+                // A run whose length is not a whole number of elements is
+                // refused before any element is read. `chunks` and its last
+                // chunk rather than `chunks_exact` and its remainder, and no
+                // `%`: clippy proposes `as_chunks` and `is_multiple_of` for
+                // those, which Rust 1.83 does not have.
                 quote! {
-                    let __chunks = __run.chunks_exact(#width);
-                    if !__chunks.remainder().is_empty() {
+                    if __run
+                        .chunks(#width)
+                        .next_back()
+                        .is_some_and(|__last| __last.len() != #width)
+                    {
                         #out_of_bounds
                     }
                     #elements
@@ -2665,8 +2673,10 @@ impl<'a> Codec<'a> {
                         Some(width) => {
                             let width = Literal::usize_suffixed(width);
                             let read = scalar.fixed_read();
+                            // `verify` has refused a run that is not a whole
+                            // number of elements, so every chunk is whole.
                             quote! {
-                                for __chunk in __run.chunks_exact(#width) {
+                                for __chunk in __run.chunks(#width) {
                                     #read
                                     #binding.push(#domain);
                                 }
