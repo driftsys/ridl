@@ -49,7 +49,7 @@ baseline = "v0.10.0"
 
 [[surface]]
 name = "runtime-crates"
-baseline = "v0.10.0"
+baseline = "v0.12.0"
 
 [[surface]]
 name = "keywords"

@@ -24,11 +24,12 @@ use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
 /// The crates of the `runtime-crates` surface.
-pub const RUNTIME_CRATES: [&str; 4] = [
+pub const RUNTIME_CRATES: [&str; 5] = [
     "ridl-rt",
     "ridl-rt-conformance",
     "ridl-loopback",
     "ridl-descriptor",
+    "ridl-transport-ws",
 ];
 
 /// The generated crates: the directory under `freeze/generated/` and the
