@@ -288,6 +288,10 @@ pub(crate) fn tuple_state<'a>(home: &'a Package, tuple: &'a TupleType, ctx: &Ctx
     }
 }
 
+/// The field `number` of type `ty`. A field number the proto backend refuses
+/// is `RefusedMember` whatever the field's type: it is checked before the
+/// type is read, so a leaf with no bound behind a refused number does not
+/// turn the refusal into `NoBound`.
 fn field_size<'a>(
     number: u32,
     ty: &'a FieldType,
@@ -295,6 +299,9 @@ fn field_size<'a>(
     walk: &mut Walk<'a, '_>,
     depth: u32,
 ) -> Option<u64> {
+    if PROTO_RESERVED.contains(&number) || number > PROTO_MAX_FIELD_NUMBER {
+        return None;
+    }
     let leaf = walk.leaf_of(ty, home)?;
     leaf_field(number, leaf, walk, depth)
 }
@@ -1247,6 +1254,62 @@ mod tests {
         );
         // The largest field number takes a 5-byte tag: 5 + 5.
         assert_eq!(state_in("Highest", &ctx), SizeState::Bounded(10));
+    }
+
+    /// A member proto3 cannot represent is `RefusedMember` whatever else the
+    /// message holds: a stream field, a field naming a declaration that does
+    /// not resolve, and a field naming a constant. A refused field number is
+    /// checked before the field's type is read, so a field with no bound
+    /// behind a reserved number is `RefusedMember` rather than `NoBound`.
+    #[test]
+    fn a_stream_an_unresolved_name_a_constant_and_a_refused_number_are_refused_members() {
+        let mut package = fixture();
+        let free = TypeDef {
+            backing: Some(Backing {
+                kind: Some(backing::Kind::Primitive(PrimitiveType::String as i32)),
+            }),
+            ..Default::default()
+        };
+        package.decls.push(Decl {
+            name: "Free".to_owned(),
+            kind: Some(decl::Kind::TypeDef(free)),
+            ..Default::default()
+        });
+        let stream = field(field_type::Kind::Stream(crate::v2::StreamType {
+            element: Some(crate::v2::stream_type::Element::Named("Point".to_owned())),
+        }));
+        package
+            .decls
+            .push(struct_decl("Streamed", vec![("pts", 1, stream)]));
+        package
+            .decls
+            .push(struct_decl("Dangling", vec![("x", 1, named("Missing"))]));
+        // `LIMIT` is the fixture's constant: it projects no type.
+        package
+            .decls
+            .push(struct_decl("Limited", vec![("x", 1, named("LIMIT"))]));
+        package.decls.push(struct_decl(
+            "ReservedFree",
+            vec![("text", 19_000, named("Free"))],
+        ));
+        let others: [&Package; 0] = [];
+        let ctx = Ctx::new(&package, &others);
+        for name in ["Streamed", "Dangling", "Limited", "ReservedFree"] {
+            assert_eq!(
+                state_in(name, &ctx),
+                SizeState::Absent(AbsentCause::RefusedMember),
+                "{name}"
+            );
+        }
+        // The same leaf behind an admitted number is the size problem.
+        package
+            .decls
+            .push(struct_decl("PlainFree", vec![("text", 1, named("Free"))]));
+        let ctx = Ctx::new(&package, &others);
+        assert_eq!(
+            state_in("PlainFree", &ctx),
+            SizeState::Absent(AbsentCause::NoBound)
+        );
     }
 
     fn union_decl(name: &str, arms: &[(&str, u32, &str)]) -> Decl {
