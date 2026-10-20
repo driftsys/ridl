@@ -15,13 +15,10 @@
 //! - **Composition changed** — a change to the closure or to a component's
 //!   lines: a component added to or removed from the system, an `offers` or
 //!   `requires` line added or removed, `instances` changed, a component made
-//!   `external`, a distribution added or removed, or a `labels`, `deprecated`,
-//!   `tier` or backend key of the
-//!   system, of a component, of a distribution or of one of their lines
-//!   changed.
-//!
-//! Distribution membership changes and attributes of unpaired distribution
-//! members are not yet reported (driftsys/ridl#974).
+//!   `external`, a distribution added or removed, a member line added to or
+//!   removed from a distribution, or a `labels`, `deprecated`, `tier` or
+//!   backend key of the system, of a component, of a distribution or of one
+//!   of their lines changed.
 //!
 //! Both read the lowered `System` of each side and nothing else.
 
@@ -389,20 +386,39 @@ fn compare_distribution(
         ),
         (&after.labels, after.deprecated.as_ref(), &after.attributes),
     );
-    // Unpaired distribution members and their attributes are not reported
-    // yet (driftsys/ridl#974).
+    // A member line on one side only is compared with an empty side, so that
+    // its backend keys are listed with it.
     for line in &after.members {
-        if let Some(before) = before
+        let path = format!("{name}/{}", line.component);
+        let earlier = before
             .members
             .iter()
-            .find(|earlier| earlier.component == line.component)
+            .find(|earlier| earlier.component == line.component);
+        if earlier.is_none() {
+            composition(changes, path.clone(), None, Some("member"));
+        }
+        line_attrs(
+            changes,
+            SystemHeading::CompositionChanged,
+            &path,
+            earlier.map_or(&[], |earlier| &earlier.attributes),
+            &line.attributes,
+        );
+    }
+    for line in &before.members {
+        if !after
+            .members
+            .iter()
+            .any(|later| later.component == line.component)
         {
+            let path = format!("{name}/{}", line.component);
+            composition(changes, path.clone(), Some("member"), None);
             line_attrs(
                 changes,
                 SystemHeading::CompositionChanged,
-                &format!("{name}/{}", line.component),
-                &before.attributes,
+                &path,
                 &line.attributes,
+                &[],
             );
         }
     }
@@ -722,23 +738,21 @@ mod tests {
         let present = with_distribution();
         let mut absent = present.clone();
         absent.distributions.clear();
-        let change = SystemChange {
-            heading: SystemHeading::CompositionChanged,
-            path: "veh.topology.Adas".to_string(),
-            before: None,
-            after: Some("distribution".to_string()),
-        };
+        // The bare member line is listed with its distribution and has no
+        // backend key to compare.
         assert_eq!(
-            diff_systems(&absent, &present).as_slice(),
-            std::slice::from_ref(&change),
+            lines(&diff_systems(&absent, &present)),
+            [
+                "composition changed: veh.topology.Adas: (absent) -> distribution",
+                "composition changed: veh.topology.Adas/veh.topology.Cruise: (absent) -> member",
+            ]
         );
         assert_eq!(
-            diff_systems(&present, &absent),
-            [SystemChange {
-                before: change.after,
-                after: change.before,
-                ..change
-            }]
+            lines(&diff_systems(&present, &absent)),
+            [
+                "composition changed: veh.topology.Adas: distribution -> (removed)",
+                "composition changed: veh.topology.Adas/veh.topology.Cruise: member -> (removed)",
+            ]
         );
     }
 
@@ -773,6 +787,11 @@ mod tests {
                 Some("[]"),
                 Some("[ sign.key = release ]"),
             ),
+            (
+                "veh.topology.Adas/veh.topology.Cruise",
+                None,
+                Some("member"),
+            ),
         ];
         assert_eq!(added.len(), expected.len(), "{added:?}");
         for (change, (path, before, after)) in added.iter().zip(expected) {
@@ -781,7 +800,9 @@ mod tests {
             assert_eq!(change.before.as_deref(), before);
             assert_eq!(change.after.as_deref(), after);
         }
-        assert_eq!(diff_systems(&old, &new), added[1..]);
+        // The paired distribution keeps its member, so neither the
+        // distribution row nor the member row is listed.
+        assert_eq!(diff_systems(&old, &new), added[1..added.len() - 1]);
         let removed = diff_systems(&new, &absent);
         assert_eq!(removed.len(), added.len());
         for (removed, added) in removed.iter().zip(&added) {
@@ -924,6 +945,83 @@ mod tests {
             [
                 "composition changed: veh.topology.Cruise/deprecated: \"use Cruise2\" -> (removed)",
                 "composition changed: veh.topology.Adas/tier: PLATFORM -> (removed)",
+            ]
+        );
+    }
+
+    /// rsdl §14: a component moved between two existing distributions is a
+    /// composition change on each, and a member line's backend keys are
+    /// compared with an empty side when the member is added or removed.
+    #[test]
+    fn a_member_moved_between_distributions_is_listed_under_composition_changed() {
+        let member = |name: &str, attributes: Vec<v2::Attribute>| v2::MemberLine {
+            component: format!("veh.topology.{name}"),
+            attributes,
+            ..Default::default()
+        };
+        let distribution = |name: &str, members: Vec<v2::MemberLine>| v2::Distribution {
+            name: name.to_string(),
+            package: "veh.topology".to_string(),
+            members,
+            ..Default::default()
+        };
+        let signed = || vec![backend("sign", "key", Some("release"))];
+        let mut old = base();
+        // `Hmi` keeps its member unchanged, so a member is paired by its
+        // distribution's qualified name and not by the component alone.
+        old.distributions = vec![
+            distribution("Adas", vec![member("Cruise", signed())]),
+            distribution("Body", vec![member("Panel", Vec::new())]),
+            distribution("Hmi", vec![member("Panel", Vec::new())]),
+        ];
+        let mut new = old.clone();
+        new.distributions[0].members = vec![member("Panel", signed())];
+        new.distributions[1].members = vec![member("Cruise", Vec::new())];
+        assert_eq!(
+            lines(&diff_systems(&old, &new)),
+            [
+                "composition changed: veh.topology.Adas/veh.topology.Panel: (absent) -> member",
+                "composition changed: veh.topology.Adas/veh.topology.Panel/attributes: \
+                 [] -> [ sign.key = release ]",
+                "composition changed: veh.topology.Adas/veh.topology.Cruise: member -> (removed)",
+                "composition changed: veh.topology.Adas/veh.topology.Cruise/attributes: \
+                 [ sign.key = release ] -> []",
+                "composition changed: veh.topology.Body/veh.topology.Cruise: (absent) -> member",
+                "composition changed: veh.topology.Body/veh.topology.Panel: member -> (removed)",
+            ]
+        );
+        assert_eq!(
+            lines(&diff_systems(&new, &old)),
+            [
+                "composition changed: veh.topology.Adas/veh.topology.Cruise: (absent) -> member",
+                "composition changed: veh.topology.Adas/veh.topology.Cruise/attributes: \
+                 [] -> [ sign.key = release ]",
+                "composition changed: veh.topology.Adas/veh.topology.Panel: member -> (removed)",
+                "composition changed: veh.topology.Adas/veh.topology.Panel/attributes: \
+                 [ sign.key = release ] -> []",
+                "composition changed: veh.topology.Body/veh.topology.Panel: (absent) -> member",
+                "composition changed: veh.topology.Body/veh.topology.Cruise: member -> (removed)",
+            ]
+        );
+
+        // The members of an added or removed distribution are listed with it,
+        // and a member line's keys are compared with an empty side.
+        let mut absent = old.clone();
+        absent.distributions.remove(0);
+        let added = [
+            "composition changed: veh.topology.Adas: (absent) -> distribution",
+            "composition changed: veh.topology.Adas/veh.topology.Cruise: (absent) -> member",
+            "composition changed: veh.topology.Adas/veh.topology.Cruise/attributes: \
+             [] -> [ sign.key = release ]",
+        ];
+        assert_eq!(lines(&diff_systems(&absent, &old)), added);
+        assert_eq!(
+            lines(&diff_systems(&old, &absent)),
+            [
+                "composition changed: veh.topology.Adas: distribution -> (removed)",
+                "composition changed: veh.topology.Adas/veh.topology.Cruise: member -> (removed)",
+                "composition changed: veh.topology.Adas/veh.topology.Cruise/attributes: \
+                 [ sign.key = release ] -> []",
             ]
         );
     }
