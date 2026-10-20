@@ -658,6 +658,10 @@ All under `crates/ridl-transport-ws/`.
   consumer-only port. The contract is a hand-written test catalog, not a
   generated face, because a generated face over a WebSocket client needs a
   public Rust client, which the crate does not ship (driftsys/ridl#989).
+- **The loopback server** (`examples/loopback_server.rs`). Serves the scenario's
+  test catalog and provider on `127.0.0.1:0`, one thread and one attachment per
+  connection, prints `port <n>`, and exits when its standard input ends. It
+  serves the TypeScript package's end-to-end tests. The package leaves it out.
 
 The test targets `serve` and `scenario` require the `server` feature, so
 `--no-default-features` still runs the codec's tests.
