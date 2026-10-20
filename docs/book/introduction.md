@@ -43,9 +43,10 @@ it carries the observe and call ports to a second process, as the providing
 side of a frame session on a connection the program that embeds it accepted.
 The TypeScript package `@driftsys/ridl-transport-ws`
 (`packages/ridl-transport-ws/`) is the consuming side of that binding, for Deno
-and the browser. No other transport is built. Of the payload codecs, only FlatBuffers is built: the Rust backend emits a FlatBuffers
-codec for the payload types of a package when the manifest names it, and proto3
-and `repr(C)` have no codec.
+and the browser. No other transport is built. Of the payload codecs,
+FlatBuffers and proto3 are built: the Rust backend emits a codec for the payload
+types of a package for each of the two the manifest names, and `repr(C)` has no
+codec.
 
 `ridl build --emit` writes Rust source, TypeScript source, a proto3 schema, a
 FlatBuffers schema, or the IR as JSON, with the lowered rsdl system beside it.

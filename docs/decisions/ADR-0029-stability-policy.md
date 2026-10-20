@@ -104,7 +104,8 @@ design in each:
   `veh-cluster` corpus under `xtask/tests/freeze-fixtures/generated/`, so an
   edit to `examples/` or to the corpus is not a break of that surface.
 - The fixture manifests name only `flatbuffers`, the one codec the Rust backend
-  emits today.
+  emitted when the surface was frozen; the proto3 codec, built 2026-10-20, is
+  not among the frozen inputs (`docs/design/proto3-codec.md`).
 - The dumps are committed under `freeze/`, and the baseline copy of a dump is
   read with `git show <baseline>:freeze/<surface>.txt`. A new row therefore
   starts in a follow-up pull request that names the merge commit of the pull

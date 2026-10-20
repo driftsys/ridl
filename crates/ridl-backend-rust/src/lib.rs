@@ -225,9 +225,9 @@ pub(crate) fn generate_pipeline_over(
 ) -> Result<Generated, GenerateError> {
     let mut ctx = Ctx::over(model);
     if !emits_face(encodings) {
-        // Types only, or types and a codec with no face: no descriptor reads
-        // the catalog hash and no interface is walked, so nothing below
-        // applies and nothing is refused.
+        // Types only: the list is empty, so no codec, no descriptor and no
+        // face is emitted, the catalog hash is not read and no interface is
+        // walked, so nothing below applies and nothing is refused.
         return render(package_items(&ctx, &[], encodings)?);
     }
     ctx.encodings = encodings.to_vec();
@@ -478,7 +478,9 @@ fn face_gap(ctx: &Ctx, interface: &v1::Interface, err: &GenerateError) -> FaceGa
 ///
 /// There is one emitter per codec and one call to each, which is why the
 /// face compiles over the codec emitted here rather than over one written
-/// for it (design note D-11). A codec is emitted only when `encodings` names
+/// for it (the FlatBuffers codec design note,
+/// `docs/archive/2026-09-20-flatbuffers-codec-design.md`, D-11). A codec is
+/// emitted only when `encodings` names
 /// it: a types-only package carries no `Payload<_>` implementation, no
 /// `*FbView` type and no `__ridl_fb_*` or `__ridl_pb_*` helper, and a list
 /// that names both encodings carries both codecs side by side.
@@ -507,8 +509,9 @@ fn package_items(
 }
 
 /// A payload encoding a generated package carries a codec for, and that its
-/// face encodes and verifies over (design note D-11; ADR-0020 decision 1
-/// names the three encodings).
+/// face encodes and verifies over (the FlatBuffers codec design note,
+/// `docs/archive/2026-09-20-flatbuffers-codec-design.md`, D-11; ADR-0020
+/// decision 1 names the three encodings).
 ///
 /// It is a per-package build-time choice rather than a type parameter on the
 /// face: the alternative would put an `E: Encoding` on every descriptor, every
@@ -583,8 +586,10 @@ impl WireEncoding {
 /// this walk used to and names with `InducedName.rust`.
 ///
 /// This does not emit the codec. [`package_items`] appends it, for both entry
-/// points: the codec is `generate`'s output (design note D-1 as amended), and
-/// the face compiles over that same output (D-11).
+/// points: the codec is `generate`'s output, and the face compiles over that
+/// same output (the FlatBuffers codec design note,
+/// `docs/archive/2026-09-20-flatbuffers-codec-design.md`, D-1 as amended and
+/// D-11).
 fn domain_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items: Vec<TokenStream> = Vec::new();
     for decl in &ctx.model.declarations {

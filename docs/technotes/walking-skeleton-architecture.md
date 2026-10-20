@@ -147,7 +147,7 @@ crate the workspace holds — see `AGENTS.md` for that.
   `ridl diff` reads; `v2::load_ir_json` reads such a snapshot from a file, the
   only file I/O in the crate's library (ADR-0008 decision 9). `ridl_ir::zero`
   holds the one definition of whether the value 0 is legal for a type, which the
-  Rust FlatBuffers codec and `ridl-diff`'s classifier both call
+  Rust backend's FlatBuffers and proto3 codecs and `ridl-diff`'s classifier call
   (driftsys/ridl#598). `ridl_ir::catalog_hash` computes the catalog hash:
   SHA-256 over the protobuf binary of a reduced unit that holds the interfaces,
   their numbers and the types they reach (ADR-0014 decision 15). It is in this

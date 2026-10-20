@@ -249,8 +249,8 @@ pub enum Malformed {
     /// `u32::MAX`, or a `sint32` or an enum outside `i32`.
     ///
     /// Protobuf parsers truncate an over-wide varint to the field's width.
-    /// This crate's proto3 codec refuses it, because the bytes do not hold a
-    /// value of the field's type.
+    /// The generated proto3 codec refuses it, through this crate's narrowing
+    /// helpers, because the bytes do not hold a value of the field's type.
     Varint,
     /// A tag names field number 0, a wire type that proto3 does not have (3,
     /// 4, 6 or 7), or a wire type that the known field's type does not take.
@@ -260,9 +260,9 @@ pub enum Malformed {
     ///
     /// Protobuf's own rule reads a repeated singular field as "last one wins",
     /// a repeated message field as a merge of every occurrence, and two
-    /// `oneof` arms as "last one wins". This crate's proto3 codec refuses all
-    /// three, because a payload is one value written once and no generated
-    /// writer emits a field twice.
+    /// `oneof` arms as "last one wins". The generated proto3 codec refuses all
+    /// three, with this variant, because a payload is one value written once
+    /// and no generated writer emits a field twice.
     Duplicate,
 }
 

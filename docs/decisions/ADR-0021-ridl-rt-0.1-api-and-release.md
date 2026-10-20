@@ -538,14 +538,14 @@ trusted with no `unsafe` and no second verification pass.
    The module holds what every generated `Payload<Proto3>` implementation
    shares: the varint and zigzag encodings and their lengths, `tag_len`,
    `check_capacity`, a forward `Writer` over the caller's slice, a `Reader` that
-   yields each field of a message as a `Field` of a `WireType` and a `Value`,
-   the narrowing functions `narrow_u32`, `narrow_i32` and `unzigzag32_checked`,
-   `utf8`, and `Verified<'a>`, the view a generated `verify` returns. It decides
-   no layout, takes no dependency, allocates nothing and has no `unsafe` code,
-   so the three constraints this crate holds to are unaffected, and
-   `just wasm-check` and `just compat-check` cover it through their
-   `--all-features` invocations. `repr-c` still enables nothing. Under decision
-   10 the change is additive.
+   yields each field of a message as a `Field` of a field number and a `Value`,
+   whose variant is the wire type, the narrowing functions `narrow_u32`,
+   `narrow_i32` and `unzigzag32_checked`, `utf8`, and `Verified<'a>`, the view a
+   generated `verify` returns. It decides no layout, takes no dependency,
+   allocates nothing and has no `unsafe` code, so the three constraints this
+   crate holds to are unaffected, and `just wasm-check` and `just compat-check`
+   cover it through their `--all-features` invocations. `repr-c` still enables
+   nothing. Under decision 10 the change is additive.
 
 9. **`Contract` and `CallError` stay exhaustive; every other error enum stays
    `#[non_exhaustive]`.** `Contract`'s variants are ridl §10.2's fixed

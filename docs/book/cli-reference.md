@@ -722,9 +722,10 @@ the workspace's own packages only.
 a package in one file: the domain types (a struct, an enum, an enum set, a
 union and a named scalar, each with its typl constraints enforced at
 construction) always, and, when `[backend.rust] encodings` in the manifest names
-`flatbuffers`, the FlatBuffers codec — `encode`, `verify`,
-`decode` and a `MAX_SIZE` bound — the interaction descriptors, and the
-interaction face. With no `encodings` list the file holds the types only. Each
+`flatbuffers` or `proto3`, the codec of each encoding named — `encode`,
+`verify`, `decode` and a `MAX_SIZE` bound — the interaction descriptors, with
+one size table per encoding, and the interaction face. With no `encodings` list
+the file holds the types only. Each
 interface gets the parts its own interactions need: a
 `Client` for the consumer side when it carries any interaction at all; a
 `Publisher` for the producer side when it carries a signal or an event; and a

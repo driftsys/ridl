@@ -499,8 +499,10 @@ be generated, and in what order", which is what this record answers.
     it did not write names an encoding only where it builds that runtime, and a
     program that writes its own port names it in that port's `Encoded`
     implementation instead. The face is still emitted only when the manifest
-    names `flatbuffers`, which is the one codec the Rust backend emits.
-    `ridl-loopback` is the port side of this:
+    names `flatbuffers`, which is the one codec the Rust backend emits. (Amended
+    2026-10-20: the proto3 codec is built, and the face is emitted when the
+    manifest names `flatbuffers` or `proto3`, alone or together;
+    `docs/design/proto3-codec.md`.) `ridl-loopback` is the port side of this:
     `Loopback<E: Encoding = FlatBuffers>` and each of its six role handles
     implement `Encoded`, so `Loopback::new(catalog)` carries FlatBuffers and
     `Loopback::<E>::with_encoding(catalog)` names another encoding

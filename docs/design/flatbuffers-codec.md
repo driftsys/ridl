@@ -548,16 +548,16 @@ breaking, because this codec refuses the old buffer with `MissingRequired` (case
 9). A type the diff cannot resolve is reported as breaking; `ridl diff` resolves
 types against the new snapshot and the built-in `ridl.std`. The codec and the
 diff read one definition of "0 is legal", `ridl_ir::zero`: `zero_is_legal` in
-`codec.rs` calls `ridl_ir::zero::range_holds_zero`, and the lowering's enum zero
-member comes from `ridl_ir::zero::enum_zero_member`. Case 12 ties the two
-together over one fixture. The proto3 codec (built 2026-10-20,
-[its record](proto3-codec.md)) applies the same reader rule in proto3 terms,
-where it is forced, and further: proto3 gives no non-optional field presence, so
-it also reads an absent string, bytes, collection or nested message as the empty
-value when that is legal. It therefore reads five appends that this rule calls
-breaking — a non-optional struct, string, array, map and tuple field — and
-`ridl diff` keeps calling them breaking, because the rule is held to the
-stricter of the two codecs.
+`lib.rs`, which both codecs call, calls `ridl_ir::zero::range_holds_zero`, and
+the lowering's enum zero member comes from `ridl_ir::zero::enum_zero_member`.
+Case 12 ties the two together over one fixture. The proto3 codec (built
+2026-10-20, [its record](proto3-codec.md)) applies the same reader rule in
+proto3 terms, where it is forced, and further: proto3 gives no non-optional
+field presence, so it also reads an absent string, bytes, collection or nested
+message as the empty value when that is legal. It therefore reads five appends
+that this rule calls breaking — a non-optional struct, string, array, map and
+tuple field — and `ridl diff` keeps calling them breaking, because the rule is
+held to the stricter of the two codecs.
 
 **A foreign reader does not refuse.** The emitted `.fbs` gives a field such as
 `c : Level [1..10]` no default annotation — FlatBuffers has no way to mark a

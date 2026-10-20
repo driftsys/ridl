@@ -96,37 +96,47 @@ added to the codegen protocol; it is additive under
 `BUFFER` come from the same literal. The catalog descriptor's proto3 row and the
 `Sizes<Proto3>` row are the same number, because all three read one sizer. Every
 `MAX_SIZE` is finite, and `ridl-rt`'s `Payload` and `Sizes` API is the one the
-FlatBuffers codec implements.
+FlatBuffers codec implements. The lowering sizes each declaration with a walk of
+its own, so a nested type that several declarations share is sized once per
+declaration; the cost is paid once, at generation time.
 
 **A type whose size state is not `Bounded` is refused**, for a declaration
 exactly as the FlatBuffers codec refuses a declaration with no finite bound.
 Every state but `Bounded` is refused: an absent state (`NoBound`, `Overflow`,
 `RefusedMember` and `Unresolved` are the causes the sizer gives a type),
 `Unbounded`, and a state the model does not carry. The refusal is a
-`GenerateError` that names the declaration, or the interaction and its induced
-message, and the cause, by its name in parentheses for an absent state
-(`bound_state` in `codec_proto3.rs`). The codec emitter stops at the first
-refused message, so one refusal fails the package's proto3 generation, and
-`ridl build` fails with it; the same package still generates with no encoding.
-`an_unbounded_type_is_refused_under_proto3` pins `NoBound` for a string with no
-length bound and for a struct that holds one, and `Overflow` for a call whose
-argument message is a sum of bounds that does not fit a `u32`;
-`an_interface_with_an_unbounded_payload_is_refused`
-(`tests/descriptor_generation.rs`) pins the same refusal through the face. Two
-differences from the FlatBuffers codec remain. That codec withholds the codec of
-a type whose bound it cannot judge, while the proto3 sizer resolves
-cross-package references through `others`, so no proto3 type is withheld
-silently. And an induced interaction payload with no finite bound fails the
-package's proto3 generation, where the FlatBuffers codec skips only that
-interface's face and descriptors with a `__RIDL_NO_FACE_<NAME>` marker and the
-build succeeds.
+`GenerateError` that names the declaration and the cause, by its name in
+parentheses for an absent state (`bound_state` in `codec_proto3.rs`). The codec
+emitter stops at the first refused declaration, so one refusal fails the
+package's proto3 generation, and `ridl build` fails with it; the same package
+still generates with no encoding. `an_unbounded_type_is_refused_under_proto3`
+pins `NoBound` for a string with no length bound and for a struct that holds
+one. An induced interaction payload — a call's argument message, a query's tuple
+reply — whose state is not `Bounded` is handled as the FlatBuffers codec handles
+one with no finite FlatBuffers bound: the tuple gets no `Payload<Proto3>`, and
+the pipeline skips its interface, with the interface's descriptors and face,
+under the rule and the marker [the interaction-face record](interaction-face.md)
+states (design rule 2 and "The consumer face"), so the package's other
+interfaces and its types still generate. The descriptor emitter judges the tuple
+in each encoding the list names (`descriptors::induced_name`), and the note
+names the tuple and the sizer's cause.
+`an_unbounded_type_is_refused_under_proto3` pins the skip for `Overflow`, and
+`tests/induced_call_refusals.rs` pins it under `proto3` alone and beside
+`flatbuffers`, with the other interface faced; `generate_face_with`, which
+refuses rather than skips, refuses with the same message
+(`an_interface_with_an_unbounded_payload_is_refused`). One difference from the
+FlatBuffers codec remains: that codec withholds the codec of a type whose bound
+it cannot judge, while the proto3 sizer resolves cross-package references
+through `others`, so no proto3 type is withheld silently.
 
 The sizer names the cause. `NoBound` is a member with no finite bound: a
 `string` or `bytes` with no length bound, such as the ros2 corpus's
-`RosString : string [0..18446744073709551615]`, or a collection whose count has
-none. `Overflow` is a bound past `u32::MAX`, a sum or product of bounds that
-does not fit, or a nesting past the sizer's depth limit. `RefusedMember` is a
-member the `.proto` emitter refuses: an optional array or map field (ADR-0013
+`RosString : string [0..18446744073709551615]`, whose bound overflows the
+string's byte count; a collection's count is always a bounded `u64`, so a
+collection reaches `NoBound` only through its element, and `Overflow` through
+its count. `Overflow` is a bound past `u32::MAX`, a sum or product of bounds
+that does not fit, or a nesting past the sizer's depth limit. `RefusedMember` is
+a member the `.proto` emitter refuses: an optional array or map field (ADR-0013
 decision 7), an array of arrays or of maps, a map whose value is an array or a
 map, a map key outside the integral and string scalars, an enum value or a
 retired enum value outside int32, a field number proto3 reserves (19000 to
@@ -150,12 +160,12 @@ only `builtininterfaces`, which declares no string, generates;
 platform-wide payload ceiling of driftsys/ridl#996, which is to cap such bounds
 for both codecs, lands.
 
-`descriptors.rs` emits `Sizes<Proto3>` for every interface of a package that
-carries proto3, with each row a const expression over the payloads'
-`<T as Payload<Proto3>>::MAX_SIZE`; an interface with a payload that has no
-bound is not reached, because the codec refuses the package before a descriptor
-is rendered. The face is generic over its port's encoding and changed in no
-line.
+`descriptors.rs` emits `Sizes<Proto3>` for every faced interface of a package
+that carries proto3, with each row a const expression over the payloads'
+`<T as Payload<Proto3>>::MAX_SIZE`; a declaration with no bound refuses the
+package before a descriptor is rendered, and an interface whose induced payload
+has no bound is skipped, so no table names a `MAX_SIZE` that does not exist. The
+face is generic over its port's encoding and changed in no line.
 
 ## The wire mapping
 
@@ -238,16 +248,17 @@ returns `EncodeError::Capacity { needed, available }` with the exact `needed`
 when `out` is too small, and otherwise writes, so `Encoded.bytes` is a
 **prefix** of `out` (a FlatBuffers encoding is a suffix). A nested message's
 length is computed by its own length function before its prefix is written,
-which costs one recomputation per nesting level, the cost `prost` pays the same
-way; the depth is fixed at generation time. The length arithmetic saturates, so
-a value past its declared bound that is too large for a `usize` asks for
-`usize::MAX` rather than wrapping. `encode` checks what the FlatBuffers `encode`
-checks — an anonymous string's or byte sequence's length, a collection's count
-and a map's key uniqueness — and returns `EncodeError::Contract` on the same
-rules. It allocates nothing beyond what the domain type owns.
-`ridl_rt::proto3::Writer` never panics: a write past the end records the
-overflow and `finish` reports it, which only an undercounting length function
-can reach.
+which costs one recomputation per nesting level, so `encode` costs the encoded
+size times the nesting depth rather than the size alone, the cost `prost` pays
+the same way; the depth is fixed at generation time. The length arithmetic
+saturates, so a value past its declared bound that is too large for a `usize`
+asks for `usize::MAX` rather than wrapping. `encode` checks what the FlatBuffers
+`encode` checks — an anonymous string's or byte sequence's length, a
+collection's count and a map's key uniqueness — and returns
+`EncodeError::Contract` on the same rules. It allocates nothing beyond what the
+domain type owns. `ridl_rt::proto3::Writer` never panics: a write past the end
+records the overflow and `finish` reports it, which only an undercounting length
+function can reach.
 
 ## Presence, defaults and absence
 
@@ -309,21 +320,26 @@ payload: a buffer from a newer writer may exceed this version's `MAX_SIZE`
 because of the fields this version skips, and
 `a_newer_writers_payload_above_max_size_verifies` pins it. What protects a
 receiver is the buffer its port reads into. `verify` is linear in the bytes it
-reads, and it needs no run-time depth limit: a type is not recursive, so the
+reads, except map key uniqueness, which compares each entry's key with the keys
+of the entries before it and so is quadratic in the map's entry count, as the
+FlatBuffers codec's is; the count is checked before each entry's key is
+compared, so the walk is bounded by the declared maximum and not by the buffer.
+`verify` needs no run-time depth limit: a type is not recursive, so the
 generated functions nest to a depth fixed at generation time, and skipping an
 unknown length-delimited field does not recurse.
 
 What `verify` refuses as malformed:
 
-| Fault                                                                                                                                  | Error                                                     |
-| -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| a length or a fixed-width value past the end, a truncated varint, a packed fixed-width run whose length is not a multiple of the width | `Malformed::OutOfBounds`                                  |
-| a varint longer than ten bytes, or whose tenth byte is above 1; a tag wider than `u32`                                                 | `Malformed::Varint`                                       |
-| a varint wider than its field's scalar: a `uint32` above `u32::MAX`, a `sint32` or an enum outside `i32`                               | `Malformed::Varint` — `prost` truncates                   |
-| field number 0; wire type 3, 4, 6 or 7; a known field under a wire type its type does not take                                         | `Malformed::WireType` — `prost` skips a group             |
-| a field that is not repeated written twice; a union message with two arms, or one arm twice                                            | `Malformed::Duplicate` — `prost` merges or keeps the last |
-| a string that is not UTF-8                                                                                                             | `Malformed::Utf8`                                         |
-| an absent field whose default is not legal                                                                                             | `Malformed::MissingRequired`                              |
+| Fault                                                                                                                                                              | Error                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| a length or a fixed-width value past the end, a truncated varint, a packed fixed-width run whose length is not a multiple of the width                             | `Malformed::OutOfBounds`                                    |
+| a varint longer than ten bytes, or whose tenth byte is above 1; a tag wider than `u32`                                                                             | `Malformed::Varint`                                         |
+| a varint wider than its field's scalar: a `uint32` above `u32::MAX`, a `sint32` or an enum outside `i32`                                                           | `Malformed::Varint` — `prost` truncates                     |
+| a negative `int32` (an enum value) in the 5-byte form (`ff ff ff ff 0f`), which is not the protobuf encoding: a writer sign-extends to 64 bits and emits ten bytes | `Malformed::Varint` — `protoc` parsers and `prost` truncate |
+| field number 0; wire type 3, 4, 6 or 7; a known field under a wire type its type does not take                                                                     | `Malformed::WireType` — `prost` skips a group               |
+| a field that is not repeated written twice; a union message with two arms, or one arm twice                                                                        | `Malformed::Duplicate` — `prost` merges or keeps the last   |
+| a string that is not UTF-8                                                                                                                                         | `Malformed::Utf8`                                           |
+| an absent field whose default is not legal                                                                                                                         | `Malformed::MissingRequired`                                |
 
 **The duplicate refusal is a deliberate deviation from protobuf** (an owner
 ruling of 2026-10-20, stated as well in the rustdoc of `Malformed::Duplicate`).
@@ -355,7 +371,10 @@ that fits the wire scalar but not the declared width (300 in a `u8` field) is
 
 **`decode` is total.** It takes a `Ref`, and every read that could fail is
 discharged with the neutral value of its type, which `verify` makes unreachable.
-**The view is the verified bytes** (ADR-0021 open item 3, as answered):
+Each non-optional nested field starts as the message decoded from zero bytes, so
+an absent field needs no second path; a present one replaces that default, which
+costs one default sub-tree per nested field on each decode. **The view is the
+verified bytes** (ADR-0021 open item 3, as answered):
 `ridl_rt::proto3::Verified<'a>` implements `payload::View` and has no field
 accessors. proto3 is not a random-access format, so an accessor would be a scan,
 and the face reads every payload through `decode`. Accessors can be added later
@@ -400,12 +419,13 @@ bare-`rustc` mechanism every compile proof in the crate uses.
 
 **The dev-dependencies, each test-only.** `ridl-backend-proto` emits the
 `.proto`; `protox` compiles it; `prost-build` generates the oracle, in the
-regeneration test only; `prost` is the runtime the oracle links;
-`prost-reflect`, through `protox`'s re-export, reads a message of any corpus
-package as a `DynamicMessage` without generating code per package; and
-`proptest` draws the seeded values. `xtask/tests/oracle_boundary.rs` holds the
-line: `the_runtime_reaches_no_prost_crate` resolves `ridl-rt` with every feature
-and finds none of `prost`, `prost-derive`, `prost-build`, `prost-types`,
+regeneration test only; `prost` is the runtime the oracle links; and `proptest`
+draws the seeded values. `prost-reflect` is not a dev-dependency of its own: it
+is reached as `protox::prost_reflect`, and reads a message of any corpus package
+as a `DynamicMessage` without generating code per package.
+`xtask/tests/oracle_boundary.rs` holds the line:
+`the_runtime_reaches_no_prost_crate` resolves `ridl-rt` with every feature and
+finds none of `prost`, `prost-derive`, `prost-build`, `prost-types`,
 `prost-reflect`, `protox` or `protox-parse` at any edge kind;
 `the_generated_crate_reaches_no_prost_crate` does the same for the two crates
 `just demo` writes under `examples/cabin/` (`generated/` and

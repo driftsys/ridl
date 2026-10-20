@@ -114,13 +114,11 @@ reply struct named `<Interface><Call>Reply` in the same way. These structs are
 generated types of the package module, and the face methods take and return
 them like any other payload.
 The wire backends emit the matching positional `.proto` messages and `.fbs`
-tables under the names assigned by lowering. When the manifest names
-`flatbuffers` and an induced payload has no finite FlatBuffers bound, its
-interface is skipped with the refusal constant described above rather than
-emitting a descriptor that names a missing codec. The proto3 codec skips no
-interface: an induced payload with no finite proto3 bound, or one proto3 cannot
-represent, makes `ridl build` fail with an error that names the interaction and
-the cause.
+tables under the names assigned by lowering. When an induced payload has no
+finite bound in an encoding the manifest names — no finite FlatBuffers bound
+under `flatbuffers`; no finite proto3 bound, or a member proto3 cannot
+represent, under `proto3` — its interface is skipped with the refusal constant
+described above rather than emitting a descriptor that names a missing codec.
 
 The face opens no socket and holds no runtime. Each `Client`, `Publisher` and
 `serve` runs over a _port_ that the application passes in, and a port comes from

@@ -176,16 +176,16 @@ induce a reply struct. The rule is held by
 `descriptors::single_param_type`, `query_param_type` and `query_reply_type` are
 the one place the backend asks what a call sends. They read the name the
 lowering wrote, and the backend never builds one. A fallible `T | E` reply, an
-untyped position and a stream are still refused (driftsys/ridl#943). When
-`encodings` names `flatbuffers`, an induced payload with no finite FlatBuffers
-bound is also refused before its descriptor is accepted: the codec cannot
-implement `Payload<FlatBuffers>` for it. The pipeline skips that interface with
-the same refusal marker, leaving the package's domain types and its other
-interfaces unaffected. When `encodings` names `proto3`, an induced root whose
-proto3 size state is not bounded — no finite bound, a bound that does not fit,
-or a member proto3 cannot represent — is not skipped: it fails the package's
-proto3 generation with a `GenerateError` that names the interaction and the
-cause.
+untyped position and a stream are still refused (driftsys/ridl#943). An induced
+payload with no finite bound in an encoding `encodings` names is also refused
+before its descriptor is accepted, because that encoding's codec cannot
+implement `Payload<E>` for it: under `flatbuffers`, a tuple whose FlatBuffers
+root has no finite bound; under `proto3`, a tuple whose proto3 size state is not
+bounded — no finite bound, a bound that does not fit, or a member proto3 cannot
+represent — with the refusal naming the tuple and the sizer's cause. The
+pipeline skips that interface with the same refusal marker, leaving the
+package's domain types and its other interfaces unaffected
+(`tests/induced_call_refusals.rs`).
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
 one member the face covers, one `pub mod` named after the interface. Its
