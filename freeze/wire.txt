@@ -618,6 +618,289 @@ fbs mavlink/standard.fbs table Int32MillimetersBox {
 fbs mavlink/standard.fbs table MavBoolBox {
 fbs mavlink/standard.fbs table Uint16Box {
 fbs mavlink/standard.fbs table Uint32MillisecondsBox {
+fbs veh-cluster/ridl.std.fbs [CertificateBox] value: [ubyte] (id: 0);
+fbs veh-cluster/ridl.std.fbs [CertificateBox] }
+fbs veh-cluster/ridl.std.fbs [CountryCodeBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [CountryCodeBox] }
+fbs veh-cluster/ridl.std.fbs [DateBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [DateBox] }
+fbs veh-cluster/ridl.std.fbs [DurationBox] value: double (id: 0);
+fbs veh-cluster/ridl.std.fbs [DurationBox] }
+fbs veh-cluster/ridl.std.fbs [EmailBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [EmailBox] }
+fbs veh-cluster/ridl.std.fbs [IpV4Box] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [IpV4Box] }
+fbs veh-cluster/ridl.std.fbs [IpV6Box] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [IpV6Box] }
+fbs veh-cluster/ridl.std.fbs [LabelBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [LabelBox] }
+fbs veh-cluster/ridl.std.fbs [LanguageCodeBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [LanguageCodeBox] }
+fbs veh-cluster/ridl.std.fbs [MessageBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [MessageBox] }
+fbs veh-cluster/ridl.std.fbs [NameBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [NameBox] }
+fbs veh-cluster/ridl.std.fbs [Sha256HashBox] value: [ubyte] (id: 0);
+fbs veh-cluster/ridl.std.fbs [Sha256HashBox] }
+fbs veh-cluster/ridl.std.fbs [Sha512HashBox] value: [ubyte] (id: 0);
+fbs veh-cluster/ridl.std.fbs [Sha512HashBox] }
+fbs veh-cluster/ridl.std.fbs [SignatureBox] value: [ubyte] (id: 0);
+fbs veh-cluster/ridl.std.fbs [SignatureBox] }
+fbs veh-cluster/ridl.std.fbs [TimeOfDayBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [TimeOfDayBox] }
+fbs veh-cluster/ridl.std.fbs [TimestampBox] value: ulong (id: 0);
+fbs veh-cluster/ridl.std.fbs [TimestampBox] }
+fbs veh-cluster/ridl.std.fbs [UlidBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [UlidBox] }
+fbs veh-cluster/ridl.std.fbs [UriBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [UriBox] }
+fbs veh-cluster/ridl.std.fbs [UrlBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [UrlBox] }
+fbs veh-cluster/ridl.std.fbs [UuidBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [UuidBox] }
+fbs veh-cluster/ridl.std.fbs [VersionBox] value: string (id: 0);
+fbs veh-cluster/ridl.std.fbs [VersionBox] }
+fbs veh-cluster/ridl.std.fbs namespace ridl.std;
+fbs veh-cluster/ridl.std.fbs table CertificateBox {
+fbs veh-cluster/ridl.std.fbs table CountryCodeBox {
+fbs veh-cluster/ridl.std.fbs table DateBox {
+fbs veh-cluster/ridl.std.fbs table DurationBox {
+fbs veh-cluster/ridl.std.fbs table EmailBox {
+fbs veh-cluster/ridl.std.fbs table IpV4Box {
+fbs veh-cluster/ridl.std.fbs table IpV6Box {
+fbs veh-cluster/ridl.std.fbs table LabelBox {
+fbs veh-cluster/ridl.std.fbs table LanguageCodeBox {
+fbs veh-cluster/ridl.std.fbs table MessageBox {
+fbs veh-cluster/ridl.std.fbs table NameBox {
+fbs veh-cluster/ridl.std.fbs table Sha256HashBox {
+fbs veh-cluster/ridl.std.fbs table Sha512HashBox {
+fbs veh-cluster/ridl.std.fbs table SignatureBox {
+fbs veh-cluster/ridl.std.fbs table TimeOfDayBox {
+fbs veh-cluster/ridl.std.fbs table TimestampBox {
+fbs veh-cluster/ridl.std.fbs table UlidBox {
+fbs veh-cluster/ridl.std.fbs table UriBox {
+fbs veh-cluster/ridl.std.fbs table UrlBox {
+fbs veh-cluster/ridl.std.fbs table UuidBox {
+fbs veh-cluster/ridl.std.fbs table VersionBox {
+fbs veh-cluster/veh.cluster.fbs [ClimateReport] cabin: float (id: 0);
+fbs veh-cluster/veh.cluster.fbs [ClimateReport] fan: ubyte (id: 2);
+fbs veh-cluster/veh.cluster.fbs [ClimateReport] setpoint: float (id: 1);
+fbs veh-cluster/veh.cluster.fbs [ClimateReport] }
+fbs veh-cluster/veh.cluster.fbs [DiagErrorBox] value: DiagError (id: 0);
+fbs veh-cluster/veh.cluster.fbs [DiagErrorBox] }
+fbs veh-cluster/veh.cluster.fbs [DiagError] ACCESS_DENIED = 2,
+fbs veh-cluster/veh.cluster.fbs [DiagError] FILTER_INVALID = 0,
+fbs veh-cluster/veh.cluster.fbs [DiagError] STORAGE_BUSY = 1,
+fbs veh-cluster/veh.cluster.fbs [DiagError] }
+fbs veh-cluster/veh.cluster.fbs [DiagFilter] category: string (id: 1);
+fbs veh-cluster/veh.cluster.fbs [DiagFilter] severity: ubyte (id: 0);
+fbs veh-cluster/veh.cluster.fbs [DiagFilter] }
+fbs veh-cluster/veh.cluster.fbs [DoorPayload] is_open: bool (id: 1);
+fbs veh-cluster/veh.cluster.fbs [DoorPayload] sensor_id: ubyte (id: 0);
+fbs veh-cluster/veh.cluster.fbs [DoorPayload] }
+fbs veh-cluster/veh.cluster.fbs [FanLevelBox] value: ubyte (id: 0);
+fbs veh-cluster/veh.cluster.fbs [FanLevelBox] }
+fbs veh-cluster/veh.cluster.fbs [FanTagBox] value: string (id: 0);
+fbs veh-cluster/veh.cluster.fbs [FanTagBox] }
+fbs veh-cluster/veh.cluster.fbs [FaultEvent] code: ushort (id: 0);
+fbs veh-cluster/veh.cluster.fbs [FaultEvent] message: string (id: 1);
+fbs veh-cluster/veh.cluster.fbs [FaultEvent] timestamp: ulong (id: 2);
+fbs veh-cluster/veh.cluster.fbs [FaultEvent] }
+fbs veh-cluster/veh.cluster.fbs [FaultPage] faults: [FaultEvent] (id: 0);
+fbs veh-cluster/veh.cluster.fbs [FaultPage] }
+fbs veh-cluster/veh.cluster.fbs [FilterState] clogged: bool (id: 1);
+fbs veh-cluster/veh.cluster.fbs [FilterState] hours_run: ushort (id: 0);
+fbs veh-cluster/veh.cluster.fbs [FilterState] }
+fbs veh-cluster/veh.cluster.fbs [HvacErrorBox] value: HvacError (id: 0);
+fbs veh-cluster/veh.cluster.fbs [HvacErrorBox] }
+fbs veh-cluster/veh.cluster.fbs [HvacError] COMPRESSOR_OFF = 0,
+fbs veh-cluster/veh.cluster.fbs [HvacError] SENSOR_FAULT = 1,
+fbs veh-cluster/veh.cluster.fbs [HvacError] }
+fbs veh-cluster/veh.cluster.fbs [RawTickCountBox] value: ushort (id: 0);
+fbs veh-cluster/veh.cluster.fbs [RawTickCountBox] }
+fbs veh-cluster/veh.cluster.fbs [RawWheelSpanBurstsElement] field_1: ushort (id: 0);
+fbs veh-cluster/veh.cluster.fbs [RawWheelSpanBurstsElement] field_2: ushort (id: 1);
+fbs veh-cluster/veh.cluster.fbs [RawWheelSpanBurstsElement] }
+fbs veh-cluster/veh.cluster.fbs [RawWheelSpanSpan] field_1: ushort (id: 0);
+fbs veh-cluster/veh.cluster.fbs [RawWheelSpanSpan] field_2: ushort (id: 1);
+fbs veh-cluster/veh.cluster.fbs [RawWheelSpanSpan] }
+fbs veh-cluster/veh.cluster.fbs [RawWheelSpan] bursts: [RawWheelSpanBurstsElement] (id: 1);
+fbs veh-cluster/veh.cluster.fbs [RawWheelSpan] span: RawWheelSpanSpan (id: 0);
+fbs veh-cluster/veh.cluster.fbs [RawWheelSpan] }
+fbs veh-cluster/veh.cluster.fbs [VehClusterWheelsOrdinal] SLIPPED = 4,
+fbs veh-cluster/veh.cluster.fbs [VehClusterWheelsOrdinal] TICKS = 1,
+fbs veh-cluster/veh.cluster.fbs [VehClusterWheelsOrdinal] }
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetBoundsParams] }
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetBoundsReply] field_1: float (id: 0);
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetBoundsReply] field_2: float (id: 1);
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetBoundsReply] }
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetCabinTempParams] }
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetClimateParams] }
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] BLOWER_DUTY = 3,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] CABIN_TEMP = 1,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] CALIBRATE = 13,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] COMPRESSOR_LOAD = 5,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] FAN_LEVEL = 4,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] FILTER_CLOGGED = 6,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] GET_BOUNDS = 12,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] GET_CABIN_TEMP = 15,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] GET_CLIMATE = 14,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] REBALANCE = 11,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] REPLAY_TRACE = 9,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] SCALED_FAN = 20,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] SET_FAN = 18,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] SET_TARGET = 7,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] STREAM_FILTER_HISTORY = 10,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] SUPPORTED_MODES = 17,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] TARGET_TEMP = 2,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] TRIM_FAN = 19,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] UNIT_SERIAL = 16,
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] }
+fbs veh-cluster/veh.cluster.fbs [VehHvacCabinScaledFanParams] }
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] CAPABILITIES = 11,
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] CURRENT_SPEED = 1,
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] DOOR_OPENED = 4,
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] ENGINE_TEMP = 2,
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] GET_AVERAGE_SPEED = 7,
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] GET_FAULT_PAGE = 9,
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] SET_GEAR = 5,
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] SOFTWARE_VERSION = 10,
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] STREAM_FAULTS = 8,
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] WARNINGS = 3,
+fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] }
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsOrdinal] READ_SPAN = 5,
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsOrdinal] READ_TICKS = 3,
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsOrdinal] RESET_TICKS = 4,
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsOrdinal] SLIP_DETECTED = 2,
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsOrdinal] TICK_BOUNDS = 6,
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsOrdinal] WHEEL_TICKS = 1,
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsOrdinal] }
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsReadSpanParams] }
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsReadSpanReply] field_1: ushort (id: 0);
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsReadSpanReply] field_2: ushort (id: 1);
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsReadSpanReply] }
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsReadTicksParams] }
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsTickBoundsElement] field_1: ushort (id: 0);
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsTickBoundsElement] field_2: ushort (id: 1);
+fbs veh-cluster/veh.cluster.fbs [WheelDiagnosticsTickBoundsElement] }
+fbs veh-cluster/veh.cluster.fbs [WheelHistoryOrdinal] WHEEL_SLIP_RATE = 5,
+fbs veh-cluster/veh.cluster.fbs [WheelHistoryOrdinal] WHEEL_TEMP = 3,
+fbs veh-cluster/veh.cluster.fbs [WheelHistoryOrdinal] WHEEL_TICKS = 1,
+fbs veh-cluster/veh.cluster.fbs [WheelHistoryOrdinal] }
+fbs veh-cluster/veh.cluster.fbs [WheelSummaryOrdinal] WHEEL_HEALTH = 1,
+fbs veh-cluster/veh.cluster.fbs [WheelSummaryOrdinal] }
+fbs veh-cluster/veh.cluster.fbs enum DiagError : long {
+fbs veh-cluster/veh.cluster.fbs enum HvacError : long {
+fbs veh-cluster/veh.cluster.fbs enum VehClusterWheelsOrdinal : uint {
+fbs veh-cluster/veh.cluster.fbs enum VehHvacCabinOrdinal : uint {
+fbs veh-cluster/veh.cluster.fbs enum VehicleStatusOrdinal : uint {
+fbs veh-cluster/veh.cluster.fbs enum WheelDiagnosticsOrdinal : uint {
+fbs veh-cluster/veh.cluster.fbs enum WheelHistoryOrdinal : uint {
+fbs veh-cluster/veh.cluster.fbs enum WheelSummaryOrdinal : uint {
+fbs veh-cluster/veh.cluster.fbs namespace veh.cluster;
+fbs veh-cluster/veh.cluster.fbs table ClimateReport {
+fbs veh-cluster/veh.cluster.fbs table DiagErrorBox {
+fbs veh-cluster/veh.cluster.fbs table DiagFilter {
+fbs veh-cluster/veh.cluster.fbs table DoorPayload {
+fbs veh-cluster/veh.cluster.fbs table FanLevelBox {
+fbs veh-cluster/veh.cluster.fbs table FanTagBox {
+fbs veh-cluster/veh.cluster.fbs table FaultEvent {
+fbs veh-cluster/veh.cluster.fbs table FaultPage {
+fbs veh-cluster/veh.cluster.fbs table FilterState {
+fbs veh-cluster/veh.cluster.fbs table HvacErrorBox {
+fbs veh-cluster/veh.cluster.fbs table RawTickCountBox {
+fbs veh-cluster/veh.cluster.fbs table RawWheelSpan {
+fbs veh-cluster/veh.cluster.fbs table RawWheelSpanBurstsElement {
+fbs veh-cluster/veh.cluster.fbs table RawWheelSpanSpan {
+fbs veh-cluster/veh.cluster.fbs table VehHvacCabinGetBoundsParams {
+fbs veh-cluster/veh.cluster.fbs table VehHvacCabinGetBoundsReply {
+fbs veh-cluster/veh.cluster.fbs table VehHvacCabinGetCabinTempParams {
+fbs veh-cluster/veh.cluster.fbs table VehHvacCabinGetClimateParams {
+fbs veh-cluster/veh.cluster.fbs table VehHvacCabinScaledFanParams {
+fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsReadSpanParams {
+fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsReadSpanReply {
+fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsReadTicksParams {
+fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsTickBoundsElement {
+fbs veh-cluster/veh.common.fbs [CounterBox] value: ushort (id: 0);
+fbs veh-cluster/veh.common.fbs [CounterBox] }
+fbs veh-cluster/veh.common.fbs [DriverProfile] gears: ubyte (id: 3);
+fbs veh-cluster/veh.common.fbs [DriverProfile] name: string (id: 0);
+fbs veh-cluster/veh.common.fbs [DriverProfile] override: float = null (id: 2);
+fbs veh-cluster/veh.common.fbs [DriverProfile] speed: float (id: 1);
+fbs veh-cluster/veh.common.fbs [DriverProfile] }
+fbs veh-cluster/veh.common.fbs [GainBox] value: float (id: 0);
+fbs veh-cluster/veh.common.fbs [GainBox] }
+fbs veh-cluster/veh.common.fbs [GearPositionBox] value: GearPosition (id: 0);
+fbs veh-cluster/veh.common.fbs [GearPositionBox] }
+fbs veh-cluster/veh.common.fbs [GearPosition] DRIVE = 1,
+fbs veh-cluster/veh.common.fbs [GearPosition] NEUTRAL = 3,
+fbs veh-cluster/veh.common.fbs [GearPosition] PARK = 0,
+fbs veh-cluster/veh.common.fbs [GearPosition] REVERSE = 2,
+fbs veh-cluster/veh.common.fbs [GearPosition] }
+fbs veh-cluster/veh.common.fbs [RPMBox] value: float (id: 0);
+fbs veh-cluster/veh.common.fbs [RPMBox] }
+fbs veh-cluster/veh.common.fbs [RatioBox] value: float (id: 0);
+fbs veh-cluster/veh.common.fbs [RatioBox] }
+fbs veh-cluster/veh.common.fbs [RawWheelFrame] frame: [ubyte] (id: 1);
+fbs veh-cluster/veh.common.fbs [RawWheelFrame] ticks: ushort (id: 0);
+fbs veh-cluster/veh.common.fbs [RawWheelFrame] }
+fbs veh-cluster/veh.common.fbs [SensorBoundsMetaEntry] key: string (id: 0);
+fbs veh-cluster/veh.common.fbs [SensorBoundsMetaEntry] value: string (id: 1);
+fbs veh-cluster/veh.common.fbs [SensorBoundsMetaEntry] }
+fbs veh-cluster/veh.common.fbs [SensorBoundsRange] field_1: float (id: 0);
+fbs veh-cluster/veh.common.fbs [SensorBoundsRange] field_2: float (id: 1);
+fbs veh-cluster/veh.common.fbs [SensorBoundsRange] }
+fbs veh-cluster/veh.common.fbs [SensorBounds] labels: [string] (id: 2);
+fbs veh-cluster/veh.common.fbs [SensorBounds] meta: [SensorBoundsMetaEntry] (id: 3);
+fbs veh-cluster/veh.common.fbs [SensorBounds] range: SensorBoundsRange (id: 0);
+fbs veh-cluster/veh.common.fbs [SensorBounds] readings: [float] (id: 1);
+fbs veh-cluster/veh.common.fbs [SensorBounds] }
+fbs veh-cluster/veh.common.fbs [SensorFault] code: ushort (id: 0);
+fbs veh-cluster/veh.common.fbs [SensorFault] message: string (id: 1);
+fbs veh-cluster/veh.common.fbs [SensorFault] }
+fbs veh-cluster/veh.common.fbs [SensorReading] timestamp: ulong (id: 1);
+fbs veh-cluster/veh.common.fbs [SensorReading] value: float (id: 0);
+fbs veh-cluster/veh.common.fbs [SensorReading] }
+fbs veh-cluster/veh.common.fbs [SensorResult] value: SensorResultUnion (id: 1);
+fbs veh-cluster/veh.common.fbs [SensorResult] }
+fbs veh-cluster/veh.common.fbs [SpeedBox] value: float (id: 0);
+fbs veh-cluster/veh.common.fbs [SpeedBox] }
+fbs veh-cluster/veh.common.fbs [SpeedLimitPayload] actual: float (id: 1);
+fbs veh-cluster/veh.common.fbs [SpeedLimitPayload] limit: float (id: 0);
+fbs veh-cluster/veh.common.fbs [SpeedLimitPayload] }
+fbs veh-cluster/veh.common.fbs [TemperatureBox] value: float (id: 0);
+fbs veh-cluster/veh.common.fbs [TemperatureBox] }
+fbs veh-cluster/veh.common.fbs [WarningBox] value: Warning (id: 0);
+fbs veh-cluster/veh.common.fbs [WarningBox] }
+fbs veh-cluster/veh.common.fbs [WarningFlagsBox] value: ubyte (id: 0);
+fbs veh-cluster/veh.common.fbs [WarningFlagsBox] }
+fbs veh-cluster/veh.common.fbs [Warning] CHECK_ENGINE = 1,
+fbs veh-cluster/veh.common.fbs [Warning] DOOR_OPEN = 2,
+fbs veh-cluster/veh.common.fbs [Warning] LOW_FUEL = 0,
+fbs veh-cluster/veh.common.fbs [Warning] SEATBELT = 3,
+fbs veh-cluster/veh.common.fbs [Warning] }
+fbs veh-cluster/veh.common.fbs enum GearPosition : long {
+fbs veh-cluster/veh.common.fbs enum Warning : long {
+fbs veh-cluster/veh.common.fbs namespace veh.common;
+fbs veh-cluster/veh.common.fbs table CounterBox {
+fbs veh-cluster/veh.common.fbs table DriverProfile {
+fbs veh-cluster/veh.common.fbs table GainBox {
+fbs veh-cluster/veh.common.fbs table GearPositionBox {
+fbs veh-cluster/veh.common.fbs table RPMBox {
+fbs veh-cluster/veh.common.fbs table RatioBox {
+fbs veh-cluster/veh.common.fbs table RawWheelFrame {
+fbs veh-cluster/veh.common.fbs table SensorBounds {
+fbs veh-cluster/veh.common.fbs table SensorBoundsMetaEntry {
+fbs veh-cluster/veh.common.fbs table SensorBoundsRange {
+fbs veh-cluster/veh.common.fbs table SensorFault {
+fbs veh-cluster/veh.common.fbs table SensorReading {
+fbs veh-cluster/veh.common.fbs table SensorResult {
+fbs veh-cluster/veh.common.fbs table SpeedBox {
+fbs veh-cluster/veh.common.fbs table SpeedLimitPayload {
+fbs veh-cluster/veh.common.fbs table TemperatureBox {
+fbs veh-cluster/veh.common.fbs table WarningBox {
+fbs veh-cluster/veh.common.fbs table WarningFlagsBox {
+fbs veh-cluster/veh.common.fbs union SensorResultUnion { ok: SensorReading, err: SensorFault }
 fbs vss/vehicle.cabin.hvac.fbs [AmbientAirTemperatureBox] value: double (id: 0);
 fbs vss/vehicle.cabin.hvac.fbs [AmbientAirTemperatureBox] }
 fbs vss/vehicle.cabin.hvac.fbs [BooleanBox] value: bool (id: 0);
@@ -2502,6 +2785,302 @@ proto ros2/stdsrvs.proto message TriggerRequest {
 proto ros2/stdsrvs.proto message TriggerResponse {
 proto ros2/stdsrvs.proto package stdsrvs;
 proto ros2/stdsrvs.proto syntax = "proto3";
+proto veh-cluster/ridl.std.proto [CertificateBox] bytes value = 1;
+proto veh-cluster/ridl.std.proto [CertificateBox] }
+proto veh-cluster/ridl.std.proto [CountryCodeBox] string value = 1;
+proto veh-cluster/ridl.std.proto [CountryCodeBox] }
+proto veh-cluster/ridl.std.proto [DateBox] string value = 1;
+proto veh-cluster/ridl.std.proto [DateBox] }
+proto veh-cluster/ridl.std.proto [DurationBox] double value = 1;
+proto veh-cluster/ridl.std.proto [DurationBox] }
+proto veh-cluster/ridl.std.proto [EmailBox] string value = 1;
+proto veh-cluster/ridl.std.proto [EmailBox] }
+proto veh-cluster/ridl.std.proto [IpV4Box] string value = 1;
+proto veh-cluster/ridl.std.proto [IpV4Box] }
+proto veh-cluster/ridl.std.proto [IpV6Box] string value = 1;
+proto veh-cluster/ridl.std.proto [IpV6Box] }
+proto veh-cluster/ridl.std.proto [LabelBox] string value = 1;
+proto veh-cluster/ridl.std.proto [LabelBox] }
+proto veh-cluster/ridl.std.proto [LanguageCodeBox] string value = 1;
+proto veh-cluster/ridl.std.proto [LanguageCodeBox] }
+proto veh-cluster/ridl.std.proto [MessageBox] string value = 1;
+proto veh-cluster/ridl.std.proto [MessageBox] }
+proto veh-cluster/ridl.std.proto [NameBox] string value = 1;
+proto veh-cluster/ridl.std.proto [NameBox] }
+proto veh-cluster/ridl.std.proto [Sha256HashBox] bytes value = 1;
+proto veh-cluster/ridl.std.proto [Sha256HashBox] }
+proto veh-cluster/ridl.std.proto [Sha512HashBox] bytes value = 1;
+proto veh-cluster/ridl.std.proto [Sha512HashBox] }
+proto veh-cluster/ridl.std.proto [SignatureBox] bytes value = 1;
+proto veh-cluster/ridl.std.proto [SignatureBox] }
+proto veh-cluster/ridl.std.proto [TimeOfDayBox] string value = 1;
+proto veh-cluster/ridl.std.proto [TimeOfDayBox] }
+proto veh-cluster/ridl.std.proto [TimestampBox] uint64 value = 1;
+proto veh-cluster/ridl.std.proto [TimestampBox] }
+proto veh-cluster/ridl.std.proto [UlidBox] string value = 1;
+proto veh-cluster/ridl.std.proto [UlidBox] }
+proto veh-cluster/ridl.std.proto [UriBox] string value = 1;
+proto veh-cluster/ridl.std.proto [UriBox] }
+proto veh-cluster/ridl.std.proto [UrlBox] string value = 1;
+proto veh-cluster/ridl.std.proto [UrlBox] }
+proto veh-cluster/ridl.std.proto [UuidBox] string value = 1;
+proto veh-cluster/ridl.std.proto [UuidBox] }
+proto veh-cluster/ridl.std.proto [VersionBox] string value = 1;
+proto veh-cluster/ridl.std.proto [VersionBox] }
+proto veh-cluster/ridl.std.proto message CertificateBox {
+proto veh-cluster/ridl.std.proto message CountryCodeBox {
+proto veh-cluster/ridl.std.proto message DateBox {
+proto veh-cluster/ridl.std.proto message DurationBox {
+proto veh-cluster/ridl.std.proto message EmailBox {
+proto veh-cluster/ridl.std.proto message IpV4Box {
+proto veh-cluster/ridl.std.proto message IpV6Box {
+proto veh-cluster/ridl.std.proto message LabelBox {
+proto veh-cluster/ridl.std.proto message LanguageCodeBox {
+proto veh-cluster/ridl.std.proto message MessageBox {
+proto veh-cluster/ridl.std.proto message NameBox {
+proto veh-cluster/ridl.std.proto message Sha256HashBox {
+proto veh-cluster/ridl.std.proto message Sha512HashBox {
+proto veh-cluster/ridl.std.proto message SignatureBox {
+proto veh-cluster/ridl.std.proto message TimeOfDayBox {
+proto veh-cluster/ridl.std.proto message TimestampBox {
+proto veh-cluster/ridl.std.proto message UlidBox {
+proto veh-cluster/ridl.std.proto message UriBox {
+proto veh-cluster/ridl.std.proto message UrlBox {
+proto veh-cluster/ridl.std.proto message UuidBox {
+proto veh-cluster/ridl.std.proto message VersionBox {
+proto veh-cluster/ridl.std.proto package ridl.std;
+proto veh-cluster/ridl.std.proto syntax = "proto3";
+proto veh-cluster/veh.cluster.proto [ClimateReport] float cabin = 1;
+proto veh-cluster/veh.cluster.proto [ClimateReport] float setpoint = 2;
+proto veh-cluster/veh.cluster.proto [ClimateReport] uint32 fan = 3;
+proto veh-cluster/veh.cluster.proto [ClimateReport] }
+proto veh-cluster/veh.cluster.proto [DiagErrorBox] DiagError value = 1;
+proto veh-cluster/veh.cluster.proto [DiagErrorBox] }
+proto veh-cluster/veh.cluster.proto [DiagError] DIAG_ERROR_ACCESS_DENIED = 2;
+proto veh-cluster/veh.cluster.proto [DiagError] DIAG_ERROR_FILTER_INVALID = 0;
+proto veh-cluster/veh.cluster.proto [DiagError] DIAG_ERROR_STORAGE_BUSY = 1;
+proto veh-cluster/veh.cluster.proto [DiagError] }
+proto veh-cluster/veh.cluster.proto [DiagFilter] optional string category = 2;
+proto veh-cluster/veh.cluster.proto [DiagFilter] uint32 severity = 1;
+proto veh-cluster/veh.cluster.proto [DiagFilter] }
+proto veh-cluster/veh.cluster.proto [DoorPayload] bool is_open = 2;
+proto veh-cluster/veh.cluster.proto [DoorPayload] uint32 sensor_id = 1;
+proto veh-cluster/veh.cluster.proto [DoorPayload] }
+proto veh-cluster/veh.cluster.proto [FanLevelBox] uint32 value = 1;
+proto veh-cluster/veh.cluster.proto [FanLevelBox] }
+proto veh-cluster/veh.cluster.proto [FanTagBox] string value = 1;
+proto veh-cluster/veh.cluster.proto [FanTagBox] }
+proto veh-cluster/veh.cluster.proto [FaultEvent] string message = 2;
+proto veh-cluster/veh.cluster.proto [FaultEvent] uint32 code = 1;
+proto veh-cluster/veh.cluster.proto [FaultEvent] uint64 timestamp = 3;
+proto veh-cluster/veh.cluster.proto [FaultEvent] }
+proto veh-cluster/veh.cluster.proto [FaultPage] repeated FaultEvent faults = 1;
+proto veh-cluster/veh.cluster.proto [FaultPage] }
+proto veh-cluster/veh.cluster.proto [FilterState] bool clogged = 2;
+proto veh-cluster/veh.cluster.proto [FilterState] uint32 hours_run = 1;
+proto veh-cluster/veh.cluster.proto [FilterState] }
+proto veh-cluster/veh.cluster.proto [HvacErrorBox] HvacError value = 1;
+proto veh-cluster/veh.cluster.proto [HvacErrorBox] }
+proto veh-cluster/veh.cluster.proto [HvacError] HVAC_ERROR_COMPRESSOR_OFF = 0;
+proto veh-cluster/veh.cluster.proto [HvacError] HVAC_ERROR_SENSOR_FAULT = 1;
+proto veh-cluster/veh.cluster.proto [HvacError] }
+proto veh-cluster/veh.cluster.proto [RawTickCountBox] uint32 value = 1;
+proto veh-cluster/veh.cluster.proto [RawTickCountBox] }
+proto veh-cluster/veh.cluster.proto [RawWheelSpanBurstsElement] uint32 field_1 = 1;
+proto veh-cluster/veh.cluster.proto [RawWheelSpanBurstsElement] uint32 field_2 = 2;
+proto veh-cluster/veh.cluster.proto [RawWheelSpanBurstsElement] }
+proto veh-cluster/veh.cluster.proto [RawWheelSpanSpan] uint32 field_1 = 1;
+proto veh-cluster/veh.cluster.proto [RawWheelSpanSpan] uint32 field_2 = 2;
+proto veh-cluster/veh.cluster.proto [RawWheelSpanSpan] }
+proto veh-cluster/veh.cluster.proto [RawWheelSpan] RawWheelSpanSpan span = 1;
+proto veh-cluster/veh.cluster.proto [RawWheelSpan] repeated RawWheelSpanBurstsElement bursts = 2;
+proto veh-cluster/veh.cluster.proto [RawWheelSpan] }
+proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] VEH_CLUSTER_WHEELS_ORDINAL_SLIPPED = 4;
+proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] VEH_CLUSTER_WHEELS_ORDINAL_TICKS = 1;
+proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] VEH_CLUSTER_WHEELS_ORDINAL_UNSPECIFIED = 0;
+proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] reserved 2;
+proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] reserved 3;
+proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] }
+proto veh-cluster/veh.cluster.proto [VehHvacCabinGetBoundsParams] }
+proto veh-cluster/veh.cluster.proto [VehHvacCabinGetBoundsReply] float field_1 = 1;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinGetBoundsReply] float field_2 = 2;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinGetBoundsReply] }
+proto veh-cluster/veh.cluster.proto [VehHvacCabinGetCabinTempParams] }
+proto veh-cluster/veh.cluster.proto [VehHvacCabinGetClimateParams] }
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_BLOWER_DUTY = 3;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_CABIN_TEMP = 1;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_CALIBRATE = 13;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_COMPRESSOR_LOAD = 5;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_FAN_LEVEL = 4;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_FILTER_CLOGGED = 6;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_GET_BOUNDS = 12;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_GET_CABIN_TEMP = 15;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_GET_CLIMATE = 14;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_REBALANCE = 11;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_REPLAY_TRACE = 9;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_SCALED_FAN = 20;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_SET_FAN = 18;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_SET_TARGET = 7;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_STREAM_FILTER_HISTORY = 10;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_SUPPORTED_MODES = 17;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_TARGET_TEMP = 2;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_TRIM_FAN = 19;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_UNIT_SERIAL = 16;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_UNSPECIFIED = 0;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] reserved 8;
+proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] }
+proto veh-cluster/veh.cluster.proto [VehHvacCabinScaledFanParams] }
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_CAPABILITIES = 11;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_CURRENT_SPEED = 1;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_DOOR_OPENED = 4;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_ENGINE_TEMP = 2;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_GET_AVERAGE_SPEED = 7;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_GET_FAULT_PAGE = 9;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_SET_GEAR = 5;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_SOFTWARE_VERSION = 10;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_STREAM_FAULTS = 8;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_UNSPECIFIED = 0;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_WARNINGS = 3;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] reserved 6;
+proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] }
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsOrdinal] WHEEL_DIAGNOSTICS_ORDINAL_READ_SPAN = 5;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsOrdinal] WHEEL_DIAGNOSTICS_ORDINAL_READ_TICKS = 3;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsOrdinal] WHEEL_DIAGNOSTICS_ORDINAL_RESET_TICKS = 4;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsOrdinal] WHEEL_DIAGNOSTICS_ORDINAL_SLIP_DETECTED = 2;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsOrdinal] WHEEL_DIAGNOSTICS_ORDINAL_TICK_BOUNDS = 6;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsOrdinal] WHEEL_DIAGNOSTICS_ORDINAL_UNSPECIFIED = 0;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsOrdinal] WHEEL_DIAGNOSTICS_ORDINAL_WHEEL_TICKS = 1;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsOrdinal] }
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsReadSpanParams] }
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsReadSpanReply] uint32 field_1 = 1;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsReadSpanReply] uint32 field_2 = 2;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsReadSpanReply] }
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsReadTicksParams] }
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsTickBoundsElement] uint32 field_1 = 1;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsTickBoundsElement] uint32 field_2 = 2;
+proto veh-cluster/veh.cluster.proto [WheelDiagnosticsTickBoundsElement] }
+proto veh-cluster/veh.cluster.proto [WheelHistoryOrdinal] WHEEL_HISTORY_ORDINAL_UNSPECIFIED = 0;
+proto veh-cluster/veh.cluster.proto [WheelHistoryOrdinal] WHEEL_HISTORY_ORDINAL_WHEEL_SLIP_RATE = 5;
+proto veh-cluster/veh.cluster.proto [WheelHistoryOrdinal] WHEEL_HISTORY_ORDINAL_WHEEL_TEMP = 3;
+proto veh-cluster/veh.cluster.proto [WheelHistoryOrdinal] WHEEL_HISTORY_ORDINAL_WHEEL_TICKS = 1;
+proto veh-cluster/veh.cluster.proto [WheelHistoryOrdinal] reserved 2;
+proto veh-cluster/veh.cluster.proto [WheelHistoryOrdinal] reserved 4;
+proto veh-cluster/veh.cluster.proto [WheelHistoryOrdinal] }
+proto veh-cluster/veh.cluster.proto [WheelSummaryOrdinal] WHEEL_SUMMARY_ORDINAL_UNSPECIFIED = 0;
+proto veh-cluster/veh.cluster.proto [WheelSummaryOrdinal] WHEEL_SUMMARY_ORDINAL_WHEEL_HEALTH = 1;
+proto veh-cluster/veh.cluster.proto [WheelSummaryOrdinal] }
+proto veh-cluster/veh.cluster.proto enum DiagError {
+proto veh-cluster/veh.cluster.proto enum HvacError {
+proto veh-cluster/veh.cluster.proto enum VehClusterWheelsOrdinal {
+proto veh-cluster/veh.cluster.proto enum VehHvacCabinOrdinal {
+proto veh-cluster/veh.cluster.proto enum VehicleStatusOrdinal {
+proto veh-cluster/veh.cluster.proto enum WheelDiagnosticsOrdinal {
+proto veh-cluster/veh.cluster.proto enum WheelHistoryOrdinal {
+proto veh-cluster/veh.cluster.proto enum WheelSummaryOrdinal {
+proto veh-cluster/veh.cluster.proto message ClimateReport {
+proto veh-cluster/veh.cluster.proto message DiagErrorBox {
+proto veh-cluster/veh.cluster.proto message DiagFilter {
+proto veh-cluster/veh.cluster.proto message DoorPayload {
+proto veh-cluster/veh.cluster.proto message FanLevelBox {
+proto veh-cluster/veh.cluster.proto message FanTagBox {
+proto veh-cluster/veh.cluster.proto message FaultEvent {
+proto veh-cluster/veh.cluster.proto message FaultPage {
+proto veh-cluster/veh.cluster.proto message FilterState {
+proto veh-cluster/veh.cluster.proto message HvacErrorBox {
+proto veh-cluster/veh.cluster.proto message RawTickCountBox {
+proto veh-cluster/veh.cluster.proto message RawWheelSpan {
+proto veh-cluster/veh.cluster.proto message RawWheelSpanBurstsElement {
+proto veh-cluster/veh.cluster.proto message RawWheelSpanSpan {
+proto veh-cluster/veh.cluster.proto message VehHvacCabinGetBoundsParams {
+proto veh-cluster/veh.cluster.proto message VehHvacCabinGetBoundsReply {
+proto veh-cluster/veh.cluster.proto message VehHvacCabinGetCabinTempParams {
+proto veh-cluster/veh.cluster.proto message VehHvacCabinGetClimateParams {
+proto veh-cluster/veh.cluster.proto message VehHvacCabinScaledFanParams {
+proto veh-cluster/veh.cluster.proto message WheelDiagnosticsReadSpanParams {
+proto veh-cluster/veh.cluster.proto message WheelDiagnosticsReadSpanReply {
+proto veh-cluster/veh.cluster.proto message WheelDiagnosticsReadTicksParams {
+proto veh-cluster/veh.cluster.proto message WheelDiagnosticsTickBoundsElement {
+proto veh-cluster/veh.cluster.proto package veh.cluster;
+proto veh-cluster/veh.cluster.proto syntax = "proto3";
+proto veh-cluster/veh.common.proto [CounterBox] uint32 value = 1;
+proto veh-cluster/veh.common.proto [CounterBox] }
+proto veh-cluster/veh.common.proto [DriverProfile] float speed = 2;
+proto veh-cluster/veh.common.proto [DriverProfile] optional float override = 3;
+proto veh-cluster/veh.common.proto [DriverProfile] string name = 1;
+proto veh-cluster/veh.common.proto [DriverProfile] uint32 gears = 4;
+proto veh-cluster/veh.common.proto [DriverProfile] }
+proto veh-cluster/veh.common.proto [GainBox] float value = 1;
+proto veh-cluster/veh.common.proto [GainBox] }
+proto veh-cluster/veh.common.proto [GearPositionBox] GearPosition value = 1;
+proto veh-cluster/veh.common.proto [GearPositionBox] }
+proto veh-cluster/veh.common.proto [GearPosition] GEAR_POSITION_DRIVE = 1;
+proto veh-cluster/veh.common.proto [GearPosition] GEAR_POSITION_NEUTRAL = 3;
+proto veh-cluster/veh.common.proto [GearPosition] GEAR_POSITION_PARK = 0;
+proto veh-cluster/veh.common.proto [GearPosition] GEAR_POSITION_REVERSE = 2;
+proto veh-cluster/veh.common.proto [GearPosition] }
+proto veh-cluster/veh.common.proto [RPMBox] float value = 1;
+proto veh-cluster/veh.common.proto [RPMBox] }
+proto veh-cluster/veh.common.proto [RatioBox] float value = 1;
+proto veh-cluster/veh.common.proto [RatioBox] }
+proto veh-cluster/veh.common.proto [RawWheelFrame] bytes frame = 2;
+proto veh-cluster/veh.common.proto [RawWheelFrame] uint32 ticks = 1;
+proto veh-cluster/veh.common.proto [RawWheelFrame] }
+proto veh-cluster/veh.common.proto [SensorBoundsRange] float field_1 = 1;
+proto veh-cluster/veh.common.proto [SensorBoundsRange] float field_2 = 2;
+proto veh-cluster/veh.common.proto [SensorBoundsRange] }
+proto veh-cluster/veh.common.proto [SensorBounds] SensorBoundsRange range = 1;
+proto veh-cluster/veh.common.proto [SensorBounds] map<string, string> meta = 4;
+proto veh-cluster/veh.common.proto [SensorBounds] repeated float readings = 2;
+proto veh-cluster/veh.common.proto [SensorBounds] repeated string labels = 3;
+proto veh-cluster/veh.common.proto [SensorBounds] }
+proto veh-cluster/veh.common.proto [SensorFault] string message = 2;
+proto veh-cluster/veh.common.proto [SensorFault] uint32 code = 1;
+proto veh-cluster/veh.common.proto [SensorFault] }
+proto veh-cluster/veh.common.proto [SensorReading] float value = 1;
+proto veh-cluster/veh.common.proto [SensorReading] uint64 timestamp = 2;
+proto veh-cluster/veh.common.proto [SensorReading] }
+proto veh-cluster/veh.common.proto [SensorResult.value] SensorFault err = 2;
+proto veh-cluster/veh.common.proto [SensorResult.value] SensorReading ok = 1;
+proto veh-cluster/veh.common.proto [SensorResult.value] }
+proto veh-cluster/veh.common.proto [SensorResult] oneof value {
+proto veh-cluster/veh.common.proto [SensorResult] }
+proto veh-cluster/veh.common.proto [SpeedBox] float value = 1;
+proto veh-cluster/veh.common.proto [SpeedBox] }
+proto veh-cluster/veh.common.proto [SpeedLimitPayload] float actual = 2;
+proto veh-cluster/veh.common.proto [SpeedLimitPayload] float limit = 1;
+proto veh-cluster/veh.common.proto [SpeedLimitPayload] }
+proto veh-cluster/veh.common.proto [TemperatureBox] float value = 1;
+proto veh-cluster/veh.common.proto [TemperatureBox] }
+proto veh-cluster/veh.common.proto [WarningBox] Warning value = 1;
+proto veh-cluster/veh.common.proto [WarningBox] }
+proto veh-cluster/veh.common.proto [WarningFlagsBox] uint32 value = 1;
+proto veh-cluster/veh.common.proto [WarningFlagsBox] }
+proto veh-cluster/veh.common.proto [Warning] WARNING_CHECK_ENGINE = 1;
+proto veh-cluster/veh.common.proto [Warning] WARNING_DOOR_OPEN = 2;
+proto veh-cluster/veh.common.proto [Warning] WARNING_LOW_FUEL = 0;
+proto veh-cluster/veh.common.proto [Warning] WARNING_SEATBELT = 3;
+proto veh-cluster/veh.common.proto [Warning] }
+proto veh-cluster/veh.common.proto enum GearPosition {
+proto veh-cluster/veh.common.proto enum Warning {
+proto veh-cluster/veh.common.proto message CounterBox {
+proto veh-cluster/veh.common.proto message DriverProfile {
+proto veh-cluster/veh.common.proto message GainBox {
+proto veh-cluster/veh.common.proto message GearPositionBox {
+proto veh-cluster/veh.common.proto message RPMBox {
+proto veh-cluster/veh.common.proto message RatioBox {
+proto veh-cluster/veh.common.proto message RawWheelFrame {
+proto veh-cluster/veh.common.proto message SensorBounds {
+proto veh-cluster/veh.common.proto message SensorBoundsRange {
+proto veh-cluster/veh.common.proto message SensorFault {
+proto veh-cluster/veh.common.proto message SensorReading {
+proto veh-cluster/veh.common.proto message SensorResult {
+proto veh-cluster/veh.common.proto message SpeedBox {
+proto veh-cluster/veh.common.proto message SpeedLimitPayload {
+proto veh-cluster/veh.common.proto message TemperatureBox {
+proto veh-cluster/veh.common.proto message WarningBox {
+proto veh-cluster/veh.common.proto message WarningFlagsBox {
+proto veh-cluster/veh.common.proto package veh.common;
+proto veh-cluster/veh.common.proto syntax = "proto3";
 proto vss/vehicle.cabin.hvac.proto [AmbientAirTemperatureBox] double value = 1;
 proto vss/vehicle.cabin.hvac.proto [AmbientAirTemperatureBox] }
 proto vss/vehicle.cabin.hvac.proto [BooleanBox] bool value = 1;

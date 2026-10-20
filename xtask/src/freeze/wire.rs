@@ -1,8 +1,10 @@
 //! The wire mapping: the encoding names the manifest accepts, the proto3 and
 //! FlatBuffers schemas that `ridl build` writes for the corpus, the catalog
 //! hash of the cabin example, and the test vectors of the WebSocket binding.
-//! The corpus and the cabin example are read from frozen copies, so an edit to
-//! `examples/` or to `evals/corpus/` does not change the dump.
+//! The schemas are also written for the frozen veh-cluster copy that the
+//! generated-crate surface reads, the one copy that declares a union. The
+//! corpus, that copy and the cabin example are read from frozen copies, so an
+//! edit to `examples/` or to `evals/corpus/` does not change the dump.
 //!
 //! The vectors are read from the frame specification itself
 //! (`docs/specification/frame-specification.md` §11.1), because that table is
@@ -100,9 +102,19 @@ fn schema_file_lines(text: &str) -> Vec<String> {
     out
 }
 
+/// The frozen copy of the veh-cluster corpus that the generated-crate surface
+/// reads, relative to the repository root. The `evals/corpus/` copies declare
+/// no union, so without it the dump would hold no proto3 `oneof` line and no
+/// FlatBuffers `union` line.
+const UNION_SOURCE: (&str, &str) = (
+    "veh-cluster",
+    "xtask/tests/freeze-fixtures/generated/veh-cluster",
+);
+
 /// Each corpus workspace the schema lines are built from, as `(name,
 /// directory)`: the name is the one the dump lines carry, the directory is
 /// the frozen copy that `ridl build` reads, relative to the repository root.
+/// They are the copies of `evals/corpus/` and [`UNION_SOURCE`].
 fn corpora(root: &Path) -> Result<Vec<(String, String)>, String> {
     let dir = format!("{}/evals/corpus", bin::SOURCE_COPIES);
     let entries =
@@ -114,6 +126,11 @@ fn corpora(root: &Path) -> Result<Vec<(String, String)>, String> {
             out.push((name.clone(), format!("{dir}/{name}")));
         }
     }
+    let (name, source) = UNION_SOURCE;
+    if out.iter().any(|(n, _)| n == name) {
+        return Err(format!("{dir}/{name} has the name of {source}"));
+    }
+    out.push((name.to_string(), source.to_string()));
     out.sort();
     Ok(out)
 }
@@ -537,8 +554,12 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let corpora = corpora(root).unwrap();
         let names: Vec<&str> = corpora.iter().map(|(n, _)| n.as_str()).collect();
-        assert_eq!(names, vec!["mavlink", "ros2", "vss"]);
+        assert_eq!(names, vec!["mavlink", "ros2", "veh-cluster", "vss"]);
         for (name, dir) in &corpora {
+            if *name == UNION_SOURCE.0 {
+                assert_eq!(*dir, UNION_SOURCE.1);
+                continue;
+            }
             assert_eq!(
                 *dir,
                 format!("xtask/tests/freeze-fixtures/sources/evals/corpus/{name}")
@@ -548,6 +569,36 @@ mod tests {
             CATALOG_SOURCE.starts_with("xtask/tests/freeze-fixtures/"),
             "{CATALOG_SOURCE}"
         );
+    }
+
+    #[test]
+    fn reordering_union_arms_removes_a_line() {
+        // A FlatBuffers union sets each arm's tag by its position, and the
+        // proto3 `oneof` sets it by number: in both, a reorder must remove a
+        // line, because the check compares the dumps as sets of lines.
+        let fbs = |arms: &str| schema_file_lines(&format!("union U {{ {arms} }}\n"));
+        let before = fbs("a: A, b: B");
+        let after = fbs("b: B, a: A");
+        assert!(before.iter().any(|line| !after.contains(line)), "{after:?}");
+        let oneof = |a: u32, b: u32| {
+            schema_file_lines(&format!(
+                "message M {{\n  oneof value {{\n    A a = {a};\n    B b = {b};\n  }}\n}}\n"
+            ))
+        };
+        let before = oneof(1, 2);
+        let after = oneof(2, 1);
+        // The committed dump holds both forms, built from `UNION_SOURCE`.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let dump = std::fs::read_to_string(root.join("freeze/wire.txt")).unwrap();
+        assert!(
+            dump.lines()
+                .any(|l| l.starts_with("fbs veh-cluster/") && l.contains(" union "))
+        );
+        assert!(
+            dump.lines()
+                .any(|l| l.starts_with("proto veh-cluster/") && l.ends_with("oneof value {"))
+        );
+        assert!(before.iter().any(|line| !after.contains(line)), "{after:?}");
     }
 
     #[test]

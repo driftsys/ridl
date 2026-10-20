@@ -95,7 +95,8 @@ pub fn tracked_files(root: &Path, paths: &[&str]) -> Result<Vec<String>, String>
 }
 
 /// The frozen copies of the example and corpus packages that the
-/// accepted-sources and wire dumps read, relative to the repository root.
+/// accepted-sources and wire dumps read, relative to the repository root. The
+/// wire dump also reads one copy outside it (`wire::UNION_SOURCE`).
 /// Below it, each copy keeps the path of its original, for example
 /// `examples/cabin`, so an edit to `examples/` or to `evals/corpus/` does not
 /// change a dump.

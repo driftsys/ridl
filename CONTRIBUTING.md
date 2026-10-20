@@ -108,7 +108,9 @@ vector carries, among them the `kind` values 2 and 5 and the `attach` encodings
    so an edit to an example or to the corpus changes no dump. To refresh a copy
    on purpose, copy the package's files over it and run
    `cargo xtask freeze update`. A new copy adds lines; a replaced copy that
-   removes a line is a break, handled as in step 2.
+   removes a line is a break, handled as in step 2. The wire dump also reads the
+   veh-cluster copy under `xtask/tests/freeze-fixtures/generated/`, so a refresh
+   of that copy changes both the generated-crate and the wire surfaces.
 
 ## Writing examples in the book
 

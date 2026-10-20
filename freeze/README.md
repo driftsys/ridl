@@ -17,20 +17,28 @@ which release each surface is frozen against (ADR-0029).
 ## The frozen source copies
 
 The `accepted-sources` and `wire` dumps read frozen copies of the packages under
-`examples/` and `evals/corpus/`, not the packages themselves. The copies are in
+`examples/` and `evals/corpus/`, not the packages themselves (the `wire` dump
+also reads one copy under `generated/`, below). The copies are in
 `xtask/tests/freeze-fixtures/sources/`, each at the path of its original (for
 example `xtask/tests/freeze-fixtures/sources/examples/cabin`), and each holds
 the package's `ridl.toml` and its `.typl`, `.ridl` and `.rsdl` files. A dump
 line names the path of the original. The catalog hash of the `wire` dump is read
 from `xtask/tests/freeze-fixtures/generated/cabin`, the copy of `examples/cabin`
-that the `generated-crate` surface reads. An edit to `examples/` or to
-`evals/corpus/` therefore changes no dump. The `wire` dump also holds the test
-vectors of the WebSocket binding: one `frame-vector <id> <hex>` line per row of
-the vector table in `docs/specification/frame-specification.md` §11.1, read from
-that document by the row's `Id`, so an edit to a vector changes the dump. The
-checker also reads the payload that a row's `Vector` cell names as
-`` payload `<hex>` `` and fails a row whose bytes after the header differ from
-it, or from no bytes when the cell names none.
+that the `generated-crate` surface reads. The `.proto` and `.fbs` lines of the
+`wire` dump are also built from
+`xtask/tests/freeze-fixtures/generated/veh-cluster`, the only frozen copy that
+declares a union, so the dump holds a proto3 `oneof` and a FlatBuffers `union`.
+A FlatBuffers union is one line that lists its arms in order, so reordering arms
+removes a line. The FlatBuffers backend refuses the ros2 corpus, so ros2 has no
+`.fbs` line. A refresh of the veh-cluster copy for the `generated-crate` surface
+therefore also changes `wire.txt`. An edit to `examples/` or to `evals/corpus/`
+therefore changes no dump. The `wire` dump also holds the test vectors of the
+WebSocket binding: one `frame-vector <id> <hex>` line per row of the vector
+table in `docs/specification/frame-specification.md` §11.1, read from that
+document by the row's `Id`, so an edit to a vector changes the dump. The checker
+also reads the payload that a row's `Vector` cell names as `` payload `<hex>` ``
+and fails a row whose bytes after the header differ from it, or from no bytes
+when the cell names none.
 
 To refresh a copy on purpose, copy the package's files over it and run
 `cargo xtask freeze update`. A new copy adds lines and passes. A replaced copy
