@@ -51,9 +51,16 @@ lines. Neither has a `<surface>.txt`.
 
 - `runtime-crates`: `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback`,
   `ridl-descriptor` and `ridl-transport-ws`, compared with the same crates at
-  the baseline. Each crate's own items are compared: the `ridl-ir` items that
-  `ridl-descriptor` re-exports or takes in its signatures are not, so a break in
-  them is caught only by review until driftsys/ridl#934 is fixed.
+  the baseline. Each crate's own items are compared. `ridl-descriptor` wraps the
+  catalog hash functions of `ridl-ir`, so the wrappers are compared. The
+  `ridl-ir` types that appear in `ridl-descriptor` signatures are not, so a
+  break in them is caught only by review until driftsys/ridl#1010 is fixed. The
+  comparison is skipped when `git diff --quiet <baseline>` reports no change
+  between the baseline and the working tree, and no file is untracked, in the
+  directory of each of these crates, in `crates/ridl-ir`, in the root
+  `Cargo.toml` and in `Cargo.lock`, because then no break is possible. The
+  working tree is compared, so an edit that is not committed yet is still
+  compared. The passing line of the check says so.
 - `generated-crate`: each directory `generated/<name>/` holds a crate that
   `ridl build --emit rust` writes, from the source packages under
   `xtask/tests/freeze-fixtures/generated/`. Those are frozen copies of
@@ -78,6 +85,16 @@ the local cargo cache. Before the first comparison, the check runs
 `cargo fetch --locked` with the network allowed, which puts every package of
 `Cargo.lock` there, for every platform. A build of the workspace is not enough:
 it downloads only the packages of the host platform.
+
+The `runtime-crates` comparison also builds the crates at the baseline offline.
+The baseline can pin a package that HEAD's `Cargo.lock` no longer names, so the
+check also extracts the baseline's tree into
+`${CARGO_TARGET_DIR:-target}/freeze-api/baseline-tree/` and runs
+`cargo fetch --locked` there, with the network allowed, before the comparison.
+
+The passing line of the check says which Rust API comparisons ran. For each API
+surface it names one of three results: compared with its baseline, skipped (with
+the reason), or not compared because the surface has no row in `surfaces.toml`.
 
 ## Lines that a compatible change removes
 

@@ -243,12 +243,13 @@ design in each:
      compared with `cargo semver-checks`, because a line dump cannot classify a
      Rust API change correctly, for example a new required method on a public
      trait. The runtime crates are compared with the same crates at the baseline
-     ref. Each crate's own items are compared; the `ridl-ir` items that
-     `ridl-descriptor` re-exports or takes in its signatures are not, so a break
-     in them is frozen by policy only until driftsys/ridl#934 is fixed. The
-     generated crates are committed under `freeze/generated/` from the frozen
-     fixtures named in the Context, and each is compared with the same crate in
-     the baseline's `freeze/generated/`. The check first runs
+     ref. Each crate's own items are compared. `ridl-descriptor` wraps the
+     catalog hash functions of `ridl-ir`, so the wrappers are compared. The
+     `ridl-ir` types that appear in `ridl-descriptor` signatures are not, so a
+     break in them is frozen by policy only until driftsys/ridl#1010 is fixed.
+     The generated crates are committed under `freeze/generated/` from the
+     frozen fixtures named in the Context, and each is compared with the same
+     crate in the baseline's `freeze/generated/`. The check first runs
      `cargo fetch --locked` once with the network allowed, then runs the
      comparison offline and with the release type `minor`. Ten lints of
      `cargo semver-checks` that require a major version but report only a
