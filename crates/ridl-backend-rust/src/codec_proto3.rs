@@ -1254,7 +1254,7 @@ impl<'a> Codec<'a> {
                 ),
             })?;
             fields.push(Field {
-                number,
+                number: field_number(owner, name, number)?,
                 name: snake_of(field.name.as_ref()).to_string(),
                 wire: self.wire(ty)?,
                 optional: ty.optional,

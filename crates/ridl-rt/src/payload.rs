@@ -66,7 +66,10 @@ pub trait Payload<E: Encoding>: Sized {
 /// [`EncodeError::Capacity`] when the buffer is too short.
 ///
 /// [`Ref`] is bounded by this trait, so the three operations work the same
-/// way for a type with a bound and for one without.
+/// way for a type with a bound and for one without. Code that writes both
+/// `T: Payload<E>` and `T: Codec<E>` names the view as
+/// `<T as Payload<E>>::View<'a>`, because the shorthand `T::View` is then
+/// ambiguous between the two traits.
 pub trait Codec<E: Encoding>: Sized {
     /// What a successful check or encode leaves behind: the bytes, an
     /// accessor over the bytes, or a parsed value.

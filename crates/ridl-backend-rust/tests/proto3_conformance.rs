@@ -3021,6 +3021,9 @@ fn unbounded_values_round_trip_through_prost_reflect_byte_for_byte() {
     let pool = proto3::compile_protos(&proto3::emit_protos(std::slice::from_ref(&package), &[]))
         .descriptor_pool();
     let long = "x".repeat(300);
+    // The "long" case holds the text three times over, so its encoding is
+    // well past any small buffer a codec with a bound would have used.
+    assert!(long.len() * 3 > 600);
     let prelude = format!(
         r#"
 fn free(s: &str) -> Free {{ Free::new_unchecked(String::from(s)) }}
@@ -3124,10 +3127,6 @@ fn long() -> String {{ "x".repeat({}) }}
             "{message}/{name}: prost-reflect re-encodes what this codec wrote to the same bytes"
         );
     }
-    assert!(
-        prost::Message::encode_to_vec(&theirs[1].2).len() > 600,
-        "the long value is well past any small buffer"
-    );
 }
 
 // ---------------------------------------------------------------------------

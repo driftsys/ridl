@@ -426,6 +426,86 @@ fn rust_for(decls: Vec<v2::Decl>) -> String {
         .rust_source
 }
 
+/// The proto3 codec refuses a field number proto3 reserves (19000 to 19999)
+/// or does not admit (above 2^29 - 1), in a struct and in a union arm, as the
+/// proto backend does, and admits the highest number. The sizer answers
+/// `RefusedMember` for each, which is "no bound" to the codec, so without its
+/// own check such a declaration would get a `Codec<Proto3>` instead.
+#[test]
+fn the_proto3_codec_refuses_a_field_number_the_proto_backend_refuses() {
+    let struct_at = |name: &str, ordinal: u32| {
+        public_decl(
+            name,
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(named_field(
+                    "x",
+                    ordinal,
+                    "Speed",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            }),
+        )
+    };
+    let union_at = |name: &str, ordinal: u32| {
+        public_decl(
+            name,
+            v2::decl::Kind::UnionDef(v2::UnionDef {
+                arms: vec![v2::UnionArm {
+                    name: "a".to_string(),
+                    ordinal,
+                    type_ref: "Speed".to_string(),
+                    doc: String::new(),
+                    links: Vec::new(),
+                    see: Vec::new(),
+                    since: Vec::new(),
+                }],
+                is_result: false,
+                reserved: Vec::new(),
+            }),
+        )
+    };
+    let generate = |decl: v2::Decl| {
+        let package = package("veh.common", vec![speed_decl(), decl]);
+        super::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+            .map(|generated| generated.rust_source)
+            .map_err(|error| error.message)
+    };
+    for (decl, what) in [
+        (
+            struct_at("Reserved", 19_000),
+            "`Reserved.x` has field number 19000",
+        ),
+        (
+            struct_at("Reserved2", 19_999),
+            "`Reserved2.x` has field number 19999",
+        ),
+        (
+            struct_at("TooHigh", 536_870_912),
+            "`TooHigh.x` has field number 536870912",
+        ),
+        (
+            union_at("ArmReserved", 19_500),
+            "`ArmReserved.a` has field number 19500",
+        ),
+    ] {
+        let error = generate(decl).expect_err(what);
+        assert!(
+            error.starts_with(what) && error.contains("proto3 reserves or does not admit"),
+            "the refusal names the position and the cause, got: {error}"
+        );
+    }
+    let highest = generate(struct_at("Highest", 536_870_911)).expect("the highest number");
+    assert!(
+        highest.contains("impl ::ridl_rt::payload::Codec<::ridl_rt::encoding::Proto3> for Highest")
+            || highest.contains(
+                "impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Highest"
+            ),
+        "`Highest` gets a proto3 codec"
+    );
+}
+
 /// The contract accepts `proto3`, alone and beside `flatbuffers`, and still
 /// refuses `repr-c` with the issue that builds its codec.
 #[test]
