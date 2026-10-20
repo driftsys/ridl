@@ -111,6 +111,9 @@ ridl-backend-proto = { path = "../ridl-backend-proto" }
 protox.workspace = true
 prost-build.workspace = true
 prost.workspace = true
+# The seeded value generator of the proto3 conformance property: `std` for
+# the strategy builders and the test runner, as the other backends enable it.
+proptest = { workspace = true, features = ["std"] }
 # The propagation hook spike. The design of generated observation gives
 # `ridl_rt::trace::Propagation` to the application, and the tests in
 # `otel_propagation.rs` prove the hook's call order by implementing it with

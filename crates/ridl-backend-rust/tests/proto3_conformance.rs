@@ -30,7 +30,13 @@
 //!
 //! The generated codec runs as a program, built once per test binary
 //! (`support::proto3::Program`) and fed one request line per case, so the
-//! suite's wall time is one `rustc` call and not one per case.
+//! suite's wall time is one `rustc` call and not one per case. Beyond the
+//! value table, a seeded property draws values within the fixture's typl
+//! constraints, a robustness case feeds every truncation and byte
+//! replacement of the table's buffers to `verify`, a corpus case round-trips
+//! every corpus default through `prost-reflect` (one more program per corpus
+//! entry), and the determinism and bound cases pin one encoding, encode into
+//! a dirty buffer, and encode a worst-case value per message.
 
 #[path = "support/proto3.rs"]
 mod proto3;
@@ -41,6 +47,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::OnceLock;
 
+use proptest::prelude::*;
+use proptest::strategy::ValueTree;
+use proptest::test_runner::{Config, RngAlgorithm, TestRng, TestRunner};
 use protox::prost_reflect::{DescriptorPool, Kind};
 use ridl_backend_rust::{Proto3Label, Proto3MessageLayout};
 use ridl_ir::v2;
@@ -821,6 +830,46 @@ const WIDE_FLAGS_ALL: i64 = 1 | (1 << 32) | (1i64 << 63);
 
 /// A sixteen-character label whose every character is four UTF-8 bytes.
 const WIDEST_LABEL: &str = "\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}\u{10348}";
+
+/// A string of `chars` four-byte characters ending in `last`, so that keys
+/// of one width can differ.
+fn widest(chars: usize, last: char) -> String {
+    let mut text: String = WIDEST_LABEL.chars().take(chars - 1).collect();
+    text.push(last);
+    text
+}
+
+/// `Scalars` at its widest encoding: every varint at its widest, every
+/// string at sixteen four-byte characters, every bytes at eight.
+fn worst_scalars() -> Scalars {
+    Scalars {
+        unsigned8: 255,
+        unsigned16: 65535,
+        unsigned32: 4294967295,
+        unsigned64: 9223372036854775807,
+        signed8: -128,
+        signed16: -32768,
+        signed32: -2147483648,
+        signed64: -4294967296,
+        plain: i64::MIN,
+        narrow: 250.0,
+        real: f64::MIN,
+        flag: true,
+        text: String::from(WIDEST_LABEL),
+        data: vec![0xff; 8],
+        count: count(200),
+        wide: Wide::new_unchecked(i64::MAX),
+        ratio: Ratio::new_unchecked(250.0),
+        label: label(WIDEST_LABEL),
+        blob: blob(&[0xff; 8]),
+        engaged: Engaged::new(true),
+        health: Health::Fail,
+        gear: Gear::Second,
+        trend: Trend::Down,
+        flags: flags(3),
+        wide_flags: WideFlags::try_from(WIDE_FLAGS_ALL).unwrap(),
+    }
+}
 "#;
 
 /// The bits of every member of `WideFlags`, which is width u64 because bit
@@ -839,6 +888,9 @@ trait Oracle {
     fn encode(&self) -> Vec<u8>;
     fn debug(&self) -> String;
     fn decode_debug(&self, bytes: &[u8]) -> Result<String, String>;
+    /// `prost`'s re-encoding of what it reads from `bytes`: its canonical
+    /// form of an arbitrary buffer, or the decode error.
+    fn decode_encode(&self, bytes: &[u8]) -> Result<Vec<u8>, String>;
 }
 
 impl<T: prost::Message + Default + std::fmt::Debug> Oracle for T {
@@ -853,6 +905,12 @@ impl<T: prost::Message + Default + std::fmt::Debug> Oracle for T {
     fn decode_debug(&self, bytes: &[u8]) -> Result<String, String> {
         T::decode(bytes)
             .map(|value| format!("{value:?}"))
+            .map_err(|error| error.to_string())
+    }
+
+    fn decode_encode(&self, bytes: &[u8]) -> Result<Vec<u8>, String> {
+        T::decode(bytes)
+            .map(|value| value.encode_to_vec())
             .map_err(|error| error.to_string())
     }
 }
@@ -1698,7 +1756,195 @@ fn named_values() -> Vec<proto3::NamedValue> {
         name: "narrow_minus_zero",
         expr: "{ let mut v = scalars_zero(); v.narrow = -0.0; v }",
     });
+    values.extend(worst_cases());
     values
+}
+
+/// The largest value each dispatched message admits, named `worst`: every
+/// collection at its maximum count, every string at its maximum length of
+/// four-byte characters, every bytes at its maximum length, every varint at
+/// its widest (the top of an unsigned range, the bottom of a signed one,
+/// `i64::MIN` for a bare integer, a negative enum value, bit 63 of the wide
+/// enum set), every optional present, a union at its widest arm. Read by
+/// [`the_worst_case_value_fits_max_size`], which requires one per message.
+fn worst_cases() -> Vec<proto3::NamedValue> {
+    const WORST_INNER: &str = "inner(200, WIDEST_LABEL)";
+    [
+        ("Scalars", "worst_scalars()"),
+        ("Inner", WORST_INNER),
+        (
+            "Optionals",
+            r#"Optionals {
+                count: Some(count(200)),
+                label: Some(label(WIDEST_LABEL)),
+                blob: Some(blob(&[0xff; 8])),
+                flag: Some(true),
+                real: Some(f64::MIN),
+                health: Some(Health::Fail),
+                flags: Some(flags(3)),
+                inner: Some(inner(200, WIDEST_LABEL)),
+            }"#,
+        ),
+        (
+            "Nested",
+            "Nested { inner: inner(200, WIDEST_LABEL), count: count(200) }",
+        ),
+        (
+            "Zeroable",
+            r#"Zeroable {
+                count: count(200),
+                flag: true,
+                label: label(WIDEST_LABEL),
+                blob: blob(&[0xff; 8]),
+                health: Health::Fail,
+                flags: flags(3),
+                real: f64::MIN,
+            }"#,
+        ),
+        (
+            "Required",
+            "Required { level: Level::new_unchecked(10), gear: Gear::Second }",
+        ),
+        ("Signs", "Signs { ignored: i64::MIN, value: f64::MIN }"),
+        (
+            "Lengths",
+            r#"Lengths {
+                text: WIDEST_LABEL.chars().take(8).collect(),
+                code: Code::new_unchecked(WIDEST_LABEL.chars().take(4).collect()),
+                data: vec![0xff; 4],
+            }"#,
+        ),
+        (
+            "Axle",
+            r#"Axle {
+                wheel: crate::pb::parts::Wheel { radius: 100 },
+                grade: crate::pb::parts::Grade::B,
+                torque: crate::pb::parts::Torque::new_unchecked(5000),
+            }"#,
+        ),
+        ("Wheel", "crate::pb::parts::Wheel { radius: 100 }"),
+        ("GradeBox", "crate::pb::parts::Grade::B"),
+        ("TorqueBox", "crate::pb::parts::Torque::new_unchecked(5000)"),
+        ("Outcome", "Outcome::Inner(inner(200, WIDEST_LABEL))"),
+        (
+            "Tuples",
+            r#"Tuples {
+                range: TuplesRange { min: count(200), max: count(200) },
+                pair: TuplesPair { lo: count(200), inner: inner(200, WIDEST_LABEL) },
+            }"#,
+        ),
+        (
+            "Packed",
+            r#"Packed {
+                unsigned8s: vec![255; 4],
+                unsigned16s: vec![65535; 4],
+                unsigned32s: vec![4294967295; 4],
+                unsigned64s: vec![9223372036854775807; 4],
+                signed8s: vec![-128; 4],
+                signed16s: vec![-32768; 4],
+                signed32s: vec![-2147483648; 4],
+                signed64s: vec![-4294967296; 4],
+                plains: vec![i64::MIN; 4],
+                narrows: vec![Ratio::new_unchecked(250.0); 4],
+                reals: vec![f64::MIN; 4],
+                flags: vec![true; 4],
+                healths: vec![Health::Fail; 4],
+                trends: vec![Trend::Down; 4],
+                sets: vec![flags(3); 4],
+                three: [count(200); 3],
+            }"#,
+        ),
+        (
+            "Records",
+            r#"Records {
+                labels: vec![label(WIDEST_LABEL); 3],
+                blobs: vec![blob(&[0xff; 8]); 3],
+                inners: vec![inner(200, WIDEST_LABEL); 3],
+                outcomes: vec![Outcome::Inner(inner(200, WIDEST_LABEL)); 3],
+                points: vec![RecordsPointsElement { x: count(200), y: count(200) }; 2],
+            }"#,
+        ),
+        (
+            "Maps",
+            r#"Maps {
+                by_string: vec![
+                    (Key::new_unchecked(widest(8, '\u{10349}')), count(200)),
+                    (Key::new_unchecked(widest(8, '\u{1034A}')), count(200)),
+                    (Key::new_unchecked(widest(8, '\u{1034B}')), count(200)),
+                ],
+                by_uint32: vec![
+                    (4294967293, label(WIDEST_LABEL)),
+                    (4294967294, label(WIDEST_LABEL)),
+                    (4294967295, label(WIDEST_LABEL)),
+                ],
+                by_uint64: vec![
+                    (9223372036854775805, Health::Fail),
+                    (9223372036854775806, Health::Fail),
+                    (9223372036854775807, Health::Fail),
+                ],
+                by_sint32: vec![
+                    (-100, inner(200, WIDEST_LABEL)),
+                    (-99, inner(200, WIDEST_LABEL)),
+                    (-98, inner(200, WIDEST_LABEL)),
+                ],
+                by_sint64: vec![
+                    (i64::MIN, count(200)),
+                    (i64::MIN + 1, count(200)),
+                    (i64::MIN + 2, count(200)),
+                ],
+                by_boolean: vec![(false, count(200)), (true, count(200))],
+                by_label: vec![
+                    (label(&widest(16, '\u{10349}')), count(200)),
+                    (label(&widest(16, '\u{1034A}')), count(200)),
+                    (label(&widest(16, '\u{1034B}')), count(200)),
+                ],
+            }"#,
+        ),
+        (
+            "OptionalComposites",
+            r#"OptionalComposites {
+                pair: Some(OptionalCompositesPair { lo: count(200), hi: count(200) }),
+                outcome: Some(Outcome::Inner(inner(200, WIDEST_LABEL))),
+            }"#,
+        ),
+        (
+            "ProbeSetBothParams",
+            "ProbeSetBothParams { level: Level::new_unchecked(10), count: count(200) }",
+        ),
+        ("ProbeStatusParams", "ProbeStatusParams {}"),
+        ("ProbeSpanParams", "ProbeSpanParams {}"),
+        (
+            "ProbeSpanReply",
+            "ProbeSpanReply { lo: count(200), hi: count(200) }",
+        ),
+        ("CountBox", "count(200)"),
+        ("WideBox", "Wide::new_unchecked(i64::MAX)"),
+        ("RatioBox", "Ratio::new_unchecked(250.0)"),
+        ("LabelBox", "label(WIDEST_LABEL)"),
+        ("BlobBox", "blob(&[0xff; 8])"),
+        ("EngagedBox", "Engaged::new(true)"),
+        ("LevelBox", "Level::new_unchecked(10)"),
+        (
+            "CodeBox",
+            "Code::new_unchecked(WIDEST_LABEL.chars().take(4).collect())",
+        ),
+        ("KeyBox", "key(&widest(8, '\u{10349}'))"),
+        ("HealthBox", "Health::Fail"),
+        ("GearBox", "Gear::Second"),
+        ("TrendBox", "Trend::Down"),
+        ("WarningFlagsBox", "flags(3)"),
+        (
+            "WideFlagsBox",
+            "WideFlags::try_from(WIDE_FLAGS_ALL).unwrap()",
+        ),
+    ]
+    .into_iter()
+    .map(|(message, expr)| proto3::NamedValue {
+        message,
+        name: "worst",
+        expr,
+    })
+    .collect()
 }
 
 fn to_hex(bytes: &[u8]) -> String {
@@ -1938,4 +2184,873 @@ fn every_emitted_message_default_round_trips() {
             "`{message}`: the default value's encoding round-trips"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// The seeded property
+// ---------------------------------------------------------------------------
+
+/// One generated value, in `prost`'s vocabulary: the message it is of, the
+/// bytes `prost` writes for it, and its `Debug` text for the failure report.
+#[derive(Clone, Debug)]
+struct Case {
+    message: &'static str,
+    bytes: Vec<u8>,
+    debug: String,
+}
+
+/// A strategy over `Case` for `message`, from a strategy over the `prost`
+/// value.
+fn cases<T, S>(message: &'static str, strategy: S) -> BoxedStrategy<Case>
+where
+    T: Oracle + std::fmt::Debug + 'static,
+    S: Strategy<Value = T> + 'static,
+{
+    strategy
+        .prop_map(move |value| Case {
+            message,
+            bytes: value.encode(),
+            debug: value.debug(),
+        })
+        .boxed()
+}
+
+/// A string of up to `max` characters of any printable kind, multi-byte
+/// ones included: the typl length is counted in characters.
+fn text(min: usize, max: usize) -> BoxedStrategy<String> {
+    prop::string::string_regex(&format!("\\PC{{{min},{max}}}"))
+        .expect("a valid regex")
+        .boxed()
+}
+
+fn bytes(min: usize, max: usize) -> BoxedStrategy<Vec<u8>> {
+    prop::collection::vec(any::<u8>(), min..=max).boxed()
+}
+
+/// A `float [0.0..250.0 step 0.5]`: `k / 2` for `k` in `0..=500`.
+fn ratio() -> BoxedStrategy<f32> {
+    (0u32..=500).prop_map(|k| k as f32 * 0.5).boxed()
+}
+
+/// Any `double` but `-0.0`, the listed exception, and NaN, whose payload
+/// bits are a property of the platform rather than of either codec.
+fn real() -> BoxedStrategy<f64> {
+    use proptest::num::f64::{INFINITE, NEGATIVE, NORMAL, POSITIVE, SUBNORMAL, ZERO};
+    (POSITIVE | NEGATIVE | NORMAL | SUBNORMAL | ZERO | INFINITE)
+        .prop_filter("-0.0 is the listed exception", |x| {
+            !(*x == 0.0 && x.is_sign_negative())
+        })
+        .boxed()
+}
+
+fn count() -> BoxedStrategy<u32> {
+    (0u32..=200).boxed()
+}
+
+fn wide() -> BoxedStrategy<u64> {
+    (0u64..=u64::try_from(i64::MAX).expect("positive")).boxed()
+}
+
+fn health() -> BoxedStrategy<i32> {
+    (0i32..=2).boxed()
+}
+
+fn gear() -> BoxedStrategy<i32> {
+    (1i32..=2).boxed()
+}
+
+fn trend() -> BoxedStrategy<i32> {
+    (-1i32..=1).boxed()
+}
+
+fn warning_flags() -> BoxedStrategy<u32> {
+    (0u32..=3).boxed()
+}
+
+fn wide_flags() -> BoxedStrategy<u64> {
+    (any::<bool>(), any::<bool>(), any::<bool>())
+        .prop_map(|(first, middle, last)| {
+            u64::from(first) | (u64::from(middle) << 32) | (u64::from(last) << 63)
+        })
+        .boxed()
+}
+
+fn inner() -> BoxedStrategy<prost_oracle::pb::conformance::Inner> {
+    (count(), text(0, 16))
+        .prop_map(|(speed, label)| prost_oracle::pb::conformance::Inner { speed, label })
+        .boxed()
+}
+
+fn outcome_value() -> BoxedStrategy<prost_oracle::pb::conformance::Outcome> {
+    use prost_oracle::pb::conformance::outcome::Value;
+    prop_oneof![
+        count().prop_map(Value::Number),
+        text(0, 16).prop_map(Value::Text),
+        health().prop_map(Value::Health),
+        warning_flags().prop_map(Value::Flags),
+        inner().prop_map(Value::Inner),
+    ]
+    .prop_map(outcome)
+    .boxed()
+}
+
+/// One strategy per message of the fixture, each within the typl
+/// constraints of its fields: the range of every integer, the step of every
+/// `float`, the length of every string and bytes, the count of every
+/// collection, the members of every enum and enum set. A map is a
+/// `BTreeMap`, so its entries are in key order, which is the one order this
+/// codec and `prost` agree on.
+fn strategies() -> Vec<BoxedStrategy<Case>> {
+    use prost_oracle::pb::conformance as pb;
+    use prost_oracle::pb::parts;
+
+    let scalars = (
+        (
+            0u32..=255,
+            0u32..=65535,
+            any::<u32>(),
+            wide(),
+            -128i32..=127,
+            -32768i32..=32767,
+            any::<i32>(),
+            -4294967296i64..=4294967296,
+            any::<i64>(),
+            ratio(),
+            real(),
+            any::<bool>(),
+        ),
+        (
+            text(0, 16),
+            bytes(0, 8),
+            count(),
+            wide(),
+            ratio(),
+            text(0, 16),
+            bytes(0, 8),
+            any::<bool>(),
+            health(),
+            gear(),
+            trend(),
+            warning_flags(),
+        ),
+        wide_flags(),
+    )
+        .prop_map(|(numbers, rest, wide_flags)| pb::Scalars {
+            unsigned8: numbers.0,
+            unsigned16: numbers.1,
+            unsigned32: numbers.2,
+            unsigned64: numbers.3,
+            signed8: numbers.4,
+            signed16: numbers.5,
+            signed32: numbers.6,
+            signed64: numbers.7,
+            plain: numbers.8,
+            narrow: numbers.9,
+            real: numbers.10,
+            flag: numbers.11,
+            text: rest.0,
+            data: rest.1,
+            count: rest.2,
+            wide: rest.3,
+            ratio: rest.4,
+            label: rest.5,
+            blob: rest.6,
+            engaged: rest.7,
+            health: rest.8,
+            gear: rest.9,
+            trend: rest.10,
+            flags: rest.11,
+            wide_flags,
+        });
+
+    let optionals = (
+        prop::option::of(count()),
+        prop::option::of(text(0, 16)),
+        prop::option::of(bytes(0, 8)),
+        prop::option::of(any::<bool>()),
+        prop::option::of(real()),
+        prop::option::of(health()),
+        prop::option::of(warning_flags()),
+        prop::option::of(inner()),
+    )
+        .prop_map(
+            |(count, label, blob, flag, real, health, flags, inner)| pb::Optionals {
+                count,
+                label,
+                blob,
+                flag,
+                real,
+                health,
+                flags,
+                inner,
+            },
+        );
+
+    let packed = (
+        (
+            prop::collection::vec(0u32..=255, 0..=4),
+            prop::collection::vec(0u32..=65535, 0..=4),
+            prop::collection::vec(any::<u32>(), 0..=4),
+            prop::collection::vec(wide(), 0..=4),
+            prop::collection::vec(-128i32..=127, 0..=4),
+            prop::collection::vec(-32768i32..=32767, 0..=4),
+            prop::collection::vec(any::<i32>(), 0..=4),
+            prop::collection::vec(-4294967296i64..=4294967296, 0..=4),
+        ),
+        (
+            prop::collection::vec(any::<i64>(), 0..=4),
+            prop::collection::vec(ratio(), 0..=4),
+            prop::collection::vec(real(), 0..=4),
+            prop::collection::vec(any::<bool>(), 0..=4),
+            prop::collection::vec(health(), 0..=4),
+            prop::collection::vec(trend(), 0..=4),
+            prop::collection::vec(warning_flags(), 0..=4),
+            prop::collection::vec(count(), 3),
+        ),
+    )
+        .prop_map(|(numbers, rest)| pb::Packed {
+            unsigned8s: numbers.0,
+            unsigned16s: numbers.1,
+            unsigned32s: numbers.2,
+            unsigned64s: numbers.3,
+            signed8s: numbers.4,
+            signed16s: numbers.5,
+            signed32s: numbers.6,
+            signed64s: numbers.7,
+            plains: rest.0,
+            narrows: rest.1,
+            reals: rest.2,
+            flags: rest.3,
+            healths: rest.4,
+            trends: rest.5,
+            sets: rest.6,
+            three: rest.7,
+        });
+
+    let records = (
+        prop::collection::vec(text(0, 16), 0..=3),
+        prop::collection::vec(bytes(0, 8), 0..=3),
+        prop::collection::vec(inner(), 0..=3),
+        prop::collection::vec(outcome_value(), 0..=3),
+        prop::collection::vec(
+            (count(), count())
+                .prop_map(|(field_1, field_2)| pb::RecordsPointsElement { field_1, field_2 }),
+            0..=2,
+        ),
+    )
+        .prop_map(|(labels, blobs, inners, outcomes, points)| pb::Records {
+            labels,
+            blobs,
+            inners,
+            outcomes,
+            points,
+        });
+
+    let maps = (
+        prop::collection::btree_map(text(1, 8), count(), 0..=3),
+        prop::collection::btree_map(any::<u32>(), text(0, 16), 0..=3),
+        prop::collection::btree_map(wide(), health(), 0..=3),
+        prop::collection::btree_map(-100i32..=100, inner(), 0..=3),
+        prop::collection::btree_map(any::<i64>(), count(), 0..=3),
+        prop::collection::btree_map(any::<bool>(), count(), 0..=2),
+        prop::collection::btree_map(text(0, 16), count(), 0..=3),
+    )
+        .prop_map(
+            |(by_string, by_uint32, by_uint64, by_sint32, by_sint64, by_boolean, by_label)| {
+                pb::Maps {
+                    by_string,
+                    by_uint32,
+                    by_uint64,
+                    by_sint32,
+                    by_sint64,
+                    by_boolean,
+                    by_label,
+                }
+            },
+        );
+
+    let pair = (count(), count())
+        .prop_map(|(field_1, field_2)| pb::OptionalCompositesPair { field_1, field_2 });
+
+    vec![
+        cases("Scalars", scalars),
+        cases("Inner", inner()),
+        cases("Optionals", optionals),
+        cases(
+            "Nested",
+            (inner(), count()).prop_map(|(inner, count)| pb::Nested {
+                inner: Some(inner),
+                count,
+            }),
+        ),
+        cases(
+            "Zeroable",
+            (
+                count(),
+                any::<bool>(),
+                text(0, 16),
+                bytes(0, 8),
+                health(),
+                warning_flags(),
+                real(),
+            )
+                .prop_map(|(count, flag, label, blob, health, flags, real)| {
+                    pb::Zeroable {
+                        count,
+                        flag,
+                        label,
+                        blob,
+                        health,
+                        flags,
+                        real,
+                    }
+                }),
+        ),
+        cases(
+            "Required",
+            (1u32..=10, gear()).prop_map(|(level, gear)| pb::Required { level, gear }),
+        ),
+        cases(
+            "Signs",
+            (any::<i64>(), real()).prop_map(|(ignored, value)| pb::Signs { ignored, value }),
+        ),
+        cases(
+            "Lengths",
+            (text(1, 8), text(2, 4), bytes(1, 4)).prop_map(|(text, code, data)| pb::Lengths {
+                text,
+                code,
+                data,
+            }),
+        ),
+        cases(
+            "Axle",
+            (0u32..=100, 0i32..=1, 0u32..=5000).prop_map(|(radius, grade, torque)| pb::Axle {
+                wheel: Some(parts::Wheel { radius }),
+                grade,
+                torque,
+            }),
+        ),
+        cases(
+            "Wheel",
+            (0u32..=100).prop_map(|radius| parts::Wheel { radius }),
+        ),
+        cases(
+            "GradeBox",
+            (0i32..=1).prop_map(|value| parts::GradeBox { value }),
+        ),
+        cases(
+            "TorqueBox",
+            (0u32..=5000).prop_map(|value| parts::TorqueBox { value }),
+        ),
+        cases("Outcome", outcome_value()),
+        cases(
+            "Tuples",
+            (count(), count(), count(), inner()).prop_map(|(min, max, lo, inner)| pb::Tuples {
+                range: Some(pb::TuplesRange {
+                    field_1: min,
+                    field_2: max,
+                }),
+                pair: Some(pb::TuplesPair {
+                    field_1: lo,
+                    field_2: Some(inner),
+                }),
+            }),
+        ),
+        cases("Packed", packed),
+        cases("Records", records),
+        cases("Maps", maps),
+        cases(
+            "OptionalComposites",
+            (prop::option::of(pair), prop::option::of(outcome_value()))
+                .prop_map(|(pair, outcome)| pb::OptionalComposites { pair, outcome }),
+        ),
+        cases(
+            "ProbeSetBothParams",
+            (1u32..=10, count())
+                .prop_map(|(field_1, field_2)| pb::ProbeSetBothParams { field_1, field_2 }),
+        ),
+        cases("ProbeStatusParams", Just(pb::ProbeStatusParams {})),
+        cases("ProbeSpanParams", Just(pb::ProbeSpanParams {})),
+        cases(
+            "ProbeSpanReply",
+            (count(), count())
+                .prop_map(|(field_1, field_2)| pb::ProbeSpanReply { field_1, field_2 }),
+        ),
+        cases("CountBox", count().prop_map(|value| pb::CountBox { value })),
+        cases("WideBox", wide().prop_map(|value| pb::WideBox { value })),
+        cases("RatioBox", ratio().prop_map(|value| pb::RatioBox { value })),
+        cases(
+            "LabelBox",
+            text(0, 16).prop_map(|value| pb::LabelBox { value }),
+        ),
+        cases(
+            "BlobBox",
+            bytes(0, 8).prop_map(|value| pb::BlobBox { value }),
+        ),
+        cases(
+            "EngagedBox",
+            any::<bool>().prop_map(|value| pb::EngagedBox { value }),
+        ),
+        cases(
+            "LevelBox",
+            (1u32..=10).prop_map(|value| pb::LevelBox { value }),
+        ),
+        cases(
+            "CodeBox",
+            text(2, 4).prop_map(|value| pb::CodeBox { value }),
+        ),
+        cases("KeyBox", text(1, 8).prop_map(|value| pb::KeyBox { value })),
+        cases(
+            "HealthBox",
+            health().prop_map(|value| pb::HealthBox { value }),
+        ),
+        cases("GearBox", gear().prop_map(|value| pb::GearBox { value })),
+        cases("TrendBox", trend().prop_map(|value| pb::TrendBox { value })),
+        cases(
+            "WarningFlagsBox",
+            warning_flags().prop_map(|value| pb::WarningFlagsBox { value }),
+        ),
+        cases(
+            "WideFlagsBox",
+            wide_flags().prop_map(|value| pb::WideFlagsBox { value }),
+        ),
+    ]
+}
+
+/// The seeded `proptest` runner: a fixed seed, so a failure reproduces run
+/// after run, and no persistence file, so a failure writes nothing into the
+/// tree.
+fn runner(cases: u32) -> TestRunner {
+    TestRunner::new_with_rng(
+        Config {
+            cases,
+            failure_persistence: None,
+            ..Config::default()
+        },
+        TestRng::deterministic_rng(RngAlgorithm::ChaCha),
+    )
+}
+
+/// **The property.** For 256 seeded draws of one value per message of the
+/// fixture, within the typl constraints of every field, the bytes `prost`
+/// writes are verified and decoded by this codec, and what it decoded
+/// re-encodes to the bytes `prost` wrote: both directions in one assertion,
+/// since the re-encoding is this codec's bytes for the value, and the
+/// equality says they are `prost`'s.
+#[test]
+fn prost_values_round_trip_through_this_codec_byte_for_byte() {
+    let strategies = strategies();
+    let messages: BTreeSet<&str> = program().messages().into_iter().collect();
+    let result = runner(256).run(&strategies, |cases| {
+        let lines: Vec<String> = cases
+            .iter()
+            .map(|case| format!("{} decode-encode {}", case.message, to_hex(&case.bytes)))
+            .collect();
+        let answers = program().run(&lines);
+        for (case, answer) in cases.iter().zip(&answers) {
+            prop_assert_eq!(
+                answer,
+                &to_hex(&case.bytes),
+                "{}: {} — prost's bytes must be read here and re-encode to themselves",
+                case.message,
+                case.debug
+            );
+        }
+        Ok(())
+    });
+    if let Err(error) = result {
+        panic!("the property failed: {error}");
+    }
+    // Every dispatched message has a strategy, so a message added to the
+    // fixture cannot stay out of the property unnoticed.
+    let with_strategy: BTreeSet<&str> = strategies
+        .iter()
+        .map(|strategy| {
+            strategy
+                .new_tree(&mut runner(1))
+                .expect("the strategy generates")
+                .current()
+                .message
+        })
+        .collect();
+    assert_eq!(
+        with_strategy, messages,
+        "the messages with a strategy are the messages the program dispatches"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Malformed-input robustness
+// ---------------------------------------------------------------------------
+
+/// Every truncation and every single-byte replacement (by `0x00`, `0xff`
+/// and `0x80`) of every buffer of the value table, plus 512 seeded random
+/// buffers of up to 48 bytes spread over the table's messages, fed to
+/// `verify` and to `decode`. The program never aborts — a panic is reported
+/// with the input that caused it — and whenever `verify` accepts a buffer,
+/// `prost` accepts the same bytes and re-encodes what it read to the bytes
+/// this codec re-encodes: the two readers agree on every accepted value,
+/// and this codec is only ever stricter.
+#[test]
+fn verify_never_panics_and_is_no_looser_than_prost() {
+    let rows = rows();
+    // The oracle of each message, from its first row.
+    let mut oracles: BTreeMap<&'static str, &dyn Oracle> = BTreeMap::new();
+    for row in &rows {
+        oracles.entry(row.message).or_insert(row.prost.as_ref());
+    }
+    let messages: Vec<&'static str> = oracles.keys().copied().collect();
+
+    // Each input: the message, the bytes, and how the bytes were derived.
+    let mut inputs: Vec<(&'static str, Vec<u8>, String)> = Vec::new();
+    for row in &rows {
+        let bytes = row.prost.encode();
+        for len in 0..bytes.len() {
+            inputs.push((
+                row.message,
+                bytes[..len].to_vec(),
+                format!("{}/{} truncated to {len} bytes", row.message, row.name),
+            ));
+        }
+        for at in 0..bytes.len() {
+            for replacement in [0x00u8, 0xff, 0x80] {
+                if bytes[at] == replacement {
+                    continue;
+                }
+                let mut mutated = bytes.clone();
+                mutated[at] = replacement;
+                inputs.push((
+                    row.message,
+                    mutated,
+                    format!(
+                        "{}/{} with byte {at} replaced by {replacement:#04x}",
+                        row.message, row.name
+                    ),
+                ));
+            }
+        }
+    }
+    let mutated = inputs.len();
+    let mut runner = runner(1);
+    let random = prop::collection::vec(any::<u8>(), 0..=48);
+    for draw in 0..512usize {
+        let bytes = random
+            .new_tree(&mut runner)
+            .expect("the strategy generates")
+            .current();
+        let message = messages[draw % messages.len()];
+        inputs.push((
+            message,
+            bytes,
+            format!("random buffer {draw} read as {message}"),
+        ));
+    }
+    assert!(
+        inputs.len() > mutated + 500 && mutated > 2000,
+        "{} inputs",
+        inputs.len()
+    );
+
+    let lines: Vec<String> = inputs
+        .iter()
+        .flat_map(|(message, bytes, _)| {
+            let hex = to_hex(bytes);
+            [
+                format!("{message} verify {hex}"),
+                format!("{message} decode-encode {hex}"),
+            ]
+        })
+        .collect();
+    let answers = match program().try_run(&lines) {
+        Ok(answers) => answers,
+        Err(abort) => {
+            let (message, bytes, how) = &inputs[abort.request / 2];
+            panic!(
+                "the generated codec aborted on {how} ({message}, {}), stderr:\n{}",
+                to_hex(bytes),
+                abort.stderr
+            );
+        }
+    };
+
+    // Every accepted input: its message, its description, this codec's
+    // re-encoding, and prost's canonical form of the same bytes.
+    let mut accepted: Vec<(&str, &str, &str, String)> = Vec::new();
+    for ((message, bytes, how), answer) in inputs.iter().zip(answers.chunks(2)) {
+        let [verdict, re_encoded] = answer else {
+            panic!("two answers per input");
+        };
+        if verdict != "ok" {
+            assert_eq!(
+                re_encoded, verdict,
+                "{how}: a buffer verify refuses is refused by decode the same way"
+            );
+            continue;
+        }
+        let theirs = oracles[message]
+            .decode_encode(bytes)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "{how}: this codec accepts {} and prost refuses it: {error}",
+                    to_hex(bytes)
+                )
+            });
+        accepted.push((message, how, re_encoded, to_hex(&theirs)));
+    }
+    assert!(
+        accepted.len() > 100,
+        "some mutated buffers are accepted, or the case proves only refusal: {}",
+        accepted.len()
+    );
+
+    // The two readers agree on the value. Two forms keep the agreement
+    // from being byte for byte: a non-optional struct, tuple or union
+    // field absent from the buffer, which this codec reads as the default
+    // and writes back as an empty record, and prost reads as `None` and
+    // writes nothing; and a map whose entries a mutation put out of key
+    // order, which this codec writes back in the order it read and prost's
+    // `BTreeMap` sorts. So prost's canonical form is read here and written
+    // again, and that re-encoding and this codec's re-encoding of the input
+    // — both bytes this codec wrote — are compared as prost reads them: the
+    // first normalizes absence, the second the entry order. The count of
+    // inputs both readers re-encode byte for byte is reported and held
+    // above half.
+    let lines: Vec<String> = accepted
+        .iter()
+        .map(|(message, _, _, theirs)| format!("{message} decode-encode {theirs}"))
+        .collect();
+    let through_this_codec = program().run(&lines);
+    let mut byte_identical = 0usize;
+    for ((message, how, ours, theirs), of_theirs) in accepted.iter().zip(&through_this_codec) {
+        let read = |bytes: &str| {
+            oracles[message]
+                .decode_debug(&from_hex(bytes))
+                .unwrap_or_else(|error| panic!("{how}: prost reads {bytes}: {error}"))
+        };
+        assert_eq!(
+            read(of_theirs),
+            read(ours),
+            "{how}: prost's canonical form ({theirs}) must read here as the value this codec \
+             read from the input"
+        );
+        byte_identical += usize::from(ours == theirs);
+    }
+    println!(
+        "accepted {} of {} malformed or random inputs, {byte_identical} re-encoded byte for byte \
+         by both readers",
+        accepted.len(),
+        inputs.len()
+    );
+    assert!(
+        byte_identical * 2 > accepted.len(),
+        "most accepted inputs re-encode byte for byte on both sides"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The corpus pass
+// ---------------------------------------------------------------------------
+
+/// The corpus entries whose every package generates under proto3 — the
+/// ros2 corpus is refused by its declarations
+/// ([`the_corpus_generates_with_proto3`]) — each built as one program over
+/// all of its packages, keyed by full name.
+const PROTO3_CORPUS: &[&str] = &[
+    "examples/cabin",
+    "crates/ridlc/tests/corpus/veh-cluster",
+    "evals/corpus/mavlink",
+    "evals/corpus/vss",
+];
+
+/// For every message of every corpus package whose generated type has a
+/// `Default` value, the bytes this codec writes for that value are decoded
+/// by `prost-reflect` as a `DynamicMessage` over the descriptor pool of the
+/// emitted `.proto`, and re-encoded to the same bytes — without generating
+/// `prost` code per corpus package. A message whose default holds a map of
+/// more than one entry is left out: `prost-reflect` writes map entries in
+/// hash order.
+#[test]
+fn corpus_defaults_round_trip_through_prost_reflect() {
+    use protox::prost_reflect::{DynamicMessage, ReflectMessage};
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let std_ir = ridlc::std_ir();
+    let mut compared = 0usize;
+    let mut non_empty = 0usize;
+    for entry in PROTO3_CORPUS {
+        // The standard package is generated beside the workspace's own: a
+        // corpus field that names `ridl.std.Label` is emitted as
+        // `crate::ridl::std::Label`, which the program must hold.
+        let mut packages = proto3::compile_workspace(&root.join(entry));
+        packages.push(std_ir.clone());
+        let pool = proto3::compile_protos(&proto3::emit_protos(&packages, &[])).descriptor_pool();
+        let program = proto3::Program::build_over(&packages, &[], proto3::Key::Qualified, "", &[]);
+        let messages = program.messages_with_default();
+        assert!(!messages.is_empty(), "{entry}: a message with a Default");
+        let lines: Vec<String> = messages
+            .iter()
+            .map(|message| format!("{message} encode-default"))
+            .collect();
+        let answers = program.run(&lines);
+        for (message, answer) in messages.iter().zip(&answers) {
+            let descriptor = pool
+                .get_message_by_name(message)
+                .unwrap_or_else(|| panic!("{entry}: the schema declares `{message}`"));
+            let ours = from_hex(answer);
+            let dynamic = DynamicMessage::decode(descriptor.clone(), ours.as_slice())
+                .unwrap_or_else(|error| {
+                    panic!("{entry}: prost-reflect reads `{message}` at its default: {error}")
+                });
+            let multi_entry_map = descriptor.fields().any(|field| {
+                field.is_map()
+                    && dynamic
+                        .get_field(&field)
+                        .as_map()
+                        .is_some_and(|map| map.len() > 1)
+            });
+            if multi_entry_map {
+                continue;
+            }
+            let theirs = prost::Message::encode_to_vec(&dynamic);
+            assert_eq!(
+                to_hex(&theirs),
+                to_hex(&ours),
+                "{entry}: `{message}` at its default re-encodes through prost-reflect to the \
+                 bytes this codec wrote ({} fields)",
+                dynamic.descriptor().fields().count()
+            );
+            compared += 1;
+            non_empty += usize::from(!ours.is_empty());
+        }
+    }
+    println!("{compared} corpus messages compared, {non_empty} with a non-empty default");
+    assert!(compared > 50, "{compared} corpus messages compared");
+    assert!(non_empty > 0, "some corpus default encodes to something");
+}
+
+// ---------------------------------------------------------------------------
+// Determinism and the bound
+// ---------------------------------------------------------------------------
+
+/// The bytes one value encodes to are pinned as a literal: the half of the
+/// determinism claim that [`the_encoding_is_deterministic`] cannot reach,
+/// since that case encodes twice inside one process. `Scalars/maxes` holds
+/// a varint of every width, both float widths, a string, bytes, each enum
+/// kind (the negative value as a ten-byte varint) and the wide enum set.
+/// A deliberate change to what the writer emits changes this literal in the
+/// same commit.
+#[test]
+fn the_encoding_of_one_value_is_pinned_across_runs() {
+    let answers = program().run(&["Scalars encode-named maxes".to_string()]);
+    assert_eq!(
+        answers[0], SCALARS_MAXES_ENCODING,
+        "the bytes one value encodes to are pinned; a deliberate change to the writer \
+         updates this literal in the same commit"
+    );
+    let theirs = rows()
+        .into_iter()
+        .find(|row| row.message == "Scalars" && row.name == "maxes")
+        .expect("the row")
+        .prost
+        .encode();
+    assert_eq!(
+        to_hex(&theirs),
+        SCALARS_MAXES_ENCODING,
+        "the literal is prost's bytes too"
+    );
+}
+
+/// The encoding of `Scalars/maxes`, read by
+/// [`the_encoding_of_one_value_is_pinned_across_runs`].
+const SCALARS_MAXES_ENCODING: &str = concat!(
+    "08ff0110ffff0318ffffffff0f20ffffffffffffffff7f28fe0130feff0338feffffff0f",
+    "40808080802048feffffffffffffffff015500007a4359ffffffffffffef7f60016a1063",
+    "6166c3a920f09f9a972061e282ac627208ffffffffffffffff78c8018001ffffffffffff",
+    "ffff7f8d0100007a43920140f0908d88f0908d88f0908d88f0908d88f0908d88f0908d88",
+    "f0908d88f0908d88f0908d88f0908d88f0908d88f0908d88f0908d88f0908d88f0908d88",
+    "f0908d889a0108ffffffffffffffffa00101a80102b00102b80101c00103c80181808080",
+    "908080808001"
+);
+
+/// The encoder is deterministic within a process as well: every named value
+/// of the table encodes to the same bytes into a zeroed buffer and into one
+/// filled with `0xAB`, so a byte the writer leaves untouched cannot make two
+/// encodes agree by accident, and a map's entries keep the order of the
+/// domain `Vec<(K, V)>` rather than a hash order.
+#[test]
+fn the_encoding_is_deterministic() {
+    let rows = rows();
+    let lines: Vec<String> = rows
+        .iter()
+        .flat_map(|row| {
+            [
+                format!("{} encode-named {}", row.message, row.name),
+                format!("{} encode-named-dirty {}", row.message, row.name),
+            ]
+        })
+        .collect();
+    let answers = program().run(&lines);
+    for (row, answer) in rows.iter().zip(answers.chunks(2)) {
+        let [clean, dirty] = answer else {
+            panic!("two answers per row");
+        };
+        assert_eq!(
+            clean, dirty,
+            "{}/{}: one value encodes to one byte sequence, whatever the buffer held",
+            row.message, row.name
+        );
+    }
+}
+
+/// The worst-case value of every dispatched message — [`worst_cases`] —
+/// encodes to at most the message's `MAX_SIZE`, the bound the sizer in
+/// `ridl-ir` answers and the codec emits as a literal. A worst case over
+/// the bound is a sizer defect, not a codec one, and the fix goes there.
+/// Every dispatched message must have a worst case, so a message added to
+/// the fixture cannot stay unmeasured.
+#[test]
+fn the_worst_case_value_fits_max_size() {
+    let program = program();
+    let messages = program.messages();
+    let worst: BTreeSet<&str> = worst_cases().iter().map(|value| value.message).collect();
+    let dispatched: BTreeSet<&str> = messages.iter().copied().collect();
+    assert_eq!(
+        worst, dispatched,
+        "every dispatched message has a worst-case value, and no worst case names a message \
+         the program does not dispatch"
+    );
+    let lines: Vec<String> = messages
+        .iter()
+        .flat_map(|message| {
+            [
+                format!("{message} encode-named worst"),
+                format!("{message} max-size"),
+            ]
+        })
+        .collect();
+    // A worst case over the bound cannot be encoded at all: the program
+    // writes into a buffer of `MAX_SIZE`, so the writer answers
+    // `EncodeError::Capacity { needed, available }` and the program panics
+    // on it, which names the type and the two numbers.
+    let answers = match program.try_run(&lines) {
+        Ok(answers) => answers,
+        Err(abort) => panic!(
+            "a worst-case value does not fit its MAX_SIZE, which is a sizer defect, on `{}`:\n{}",
+            lines[abort.request], abort.stderr
+        ),
+    };
+    let mut slack = 0usize;
+    for (message, answer) in messages.iter().zip(answers.chunks(2)) {
+        let [encoded, max_size] = answer else {
+            panic!("two answers per message");
+        };
+        let written = from_hex(encoded).len();
+        let max_size: usize = max_size.parse().expect("MAX_SIZE in decimal");
+        assert!(
+            written <= max_size,
+            "{message}: {written} bytes in {max_size}"
+        );
+        slack += max_size - written;
+    }
+    println!("slack over {} messages: {slack} bytes", messages.len());
 }

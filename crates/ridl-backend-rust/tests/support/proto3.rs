@@ -178,43 +178,75 @@ pub struct NamedValue {
 ///   value, for a message whose generated type has one
 ///   ([`Program::messages_with_default`]);
 /// - `encode-named <name>`: the hexadecimal encoding of the [`NamedValue`]
-///   of that name;
+///   of that name, written into a zeroed buffer;
+/// - `encode-named-dirty <name>`: the same, written into a buffer filled
+///   with `0xAB`, so a byte the writer leaves untouched shows;
 /// - `max-size`: the type's `MAX_SIZE`, in decimal.
 ///
 /// An empty hexadecimal argument is the empty buffer.
 pub struct Program {
     binary: PathBuf,
-    /// The `.proto` name of every message the program dispatches — every
-    /// message the codec emits with a `Payload<Proto3>`, in both packages —
-    /// and whether its generated type has a `Default` value.
+    /// The key of every message the program dispatches — every message the
+    /// codec emits with a `Payload<Proto3>`, in every generated package —
+    /// and whether its generated type has a `Default` value. The key is the
+    /// `.proto` message name, bare or qualified by its package, as
+    /// [`Program::build_over`] was asked.
     messages: Vec<(String, bool)>,
     /// Keeps the binary's directory alive as long as the program.
     _dir: tempfile::TempDir,
+}
+
+/// How [`Program::build_over`] keys the messages it dispatches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Key {
+    /// The bare `.proto` message name (`Scalars`): the fixture's choice,
+    /// whose two packages share no name.
+    Bare,
+    /// The `.proto` full name (`veh.cabin.Scalars`): a corpus workspace's
+    /// choice, whose packages may share a bare name.
+    Qualified,
 }
 
 impl Program {
     /// Builds the program over the fixture: both packages, generated with
     /// the proto3 encoding and composed as `crate::pb::conformance` and
     /// `crate::pb::parts`, `prelude` (helper items the named values use),
-    /// and the harness `main`. Every message the codec emits with a
-    /// `Payload<Proto3>`, in either package, is dispatched; a message it does
-    /// not emit, or a tuple message encoded only inside its owner, is unknown
-    /// to the program, so a request over one fails the run.
+    /// and the harness `main`, keyed by bare name. Every message the codec
+    /// emits with a `Payload<Proto3>`, in either package, is dispatched; a
+    /// message it does not emit, or a tuple message encoded only inside its
+    /// owner, is unknown to the program, so a request over one fails the run.
     pub fn build(prelude: &str, named: &[NamedValue]) -> Program {
         let (main, others) = fixture();
         let mut packages = vec![main];
         packages.extend(others);
+        Program::build_over(&packages, &[], Key::Bare, prelude, named)
+    }
+
+    /// Builds the program over `packages`, each generated with every other
+    /// one and `context` (the standard package, for a corpus that names it)
+    /// as its resolution context, composed into one module tree. The
+    /// harness imports the first package's items for `prelude` and the
+    /// named values. Every message the codec emits with a `Payload<Proto3>`,
+    /// in any of `packages`, is dispatched under its `key`.
+    pub fn build_over(
+        packages: &[v2::Package],
+        context: &[&v2::Package],
+        key: Key,
+        prelude: &str,
+        named: &[NamedValue],
+    ) -> Program {
         let mut bodies: Vec<(String, String)> = Vec::new();
-        // Per dispatched message: its `.proto` name, the generated type's
-        // path, and whether that type has a `Default` value.
+        // Per dispatched message: its key, the generated type's path, and
+        // whether that type has a `Default` value.
         let mut dispatch: Vec<(String, String, bool)> = Vec::new();
         for (at, package) in packages.iter().enumerate() {
-            let others: Vec<&v2::Package> = packages
+            let mut others: Vec<&v2::Package> = packages
                 .iter()
                 .enumerate()
                 .filter(|(other, _)| *other != at)
                 .map(|(_, other)| other)
                 .collect();
+            others.extend_from_slice(context);
             let generated = ridl_backend_rust::generate_pipeline(
                 package,
                 &[ridl_backend_rust::WireEncoding::Proto3],
@@ -246,7 +278,11 @@ impl Program {
                 if emitted.contains(message.as_str()) && has_payload {
                     let has_default =
                         dense.contains(&format!("impl::core::default::Defaultfor{ty}{{"));
-                    dispatch.push((message, format!("{path}::{ty}"), has_default));
+                    let key = match key {
+                        Key::Bare => message,
+                        Key::Qualified => format!("{}.{message}", package.name),
+                    };
+                    dispatch.push((key, format!("{path}::{ty}"), has_default));
                 }
             }
             bodies.push((package.name.clone(), generated));
@@ -255,7 +291,7 @@ impl Program {
         for (message, _, _) in &dispatch {
             assert!(
                 seen.insert(message.clone()),
-                "`{message}` is a message of both fixture packages; the harness keys by bare name"
+                "`{message}` is a message of two packages; key the program by full name"
             );
         }
         let arms: String = dispatch
@@ -273,12 +309,23 @@ impl Program {
             .iter()
             .map(|value| {
                 format!(
-                    "        ({:?}, {:?}) => Some(hex(&encode(&{{ {} }}))),\n",
+                    "        ({:?}, {:?}) => Some(hex(&encode_into(fill, &{{ {} }}))),\n",
                     value.message, value.name, value.expr
                 )
             })
             .collect();
-        let mut source = String::from("#![allow(dead_code)]\n");
+        let main_path = format!(
+            "crate::{}",
+            packages
+                .first()
+                .expect("a package to generate")
+                .name
+                .replace('.', "::")
+        );
+        // `deprecated` as well: a corpus declaration marked `@deprecated`
+        // is emitted with `#[deprecated]`, and the harness's own dispatch
+        // names it under `-D warnings`.
+        let mut source = String::from("#![allow(dead_code, deprecated)]\n");
         source.push_str(&compose_modules(&bodies));
         source.push_str(&format!(
             r#"
@@ -286,7 +333,7 @@ use std::io::BufRead;
 use ridl_rt::encoding::Proto3;
 use ridl_rt::payload::{{Payload, Ref}};
 #[allow(unused_imports)]
-use crate::pb::conformance::*;
+use {main_path}::*;
 
 {prelude}
 
@@ -301,9 +348,13 @@ fn unhex(text: &str) -> Vec<u8> {{
         .collect()
 }}
 
-fn encode<T: Payload<Proto3>>(value: &T) -> Vec<u8> {{
-    let mut out = vec![0u8; <T as Payload<Proto3>>::MAX_SIZE];
+fn encode_into<T: Payload<Proto3>>(fill: u8, value: &T) -> Vec<u8> {{
+    let mut out = vec![fill; <T as Payload<Proto3>>::MAX_SIZE];
     value.encode(&mut out).expect("encode").bytes.to_vec()
+}}
+
+fn encode<T: Payload<Proto3>>(value: &T) -> Vec<u8> {{
+    encode_into(0, value)
 }}
 
 fn dispatch<T: Payload<Proto3>>(op: &str, arg: &str) -> String {{
@@ -330,7 +381,9 @@ fn encode_default(message: &str) -> String {{
     }}
 }}
 
-fn named(message: &str, name: &str) -> Option<String> {{
+fn named(message: &str, name: &str, fill: u8) -> Option<String> {{
+    // Unused by a program with no named value.
+    let _ = fill;
     match (message, name) {{
 {named_arms}        _ => None,
     }}
@@ -344,8 +397,10 @@ fn main() {{
         let message = parts.next().expect("a message name");
         let op = parts.next().expect("an op");
         let arg = parts.next().unwrap_or("");
-        let answer = if op == "encode-named" {{
-            named(message, arg).unwrap_or_else(|| panic!("no named value `{{arg}}` of `{{message}}`"))
+        let answer = if op == "encode-named" || op == "encode-named-dirty" {{
+            let fill = if op == "encode-named" {{ 0 }} else {{ 0xAB }};
+            named(message, arg, fill)
+                .unwrap_or_else(|| panic!("no named value `{{arg}}` of `{{message}}`"))
         }} else if op == "encode-default" {{
             encode_default(message)
         }} else {{
@@ -407,39 +462,79 @@ fn main() {{
 
     /// Feeds `lines` to the program and returns one answer per line.
     pub fn run(&self, lines: &[String]) -> Vec<String> {
+        match self.try_run(lines) {
+            Ok(answers) => answers,
+            Err(Abort { request, stderr }) => panic!(
+                "the generated codec must answer every request; it aborted on `{}`, stderr:\n{stderr}",
+                lines
+                    .get(request)
+                    .map(String::as_str)
+                    .unwrap_or("<after the last request>")
+            ),
+        }
+    }
+
+    /// Feeds `lines` to the program and returns one answer per line, or the
+    /// [`Abort`] that names the request the program died on.
+    ///
+    /// The program answers each request on its own line and standard output
+    /// is line-buffered, so the answers written before a panic are read
+    /// back, and the first request without an answer is the one that
+    /// panicked.
+    pub fn try_run(&self, lines: &[String]) -> Result<Vec<String>, Abort> {
         let mut child = Command::new(&self.binary)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .expect("the compiled program runs");
-        {
-            let mut stdin = child
-                .stdin
-                .take()
-                .expect("the program reads standard input");
-            for line in lines {
-                writeln!(stdin, "{line}").expect("the request is written");
+        let mut stdin = child
+            .stdin
+            .take()
+            .expect("the program reads standard input");
+        // The requests are written from a thread while the answers are read
+        // below: a batch of thousands of requests fills the answer pipe
+        // before the last request is written, and a writer that waits for
+        // its own reads to drain that pipe waits forever.
+        let requests: Vec<String> = lines.to_vec();
+        let writer = std::thread::spawn(move || {
+            for line in &requests {
+                // A program that died stops reading; the write then fails
+                // with a broken pipe, and the exit status below says why.
+                if writeln!(stdin, "{line}").is_err() {
+                    break;
+                }
             }
-        }
+        });
         let output = child.wait_with_output().expect("the program exits");
-        assert!(
-            output.status.success(),
-            "the generated codec must answer every request, stderr:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        writer.join().expect("the requests are written");
         let answers: Vec<String> = String::from_utf8(output.stdout)
             .expect("the program writes UTF-8")
             .lines()
             .map(str::to_string)
             .collect();
+        if !output.status.success() {
+            return Err(Abort {
+                request: answers.len(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            });
+        }
         assert_eq!(
             answers.len(),
             lines.len(),
             "one answer per request, got {answers:?} for {lines:?}"
         );
-        answers
+        Ok(answers)
     }
+}
+
+/// A run the program did not finish: the index of the first request it gave
+/// no answer to — the one it panicked on — and what it wrote to standard
+/// error.
+#[derive(Debug)]
+pub struct Abort {
+    pub request: usize,
+    pub stderr: String,
 }
 
 /// Composes one Rust body per dotted package name into one module tree, so
