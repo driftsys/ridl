@@ -2343,16 +2343,17 @@ impl<'a> Codec<'a> {
                             .filter(|_| named.is_none())
                             .map(|sc| scalar_constraint_check(sc, owner, quote! { __s }, false))
                     });
-                let body = match check {
-                    Some(check) => quote! {
-                        let __s = ::ridl_rt::proto3::utf8(__b)
-                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                        #check
-                    },
-                    None => quote! {
-                        ::ridl_rt::proto3::utf8(__b)
-                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                    },
+                // The UTF-8 check is emitted once, whether or not a
+                // constraint check follows it. The checker gives every
+                // string a length bound (a bare `string` field is refused,
+                // TYPL-208, and a bare `type X : string` takes the default
+                // bound), so `check` is `None` only for IR built by hand;
+                // the binding's leading underscore keeps that case free of
+                // an unused-variable lint.
+                let body = quote! {
+                    let __s = ::ridl_rt::proto3::utf8(__b)
+                        .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                    #check
                 };
                 (quote! { ::ridl_rt::proto3::Value::Len(__b) }, body)
             }

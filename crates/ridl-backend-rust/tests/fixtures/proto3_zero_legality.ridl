@@ -6,7 +6,8 @@
 // proto3 writer emits when the first field is at its default — is read here
 // as each of them, and what differs is only the type of the absent field.
 // The FlatBuffers suite has the same fixture for the scalar rows; this one
-// adds the rows proto3 omits as well: a string, a collection and a union.
+// adds the rows proto3 omits as well: a string, a collection, a union and a
+// nested struct — and a string with no constraint, for the UTF-8 check alone.
 
 package pb.zero
 
@@ -25,6 +26,13 @@ type Even : float [-1.0..1.0 step 1.0]
 
 /// A string whose length excludes the empty string.
 type Short : string [1..8]
+
+/// A string with no declared constraint: the checker gives it a default
+/// length bound, so it has a proto3 bound and a length check like any other
+/// string, and its UTF-8 is checked before that. No string of a checked
+/// source is unconstrained: a bare `string` at a field position is refused
+/// by the checker (TYPL-208), and a bare named one takes the default bound.
+type Free : string
 
 /// An enum whose zero member is not its first.
 enum Mode {
@@ -114,5 +122,18 @@ struct ValueList {
 /// A union field: absent, its message holds no arm.
 struct ValueChoice {
   value : Choice
+  label : Label
+}
+
+/// A nested struct whose own field excludes 0: absent, its empty message is
+/// verified and refused by that field.
+struct ValueNested {
+  value : ValueRange
+  label : Label
+}
+
+/// A string with no declared constraint.
+struct ValueFree {
+  value : Free
   label : Label
 }

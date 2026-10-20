@@ -1059,8 +1059,9 @@ fn an_undeclared_enum_set_bit_is_a_variant_violation() {
 }
 
 /// A string that is not UTF-8 is `Utf8`, at a box root, at a named and an
-/// inline string field, as a map key, and as a union arm; `prost` refuses
-/// it too. A `bytes` field holding the same byte is the contrast: read.
+/// inline string field, as a map key, as a union arm, and in a string with
+/// no constraint at all; `prost` refuses it too. A `bytes` field holding
+/// the same byte is the contrast: read.
 #[test]
 fn invalid_utf8_is_refused() {
     let utf8 = structure("Utf8");
@@ -1119,6 +1120,58 @@ fn invalid_utf8_is_refused() {
     assert_eq!(
         prost_read::<oracle::BlobBox>(&bytes),
         Ok(oracle::BlobBox { value: vec![0xff] })
+    );
+
+    // A string with no declared constraint, `pb.zero`'s `Free`, at a field
+    // and at a box root: the checker gives it a default length bound, so it
+    // is checked as every other string is, UTF-8 first. No string of a
+    // checked source reaches the codec without a constraint, so this is the
+    // least-constrained string a test can hold. `prost` refuses the same
+    // bytes as a `LabelBox`, asserted above.
+    rustc::run_program(
+        "pb_utf8_unconstrained",
+        &fixture_program(
+            "proto3_zero_legality.ridl",
+            r#"
+use ridl_rt::encoding::Proto3;
+use ridl_rt::payload::{Malformed, Payload, Ref, VerifyError};
+
+fn main() {
+    let invalid: &[u8] = &[0x0a, 0x01, 0xff];
+    assert_eq!(
+        <ValueFree as Payload<Proto3>>::verify(invalid).err(),
+        Some(VerifyError::Structure(Malformed::Utf8)),
+        "a string field with no declared constraint, of 0xff",
+    );
+    assert_eq!(
+        <Free as Payload<Proto3>>::verify(invalid).err(),
+        Some(VerifyError::Structure(Malformed::Utf8)),
+        "a string box with no declared constraint, of 0xff",
+    );
+    let valid: &[u8] = &[0x0a, 0x01, 0x78];
+    let proof: Ref<'_, ValueFree, Proto3> = Ref::verify(valid).expect("a valid string reads");
+    assert_eq!(
+        proof.decode(),
+        ValueFree { value: Free::new_unchecked(String::from("x")), label: Label::new_unchecked(String::new()) },
+    );
+    let proof: Ref<'_, Free, Proto3> = Ref::verify(valid).expect("a valid string box reads");
+    assert_eq!(proof.decode(), Free::new_unchecked(String::from("x")));
+    // The default bound the checker gave `Free` is a real check: 257
+    // characters are refused by length, so `Free` is not unconstrained.
+    let long = "x".repeat(257);
+    // The tag, then 257 as a varint.
+    let mut over = vec![0x0a, 0x81, 0x02];
+    over.extend_from_slice(long.as_bytes());
+    assert!(
+        matches!(
+            <Free as Payload<Proto3>>::verify(&over).err(),
+            Some(VerifyError::Contract(v)) if v.rule == ridl_rt::payload::Rule::Length
+        ),
+        "the default length bound is checked",
+    );
+}
+"#,
+        ),
     );
 }
 
@@ -1317,8 +1370,8 @@ fn absence_reads_as_the_default_when_it_is_legal() {
 /// type is `MissingRequired`: an integer whose range excludes 0, a float
 /// whose step excludes 0, an enum with no zero member, a string whose
 /// length excludes the empty string, an array whose count excludes the
-/// empty array, a union, and the empty payload of a box whose type excludes
-/// 0. `prost` reads every one of these buffers: it has no rule to refuse
+/// empty array, a union, a nested struct whose own field excludes 0, and
+/// the empty payload of a box whose type excludes 0. `prost` reads every one of these buffers: it has no rule to refuse
 /// an absent field, which is where this codec is stricter.
 ///
 /// The rows the conformance fixture holds run through the program with
@@ -1446,6 +1499,9 @@ fn main() {
     refused("an absent Short", Ref::<'_, ValueShort, Proto3>::verify(LABEL_ONLY));
     refused("an absent string [1..8]", Ref::<'_, ValueInlineShort, Proto3>::verify(LABEL_ONLY));
     refused("an absent [Count; 1..4]", Ref::<'_, ValueList, Proto3>::verify(LABEL_ONLY));
+    // A nested struct absent: its empty message is verified by the same rule
+    // and refused by its own `integer [1..10]` field.
+    refused("an absent ValueRange", Ref::<'_, ValueNested, Proto3>::verify(LABEL_ONLY));
     refused("an absent Choice", Ref::<'_, ValueChoice, Proto3>::verify(LABEL_ONLY));
 
     refused("an empty Odd box", Ref::<'_, Odd, Proto3>::verify(&[]));
