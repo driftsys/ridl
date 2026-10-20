@@ -98,15 +98,21 @@ fn assert_clean(label: &str, source: &str) {
 /// reads them as the workspace `support/proto3.rs` builds.
 const WORKSPACE_MEMBERS: [&str; 2] = ["proto3_conformance.ridl", "proto3_conformance_other.ridl"];
 
-/// The fixtures the proto3 codec refuses by design — a map keyed by a float
-/// and one keyed by bytes, which proto3 does not admit as a key; a
-/// declaration, then an interaction, with no proto3 bound — so
-/// `generate_pipeline` with `proto3` has no output to scan for them, and must
-/// refuse rather than generate.
-const PROTO3_REFUSED: [&str; 3] = [
-    "payload_constraints.ridl",
-    "proto3_unbounded.ridl",
-    "proto3_unbounded_call.ridl",
+/// The fixtures the proto3 codec refuses by design, each with the text its
+/// refusal must carry — a map keyed by a float and one keyed by bytes, which
+/// proto3 does not admit as a key; a declaration, then an interaction, with
+/// no proto3 bound — so `generate_pipeline` with `proto3` has no output to
+/// scan for them, and must refuse for that reason rather than generate.
+const PROTO3_REFUSED: [(&str, &str); 3] = [
+    (
+        "payload_constraints.ridl",
+        "a map key must be an integral or string type",
+    ),
+    ("proto3_unbounded.ridl", "` has no proto3 bound: "),
+    (
+        "proto3_unbounded_call.ridl",
+        "`'s argument message `ProbeSetParams` has no proto3 bound: ",
+    ),
 ];
 
 fn fixtures() -> Vec<String> {
@@ -161,11 +167,20 @@ fn generate_over_every_fixture_cites_no_issue() {
 }
 
 /// `generate_pipeline` over every fixture with FlatBuffers, and with proto3
-/// for every fixture but the two it refuses by design, which must refuse.
+/// for every fixture but the three it refuses by design, which must refuse
+/// with the cause [`PROTO3_REFUSED`] names; a name listed there that is not
+/// a fixture is stale and fails.
 #[test]
 fn generate_pipeline_over_every_fixture_cites_no_issue() {
     use ridl_backend_rust::WireEncoding;
-    for name in fixtures() {
+    let names = fixtures();
+    for (refused, _) in PROTO3_REFUSED {
+        assert!(
+            names.iter().any(|name| name == refused),
+            "`{refused}` is listed as refused but is not a fixture"
+        );
+    }
+    for name in names {
         let package = ir::compile_fixture(&name);
         let source =
             ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::FlatBuffers], &[])
@@ -173,8 +188,18 @@ fn generate_pipeline_over_every_fixture_cites_no_issue() {
                 .rust_source;
         assert_clean(&format!("generate_pipeline({name})"), &source);
         let proto3 = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[]);
-        if PROTO3_REFUSED.contains(&name.as_str()) {
-            assert!(proto3.is_err(), "{name} is refused with proto3 by design");
+        if let Some((_, cause)) = PROTO3_REFUSED
+            .iter()
+            .find(|(refused, _)| *refused == name.as_str())
+        {
+            let error = proto3
+                .err()
+                .unwrap_or_else(|| panic!("{name} is refused with proto3 by design"));
+            assert!(
+                error.message.contains(cause),
+                "{name} is refused for the cause {cause:?}, got: {}",
+                error.message
+            );
             continue;
         }
         let source = proto3

@@ -103,7 +103,7 @@ use crate::{
 
 /// Emits the proto3 codec for the package `ctx` was built over.
 pub(crate) fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
-    Codec { ctx }.items()
+    Codec::new(ctx)?.items()
 }
 
 /// The layout the codec emits from, per emitted message, for the test that
@@ -111,7 +111,7 @@ pub(crate) fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError
 /// classification the codec refuses is the test's error, not an empty
 /// layout.
 pub(crate) fn layout(ctx: &Ctx) -> Result<Vec<MessageLayout>, GenerateError> {
-    Ok(Codec { ctx }
+    Ok(Codec::new(ctx)?
         .messages()?
         .into_iter()
         .map(|message| message.layout())
@@ -142,6 +142,9 @@ pub struct MessageLayout {
 
 struct Codec<'a> {
     ctx: &'a Ctx<'a>,
+    /// The name of the package the model was lowered for, which a type
+    /// reference of this package names.
+    scope: &'a str,
 }
 
 // ---------------------------------------------------------------------------
@@ -828,14 +831,22 @@ fn entry_fields(key: &Wire, value: &Wire) -> [Field; 2] {
 // ---------------------------------------------------------------------------
 
 impl<'a> Codec<'a> {
-    /// The name of the package this model was lowered for.
-    fn scope_package(&self) -> &str {
-        self.ctx
+    /// The codec over `ctx`, or an error for a model lowered with no scope
+    /// package: a type reference is resolved against that name, so without
+    /// it no reference of this package could be told from a foreign one.
+    fn new(ctx: &'a Ctx<'a>) -> Result<Codec<'a>, GenerateError> {
+        let scope = ctx
             .model
             .scope
             .as_ref()
             .map(|scope| scope.package.as_str())
-            .unwrap_or_default()
+            .filter(|package| !package.is_empty())
+            .ok_or_else(|| GenerateError {
+                message: "the lowered model names no scope package, so no type reference can \
+                          be resolved for the proto3 codec"
+                    .to_string(),
+            })?;
+        Ok(Codec { ctx, scope })
     }
 
     /// Resolves a type reference against this package first and then the
@@ -846,7 +857,7 @@ impl<'a> Codec<'a> {
         if reference.package.is_empty() {
             return None;
         }
-        if reference.package == self.scope_package() {
+        if reference.package == self.scope {
             let decl = self.ctx.declaration(reference.index)?;
             return Some((decl, declared(decl.name.as_ref()).to_string()));
         }
@@ -1180,7 +1191,8 @@ impl<'a> Codec<'a> {
 
     /// The message of one induced tuple: positional fields numbered from 1,
     /// as `emit_induced_tuple` of the proto backend numbers them, named in
-    /// Rust by the tuple field's own name.
+    /// Rust by the tuple field's own name. A tuple the lowering left without
+    /// a Rust name is an error: nothing could name its functions.
     fn tuple_message(
         &self,
         induced: &v1::InducedTuple,
@@ -1190,7 +1202,14 @@ impl<'a> Codec<'a> {
             .name
             .as_ref()
             .map(|name| name.rust.as_str())
-            .unwrap_or_default();
+            .filter(|rust| !rust.is_empty())
+            .ok_or_else(|| GenerateError {
+                message: format!(
+                    "an induced tuple of `{}` carries no Rust name, so the proto3 codec cannot \
+                     name its functions",
+                    self.ctx.package_name()
+                ),
+            })?;
         let proto = induced
             .name
             .as_ref()

@@ -681,10 +681,14 @@ fn the_corpus_generates_with_proto3() {
             })
             .collect()
     };
-    for entry in ["examples/cabin", "crates/ridlc/tests/corpus/veh-cluster"] {
-        let results = generate(entry);
+    let cabin = generate("examples/cabin");
+    let cluster = generate("crates/ridlc/tests/corpus/veh-cluster");
+    for (entry, results) in [
+        ("examples/cabin", &cabin),
+        ("crates/ridlc/tests/corpus/veh-cluster", &cluster),
+    ] {
         assert!(!results.is_empty(), "{entry} holds a package");
-        for (name, result) in &results {
+        for (name, result) in results {
             let source = result
                 .as_ref()
                 .unwrap_or_else(|error| panic!("{entry}: `{name}` generates with proto3: {error}"));
@@ -694,7 +698,6 @@ fn the_corpus_generates_with_proto3() {
             );
         }
     }
-    let cluster = generate("crates/ridlc/tests/corpus/veh-cluster");
     let (_, veh_cluster) = cluster
         .iter()
         .find(|(name, _)| name == "veh.cluster")
