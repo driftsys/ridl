@@ -377,9 +377,6 @@ fn max_size_is_the_shared_bound() {
             .as_ref()
             .map(|name| name.declared.as_str())
             .unwrap_or_default();
-        if matches!(name, "WithList" | "ReachesList") {
-            continue;
-        }
         let Some(ridl_ir::codegen::v1::size_state::State::Bounded(bound)) =
             decl.proto3.as_ref().and_then(|state| state.state.as_ref())
         else {
@@ -455,28 +452,69 @@ fn a_declaration_without_a_proto3_bound_is_refused() {
     ridl_backend_rust::generate_pipeline(&package, &[], &[]).expect("the types alone generate");
 }
 
-/// A declaration whose shape reaches a collection, a tuple or a union gets no
-/// `Payload<Proto3>` yet and draws no error: the package still generates.
+/// An induced interaction root whose payload has no proto3 bound is refused
+/// with an error naming the interaction and the induced message, while the
+/// package's declarations, which all have a bound, draw none: the layout
+/// still answers, and the same package generates with no encoding.
 #[test]
-fn a_declaration_that_reaches_a_collection_is_not_emitted_yet() {
+fn an_interaction_root_without_a_proto3_bound_is_refused() {
+    let package = ir::compile_fixture("proto3_unbounded_call.ridl");
+    let err = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+        .expect_err("an interaction whose argument message has no proto3 bound is refused");
+    assert!(
+        err.message.starts_with(
+            "`pb.unbounded.call.Probe.set`'s argument message `ProbeSetParams` has no proto3 \
+             bound: "
+        ),
+        "the refusal names the interaction and the induced message, got: {}",
+        err.message
+    );
+    let layout = ridl_backend_rust::proto3_layout(&package, &[]).expect("the layout does not size");
+    assert!(
+        layout
+            .iter()
+            .any(|message| message.name == "ProbeSetParams")
+    );
+    ridl_backend_rust::generate_pipeline(&package, &[], &[]).expect("the types alone generate");
+}
+
+/// Every declaration that projects a type carries a `Payload<Proto3>`,
+/// including one that holds or reaches a collection, and so does every
+/// induced interaction tuple that crosses the wire on its own; a tuple
+/// reached only from a field has the four functions and no `Payload`.
+#[test]
+fn every_declaration_and_interaction_root_is_emitted() {
     let package = ir::compile_fixture("proto3_roundtrip.ridl");
     let source = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
         .expect("the fixture generates")
         .rust_source;
-    for name in ["WithList", "ReachesList"] {
+    for name in [
+        "WithList",
+        "ReachesList",
+        "Outcome",
+        "Tuples",
+        "Lists",
+        "Maps",
+        "OptionalComposites",
+        "ProbeSetBothParams",
+        "ProbeStatusParams",
+        "ProbeSpanReply",
+    ] {
         assert!(
-            !source.contains(&format!("Payload<::ridl_rt::encoding::Proto3> for {name} ")),
-            "`{name}` reaches an array and is not emitted yet"
-        );
-        assert!(
-            !source.contains(&format!("__ridl_pb_len_{name}(")),
-            "`{name}` reaches an array and has no functions yet"
+            source.contains(&format!("Payload<::ridl_rt::encoding::Proto3> for {name} ")),
+            "`{name}` carries a `Payload<Proto3>`"
         );
     }
-    assert!(
-        source.contains("Payload<::ridl_rt::encoding::Proto3> for Nested "),
-        "every other declaration is emitted"
-    );
+    for name in ["TuplesRange", "TuplesPair", "OptionalCompositesPair"] {
+        assert!(
+            !source.contains(&format!("Payload<::ridl_rt::encoding::Proto3> for {name} ")),
+            "`{name}` is reached only from a field and is no root"
+        );
+        assert!(
+            source.contains(&format!("__ridl_pb_len_{name}(")),
+            "`{name}` has its functions, for the owner that encodes it"
+        );
+    }
     // With both encodings, both codecs are emitted side by side.
     let both = ridl_backend_rust::generate_pipeline(
         &package,
@@ -630,7 +668,124 @@ fn the_layout_names_each_message_and_its_fields() {
             .iter()
             .all(|field| field.2 == ridl_backend_rust::Proto3Label::Optional)
     );
-    assert!(!layout.iter().any(|message| message.name == "WithList"));
+    // A collection is `Repeated`, named by its element's scalar or message,
+    // or spelled as `map<K, V>`; a tuple field names the induced message.
+    let lists = layout
+        .iter()
+        .find(|message| message.name == "Lists")
+        .expect("`Lists` is laid out");
+    assert_eq!(
+        lists.fields[0],
+        (
+            1,
+            "uint32".to_string(),
+            ridl_backend_rust::Proto3Label::Repeated
+        )
+    );
+    assert_eq!(
+        lists.fields[5],
+        (
+            6,
+            "Inner".to_string(),
+            ridl_backend_rust::Proto3Label::Repeated
+        )
+    );
+    assert_eq!(
+        lists.fields[6],
+        (
+            7,
+            "Outcome".to_string(),
+            ridl_backend_rust::Proto3Label::Repeated
+        )
+    );
+    assert_eq!(
+        lists.fields.len(),
+        9,
+        "the reserved tombstone holds its number and lays out no field"
+    );
+    assert_eq!(lists.fields[8].0, 10);
+    let maps = layout
+        .iter()
+        .find(|message| message.name == "Maps")
+        .expect("`Maps` is laid out");
+    assert_eq!(
+        maps.fields,
+        vec![
+            (
+                1,
+                "map<string, uint32>".to_string(),
+                ridl_backend_rust::Proto3Label::Repeated
+            ),
+            (
+                2,
+                "map<sint32, Inner>".to_string(),
+                ridl_backend_rust::Proto3Label::Repeated
+            ),
+            (
+                3,
+                "map<bool, string>".to_string(),
+                ridl_backend_rust::Proto3Label::Repeated
+            ),
+        ]
+    );
+    let tuples = layout
+        .iter()
+        .find(|message| message.name == "Tuples")
+        .expect("`Tuples` is laid out");
+    assert_eq!(tuples.fields[0].1, "TuplesRange");
+    let range = layout
+        .iter()
+        .find(|message| message.name == "TuplesRange")
+        .expect("the induced tuple message is laid out");
+    assert_eq!(
+        range.fields,
+        vec![
+            (
+                1,
+                "uint32".to_string(),
+                ridl_backend_rust::Proto3Label::Implicit
+            ),
+            (
+                2,
+                "uint32".to_string(),
+                ridl_backend_rust::Proto3Label::Implicit
+            ),
+        ]
+    );
+    let outcome = layout
+        .iter()
+        .find(|message| message.name == "Outcome")
+        .expect("`Outcome` is laid out");
+    assert_eq!(
+        outcome.fields,
+        vec![
+            (
+                1,
+                "uint32".to_string(),
+                ridl_backend_rust::Proto3Label::Implicit
+            ),
+            (
+                2,
+                "string".to_string(),
+                ridl_backend_rust::Proto3Label::Implicit
+            ),
+            (
+                3,
+                "Health".to_string(),
+                ridl_backend_rust::Proto3Label::Implicit
+            ),
+            (
+                4,
+                "uint32".to_string(),
+                ridl_backend_rust::Proto3Label::Implicit
+            ),
+            (
+                5,
+                "Inner".to_string(),
+                ridl_backend_rust::Proto3Label::Implicit
+            ),
+        ]
+    );
     // An enum field is named by the enum, as the `.proto` names it; an enum
     // set is inlined as its scalar.
     let scalars = layout
@@ -768,4 +923,480 @@ fn main() {
     let source = program(main);
     rustc::run_program("pb_pattern_off", &source);
     rustc::run_program_with_pattern("pb_pattern_on", &source, true);
+}
+
+/// The prelude items the collection cases share: a `Lists` value with every
+/// array kind populated, a union value per arm, and the maps.
+const COLLECTIONS: &str = r#"
+fn count(v: i64) -> Count { Count::new_unchecked(v) }
+fn label(s: &str) -> Label { Label::new_unchecked(String::from(s)) }
+
+fn lists() -> Lists {
+    Lists {
+        counts: vec![count(1), count(2)],
+        reals: vec![],
+        flags: vec![true, false],
+        healths: vec![Health::Ok, Health::Fail],
+        labels: vec![label("")],
+        inners: vec![inner(1, "a")],
+        outcomes: vec![Outcome::Number(count(0))],
+        three: [count(0); 3],
+        at_least_one: vec![count(7)],
+    }
+}
+"#;
+
+/// Every collection, tuple and union shape round-trips, and the writer's
+/// canonical form is pinned byte for byte: a numeric, boolean or enum array
+/// is one packed record, any other array is one record per element, an
+/// empty array is not written, a fixed-length array of zeros is still
+/// written, a union writes its one arm even at the arm's default, a tuple
+/// is a nested message with positional fields, and a map entry omits a key
+/// or a value at its default.
+#[test]
+fn collections_tuples_and_unions_round_trip() {
+    let main = format!(
+        "{COLLECTIONS}{}",
+        r#"
+fn main() {
+    let bytes = round_trip("lists", &lists());
+    assert_eq!(
+        hex(&bytes),
+        "0a0201021a020100220200022a00320508011201613a0208004203000000520107",
+        "packed runs, one record per element, the empty array omitted, the fixed array written"
+    );
+    let bytes = round_trip("lists_reals", &Lists { reals: vec![-0.5, 2.0], ..lists() });
+    assert!(hex(&bytes).contains("1210000000000000e0bf0000000000000040"), "a packed double run: {}", hex(&bytes));
+
+    // A union writes exactly its one arm, even at the arm's default.
+    assert_eq!(hex(&round_trip("arm_number", &Outcome::Number(count(0)))), "0800");
+    assert_eq!(hex(&round_trip("arm_text", &Outcome::Text(label("")))), "1200");
+    assert_eq!(hex(&round_trip("arm_health", &Outcome::Health(Health::Ok))), "1800");
+    assert_eq!(hex(&round_trip("arm_flags", &Outcome::Flags(WarningFlags::try_from(0i64).unwrap()))), "2000");
+    assert_eq!(hex(&round_trip("arm_inner", &Outcome::Inner(inner(0, "")))), "2a00");
+    assert_eq!(hex(&round_trip("arm_value", &Outcome::Inner(inner(3, "x")))), "2a050803120178");
+
+    // A tuple is a nested message with positional fields numbered from 1.
+    let tuples = Tuples {
+        range: TuplesRange { min: count(1), max: count(2) },
+        pair: TuplesPair { lo: count(0), inner: inner(0, "") },
+    };
+    assert_eq!(hex(&round_trip("tuples", &tuples)), "0a040801100212021200");
+
+    // A map entry omits a key or a value at its default, and a struct value
+    // whose own encoding is empty.
+    let maps = Maps {
+        by_label: vec![(label(""), count(0)), (label("a"), count(1))],
+        by_int: vec![(-1, inner(0, "")), (3, inner(2, "b"))],
+        by_bool: vec![(true, label("x"))],
+    };
+    assert_eq!(
+        hex(&round_trip("maps", &maps)),
+        "0a000a050a016110011202080112090806120508021201621a050801120178",
+    );
+    assert!(round_trip("maps_empty", &Maps { by_label: vec![], by_int: vec![], by_bool: vec![] }).is_empty());
+
+    // The optional composites: present at any value, absent as `None`.
+    let present = OptionalComposites {
+        pair: Some(OptionalCompositesPair { lo: count(0), hi: count(0) }),
+        outcome: Some(Outcome::Number(count(0))),
+    };
+    assert_eq!(hex(&round_trip("composites_present", &present)), "0a0012020800");
+    assert!(round_trip("composites_absent", &OptionalComposites { pair: None, outcome: None }).is_empty());
+
+    // The induced interaction roots are payloads of their own.
+    assert_eq!(
+        hex(&round_trip("set_both", &ProbeSetBothParams { level: Level::new_unchecked(2), count: count(0) })),
+        "0802"
+    );
+    assert!(round_trip("status", &ProbeStatusParams {}).is_empty());
+    assert_eq!(hex(&round_trip("span", &ProbeSpanReply { lo: count(1), hi: count(2) })), "08011002");
+}
+"#
+    );
+    rustc::run_program("pb_collections", &program(&main));
+}
+
+/// A repeated numeric field is read in packed form, unpacked form, or both
+/// mixed, the elements concatenated in order; the writer's own form is the
+/// packed one.
+#[test]
+fn packed_unpacked_and_mixed_runs_are_read() {
+    let main = format!(
+        "{COLLECTIONS}{}",
+        r#"
+fn main() {
+    let expected = Lists {
+        counts: vec![count(1), count(2), count(3)],
+        reals: vec![], flags: vec![], healths: vec![], labels: vec![], inners: vec![], outcomes: vec![],
+        three: [count(0); 3],
+        at_least_one: vec![count(7)],
+    };
+    let tail: &[u8] = &[0x42, 0x03, 0, 0, 0, 0x52, 0x01, 0x07];
+    for (name, head) in [
+        ("packed", &[0x0a, 0x03, 0x01, 0x02, 0x03][..]),
+        ("unpacked", &[0x08, 0x01, 0x08, 0x02, 0x08, 0x03][..]),
+        ("mixed", &[0x08, 0x01, 0x0a, 0x02, 0x02, 0x03][..]),
+        ("packed_twice", &[0x0a, 0x01, 0x01, 0x0a, 0x02, 0x02, 0x03][..]),
+    ] {
+        let mut buf = head.to_vec();
+        buf.extend_from_slice(tail);
+        let proof: Ref<'_, Lists, Proto3> = Ref::verify(&buf).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        assert_eq!(proof.decode(), expected, "{name}");
+    }
+    // A double run whose length is not a multiple of eight.
+    assert_eq!(
+        <Lists as Payload<Proto3>>::verify(&[0x12, 0x03, 0, 0, 0, 0x42, 0x03, 0, 0, 0, 0x52, 0x01, 0x07]).err(),
+        Some(VerifyError::Structure(Malformed::OutOfBounds)),
+    );
+    // A record array under a wire type its element does not take.
+    assert_eq!(
+        <Lists as Payload<Proto3>>::verify(&[0x28, 0x01, 0x42, 0x03, 0, 0, 0, 0x52, 0x01, 0x07]).err(),
+        Some(VerifyError::Structure(Malformed::WireType)),
+    );
+}
+"#
+    );
+    rustc::run_program("pb_packed_forms", &program(&main));
+}
+
+/// An empty array is not written, and an absent array whose count lower
+/// bound is 0 reads as empty; one whose lower bound excludes 0 is refused
+/// when absent.
+#[test]
+fn an_empty_array_is_not_written() {
+    let main = format!(
+        "{COLLECTIONS}{}",
+        r#"
+fn main() {
+    let value = Lists {
+        counts: vec![], reals: vec![], flags: vec![], healths: vec![], labels: vec![], inners: vec![], outcomes: vec![],
+        three: [count(0); 3],
+        at_least_one: vec![count(1)],
+    };
+    let bytes = round_trip("empty_arrays", &value);
+    assert_eq!(hex(&bytes), "4203000000520101", "only the fixed array and the required one are written");
+    // `at_least_one` absent.
+    assert_eq!(
+        <Lists as Payload<Proto3>>::verify(&[0x42, 0x03, 0, 0, 0]).err(),
+        Some(VerifyError::Structure(Malformed::MissingRequired)),
+    );
+    // `three` absent.
+    assert_eq!(
+        <Lists as Payload<Proto3>>::verify(&[0x52, 0x01, 0x01]).err(),
+        Some(VerifyError::Structure(Malformed::MissingRequired)),
+    );
+    let empty = round_trip("with_list_empty", &WithList { items: vec![] });
+    assert!(empty.is_empty());
+    let proof: Ref<'_, WithList, Proto3> = Ref::verify(&[]).expect("an absent array reads as empty");
+    assert_eq!(proof.decode(), WithList { items: vec![] });
+}
+"#
+    );
+    rustc::run_program("pb_empty_arrays", &program(&main));
+}
+
+/// A map with a key twice is refused on both sides: the encoder with
+/// `EncodeError::Contract(Unique)`, the verifier with
+/// `VerifyError::Contract(Unique)` over a hand-built buffer, including one
+/// whose repeated key is the omitted default.
+#[test]
+fn a_map_with_a_repeated_key_is_refused_on_both_sides() {
+    let main = format!(
+        "{COLLECTIONS}{}",
+        r#"
+fn main() {
+    use ridl_rt::payload::{Rule, Violation};
+    let unique = Violation { type_name: Some("Maps"), rule: Rule::Unique };
+    let twice = Maps {
+        by_label: vec![(label("a"), count(1)), (label("a"), count(2))],
+        by_int: vec![], by_bool: vec![],
+    };
+    let mut out = vec![0u8; <Maps as Payload<Proto3>>::MAX_SIZE];
+    assert_eq!(twice.encode(&mut out).err(), Some(EncodeError::Contract(unique)));
+    let twice = Maps {
+        by_label: vec![],
+        by_int: vec![(5, inner(0, "")), (5, inner(1, ""))], by_bool: vec![],
+    };
+    assert_eq!(twice.encode(&mut out).err(), Some(EncodeError::Contract(unique)));
+    assert_eq!(
+        <Maps as Payload<Proto3>>::verify(&[0x0a, 0x05, 0x0a, 0x01, 0x61, 0x10, 0x01, 0x0a, 0x05, 0x0a, 0x01, 0x61, 0x10, 0x02]).err(),
+        Some(VerifyError::Contract(unique)),
+        "the same string key twice",
+    );
+    assert_eq!(
+        <Maps as Payload<Proto3>>::verify(&[0x0a, 0x00, 0x0a, 0x00]).err(),
+        Some(VerifyError::Contract(unique)),
+        "the omitted default key twice",
+    );
+    assert_eq!(
+        <Maps as Payload<Proto3>>::verify(&[0x12, 0x02, 0x08, 0x02, 0x12, 0x04, 0x08, 0x02, 0x12, 0x00]).err(),
+        Some(VerifyError::Contract(unique)),
+        "the same integer key twice",
+    );
+    assert_eq!(
+        <Maps as Payload<Proto3>>::verify(&[0x1a, 0x02, 0x08, 0x01, 0x1a, 0x00]).err(),
+        None,
+        "two different boolean keys",
+    );
+    assert_eq!(
+        <Maps as Payload<Proto3>>::verify(&[0x1a, 0x02, 0x08, 0x01, 0x1a, 0x02, 0x08, 0x01]).err(),
+        Some(VerifyError::Contract(unique)),
+        "the same boolean key twice",
+    );
+}
+"#
+    );
+    rustc::run_program("pb_map_unique", &program(&main));
+}
+
+/// A collection longer than its declared count is refused by `encode` and
+/// by `verify` with `Rule::Length`, for an array and for a map; a fixed
+/// array is refused by `verify` at any other count.
+#[test]
+fn a_collection_over_its_count_is_refused() {
+    let main = format!(
+        "{COLLECTIONS}{}",
+        r#"
+fn main() {
+    use ridl_rt::payload::{Rule, Violation};
+    let length = Violation { type_name: Some("Lists"), rule: Rule::Length };
+    let mut out = vec![0u8; 256];
+    let long = Lists { counts: vec![count(1); 5], ..lists() };
+    assert_eq!(long.encode(&mut out).err(), Some(EncodeError::Contract(length)));
+    let long = Lists { labels: vec![label("a"); 4], ..lists() };
+    assert_eq!(long.encode(&mut out).err(), Some(EncodeError::Contract(length)));
+    let tail: &[u8] = &[0x42, 0x03, 0, 0, 0, 0x52, 0x01, 0x07];
+    let mut buf = vec![0x0a, 0x05, 1, 2, 3, 4, 5];
+    buf.extend_from_slice(tail);
+    assert_eq!(<Lists as Payload<Proto3>>::verify(&buf).err(), Some(VerifyError::Contract(length)), "a packed run over the count");
+    let mut buf = vec![0x08, 1, 0x08, 2, 0x08, 3, 0x08, 4, 0x08, 5];
+    buf.extend_from_slice(tail);
+    assert_eq!(<Lists as Payload<Proto3>>::verify(&buf).err(), Some(VerifyError::Contract(length)), "unpacked records over the count");
+    let mut buf = vec![0x2a, 0x00, 0x2a, 0x00, 0x2a, 0x00, 0x2a, 0x00];
+    buf.extend_from_slice(tail);
+    assert_eq!(<Lists as Payload<Proto3>>::verify(&buf).err(), Some(VerifyError::Contract(length)), "string records over the count");
+    assert_eq!(
+        <Lists as Payload<Proto3>>::verify(&[0x42, 0x02, 0, 0, 0x52, 0x01, 0x07]).err(),
+        Some(VerifyError::Contract(length)),
+        "a fixed array of another count",
+    );
+    assert_eq!(
+        <Lists as Payload<Proto3>>::verify(&[0x42, 0x03, 0, 0, 0, 0x52, 0x04, 1, 2, 3, 4]).err(),
+        Some(VerifyError::Contract(length)),
+        "a bounded array over its count",
+    );
+
+    let length = Violation { type_name: Some("Maps"), rule: Rule::Length };
+    let long = Maps {
+        by_label: vec![(label("a"), count(1)), (label("b"), count(1)), (label("c"), count(1)), (label("d"), count(1))],
+        by_int: vec![], by_bool: vec![],
+    };
+    assert_eq!(long.encode(&mut out).err(), Some(EncodeError::Contract(length)));
+    assert_eq!(
+        <Maps as Payload<Proto3>>::verify(&[
+            0x0a, 0x03, 0x0a, 0x01, 0x61, 0x0a, 0x03, 0x0a, 0x01, 0x62,
+            0x0a, 0x03, 0x0a, 0x01, 0x63, 0x0a, 0x03, 0x0a, 0x01, 0x64,
+        ]).err(),
+        Some(VerifyError::Contract(length)),
+        "four distinct entries in a map of at most three",
+    );
+}
+"#
+    );
+    rustc::run_program("pb_counts", &program(&main));
+}
+
+/// An optional array element and an optional map value are refused at
+/// generation, as the FlatBuffers codec refuses them: the schema emits
+/// neither with presence, so a `None` would have no form on the wire.
+#[test]
+fn an_optional_array_element_is_refused_at_generation() {
+    use ridl_ir::v2;
+    let package = ir::compile_fixture("proto3_roundtrip.ridl");
+    let with_optional =
+        |decl: &str, field: &str, pick: fn(&mut v2::FieldType) -> &mut v2::FieldType| {
+            let mut package = package.clone();
+            let decl = package
+                .decls
+                .iter_mut()
+                .find(|candidate| candidate.name == decl)
+                .expect("the fixture declares it");
+            let Some(v2::decl::Kind::StructDef(def)) = decl.kind.as_mut() else {
+                panic!("a struct");
+            };
+            let field = def
+                .members
+                .iter_mut()
+                .find_map(|member| match member.member.as_mut() {
+                    Some(v2::struct_member::Member::Field(candidate))
+                        if candidate.name == field =>
+                    {
+                        Some(candidate)
+                    }
+                    _ => None,
+                })
+                .expect("the field is declared");
+            pick(field.r#type.as_mut().expect("typed")).optional = true;
+            package
+        };
+    let element = with_optional("WithList", "items", |ty| match ty.kind.as_mut() {
+        Some(v2::field_type::Kind::Array(array)) => array.element.as_mut().expect("an element"),
+        _ => panic!("an array"),
+    });
+    let err = ridl_backend_rust::generate_pipeline(&element, &[WireEncoding::Proto3], &[])
+        .expect_err("an optional array element is refused");
+    assert!(
+        err.message.contains("an array element is optional"),
+        "the refusal names the position, got: {}",
+        err.message
+    );
+    ridl_backend_rust::generate_pipeline(&element, &[], &[]).expect("the types alone generate");
+
+    let value = with_optional("Maps", "byLabel", |ty| match ty.kind.as_mut() {
+        Some(v2::field_type::Kind::Map(map)) => map.value.as_mut().expect("a value"),
+        _ => panic!("a map"),
+    });
+    let err = ridl_backend_rust::generate_pipeline(&value, &[WireEncoding::Proto3], &[])
+        .expect_err("an optional map value is refused");
+    assert!(
+        err.message.contains("a map value is optional"),
+        "the refusal names the position, got: {}",
+        err.message
+    );
+}
+
+/// Each induced interaction root — the argument message of a call with two
+/// parameters, the empty argument message of a query with none, and the
+/// reply message of a query that replies with a tuple — takes as `MAX_SIZE`
+/// the bound the model carries for that interaction's payload.
+#[test]
+fn an_induced_interaction_root_takes_the_interactions_bound() {
+    use ridl_ir::codegen::v1;
+    let package = ir::compile_fixture("proto3_roundtrip.ridl");
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let bound = |sizes: Option<&v1::PayloadSizes>| -> u32 {
+        match sizes
+            .and_then(|sizes| sizes.proto3.as_ref())
+            .and_then(|state| state.state.as_ref())
+        {
+            Some(v1::size_state::State::Bounded(bound)) => *bound,
+            other => panic!("the interaction's payload has a proto3 bound, got {other:?}"),
+        }
+    };
+    let tuple_name = |reference: Option<&v1::TupleRef>| -> String {
+        let reference = reference.expect("the interaction induces a tuple");
+        model.tuples[reference.index as usize]
+            .name
+            .as_ref()
+            .map(|name| name.rust.clone())
+            .expect("the tuple is named")
+    };
+    let mut pins: Vec<(String, u32)> = Vec::new();
+    for interface in &model.interfaces {
+        for slot in &interface.slots {
+            let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                slot.occupant.as_ref()
+            else {
+                continue;
+            };
+            match interaction.shape.as_ref() {
+                Some(v1::interaction::Shape::Command(command)) => {
+                    pins.push((
+                        tuple_name(command.request_tuple.as_ref()),
+                        bound(command.request_sizes.as_ref()),
+                    ));
+                }
+                Some(v1::interaction::Shape::Query(query)) => {
+                    pins.push((
+                        tuple_name(query.request_tuple.as_ref()),
+                        bound(query.request_sizes.as_ref()),
+                    ));
+                    if query.reply_tuple.is_some() {
+                        pins.push((
+                            tuple_name(query.reply_tuple.as_ref()),
+                            bound(query.reply_sizes.as_ref()),
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let names: Vec<&str> = pins.iter().map(|(name, _)| name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "ProbeSetBothParams",
+            "ProbeStatusParams",
+            "ProbeSpanParams",
+            "ProbeSpanReply"
+        ]
+    );
+    let asserts: String = pins
+        .iter()
+        .map(|(name, bound)| {
+            format!(
+                "    assert_eq!(<{name} as Payload<Proto3>>::MAX_SIZE, {bound}usize, \"{name}\");\n"
+            )
+        })
+        .collect();
+    let main = format!(
+        r#"
+fn main() {{
+{asserts}
+    // The widest value of each fits its bound.
+    let mut out = vec![0u8; <ProbeSetBothParams as Payload<Proto3>>::MAX_SIZE];
+    ProbeSetBothParams {{ level: Level::new_unchecked(10), count: Count::new_unchecked(200) }}
+        .encode(&mut out).expect("fits");
+    let mut out = vec![0u8; <ProbeSpanReply as Payload<Proto3>>::MAX_SIZE];
+    ProbeSpanReply {{ lo: Count::new_unchecked(200), hi: Count::new_unchecked(200) }}
+        .encode(&mut out).expect("fits");
+    assert_eq!(<ProbeStatusParams as Payload<Proto3>>::MAX_SIZE, 0usize);
+}}
+"#
+    );
+    rustc::run_program("pb_interaction_roots", &program(&main));
+}
+
+/// A non-optional union field that is absent, and a union message with no
+/// arm, are `MissingRequired`; two arms, or one arm twice, are `Duplicate`.
+#[test]
+fn a_union_holds_exactly_one_arm() {
+    let main = format!(
+        "{COLLECTIONS}{}",
+        r#"
+fn main() {
+    assert_eq!(
+        <Outcome as Payload<Proto3>>::verify(&[]).err(),
+        Some(VerifyError::Structure(Malformed::MissingRequired)),
+        "no arm",
+    );
+    assert_eq!(
+        <Outcome as Payload<Proto3>>::verify(&[0x08, 0x01, 0x18, 0x01]).err(),
+        Some(VerifyError::Structure(Malformed::Duplicate)),
+        "two arms",
+    );
+    assert_eq!(
+        <Outcome as Payload<Proto3>>::verify(&[0x08, 0x01, 0x08, 0x01]).err(),
+        Some(VerifyError::Structure(Malformed::Duplicate)),
+        "one arm twice",
+    );
+    // An unknown field beside the arm is skipped.
+    let proof: Ref<'_, Outcome, Proto3> = Ref::verify(&[0x38, 0x01, 0x08, 0x05]).expect("verify");
+    assert_eq!(proof.decode(), Outcome::Number(count(5)));
+    // A union element of an array with no arm is refused through its owner.
+    assert_eq!(
+        <Lists as Payload<Proto3>>::verify(&[0x3a, 0x00, 0x42, 0x03, 0, 0, 0, 0x52, 0x01, 0x07]).err(),
+        Some(VerifyError::Structure(Malformed::MissingRequired)),
+    );
+    // An arm's own constraint is checked: `Count` is `[0..200]`.
+    assert!(matches!(
+        <Outcome as Payload<Proto3>>::verify(&[0x08, 0xc9, 0x01]).err(),
+        Some(VerifyError::Contract(_)),
+    ));
+}
+"#
+    );
+    rustc::run_program("pb_union_arms", &program(&main));
 }

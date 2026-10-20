@@ -21,10 +21,12 @@
 //! `prost-build`, **checked in** under `tests/generated/` with no `build.rs`
 //! and no `protoc`. [`the_checked_in_prost_code_is_what_prost_build_writes`]
 //! regenerates it and compares bytes. The fixture holds every shape the
-//! codec is specified to carry, so the checked-in oracle is generated once;
-//! the value table below covers the shapes the codec emits today, and
-//! [`proto3_layout_matches_the_emitted_schema`] lists, by name, every
-//! message it does not emit yet.
+//! codec carries, the value table below covers each of them, and
+//! [`the_inventory_reaches_every_shape`] checks that the fixture's model
+//! reaches every row of the wire mapping, so a shape cannot drop out of the
+//! table unnoticed. [`proto3_layout_matches_the_emitted_schema`] requires
+//! every message of the emitted schema to be laid out by the codec, over the
+//! fixture and over every corpus package.
 //!
 //! The generated codec runs as a program, built once per test binary
 //! (`support::proto3::Program`) and fed one request line per case, so the
@@ -148,7 +150,7 @@ fn the_fixture_holds_every_shape() {
         "Trend",
         "WarningFlags",
         "WideFlags",
-        // The shapes the codec carries today.
+        // The structs over scalars and nested structs.
         "Inner",
         "Scalars",
         "Optionals",
@@ -158,7 +160,7 @@ fn the_fixture_holds_every_shape() {
         "Signs",
         "Lengths",
         "Axle",
-        // The shapes it does not carry yet.
+        // The collections, the tuples and the union.
         "Outcome",
         "Tuples",
         "Packed",
@@ -188,6 +190,223 @@ fn the_fixture_holds_every_shape() {
     );
 }
 
+/// The rows of the wire mapping, as the fixture's lowered model reaches
+/// them, so that no row of it is left without a value in the table: the
+/// walk below sets each name when it meets the shape, and the test asserts
+/// every name was set.
+const WIRE_ROWS: &[&str] = &[
+    "integer of width u8, u16, u32: uint32",
+    "integer of width u64: uint64",
+    "integer of width i8, i16, i32: sint32",
+    "integer of width i64 or bare integer: sint64",
+    "float f32: float",
+    "float f64 or bare float: double",
+    "boolean: bool",
+    "string",
+    "bytes",
+    "named scalar at a field",
+    "enum",
+    "enum set",
+    "struct",
+    "optional scalar",
+    "optional enum",
+    "optional string",
+    "optional struct",
+    "packed array of a numeric, bool or enum",
+    "array of string, bytes, struct or union",
+    "map",
+    "tuple",
+    "union",
+    "retired field",
+    "cross-package struct",
+    "cross-package enum",
+];
+
+/// Every row of the wire mapping occurs at least once in the fixture's
+/// model, walked over every struct field, union arm and induced tuple field
+/// of the main package. A row no shape reaches is a value the table above
+/// cannot hold, and a shape the codec would carry with no case against
+/// `prost`.
+#[test]
+fn the_inventory_reaches_every_shape() {
+    use ridl_ir::codegen::v1;
+    use ridl_ir::projection::proto3::{self as pb, Scalar};
+
+    let (main, others) = proto3::fixture();
+    let refs: Vec<&v2::Package> = others.iter().collect();
+    let model = ridl_ir::codegen::lower(&main, &refs);
+    let mut reached: BTreeSet<&'static str> = BTreeSet::new();
+
+    fn scalar_row(scalar: Scalar) -> &'static str {
+        match scalar {
+            Scalar::Uint32 => "integer of width u8, u16, u32: uint32",
+            Scalar::Uint64 => "integer of width u64: uint64",
+            Scalar::Sint32 => "integer of width i8, i16, i32: sint32",
+            Scalar::Sint64 => "integer of width i64 or bare integer: sint64",
+            Scalar::Float => "float f32: float",
+            Scalar::Double => "float f64 or bare float: double",
+            Scalar::Bool => "boolean: bool",
+            Scalar::String => "string",
+            Scalar::Bytes => "bytes",
+            Scalar::Int64 => "enum",
+        }
+    }
+
+    fn scalar_of(sc: &v1::Scalar) -> Scalar {
+        match sc.width {
+            Some(v1::scalar::Width::IntWidth(width)) => {
+                pb::int_width_scalar(v1::IntWidth::try_from(width).expect("a width"))
+                    .expect("a projected scalar")
+            }
+            Some(v1::scalar::Width::FloatWidth(width)) => {
+                pb::float_width_scalar(v1::FloatWidth::try_from(width).expect("a width"))
+                    .expect("a projected scalar")
+            }
+            None => match v1::ScalarClass::try_from(sc.class).expect("a class") {
+                v1::ScalarClass::Boolean => Scalar::Bool,
+                v1::ScalarClass::String => Scalar::String,
+                v1::ScalarClass::Bytes => Scalar::Bytes,
+                other => panic!("a {other:?} scalar carries a width"),
+            },
+        }
+    }
+
+    /// The row of one type position, whether its element is packable (a
+    /// numeric, a boolean, an enum or an enum set), and whether it is a
+    /// string, inline or named.
+    fn visit(
+        model: &v1::Model,
+        ty: &v1::Type,
+        reached: &mut BTreeSet<&'static str>,
+    ) -> (&'static str, bool, bool) {
+        let (row, packable, text) = match ty.kind.as_ref() {
+            Some(v1::r#type::Kind::Primitive(primitive)) => {
+                let scalar = pb::primitive(*primitive);
+                (scalar_row(scalar), true, scalar == Scalar::String)
+            }
+            Some(v1::r#type::Kind::Inline(sc)) => {
+                let scalar = scalar_of(sc);
+                (
+                    scalar_row(scalar),
+                    scalar.packable(),
+                    scalar == Scalar::String,
+                )
+            }
+            Some(v1::r#type::Kind::Named(reference)) => {
+                let kind = v1::DeclKind::try_from(reference.kind).expect("a kind");
+                if reference.foreign {
+                    reached.insert(match kind {
+                        v1::DeclKind::Struct => "cross-package struct",
+                        v1::DeclKind::Enum => "cross-package enum",
+                        _ => "named scalar at a field",
+                    });
+                }
+                match kind {
+                    v1::DeclKind::Scalar => {
+                        if !reference.foreign {
+                            let decl = &model.declarations[reference.index as usize];
+                            let Some(v1::declaration::Kind::Scalar(sc)) = decl.kind.as_ref() else {
+                                panic!("a scalar declaration");
+                            };
+                            let scalar = scalar_of(sc);
+                            reached.insert(scalar_row(scalar));
+                            (
+                                "named scalar at a field",
+                                scalar.packable(),
+                                scalar == Scalar::String,
+                            )
+                        } else {
+                            ("named scalar at a field", true, false)
+                        }
+                    }
+                    v1::DeclKind::Enum => ("enum", true, false),
+                    v1::DeclKind::EnumSet => ("enum set", true, false),
+                    v1::DeclKind::Struct => ("struct", false, false),
+                    v1::DeclKind::Union => ("union", false, false),
+                    other => panic!("{other:?} at a type position"),
+                }
+            }
+            Some(v1::r#type::Kind::Tuple(_)) => ("tuple", false, false),
+            Some(v1::r#type::Kind::Array(array)) => {
+                let (_, packable, _) =
+                    visit(model, array.element.as_ref().expect("an element"), reached);
+                let row = if packable {
+                    "packed array of a numeric, bool or enum"
+                } else {
+                    "array of string, bytes, struct or union"
+                };
+                (row, false, false)
+            }
+            Some(v1::r#type::Kind::Map(map)) => {
+                visit(model, map.key.as_ref().expect("a key"), reached);
+                visit(model, map.value.as_ref().expect("a value"), reached);
+                ("map", false, false)
+            }
+            other => panic!("{other:?} at a type position"),
+        };
+        reached.insert(row);
+        if ty.optional {
+            reached.insert(match row {
+                "enum" => "optional enum",
+                "struct" => "optional struct",
+                _ if text => "optional string",
+                _ => "optional scalar",
+            });
+        }
+        (row, packable, text)
+    }
+
+    for decl in &model.declarations {
+        match decl.kind.as_ref() {
+            Some(v1::declaration::Kind::Struct(def)) => {
+                for slot in &def.slots {
+                    match slot.occupant.as_ref() {
+                        Some(v1::slot::Occupant::Field(field)) => {
+                            visit(&model, field.r#type.as_ref().expect("typed"), &mut reached);
+                        }
+                        Some(v1::slot::Occupant::Retired(_)) => {
+                            reached.insert("retired field");
+                        }
+                        None => {}
+                    }
+                }
+            }
+            Some(v1::declaration::Kind::Union(def)) => {
+                reached.insert("union");
+                for arm in &def.arms {
+                    let reference = arm.r#type.as_ref().expect("an arm type");
+                    visit(
+                        &model,
+                        &v1::Type {
+                            optional: false,
+                            kind: Some(v1::r#type::Kind::Named(reference.clone())),
+                        },
+                        &mut reached,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    for tuple in &model.tuples {
+        for field in &tuple.fields {
+            visit(&model, field.r#type.as_ref().expect("typed"), &mut reached);
+        }
+    }
+
+    let expected: BTreeSet<&'static str> = WIRE_ROWS.iter().copied().collect();
+    let missing: Vec<&&str> = expected.difference(&reached).collect();
+    assert!(
+        missing.is_empty(),
+        "rows of the wire mapping no shape of the fixture reaches: {missing:?}"
+    );
+    let unknown: Vec<&&str> = reached.difference(&expected).collect();
+    assert!(
+        unknown.is_empty(),
+        "rows the walk names and the table does not: {unknown:?}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The structural drift test
 // ---------------------------------------------------------------------------
@@ -195,131 +414,34 @@ fn the_fixture_holds_every_shape() {
 /// The corpus packages the drift test reads beside the fixture — each a
 /// workspace entry `ridlc::compile_workspace` loads, relative to the
 /// repository root — with every message of its emitted schema the codec
-/// does not emit yet, by `.proto` full name, sorted. The lists are held to
-/// the same rule as [`EXPECTED_UNCOVERED`], and empty as the codec grows.
+/// does not lay out, by `.proto` full name, sorted. The lists are held to
+/// the same rule as [`EXPECTED_UNCOVERED`]: a name may stay only for a
+/// message no payload carries, with the reason beside it.
 const CORPUS: &[(&str, &[&str])] = &[
     ("examples/cabin", &[]),
     (
         "crates/ridlc/tests/corpus/veh-cluster",
         &[
-            "veh.cluster.FaultPage",
-            "veh.cluster.RawWheelSpan",
-            "veh.cluster.RawWheelSpanBurstsElement",
-            "veh.cluster.RawWheelSpanSpan",
-            "veh.cluster.VehHvacCabinGetBoundsParams",
-            "veh.cluster.VehHvacCabinGetBoundsReply",
-            "veh.cluster.VehHvacCabinGetCabinTempParams",
-            "veh.cluster.VehHvacCabinGetClimateParams",
-            "veh.cluster.VehHvacCabinScaledFanParams",
-            "veh.cluster.WheelDiagnosticsReadSpanParams",
-            "veh.cluster.WheelDiagnosticsReadSpanReply",
-            "veh.cluster.WheelDiagnosticsReadTicksParams",
+            // The tuple the array element of `WheelDiagnostics.tickBounds`
+            // induces. A `fixed` interaction is provisioned, never in flight
+            // (driftsys/ridl#852), so no payload crosses the wire with this
+            // tuple: the schema emitter appends every interaction-induced
+            // tuple as a message, and the codec, like the FlatBuffers one,
+            // emits functions only for a tuple a payload reaches, so that no
+            // function without a caller lands in a consumer's build.
             "veh.cluster.WheelDiagnosticsTickBoundsElement",
-            "veh.common.SensorBounds",
-            "veh.common.SensorBoundsRange",
-            "veh.common.SensorResult",
         ],
     ),
-    (
-        "evals/corpus/mavlink",
-        &["common.GpsRawInt", "common.Uint64Bytes"],
-    ),
-    (
-        "evals/corpus/ros2",
-        &[
-            "geometrymsgs.AccelWithCovariance",
-            "geometrymsgs.AccelWithCovarianceStamped",
-            "geometrymsgs.Polygon",
-            "geometrymsgs.PolygonInstance",
-            "geometrymsgs.PolygonInstanceStamped",
-            "geometrymsgs.PolygonStamped",
-            "geometrymsgs.PoseArray",
-            "geometrymsgs.PoseWithCovariance",
-            "geometrymsgs.PoseWithCovarianceStamped",
-            "geometrymsgs.TwistWithCovariance",
-            "geometrymsgs.TwistWithCovarianceStamped",
-            "geometrymsgs.VelocityWithCovarianceStamped",
-            "nav2msgs.BehaviorTreeLog",
-            "nav2msgs.ClearEntireCostmapRequest",
-            "nav2msgs.Costmap",
-            "nav2msgs.FollowWaypointsGoal",
-            "nav2msgs.FollowWaypointsResult",
-            "nav2msgs.GetCostmapResponse",
-            "nav2msgs.IsPathValidResponse",
-            "nav2msgs.Nav2MsgsInteractionsIsPathValidParams",
-            "nav2msgs.Nav2MsgsInteractionsSaveMapParams",
-            "nav2msgs.ParticleCloud",
-            "nav2msgs.VoxelGrid",
-            "navmsgs.GetMapResponse",
-            "navmsgs.GetPlanResponse",
-            "navmsgs.Goals",
-            "navmsgs.GridCells",
-            "navmsgs.LoadMapResponse",
-            "navmsgs.NavMsgsInteractionsGetMapParams",
-            "navmsgs.NavMsgsInteractionsGetPlanParams",
-            "navmsgs.NavMsgsInteractionsSetMapParams",
-            "navmsgs.OccupancyGrid",
-            "navmsgs.Path",
-            "navmsgs.SetMapRequest",
-            "navmsgs.Trajectory",
-            "sensormsgs.BatteryState",
-            "sensormsgs.CameraInfo",
-            "sensormsgs.ChannelFloat32",
-            "sensormsgs.CompressedImage",
-            "sensormsgs.Image",
-            "sensormsgs.Imu",
-            "sensormsgs.JointState",
-            "sensormsgs.Joy",
-            "sensormsgs.JoyFeedbackArray",
-            "sensormsgs.LaserEcho",
-            "sensormsgs.LaserScan",
-            "sensormsgs.MagneticField",
-            "sensormsgs.MultiDOFJointState",
-            "sensormsgs.MultiEchoLaserScan",
-            "sensormsgs.NavSatFix",
-            "sensormsgs.PointCloud",
-            "sensormsgs.PointCloud2",
-            "sensormsgs.SetCameraInfoRequest",
-            "stdmsgs.ByteMultiArray",
-            "stdmsgs.Float32MultiArray",
-            "stdmsgs.Float64MultiArray",
-            "stdmsgs.Int16MultiArray",
-            "stdmsgs.Int32MultiArray",
-            "stdmsgs.Int64MultiArray",
-            "stdmsgs.Int8MultiArray",
-            "stdmsgs.MultiArrayLayout",
-            "stdmsgs.UInt16MultiArray",
-            "stdmsgs.UInt32MultiArray",
-            "stdmsgs.UInt64MultiArray",
-            "stdmsgs.UInt8MultiArray",
-            "stdsrvs.StdSrvsInteractionsEmptyParams",
-            "stdsrvs.StdSrvsInteractionsTriggerParams",
-        ],
-    ),
+    ("evals/corpus/mavlink", &[]),
+    ("evals/corpus/ros2", &[]),
     ("evals/corpus/vss", &[]),
 ];
 
-/// Every message of the fixture's emitted schema the codec does not emit
-/// yet, by `.proto` full name: anything that reaches an array, a map, a
-/// tuple or a union, and the messages the interface's calls induce. A name
-/// here that the codec does emit fails the drift test, so the list cannot
-/// go stale; it is emptied as the codec grows.
-const EXPECTED_UNCOVERED: &[&str] = &[
-    "pb.conformance.Maps",
-    "pb.conformance.OptionalComposites",
-    "pb.conformance.OptionalCompositesPair",
-    "pb.conformance.Outcome",
-    "pb.conformance.Packed",
-    "pb.conformance.ProbeSetBothParams",
-    "pb.conformance.ProbeSpanParams",
-    "pb.conformance.ProbeSpanReply",
-    "pb.conformance.ProbeStatusParams",
-    "pb.conformance.Records",
-    "pb.conformance.RecordsPointsElement",
-    "pb.conformance.Tuples",
-    "pb.conformance.TuplesPair",
-    "pb.conformance.TuplesRange",
-];
+/// Every message of the fixture's emitted schema the codec does not lay out,
+/// by `.proto` full name. The codec carries every shape of the fixture, so
+/// the list is empty; a name that appears here is a message the schema
+/// emits and the codec does not, which the drift test reports.
+const EXPECTED_UNCOVERED: &[&str] = &[];
 
 /// How a message's fields are spelled for the comparison: the number, the
 /// scalar as the `.proto` spells it or the message or enum name (bare for
@@ -327,31 +449,52 @@ const EXPECTED_UNCOVERED: &[&str] = &[
 /// codec's layout spells both), and the label.
 type Fields = Vec<(u32, String, Proto3Label)>;
 
+/// The spelling of one descriptor kind: the scalar as the `.proto` spells
+/// it, or the message or enum name, bare for one of `package`.
+fn spell_kind(package: &str, kind: &Kind) -> String {
+    match kind {
+        Kind::Double => "double".to_string(),
+        Kind::Float => "float".to_string(),
+        Kind::Int32 => "int32".to_string(),
+        Kind::Int64 => "int64".to_string(),
+        Kind::Uint32 => "uint32".to_string(),
+        Kind::Uint64 => "uint64".to_string(),
+        Kind::Sint32 => "sint32".to_string(),
+        Kind::Sint64 => "sint64".to_string(),
+        Kind::Fixed32 => "fixed32".to_string(),
+        Kind::Fixed64 => "fixed64".to_string(),
+        Kind::Sfixed32 => "sfixed32".to_string(),
+        Kind::Sfixed64 => "sfixed64".to_string(),
+        Kind::Bool => "bool".to_string(),
+        Kind::String => "string".to_string(),
+        Kind::Bytes => "bytes".to_string(),
+        Kind::Message(named) => local_or_qualified(package, named.full_name()),
+        Kind::Enum(named) => local_or_qualified(package, named.full_name()),
+    }
+}
+
 /// The fields of one descriptor message, in number order, in the spelling of
-/// [`Fields`].
+/// [`Fields`]. A map field is spelled `map<K, V>` from its entry message's
+/// two fields, which is how the codec's layout spells one, so the key and
+/// the value scalars are compared as well as the field itself.
 fn descriptor_fields(message: &protox::prost_reflect::MessageDescriptor) -> Fields {
     let package = message.package_name();
     let mut fields: Fields = message
         .fields()
         .map(|field| {
-            let ty = match field.kind() {
-                Kind::Double => "double".to_string(),
-                Kind::Float => "float".to_string(),
-                Kind::Int32 => "int32".to_string(),
-                Kind::Int64 => "int64".to_string(),
-                Kind::Uint32 => "uint32".to_string(),
-                Kind::Uint64 => "uint64".to_string(),
-                Kind::Sint32 => "sint32".to_string(),
-                Kind::Sint64 => "sint64".to_string(),
-                Kind::Fixed32 => "fixed32".to_string(),
-                Kind::Fixed64 => "fixed64".to_string(),
-                Kind::Sfixed32 => "sfixed32".to_string(),
-                Kind::Sfixed64 => "sfixed64".to_string(),
-                Kind::Bool => "bool".to_string(),
-                Kind::String => "string".to_string(),
-                Kind::Bytes => "bytes".to_string(),
-                Kind::Message(named) => local_or_qualified(package, named.full_name()),
-                Kind::Enum(named) => local_or_qualified(package, named.full_name()),
+            let ty = if field.is_map() {
+                let Kind::Message(entry) = field.kind() else {
+                    panic!("a map field's kind is its entry message");
+                };
+                let key = entry.map_entry_key_field();
+                let value = entry.map_entry_value_field();
+                format!(
+                    "map<{}, {}>",
+                    spell_kind(package, &key.kind()),
+                    spell_kind(package, &value.kind())
+                )
+            } else {
+                spell_kind(package, &field.kind())
             };
             let label = if field.is_list() || field.is_map() {
                 Proto3Label::Repeated
@@ -462,8 +605,8 @@ fn proto3_layout_matches_the_emitted_schema() {
         .collect();
     assert_eq!(
         uncovered, expected,
-        "the messages the codec does not emit yet, in the fixture: a name listed but \
-         emitted is stale, a name emitted nowhere but unlisted is new"
+        "the messages the codec does not lay out, in the fixture: a name listed but \
+         laid out is stale, a name laid out nowhere but unlisted is new"
     );
 
     // The corpus.
@@ -493,8 +636,8 @@ fn proto3_layout_matches_the_emitted_schema() {
             .collect();
         assert_eq!(
             uncovered, expected,
-            "{entry}: the messages the codec does not emit yet ({covered} compared): a name \
-             listed but emitted is stale, a name emitted nowhere but unlisted is new"
+            "{entry}: the messages the codec does not lay out ({covered} compared): a name \
+             listed but laid out is stale, a name laid out nowhere but unlisted is new"
         );
     }
 
@@ -557,6 +700,32 @@ fn scalars_zero() -> Scalars {
 
 fn optionals_none() -> Optionals {
     Optionals { count: None, label: None, blob: None, flag: None, real: None, health: None, flags: None, inner: None }
+}
+
+fn count(v: i64) -> Count { Count::new_unchecked(v) }
+fn label(s: &str) -> Label { Label::new_unchecked(String::from(s)) }
+fn blob(b: &[u8]) -> Blob { Blob::new_unchecked(b.to_vec()) }
+fn key(s: &str) -> Key { Key::new_unchecked(String::from(s)) }
+fn flags(bits: i64) -> WarningFlags { WarningFlags::try_from(bits).unwrap() }
+
+fn packed_empty() -> Packed {
+    Packed {
+        unsigned8s: vec![], unsigned16s: vec![], unsigned32s: vec![], unsigned64s: vec![],
+        signed8s: vec![], signed16s: vec![], signed32s: vec![], signed64s: vec![], plains: vec![],
+        narrows: vec![], reals: vec![], flags: vec![], healths: vec![], trends: vec![], sets: vec![],
+        three: [count(0); 3],
+    }
+}
+
+fn records_empty() -> Records {
+    Records { labels: vec![], blobs: vec![], inners: vec![], outcomes: vec![], points: vec![] }
+}
+
+fn maps_empty() -> Maps {
+    Maps {
+        by_string: vec![], by_uint32: vec![], by_uint64: vec![], by_sint32: vec![], by_sint64: vec![],
+        by_boolean: vec![], by_label: vec![],
+    }
 }
 
 /// The bits of every member of `WideFlags`, as the codec's `i64` language
@@ -648,9 +817,12 @@ fn refused_row<T: Oracle + 'static>(
 /// `NaN`, a negative enum value, every optional kind present at its default,
 /// absent and present at a value, a nested struct at a value and at zero,
 /// every box root, a struct whose every field is at a legal default, one
-/// whose fields exclude it, a cross-package reference, and the second
-/// package's own messages. A later task extends it with the collections,
-/// the tuples and the unions.
+/// whose fields exclude it, a cross-package reference, the second package's
+/// own messages, a union at each arm at its default and at a value, the
+/// tuples at zero and at a value, every packed array kind and every record
+/// array kind empty and populated, a map for each key kind with an entry at
+/// its default on either side, the optional composites, and each induced
+/// interaction root.
 fn rows() -> Vec<Row> {
     use prost_oracle::pb::conformance as oracle;
     use prost_oracle::pb::parts;
@@ -1100,7 +1272,321 @@ fn rows() -> Vec<Row> {
             "crate::pb::parts::Torque::new_unchecked(4999)",
             parts::TorqueBox { value: 4999 },
         ),
+        // The union: each arm at its default, which is still written, and at
+        // a value.
+        row(
+            "Outcome",
+            "number_zero",
+            "Outcome::Number(count(0))",
+            outcome(oracle::outcome::Value::Number(0)),
+        ),
+        row(
+            "Outcome",
+            "number",
+            "Outcome::Number(count(200))",
+            outcome(oracle::outcome::Value::Number(200)),
+        ),
+        row(
+            "Outcome",
+            "text_empty",
+            r#"Outcome::Text(label(""))"#,
+            outcome(oracle::outcome::Value::Text(String::new())),
+        ),
+        row(
+            "Outcome",
+            "text",
+            r#"Outcome::Text(label("ab"))"#,
+            outcome(oracle::outcome::Value::Text(String::from("ab"))),
+        ),
+        row(
+            "Outcome",
+            "health_zero",
+            "Outcome::Health(Health::Ok)",
+            outcome(oracle::outcome::Value::Health(oracle::Health::Ok as i32)),
+        ),
+        row(
+            "Outcome",
+            "health",
+            "Outcome::Health(Health::Fail)",
+            outcome(oracle::outcome::Value::Health(oracle::Health::Fail as i32)),
+        ),
+        row(
+            "Outcome",
+            "flags_empty",
+            "Outcome::Flags(flags(0))",
+            outcome(oracle::outcome::Value::Flags(0)),
+        ),
+        row(
+            "Outcome",
+            "flags",
+            "Outcome::Flags(WarningFlags::HIGH)",
+            outcome(oracle::outcome::Value::Flags(2)),
+        ),
+        row(
+            "Outcome",
+            "inner_zero",
+            r#"Outcome::Inner(inner(0, ""))"#,
+            outcome(oracle::outcome::Value::Inner(oracle::Inner::default())),
+        ),
+        row(
+            "Outcome",
+            "inner",
+            r#"Outcome::Inner(inner(5, "x"))"#,
+            outcome(oracle::outcome::Value::Inner(oracle::Inner {
+                speed: 5,
+                label: String::from("x"),
+            })),
+        ),
+        // The tuples: positional fields numbered from 1, a nested struct
+        // field always written.
+        row(
+            "Tuples",
+            "zero",
+            r#"Tuples {
+                range: TuplesRange { min: count(0), max: count(0) },
+                pair: TuplesPair { lo: count(0), inner: inner(0, "") },
+            }"#,
+            oracle::Tuples {
+                range: Some(oracle::TuplesRange::default()),
+                pair: Some(oracle::TuplesPair {
+                    field_1: 0,
+                    field_2: Some(oracle::Inner::default()),
+                }),
+            },
+        ),
+        row(
+            "Tuples",
+            "value",
+            r#"Tuples {
+                range: TuplesRange { min: count(1), max: count(200) },
+                pair: TuplesPair { lo: count(7), inner: inner(3, "q") },
+            }"#,
+            oracle::Tuples {
+                range: Some(oracle::TuplesRange {
+                    field_1: 1,
+                    field_2: 200,
+                }),
+                pair: Some(oracle::TuplesPair {
+                    field_1: 7,
+                    field_2: Some(oracle::Inner {
+                        speed: 3,
+                        label: String::from("q"),
+                    }),
+                }),
+            },
+        ),
+        // The packed arrays: every element kind empty, and populated with
+        // each width's extremes; the fixed array of three is always written,
+        // zeros included.
+        row(
+            "Packed",
+            "empty",
+            "packed_empty()",
+            oracle::Packed {
+                three: vec![0, 0, 0],
+                ..Default::default()
+            },
+        ),
+        row(
+            "Packed",
+            "values",
+            r#"Packed {
+                unsigned8s: vec![0, 255],
+                unsigned16s: vec![65535, 1],
+                unsigned32s: vec![4294967295, 0],
+                unsigned64s: vec![9223372036854775807, 1],
+                signed8s: vec![-128, 127],
+                signed16s: vec![-32768, 32767],
+                signed32s: vec![-2147483648, 2147483647],
+                signed64s: vec![-4294967296, 4294967296],
+                plains: vec![i64::MIN, 0, i64::MAX],
+                narrows: vec![Ratio::new_unchecked(0.5), Ratio::new_unchecked(250.0)],
+                reals: vec![-0.25, f64::MAX, 0.0],
+                flags: vec![true, false, true],
+                healths: vec![Health::Ok, Health::Fail],
+                trends: vec![Trend::Down, Trend::Up, Trend::Flat],
+                sets: vec![WarningFlags::LOW, flags(3), flags(0)],
+                three: [count(1), count(0), count(200)],
+            }"#,
+            oracle::Packed {
+                unsigned8s: vec![0, 255],
+                unsigned16s: vec![65535, 1],
+                unsigned32s: vec![4294967295, 0],
+                unsigned64s: vec![9223372036854775807, 1],
+                signed8s: vec![-128, 127],
+                signed16s: vec![-32768, 32767],
+                signed32s: vec![-2147483648, 2147483647],
+                signed64s: vec![-4294967296, 4294967296],
+                plains: vec![i64::MIN, 0, i64::MAX],
+                narrows: vec![0.5, 250.0],
+                reals: vec![-0.25, f64::MAX, 0.0],
+                flags: vec![true, false, true],
+                healths: vec![oracle::Health::Ok as i32, oracle::Health::Fail as i32],
+                trends: vec![
+                    oracle::Trend::Down as i32,
+                    oracle::Trend::Up as i32,
+                    oracle::Trend::Flat as i32,
+                ],
+                sets: vec![1, 3, 0],
+                three: vec![1, 0, 200],
+            },
+        ),
+        // The record arrays: one record per element, an element at its
+        // default written as an empty record.
+        row(
+            "Records",
+            "empty",
+            "records_empty()",
+            oracle::Records::default(),
+        ),
+        row(
+            "Records",
+            "values",
+            r#"Records {
+                labels: vec![label(""), label("a")],
+                blobs: vec![blob(&[]), blob(&[1, 2])],
+                inners: vec![inner(0, ""), inner(1, "b")],
+                outcomes: vec![Outcome::Number(count(0)), Outcome::Text(label("t"))],
+                points: vec![RecordsPointsElement { x: count(1), y: count(2) }],
+            }"#,
+            oracle::Records {
+                labels: vec![String::new(), String::from("a")],
+                blobs: vec![vec![], vec![1, 2]],
+                inners: vec![
+                    oracle::Inner::default(),
+                    oracle::Inner {
+                        speed: 1,
+                        label: String::from("b"),
+                    },
+                ],
+                outcomes: vec![
+                    outcome(oracle::outcome::Value::Number(0)),
+                    outcome(oracle::outcome::Value::Text(String::from("t"))),
+                ],
+                points: vec![oracle::RecordsPointsElement {
+                    field_1: 1,
+                    field_2: 2,
+                }],
+            },
+        ),
+        // The maps: entries in key order, a key or a value at its default
+        // omitted inside its entry, `{"": 0}` written as the empty entry.
+        row("Maps", "empty", "maps_empty()", oracle::Maps::default()),
+        row(
+            "Maps",
+            "entries",
+            r#"Maps {
+                by_string: vec![(key("k"), count(5)), (key("zz"), count(200))],
+                by_uint32: vec![(0, label("")), (7, label("a"))],
+                by_uint64: vec![(1, Health::Fail)],
+                by_sint32: vec![(-100, inner(0, "")), (100, inner(1, "x"))],
+                by_sint64: vec![(-5, count(3)), (0, count(0))],
+                by_boolean: vec![(false, count(1)), (true, count(2))],
+                by_label: vec![(label(""), count(0)), (label("a"), count(1))],
+            }"#,
+            oracle::Maps {
+                by_string: [(String::from("k"), 5), (String::from("zz"), 200)].into(),
+                by_uint32: [(0, String::new()), (7, String::from("a"))].into(),
+                by_uint64: [(1, oracle::Health::Fail as i32)].into(),
+                by_sint32: [
+                    (-100, oracle::Inner::default()),
+                    (
+                        100,
+                        oracle::Inner {
+                            speed: 1,
+                            label: String::from("x"),
+                        },
+                    ),
+                ]
+                .into(),
+                by_sint64: [(-5, 3), (0, 0)].into(),
+                by_boolean: [(false, 1), (true, 2)].into(),
+                by_label: [(String::new(), 0), (String::from("a"), 1)].into(),
+            },
+        ),
+        // The optional composites: absent, present at the default, present
+        // at a value.
+        row(
+            "OptionalComposites",
+            "absent",
+            "OptionalComposites { pair: None, outcome: None }",
+            oracle::OptionalComposites::default(),
+        ),
+        row(
+            "OptionalComposites",
+            "present_zero",
+            r#"OptionalComposites {
+                pair: Some(OptionalCompositesPair { lo: count(0), hi: count(0) }),
+                outcome: Some(Outcome::Number(count(0))),
+            }"#,
+            oracle::OptionalComposites {
+                pair: Some(oracle::OptionalCompositesPair::default()),
+                outcome: Some(outcome(oracle::outcome::Value::Number(0))),
+            },
+        ),
+        row(
+            "OptionalComposites",
+            "present",
+            r#"OptionalComposites {
+                pair: Some(OptionalCompositesPair { lo: count(1), hi: count(2) }),
+                outcome: Some(Outcome::Inner(inner(4, "d"))),
+            }"#,
+            oracle::OptionalComposites {
+                pair: Some(oracle::OptionalCompositesPair {
+                    field_1: 1,
+                    field_2: 2,
+                }),
+                outcome: Some(outcome(oracle::outcome::Value::Inner(oracle::Inner {
+                    speed: 4,
+                    label: String::from("d"),
+                }))),
+            },
+        ),
+        // The induced interaction roots.
+        row(
+            "ProbeSetBothParams",
+            "value",
+            "ProbeSetBothParams { level: Level::new_unchecked(3), count: count(0) }",
+            oracle::ProbeSetBothParams {
+                field_1: 3,
+                field_2: 0,
+            },
+        ),
+        row(
+            "ProbeStatusParams",
+            "empty",
+            "ProbeStatusParams {}",
+            oracle::ProbeStatusParams::default(),
+        ),
+        row(
+            "ProbeSpanParams",
+            "empty",
+            "ProbeSpanParams {}",
+            oracle::ProbeSpanParams::default(),
+        ),
+        row(
+            "ProbeSpanReply",
+            "value",
+            "ProbeSpanReply { lo: count(1), hi: count(2) }",
+            oracle::ProbeSpanReply {
+                field_1: 1,
+                field_2: 2,
+            },
+        ),
+        row(
+            "ProbeSpanReply",
+            "zero",
+            "ProbeSpanReply { lo: count(0), hi: count(0) }",
+            oracle::ProbeSpanReply::default(),
+        ),
     ]
+}
+
+/// A `prost` union value holding `arm`.
+fn outcome(
+    arm: prost_oracle::pb::conformance::outcome::Value,
+) -> prost_oracle::pb::conformance::Outcome {
+    prost_oracle::pb::conformance::Outcome { value: Some(arm) }
 }
 
 /// The values the program encodes by name: every row, and the `-0.0` value
@@ -1303,18 +1789,19 @@ fn minus_zero_differs_from_prost_as_designed() {
     );
 }
 
-/// Every message the codec emits, in both packages, is dispatched by the
-/// program, and every one whose generated type has a `Default` value
-/// encodes it to bytes that verify and re-encode to the same bytes. The
-/// three without one (`Code` and `Key`, whose length excludes the empty
-/// string, and `Lengths`, which holds `Code`) have no derivable init value
-/// (TYPL-115).
+/// Every message the codec emits with a `Payload<Proto3>`, in both packages,
+/// is dispatched by the program, and every one whose generated type has a
+/// `Default` value encodes it to bytes that verify and re-encode to the same
+/// bytes. The three without one (`Code` and `Key`, whose length excludes the
+/// empty string, and `Lengths`, which holds `Code`) have no derivable init
+/// value (TYPL-115). A tuple reached only from a field is not dispatched: it
+/// has the four functions and no `Payload`.
 #[test]
 fn every_emitted_message_default_round_trips() {
     let program = program();
     let messages = program.messages();
     assert!(
-        messages.len() >= 20,
+        messages.len() >= 30,
         "the fixture emits many messages: {messages:?}"
     );
     for required in [
@@ -1324,6 +1811,16 @@ fn every_emitted_message_default_round_trips() {
         "GradeBox",
         "TorqueBox",
         "WideFlagsBox",
+        "Outcome",
+        "Tuples",
+        "Packed",
+        "Records",
+        "Maps",
+        "OptionalComposites",
+        "ProbeSetBothParams",
+        "ProbeStatusParams",
+        "ProbeSpanParams",
+        "ProbeSpanReply",
     ] {
         assert!(
             messages.contains(&required),

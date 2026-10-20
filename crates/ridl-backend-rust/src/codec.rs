@@ -2943,7 +2943,14 @@ struct UnionArm {
 /// array is one equality instead of two comparisons, and it is what keeps
 /// `decode`'s `[T; N]` from being built out of a vector of another length.
 fn count_check(owner: &str, min: u64, max: u64) -> TokenStream {
-    let condition = count_condition(&Length::field(quote! { __v.len }), min, max);
+    count_check_of(owner, min, max, quote! { __v.len })
+}
+
+/// [`count_check`] over `len`, the expression a verifier reads a
+/// collection's element count from: the vector header's field here, a
+/// counter the proto3 verifier keeps per repeated field.
+pub(crate) fn count_check_of(owner: &str, min: u64, max: u64, len: TokenStream) -> TokenStream {
+    let condition = count_condition(&Length::field(len), min, max);
     quote! {
         if #condition {
             return ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(
@@ -2976,8 +2983,14 @@ fn count_check(owner: &str, min: u64, max: u64) -> TokenStream {
 /// `Vec<(K, V)>` whatever its bound, so an exact count is as
 /// representable as any other and is checked here. The verifier keeps its own
 /// check for both shapes, because the bytes it reads carry a length of their
-/// own.
-fn encode_count_check(owner: &str, min: u64, max: u64, collection: &TokenStream) -> TokenStream {
+/// own. Shared with the proto3 codec, whose `encode` runs the same check
+/// before it writes a collection.
+pub(crate) fn encode_count_check(
+    owner: &str,
+    min: u64,
+    max: u64,
+    collection: &TokenStream,
+) -> TokenStream {
     encode_length_check(owner, min, max, &Length::collection(collection))
 }
 

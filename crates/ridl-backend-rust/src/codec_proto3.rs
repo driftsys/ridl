@@ -2,11 +2,13 @@
 //! (`crate::codec`) when a package's `encodings` names `proto3`.
 //!
 //! For every declaration that projects a type — a struct over its own
-//! message, and a named scalar, an enum and an enum set over the box message
+//! message, a union over its message with `oneof value`, and a named scalar,
+//! an enum and an enum set over the box message
 //! `<Name>Box { <type> value = 1; }` the proto backend emits for them
-//! (ADR-0017 decision 6) — this module emits, at the generated package's
-//! module scope and `pub(crate)` for the reasons the FlatBuffers codec gives
-//! for its own functions:
+//! (ADR-0017 decision 6) — and for every induced tuple the package's
+//! declarations and interactions reach, this module emits, at the generated
+//! package's module scope and `pub(crate)` for the reasons the FlatBuffers
+//! codec gives for its own functions:
 //!
 //! - `__ridl_pb_len_<Name>(&T) -> usize`, the exact encoded length;
 //! - `__ridl_pb_encode_<Name>(&T, &mut Writer)`, which writes forwards;
@@ -17,38 +19,64 @@
 //! - the `Payload<::ridl_rt::encoding::Proto3>` implementation, whose view
 //!   is `::ridl_rt::proto3::Verified`, the verified bytes with no accessor.
 //!
-//! **A declaration whose shape reaches an array, a map, a tuple or a union
-//! gets nothing yet**: collections and unions are not emitted yet, and such
-//! a declaration is skipped with no error, which also skips every struct
-//! that reaches it through a field. Nothing else is skipped: a declaration
-//! this module does emit and whose proto3 size state is not bounded is
-//! refused with a [`GenerateError`] naming it and the cause.
+//! An induced tuple gets the four functions, and the `Payload`
+//! implementation only when it crosses the wire on its own: the argument
+//! message of a call with zero or several parameters, and the reply message
+//! of a query whose reply is a tuple (driftsys/ridl#713). Its `MAX_SIZE` is
+//! the bound the model carries for that interaction's payload. A tuple
+//! reached only from a field is encoded inside its owner.
+//!
+//! A declaration whose proto3 size state is not bounded is refused with a
+//! [`GenerateError`] naming it and the cause, and so is an interaction whose
+//! induced root has no bound. An optional array element and an optional map
+//! value are refused as the FlatBuffers codec refuses them: the schema emits
+//! neither with presence.
 //!
 //! # The wire mapping
 //!
-//! A field's number is its ordinal, and the scalar a width projects to is
+//! A field's number is its ordinal, a union arm's number is its ordinal, a
+//! tuple's fields are numbered from 1 in position order, a map entry's key
+//! and value are 1 and 2, and the scalar a width projects to is
 //! `ridl_ir::projection::proto3`'s table, the one the proto backend and the
 //! proto3 sizer read, so the codec cannot disagree with the emitted `.proto`
-//! on either. The writer writes the canonical form: fields in number order,
-//! an implicit-presence field omitted at its proto3 default — 0, `false`,
-//! the empty string or bytes, enum value 0, the empty set — a `?` field
-//! written whenever present, a non-optional nested struct always written, as
-//! a record that may be empty, and a float compared by its bits, so `-0.0`
-//! is written. The reader accepts fields in any order, skips an unknown
-//! field number, and refuses a singular field written twice
+//! on any of them. The writer writes the canonical form: fields in number
+//! order, an implicit-presence field omitted at its proto3 default — 0,
+//! `false`, the empty string or bytes, enum value 0, the empty set, the
+//! empty array or map — a `?` field written whenever present, a
+//! non-optional nested struct or tuple always written, as a record that may
+//! be empty, a union written as exactly its one arm, even at the arm's
+//! default, an array of numerics, booleans, enums or enum sets as one packed
+//! record, any other array as one record per element, a map as one entry
+//! message per pair in the order of the domain `Vec`, where a key or a value
+//! at its default is omitted and a message value is omitted when its own
+//! encoding is empty, and a float compared by its bits, so `-0.0` is
+//! written. The reader accepts fields in any order, a repeated numeric field
+//! packed, unpacked or both mixed, skips an unknown field number, and
+//! refuses a singular field written twice and a union carrying two arms
 //! (`Malformed::Duplicate`), a known field under a wire type its type does
-//! not take (`Malformed::WireType`), and a varint wider than its field's
-//! scalar (`Malformed::Varint`).
+//! not take (`Malformed::WireType`), a varint wider than its field's scalar
+//! (`Malformed::Varint`), and a packed run of fixed-width values whose
+//! length is not a multiple of the width (`Malformed::OutOfBounds`).
 //!
 //! An absent implicit-presence field reads as its default when that default
 //! is a legal value of its type, decided at generation time by the predicate
 //! the FlatBuffers codec reads (`crate::zero_is_legal`, a string's or bytes'
-//! length lower bound, an enum's zero member), and is
-//! `Malformed::MissingRequired` otherwise. An absent non-optional nested
-//! struct is the message decoded from zero bytes, so `verify` verifies the
-//! empty message in its place, which refuses it exactly when one of its own
-//! fields is refused when absent. A field whose default is not legal is never
-//! at its default, so the writer writes it without testing it.
+//! length lower bound, a collection's count lower bound, an enum's zero
+//! member), and is `Malformed::MissingRequired` otherwise. An absent
+//! non-optional nested struct or tuple is the message decoded from zero
+//! bytes, so `verify` verifies the empty message in its place, which refuses
+//! it exactly when one of its own fields is refused when absent; an absent
+//! non-optional union is refused the same way, because its empty message
+//! holds no arm. A field whose default is not legal is never at its default,
+//! so the writer writes it without testing it. The rule holds inside a map
+//! entry too: an absent key or value reads as its default when that is
+//! legal.
+//!
+//! `verify` checks a collection's count against its declared bound
+//! (`Rule::Length`) and a map's keys for uniqueness (`Rule::Unique`), the
+//! latter by re-reading the entries before the one in hand, so no index is
+//! allocated; `encode` checks the same count and the same uniqueness before
+//! it writes the collection, as the FlatBuffers `encode` does.
 //!
 //! `encode` sizes the value first, with the length function, and returns
 //! `EncodeError::Capacity` carrying that exact `needed` before it writes a
@@ -56,7 +84,7 @@
 //! applies no size ceiling: a buffer from a newer writer may carry fields
 //! this version skips.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::{format_ident, quote};
@@ -64,9 +92,10 @@ use ridl_ir::codegen::v1;
 use ridl_ir::projection::proto3 as pb;
 
 use crate::codec::{
-    NamedScalar, Operand, inline_length_check, missing_required, named_scalar_check,
-    scalar_constraint_check,
+    NamedScalar, Operand, count_check_of, encode_count_check, inline_length_check,
+    missing_required, named_scalar_check, scalar_constraint_check,
 };
+use crate::descriptors::{declared_name, interactions};
 use crate::{
     Ctx, GenerateError, ScalarBacking, allow_dead_code_if_internal, class_backing, declared, ident,
     pascal_of, snake_of, type_path, zero_is_legal,
@@ -102,7 +131,8 @@ pub enum Label {
 }
 
 /// One emitted message: its `.proto` name and, per field, the field number,
-/// the scalar's spelling or the referenced message's name, and the label.
+/// the scalar's spelling or the referenced message's name (a map as
+/// `map<K, V>`), and the label.
 #[doc(hidden)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MessageLayout {
@@ -127,24 +157,49 @@ enum Wire {
     Text(Option<NamedScalar>, Option<v1::Scalar>),
     /// Length-delimited bytes; `Some` when a named scalar wraps it.
     Bytes(Option<NamedScalar>, Option<v1::Scalar>),
-    /// A length-delimited nested message of the named generated struct.
-    Message(String),
+    /// A length-delimited nested message: a struct, a union or an induced
+    /// tuple. `owner` names the generated Rust item whose functions encode
+    /// it (the dotted reference for one of another package), `proto` the
+    /// `.proto` message, which differs from the Rust name only for a tuple.
+    Message { owner: String, proto: String },
+    /// A `repeated` field: packed when the element is a scalar, one record
+    /// per element otherwise.
+    Array {
+        element: Box<Wire>,
+        min: u64,
+        max: u64,
+    },
+    /// A `map<K, V>` field: one entry message per pair.
+    Map {
+        key: Box<Wire>,
+        value: Box<Wire>,
+        min: u64,
+        max: u64,
+    },
 }
 
 impl Wire {
-    /// The wire type the field's tag carries.
+    /// The wire type the field's tag carries. A packed array, a record
+    /// array and a map entry are all length-delimited; an unpacked element
+    /// of a scalar array carries the element's own wire type, which the
+    /// reader accepts beside the packed form.
     fn wire_type(&self) -> pb::WireType {
         match self {
             Wire::Scalar(scalar) => scalar.scalar.wire_type(),
-            Wire::Text(..) | Wire::Bytes(..) | Wire::Message(_) => pb::WireType::Len,
+            Wire::Text(..)
+            | Wire::Bytes(..)
+            | Wire::Message { .. }
+            | Wire::Array { .. }
+            | Wire::Map { .. } => pb::WireType::Len,
         }
     }
 
     /// Whether the proto3 default of the field's type is a legal value of
     /// it, decided at generation time: an absent non-optional field reads as
     /// that default when it is, and is refused when it is not. A nested
-    /// struct decides for itself, field by field, when its empty message is
-    /// verified.
+    /// message decides for itself, field by field, when its empty message is
+    /// verified; a collection's default is the empty one, legal when the
+    /// count lower bound is 0.
     fn default_is_legal(&self) -> bool {
         match self {
             Wire::Scalar(scalar) => scalar.zero_legal,
@@ -156,13 +211,20 @@ impl Wire {
                     .unwrap_or(0)
                     == 0
             }
-            Wire::Message(_) => true,
+            Wire::Message { .. } => true,
+            Wire::Array { min, .. } | Wire::Map { min, .. } => *min == 0,
         }
+    }
+
+    /// Whether the field is `repeated` in the schema: an array or a map.
+    fn repeated(&self) -> bool {
+        matches!(self, Wire::Array { .. } | Wire::Map { .. })
     }
 
     /// The scalar's spelling or the message's name, for [`MessageLayout`]:
     /// the `.proto` names an enum by its name (the bare name when local,
-    /// `pkg.Name` when foreign) and inlines an enum set as its scalar.
+    /// `pkg.Name` when foreign), inlines an enum set as its scalar, names a
+    /// repeated field by its element, and spells a map as `map<K, V>`.
     fn layout_name(&self) -> String {
         match self {
             Wire::Scalar(Scalar {
@@ -172,7 +234,11 @@ impl Wire {
             Wire::Scalar(scalar) => scalar.scalar.as_str().to_string(),
             Wire::Text(..) => pb::Scalar::String.as_str().to_string(),
             Wire::Bytes(..) => pb::Scalar::Bytes.as_str().to_string(),
-            Wire::Message(owner) => owner.clone(),
+            Wire::Message { proto, .. } => proto.clone(),
+            Wire::Array { element, .. } => element.layout_name(),
+            Wire::Map { key, value, .. } => {
+                format!("map<{}, {}>", key.layout_name(), value.layout_name())
+            }
         }
     }
 }
@@ -263,6 +329,15 @@ impl Scalar {
         }
     }
 
+    /// The width of a fixed-width value, or `None` for a varint.
+    fn fixed_width(&self) -> Option<usize> {
+        match self.scalar.wire_type() {
+            pb::WireType::I32 => Some(4),
+            pb::WireType::I64 => Some(8),
+            pb::WireType::Varint | pb::WireType::Len => None,
+        }
+    }
+
     /// The writer call for the value `__r`.
     fn write(&self) -> TokenStream {
         match self.scalar.wire_type() {
@@ -271,6 +346,19 @@ impl Scalar {
             pb::WireType::I64 => quote! { writer.fixed64(__r); },
             pb::WireType::Len => quote! {},
         }
+    }
+
+    /// The `Value` variant the field's wire type is read as.
+    fn value_variant(&self) -> Ident {
+        format_ident!(
+            "{}",
+            match self.scalar.wire_type() {
+                pb::WireType::Varint => "Varint",
+                pb::WireType::I32 => "I32",
+                pb::WireType::I64 => "I64",
+                pb::WireType::Len => "Len",
+            }
+        )
     }
 
     /// The language-layer value read from the raw wire value `__raw`, and
@@ -352,6 +440,16 @@ impl Scalar {
         }
     }
 
+    /// The language-layer zero: what an absent value or a discharged read
+    /// is, before the domain constructor.
+    fn language_zero(&self) -> TokenStream {
+        match self.scalar {
+            pb::Scalar::Bool => quote! { false },
+            pb::Scalar::Float | pb::Scalar::Double => quote! { 0.0f64 },
+            _ => quote! { 0i64 },
+        }
+    }
+
     /// The domain value built from a language-layer value `language`, for
     /// `decode`.
     fn domain(&self, language: TokenStream) -> TokenStream {
@@ -385,11 +483,7 @@ impl Scalar {
     /// type excludes 0, so for an enum this is its zero member; the first
     /// variant stands in only where `verify` makes the read unreachable.
     fn decode_default(&self) -> TokenStream {
-        let zero = match self.scalar {
-            pb::Scalar::Bool => quote! { false },
-            pb::Scalar::Float | pb::Scalar::Double => quote! { 0.0f64 },
-            _ => quote! { 0i64 },
-        };
+        let zero = self.language_zero();
         match &self.repr {
             Repr::Bool | Repr::Int | Repr::Float => zero,
             Repr::Named(named) => {
@@ -426,6 +520,21 @@ impl Scalar {
             }),
         }
     }
+
+    /// The statements that check one raw wire value `__raw`: the widening,
+    /// which may refuse an over-wide varint, then the constraint. Empty when
+    /// neither can refuse.
+    fn raw_checks(&self, owner: &str) -> TokenStream {
+        let (widened, fallible) = self.widen();
+        match (self.check(owner), fallible) {
+            (Some(check), _) => quote! {
+                let __v = #widened;
+                #check
+            },
+            (None, true) => quote! { let _ = #widened; },
+            (None, false) => quote! {},
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -435,17 +544,36 @@ impl Scalar {
 /// How one field's value is reached from the value being encoded.
 #[derive(Debug, Clone)]
 enum Access {
-    /// A named field of a struct.
+    /// A named field of a struct or an induced tuple struct.
     Field(String),
     /// The whole value: a box root's `value`.
     Whole,
+    /// A position of a map entry's pair, `__e.0` or `__e.1`.
+    Position(usize),
+}
+
+/// Where a value is written from, which decides whether it is tested
+/// against its default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Site {
+    /// A field of a struct, a tuple or a box: an implicit-presence field is
+    /// omitted at its default when that default is legal, a nested message
+    /// is always written.
+    Field,
+    /// A map entry's key or value: omitted at its default, and a message
+    /// omitted when its own encoding is empty, which is what every proto3
+    /// writer does inside an entry.
+    Entry,
+    /// An element of a record array, or a union's arm: always written.
+    Element,
 }
 
 #[derive(Debug, Clone)]
 struct Field {
-    /// The field number: the ordinal, or 1 for a box's `value`.
+    /// The field number: the ordinal, the position from 1 in a tuple, 1 for
+    /// a box's `value`.
     number: u32,
-    /// The typl name, used for the decoded field.
+    /// The Rust name, used for the decoded field.
     name: String,
     wire: Wire,
     optional: bool,
@@ -460,49 +588,78 @@ impl Field {
                 Operand::owned(quote! { #base.#field })
             }
             Access::Whole => Operand::borrowed(base.clone()),
+            Access::Position(position) => {
+                let index = Literal::usize_unsuffixed(*position);
+                Operand::owned(quote! { #base.#index })
+            }
         }
     }
 
     fn label(&self) -> Label {
-        if self.optional {
+        if self.wire.repeated() {
+            Label::Repeated
+        } else if self.optional {
             Label::Optional
         } else {
             Label::Implicit
         }
     }
+
+    /// A field for one position of a value reached through a collection or
+    /// a union: the same number, the element's or the arm's wire shape, no
+    /// `?`, reached through the binding the caller names.
+    fn element(number: u32, wire: Wire) -> Field {
+        Field {
+            number,
+            name: String::new(),
+            wire,
+            optional: false,
+            access: Access::Whole,
+        }
+    }
 }
 
-/// What `decode` builds: a struct literal over the fields, or a box's one
-/// value.
+/// What `decode` builds: a struct literal over the fields, a box's one
+/// value, or a union's one arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Build {
     Struct,
     Box,
+    Union,
+}
+
+/// What a message was classified from.
+#[derive(Debug, Clone)]
+enum Source {
+    /// The declaration at this index of the model.
+    Declaration(u32),
+    /// An induced tuple of the model, with its bound when an interaction
+    /// names it as a payload of its own — or the refusal to raise when that
+    /// interaction's payload has no bound, raised when the codec is emitted
+    /// and not when it is laid out, so the layout of a package whose
+    /// interaction cannot be sized is still a layout.
+    Tuple { root: Option<Result<u32, String>> },
 }
 
 #[derive(Debug, Clone)]
 struct Message {
-    /// The declared name of the owning declaration.
+    /// The generated Rust item the functions are named after: the declared
+    /// name, or the tuple's Rust name.
     owner: String,
-    /// The index of the declaration in the model.
-    declaration: u32,
-    /// The fields, in field-number order.
+    /// The `.proto` message name: the declared name, `<Name>Box`, or the
+    /// tuple's wire name.
+    proto: String,
+    source: Source,
+    visibility: i32,
+    /// The fields, in field-number order; a union's arms.
     fields: Vec<Field>,
     build: Build,
 }
 
 impl Message {
-    /// The `.proto` message name: the declared name, or `<Name>Box`.
-    fn proto_name(&self) -> String {
-        match self.build {
-            Build::Struct => self.owner.clone(),
-            Build::Box => format!("{}Box", self.owner),
-        }
-    }
-
     fn layout(&self) -> MessageLayout {
         MessageLayout {
-            name: self.proto_name(),
+            name: self.proto.clone(),
             fields: self
                 .fields
                 .iter()
@@ -597,6 +754,37 @@ fn structure_error(variant: &str) -> TokenStream {
     }
 }
 
+/// The `verify` statement for a map key that an earlier entry already
+/// holds, the typl uniqueness rule the FlatBuffers codec refuses by the same
+/// violation.
+fn unique_error(owner: &str) -> TokenStream {
+    quote! {
+        return ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(
+            ::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some(#owner),
+                rule: ::ridl_rt::payload::Rule::Unique,
+            },
+        ));
+    }
+}
+
+/// The `encode` statement for the same fault, before the map is written.
+fn encode_unique_error(owner: &str) -> TokenStream {
+    quote! {
+        return ::core::result::Result::Err(::ridl_rt::payload::EncodeError::Contract(
+            ::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some(#owner),
+                rule: ::ridl_rt::payload::Rule::Unique,
+            },
+        ));
+    }
+}
+
+/// The counter `verify` keeps for the repeated field at `index`.
+fn count_ident(index: usize) -> Ident {
+    format_ident!("__c{}", index)
+}
+
 // ---------------------------------------------------------------------------
 // Emission
 // ---------------------------------------------------------------------------
@@ -628,73 +816,196 @@ impl<'a> Codec<'a> {
         Some((foreign.declaration.as_ref()?, reference.reference.clone()))
     }
 
-    /// The messages this codec emits, in declaration order.
-    ///
-    /// A declaration whose shape reaches an array, a map, a tuple or a union
-    /// is left out: collections and unions are not emitted yet. A struct
-    /// that reaches such a declaration through a field is left out with it,
-    /// because the functions it would call do not exist, which is settled by
-    /// a fixpoint over the local references.
+    /// The messages this codec emits: every declaration that projects a
+    /// type, in declaration order, then every induced tuple those
+    /// declarations and the interaction roots reach, in discovery order.
     fn messages(&self) -> Result<Vec<Message>, GenerateError> {
         let mut messages: Vec<Message> = Vec::new();
-        let mut later: HashSet<String> = HashSet::new();
         for (index, decl) in self.ctx.model.declarations.iter().enumerate() {
             let index = u32::try_from(index).map_err(|_| GenerateError {
                 message: "the lowered model carries more declarations than a u32 indexes"
                     .to_string(),
             })?;
-            match self.message_of(decl, index)? {
-                Some(message) => messages.push(message),
-                None => {
-                    later.insert(declared(decl.name.as_ref()).to_string());
-                }
+            if let Some(message) = self.message_of(decl, index)? {
+                messages.push(message);
             }
         }
-        loop {
-            let before = messages.len();
-            messages.retain(|message| {
-                let reaches_later = message.fields.iter().any(|field| match &field.wire {
-                    Wire::Message(owner) => later.contains(owner),
-                    _ => false,
-                });
-                if reaches_later {
-                    later.insert(message.owner.clone());
-                }
-                !reaches_later
-            });
-            if messages.len() == before {
-                break;
-            }
+        let roots = self.interaction_roots();
+        for index in self.reachable_tuples(&roots) {
+            let induced = self.ctx.tuple(index).ok_or_else(|| GenerateError {
+                message: "the lowered model names a tuple it does not carry".to_string(),
+            })?;
+            messages.push(self.tuple_message(induced, roots.get(&index).cloned())?);
         }
         Ok(messages)
+    }
+
+    /// The induced tuples the interactions of this package send on their
+    /// own — a call's argument message, a query's tuple reply — each with
+    /// its bound, the proto3 state the model carries for that interaction's
+    /// payload, or with the refusal naming the interaction when that state
+    /// is not bounded.
+    fn interaction_roots(&self) -> HashMap<u32, Result<u32, String>> {
+        let mut roots: HashMap<u32, Result<u32, String>> = HashMap::new();
+        for interface in &self.ctx.model.interfaces {
+            let interface_name = declared_name(interface)
+                .map(str::to_string)
+                .or_else(|| match interface.identity.as_ref() {
+                    Some(v1::interface::Identity::Service(service)) => Some(service.dotted.clone()),
+                    _ => None,
+                })
+                .unwrap_or_default();
+            for (_, interaction) in interactions(interface) {
+                let name = declared(interaction.name.as_ref());
+                let payloads: Vec<(Option<&v1::TupleRef>, Option<&v1::PayloadSizes>, &str)> =
+                    match interaction.shape.as_ref() {
+                        Some(v1::interaction::Shape::Command(command)) => vec![(
+                            command.request_tuple.as_ref(),
+                            command.request_sizes.as_ref(),
+                            "argument",
+                        )],
+                        Some(v1::interaction::Shape::Query(query)) => vec![
+                            (
+                                query.request_tuple.as_ref(),
+                                query.request_sizes.as_ref(),
+                                "argument",
+                            ),
+                            (
+                                query.reply_tuple.as_ref(),
+                                query.reply_sizes.as_ref(),
+                                "reply",
+                            ),
+                        ],
+                        _ => Vec::new(),
+                    };
+                for (reference, sizes, what) in payloads {
+                    let Some(reference) = reference else {
+                        continue;
+                    };
+                    let tuple = self.ctx.tuple_name(reference.index);
+                    let state = sizes.and_then(|sizes| sizes.proto3.as_ref());
+                    let bound = bound_state(state).map_err(|cause| {
+                        format!(
+                            "`{}.{interface_name}.{name}`'s {what} message `{tuple}` has no \
+                             proto3 bound: {cause}",
+                            self.ctx.package_name()
+                        )
+                    });
+                    roots.insert(reference.index, bound);
+                }
+            }
+        }
+        roots
+    }
+
+    /// The induced tuples reachable from the declarations and from the
+    /// interaction roots, in discovery order: a root tuple itself, and every
+    /// tuple a struct field, a tuple field, an array element or a map value
+    /// holds. Only a reached tuple gets functions, so no dead code reaches a
+    /// consumer's build.
+    fn reachable_tuples(&self, roots: &HashMap<u32, Result<u32, String>>) -> Vec<u32> {
+        let mut found: Vec<u32> = Vec::new();
+        let mut seen: HashSet<u32> = HashSet::new();
+        let mut queue: Vec<&'a v1::Type> = Vec::new();
+
+        for decl in &self.ctx.model.declarations {
+            if let Some(v1::declaration::Kind::Struct(def)) = decl.kind.as_ref() {
+                for slot in &def.slots {
+                    if let Some(v1::slot::Occupant::Field(field)) = slot.occupant.as_ref()
+                        && let Some(ty) = field.r#type.as_ref()
+                    {
+                        queue.push(ty);
+                    }
+                }
+            }
+        }
+        let mut root_indices: Vec<u32> = roots.keys().copied().collect();
+        root_indices.sort_unstable();
+        for index in root_indices {
+            let Some(tuple) = self.ctx.tuple(index) else {
+                continue;
+            };
+            if !self.ctx.tuple_name(index).is_empty() && seen.insert(index) {
+                found.push(index);
+                for field in &tuple.fields {
+                    if let Some(ty) = field.r#type.as_ref() {
+                        queue.push(ty);
+                    }
+                }
+            }
+        }
+
+        let mut at = 0;
+        while at < queue.len() {
+            let ty = queue[at];
+            at += 1;
+            match ty.kind.as_ref() {
+                Some(v1::r#type::Kind::Tuple(reference)) => {
+                    let Some(tuple) = self.ctx.tuple(reference.index) else {
+                        continue;
+                    };
+                    if !self.ctx.tuple_name(reference.index).is_empty()
+                        && seen.insert(reference.index)
+                    {
+                        found.push(reference.index);
+                        for field in &tuple.fields {
+                            if let Some(inner) = field.r#type.as_ref() {
+                                queue.push(inner);
+                            }
+                        }
+                    }
+                }
+                Some(v1::r#type::Kind::Array(array)) => {
+                    if let Some(element) = array.element.as_deref() {
+                        queue.push(element);
+                    }
+                }
+                Some(v1::r#type::Kind::Map(map)) => {
+                    if let Some(key) = map.key.as_deref() {
+                        queue.push(key);
+                    }
+                    if let Some(value) = map.value.as_deref() {
+                        queue.push(value);
+                    }
+                }
+                _ => {}
+            }
+        }
+        found
     }
 
     fn items(&self) -> Result<Vec<TokenStream>, GenerateError> {
         let mut items: Vec<TokenStream> = Vec::new();
         for message in self.messages()? {
-            let decl = self
-                .ctx
-                .declaration(message.declaration)
-                .ok_or_else(|| GenerateError {
-                    message: "the proto3 codec names a declaration the lowered model does not \
-                              carry"
-                        .to_string(),
-                })?;
-            let bound = self.bound(decl)?;
-            let visibility = decl.visibility;
+            let bound = match &message.source {
+                Source::Declaration(index) => {
+                    let decl = self.ctx.declaration(*index).ok_or_else(|| GenerateError {
+                        message: "the proto3 codec names a declaration the lowered model does \
+                                  not carry"
+                            .to_string(),
+                    })?;
+                    Some(self.bound(decl)?)
+                }
+                Source::Tuple { root: None } => None,
+                Source::Tuple { root: Some(root) } => {
+                    Some(root.clone().map_err(|message| GenerateError { message })?)
+                }
+            };
             let owner = message.owner.as_str();
             let ty = ident(owner);
-            let functions = [
+            let mut functions = vec![
                 self.len_fn(&message, &ty)?,
                 self.encode_fn(&message, &ty)?,
                 self.verify_fn(&message)?,
                 self.decode_fn(&message, &ty)?,
-                self.payload_impl(owner, &ty, bound),
             ];
+            if let Some(bound) = bound {
+                functions.push(self.payload_impl(owner, &ty, bound));
+            }
             items.extend(
                 functions
                     .into_iter()
-                    .map(|item| allow_dead_code_if_internal(visibility, item)),
+                    .map(|item| allow_dead_code_if_internal(message.visibility, item)),
             );
         }
         Ok(items)
@@ -705,37 +1016,7 @@ impl<'a> Codec<'a> {
     fn bound(&self, decl: &v1::Declaration) -> Result<u32, GenerateError> {
         let pkg = self.ctx.package_name();
         let name = declared(decl.name.as_ref());
-        let cause = match decl.proto3.as_ref().and_then(|state| state.state.as_ref()) {
-            Some(v1::size_state::State::Bounded(bound)) => return Ok(*bound),
-            Some(v1::size_state::State::Absent(absent)) => {
-                match v1::AbsentCause::try_from(absent.cause)
-                    .unwrap_or(v1::AbsentCause::Unspecified)
-                {
-                    v1::AbsentCause::RefusedMember => {
-                        "a member of it is one the proto backend refuses: an enum value outside \
-                         int32, a field number proto3 reserves or exceeds, an optional array or \
-                         map, an array of arrays or of maps, a map whose value is a collection, \
-                         or a map key outside the integral and string scalars"
-                    }
-                    v1::AbsentCause::NoBound => {
-                        "a member of it is a string or bytes with no length bound, or a scalar \
-                         with no width"
-                    }
-                    v1::AbsentCause::Overflow => {
-                        "its bound exceeds u32::MAX, or its nesting passes the sizer's depth limit"
-                    }
-                    v1::AbsentCause::Unresolved => {
-                        "it names a declaration the sizer did not resolve"
-                    }
-                    v1::AbsentCause::NoMessage
-                    | v1::AbsentCause::EncodingUndefined
-                    | v1::AbsentCause::Unspecified => "no proto3 message defines it",
-                }
-            }
-            Some(v1::size_state::State::Unbounded(_)) => "no finite bound exists for it",
-            None => "the lowered model carries no proto3 size state for it",
-        };
-        Err(GenerateError {
+        bound_state(decl.proto3.as_ref()).map_err(|cause| GenerateError {
             message: format!("`{pkg}.{name}` has no proto3 bound: {cause}"),
         })
     }
@@ -744,9 +1025,9 @@ impl<'a> Codec<'a> {
     // Classification
     // -----------------------------------------------------------------
 
-    /// The message of one declaration: a struct over its fields, a named
-    /// scalar, an enum or an enum set over its box. `None` for a declaration
-    /// this codec does not emit yet, and for one that projects no type.
+    /// The message of one declaration: a struct over its fields, a union
+    /// over its arms, a named scalar, an enum or an enum set over its box.
+    /// `None` for a constant, which projects no type.
     fn message_of(
         &self,
         decl: &v1::Declaration,
@@ -768,13 +1049,10 @@ impl<'a> Codec<'a> {
                             message: format!("`{owner}.{name}` carries no type"),
                         });
                     };
-                    let Some(wire) = self.wire(ty)? else {
-                        return Ok(None);
-                    };
                     fields.push(Field {
                         number: slot.ordinal,
                         name: snake_of(field.name.as_ref()).to_string(),
-                        wire,
+                        wire: self.wire(ty)?,
                         optional: ty.optional,
                         access: Access::Field(snake_of(field.name.as_ref()).to_string()),
                     });
@@ -783,9 +1061,50 @@ impl<'a> Codec<'a> {
                 fields.sort_by_key(|field| field.number);
                 Ok(Some(Message {
                     owner: owner.to_string(),
-                    declaration: index,
+                    proto: owner.to_string(),
+                    source: Source::Declaration(index),
+                    visibility: decl.visibility,
                     fields,
                     build: Build::Struct,
+                }))
+            }
+            Some(v1::declaration::Kind::Union(def)) => {
+                if def.arms.is_empty() {
+                    return Err(GenerateError {
+                        message: format!("`{owner}` declares no arm, so it encodes no value"),
+                    });
+                }
+                let mut fields: Vec<Field> = Vec::new();
+                for arm in &def.arms {
+                    let name = declared(arm.name.as_ref());
+                    let reference = arm.r#type.as_ref().ok_or_else(|| GenerateError {
+                        message: format!("`{owner}.{name}` names no type"),
+                    })?;
+                    let Some((decl, arm_owner)) = self.resolve(reference) else {
+                        let text = &reference.reference;
+                        return Err(GenerateError {
+                            message: format!(
+                                "`{text}` resolves in no package of this build, so no proto3 \
+                                 codec can be emitted for it"
+                            ),
+                        });
+                    };
+                    fields.push(Field {
+                        number: arm.ordinal,
+                        name: crate::camel_of(arm.name.as_ref()).to_string(),
+                        wire: self.declaration_wire(decl, arm_owner, &reference.reference)?,
+                        optional: false,
+                        access: Access::Whole,
+                    });
+                }
+                fields.sort_by_key(|field| field.number);
+                Ok(Some(Message {
+                    owner: owner.to_string(),
+                    proto: owner.to_string(),
+                    source: Source::Declaration(index),
+                    visibility: decl.visibility,
+                    fields,
+                    build: Build::Union,
                 }))
             }
             Some(
@@ -793,12 +1112,12 @@ impl<'a> Codec<'a> {
                 | v1::declaration::Kind::Enum(_)
                 | v1::declaration::Kind::EnumSet(_),
             ) => {
-                let Some(wire) = self.declaration_wire(decl, owner.to_string(), owner)? else {
-                    return Ok(None);
-                };
+                let wire = self.declaration_wire(decl, owner.to_string(), owner)?;
                 Ok(Some(Message {
                     owner: owner.to_string(),
-                    declaration: index,
+                    proto: format!("{owner}Box"),
+                    source: Source::Declaration(index),
+                    visibility: decl.visibility,
                     fields: vec![Field {
                         number: 1,
                         name: "value".to_string(),
@@ -809,36 +1128,84 @@ impl<'a> Codec<'a> {
                     build: Build::Box,
                 }))
             }
-            // A union is not emitted yet; a constant projects no type.
+            // A constant projects no type.
             _ => Ok(None),
         }
     }
 
-    /// The wire shape of one type position, or `None` for a position this
-    /// codec does not emit yet: an array, a map, a tuple, or a reference to a
-    /// union.
-    fn wire(&self, ty: &v1::Type) -> Result<Option<Wire>, GenerateError> {
+    /// The message of one induced tuple: positional fields numbered from 1,
+    /// as `emit_induced_tuple` of the proto backend numbers them, named in
+    /// Rust by the tuple field's own name.
+    fn tuple_message(
+        &self,
+        induced: &v1::InducedTuple,
+        root: Option<Result<u32, String>>,
+    ) -> Result<Message, GenerateError> {
+        let owner = induced
+            .name
+            .as_ref()
+            .map(|name| name.rust.as_str())
+            .unwrap_or_default();
+        let proto = induced
+            .name
+            .as_ref()
+            .map(|name| name.wire.as_str())
+            .filter(|wire| !wire.is_empty())
+            .unwrap_or(owner);
+        let mut fields: Vec<Field> = Vec::new();
+        for (index, field) in induced.fields.iter().enumerate() {
+            let name = declared(field.name.as_ref());
+            let Some(ty) = field.r#type.as_ref() else {
+                return Err(GenerateError {
+                    message: format!("`{owner}.{name}` carries no type"),
+                });
+            };
+            let number = u32::try_from(index + 1).map_err(|_| GenerateError {
+                message: format!(
+                    "`{owner}` has more tuple fields than a proto3 field number holds"
+                ),
+            })?;
+            fields.push(Field {
+                number,
+                name: snake_of(field.name.as_ref()).to_string(),
+                wire: self.wire(ty)?,
+                optional: ty.optional,
+                access: Access::Field(snake_of(field.name.as_ref()).to_string()),
+            });
+        }
+        Ok(Message {
+            owner: owner.to_string(),
+            proto: proto.to_string(),
+            source: Source::Tuple { root },
+            visibility: induced.visibility,
+            fields,
+            build: Build::Struct,
+        })
+    }
+
+    /// The wire shape of one type position.
+    fn wire(&self, ty: &v1::Type) -> Result<Wire, GenerateError> {
         match ty.kind.as_ref() {
             Some(v1::r#type::Kind::Primitive(primitive)) => {
                 match v1::PrimitiveType::try_from(*primitive).ok() {
-                    Some(v1::PrimitiveType::Boolean) => Ok(Some(Wire::Scalar(Scalar {
+                    Some(v1::PrimitiveType::Boolean) => Ok(Wire::Scalar(Scalar {
                         scalar: pb::Scalar::Bool,
                         repr: Repr::Bool,
                         constraint: None,
                         zero_legal: true,
-                    }))),
-                    Some(v1::PrimitiveType::Integer) => Ok(Some(Wire::Scalar(Scalar {
+                    })),
+                    Some(v1::PrimitiveType::Integer) => Ok(Wire::Scalar(Scalar {
                         scalar: pb::primitive(*primitive),
                         repr: Repr::Int,
                         constraint: None,
                         zero_legal: true,
-                    }))),
-                    Some(v1::PrimitiveType::Float) => Ok(Some(Wire::Scalar(Scalar {
+                    })),
+                    Some(v1::PrimitiveType::Float) => Ok(Wire::Scalar(Scalar {
                         scalar: pb::primitive(*primitive),
                         repr: Repr::Float,
                         constraint: None,
                         zero_legal: true,
-                    }))),
+                    })),
                     // A bare `string` or `bytes` carries no length bound, so
                     // it has no finite bound (typl §15.3 keeps it out of a
                     // field position anyway).
@@ -847,7 +1214,7 @@ impl<'a> Codec<'a> {
                     }),
                 }
             }
-            Some(v1::r#type::Kind::Inline(sc)) => self.scalar_wire(sc, None).map(Some),
+            Some(v1::r#type::Kind::Inline(sc)) => self.scalar_wire(sc, None),
             Some(v1::r#type::Kind::Named(reference)) => {
                 let Some((decl, owner)) = self.resolve(reference) else {
                     let text = &reference.reference;
@@ -860,10 +1227,86 @@ impl<'a> Codec<'a> {
                 };
                 self.declaration_wire(decl, owner, &reference.reference)
             }
-            // Collections and tuples are not emitted yet.
-            Some(
-                v1::r#type::Kind::Array(_) | v1::r#type::Kind::Map(_) | v1::r#type::Kind::Tuple(_),
-            ) => Ok(None),
+            // A tuple generates a named struct, encoded as a nested message
+            // (typl §11). The lowering named it twice: for Rust and for the
+            // wire.
+            Some(v1::r#type::Kind::Tuple(reference)) => {
+                let induced = self
+                    .ctx
+                    .tuple(reference.index)
+                    .ok_or_else(|| GenerateError {
+                        message: "the lowered model names a tuple it does not carry".to_string(),
+                    })?;
+                let owner = self.ctx.tuple_name(reference.index);
+                let proto = induced
+                    .name
+                    .as_ref()
+                    .map(|name| name.wire.as_str())
+                    .filter(|wire| !wire.is_empty())
+                    .unwrap_or(owner);
+                Ok(Wire::Message {
+                    owner: owner.to_string(),
+                    proto: proto.to_string(),
+                })
+            }
+            Some(v1::r#type::Kind::Array(array)) => {
+                let element = array.element.as_deref().ok_or_else(|| GenerateError {
+                    message: "an array carries no element type".to_string(),
+                })?;
+                refuse_optional(element, "an array element")?;
+                let element = self.wire(element)?;
+                if element.repeated() {
+                    return Err(GenerateError {
+                        message: "an array of arrays or of maps is one proto3 does not admit, \
+                                  as the proto backend refuses it"
+                            .to_string(),
+                    });
+                }
+                Ok(Wire::Array {
+                    element: Box::new(element),
+                    min: array.min,
+                    max: array.max,
+                })
+            }
+            Some(v1::r#type::Kind::Map(map)) => {
+                let key = map.key.as_deref().ok_or_else(|| GenerateError {
+                    message: "a map carries no key type".to_string(),
+                })?;
+                let value = map.value.as_deref().ok_or_else(|| GenerateError {
+                    message: "a map carries no value type".to_string(),
+                })?;
+                // Defence in depth: `ridl check` already refuses an optional
+                // map key (TYPL-209), so no checked source reaches this.
+                refuse_optional(key, "a map key")?;
+                refuse_optional(value, "a map value")?;
+                let key = self.wire(key)?;
+                let admitted = match &key {
+                    Wire::Scalar(scalar) => scalar.scalar.admitted_as_map_key(),
+                    Wire::Text(..) => true,
+                    _ => false,
+                };
+                if !admitted {
+                    return Err(GenerateError {
+                        message: "a map key must be an integral or string type, as the proto \
+                                  backend requires"
+                            .to_string(),
+                    });
+                }
+                let value = self.wire(value)?;
+                if value.repeated() {
+                    return Err(GenerateError {
+                        message: "a map whose value is an array or a map is one proto3 does \
+                                  not admit, as the proto backend refuses it"
+                            .to_string(),
+                    });
+                }
+                Ok(Wire::Map {
+                    key: Box::new(key),
+                    value: Box::new(value),
+                    min: map.min,
+                    max: map.max,
+                })
+            }
             _ => Err(GenerateError {
                 message: "a proto3 codec cannot carry this type position".to_string(),
             }),
@@ -871,25 +1314,22 @@ impl<'a> Codec<'a> {
     }
 
     /// The wire shape of one resolved reference, or of the declaration being
-    /// boxed: the declaration decides. `None` for a union, which is not
-    /// emitted yet.
+    /// boxed: the declaration decides.
     fn declaration_wire(
         &self,
         decl: &v1::Declaration,
         owner: String,
         reference: &str,
-    ) -> Result<Option<Wire>, GenerateError> {
+    ) -> Result<Wire, GenerateError> {
         let name = declared(decl.name.as_ref());
         match decl.kind.as_ref() {
-            Some(v1::declaration::Kind::Scalar(sc)) => self
-                .scalar_wire(
-                    sc,
-                    Some(NamedScalar {
-                        name: owner,
-                        ctor: if sc.vacuous { "new" } else { "new_unchecked" },
-                    }),
-                )
-                .map(Some),
+            Some(v1::declaration::Kind::Scalar(sc)) => self.scalar_wire(
+                sc,
+                Some(NamedScalar {
+                    name: owner,
+                    ctor: if sc.vacuous { "new" } else { "new_unchecked" },
+                }),
+            ),
             Some(v1::declaration::Kind::Enum(def)) => {
                 let Some(first) = def.values.first() else {
                     return Err(GenerateError {
@@ -902,7 +1342,7 @@ impl<'a> Codec<'a> {
                     .zero_member
                     .and_then(|index| def.values.get(index as usize))
                     .map(|zero| pascal_of(zero.name.as_ref()));
-                Ok(Some(Wire::Scalar(Scalar {
+                Ok(Wire::Scalar(Scalar {
                     scalar: pb::Scalar::Int64,
                     zero_legal: zero.is_some(),
                     repr: Repr::Enum {
@@ -911,7 +1351,7 @@ impl<'a> Codec<'a> {
                         zero,
                     },
                     constraint: None,
-                })))
+                }))
             }
             Some(v1::declaration::Kind::EnumSet(def)) => {
                 let scalar = v1::IntWidth::try_from(def.width)
@@ -920,16 +1360,19 @@ impl<'a> Codec<'a> {
                     .ok_or_else(|| GenerateError {
                         message: format!("`{name}` carries no integer width"),
                     })?;
-                Ok(Some(Wire::Scalar(Scalar {
+                Ok(Wire::Scalar(Scalar {
                     scalar,
                     repr: Repr::EnumSet { name: owner },
                     constraint: None,
                     zero_legal: true,
-                })))
+                }))
             }
-            Some(v1::declaration::Kind::Struct(_)) => Ok(Some(Wire::Message(owner))),
-            // A union is not emitted yet.
-            Some(v1::declaration::Kind::Union(_)) => Ok(None),
+            Some(v1::declaration::Kind::Struct(_) | v1::declaration::Kind::Union(_)) => {
+                Ok(Wire::Message {
+                    proto: owner.clone(),
+                    owner,
+                })
+            }
             _ => Err(GenerateError {
                 message: format!("`{reference}` names a declaration a proto3 codec cannot carry"),
             }),
@@ -1006,7 +1449,16 @@ impl<'a> Codec<'a> {
         let name = len_ident(&message.owner);
         let used = !message.fields.is_empty();
         let value = param_binding("value", used);
-        let body = if used {
+        let body = if message.build == Build::Union {
+            let arms = self.union_arms(message, ty, Pass::Len)?;
+            quote! {
+                let mut __n = 0usize;
+                match value {
+                    #(#arms)*
+                }
+                __n
+            }
+        } else if used {
             let mut counts: Vec<TokenStream> = Vec::new();
             for field in &message.fields {
                 counts.push(self.field_statement(&message.owner, field, Pass::Len)?);
@@ -1033,25 +1485,58 @@ impl<'a> Codec<'a> {
         let used = !message.fields.is_empty();
         let value = param_binding("value", used);
         let writer = param_binding("writer", used);
-        let mut writes: Vec<TokenStream> = Vec::new();
-        for field in &message.fields {
-            writes.push(self.field_statement(&message.owner, field, Pass::Encode)?);
-        }
+        let body = if message.build == Build::Union {
+            let arms = self.union_arms(message, ty, Pass::Encode)?;
+            quote! {
+                match value {
+                    #(#arms)*
+                }
+            }
+        } else {
+            let mut writes: Vec<TokenStream> = Vec::new();
+            for field in &message.fields {
+                writes.push(self.field_statement(&message.owner, field, Pass::Encode)?);
+            }
+            quote! { #(#writes)* }
+        };
         // Writes the value's fields in number order. The caller has sized the
         // value with the length function and checked the capacity, so no
         // write fails for lack of room; what can fail is an anonymous length
-        // outside its bound, which is `EncodeError::Contract`. An internal:
-        // no doc.
+        // or a collection count outside its bound, or a map key held twice,
+        // which is `EncodeError::Contract`. An internal: no doc.
         Ok(quote! {
             #[allow(deprecated, non_snake_case)]
             pub(crate) fn #name(
                 #value: &#ty,
                 #writer: &mut ::ridl_rt::proto3::Writer<'_>,
             ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
-                #(#writes)*
+                #body
                 ::core::result::Result::Ok(())
             }
         })
+    }
+
+    /// One `match` arm per union arm, over `value: &Ty`: the arm's record is
+    /// always written, even at the arm's default.
+    fn union_arms(
+        &self,
+        message: &Message,
+        ty: &Ident,
+        pass: Pass,
+    ) -> Result<Vec<TokenStream>, GenerateError> {
+        let mut arms: Vec<TokenStream> = Vec::new();
+        for field in &message.fields {
+            let variant = ident(&field.name);
+            let statement = self.field_value(
+                &message.owner,
+                field,
+                &Operand::borrowed(quote! { __a }),
+                pass,
+                Site::Element,
+            )?;
+            arms.push(quote! { #ty::#variant(__a) => { #statement } });
+        }
+        Ok(arms)
     }
 
     /// The statement that counts (`Pass::Len`) or writes (`Pass::Encode`)
@@ -1066,26 +1551,30 @@ impl<'a> Codec<'a> {
         if field.optional {
             // Written when present, whatever its value.
             let place = &operand.place;
-            let inner = self.field_value(owner, field, &Operand::borrowed(quote! { __v }), pass)?;
+            let inner = self.field_value(
+                owner,
+                field,
+                &Operand::borrowed(quote! { __v }),
+                pass,
+                Site::Element,
+            )?;
             return Ok(quote! {
                 if let ::core::option::Option::Some(__v) = &#place {
                     #inner
                 }
             });
         }
-        self.field_value(owner, field, &operand, pass)
+        self.field_value(owner, field, &operand, pass, Site::Field)
     }
 
-    /// The statements that count or write one present value: a field whose
-    /// default is legal is omitted at it, a field whose default is not legal
-    /// is never at it and is written without a test, and a nested struct is
-    /// always written.
+    /// The statements that count or write one present value at `site`.
     fn field_value(
         &self,
         owner: &str,
         field: &Field,
         operand: &Operand,
         pass: Pass,
+        site: Site,
     ) -> Result<TokenStream, GenerateError> {
         let tag_len = Literal::usize_suffixed(tag_len(field.number));
         let number = Literal::u32_suffixed(field.number);
@@ -1093,10 +1582,16 @@ impl<'a> Codec<'a> {
         let place = &operand.place;
         let reference = &operand.reference;
         let receiver = operand.receiver();
-        // A `?` field is written whatever its value; an implicit-presence
-        // field is tested against its default only when that default is a
-        // legal value, since otherwise it never holds it.
-        let test = !field.optional && field.wire.default_is_legal();
+        // At a struct field, an implicit-presence value is tested against
+        // its default only when that default is a legal value, since
+        // otherwise it never holds it; inside a map entry it is always
+        // tested, as every proto3 writer does; an element or an arm is
+        // written whatever its value.
+        let test = match site {
+            Site::Field => field.wire.default_is_legal(),
+            Site::Entry => true,
+            Site::Element => false,
+        };
         Ok(match &field.wire {
             Wire::Scalar(scalar) => {
                 let raw = scalar.raw(scalar.language(quote! { __s }));
@@ -1167,28 +1662,254 @@ impl<'a> Codec<'a> {
                     }
                 }
             }
-            Wire::Message(name) => {
+            Wire::Message { owner: name, .. } => {
                 let len = owner_path(name, len_ident);
-                match pass {
+                let action = match pass {
                     Pass::Len => quote! {
-                        {
-                            let __l = #len(#reference);
-                            __n += #tag_len
-                                + ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64)
-                                + __l;
-                        }
+                        __n += #tag_len
+                            + ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64)
+                            + __l;
                     },
                     Pass::Encode => {
                         let encode = owner_path(name, encode_ident);
                         quote! {
-                            {
-                                let __l = #len(#reference);
-                                writer.tag(#number, #wire_type);
-                                writer.varint(__l as ::core::primitive::u64);
-                                #encode(#reference, writer)?;
-                            }
+                            writer.tag(#number, #wire_type);
+                            writer.varint(__l as ::core::primitive::u64);
+                            #encode(#reference, writer)?;
                         }
                     }
+                };
+                // A nested message at a field is always written, as a record
+                // that may be empty; inside a map entry it is omitted when
+                // empty.
+                let action = if site == Site::Entry {
+                    quote! { if __l != 0usize { #action } }
+                } else {
+                    action
+                };
+                quote! {
+                    {
+                        let __l = #len(#reference);
+                        #action
+                    }
+                }
+            }
+            Wire::Array { element, min, max } => {
+                self.array_statement(owner, field, element, *min, *max, reference, pass)?
+            }
+            Wire::Map {
+                key,
+                value,
+                min,
+                max,
+            } => self.map_statement(owner, field, key, value, *min, *max, reference, pass)?,
+        })
+    }
+
+    /// The statement that counts or writes one array, bound to `__c`: a
+    /// scalar element makes one packed record, any other element one record
+    /// per element, and an empty array is not written. A fixed-length array
+    /// has nothing to count and no emptiness to test, because its Rust type
+    /// is `[T; N]`.
+    #[allow(clippy::too_many_arguments)]
+    fn array_statement(
+        &self,
+        owner: &str,
+        field: &Field,
+        element: &Wire,
+        min: u64,
+        max: u64,
+        reference: &TokenStream,
+        pass: Pass,
+    ) -> Result<TokenStream, GenerateError> {
+        let fixed = min == max;
+        if fixed && max == 0 {
+            return Ok(quote! {});
+        }
+        let tag_len = Literal::usize_suffixed(tag_len(field.number));
+        let number = Literal::u32_suffixed(field.number);
+        let count = match pass {
+            Pass::Encode if !fixed => encode_count_check(owner, min, max, &quote! { __c }),
+            _ => quote! {},
+        };
+        let body = match element {
+            Wire::Scalar(scalar) => {
+                let raw = scalar.raw(scalar.language(quote! { __s }));
+                let write = scalar.write();
+                let run_len = match scalar.fixed_width() {
+                    Some(width) => {
+                        let width = Literal::usize_suffixed(width);
+                        quote! { let __l = __c.len() * #width; }
+                    }
+                    None => quote! {
+                        let mut __l = 0usize;
+                        for __e in __c.iter() {
+                            let __s = *__e;
+                            let __r = #raw;
+                            __l += ::ridl_rt::proto3::varint_len(__r);
+                        }
+                    },
+                };
+                let action = match pass {
+                    Pass::Len => quote! {
+                        __n += #tag_len
+                            + ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64)
+                            + __l;
+                    },
+                    Pass::Encode => quote! {
+                        writer.tag(#number, ::ridl_rt::proto3::WireType::Len);
+                        writer.varint(__l as ::core::primitive::u64);
+                        for __e in __c.iter() {
+                            let __s = *__e;
+                            let __r = #raw;
+                            #write
+                        }
+                    },
+                };
+                let packed = quote! {
+                    #run_len
+                    #action
+                };
+                if fixed {
+                    packed
+                } else {
+                    quote! { if !__c.is_empty() { #packed } }
+                }
+            }
+            other => {
+                let element = Field::element(field.number, other.clone());
+                let statement = self.field_value(
+                    owner,
+                    &element,
+                    &Operand::borrowed(quote! { __e }),
+                    pass,
+                    Site::Element,
+                )?;
+                quote! {
+                    for __e in __c.iter() {
+                        #statement
+                    }
+                }
+            }
+        };
+        Ok(quote! {
+            {
+                let __c = #reference;
+                #count
+                #body
+            }
+        })
+    }
+
+    /// The statement that counts or writes one map, bound to `__c`: one
+    /// entry message per pair, in the order of the `Vec`, with the key at 1
+    /// and the value at 2 under the entry rule. `encode` checks the count
+    /// and the uniqueness of the keys first, as the FlatBuffers encoder
+    /// does.
+    #[allow(clippy::too_many_arguments)]
+    fn map_statement(
+        &self,
+        owner: &str,
+        field: &Field,
+        key: &Wire,
+        value: &Wire,
+        min: u64,
+        max: u64,
+        reference: &TokenStream,
+        pass: Pass,
+    ) -> Result<TokenStream, GenerateError> {
+        let tag_len = Literal::usize_suffixed(tag_len(field.number));
+        let number = Literal::u32_suffixed(field.number);
+        let key_field = Field {
+            number: 1,
+            name: "key".to_string(),
+            wire: key.clone(),
+            optional: false,
+            access: Access::Position(0),
+        };
+        let value_field = Field {
+            number: 2,
+            name: "value".to_string(),
+            wire: value.clone(),
+            optional: false,
+            access: Access::Position(1),
+        };
+        let base = quote! { __e };
+        let key_len = self.field_value(
+            owner,
+            &key_field,
+            &key_field.operand(&base),
+            Pass::Len,
+            Site::Entry,
+        )?;
+        let value_len = self.field_value(
+            owner,
+            &value_field,
+            &value_field.operand(&base),
+            Pass::Len,
+            Site::Entry,
+        )?;
+        let entry_len = quote! {
+            let __l = {
+                let mut __n = 0usize;
+                #key_len
+                #value_len
+                __n
+            };
+        };
+        let (checks, action) = match pass {
+            Pass::Len => (
+                quote! {},
+                quote! {
+                    __n += #tag_len
+                        + ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64)
+                        + __l;
+                },
+            ),
+            Pass::Encode => {
+                let count = encode_count_check(owner, min, max, &quote! { __c });
+                let unique = encode_unique_error(owner);
+                let key_encode = self.field_value(
+                    owner,
+                    &key_field,
+                    &key_field.operand(&base),
+                    Pass::Encode,
+                    Site::Entry,
+                )?;
+                let value_encode = self.field_value(
+                    owner,
+                    &value_field,
+                    &value_field.operand(&base),
+                    Pass::Encode,
+                    Site::Entry,
+                )?;
+                (
+                    quote! {
+                        #count
+                        for (__i, __e) in __c.iter().enumerate() {
+                            for __p in __c[..__i].iter() {
+                                if __p.0 == __e.0 {
+                                    #unique
+                                }
+                            }
+                        }
+                    },
+                    quote! {
+                        writer.tag(#number, ::ridl_rt::proto3::WireType::Len);
+                        writer.varint(__l as ::core::primitive::u64);
+                        #key_encode
+                        #value_encode
+                    },
+                )
+            }
+        };
+        Ok(quote! {
+            {
+                let __c = #reference;
+                #checks
+                for __e in __c.iter() {
+                    #entry_len
+                    #action
                 }
             }
         })
@@ -1200,61 +1921,17 @@ impl<'a> Codec<'a> {
 
     fn verify_fn(&self, message: &Message) -> Result<TokenStream, GenerateError> {
         let name = verify_ident(&message.owner);
-        let count = message.fields.len();
-        let mut arms: Vec<TokenStream> = Vec::new();
-        let mut absent: Vec<TokenStream> = Vec::new();
-        for (index, field) in message.fields.iter().enumerate() {
-            let number = Literal::u32_suffixed(field.number);
-            let seen = Literal::usize_suffixed(index);
-            let present = self.verify_present(&message.owner, field)?;
-            let duplicate = structure_error("Duplicate");
-            arms.push(quote! {
-                #number => {
-                    if __seen[#seen] {
-                        #duplicate
-                    }
-                    __seen[#seen] = true;
-                    #present
-                }
-            });
-            let when_absent = self.verify_absent(&message.owner, field);
-            if !when_absent.is_empty() {
-                absent.push(quote! {
-                    if !__seen[#seen] {
-                        #when_absent
-                    }
-                });
-            }
-        }
-        let walk = if count == 0 {
-            // No field to match: the walk checks the message's structure and
-            // nothing else.
-            quote! {
-                let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
-                while let ::core::option::Option::Some(__field) = __reader.next() {
-                    __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                }
-            }
-        } else {
-            let count = Literal::usize_suffixed(count);
-            quote! {
-                let mut __seen = [false; #count];
-                let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
-                while let ::core::option::Option::Some(__field) = __reader.next() {
-                    let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                    match __field.number {
-                        #(#arms)*
-                        // An unknown field: the reader has moved past it.
-                        _ => {}
-                    }
-                }
-                #(#absent)*
+        let walk = match message.build {
+            Build::Union => self.union_verify_walk(message)?,
+            Build::Struct | Build::Box => {
+                self.message_walk(&message.owner, &message.fields, &quote! { buf })?
             }
         };
         // Checks the proto3 message in `buf` against the declaration's
         // shape: the structure, each known field's wire type, a singular
-        // field written once, enum discriminants, named and anonymous scalar
-        // ranges, steps and lengths, and the absence rule. Pattern checks
+        // field written once, a union holding one arm, enum discriminants,
+        // named and anonymous scalar ranges, steps and lengths, collection
+        // counts, map key uniqueness, and the absence rule. Pattern checks
         // require `validate-pattern`. An internal: no doc.
         Ok(quote! {
             #[allow(deprecated, non_snake_case)]
@@ -1267,29 +1944,343 @@ impl<'a> Codec<'a> {
         })
     }
 
-    /// The statements that check one present field's value, over
-    /// `__field.value`: the wire type its type takes, then the constraints.
-    fn verify_present(&self, owner: &str, field: &Field) -> Result<TokenStream, GenerateError> {
+    /// The walk of one message's bytes `buf` over `fields`: each known field
+    /// is checked by number, a singular one refused when written twice, a
+    /// repeated one counted, an unknown one skipped; then the absence rule
+    /// and the count bounds. The same walk serves a struct, a tuple, a box
+    /// and a map entry, so it binds `__seen`, `__reader` and `__field`,
+    /// which an entry walk shadows inside its own block.
+    fn message_walk(
+        &self,
+        owner: &str,
+        fields: &[Field],
+        buf: &TokenStream,
+    ) -> Result<TokenStream, GenerateError> {
+        if fields.is_empty() {
+            // No field to match: the walk checks the message's structure and
+            // nothing else.
+            return Ok(quote! {
+                let mut __reader = ::ridl_rt::proto3::Reader::new(#buf);
+                while let ::core::option::Option::Some(__field) = __reader.next() {
+                    __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                }
+            });
+        }
+        let count = Literal::usize_suffixed(fields.len());
+        let mut counters: Vec<TokenStream> = Vec::new();
+        let mut arms: Vec<TokenStream> = Vec::new();
+        let mut after: Vec<TokenStream> = Vec::new();
+        for (index, field) in fields.iter().enumerate() {
+            let number = Literal::u32_suffixed(field.number);
+            let seen = Literal::usize_suffixed(index);
+            let counter = count_ident(index);
+            if field.wire.repeated() {
+                counters.push(quote! { let mut #counter = 0usize; });
+            }
+            let body = self.verify_arm(owner, field, index, buf)?;
+            arms.push(quote! { #number => { #body } });
+            let when_absent = self.verify_absent(owner, field);
+            if !when_absent.is_empty() {
+                after.push(quote! {
+                    if !__seen[#seen] {
+                        #when_absent
+                    }
+                });
+            }
+            match &field.wire {
+                Wire::Array { min, max, .. } | Wire::Map { min, max, .. } if !field.optional => {
+                    after.push(count_check_of(owner, *min, *max, quote! { #counter }));
+                }
+                _ => {}
+            }
+        }
+        Ok(quote! {
+            let mut __seen = [false; #count];
+            #(#counters)*
+            let mut __reader = ::ridl_rt::proto3::Reader::new(#buf);
+            while let ::core::option::Option::Some(__field) = __reader.next() {
+                let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                match __field.number {
+                    #(#arms)*
+                    // An unknown field: the reader has moved past it.
+                    _ => {}
+                }
+            }
+            #(#after)*
+        })
+    }
+
+    /// The body of the `match` arm for one known field at `index` of the
+    /// walk over `buf`.
+    fn verify_arm(
+        &self,
+        owner: &str,
+        field: &Field,
+        index: usize,
+        buf: &TokenStream,
+    ) -> Result<TokenStream, GenerateError> {
+        let seen = Literal::usize_suffixed(index);
+        let counter = count_ident(index);
+        let number = Literal::u32_suffixed(field.number);
         let wrong_type = structure_error("WireType");
-        let (pattern, checks) = match &field.wire {
-            Wire::Scalar(scalar) => {
-                let variant = match scalar.scalar.wire_type() {
-                    pb::WireType::Varint => "Varint",
-                    pb::WireType::I32 => "I32",
-                    pb::WireType::I64 => "I64",
-                    pb::WireType::Len => "Len",
+        let duplicate = structure_error("Duplicate");
+        Ok(match &field.wire {
+            Wire::Array { element, .. } => {
+                let run = match element.as_ref() {
+                    Wire::Scalar(scalar) => {
+                        let checks = scalar.raw_checks(owner);
+                        let variant = scalar.value_variant();
+                        let single = if checks.is_empty() {
+                            quote! {
+                                ::ridl_rt::proto3::Value::#variant(_) => { #counter += 1usize; }
+                            }
+                        } else {
+                            quote! {
+                                ::ridl_rt::proto3::Value::#variant(__raw) => {
+                                    #checks
+                                    #counter += 1usize;
+                                }
+                            }
+                        };
+                        let packed = match scalar.fixed_width() {
+                            Some(width) => {
+                                let width = Literal::usize_suffixed(width);
+                                let out_of_bounds = structure_error("OutOfBounds");
+                                let read = match scalar.scalar.wire_type() {
+                                    pb::WireType::I32 => quote! {
+                                        let mut __bytes = [0u8; 4];
+                                        __bytes.copy_from_slice(__chunk);
+                                        let __raw = ::core::primitive::u32::from_le_bytes(__bytes);
+                                    },
+                                    _ => quote! {
+                                        let mut __bytes = [0u8; 8];
+                                        __bytes.copy_from_slice(__chunk);
+                                        let __raw = ::core::primitive::u64::from_le_bytes(__bytes);
+                                    },
+                                };
+                                let elements = if checks.is_empty() {
+                                    quote! { #counter += __run.len() / #width; }
+                                } else {
+                                    quote! {
+                                        for __chunk in __chunks {
+                                            #read
+                                            #checks
+                                            #counter += 1usize;
+                                        }
+                                    }
+                                };
+                                quote! {
+                                    let __chunks = __run.chunks_exact(#width);
+                                    if !__chunks.remainder().is_empty() {
+                                        #out_of_bounds
+                                    }
+                                    #elements
+                                }
+                            }
+                            None => {
+                                let read = if checks.is_empty() {
+                                    quote! {
+                                        ::ridl_rt::proto3::read_varint(__run, &mut __at)
+                                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                                    }
+                                } else {
+                                    quote! {
+                                        let __raw = ::ridl_rt::proto3::read_varint(__run, &mut __at)
+                                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                                        #checks
+                                    }
+                                };
+                                quote! {
+                                    let mut __at = 0usize;
+                                    while __at < __run.len() {
+                                        #read
+                                        #counter += 1usize;
+                                    }
+                                }
+                            }
+                        };
+                        quote! {
+                            ::ridl_rt::proto3::Value::Len(__run) => { #packed }
+                            #single
+                        }
+                    }
+                    other => {
+                        let (pattern, checks) = self.present_checks(owner, other)?;
+                        quote! {
+                            #pattern => {
+                                #checks
+                                #counter += 1usize;
+                            }
+                        }
+                    }
                 };
-                let variant = format_ident!("{}", variant);
-                let (widened, fallible) = scalar.widen();
-                let check = scalar.check(owner);
-                let body = match (check, fallible) {
-                    (Some(check), _) => quote! {
-                        let __v = #widened;
-                        #check
+                quote! {
+                    __seen[#seen] = true;
+                    match __field.value {
+                        #run
+                        _ => { #wrong_type }
+                    }
+                }
+            }
+            Wire::Map { key, value, .. } => {
+                let entry_fields = [
+                    Field {
+                        number: 1,
+                        name: "key".to_string(),
+                        wire: key.as_ref().clone(),
+                        optional: false,
+                        access: Access::Position(0),
                     },
-                    (None, true) => quote! { let _ = #widened; },
-                    (None, false) => quote! {},
-                };
+                    Field {
+                        number: 2,
+                        name: "value".to_string(),
+                        wire: value.as_ref().clone(),
+                        optional: false,
+                        access: Access::Position(1),
+                    },
+                ];
+                let entry_walk = self.message_walk(owner, &entry_fields, &quote! { __b })?;
+                let key_of_this = self.key_of(key, &quote! { __b });
+                let key_of_previous = self.key_of(key, &quote! { __pb });
+                let unique = unique_error(owner);
+                quote! {
+                    __seen[#seen] = true;
+                    match __field.value {
+                        ::ridl_rt::proto3::Value::Len(__b) => {
+                            { #entry_walk }
+                            // The entries before this one have passed; their
+                            // keys are read again rather than kept, so no
+                            // index is allocated from an untrusted count.
+                            let __k = #key_of_this;
+                            let mut __left = #counter;
+                            let mut __prev = ::ridl_rt::proto3::Reader::new(#buf);
+                            while __left > 0usize {
+                                match __prev.next() {
+                                    ::core::option::Option::Some(::core::result::Result::Ok(__p)) => {
+                                        if __p.number == #number {
+                                            __left -= 1usize;
+                                            if let ::ridl_rt::proto3::Value::Len(__pb) = __p.value {
+                                                let __pk = #key_of_previous;
+                                                if __pk == __k {
+                                                    #unique
+                                                }
+                                            }
+                                        }
+                                    }
+                                    _ => break,
+                                }
+                            }
+                            #counter += 1usize;
+                        }
+                        _ => { #wrong_type }
+                    }
+                }
+            }
+            _ => {
+                let (pattern, checks) = self.present_checks(owner, &field.wire)?;
+                quote! {
+                    if __seen[#seen] {
+                        #duplicate
+                    }
+                    __seen[#seen] = true;
+                    match __field.value {
+                        #pattern => { #checks }
+                        _ => { #wrong_type }
+                    }
+                }
+            }
+        })
+    }
+
+    /// The expression reading a map entry's key from the entry bytes
+    /// `bytes`, as a value two entries can be compared by: the language
+    /// value of a scalar key, the bytes of a string key, the key's default
+    /// when the entry omits it.
+    fn key_of(&self, key: &Wire, bytes: &TokenStream) -> TokenStream {
+        let (init, pattern, value) = match key {
+            Wire::Scalar(scalar) => {
+                let variant = scalar.value_variant();
+                (
+                    scalar.language_zero(),
+                    quote! { ::ridl_rt::proto3::Value::#variant(__raw) },
+                    scalar.widen_total(),
+                )
+            }
+            _ => (
+                quote! { &[][..] },
+                quote! { ::ridl_rt::proto3::Value::Len(__kb) },
+                quote! { __kb },
+            ),
+        };
+        quote! {
+            {
+                let mut __k = #init;
+                let mut __reader = ::ridl_rt::proto3::Reader::new(#bytes);
+                while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) =
+                    __reader.next()
+                {
+                    if __field.number == 1u32 {
+                        if let #pattern = __field.value {
+                            __k = #value;
+                        }
+                    }
+                }
+                __k
+            }
+        }
+    }
+
+    /// The walk of a union's bytes: exactly one arm, written once.
+    fn union_verify_walk(&self, message: &Message) -> Result<TokenStream, GenerateError> {
+        let mut arms: Vec<TokenStream> = Vec::new();
+        let duplicate = structure_error("Duplicate");
+        let wrong_type = structure_error("WireType");
+        for field in &message.fields {
+            let number = Literal::u32_suffixed(field.number);
+            let (pattern, checks) = self.present_checks(&message.owner, &field.wire)?;
+            arms.push(quote! {
+                #number => {
+                    if __arm {
+                        #duplicate
+                    }
+                    __arm = true;
+                    match __field.value {
+                        #pattern => { #checks }
+                        _ => { #wrong_type }
+                    }
+                }
+            });
+        }
+        let missing = missing_required();
+        Ok(quote! {
+            let mut __arm = false;
+            let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+            while let ::core::option::Option::Some(__field) = __reader.next() {
+                let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                match __field.number {
+                    #(#arms)*
+                    _ => {}
+                }
+            }
+            // A union holds exactly one arm: no arm is no value.
+            if !__arm {
+                #missing
+            }
+        })
+    }
+
+    /// The pattern over `__field.value` that one present singular value
+    /// takes — the wire type its type takes — and the statements that check
+    /// it.
+    fn present_checks(
+        &self,
+        owner: &str,
+        wire: &Wire,
+    ) -> Result<(TokenStream, TokenStream), GenerateError> {
+        Ok(match wire {
+            Wire::Scalar(scalar) => {
+                let variant = scalar.value_variant();
+                let body = scalar.raw_checks(owner);
                 if body.is_empty() {
                     (quote! { ::ridl_rt::proto3::Value::#variant(_) }, body)
                 } else {
@@ -1334,35 +2325,36 @@ impl<'a> Codec<'a> {
                     None => (quote! { ::ridl_rt::proto3::Value::Len(_) }, quote! {}),
                 }
             }
-            Wire::Message(name) => {
+            Wire::Message { owner: name, .. } => {
                 let verify = owner_path(name, verify_ident);
                 (
                     quote! { ::ridl_rt::proto3::Value::Len(__b) },
                     quote! { #verify(__b)?; },
                 )
             }
-        };
-        Ok(quote! {
-            match __field.value {
-                #pattern => { #checks }
-                _ => { #wrong_type }
+            Wire::Array { .. } | Wire::Map { .. } => {
+                return Err(GenerateError {
+                    message: "a collection is not a singular value".to_string(),
+                });
             }
         })
     }
 
     /// What `verify` does with an absent non-optional field: nothing when
     /// the proto3 default is a legal value of its type, `MissingRequired`
-    /// when it is not, and for a nested struct the verification of the empty
-    /// message, which decides by the same rule over its own fields. A string
-    /// whose empty value is legal by length but which declares a pattern has
-    /// that pattern checked on the empty string, so an absent field reads
-    /// exactly as a present empty one would.
+    /// when it is not, and for a nested message the verification of the
+    /// empty message, which decides by the same rule over its own fields —
+    /// and refuses a union, whose empty message holds no arm. A string whose
+    /// empty value is legal by length but which declares a pattern has that
+    /// pattern checked on the empty string, so an absent field reads exactly
+    /// as a present empty one would. An absent collection is empty, legal
+    /// when its count lower bound is 0.
     fn verify_absent(&self, owner: &str, field: &Field) -> TokenStream {
         if field.optional {
             return quote! {};
         }
         match &field.wire {
-            Wire::Message(name) => {
+            Wire::Message { owner: name, .. } => {
                 let verify = owner_path(name, verify_ident);
                 quote! { #verify(&[])?; }
             }
@@ -1398,32 +2390,38 @@ impl<'a> Codec<'a> {
         let name = decode_ident(&message.owner);
         let used = !message.fields.is_empty();
         let buf = param_binding("buf", used);
+        if message.build == Build::Union {
+            return Ok(self.union_decode_fn(message, ty, &name));
+        }
         let mut inits: Vec<TokenStream> = Vec::new();
         let mut arms: Vec<TokenStream> = Vec::new();
-        let mut bindings: Vec<Ident> = Vec::new();
+        let mut builds: Vec<TokenStream> = Vec::new();
         for (index, field) in message.fields.iter().enumerate() {
             let binding = format_ident!("__f{}", index);
             let number = Literal::u32_suffixed(field.number);
             let default = if field.optional {
                 quote! { ::core::option::Option::None }
             } else {
-                self.decode_default(field)
+                self.decode_default(&field.wire)
             };
             inits.push(quote! { let mut #binding = #default; });
-            let (pattern, value) = self.decode_present(field)?;
-            let value = if field.optional {
-                quote! { ::core::option::Option::Some(#value) }
-            } else {
-                value
-            };
-            arms.push(quote! {
-                #number => {
-                    if let #pattern = __field.value {
-                        #binding = #value;
+            let body = self.decode_arm(field, &binding)?;
+            arms.push(quote! { #number => { #body } });
+            builds.push(match &field.wire {
+                // A fixed-length array is decoded into a `Vec` and moved into
+                // its `[T; N]`; `verify` has checked the count, so the
+                // fallback element is never reached.
+                Wire::Array { element, min, max } if min == max && !field.optional => {
+                    let fill = self.decode_default(element);
+                    quote! {
+                        {
+                            let mut __it = #binding.into_iter();
+                            ::core::array::from_fn(|_| __it.next().unwrap_or_else(|| #fill))
+                        }
                     }
                 }
+                _ => quote! { #binding },
             });
-            bindings.push(binding);
         }
         let walk = if used {
             quote! {
@@ -1443,11 +2441,11 @@ impl<'a> Codec<'a> {
         let build = match message.build {
             Build::Struct => {
                 let names = message.fields.iter().map(|field| ident(&field.name));
-                quote! { #ty { #(#names: #bindings),* } }
+                quote! { #ty { #(#names: #builds),* } }
             }
-            Build::Box => {
-                let binding = &bindings[0];
-                quote! { #binding }
+            Build::Box | Build::Union => {
+                let build = &builds[0];
+                quote! { #build }
             }
         };
         // Builds the value from the proto3 message in `buf`, which `verify`
@@ -1466,31 +2464,172 @@ impl<'a> Codec<'a> {
         })
     }
 
-    /// The domain value an absent non-optional field decodes as.
-    fn decode_default(&self, field: &Field) -> TokenStream {
-        match &field.wire {
-            Wire::Scalar(scalar) => scalar.decode_default(),
-            Wire::Text(named, _) => named_value(named, quote! { ::std::string::String::new() }),
-            Wire::Bytes(named, _) => named_value(named, quote! { ::std::vec::Vec::new() }),
-            Wire::Message(name) => {
-                let decode = owner_path(name, decode_ident);
-                quote! { #decode(&[]) }
+    /// The decode function of a union: the first arm at its default until
+    /// the bytes name an arm, which `verify` has required.
+    fn union_decode_fn(&self, message: &Message, ty: &Ident, name: &Ident) -> TokenStream {
+        let first = &message.fields[0];
+        let first_variant = ident(&first.name);
+        let first_default = self.decode_default(&first.wire);
+        let mut arms: Vec<TokenStream> = Vec::new();
+        for field in &message.fields {
+            let number = Literal::u32_suffixed(field.number);
+            let variant = ident(&field.name);
+            let (pattern, value) = self.decode_present(&field.wire);
+            arms.push(quote! {
+                #number => {
+                    if let #pattern = __field.value {
+                        __out = #ty::#variant(#value);
+                    }
+                }
+            });
+        }
+        quote! {
+            #[allow(deprecated, non_snake_case)]
+            pub(crate) fn #name(buf: &[::core::primitive::u8]) -> #ty {
+                let mut __out = #ty::#first_variant(#first_default);
+                let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+                while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) =
+                    __reader.next()
+                {
+                    match __field.number {
+                        #(#arms)*
+                        _ => {}
+                    }
+                }
+                __out
             }
         }
     }
 
-    /// The pattern over `__field.value` and the domain value read from it,
-    /// for `decode`.
-    fn decode_present(&self, field: &Field) -> Result<(TokenStream, TokenStream), GenerateError> {
+    /// The body of the `match` arm that reads one known field into
+    /// `binding`.
+    fn decode_arm(&self, field: &Field, binding: &Ident) -> Result<TokenStream, GenerateError> {
         Ok(match &field.wire {
-            Wire::Scalar(scalar) => {
-                let variant = match scalar.scalar.wire_type() {
-                    pb::WireType::Varint => "Varint",
-                    pb::WireType::I32 => "I32",
-                    pb::WireType::I64 => "I64",
-                    pb::WireType::Len => "Len",
+            Wire::Array { element, .. } => match element.as_ref() {
+                Wire::Scalar(scalar) => {
+                    let variant = scalar.value_variant();
+                    let domain = scalar.domain(scalar.widen_total());
+                    let packed = match scalar.fixed_width() {
+                        Some(width) => {
+                            let width = Literal::usize_suffixed(width);
+                            let read = match scalar.scalar.wire_type() {
+                                pb::WireType::I32 => quote! {
+                                    let mut __bytes = [0u8; 4];
+                                    __bytes.copy_from_slice(__chunk);
+                                    let __raw = ::core::primitive::u32::from_le_bytes(__bytes);
+                                },
+                                _ => quote! {
+                                    let mut __bytes = [0u8; 8];
+                                    __bytes.copy_from_slice(__chunk);
+                                    let __raw = ::core::primitive::u64::from_le_bytes(__bytes);
+                                },
+                            };
+                            quote! {
+                                for __chunk in __run.chunks_exact(#width) {
+                                    #read
+                                    #binding.push(#domain);
+                                }
+                            }
+                        }
+                        None => quote! {
+                            let mut __at = 0usize;
+                            while __at < __run.len() {
+                                match ::ridl_rt::proto3::read_varint(__run, &mut __at) {
+                                    ::core::result::Result::Ok(__raw) => {
+                                        #binding.push(#domain);
+                                    }
+                                    ::core::result::Result::Err(_) => break,
+                                }
+                            }
+                        },
+                    };
+                    quote! {
+                        match __field.value {
+                            ::ridl_rt::proto3::Value::Len(__run) => { #packed }
+                            ::ridl_rt::proto3::Value::#variant(__raw) => {
+                                #binding.push(#domain);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                other => {
+                    let (pattern, value) = self.decode_present(other);
+                    quote! {
+                        if let #pattern = __field.value {
+                            #binding.push(#value);
+                        }
+                    }
+                }
+            },
+            Wire::Map { key, value, .. } => {
+                let key_default = self.decode_default(key);
+                let value_default = self.decode_default(value);
+                let (key_pattern, key_value) = self.decode_present(key);
+                let (value_pattern, value_value) = self.decode_present(value);
+                quote! {
+                    if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                        let mut __k = #key_default;
+                        let mut __v = #value_default;
+                        let mut __reader = ::ridl_rt::proto3::Reader::new(__b);
+                        while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) =
+                            __reader.next()
+                        {
+                            match __field.number {
+                                1u32 => {
+                                    if let #key_pattern = __field.value {
+                                        __k = #key_value;
+                                    }
+                                }
+                                2u32 => {
+                                    if let #value_pattern = __field.value {
+                                        __v = #value_value;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        #binding.push((__k, __v));
+                    }
+                }
+            }
+            _ => {
+                let (pattern, value) = self.decode_present(&field.wire);
+                let value = if field.optional {
+                    quote! { ::core::option::Option::Some(#value) }
+                } else {
+                    value
                 };
-                let variant = format_ident!("{}", variant);
+                quote! {
+                    if let #pattern = __field.value {
+                        #binding = #value;
+                    }
+                }
+            }
+        })
+    }
+
+    /// The domain value an absent non-optional value of `wire` decodes as.
+    fn decode_default(&self, wire: &Wire) -> TokenStream {
+        match wire {
+            Wire::Scalar(scalar) => scalar.decode_default(),
+            Wire::Text(named, _) => named_value(named, quote! { ::std::string::String::new() }),
+            Wire::Bytes(named, _) => named_value(named, quote! { ::std::vec::Vec::new() }),
+            Wire::Message { owner, .. } => {
+                let decode = owner_path(owner, decode_ident);
+                quote! { #decode(&[]) }
+            }
+            Wire::Array { .. } | Wire::Map { .. } => quote! { ::std::vec::Vec::new() },
+        }
+    }
+
+    /// The pattern over `__field.value` and the domain value read from it,
+    /// for one singular value of `wire`. A collection is read element by
+    /// element by [`Codec::decode_arm`] and never reaches this.
+    fn decode_present(&self, wire: &Wire) -> (TokenStream, TokenStream) {
+        match wire {
+            Wire::Scalar(scalar) => {
+                let variant = scalar.value_variant();
                 (
                     quote! { ::ridl_rt::proto3::Value::#variant(__raw) },
                     scalar.domain(scalar.widen_total()),
@@ -1511,14 +2650,18 @@ impl<'a> Codec<'a> {
                 quote! { ::ridl_rt::proto3::Value::Len(__b) },
                 named_value(named, quote! { __b.to_vec() }),
             ),
-            Wire::Message(name) => {
-                let decode = owner_path(name, decode_ident);
+            Wire::Message { owner, .. } => {
+                let decode = owner_path(owner, decode_ident);
                 (
                     quote! { ::ridl_rt::proto3::Value::Len(__b) },
                     quote! { #decode(__b) },
                 )
             }
-        })
+            Wire::Array { .. } | Wire::Map { .. } => (
+                quote! { ::ridl_rt::proto3::Value::Len(_) },
+                quote! { ::std::vec::Vec::new() },
+            ),
+        }
     }
 
     // -----------------------------------------------------------------
@@ -1537,7 +2680,8 @@ impl<'a> Codec<'a> {
             #[allow(deprecated)]
             impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for #ty {
                 // The bound is the proto3 size state the lowered model
-                // carries for the declaration's root message, which the
+                // carries for the declaration's root message, or for the
+                // interaction whose payload an induced tuple is, which the
                 // catalog descriptor and the interaction sizes read too, so
                 // one number serves every reader. A literal, so the doc
                 // states the bound and not how it is computed.
@@ -1589,6 +2733,52 @@ impl<'a> Codec<'a> {
             }
         }
     }
+}
+
+/// The bound a proto3 size state carries, or the cause of its absence as
+/// the refusal states it.
+fn bound_state(state: Option<&v1::SizeState>) -> Result<u32, &'static str> {
+    match state.and_then(|state| state.state.as_ref()) {
+        Some(v1::size_state::State::Bounded(bound)) => Ok(*bound),
+        Some(v1::size_state::State::Absent(absent)) => Err(
+            match v1::AbsentCause::try_from(absent.cause).unwrap_or(v1::AbsentCause::Unspecified) {
+                v1::AbsentCause::RefusedMember => {
+                    "a member of it is one the proto backend refuses: an enum value outside \
+                     int32, a field number proto3 reserves or exceeds, an optional array or \
+                     map, an array of arrays or of maps, a map whose value is a collection, \
+                     or a map key outside the integral and string scalars"
+                }
+                v1::AbsentCause::NoBound => {
+                    "a member of it is a string or bytes with no length bound, or a scalar \
+                     with no width"
+                }
+                v1::AbsentCause::Overflow => {
+                    "its bound exceeds u32::MAX, or its nesting passes the sizer's depth limit"
+                }
+                v1::AbsentCause::Unresolved => "it names a declaration the sizer did not resolve",
+                v1::AbsentCause::NoMessage
+                | v1::AbsentCause::EncodingUndefined
+                | v1::AbsentCause::Unspecified => "no proto3 message defines it",
+            },
+        ),
+        Some(v1::size_state::State::Unbounded(_)) => Err("no finite bound exists for it"),
+        None => Err("the lowered model carries no proto3 size state for it"),
+    }
+}
+
+/// An `optional` marker is a field's property. A proto3 `repeated` field
+/// has no absent element and a map entry no absent value, so a `?` in one
+/// of those positions is refused rather than silently written as present,
+/// as the FlatBuffers codec refuses it.
+fn refuse_optional(ty: &v1::Type, what: &str) -> Result<(), GenerateError> {
+    if ty.optional {
+        return Err(GenerateError {
+            message: format!(
+                "{what} is optional, which proto3 cannot represent — only a field may be absent"
+            ),
+        });
+    }
+    Ok(())
 }
 
 /// Which of the two passes over a message's fields a statement serves.

@@ -8,8 +8,10 @@
 // proto3 default. `Count`, `Health`, `Gear` and `WarningFlags` are box roots in
 // their own right.
 //
-// `WithList` holds an array and `ReachesList` reaches one through a field:
-// the codec emits neither yet, and the test that pins the skip reads both.
+// The collections, the tuples, the union and the interface at the end carry
+// the remaining shapes: packed and record arrays, a fixed-length array, a map
+// for three key kinds, a union with an arm of each kind, tuples at a field and
+// optional, and the messages an interface's calls induce.
 //
 // Kept self-contained, with no cross-package import, because the compile path
 // this fixture is read through (`ridlc::compile`) wraps one file as a
@@ -170,4 +172,60 @@ struct WithList {
 
 struct ReachesList {
   list : WithList
+}
+
+// ---------- Collections, tuples, unions ----------
+
+/// An arm of each kind: a scalar, a string, an enum, an enum set, a struct.
+union Outcome {
+  number : Count
+  text   : Label
+  health : Health
+  flags  : WarningFlags
+  inner  : Inner
+}
+
+struct Tuples {
+  range : (min: Count, max: Count)
+  pair  : (lo: Count, inner: Inner)
+}
+
+/// Packed arrays of a numeric, a float, a boolean and an enum, record arrays
+/// of a string, a struct and a union, a fixed-length array, an array whose
+/// count excludes zero, and a reserved tombstone.
+struct Lists {
+  counts     : [Count; 0..4]
+  reals      : [float; 0..4]
+  flags      : [boolean; 0..4]
+  healths    : [Health; 0..4]
+  labels     : [Label; 0..3]
+  inners     : [Inner; 0..3]
+  outcomes   : [Outcome; 0..3]
+  three      : [Count; 3]
+  reserved retired
+  atLeastOne : [Count; 1..3]
+}
+
+/// A map for a string key, a signed integer key and a boolean key.
+struct Maps {
+  byLabel : [Label : Count; 0..3]
+  byInt   : [integer [-100..100] : Inner; 0..3]
+  byBool  : [boolean : Label; 0..2]
+}
+
+/// The optional composite kinds.
+struct OptionalComposites {
+  pair    : (lo: Count, hi: Count)?
+  outcome : Outcome?
+}
+
+// ---------- The interface whose calls induce messages ----------
+
+interface Probe {
+  /// Two parameters: the argument type is an induced message.
+  command setBoth(level: Level, count: Count)
+  /// No parameter: the argument type is an induced message with no field.
+  query status(): Health
+  /// A tuple reply: the reply type is an induced message.
+  query span(): (lo: Count, hi: Count)
 }

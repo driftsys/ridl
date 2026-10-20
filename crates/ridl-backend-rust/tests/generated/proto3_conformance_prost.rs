@@ -273,6 +273,12 @@ pub struct Maps {
     /// Count — \[0..200\]
     #[prost(btree_map = "bool, uint32", tag = "6")]
     pub by_boolean: ::prost::alloc::collections::BTreeMap<bool, u32>,
+    /// Count — \[0..200\]
+    #[prost(btree_map = "string, uint32", tag = "7")]
+    pub by_label: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        u32,
+    >,
 }
 #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct OptionalComposites {

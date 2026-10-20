@@ -184,8 +184,8 @@ pub struct NamedValue {
 pub struct Program {
     binary: PathBuf,
     /// The `.proto` name of every message the program dispatches — every
-    /// message the codec emits, in both packages — and whether its generated
-    /// type has a `Default` value.
+    /// message the codec emits with a `Payload<Proto3>`, in both packages —
+    /// and whether its generated type has a `Default` value.
     messages: Vec<(String, bool)>,
     /// Keeps the binary's directory alive as long as the program.
     _dir: tempfile::TempDir,
@@ -195,9 +195,10 @@ impl Program {
     /// Builds the program over the fixture: both packages, generated with
     /// the proto3 encoding and composed as `crate::pb::conformance` and
     /// `crate::pb::parts`, `prelude` (helper items the named values use),
-    /// and the harness `main`. Every message the codec emits, in either
-    /// package, is dispatched; a message it does not emit yet is unknown to
-    /// the program, so a request over one fails the run.
+    /// and the harness `main`. Every message the codec emits with a
+    /// `Payload<Proto3>`, in either package, is dispatched; a message it does
+    /// not emit, or a tuple message encoded only inside its owner, is unknown
+    /// to the program, so a request over one fails the run.
     pub fn build(prelude: &str, named: &[NamedValue]) -> Program {
         let (main, others) = fixture();
         let mut packages = vec![main];
@@ -226,15 +227,22 @@ impl Program {
             // text match is deliberate: if the emitter changes the shape of
             // that impl, no message is found to have a `Default`, and the
             // test that requires `Default` on every message but three fails
-            // loudly rather than silently checking fewer messages.
+            // loudly rather than silently checking fewer messages. The
+            // `Payload<Proto3>` implementation is read the same way: a
+            // message whose type has none — a tuple reached only from a
+            // field — is encoded inside its owner and is not dispatched.
             let dense: String = generated.chars().filter(|c| !c.is_whitespace()).collect();
             let layout = ridl_backend_rust::proto3_layout(package, &others)
                 .unwrap_or_else(|error| panic!("{} lays out: {}", package.name, error.message));
             let emitted: BTreeSet<&str> =
                 layout.iter().map(|message| message.name.as_str()).collect();
             let path = format!("crate::{}", package.name.replace('.', "::"));
-            for (message, ty) in message_types(package) {
-                if emitted.contains(message.as_str()) {
+            let model = ridl_ir::codegen::lower(package, &others);
+            for (message, ty) in message_types(package, &model) {
+                let has_payload = dense.contains(&format!(
+                    "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>for{ty}{{"
+                ));
+                if emitted.contains(message.as_str()) && has_payload {
                     let has_default =
                         dense.contains(&format!("impl::core::default::Defaultfor{ty}{{"));
                     dispatch.push((message, format!("{path}::{ty}"), has_default));
@@ -475,14 +483,21 @@ pub fn compose_modules(bodies: &[(String, String)]) -> String {
 }
 
 /// The `.proto` message name and the generated Rust type name of every
-/// declaration of `package` that projects a message: a struct over its own
-/// name, a named scalar, an enum or an enum set over `<Name>Box`.
-fn message_types(package: &v2::Package) -> Vec<(String, String)> {
-    package
+/// declaration of `package` that projects a message — a struct or a union
+/// over its own name, a named scalar, an enum or an enum set over
+/// `<Name>Box` — and of every induced tuple of the lowered `model`, whose
+/// two names the lowering spells.
+fn message_types(
+    package: &v2::Package,
+    model: &ridl_ir::codegen::v1::Model,
+) -> Vec<(String, String)> {
+    let mut types: Vec<(String, String)> = package
         .decls
         .iter()
         .filter_map(|decl| match decl.kind.as_ref() {
-            Some(v2::decl::Kind::StructDef(_)) => Some((decl.name.clone(), decl.name.clone())),
+            Some(v2::decl::Kind::StructDef(_) | v2::decl::Kind::UnionDef(_)) => {
+                Some((decl.name.clone(), decl.name.clone()))
+            }
             Some(
                 v2::decl::Kind::TypeDef(_)
                 | v2::decl::Kind::EnumDef(_)
@@ -490,5 +505,10 @@ fn message_types(package: &v2::Package) -> Vec<(String, String)> {
             ) => Some((format!("{}Box", decl.name), decl.name.clone())),
             _ => None,
         })
-        .collect()
+        .collect();
+    types.extend(model.tuples.iter().filter_map(|tuple| {
+        let name = tuple.name.as_ref()?;
+        (!name.rust.is_empty()).then(|| (name.wire.clone(), name.rust.clone()))
+    }));
+    types
 }

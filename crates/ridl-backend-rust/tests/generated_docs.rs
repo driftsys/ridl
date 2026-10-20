@@ -88,13 +88,18 @@ fn assert_clean(label: &str, source: &str) {
     );
 }
 
+/// The two members of the proto3 conformance fixture, which reference each
+/// other across a package boundary and are read as a workspace by
+/// `support/proto3.rs`; a single-file compile cannot resolve the import.
+const WORKSPACE_MEMBERS: [&str; 2] = ["proto3_conformance.ridl", "proto3_conformance_other.ridl"];
+
 fn fixtures() -> Vec<String> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let mut names: Vec<String> = std::fs::read_dir(&dir)
         .unwrap_or_else(|error| panic!("read {}: {error}", dir.display()))
         .map(|entry| entry.expect("a fixture entry").file_name())
         .filter_map(|name| name.into_string().ok())
-        .filter(|name| name.ends_with(".ridl"))
+        .filter(|name| name.ends_with(".ridl") && !WORKSPACE_MEMBERS.contains(&name.as_str()))
         .collect();
     names.sort();
     assert!(!names.is_empty(), "no fixture in {}", dir.display());

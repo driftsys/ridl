@@ -1,23 +1,20 @@
 // The proto3 conformance fixture: the package the `prost` oracle is generated
 // from, read beside `proto3_conformance_other.ridl` as a two-member workspace.
 //
-// It holds every shape the proto3 codec is specified to carry, whether or not
-// the codec emits it yet, so that the checked-in oracle under
-// `tests/generated/` is generated once and does not change as the codec grows:
-// each scalar width, each enum kind (with a zero member, without one, with a
-// negative value), an enum set of width u8 and of width u64, nested structs, a
-// tuple, a union with a scalar arm, a string arm, an enum arm, an enum-set arm
-// and a struct arm, each `?` kind, packed arrays of every numeric, of booleans
-// and of enums, arrays of strings, bytes, structs and unions, a map for each
-// admitted key kind with scalar, enum, string and struct values, each root box
-// kind, a reference into the second package, and an interface with a command
-// of two parameters, a query of no parameter and a query whose reply is a
-// tuple.
+// It holds every shape the proto3 codec carries, so that the checked-in
+// oracle under `tests/generated/` is generated once: each scalar width, each
+// enum kind (with a zero member, without one, with a negative value), an enum
+// set of width u8 and of width u64, nested structs, a tuple, a union with a
+// scalar arm, a string arm, an enum arm, an enum-set arm and a struct arm,
+// each `?` kind, packed arrays of every numeric, of booleans and of enums,
+// arrays of strings, bytes, structs and unions, a map for each admitted key
+// kind with scalar, enum, string and struct values, a reserved tombstone,
+// each root box kind, a reference into the second package, and an interface
+// with a command of two parameters, a query of no parameter and a query whose
+// reply is a tuple.
 //
-// The declarations the codec carries today reach no array, map, tuple or
-// union; `Optionals` and `OptionalComposites` are split along that line so
-// that the optional scalar kinds are checked now and the optional composites
-// later.
+// `Optionals` holds the optional scalar kinds and `OptionalComposites` the
+// optional tuple and union, so that each group is checked on its own.
 
 package pb.conformance
 
@@ -187,7 +184,7 @@ struct Axle {
   torque : Torque
 }
 
-// ---------- The shapes the codec does not carry yet ----------
+// ---------- Collections, tuples, unions ----------
 
 /// An arm of each kind: a scalar, a string, an enum, an enum set, a struct.
 union Outcome {
@@ -224,17 +221,20 @@ struct Packed {
   three       : [Count; 3]
 }
 
-/// An array of each length-delimited element kind.
+/// An array of each length-delimited element kind, and a reserved tombstone
+/// at the end.
 struct Records {
   labels   : [Label; 0..3]
   blobs    : [Blob; 0..3]
   inners   : [Inner; 0..3]
   outcomes : [Outcome; 0..3]
   points   : [(x: Count, y: Count); 0..2]
+  reserved retired
 }
 
 /// A map for each admitted key kind, with a scalar, a string, an enum and a
-/// struct value.
+/// struct value; `byLabel`'s key admits the empty string, so an entry can be
+/// at its default on both sides.
 struct Maps {
   byString  : [Key : Count; 0..3]
   byUint32  : [integer [0..4294967295] : Label; 0..3]
@@ -242,6 +242,7 @@ struct Maps {
   bySint32  : [integer [-100..100] : Inner; 0..3]
   bySint64  : [integer : Count; 0..3]
   byBoolean : [boolean : Count; 0..2]
+  byLabel   : [Label : Count; 0..3]
 }
 
 /// The optional composite kinds.
