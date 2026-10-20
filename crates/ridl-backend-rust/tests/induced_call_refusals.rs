@@ -230,4 +230,3 @@ fn a_tuple_parameter_named_params_has_a_distinct_wrapper() {
     assert!(!source.contains("__RIDL_NO_FACE_Pump"), "{source}");
     compiles(&source);
 }
-

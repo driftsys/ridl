@@ -1441,3 +1441,47 @@ fn main() {
     );
     rustc::run_program("pb_union_arms", &program(&main));
 }
+
+/// A struct whose only field is a fixed-length array of zero elements has
+/// nothing to count and nothing to write, so its length and encode
+/// functions read neither the value nor the writer; the generated crate is
+/// built under `-D warnings`, so an unread parameter would fail the build.
+/// The value encodes to the empty buffer and reads back.
+#[test]
+fn a_struct_of_one_zero_length_array_builds_under_deny_warnings() {
+    let source = "package pb.empty\n\n\
+                  type Count : integer [0..200]\n\n\
+                  struct Empty {\n  none : [Count; 0]\n}\n";
+    let output = ridlc::compile("proto3_empty.ridl", source);
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|d| !matches!(d.severity, ridl_core::diag::Severity::Error)),
+        "the source compiles, got: {:?}",
+        output.diagnostics
+    );
+    // The shared prelude names the fixture's types, which this package does
+    // not declare, so the program carries its own round trip.
+    let generated =
+        ridl_backend_rust::generate_pipeline(&output.package, &[WireEncoding::Proto3], &[])
+            .expect("the package generates")
+            .rust_source;
+    let main = r#"
+use ridl_rt::encoding::Proto3;
+use ridl_rt::payload::{Payload, Ref};
+
+fn main() {
+    let value = Empty { none: [] };
+    let mut out = vec![0u8; <Empty as Payload<Proto3>>::MAX_SIZE];
+    let bytes = value.encode(&mut out).expect("encode").bytes.to_vec();
+    assert!(bytes.is_empty(), "nothing is written for a zero-length array");
+    let proof: Ref<'_, Empty, Proto3> = Ref::verify(&bytes).expect("verify");
+    assert_eq!(proof.decode(), value);
+}
+"#;
+    rustc::run_program(
+        "pb_zero_length_array",
+        &format!("#![allow(dead_code)]\n{generated}\n{main}"),
+    );
+}

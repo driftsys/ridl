@@ -616,6 +616,13 @@ struct Field {
 }
 
 impl Field {
+    /// Whether the length and encode passes emit a statement for this
+    /// field: every field but a fixed-length array of zero elements, which
+    /// has nothing to count and nothing to write (`array_statement`).
+    fn has_statement(&self) -> bool {
+        !matches!(self.wire, Wire::Array { min, max, .. } if min == max && max == 0)
+    }
+
     fn operand(&self, base: &TokenStream) -> Operand {
         match &self.access {
             Access::Field(name) => {
@@ -1586,7 +1593,7 @@ impl<'a> Codec<'a> {
 
     fn len_fn(&self, message: &Message, ty: &Ident) -> Result<TokenStream, GenerateError> {
         let name = len_ident(&message.owner);
-        let used = !message.fields.is_empty();
+        let used = message.fields.iter().any(Field::has_statement);
         let value = param_binding("value", used);
         let body = if message.build == Build::Union {
             let arms = self.union_arms(message, ty, Pass::Len)?;
@@ -1621,7 +1628,7 @@ impl<'a> Codec<'a> {
 
     fn encode_fn(&self, message: &Message, ty: &Ident) -> Result<TokenStream, GenerateError> {
         let name = encode_ident(&message.owner);
-        let used = !message.fields.is_empty();
+        let used = message.fields.iter().any(Field::has_statement);
         let value = param_binding("value", used);
         let writer = param_binding("writer", used);
         let body = if message.build == Build::Union {
