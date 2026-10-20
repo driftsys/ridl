@@ -61,15 +61,18 @@ function delay(ms: number): Promise<void> {
 
 /**
  * Reads the DevTools port the browser writes to its profile directory, for
- * up to 10 s.
+ * up to 10 s. The browser does not write the file atomically, so the port is
+ * taken only once its line ends with a newline.
  */
 async function devToolsPort(profile: string): Promise<number> {
   const file = `${profile}/DevToolsActivePort`;
   for (let i = 0; i < 100; i++) {
     try {
       const text = await Deno.readTextFile(file);
-      const port = Number(text.split("\n")[0]);
-      if (Number.isInteger(port) && port > 0) return port;
+      if (text.includes("\n")) {
+        const port = Number(text.split("\n")[0]);
+        if (Number.isInteger(port) && port > 0) return port;
+      }
     } catch (e) {
       if (!(e instanceof Deno.errors.NotFound)) throw e;
     }
@@ -104,34 +107,59 @@ interface Message {
   error?: { message: string };
 }
 
-/** One DevTools Protocol connection to a page target. */
+interface Waiter {
+  settle: (m: Message) => void;
+  reject: (e: Error) => void;
+}
+
+/**
+ * One DevTools Protocol connection to a page target. When the socket closes,
+ * every request and every event wait still open rejects, so that no wait
+ * outlives the connection.
+ */
 class Connection {
   #socket: WebSocket;
+  #url: string;
   #next = 0;
-  #pending = new Map<number, (m: Message) => void>();
-  #events: ((m: Message) => void)[] = [];
+  #isClosed = false;
+  #pending = new Map<number, Waiter>();
+  #events = new Set<Waiter>();
   #closed: Promise<void>;
 
-  private constructor(socket: WebSocket) {
+  private constructor(socket: WebSocket, url: string) {
     this.#socket = socket;
+    this.#url = url;
     this.#closed = new Promise((resolve) => {
-      socket.addEventListener("close", () => resolve());
+      socket.addEventListener("close", () => {
+        this.#isClosed = true;
+        const error = this.#closedError();
+        const waiters = [...this.#pending.values(), ...this.#events];
+        this.#pending.clear();
+        this.#events.clear();
+        for (const w of waiters) w.reject(error);
+        resolve();
+      });
     });
     socket.onmessage = (event) => {
       const m = JSON.parse(event.data as string) as Message;
       if (m.id !== undefined) {
-        this.#pending.get(m.id)?.(m);
+        const waiter = this.#pending.get(m.id);
         this.#pending.delete(m.id);
+        waiter?.settle(m);
       } else {
-        for (const listener of this.#events) listener(m);
+        for (const listener of [...this.#events]) listener.settle(m);
       }
     };
+  }
+
+  #closedError(): Error {
+    return new Error(`the DevTools socket ${this.#url} closed`);
   }
 
   static open(url: string): Promise<Connection> {
     return new Promise((resolve, reject) => {
       const socket = new WebSocket(url);
-      socket.onopen = () => resolve(new Connection(socket));
+      socket.onopen = () => resolve(new Connection(socket, url));
       socket.onerror = () => reject(new Error(`cannot connect to ${url}`));
     });
   }
@@ -143,9 +171,13 @@ class Connection {
   ): Promise<Record<string, unknown>> {
     const id = ++this.#next;
     return new Promise((resolve, reject) => {
-      this.#pending.set(id, (m) => {
-        if (m.error) reject(new Error(`${method}: ${m.error.message}`));
-        else resolve(m.result ?? {});
+      if (this.#isClosed) return reject(this.#closedError());
+      this.#pending.set(id, {
+        settle(m) {
+          if (m.error) reject(new Error(`${method}: ${m.error.message}`));
+          else resolve(m.result ?? {});
+        },
+        reject,
       });
       this.#socket.send(JSON.stringify({ id, method, params }));
     });
@@ -153,13 +185,17 @@ class Connection {
 
   /** Resolves on the next event named `method`. */
   next(method: string): Promise<void> {
-    return new Promise((resolve) => {
-      const listener = (m: Message) => {
-        if (m.method !== method) return;
-        this.#events = this.#events.filter((l) => l !== listener);
-        resolve();
+    return new Promise((resolve, reject) => {
+      if (this.#isClosed) return reject(this.#closedError());
+      const waiter: Waiter = {
+        settle: (m) => {
+          if (m.method !== method) return;
+          this.#events.delete(waiter);
+          resolve();
+        },
+        reject,
       };
-      this.#events.push(listener);
+      this.#events.add(waiter);
     });
   }
 

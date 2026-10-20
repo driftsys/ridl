@@ -33,10 +33,26 @@ export async function startServer(): Promise<Server> {
   }).spawn();
   const stdin = child.stdin.getWriter();
   const lines = child.stdout.pipeThrough(new TextDecoderStream()).getReader();
+  // Waits up to 5 s for the exit that the end of standard input causes, then
+  // kills the process, so that a server that does not exit cannot hang the
+  // test.
   const stop = async () => {
     await stdin.close().catch(() => {});
     await lines.cancel().catch(() => {});
-    await child.status;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<"late">((resolve) => {
+      timer = setTimeout(() => resolve("late"), 5000);
+    });
+    const exited = await Promise.race([child.status, late]);
+    clearTimeout(timer);
+    if (exited === "late") {
+      try {
+        child.kill();
+      } catch {
+        // The process exited after the time limit passed.
+      }
+      await child.status;
+    }
   };
   try {
     let text = "";

@@ -3,30 +3,7 @@ import { connect, Kind } from "../mod.ts";
 import type { Note, Occurrence, Sample } from "../mod.ts";
 import * as catalog from "./catalog.ts";
 import { startServer } from "./server.ts";
-
-/** Resolves with the first value `accept` takes, or rejects after `ms`. */
-function waiter<T>(what: string, ms: number) {
-  let resolve!: (value: T) => void;
-  let reject!: (e: Error) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  const timer = setTimeout(
-    () => reject(new Error(`no ${what} within ${ms} ms`)),
-    ms,
-  );
-  return {
-    promise,
-    accept(value: T) {
-      clearTimeout(timer);
-      resolve(value);
-    },
-    cancel() {
-      clearTimeout(timer);
-    },
-  };
-}
+import { waiter } from "./waiter.ts";
 
 Deno.test("a Deno program receives a live signal from the Rust server", async () => {
   const server = await startServer();
@@ -67,6 +44,7 @@ Deno.test("a Deno program receives a live signal from the Rust server", async ()
     assert.deepEqual(fixed.payload, catalog.FIXED_VALUE);
     assert.equal(fixed.envelope.seq, 0n);
 
+    init.start();
     await session.subscribe({
       kind: Kind.Signal,
       iface: catalog.IFACE,
@@ -84,6 +62,10 @@ Deno.test("a Deno program receives a live signal from the Rust server", async ()
     });
 
     const args = Uint8Array.of(0x2a, 0x07);
+    // The waits were registered with the listeners at connect; their time
+    // limits count from the command.
+    live.start();
+    occurred.start();
     await session.command(catalog.IFACE, catalog.COMMAND, args, {
       bound: 2000,
     });
