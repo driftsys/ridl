@@ -490,11 +490,13 @@ Implements D-17 cases 3, 8, 9, 11 and the worst-case half of 12.
 
 ### Task 8: the size limit lives in the type
 
-Implements D-4 and D-22 as amended by owner ruling R-OWN-2, which replaces
-R-OWN-1. The R-OWN-1 implementation had already landed on this branch (a
-`Codec<E>` and a `Bounds<E>` trait in `ridl-rt`, `Ref` bounded on `Codec<E>`, a
-proto3 codec without a size for an unbounded type, a generated `Bounds<Proto3>`
-for an interface with an unbounded payload); this task removes it.
+Implements D-4 and D-22 as amended by owner ruling R-OWN-3, which replaces
+R-OWN-1 and R-OWN-2. Under R-OWN-3 the ros2 corpus is not edited: its refusal is
+pinned as the known limit until driftsys/ridl#996. The R-OWN-1 implementation
+had already landed on this branch (a `Codec<E>` and a `Bounds<E>` trait in
+`ridl-rt`, `Ref` bounded on `Codec<E>`, a proto3 codec without a size for an
+unbounded type, a generated `Bounds<Proto3>` for an interface with an unbounded
+payload); this task removes it.
 
 **Files:**
 
@@ -506,8 +508,7 @@ for an interface with an unbounded payload); this task removes it.
   optional-array/map refusal and the field-number refusal stay),
   `src/descriptors.rs` (no `Bounds<Proto3>`; every proto3 interface table is
   `Sizes<Proto3>`), the backend tests that pinned R-OWN-1 (rewritten to pin the
-  refusal); `evals/corpus/ros2/**` (finite bounds, one comment beside
-  `RosString`); `crates/ridl-ir/src/projection/size/proto3.rs` tests (the cause
+  refusal); `crates/ridl-ir/src/projection/size/proto3.rs` tests (the cause
   attribution stays; pin `RefusedMember` for a stream, an unresolved name and a
   member naming a constant inside a message, and the field-number check before
   the leaf's `NoBound`)
@@ -521,11 +522,11 @@ for an interface with an unbounded payload); this task removes it.
       overflowing collection with `Overflow`);
       `bound_state_gives_a_codec_only_to_a_bounded_type` (every `AbsentCause`
       variant refused, `Bounded` accepted, exhaustive match);
-      `the_ros2_corpus_generates_with_proto3` (with the new bounds); the sizer
+      `the_ros2_corpus_is_refused_under_proto3` (each ros2 package refused, the
+      cause `NoBound` named, the known limit until driftsys/ridl#996); the sizer
       pins above.
-- [ ] **Step 2: Implement** the removal and the corpus bounds; regenerate any
-      checked-in generated file that changes; `freeze/generated/*` must not
-      change.
+- [ ] **Step 2: Implement** the removal and regenerate any checked-in generated
+      file that changes; `freeze/generated/*` must not change.
 - [ ] **Step 3: Run** `cargo test -p ridl-rt --all-features`,
       `cargo test -p ridl-ir`, `cargo test -p ridl-backend-rust`,
       `cargo test -p ridlc`, `cargo test -p ridl --test eval_corpus`,
@@ -534,9 +535,8 @@ for an interface with an unbounded payload); this task removes it.
       `ridl-rt` items plus the proto3 module and the three variants).
 - [ ] **Step 4: Commit**
       `revert(ridl-rt): remove the codec trait without a size bound`,
-      `fix(ridl-backend-rust): refuse a proto3 type without a finite bound`,
-      `fix(repo): give the ros2 corpus finite bounds` (scopes per
-      `.git-std.toml`).
+      `fix(ridl-backend-rust): refuse a proto3 type without a finite bound`
+      (scopes per `.git-std.toml`).
 
 ### Task 9: `Sizes<Proto3>` and `Bounds<Proto3>`, the face over a proto3 port, and the generated crates
 

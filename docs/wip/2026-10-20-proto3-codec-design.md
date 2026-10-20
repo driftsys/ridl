@@ -246,14 +246,13 @@ needs the same number. An induced interaction tuple needs no such field: its
 bound is already the interaction's `request_sizes.proto3` or
 `reply_sizes.proto3` (D-1).
 
-**A declaration with no finite bound is refused (D-22, owner ruling R-OWN-2,
+**A declaration with no finite bound is refused (D-22, owner ruling R-OWN-3,
 2026-10-20).** A declaration whose proto3 state is not `Bounded` — `NoBound`,
 `Overflow`, `RefusedMember` or `Unresolved` — is refused with a `GenerateError`
-naming it and the cause, per type, when proto3 is requested, as are the
-unwidthed integer and float of D-2 and an optional array or map field (ADR-0013
-decision 7). Every `MAX_SIZE` is finite, and `ridl-rt`'s `Payload` and `Sizes`
-API does not change. The size limit lives in the type: a source that needs a
-bounded payload declares its bound (the ros2 corpus does, D-22). Unlike
+naming it and the cause, per type, when proto3 is requested, exactly as the
+FlatBuffers codec refuses it, as are the unwidthed integer and float of D-2 and
+an optional array or map field (ADR-0013 decision 7). Every `MAX_SIZE` is
+finite, and `ridl-rt`'s `Payload` and `Sizes` API does not change. Unlike
 FlatBuffers, no type is withheld silently: the proto3 sizer resolves
 cross-package references through `others`, so there is no "cannot judge" case.
 
@@ -668,47 +667,45 @@ documentation of `Declaration.proto3` in `docs/design/codegen-plugins.md` and
 the book's plugin chapter; `docs/ROADMAP.md`, `docs/BACKLOG.md` and
 `docs/archive/roadmap-landed-record.md`.
 
-One follow-up issue is filed at the end: a design lint that warns on a string or
-collection bound too large for a finite size (D-22). The design record also
-states the fact the conformance suite pinned that a reader would otherwise not
-expect: five appends that `ridl diff` calls breaking (a non-optional struct,
-string, array, map and tuple field) still read an old payload under proto3,
-because proto3 reads an absent field of those kinds as empty (D-12).
+The design record states two facts the suites pinned that a reader would
+otherwise not expect: five appends that `ridl diff` calls breaking (a
+non-optional struct, string, array, map and tuple field) still read an old
+payload under proto3, because proto3 reads an absent field of those kinds as
+empty (D-12); and the ros2 corpus packages do not generate with proto3, because
+their bounds have no finite size, until the platform-wide payload ceiling of
+driftsys/ridl#996 lands (D-22).
 
-### D-22. The size limit lives in the type (owner ruling R-OWN-2, 2026-10-20)
+### D-22. A type with no finite bound is refused (owner ruling R-OWN-3, 2026-10-20)
 
-**The ruling, as the owner gave it:** the proto3 codec keeps refusing a
+**The ruling, as the owner gave it:** the proto3 codec keeps D-4 — it refuses a
 declaration whose size state is not `Bounded` (`NoBound`, `Overflow`,
-`RefusedMember`, `Unresolved`), as D-4 and the FlatBuffers codec do. Every
-`MAX_SIZE` stays finite, there is no "no bound" form, and `ridl-rt`'s
-`Sizes`/`MAX_SIZE` API is unchanged. The ros2 corpus gets real bounds in its
-source instead. Why: the codec must never refuse a value its type allows, and an
-embedded target needs a finite buffer. Cost if wrong: a ROS message that really
-carries a longer string than the corpus bound does not fit the corpus model.
+`RefusedMember`, `Unresolved`), exactly as the FlatBuffers codec does; every
+`MAX_SIZE` stays finite; `ridl-rt`'s `Sizes`/`MAX_SIZE` API is unchanged. A
+platform-wide payload ceiling (4 MiB + 64 KiB, bounds above it capped, not
+refused) will be built later for both codecs together, under its own ADR and
+story, driftsys/ridl#996. Why: the ceiling binds typl, both codecs and the
+transport, so it is not a proto3-only change. Cost if wrong: until #996 lands,
+the ros2 corpus packages do not generate with proto3 (nor with FlatBuffers, as
+today).
 
 **What follows from it.**
 
-- `evals/corpus/ros2` replaces each unbounded string or collection bound
-  (`RosString : string [0..18446744073709551615]` and the
-  `[T; 0..18446744073709551615]` collections) with a finite one, chosen once and
-  stated in a comment beside `RosString`; every ros2 package then generates with
-  proto3, and a test says so. The frozen copy under
-  `xtask/tests/freeze-fixtures/sources/` keeps its original text unless the
-  freeze fixtures require otherwise.
+- The ros2 corpus (`evals/corpus/ros2`) is not edited; its packages are refused
+  under proto3 with the declaration and the cause named (`NoBound` for
+  `RosString : string [0..18446744073709551615]`), and a test pins that refusal
+  as the known limit until #996.
 - The proto3 sizer reports the true cause of an absent state: `NoBound` for a
   member with no finite bound, `Overflow` for a sum that does not fit,
   `RefusedMember` only for a member proto3 cannot represent. The codec refuses
-  all of them; the cause only changes the message.
-- A design lint that warns on a string or collection bound too large for a
-  finite size is proposed in a follow-up issue, not built here.
+  all of them; the cause only changes the message and the `Model`'s state.
 
 **Alternatives considered.**
 
-| Candidate                                                                                                 | Verdict                         | Reason                                                                                                                                                                                                        |
-| --------------------------------------------------------------------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R-OWN-1: accept a type with no finite bound, through a size-free `Codec<E>` trait and a `Bounds<E>` table | rejected by the owner, replaced | it adds two public traits to `ridl-rt`, it leaves the generated face unable to serve such a payload without an allocator, and an embedded consumer still needs a finite buffer; the bound belongs in the type |
-| Accept an unbounded type with `MAX_SIZE = usize::MAX` and an empty buffer                                 | rejected                        | `MAX_SIZE` would stop being the largest encoded size, and code holding `BUFFER` would fail at run time                                                                                                        |
-| Leave the ros2 corpus unbounded and out of the proto3 tests                                               | rejected                        | the corpus is the realistic case the codec must serve; refusing it silently hides the bound the source should state                                                                                           |
+| Candidate                                                                                                                         | Verdict  | Reason                                                                                                                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Accept a type with no finite bound, through a size-free `Codec<E>` trait and a `Bounds<E>` table (owner ruling R-OWN-1, replaced) | rejected | a size ceiling binds typl, both codecs and the transport, so it is not a proto3-only change; it also added two public `ridl-rt` traits and left the face unable to serve such a payload without an allocator (driftsys/ridl#996) |
+| Give the ros2 corpus finite bounds in its source (owner ruling R-OWN-2, replaced)                                                 | rejected | the platform-wide ceiling of driftsys/ridl#996 caps such bounds for every package at once, instead of editing one corpus by hand                                                                                                 |
+| Accept an unbounded type with `MAX_SIZE = usize::MAX` and an empty buffer                                                         | rejected | `MAX_SIZE` would stop being the largest encoded size, and code holding `BUFFER` would fail at run time                                                                                                                           |
 
 ## 6. What is left to the builder
 
