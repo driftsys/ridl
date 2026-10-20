@@ -287,11 +287,16 @@ impl Scalar {
                 },
                 true,
             ),
-            // A wire value above `i64::MAX` wraps to a negative `i64`. A
-            // `uint64` field has a declared range inside `i64` with a
-            // non-negative minimum (the width is derived from the range), so
-            // the range check that follows refuses the wrapped value as
-            // `Contract(Range)`.
+            // A wire value above `i64::MAX` wraps to a negative `i64`, the
+            // inverse of the encoder's `i64 as u64` cast. A `uint64` integer
+            // field has a declared range inside `i64` with a non-negative
+            // minimum (the width is derived from the range), so the range
+            // check that follows refuses the wrapped value as
+            // `Contract(Range)`. A `uint64` enum-set field has no range: its
+            // width is u64 because bit 63 is a declared member, the wrapped
+            // value is the set's own `i64` representation, and the
+            // `TryFrom<i64>` check that follows accepts it exactly when
+            // every set bit is a member.
             pb::Scalar::Uint64 => (quote! { __raw as ::core::primitive::i64 }, false),
             pb::Scalar::Sint32 => (
                 quote! {
