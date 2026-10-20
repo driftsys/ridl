@@ -23,7 +23,7 @@ payload codecs. **Step 2** adds the TypeScript framework and the codegen plugin
 system. Kotlin, the first external plugin, follows step 2 because it depends on
 the backend contract. The plugin protocol, E4.5a and E4.5b, runs ahead of the
 two remaining Rust payload codecs, E11.8 and E11.12, and ahead of the TypeScript
-framework, E12; the sequence below states why.
+framework, E12; the sequence below states why. E11.8 landed on 2026-10-20.
 
 **Supersedes
 [ADR-0004](decisions/ADR-0004-implementation-sequencing-and-stack.md)'s
@@ -245,7 +245,7 @@ E10 value objects, E10.10 last ────────────────�
 
 E14.1 · E10, the typl debt ─→ Rust codegen finalized
       ─→ E11.7 FlatBuffers ─→ E4.5a IR stability ─→ E4.5b plugin protocol
-                                                 ─→ E11.8 proto3 · E11.12 repr(C), after #801
+                                                 ─→ E11.8 proto3, landed · E11.12 repr(C), after #801
 #801 on-request encodings — depends on nothing ─→ E11.8 · E11.9 · E11.12
 
 E6 rsdl finalized and lowered to the IR — beside the lock; E6.17 last, landed
@@ -565,9 +565,9 @@ FlatBuffers codec), test-only ports (retired by E11.15), a zero catalog hash
 (retired by E16.2, which computes it), all-absent encoded sizes (retired one
 column at a time: E16.4, driftsys/ridl#380, filled the `flatbuffers` column from
 the codegen model's bound; the later size table holds one `Sizes<E>`
-implementation per codec the manifest names, so `proto3` has none because the
-Rust backend emits no proto3 codec, and `repr-c` has none until E11.12), and a
-narrow contract-clause translator (E5.1). The as-built record is
+implementation per codec the manifest names, so `proto3` has one since E11.8
+landed, and `repr-c` has none until E11.12), and a narrow contract-clause
+translator (E5.1). The as-built record is
 [the interaction-face design record](design/interaction-face.md) and
 [ADR-0023](decisions/ADR-0023-interaction-face-generation.md); its reasoning
 trail is archived at
@@ -831,6 +831,29 @@ D-9's writer rule stands; its reader rule is amended. Its remainder,
 non-optional field breaking unless it is a scalar, enum or enum set whose type
 allows 0, which is where the reader reads the old buffers (ADR-0008 decision 14
 as amended). A type the diff cannot resolve is reported as breaking.
+
+**E11.8 landed** (driftsys/ridl#264, PR driftsys/ridl#TBD-PR). When
+`[backend.rust] encodings` names `proto3`, the Rust backend emits a
+`Payload<Proto3>` for every declaration that projects a type and for every
+induced interaction tuple that crosses the wire, and a `Sizes<Proto3>` for every
+interface; `ridl-rt`'s `proto3` feature enables the wire helpers the generated
+code calls. The bytes are checked against `prost` code that `prost-build`
+generates through `protox` from the `.proto` this toolchain emits, with no
+`protoc`, in both directions: this codec's bytes equal `prost`'s for every value
+of the fixture except a float at `-0.0`, which this codec writes and `prost`
+omits, and each side reads the other's bytes. An absent non-optional field reads
+as its proto3 default when that default is a legal value of its type and is
+refused with `MissingRequired` otherwise, which in proto3 covers strings, bytes
+and collections as well as scalars and enums. The guard in
+`xtask/tests/oracle_boundary.rs` keeps every `prost` crate out of `ridl-rt` and
+of a generated crate. A type whose proto3 size state is not bounded is refused
+at generation, as the FlatBuffers codec refuses one, so the ros2 corpus packages
+do not generate with proto3. Its as-built record is
+[the proto3 codec design record](design/proto3-codec.md). Follow-ups:
+driftsys/ridl#996 (a platform-wide payload ceiling for both codecs, which would
+cap such a bound instead of refusing it) and driftsys/ridl#997 (the codec does
+not reproduce the `.proto` emitter's name-collision refusals). The row stays in
+the table above, as the row of E11.7 does, because the section is not complete.
 
 **Known defects to clear with this work:** driftsys/ridl#302 (a union-arm
 retirement would shift FlatBuffers wire discriminants silently).

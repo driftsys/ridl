@@ -687,3 +687,23 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decision 6 as amended 2026-10-20. The follow-ups are driftsys/ridl#991 and
   driftsys/ridl#992.
+
+- **2026-10-20-proto3-codec-design.md** and **2026-10-20-proto3-codec-plan.md**
+  — the design note and the ten-task plan for the generated Rust proto3 payload
+  codec, story E11.8 (driftsys/ridl#264): the `Payload<Proto3>` and
+  `Sizes<Proto3>` emitted on request, the wire mapping the codec shares with the
+  emitted `.proto`, `Declaration.proto3` in the codegen protocol, the canonical
+  writer, the reader's acceptances and refusals, the absence rule in proto3
+  terms, the `prost` oracle generated through `protox`, and the guard that keeps
+  `prost` out of `ridl-rt` and of a generated crate. Both are archived verbatim.
+  Its D-22 is the owner's final sizing ruling of 2026-10-20: a type whose size
+  state is not bounded is refused, as the FlatBuffers codec refuses one, and the
+  platform-wide payload ceiling is driftsys/ridl#996; the two earlier rulings of
+  that day are recorded there as rejected alternatives. The durable record is
+  [the proto3 codec design record](../design/proto3-codec.md), with the
+  2026-10-20 amendments of
+  [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md),
+  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md),
+  [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) and
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md). The
+  follow-ups are driftsys/ridl#996 and driftsys/ridl#997.

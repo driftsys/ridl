@@ -15,7 +15,13 @@ library), and [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md)
 decisions 7, 8 and 10 and its open item 3 (the proof type, the `proto3` feature,
 the additive `ridl-rt` items, the view). It follows
 [the FlatBuffers codec](flatbuffers-codec.md) wherever the two formats allow,
-and this record says where they differ.
+and this record says where they differ. The reasoning behind each decision, with
+the cost the design note gave each one if it were wrong, is the archived design
+note
+[`../archive/2026-10-20-proto3-codec-design.md`](../archive/2026-10-20-proto3-codec-design.md)
+and its plan
+[`../archive/2026-10-20-proto3-codec-plan.md`](../archive/2026-10-20-proto3-codec-plan.md);
+the alternatives they rejected are [below](#alternatives-considered).
 
 **The codec is emitted on request.** `ridl build` emits it, with the descriptors
 and the face, when the manifest's `[backend.rust] encodings` names `proto3`,
@@ -544,6 +550,61 @@ regenerate byte for byte.
 | The codec does not reproduce the proto backend's name-collision refusals: a package the `.proto` emitter refuses for a name reason still gets a Rust codec                          | driftsys/ridl#997 |
 | The `.proto` emitter and the codec walk a message separately, held together by the drift test rather than by one shared walk                                                        | driftsys/ridl#690 |
 
+## Alternatives considered
+
+The design note weighed each of these and rejected it; the reason is the one it
+gave, checked against what was built.
+
+- **Delegating the codec to `prost` in the generated crate.** ADR-0018 decision
+  4 generates the codec, `prost` needs `alloc` and its own message types beside
+  the domain types, and the guard exists to keep it out.
+- **`protoc`-generated code as the oracle.** `protoc` stays out of every gate
+  (ADR-0006 decision 3); `prost` through `protox` needs no external tool.
+- **`prost-reflect` alone as the oracle.** It writes map entries in hash order,
+  and a dynamic message is a second reading of the descriptor rather than the
+  generated code a third party uses. It is kept for the corpus case.
+- **A `build.rs` that generates the oracle at test time.** It would run `protox`
+  on every build of the crate; the oracle is checked in with a regeneration
+  test, as the FlatBuffers suite checks in its own.
+- **A round trip only, with no byte equality.** proto3 has a canonical encoding
+  for every case a writer controls, so byte equality is available and is the
+  stronger check.
+- **protobuf's merge rule for a field written twice**, and **skipping groups as
+  `prost` does**: refused instead, for the reasons in the reader section.
+- **Keeping unknown fields.** It needs an allocator and a place in the domain
+  type; a gateway forwards the bytes.
+- **Writing backwards, as the FlatBuffers builder does.** A varint length prefix
+  has a size that depends on the length, so a backwards writer has to shift or
+  reserve bytes; writing forwards gives an exact `needed`.
+- **Accessors on the proto3 view.** Each would be a scan; they can be added
+  later without a break.
+- **A second proto3 sizer in the Rust backend instead of `Declaration.proto3`.**
+  It would be two sources of one bound, and the plugin path has no IR.
+- **Moving the `.proto` emitter's walk into `ridl-ir` now.** It needs the
+  emitter ported onto the codegen model first (driftsys/ridl#690); the drift
+  test covers the risk.
+- **Omitting a float at `-0.0`, as `prost` does.** The sign of zero would be
+  lost on every round trip, through this codec too.
+- **Refusing an absent string or collection, as FlatBuffers refuses an absent
+  offset.** Every proto3 writer omits an empty one, so the codec would refuse
+  `prost`'s canonical bytes.
+- **`Malformed::TooLarge` above `MAX_SIZE`.** A newer writer's skipped fields
+  can take a payload past this version's bound.
+- **Accepting a type with no finite bound through a size-free codec trait and a
+  bounds table in `ridl-rt`.** This was the owner's first ruling of 2026-10-20,
+  and it was built and then removed before the codec landed. The final ruling of
+  the same day replaced it: a size ceiling binds typl, both codecs and the
+  transport, so it is not a proto3-only change and belongs to driftsys/ridl#996;
+  the trait also added two public `ridl-rt` traits and left the face unable to
+  serve such a payload without an allocator.
+- **Giving the ros2 corpus finite bounds in its source.** This was the owner's
+  second ruling of 2026-10-20, also replaced by the final one: the ceiling of
+  driftsys/ridl#996 caps such bounds for every package at once, instead of one
+  corpus being edited by hand.
+- **Accepting a type with no finite bound with `MAX_SIZE = usize::MAX` and an
+  empty buffer.** `MAX_SIZE` would stop being the largest encoded size, and code
+  that holds `BUFFER` would fail at run time.
+
 ## Trace
 
 - Roadmap: [`../ROADMAP.md`](../ROADMAP.md); the issue is driftsys/ridl#264
@@ -567,3 +628,6 @@ regenerate byte for byte.
   [`ridl-rt.md`](ridl-rt.md), [`interaction-face.md`](interaction-face.md),
   [`catalog-descriptor.md`](catalog-descriptor.md),
   [`codegen-plugins.md`](codegen-plugins.md)
+- Archived design and plan:
+  [`../archive/2026-10-20-proto3-codec-design.md`](../archive/2026-10-20-proto3-codec-design.md),
+  [`../archive/2026-10-20-proto3-codec-plan.md`](../archive/2026-10-20-proto3-codec-plan.md)
