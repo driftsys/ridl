@@ -2871,9 +2871,11 @@ ts-browser-e2e:
 # reachable from here, because a member that is not a dependency of `build` is
 # not covered by `gate-parity`'s CI-parity check.
 #
-# The four members that need no compilation run first, so a wrong toolchain, an
-# unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
-# report before a compile starts rather than after a full compile and test run.
+# The ten members before `compile` do not compile the workspace (freeze-check
+# compiles only xtask), so they run first: a wrong toolchain, an unwired CI job,
+# a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
+# TypeScript check all report before the workspace compiles rather than after a
+# full compile and test run.
 build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
