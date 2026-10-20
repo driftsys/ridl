@@ -31,7 +31,9 @@ nothing: it carries payload bytes without decoding them, so it needs no port
 interface and no codec from a runtime package. A dependency on a package that
 does not exist would block the transport for no gain. When the runtime package
 exists, the transport may take its port interfaces as a dependency, and the row
-then says so. The row is changed in place. Open item 2 records the location.
+then says so. The row is changed in place. Open item 2 records the location. The
+package's as-built record is
+[`ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md).
 
 **Amended 2026-10-19 — decision 6, the WebSocket transport has no WebSocket
 dependency.** The `ridl-transport-ws` row said "`ridl-rt` and a WebSocket

@@ -23,19 +23,20 @@ Version: 0.2.0
 > **As built.** Two packages in this workspace speak this frame over WebSocket
 > (§11.1): the crate `ridl-transport-ws`, the serving side, and the TypeScript
 > package `@driftsys/ridl-transport-ws` (`packages/ridl-transport-ws/`), the
-> consuming side. The crate serves the observe and call ports of a provider
-> runtime, applies the exact-match rule of §6.1 at `attach`, and keeps the last
-> 64 settled responses of a session for duplicate suppression instead of keeping
-> each until its response bound has passed (§7). The runtime here,
-> `ridl-loopback`, runs in process: it carries bytes from a provider handle to a
-> consumer handle over one in-memory store, opens no socket, and has no wire
-> format ([its design record](../design/ridl-loopback.md)). Neither enforces a
-> timing rule or a contract clause on the provider side, so every sentence below
-> about those describes the specification, not behaviour a shipped runtime
-> performs. The first binding is the WebSocket transport (driftsys/ridl#265);
-> the second is a runtime's own binder contract on Android, outside this
-> repository (§11.2, which reverses an earlier AIDL binding generated per
-> interface).
+> consuming side ([the crate's design record](../design/ridl-transport-ws.md),
+> [the package's design record](../design/ridl-transport-ws-ts.md)). The crate
+> serves the observe and call ports of a provider runtime, applies the
+> exact-match rule of §6.1 at `attach`, and keeps the last 64 settled responses
+> of a session for duplicate suppression instead of keeping each until its
+> response bound has passed (§7). The runtime here, `ridl-loopback`, runs in
+> process: it carries bytes from a provider handle to a consumer handle over one
+> in-memory store, opens no socket, and has no wire format
+> ([its design record](../design/ridl-loopback.md)). Neither enforces a timing
+> rule or a contract clause on the provider side, so every sentence below about
+> those describes the specification, not behaviour a shipped runtime performs.
+> The first binding is the WebSocket transport (driftsys/ridl#265); the second
+> is a runtime's own binder contract on Android, outside this repository (§11.2,
+> which reverses an earlier AIDL binding generated per interface).
 >
 > The catalog descriptor carries the list of compatible earlier catalog hashes
 > that §6.1 names, and no runtime in this workspace reads it at `attach`.
