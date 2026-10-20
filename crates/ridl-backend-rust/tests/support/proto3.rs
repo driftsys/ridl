@@ -222,7 +222,11 @@ impl Program {
             .rust_source;
             // A generated type has a `Default` only when every field of it
             // has a derivable init value (TYPL-115), which the emitted text
-            // states as an `impl Default`; read there, whitespace aside.
+            // states as an `impl Default`; read there, whitespace aside. A
+            // text match is deliberate: if the emitter changes the shape of
+            // that impl, no message is found to have a `Default`, and the
+            // test that requires `Default` on every message but three fails
+            // loudly rather than silently checking fewer messages.
             let dense: String = generated.chars().filter(|c| !c.is_whitespace()).collect();
             let layout = ridl_backend_rust::proto3_layout(package, &others)
                 .unwrap_or_else(|error| panic!("{} lays out: {}", package.name, error.message));

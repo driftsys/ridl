@@ -29,12 +29,15 @@
 //! generates the `prost` oracle with `prost-build`. All seven edges are
 //! test-time only, for the same reason and one more: ADR-0020 decision 9
 //! makes a backend an executable rather than a library other crates link.
-//! `prost` itself is not a boundary of `ridl-backend-rust`: `ridl-ir`
-//! depends on it normally, for the IR's own messages, so it is in
-//! `ridl-backend-rust`'s normal closure by design and a dev-only rule over
-//! it would fail on that legitimate edge. What must stay out of reach of
-//! `prost` is `ridl-rt` and a generated package, which
-//! [`the_runtime_reaches_no_prost_crate`] covers for `ridl-rt`.
+//! `prost` and `prost-reflect` are not [`BOUNDARIES`] rows of
+//! `ridl-backend-rust`: `ridl-ir` depends on both normally, for the IR's
+//! own messages, so each is in `ridl-backend-rust`'s normal closure by
+//! design and a closure rule over either would fail on that legitimate
+//! edge. The dev-only rule for them, and for the three rows, is enforced
+//! on the backend's **direct** edges instead, by
+//! [`the_rust_backend_takes_its_oracles_as_dev_dependencies_only`]. What
+//! must stay out of reach of `prost` is `ridl-rt` and a generated package,
+//! which [`the_runtime_reaches_no_prost_crate`] covers for `ridl-rt`.
 //!
 //! **Which record each rule rests on.** The test-time-only rule for
 //! `ridl-backend-rust`'s seven edges rests on ADR-0020 decision 9. The FlatBuffers
@@ -130,8 +133,8 @@ const BOUNDARIES: &[Boundary] = &[
     // The proto3 counterparts: the schema backend that emits the `.proto`
     // the conformance test's oracle is generated from, the compiler that
     // turns it into a descriptor set, and the generator that writes the
-    // `prost` oracle. `prost` itself is not listed; the module
-    // documentation says why.
+    // `prost` oracle. `prost` and `prost-reflect` are not listed; the module
+    // documentation says why, and `RUST_BACKEND_DEV_ONLY` covers them.
     Boundary {
         package: "ridl-backend-rust",
         oracle: "ridl-backend-proto",
@@ -161,6 +164,21 @@ const PROST_CRATES: &[&str] = &[
     "prost-reflect",
     "protox",
     "protox-parse",
+];
+
+/// The crates `ridl-backend-rust` may name in its own manifest only under
+/// `[dev-dependencies]`: its proto3 conformance test's oracle and the crates
+/// that produce it. `prost` and `prost-reflect` are here and not in
+/// [`BOUNDARIES`] because `ridl-ir` reaches both normally, so only the
+/// backend's own direct edge can say which kind the backend uses them as.
+/// `prost-reflect` is listed before any test needs it, so that adding it
+/// under the wrong table fails on the day it is added.
+const RUST_BACKEND_DEV_ONLY: &[&str] = &[
+    "prost",
+    "prost-build",
+    "prost-reflect",
+    "protox",
+    "ridl-backend-proto",
 ];
 
 /// The packages under the stronger boundary of lane E16 (driver section 4,
@@ -292,6 +310,61 @@ fn the_runtime_reaches_no_planus_crate() {
                 path = path.unwrap_or_default(),
             );
         }
+    }
+}
+
+/// Every direct dependency of `ridl-backend-rust` named in
+/// [`RUST_BACKEND_DEV_ONLY`] is a dev-dependency and nothing else.
+///
+/// A closure walk cannot state this for `prost` or `prost-reflect`, because
+/// `ridl-ir` brings both normally: `prost` moved into `ridl-backend-rust`'s
+/// `[dependencies]` changes no closure at all. `cargo metadata` records the
+/// kind of every direct edge in `packages[].dependencies[].kind` — JSON
+/// null for a normal dependency, `"dev"`, or `"build"` — and a crate named
+/// under two tables appears as two entries, so every entry is checked. The
+/// four the conformance test uses today must be present, or the check
+/// proves nothing.
+#[test]
+fn the_rust_backend_takes_its_oracles_as_dev_dependencies_only() {
+    let metadata = cargo_metadata(None, false);
+    let id = member_id(&metadata, "ridl-backend-rust");
+    let package = metadata["packages"]
+        .as_array()
+        .expect("cargo metadata carries a `packages` array")
+        .iter()
+        .find(|package| package["id"].as_str() == Some(id))
+        .expect("`ridl-backend-rust` is a package of the workspace");
+    let mut seen: Vec<&str> = Vec::new();
+    for dependency in package["dependencies"]
+        .as_array()
+        .expect("a package carries a `dependencies` array")
+    {
+        let name = dependency["name"]
+            .as_str()
+            .expect("a dependency has a name");
+        if !RUST_BACKEND_DEV_ONLY.contains(&name) {
+            continue;
+        }
+        seen.push(name);
+        let kind = dependency["kind"].as_str().unwrap_or("normal");
+        assert_eq!(
+            kind, "dev",
+            "\n\
+             `{name}` is a {kind} dependency of `ridl-backend-rust`.\n\
+             \n\
+             `{name}` is test-time only for `ridl-backend-rust`: the proto3 \
+             conformance test's oracle, or a crate that produces it. A normal or \
+             build edge ships it with the backend (ADR-0020 decision 9 makes a \
+             backend an executable, not a library other crates link). Move it \
+             back to `[dev-dependencies]`.\n"
+        );
+    }
+    for required in ["prost", "prost-build", "protox", "ridl-backend-proto"] {
+        assert!(
+            seen.contains(&required),
+            "`{required}` is a dev-dependency of `ridl-backend-rust`, or this \
+             check has nothing to check: {seen:?}"
+        );
     }
 }
 

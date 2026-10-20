@@ -353,9 +353,11 @@ Implements D-17's oracle, cases 1, 2 and 10 for Task 3's shapes, and the
       protox descriptor's field numbers, scalar types and labels; a message the
       codec does not cover yet is skipped with its name listed in an
       `expected_uncovered` array that Task 5 empties); in `oracle_boundary.rs`,
-      `the_runtime_reaches_no_prost_crate` and the four new `BOUNDARIES` rows
-      (`ridl-backend-rust` → `ridl-backend-proto`, `protox`, `prost-build`,
-      `prost-reflect`).
+      `the_runtime_reaches_no_prost_crate`, the three new `BOUNDARIES` rows
+      (`ridl-backend-rust` → `ridl-backend-proto`, `protox`, `prost-build`) and
+      `the_rust_backend_takes_its_oracles_as_dev_dependencies_only`, the
+      direct-edge check that covers `prost` and `prost-reflect`, which `ridl-ir`
+      reaches normally and no closure rule can see (D-18).
 - [ ] **Step 2: Run**
       `cargo test -p ridl-backend-rust --test proto3_conformance` and
       `cargo test -p xtask --test oracle_boundary` — FAIL.

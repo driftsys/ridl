@@ -194,16 +194,109 @@ fn the_fixture_holds_every_shape() {
 
 /// The corpus packages the drift test reads beside the fixture — each a
 /// workspace entry `ridlc::compile_workspace` loads, relative to the
-/// repository root — with the number of messages of its emitted schema the
-/// codec does not emit yet. The count pins the coverage without naming
-/// every corpus message: it falls as the codec grows, and a change in either
-/// direction fails the test.
-const CORPUS: &[(&str, usize)] = &[
-    ("examples/cabin", 0),
-    ("crates/ridlc/tests/corpus/veh-cluster", 16),
-    ("evals/corpus/mavlink", 2),
-    ("evals/corpus/ros2", 67),
-    ("evals/corpus/vss", 0),
+/// repository root — with every message of its emitted schema the codec
+/// does not emit yet, by `.proto` full name, sorted. The lists are held to
+/// the same rule as [`EXPECTED_UNCOVERED`], and empty as the codec grows.
+const CORPUS: &[(&str, &[&str])] = &[
+    ("examples/cabin", &[]),
+    (
+        "crates/ridlc/tests/corpus/veh-cluster",
+        &[
+            "veh.cluster.FaultPage",
+            "veh.cluster.RawWheelSpan",
+            "veh.cluster.RawWheelSpanBurstsElement",
+            "veh.cluster.RawWheelSpanSpan",
+            "veh.cluster.VehHvacCabinGetBoundsParams",
+            "veh.cluster.VehHvacCabinGetBoundsReply",
+            "veh.cluster.VehHvacCabinGetCabinTempParams",
+            "veh.cluster.VehHvacCabinGetClimateParams",
+            "veh.cluster.VehHvacCabinScaledFanParams",
+            "veh.cluster.WheelDiagnosticsReadSpanParams",
+            "veh.cluster.WheelDiagnosticsReadSpanReply",
+            "veh.cluster.WheelDiagnosticsReadTicksParams",
+            "veh.cluster.WheelDiagnosticsTickBoundsElement",
+            "veh.common.SensorBounds",
+            "veh.common.SensorBoundsRange",
+            "veh.common.SensorResult",
+        ],
+    ),
+    (
+        "evals/corpus/mavlink",
+        &["common.GpsRawInt", "common.Uint64Bytes"],
+    ),
+    (
+        "evals/corpus/ros2",
+        &[
+            "geometrymsgs.AccelWithCovariance",
+            "geometrymsgs.AccelWithCovarianceStamped",
+            "geometrymsgs.Polygon",
+            "geometrymsgs.PolygonInstance",
+            "geometrymsgs.PolygonInstanceStamped",
+            "geometrymsgs.PolygonStamped",
+            "geometrymsgs.PoseArray",
+            "geometrymsgs.PoseWithCovariance",
+            "geometrymsgs.PoseWithCovarianceStamped",
+            "geometrymsgs.TwistWithCovariance",
+            "geometrymsgs.TwistWithCovarianceStamped",
+            "geometrymsgs.VelocityWithCovarianceStamped",
+            "nav2msgs.BehaviorTreeLog",
+            "nav2msgs.ClearEntireCostmapRequest",
+            "nav2msgs.Costmap",
+            "nav2msgs.FollowWaypointsGoal",
+            "nav2msgs.FollowWaypointsResult",
+            "nav2msgs.GetCostmapResponse",
+            "nav2msgs.IsPathValidResponse",
+            "nav2msgs.Nav2MsgsInteractionsIsPathValidParams",
+            "nav2msgs.Nav2MsgsInteractionsSaveMapParams",
+            "nav2msgs.ParticleCloud",
+            "nav2msgs.VoxelGrid",
+            "navmsgs.GetMapResponse",
+            "navmsgs.GetPlanResponse",
+            "navmsgs.Goals",
+            "navmsgs.GridCells",
+            "navmsgs.LoadMapResponse",
+            "navmsgs.NavMsgsInteractionsGetMapParams",
+            "navmsgs.NavMsgsInteractionsGetPlanParams",
+            "navmsgs.NavMsgsInteractionsSetMapParams",
+            "navmsgs.OccupancyGrid",
+            "navmsgs.Path",
+            "navmsgs.SetMapRequest",
+            "navmsgs.Trajectory",
+            "sensormsgs.BatteryState",
+            "sensormsgs.CameraInfo",
+            "sensormsgs.ChannelFloat32",
+            "sensormsgs.CompressedImage",
+            "sensormsgs.Image",
+            "sensormsgs.Imu",
+            "sensormsgs.JointState",
+            "sensormsgs.Joy",
+            "sensormsgs.JoyFeedbackArray",
+            "sensormsgs.LaserEcho",
+            "sensormsgs.LaserScan",
+            "sensormsgs.MagneticField",
+            "sensormsgs.MultiDOFJointState",
+            "sensormsgs.MultiEchoLaserScan",
+            "sensormsgs.NavSatFix",
+            "sensormsgs.PointCloud",
+            "sensormsgs.PointCloud2",
+            "sensormsgs.SetCameraInfoRequest",
+            "stdmsgs.ByteMultiArray",
+            "stdmsgs.Float32MultiArray",
+            "stdmsgs.Float64MultiArray",
+            "stdmsgs.Int16MultiArray",
+            "stdmsgs.Int32MultiArray",
+            "stdmsgs.Int64MultiArray",
+            "stdmsgs.Int8MultiArray",
+            "stdmsgs.MultiArrayLayout",
+            "stdmsgs.UInt16MultiArray",
+            "stdmsgs.UInt32MultiArray",
+            "stdmsgs.UInt64MultiArray",
+            "stdmsgs.UInt8MultiArray",
+            "stdsrvs.StdSrvsInteractionsEmptyParams",
+            "stdsrvs.StdSrvsInteractionsTriggerParams",
+        ],
+    ),
+    ("evals/corpus/vss", &[]),
 ];
 
 /// Every message of the fixture's emitted schema the codec does not emit
@@ -289,14 +382,15 @@ fn local_or_qualified(package: &str, full_name: &str) -> String {
 /// same fields, numbers, scalars and labels, and every top-level message of
 /// the schema the codec does not emit is collected into `uncovered`. A map
 /// entry is a nested message the schema synthesizes, so it is not a message
-/// of the package.
+/// of the package. Returns the number of messages the codec emits for
+/// `package`, each of which was compared.
 fn compare(
     package: &v2::Package,
     others: &[&v2::Package],
     pool: &DescriptorPool,
     uncovered: &mut BTreeSet<String>,
     mismatches: &mut Vec<String>,
-) {
+) -> usize {
     let layout: BTreeMap<String, Proto3MessageLayout> =
         ridl_backend_rust::proto3_layout(package, others)
             .unwrap_or_else(|error| panic!("{} lays out: {}", package.name, error.message))
@@ -334,14 +428,15 @@ fn compare(
             ));
         }
     }
+    layout.len()
 }
 
 /// The layout the codec emits from equals the emitted `.proto` schema, field
 /// by field, over the fixture and over every corpus package, so a
 /// field-number, scalar or label disagreement between the two emitters fails
 /// without running any generated code. The messages the codec does not emit
-/// yet are exactly [`EXPECTED_UNCOVERED`] in the fixture, and as many as
-/// [`CORPUS`] counts in each corpus entry.
+/// yet are exactly [`EXPECTED_UNCOVERED`] in the fixture, and exactly the
+/// names [`CORPUS`] lists for each corpus entry.
 #[test]
 fn proto3_layout_matches_the_emitted_schema() {
     let mut mismatches: Vec<String> = Vec::new();
@@ -389,17 +484,17 @@ fn proto3_layout_matches_the_emitted_schema() {
                 .map(|(_, other)| other)
                 .collect();
             others.push(&std_ir);
-            compare(package, &others, &pool, &mut uncovered, &mut mismatches);
-            covered += ridl_backend_rust::proto3_layout(package, &others)
-                .expect("laid out above")
-                .len();
+            covered += compare(package, &others, &pool, &mut uncovered, &mut mismatches);
         }
         assert!(covered > 0, "{entry}: the codec emits a message of it");
+        let expected: BTreeSet<String> = expected_uncovered
+            .iter()
+            .map(|name| name.to_string())
+            .collect();
         assert_eq!(
-            uncovered.len(),
-            *expected_uncovered,
-            "{entry}: the messages the codec does not emit yet ({covered} compared): \
-             {uncovered:?}"
+            uncovered, expected,
+            "{entry}: the messages the codec does not emit yet ({covered} compared): a name \
+             listed but emitted is stale, a name emitted nowhere but unlisted is new"
         );
     }
 
@@ -513,6 +608,11 @@ struct Row {
     name: &'static str,
     ours: &'static str,
     prost: Box<dyn Oracle>,
+    /// What `verify` answers for `prost`'s bytes: `ok` for a legal value,
+    /// or the `Debug` text of the refusal where this codec is stricter than
+    /// `prost` — a value outside a typl constraint that `prost` carries
+    /// without checking.
+    verdict: &'static str,
 }
 
 fn row<T: Oracle + 'static>(
@@ -526,6 +626,21 @@ fn row<T: Oracle + 'static>(
         name,
         ours,
         prost: Box::new(prost),
+        verdict: "ok",
+    }
+}
+
+/// A [`row`] whose value this codec refuses on `verify` with `verdict`.
+fn refused_row<T: Oracle + 'static>(
+    message: &'static str,
+    name: &'static str,
+    ours: &'static str,
+    prost: T,
+    verdict: &'static str,
+) -> Row {
+    Row {
+        verdict,
+        ..row(message, name, ours, prost)
     }
 }
 
@@ -671,6 +786,22 @@ fn rows() -> Vec<Row> {
                 ignored: 0,
                 value: f64::NAN,
             },
+        ),
+        // The 32-bit path of the bit comparison: `narrow` is a `float`. Its
+        // range is `[0.0..250.0]`, which NaN is outside of, so the bytes are
+        // prost's and prost reads them, and this codec's `verify` refuses
+        // them as a range violation: the one place in the table where this
+        // codec is stricter than prost.
+        refused_row(
+            "Scalars",
+            "f32_nan",
+            "{ let mut v = scalars_zero(); v.narrow = f32::NAN as f64; v }",
+            oracle::Scalars {
+                narrow: f32::NAN,
+                gear: oracle::Gear::First as i32,
+                ..Default::default()
+            },
+            "Contract(Violation { type_name: Some(\"Scalars\"), rule: Range })",
         ),
         row(
             "TrendBox",
@@ -989,6 +1120,11 @@ fn named_values() -> Vec<proto3::NamedValue> {
         name: "minus_zero",
         expr: "Signs { ignored: 0, value: -0.0 }",
     });
+    values.push(proto3::NamedValue {
+        message: "Scalars",
+        name: "narrow_minus_zero",
+        expr: "{ let mut v = scalars_zero(); v.narrow = -0.0; v }",
+    });
     values
 }
 
@@ -1072,14 +1208,32 @@ fn prost_bytes_decode_here() {
             panic!("three answers per row");
         };
         assert_eq!(
-            verdict, "ok",
-            "{}/{}: this codec must verify the bytes prost writes",
+            verdict, row.verdict,
+            "{}/{}: this codec must verify the bytes prost writes, or refuse them as the row \
+             states",
             row.message, row.name
         );
+        if row.verdict != "ok" {
+            assert_eq!(
+                re_encoded, row.verdict,
+                "{}/{}: a refused value is not decoded",
+                row.message, row.name
+            );
+            continue;
+        }
         assert_eq!(
             re_encoded, ours,
             "{}/{}: the value read from prost's bytes must be the row's value",
             row.message, row.name
+        );
+        // Stated on its own as well, so this direction does not rest on the
+        // other test: what was read from prost's bytes writes prost's bytes.
+        assert_eq!(
+            re_encoded,
+            &to_hex(&row.prost.encode()),
+            "{}/{}: the value read from prost's bytes must re-encode to them",
+            row.message,
+            row.name
         );
     }
 }
@@ -1090,7 +1244,9 @@ fn prost_bytes_decode_here() {
 /// it; `prost` compares by value and writes nothing. `prost` reads the
 /// written `-0.0` correctly, with its sign, so a value this codec sends
 /// arrives intact; a `-0.0` sent through `prost` arrives as `+0.0`, which the
-/// last assertion records.
+/// assertion after it records. The same for a `float`: `Scalars.narrow` at
+/// `-0.0` is `55` then `00000080`, before the `gear` the value always
+/// carries, and `prost` writes the `gear` alone.
 #[test]
 fn minus_zero_differs_from_prost_as_designed() {
     use prost::Message as _;
@@ -1123,6 +1279,27 @@ fn minus_zero_differs_from_prost_as_designed() {
         answers[1], "",
         "prost's bytes for -0.0 read here as +0.0, which is the empty message: the sign is \
          lost on that path, by prost's choice"
+    );
+
+    // The 32-bit path.
+    let narrow_minus_zero = oracle::Scalars {
+        narrow: -0.0,
+        gear: oracle::Gear::First as i32,
+        ..Default::default()
+    };
+    let theirs = Oracle::encode(&narrow_minus_zero);
+    assert_eq!(to_hex(&theirs), "b00101", "prost omits a float at -0.0 too");
+    let answers = program().run(&["Scalars encode-named narrow_minus_zero".to_string()]);
+    assert_eq!(
+        answers[0], "5500000080b00101",
+        "this codec writes a float at -0.0: field 10, wire type I32, the bits 0x80000000"
+    );
+    let read_back = oracle::Scalars::decode(from_hex(&answers[0]).as_slice())
+        .expect("prost reads the written float -0.0");
+    assert_eq!(read_back.narrow, 0.0);
+    assert!(
+        read_back.narrow.is_sign_negative(),
+        "prost reads the sign this codec wrote in the float"
     );
 }
 

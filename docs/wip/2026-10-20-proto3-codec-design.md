@@ -101,9 +101,10 @@ neither `ridl-rt` nor a generated package.
   decision 8) and stays `#![forbid(unsafe_code)]`.
 - C-3. A backend is an executable, not a library other crates link (ADR-0020
   decision 9): `ridl-backend-rust` may reach `ridl-backend-proto`,
-  `prost-build`, `protox` and `prost-reflect` only as dev-dependencies. (`prost`
-  itself is already in its normal closure through `ridl-ir`; the boundary that
-  matters is `ridl-rt` and the generated crate.)
+  `prost-build`, `protox`, `prost` and `prost-reflect` only as dev-dependencies.
+  (`prost` and `prost-reflect` are already in its normal closure through
+  `ridl-ir`, so the rule for them is checked on the backend's direct edges; the
+  boundary that matters is `ridl-rt` and the generated crate.)
 - C-4. The plugin path (`Backend::generate` over a `CodegenRequest`) has the
   codegen `Model` and no IR package, so every fact the codec reads must be in
   the `Model`.
@@ -601,9 +602,16 @@ FlatBuffers record does.
   sibling, and run by `just demo` after `ridl build` writes the crates; the
   demo's `--exact` list and its expected pass count grow by one;
 - `BOUNDARIES` gains `ridl-backend-rust → ridl-backend-proto`, `→ protox`,
-  `→ prost-build`, `→ prost-reflect` as dev-only edges. `prost` itself cannot be
-  a dev-only boundary of `ridl-backend-rust`, because `ridl-ir` already depends
-  on it; the guard's header says so.
+  `→ prost-build` as dev-only edges. `prost` and `prost-reflect` cannot be
+  dev-only boundaries of `ridl-backend-rust`, because `ridl-ir` already depends
+  on both normally, so a closure walk never sees a promotion of either; the
+  guard's header says so. A fourth check,
+  `the_rust_backend_takes_its_oracles_as_dev_dependencies_only`, reads the
+  backend's own direct edges in `cargo metadata` and requires every one named
+  `prost`, `prost-build`, `prost-reflect`, `protox` or `ridl-backend-proto` to
+  be of kind `dev` and nothing else; it is what enforces the dev-only rule for
+  `prost` and `prost-reflect`, and it fails on the day `prost-reflect` is added
+  under the wrong table.
 
 `examples/cabin/ridl.toml` and `crates/ridlc/tests/corpus/veh-cluster/ridl.toml`
 gain `"proto3"`, so `just demo` builds, lints, documents and checks for
