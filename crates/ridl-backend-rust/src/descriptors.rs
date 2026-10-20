@@ -258,7 +258,7 @@ impl TablePayloads {
                             Err(cause) => Err(GenerateError {
                                 message: format!(
                                     "`{}.{iface_name}.{member}`'s payload `{type_name}` has no \
-                                 proto3 codec: {cause}",
+                                     proto3 codec: {cause}",
                                     ctx.package_name()
                                 ),
                             }),

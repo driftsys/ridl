@@ -477,8 +477,8 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
     // would be satisfied by three unrelated diagnostics. With two tables in
     // the package, rustc reports the predicate once for the constructor path
     // and once for its argument, both inside the binding statement, so every
-    // diagnostic naming the predicate must point at that statement and at
-    // least one must exist.
+    // diagnostic naming the predicate must point at that statement, and
+    // there are one or two of them.
     let expected = Predicate {
         self_type: "Cabin".to_owned(),
         trait_name: "Sizes".to_owned(),
@@ -496,8 +496,9 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
         })
         .collect();
     assert!(
-        !refusals.is_empty(),
-        "a diagnostic must be an E0277 naming the predicate {expected:?}, rustc said:\n{rendered}"
+        (1..=2).contains(&refusals.len()),
+        "one or two diagnostics must be an E0277 naming the predicate {expected:?}, got {}, rustc said:\n{rendered}",
+        refusals.len()
     );
     for refusal in &refusals {
         assert!(

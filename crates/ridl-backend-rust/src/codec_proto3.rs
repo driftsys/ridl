@@ -827,6 +827,7 @@ fn count_ident(index: usize) -> Ident {
 /// neither `clippy::single_match` nor `clippy::match_single_binding`.
 fn number_dispatch(arms: &[(Literal, TokenStream)]) -> TokenStream {
     match arms {
+        // Defensive: every caller has at least one known field.
         [] => quote! { let _ = __field; },
         [(number, body)] => quote! {
             if __field.number == #number {

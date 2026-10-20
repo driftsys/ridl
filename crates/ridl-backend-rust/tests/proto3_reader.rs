@@ -744,6 +744,22 @@ fn a_packed_run_cut_inside_a_varint_is_out_of_bounds() {
             concat(&[&record(10, &[0; 5]), &THREE]),
             Box::new(|b| prost_read::<oracle::Packed>(b).is_err()),
         ),
+        // One byte short of a whole number of elements: the last chunk is
+        // `width - 1` bytes. `narrows` is a constrained float, so its run is
+        // read on the path that checks each element; `reals` is a plain
+        // double, read on the path that only counts.
+        (
+            "a packed float run of seven bytes",
+            "Packed",
+            concat(&[&record(10, &[0; 7]), &THREE]),
+            Box::new(|b| prost_read::<oracle::Packed>(b).is_err()),
+        ),
+        (
+            "a packed double run of fifteen bytes",
+            "Packed",
+            concat(&[&record(11, &[0; 15]), &THREE]),
+            Box::new(|b| prost_read::<oracle::Packed>(b).is_err()),
+        ),
         (
             "a record past the end",
             "Inner",

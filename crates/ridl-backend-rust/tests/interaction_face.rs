@@ -3481,14 +3481,34 @@ fn signal_event_command_query_round_trip_over_a_proto3_loopback() {
         let mut client = generated::cabin::Client::new(&mut rt);
         client.subscribe_warning().expect("subscribe");
     }
-    {
+    let warning = generated::Warning {
+        code: generated::Level::new_unchecked(5),
+        health: generated::Health::Warn,
+    };
+    let warning_proto3 = encoded::<_, Proto3>(&warning);
+    assert_ne!(
+        warning_proto3,
+        encoded::<_, FlatBuffers>(&warning),
+        "the two codecs produce different bytes for the event payload too"
+    );
+    // The first occurrence is read off the port as bytes, the second
+    // through the face.
+    for _ in 0..2 {
         let mut publisher = generated::cabin::Publisher::new(&mut rt);
-        publisher
-            .warning(generated::Warning {
-                code: generated::Level::new_unchecked(5),
-                health: generated::Health::Warn,
-            })
-            .expect("raise");
+        publisher.warning(warning).expect("raise");
+    }
+    {
+        use ridl_rt::port::EventSource;
+        let mut on_the_port = <generated::Warning as Payload<Proto3>>::BUFFER;
+        let raw = rt
+            .next(on_the_port.as_mut())
+            .expect("next")
+            .expect("an occurrence is waiting");
+        assert_eq!(
+            &on_the_port.as_ref()[..raw.len],
+            warning_proto3.as_slice(),
+            "the event was raised with the proto3 codec"
+        );
     }
     {
         let mut client = generated::cabin::Client::new(&mut rt);
