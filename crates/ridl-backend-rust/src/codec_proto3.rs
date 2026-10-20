@@ -29,13 +29,16 @@
 //! reached only from a field is encoded inside its owner.
 //!
 //! A declaration whose proto3 size state is not bounded is refused with a
-//! [`GenerateError`] naming it and the cause, and so is an interaction whose
-//! induced root is: a member with no finite bound — a string or bytes with
-//! no length bound, a collection whose count has none — a bound or a sum
-//! past `u32::MAX`, a member proto3 cannot represent, a declaration the sizer
-//! did not resolve, or no message at all. The size limit lives in the type:
-//! a source that needs a proto3 codec declares a finite bound on every string,
-//! bytes and collection its payloads reach. The codec's own walk refuses the
+//! [`GenerateError`] naming it and the cause: a member with no finite bound
+//! — a string or bytes with no length bound — a bound or a sum past
+//! `u32::MAX`, a member proto3 cannot represent, a declaration the sizer
+//! did not resolve, or no message at all. An induced root whose state is
+//! not bounded gets no `Payload` implementation, and the descriptor emitter
+//! skips its interface, as it skips an interface whose induced root has no
+//! finite FlatBuffers bound (`crate::descriptors::induced_name`). The size
+//! limit lives in the type: a source that needs a proto3 codec declares a
+//! finite bound on every string and bytes its payloads reach, and a
+//! collection count that fits. The codec's own walk refuses the
 //! same members the proto backend refuses, naming the field: an optional
 //! array or map field of a struct or a tuple (ADR-0013 decision 7), an
 //! optional array element and an optional map value, a nested collection, a
@@ -666,11 +669,9 @@ enum Source {
     /// The declaration at this index of the model.
     Declaration(u32),
     /// An induced tuple of the model, with its bound when an interaction
-    /// names it as a payload of its own — or the refusal to raise when that
-    /// interaction's payload has no finite bound or cannot be represented,
-    /// raised when the codec is emitted and not when it is laid out, so the
-    /// layout of a package whose interaction is refused is still a layout.
-    Tuple { root: Option<Result<u32, String>> },
+    /// names it as a payload of its own and that payload's proto3 state is
+    /// bounded; `None` for a tuple encoded only inside its owner.
+    Tuple { root: Option<u32> },
 }
 
 #[derive(Debug, Clone)]
@@ -942,12 +943,12 @@ impl<'a> Codec<'a> {
                 messages.push(message);
             }
         }
-        let roots = self.interaction_roots()?;
+        let roots = self.interaction_roots();
         for index in self.reachable_tuples(&roots) {
             let induced = self.ctx.tuple(index).ok_or_else(|| GenerateError {
                 message: "the lowered model names a tuple it does not carry".to_string(),
             })?;
-            messages.push(self.tuple_message(induced, roots.get(&index).cloned())?);
+            messages.push(self.tuple_message(induced, roots.get(&index).copied())?);
         }
         Ok(messages)
     }
@@ -955,74 +956,58 @@ impl<'a> Codec<'a> {
     /// The induced tuples the interactions of this package send on their
     /// own — a call's argument message, a query's tuple reply — each with
     /// its bound, the proto3 state the model carries for that interaction's
-    /// payload, or with the refusal naming the interaction when that state
-    /// is not bounded. An interface the model leaves nameless is an error,
-    /// because no refusal could name it.
-    fn interaction_roots(&self) -> Result<HashMap<u32, Result<u32, String>>, GenerateError> {
-        let mut roots: HashMap<u32, Result<u32, String>> = HashMap::new();
+    /// payload, when that state is bounded.
+    ///
+    /// A root whose state is not bounded is left out, as the FlatBuffers
+    /// codec leaves out a tuple root with no finite bound: it gets no
+    /// `Payload<Proto3>`, and the descriptor emitter skips its interface
+    /// with the refusal that names the cause (`descriptors::induced_name`),
+    /// so the package's other interfaces and its types still generate. An
+    /// interface with no declared name — a service's inline shape — is
+    /// skipped as the pipeline skips it: it gets no descriptors, so nothing
+    /// names a `Payload` for its tuples.
+    fn interaction_roots(&self) -> HashMap<u32, u32> {
+        let mut roots: HashMap<u32, u32> = HashMap::new();
         for interface in &self.ctx.model.interfaces {
-            let interface_name = declared_name(interface)
-                .map(str::to_string)
-                .or_else(|| match interface.identity.as_ref() {
-                    Some(v1::interface::Identity::Service(service)) => Some(service.dotted.clone()),
-                    _ => None,
-                })
-                .ok_or_else(|| GenerateError {
-                    message: format!(
-                        "an interface of `{}` carries neither a declared name nor a service \
-                         name, so no refusal could name it",
-                        self.ctx.package_name()
-                    ),
-                })?;
+            if declared_name(interface).is_none() {
+                continue;
+            }
             for (_, interaction) in interactions(interface) {
-                let name = declared(interaction.name.as_ref());
-                let payloads: Vec<(Option<&v1::TupleRef>, Option<&v1::PayloadSizes>, &str)> =
+                let payloads: Vec<(Option<&v1::TupleRef>, Option<&v1::PayloadSizes>)> =
                     match interaction.shape.as_ref() {
-                        Some(v1::interaction::Shape::Command(command)) => vec![(
-                            command.request_tuple.as_ref(),
-                            command.request_sizes.as_ref(),
-                            "argument",
-                        )],
+                        Some(v1::interaction::Shape::Command(command)) => {
+                            vec![(
+                                command.request_tuple.as_ref(),
+                                command.request_sizes.as_ref(),
+                            )]
+                        }
                         Some(v1::interaction::Shape::Query(query)) => vec![
-                            (
-                                query.request_tuple.as_ref(),
-                                query.request_sizes.as_ref(),
-                                "argument",
-                            ),
-                            (
-                                query.reply_tuple.as_ref(),
-                                query.reply_sizes.as_ref(),
-                                "reply",
-                            ),
+                            (query.request_tuple.as_ref(), query.request_sizes.as_ref()),
+                            (query.reply_tuple.as_ref(), query.reply_sizes.as_ref()),
                         ],
                         _ => Vec::new(),
                     };
-                for (reference, sizes, what) in payloads {
+                for (reference, sizes) in payloads {
                     let Some(reference) = reference else {
                         continue;
                     };
-                    let tuple = self.ctx.tuple_name(reference.index);
                     let state = sizes.and_then(|sizes| sizes.proto3.as_ref());
-                    let bound = bound_state(state).map_err(|cause| {
-                        format!(
-                            "`{}.{interface_name}.{name}`'s {what} message `{tuple}` has no \
-                             proto3 codec: {cause}",
-                            self.ctx.package_name()
-                        )
-                    });
-                    roots.insert(reference.index, bound);
+                    if let Ok(bound) = bound_state(state) {
+                        roots.insert(reference.index, bound);
+                    }
                 }
             }
         }
-        Ok(roots)
+        roots
     }
 
     /// The induced tuples reachable from the declarations and from the
-    /// interaction roots, in discovery order: a root tuple itself, and every
-    /// tuple a struct field, a tuple field, an array element or a map value
-    /// holds. Only a reached tuple gets functions, so no dead code reaches a
-    /// consumer's build.
-    fn reachable_tuples(&self, roots: &HashMap<u32, Result<u32, String>>) -> Vec<u32> {
+    /// bounded interaction roots, in discovery order: a root tuple itself,
+    /// and every tuple a struct field, a tuple field, an array element or a
+    /// map value holds. Only a reached tuple gets functions, so no dead code
+    /// reaches a consumer's build; a tuple root with no bound is reached
+    /// only when a declaration holds it.
+    fn reachable_tuples(&self, roots: &HashMap<u32, u32>) -> Vec<u32> {
         let mut found: Vec<u32> = Vec::new();
         let mut seen: HashSet<u32> = HashSet::new();
         let mut queue: Vec<&'a v1::Type> = Vec::new();
@@ -1107,10 +1092,7 @@ impl<'a> Codec<'a> {
                     })?;
                     Some(self.bound(decl)?)
                 }
-                Source::Tuple { root: None } => None,
-                Source::Tuple { root: Some(root) } => {
-                    Some(root.clone().map_err(|message| GenerateError { message })?)
-                }
+                Source::Tuple { root } => *root,
             };
             let owner = message.owner.as_str();
             let ty = ident(owner);
@@ -1262,7 +1244,7 @@ impl<'a> Codec<'a> {
     fn tuple_message(
         &self,
         induced: &v1::InducedTuple,
-        root: Option<Result<u32, String>>,
+        root: Option<u32>,
     ) -> Result<Message, GenerateError> {
         let owner = induced
             .name

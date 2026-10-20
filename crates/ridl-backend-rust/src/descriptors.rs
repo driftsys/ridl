@@ -10,8 +10,10 @@
 //!   one size table per encoding of the list — a `Sizes<E>` impl, every item
 //!   a const expression over the codec's own `<T as Payload<E>>::MAX_SIZE`,
 //!   which the face reads for its claim and event buffers. Every payload has
-//!   that bound in every encoding of the list: a codec refuses the package
-//!   otherwise, before any descriptor is rendered;
+//!   that bound in every encoding of the list: a declaration without one
+//!   refuses the package before any descriptor is rendered, and an induced
+//!   tuple without one refuses its interface ([`single_param_type`],
+//!   [`query_reply_type`]);
 //! - one unit struct per interaction with an `Interaction` impl (the three
 //!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
 //!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
@@ -670,8 +672,12 @@ pub(crate) fn single_param_type<'a>(
     if let Some(payload) = command.request.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
-    induced_name(ctx, command.request_tuple.as_ref())?
-        .ok_or_else(|| no_single_param(&command.params, member))
+    induced_name(
+        ctx,
+        command.request_tuple.as_ref(),
+        command.request_sizes.as_ref(),
+    )?
+    .ok_or_else(|| no_single_param(&command.params, member))
 }
 
 /// [`single_param_type`] for a query, which carries the same request shape.
@@ -683,44 +689,62 @@ pub(crate) fn query_param_type<'a>(
     if let Some(payload) = query.request.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
-    induced_name(ctx, query.request_tuple.as_ref())?
-        .ok_or_else(|| no_single_param(&query.params, member))
+    induced_name(
+        ctx,
+        query.request_tuple.as_ref(),
+        query.request_sizes.as_ref(),
+    )?
+    .ok_or_else(|| no_single_param(&query.params, member))
 }
 
 /// The Rust name of the induced tuple `reference` names, when it names one.
 ///
-/// With `flatbuffers` in the list, a tuple with no finite FlatBuffers bound
-/// is refused, because the FlatBuffers codec emits no `Payload` for it. The
-/// proto3 codec refuses the whole package for a root with no finite proto3
-/// bound, naming the interaction, so a list without `flatbuffers` refuses
-/// nothing here.
+/// A tuple with no finite bound in an encoding the list names is refused,
+/// because that encoding's codec emits no `Payload` for it, and a
+/// descriptor row would name a `MAX_SIZE` that does not exist. The refusal
+/// is per interface: the pipeline skips the interface with a note and
+/// generates the rest of the package (interaction-face design rule 2). With
+/// `flatbuffers` in the list the bound read is the FlatBuffers root's; with
+/// `proto3` in the list it is the proto3 size state of the interaction's
+/// payload, `sizes`, and the refusal names the cause the sizer gave.
 fn induced_name<'a>(
     ctx: &Ctx<'a>,
     reference: Option<&v1::TupleRef>,
+    sizes: Option<&v1::PayloadSizes>,
 ) -> Result<Option<&'a str>, GenerateError> {
     let Some(reference) = reference else {
         return Ok(None);
     };
     let name = ctx.tuple_name(reference.index);
-    if !ctx.encodings.contains(&WireEncoding::FlatBuffers) {
-        return Ok((!name.is_empty()).then_some(name));
-    }
-    let root = ctx.model.flatbuffers.as_ref().and_then(|projection| {
-        projection
-            .roots
-            .iter()
-            .find(|root| root.tuple == Some(reference.index))
-    });
-    if !matches!(
-        root.and_then(|root| root.bound.as_ref()),
-        Some(v1::fb_root::Bound::MaxSize(_))
-    ) {
-        return Err(GenerateError {
-            message: format!(
-                "`{}.{name}` has no finite FlatBuffers bound",
-                ctx.package_name()
-            ),
+    if ctx.encodings.contains(&WireEncoding::FlatBuffers) {
+        let root = ctx.model.flatbuffers.as_ref().and_then(|projection| {
+            projection
+                .roots
+                .iter()
+                .find(|root| root.tuple == Some(reference.index))
         });
+        if !matches!(
+            root.and_then(|root| root.bound.as_ref()),
+            Some(v1::fb_root::Bound::MaxSize(_))
+        ) {
+            return Err(GenerateError {
+                message: format!(
+                    "`{}.{name}` has no finite FlatBuffers bound",
+                    ctx.package_name()
+                ),
+            });
+        }
+    }
+    if ctx.encodings.contains(&WireEncoding::Proto3) {
+        let state = sizes.and_then(|sizes| sizes.proto3.as_ref());
+        if let Err(cause) = crate::codec_proto3::bound_state(state) {
+            return Err(GenerateError {
+                message: format!(
+                    "`{}.{name}` has no finite proto3 bound: {cause}",
+                    ctx.package_name()
+                ),
+            });
+        }
     }
     Ok((!name.is_empty()).then_some(name))
 }
@@ -785,7 +809,7 @@ pub(crate) fn query_reply_type<'a>(
     if let Some(payload) = query.reply_payload.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
-    if let Some(name) = induced_name(ctx, query.reply_tuple.as_ref())? {
+    if let Some(name) = induced_name(ctx, query.reply_tuple.as_ref(), query.reply_sizes.as_ref())? {
         return Ok(name);
     }
     match query.reply.as_ref().and_then(|reply| reply.kind.as_ref()) {

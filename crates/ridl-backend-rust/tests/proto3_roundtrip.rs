@@ -500,25 +500,19 @@ fn an_unbounded_type_is_refused_under_proto3() {
     );
 
     // Every declaration has a bound; the call's argument message does not.
+    // The package generates: the argument message gets no codec and its
+    // interface is skipped, as under the FlatBuffers codec
+    // (`tests/induced_call_refusals.rs` pins the note), and the layout
+    // holds no message for the tuple, which no declaration reaches.
     let package = ir::compile_fixture("proto3_unbounded_call.ridl");
-    let err = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
-        .expect_err("an interaction whose argument message overflows is refused");
-    assert_eq!(
-        err.message.split(": ").next(),
-        Some(
-            "`pb.unbounded.call.Probe.set`'s argument message `ProbeSetParams` has no proto3 codec"
-        ),
-        "the refusal names the interaction, got: {}",
-        err.message
-    );
-    assert!(
-        err.message.contains("(Overflow)"),
-        "the refusal names the cause, got: {}",
-        err.message
-    );
+    let source = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+        .expect("the package generates with the interface skipped")
+        .rust_source;
+    assert!(source.contains("__RIDL_NO_FACE_Probe"), "{source}");
+    assert!(!source.contains("ProbeSetParams"), "{source}");
     let layout = ridl_backend_rust::proto3_layout(&package, &[]).expect("the layout does not size");
     assert!(
-        layout
+        !layout
             .iter()
             .any(|message| message.name == "ProbeSetParams")
     );

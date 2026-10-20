@@ -365,9 +365,11 @@ fn a_proto3_only_package_has_a_face() {
     );
 }
 
-/// An interface a member of which has a payload with no proto3 bound is
-/// refused with the face, as with the codec alone: the refusal names the
-/// interaction, and no descriptor is emitted without its size table.
+/// An interface a member of which has an induced payload with no proto3
+/// bound is refused by this entry point, which refuses rather than skips:
+/// the refusal names the induced message and the cause, and no descriptor
+/// is emitted without its size table. The pipeline skips the interface
+/// instead (`tests/induced_call_refusals.rs`).
 #[test]
 fn an_interface_with_an_unbounded_payload_is_refused() {
     let package = ir::compile_fixture("proto3_unbounded_call.ridl");
@@ -376,9 +378,9 @@ fn an_interface_with_an_unbounded_payload_is_refused() {
     assert!(
         error
             .message
-            .starts_with("`pb.unbounded.call.Probe.set`'s argument message `ProbeSetParams`")
+            .starts_with("`pb.unbounded.call.ProbeSetParams` has no finite proto3 bound: ")
             && error.message.contains("(Overflow)"),
-        "the refusal names the interaction and the cause, got: {}",
+        "the refusal names the induced message and the cause, got: {}",
         error.message
     );
 }
