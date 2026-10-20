@@ -147,7 +147,13 @@ export function connect(
   }
   const create = options.webSocket ??
     ((u: string, p: string[]) => new WebSocket(u, p));
-  const socket = create(url, [SUBPROTOCOL]);
+  let socket: WebSocket;
+  try {
+    socket = create(url, [SUBPROTOCOL]);
+  } catch (e) {
+    // For example a `SyntaxError` for an invalid URL.
+    return Promise.reject(e);
+  }
   return new Promise((resolve, reject) => {
     new Session(socket, first, options, { resolve, reject });
   });
@@ -156,6 +162,8 @@ export function connect(
 type Waiting =
   | {
     op: "subscribe";
+    /** Set when an `unsubscribe` was sent before this subscribe's answer. */
+    dropped: boolean;
     resolve: () => void;
     reject: (e: SessionError) => void;
   }
@@ -182,7 +190,11 @@ function identity(t: Target): string {
 
 /** An open session. Created by {@link connect}. */
 export class Session {
-  /** Resolves once, when the connection has closed or failed. */
+  /**
+   * Resolves once, when the connection has closed or failed. After
+   * {@link Session.close} it resolves when the closing handshake completes;
+   * the waiting operations were already rejected with `down` by `close`.
+   */
   readonly closed: Promise<Ended>;
 
   #socket: WebSocket;
@@ -235,7 +247,12 @@ export class Session {
   subscribe(target: Target): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.#ended) return reject(new SessionError(DOWN));
-      this.#enqueue(target, { op: "subscribe", resolve, reject });
+      this.#enqueue(target, {
+        op: "subscribe",
+        dropped: false,
+        resolve,
+        reject,
+      });
       this.#send({ form: "subscribe", target });
     });
   }
@@ -243,12 +260,17 @@ export class Session {
   /**
    * Ends a subscription and drops what the session held for it: the held
    * sample of a signal, or the last `seq` of an event. Frames of the
-   * interaction that arrive later are discarded. Does nothing once the session
-   * has ended.
+   * interaction that arrive later are discarded. A `subscribe` of the same
+   * interaction still waiting for its answer resolves on that answer, but does
+   * not make the interaction subscribed. Does nothing once the session has
+   * ended.
    */
   unsubscribe(target: Target): void {
     if (this.#ended) return;
     this.#send({ form: "unsubscribe", target });
+    for (const w of this.#waiting.get(identity(target)) ?? []) {
+      if (w.op === "subscribe") w.dropped = true;
+    }
     const key = channel(target.iface, target.ord);
     if (target.kind === Kind.Signal) {
       this.#signals.delete(key);
@@ -299,9 +321,9 @@ export class Session {
   }
 
   /**
-   * Ends the session: sends a close with code 1000 and rejects every waiting
-   * operation with `down`. {@link Session.closed} resolves when the closing
-   * handshake completes.
+   * Ends the session: sends a close with code 1000 and at once rejects every
+   * waiting operation with `down`, as every later operation is. {@link
+   * Session.closed} resolves later, when the closing handshake completes.
    */
   close(): void {
     if (!this.#closeSent) {
@@ -318,7 +340,21 @@ export class Session {
   }
 
   #note(note: Note): void {
-    this.#options.onNote?.(note);
+    const onNote = this.#options.onNote;
+    if (onNote) this.#listen(() => onNote(note));
+  }
+
+  /**
+   * Calls a listener. An exception it throws is reported to the platform and
+   * does not stop the handling of the frame. Callers update the session's
+   * state before calling a listener.
+   */
+  #listen(call: () => void): void {
+    try {
+      call();
+    } catch (e) {
+      globalThis.reportError(e);
+    }
   }
 
   #enqueue(target: Target, waiting: Waiting): void {
@@ -417,10 +453,13 @@ export class Session {
       );
       return;
     }
+    if (head.op !== "subscribe") return; // ruled out above
     const t = frame.target;
-    if (t.kind === Kind.Signal) this.#signals.add(channel(t.iface, t.ord));
-    if (t.kind === Kind.Event) this.#events.add(channel(t.iface, t.ord));
-    (head as Extract<Waiting, { op: "subscribe" }>).resolve();
+    if (!head.dropped) {
+      if (t.kind === Kind.Signal) this.#signals.add(channel(t.iface, t.ord));
+      if (t.kind === Kind.Event) this.#events.add(channel(t.iface, t.ord));
+    }
+    head.resolve();
   }
 
   #onPublish(frame: Extract<Frame, { form: "publish" }>): void {
@@ -435,7 +474,8 @@ export class Session {
     const key = identity(t);
     const queue = this.#waiting.get(key);
     while (queue && queue[0]?.op === "read") {
-      reads.push(queue.shift() as Extract<Waiting, { op: "read" }>);
+      const read = queue.shift();
+      if (read?.op === "read") reads.push(read);
     }
     if (queue && queue.length === 0) this.#waiting.delete(key);
     for (const r of reads) r.resolve(sample);
@@ -456,7 +496,8 @@ export class Session {
       return;
     }
     this.#held.set(ch, sample);
-    this.#options.onPublish?.(t, sample);
+    const onPublish = this.#options.onPublish;
+    if (onPublish) this.#listen(() => onPublish(t, sample));
   }
 
   #onOccurrence(
@@ -470,28 +511,30 @@ export class Session {
     }
     const seq = frame.envelope.seq;
     const last = this.#lastSeq.get(ch);
-    if (last !== undefined) {
-      if (seq <= last) {
-        this.#note({ note: "discarded", reason: "stale", frame });
-        return;
-      }
-      if (seq > last + 1n) {
-        this.#note({
-          note: "loss",
-          iface: t.iface,
-          ord: t.ord,
-          expected: last + 1n,
-          received: seq,
-        });
-      }
+    if (last !== undefined && seq <= last) {
+      this.#note({ note: "discarded", reason: "stale", frame });
+      return;
     }
     this.#lastSeq.set(ch, seq);
-    this.#options.onOccurrence?.({
-      iface: t.iface,
-      ord: t.ord,
-      envelope: frame.envelope,
-      payload: frame.payload,
-    });
+    if (last !== undefined && seq > last + 1n) {
+      this.#note({
+        note: "loss",
+        iface: t.iface,
+        ord: t.ord,
+        expected: last + 1n,
+        received: seq,
+      });
+    }
+    const onOccurrence = this.#options.onOccurrence;
+    if (onOccurrence) {
+      const occurrence: Occurrence = {
+        iface: t.iface,
+        ord: t.ord,
+        envelope: frame.envelope,
+        payload: frame.payload,
+      };
+      this.#listen(() => onOccurrence(occurrence));
+    }
   }
 
   /**
@@ -499,7 +542,6 @@ export class Session {
    * platform cannot send 1002) and rejects everything waiting.
    */
   #violate(violation: SessionViolation): void {
-    this.#note({ note: "violation", violation });
     this.#violation = violation;
     if (!this.#closeSent) {
       this.#closeSent = true;
@@ -509,6 +551,7 @@ export class Session {
     this.#opening = null;
     opening?.reject(new ProtocolError(violation));
     this.#fail();
+    this.#note({ note: "violation", violation });
   }
 
   /** Marks the session ended and rejects every waiting operation with `down`. */

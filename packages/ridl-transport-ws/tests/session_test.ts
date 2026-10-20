@@ -510,3 +510,224 @@ Deno.test("a connection error rejects a waiting read with down and closed report
   h.socket.serverClose(1006);
   assert.deepEqual(await h.session.closed, { code: 1006, reason: "" });
 });
+
+/** Runs `body` with a handler that keeps reported errors from failing the test. */
+async function catchingReported(
+  body: (seen: unknown[]) => Promise<void>,
+): Promise<void> {
+  const seen: unknown[] = [];
+  const handler = (e: ErrorEvent) => {
+    e.preventDefault();
+    seen.push(e.error);
+  };
+  globalThis.addEventListener("error", handler);
+  try {
+    await body(seen);
+  } finally {
+    globalThis.removeEventListener("error", handler);
+  }
+}
+
+async function attachedWith(extra: Partial<ConnectOptions>) {
+  const h = start("veh.cabin", extra);
+  const socket = h.sockets[0];
+  socket.open(SUBPROTOCOL);
+  socket.deliver({ form: "attached", outcome: { outcome: "accepted" } });
+  return { ...h, socket, session: await h.pending };
+}
+
+Deno.test("an unsubscribe sent before the subscribe's answer leaves the signal unsubscribed", async () => {
+  const h = await attached();
+  const subscribing = h.session.subscribe(SIGNAL);
+  h.session.unsubscribe(SIGNAL);
+  h.socket.deliver(accepted(SIGNAL));
+  await subscribing;
+  const inFlight = live(SIGNAL, 1n, [1]);
+  h.socket.deliver(inFlight);
+  assert.equal(h.session.sample(1, 2), undefined);
+  assert.deepEqual(h.publishes, []);
+  assert.deepEqual(h.notes, [
+    { note: "discarded", reason: "not-subscribed", frame: inFlight },
+  ]);
+});
+
+Deno.test("an unsubscribe sent before the subscribe's answer leaves the event unsubscribed", async () => {
+  const h = await attached();
+  const subscribing = h.session.subscribe(EVENT);
+  h.session.unsubscribe(EVENT);
+  h.socket.deliver(accepted(EVENT));
+  await subscribing;
+  const frame = occurrence(EVENT, 1n, [1]);
+  h.socket.deliver(frame);
+  assert.deepEqual(h.occurrences, []);
+  assert.deepEqual(h.notes, [
+    { note: "discarded", reason: "not-subscribed", frame },
+  ]);
+});
+
+Deno.test("a throwing onNote on a violation still closes without a code and rejects with down", async () => {
+  await catchingReported(async (seen) => {
+    const h = await attachedWith({
+      onNote: () => {
+        throw new Error("listener failed");
+      },
+    });
+    const reading = h.session.read(SIGNAL);
+    h.socket.deliver("hello");
+    assert.deepEqual(h.socket.closes, [{}]);
+    await assert.rejects(reading, isFailure("down"));
+    await assert.rejects(h.session.read(SIGNAL), isFailure("down"));
+    assert.equal(seen.length, 1);
+    assert.equal((seen[0] as Error).message, "listener failed");
+    h.socket.serverClose(1005);
+    assert.deepEqual(await h.session.closed, {
+      code: 1005,
+      reason: "",
+      violation: "text-message",
+    });
+  });
+});
+
+Deno.test("a throwing onNote on a loss records the loss once and delivers every occurrence", async () => {
+  await catchingReported(async (seen) => {
+    const notes: Note[] = [];
+    const h = await attachedWith({
+      onNote: (n) => {
+        notes.push(n);
+        throw new Error("listener failed");
+      },
+    });
+    await subscribed(h, EVENT);
+    for (const seq of [1n, 3n, 4n]) {
+      h.socket.deliver(occurrence(EVENT, seq, [Number(seq)]));
+    }
+    assert.deepEqual(h.occurrences.map((o) => o.envelope.seq), [1n, 3n, 4n]);
+    assert.deepEqual(notes, [
+      { note: "loss", iface: 1, ord: 3, expected: 2n, received: 3n },
+    ]);
+    assert.equal(seen.length, 1);
+  });
+});
+
+Deno.test("a throwing onPublish and onOccurrence do not stop the session updating its state", async () => {
+  await catchingReported(async (seen) => {
+    const notes: Note[] = [];
+    const h = await attachedWith({
+      onPublish: () => {
+        throw new Error("publish listener failed");
+      },
+      onOccurrence: () => {
+        throw new Error("occurrence listener failed");
+      },
+      onNote: (n) => notes.push(n),
+    });
+    await subscribed(h, SIGNAL);
+    await subscribed(h, EVENT);
+    h.socket.deliver(live(SIGNAL, 1n, [1]));
+    h.socket.deliver(live(SIGNAL, 2n, [2]));
+    assert.equal(h.session.sample(1, 2)?.envelope.seq, 2n);
+    h.socket.deliver(occurrence(EVENT, 1n, [1]));
+    h.socket.deliver(occurrence(EVENT, 2n, [2]));
+    const repeat = occurrence(EVENT, 2n, [2]);
+    h.socket.deliver(repeat);
+    // seq 1 then 2 recorded no loss, and the repeat of 2 is stale.
+    assert.deepEqual(notes, [
+      { note: "discarded", reason: "stale", frame: repeat },
+    ]);
+    assert.equal(seen.length, 4);
+  });
+});
+
+Deno.test("a second attached is a violation that closes without a code", async () => {
+  const h = await attached();
+  h.socket.deliver({ form: "attached", outcome: { outcome: "accepted" } });
+  assert.deepEqual(h.socket.closes, [{}]);
+  assert.deepEqual(h.notes, [{
+    note: "violation",
+    violation: "unexpected-form",
+  }]);
+});
+
+Deno.test("a consumer-to-provider form from the server is a violation that closes without a code", async () => {
+  const h = await attached();
+  h.socket.deliver({ form: "subscribe", target: SIGNAL });
+  assert.deepEqual(h.socket.closes, [{}]);
+  assert.deepEqual(h.notes, [{
+    note: "violation",
+    violation: "unexpected-form",
+  }]);
+});
+
+Deno.test("a malformed binary message after attach is a violation", async () => {
+  const h = await attached();
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(new Uint8Array([0x07, 0x01, 1]));
+  assert.deepEqual(h.socket.closes, [{}]);
+  assert.deepEqual(h.notes, [{ note: "violation", violation: "too-short" }]);
+  await assert.rejects(reading, isFailure("down"));
+});
+
+Deno.test("a stale publish that answers a read of a subscribed signal settles the read and leaves the held sample", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 3n, [3]));
+  const held = h.session.sample(1, 2);
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(live(SIGNAL, 3n, [9]));
+  const sample = await reading;
+  assert.deepEqual(sample.payload, Uint8Array.from([9]));
+  assert.equal(h.session.sample(1, 2), held);
+  assert.equal(h.publishes.length, 1);
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("a server close or an error before attached rejects the pending connect with down", async () => {
+  const closing = start();
+  closing.sockets[0].open(SUBPROTOCOL);
+  closing.sockets[0].serverClose(1011, "internal error");
+  await assert.rejects(closing.pending, isFailure("down"));
+
+  const failing = start();
+  failing.sockets[0].error();
+  await assert.rejects(failing.pending, isFailure("down"));
+});
+
+Deno.test("a fixed publish on a subscribed signal's numbers does not touch the held sample", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 1n, [1]));
+  const held = h.session.sample(1, 2);
+  const fixed: Target = { kind: Kind.Fixed, iface: 1, ord: 2 };
+  const unsolicited = live(fixed, 5n, [5]);
+  h.socket.deliver(unsolicited);
+  const reading = h.session.read(fixed);
+  h.socket.deliver(live(fixed, 6n, [6]));
+  assert.deepEqual((await reading).payload, Uint8Array.from([6]));
+  assert.equal(h.session.sample(1, 2), held);
+  assert.equal(h.publishes.length, 1);
+  assert.deepEqual(h.notes, [
+    { note: "discarded", reason: "not-subscribed", frame: unsolicited },
+  ]);
+});
+
+Deno.test("an occurrence of another kind on a subscribed event's numbers is not delivered", async () => {
+  const h = await attached();
+  await subscribed(h, EVENT);
+  const other = occurrence({ kind: Kind.Signal, iface: 1, ord: 3 }, 1n, [1]);
+  h.socket.deliver(other);
+  assert.deepEqual(h.occurrences, []);
+  assert.deepEqual(h.notes, [
+    { note: "discarded", reason: "not-subscribed", frame: other },
+  ]);
+});
+
+Deno.test("connect rejects, and does not throw, when the platform refuses the URL", async () => {
+  let pending: Promise<Session> | undefined;
+  assert.doesNotThrow(() => {
+    pending = connect("not a url", { catalog: { name: "v", hash: HASH } });
+  });
+  await assert.rejects(
+    pending!,
+    (e: unknown) => e instanceof Error && e.name === "SyntaxError",
+  );
+});
