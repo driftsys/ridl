@@ -271,13 +271,10 @@ Deno.test("subscribe rejects with contract unknown-interaction on a refusing ans
   ]);
 });
 
-Deno.test("a publish whose seq is below the held one is discarded as stale, and one equal to it is dropped", async () => {
+Deno.test("a publish whose seq is below the held one is discarded as stale", async () => {
   const h = await attached();
   await subscribed(h, SIGNAL);
   h.socket.deliver(live(SIGNAL, 3n, [1]));
-  // The server reuses a seq only for an identical sample: a seq equal to the
-  // held one is dropped and not recorded.
-  h.socket.deliver(live(SIGNAL, 3n, [2]));
   const older = live(SIGNAL, 2n, [3]);
   h.socket.deliver(older);
   assert.deepEqual(h.session.sample(1, 2)?.payload, Uint8Array.from([1]));
@@ -287,6 +284,31 @@ Deno.test("a publish whose seq is below the held one is discarded as stale, and 
   h.socket.deliver(live(SIGNAL, 4n, [4]));
   assert.deepEqual(h.session.sample(1, 2)?.payload, Uint8Array.from([4]));
   assert.equal(h.publishes.length, 2);
+});
+
+Deno.test("a duplicate publish, with the held seq and payload, is dropped and not recorded", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 3n, [1]));
+  const held = h.session.sample(1, 2);
+  // The server reuses a seq only for an identical sample, except `Init`, which
+  // always carries seq 0: a seq equal to the held one is dropped.
+  h.socket.deliver(live(SIGNAL, 3n, [1]));
+  assert.equal(h.session.sample(1, 2), held);
+  assert.deepEqual(h.notes, []);
+  assert.equal(h.publishes.length, 1);
+});
+
+Deno.test("an Init publish with seq 0 while an Init with seq 0 is held is dropped and not recorded", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(publish(SIGNAL, 0n, { provenance: "init" }));
+  const held = h.session.sample(1, 2);
+  assert.equal(held?.provenance, "init");
+  h.socket.deliver(publish(SIGNAL, 0n, { provenance: "init" }));
+  assert.equal(h.session.sample(1, 2), held);
+  assert.deepEqual(h.notes, []);
+  assert.equal(h.publishes.length, 1);
 });
 
 Deno.test("unsubscribe drops the held sample, and a later subscribe starts from the next publish", async () => {
@@ -507,7 +529,7 @@ Deno.test("a connection error rejects a waiting read with down and closed report
   h.socket.error();
   await assert.rejects(reading, isFailure("down"));
   await assert.rejects(h.session.read(SIGNAL), isFailure("down"));
-  h.socket.serverClose(1006);
+  h.socket.serverClose(1000);
   assert.deepEqual(await h.session.closed, { code: 1006, reason: "" });
 });
 
@@ -667,15 +689,30 @@ Deno.test("a malformed binary message after attach is a violation", async () => 
   await assert.rejects(reading, isFailure("down"));
 });
 
-Deno.test("a stale publish that answers a read of a subscribed signal settles the read and leaves the held sample", async () => {
+Deno.test("a duplicate publish that answers a read of a subscribed signal settles the read and leaves the held sample", async () => {
   const h = await attached();
   await subscribed(h, SIGNAL);
   h.socket.deliver(live(SIGNAL, 3n, [3]));
   const held = h.session.sample(1, 2);
   const reading = h.session.read(SIGNAL);
-  h.socket.deliver(live(SIGNAL, 3n, [9]));
+  h.socket.deliver(live(SIGNAL, 3n, [3]));
   const sample = await reading;
-  assert.deepEqual(sample.payload, Uint8Array.from([9]));
+  assert.deepEqual(sample.payload, Uint8Array.from([3]));
+  assert.equal(h.session.sample(1, 2), held);
+  assert.equal(h.publishes.length, 1);
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("a publish with a lower seq than the held one, while a read waits, settles the read, records nothing and leaves the held sample", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(live(SIGNAL, 3n, [3]));
+  const held = h.session.sample(1, 2);
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(live(SIGNAL, 2n, [2]));
+  const sample = await reading;
+  assert.equal(sample.envelope.seq, 2n);
+  assert.deepEqual(sample.payload, Uint8Array.from([2]));
   assert.equal(h.session.sample(1, 2), held);
   assert.equal(h.publishes.length, 1);
   assert.deepEqual(h.notes, []);
@@ -747,6 +784,14 @@ Deno.test("a refused attach closes with 1000 when the server does not close, and
   assert.ok(refusal instanceof AttachRefused);
   // The client closes the connection itself.
   assert.deepEqual(socket.closes, [{ code: 1000 }]);
+  // `closed` stays pending until the close event arrives.
+  let settled = false;
+  refusal.closed.then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(settled, false);
   // The closing handshake the client started completes.
   socket.serverClose(1000);
   assert.deepEqual(await refusal.closed, {
@@ -894,6 +939,20 @@ Deno.test("the encoding option sets the attach's encoding tag", () => {
     h.sockets[0].serverClose(1000);
     h.pending.catch(() => {});
   }
+});
+
+Deno.test("an invalid interface number or ordinal raises RangeError before the ended-session check", async () => {
+  const h = await attached();
+  h.session.close();
+  h.socket.serverClose(1000);
+  await h.session.closed;
+  const bad: Target = { kind: Kind.Signal, iface: 0, ord: 2 };
+  await assert.rejects(h.session.subscribe(bad), RangeError);
+  await assert.rejects(h.session.read(bad), RangeError);
+  assert.throws(() => h.session.unsubscribe(bad), RangeError);
+  // A valid target after the end keeps its behaviour.
+  await assert.rejects(h.session.subscribe(SIGNAL), isFailure("down"));
+  assert.doesNotThrow(() => h.session.unsubscribe(SIGNAL));
 });
 
 Deno.test("an interface number or an ordinal outside 1 to 4294967295 is a RangeError and sends nothing", async () => {

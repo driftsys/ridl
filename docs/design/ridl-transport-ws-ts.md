@@ -221,16 +221,18 @@ no catalog and no payload decoding:
 
 - **Signals (§5.1, §7).** One held sample per subscribed signal. A `publish`
   whose `seq` is less than the held sample's is discarded and recorded
-  (`stale`). A `publish` whose `seq` equals the held sample's is dropped and not
-  recorded: the server reuses a session `seq` only for an identical sample (the
-  crate's D-24), so such a `publish` is the reply to a `read` that an earlier
-  `publish` already settled, or a duplicate. `unsubscribe` drops the held
-  sample, and a `publish` of an interaction that is not subscribed and has no
-  `read` waiting is discarded and recorded (`not-subscribed`), which covers
-  frames in flight after an `unsubscribe` (§6.2). `onPublish` is called for a
-  `publish` that becomes the held sample of a subscribed signal; a `publish`
-  that only answers a `read` of an unsubscribed signal settles the read and is
-  not passed to `onPublish`.
+  (`stale`), except that one that arrives while a `read` of the signal is
+  waiting settles the read and records nothing. A `publish` whose `seq` equals
+  the held sample's is dropped and not recorded: the server reuses a session
+  `seq` only for an identical sample (the crate's D-24), except `Init`, which
+  always carries `seq` 0, so such a `publish` is the reply to a `read` that an
+  earlier `publish` already settled, a duplicate, or an `Init` while an `Init`
+  is held. `unsubscribe` drops the held sample, and a `publish` of an
+  interaction that is not subscribed and has no `read` waiting is discarded and
+  recorded (`not-subscribed`), which covers frames in flight after an
+  `unsubscribe` (§6.2). `onPublish` is called for a `publish` that becomes the
+  held sample of a subscribed signal; a `publish` that only answers a `read` of
+  an unsubscribed signal settles the read and is not passed to `onPublish`.
 - **Events (§5.2, §7).** Occurrences of a subscribed event are delivered in
   arrival order. A `seq` not greater than the last accepted one is discarded
   (`stale`); a gap between two accepted occurrences of one channel is recorded

@@ -9,8 +9,9 @@ import type { Ended } from "./session.ts";
 
 /**
  * A reason the consumer ends a session: a {@link Violation} of the codec, a
- * text message, a server that selected no subprotocol, or a frame of a form
- * the provider must not send at that point.
+ * text message, a server that selected no subprotocol (in Deno; a browser
+ * fails the handshake itself), or a frame of a form the provider must not send
+ * at that point.
  */
 export type SessionViolation =
   | Violation
@@ -39,7 +40,10 @@ export class AttachRefused extends Error {
 /**
  * The session ended before it opened because the server broke the binding: it
  * selected no subprotocol, sent a text message, sent a message the codec
- * cannot read, or sent a first message other than `attached`.
+ * cannot read, or sent a first message other than `attached`. In a browser, a
+ * server that selected no subprotocol fails the handshake, so `connect`
+ * rejects with a `SessionError` `down` (close 1006) instead; the
+ * `no-subprotocol` cause happens in Deno.
  */
 export class ProtocolError extends Error {
   /** What the server did. */

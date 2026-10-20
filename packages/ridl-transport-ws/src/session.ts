@@ -295,10 +295,12 @@ export class Session {
    * interaction that arrive later are discarded. A `subscribe` of the same
    * interaction still waiting for its answer resolves on that answer, but does
    * not make the interaction subscribed. Does nothing once the session has
-   * ended.
+   * ended, except that an interface number or an ordinal that is not an
+   * integer from 1 to 4294967295 still throws.
    *
    * @throws {RangeError} when the interface number or the ordinal is not an
-   * integer from 1 to 4294967295; nothing is sent.
+   * integer from 1 to 4294967295, also after the session has ended; nothing is
+   * sent.
    */
   unsubscribe(target: Target): void {
     checkNumbers(target.iface, target.ord);
@@ -586,9 +588,10 @@ export class Session {
     }
     const held = this.#held.get(ch);
     // The server reuses a session `seq` only for an identical sample (the
-    // crate's D-24), so a `seq` equal to the held one is the reply to a read
-    // that a live publish already settled, or a duplicate: it is dropped and
-    // not recorded.
+    // crate's D-24), except `Init`, which always carries `seq` 0. A `seq` equal
+    // to the held one is the reply to a read that a live publish already
+    // settled, or a duplicate: it is dropped and not recorded. This includes an
+    // `Init` publish while an `Init` with `seq` 0 is held.
     if (held && frame.envelope.seq === held.envelope.seq) return;
     if (held && frame.envelope.seq < held.envelope.seq) {
       // A frame that answered a read is not a discard, though it changes nothing.
