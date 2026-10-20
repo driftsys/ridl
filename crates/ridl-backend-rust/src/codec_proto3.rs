@@ -338,6 +338,23 @@ impl Scalar {
         }
     }
 
+    /// The statements that read one fixed-width element `__chunk` of a
+    /// packed run into `__raw`: four bytes for an `I32`, eight for an `I64`.
+    fn fixed_read(&self) -> TokenStream {
+        match self.scalar.wire_type() {
+            pb::WireType::I32 => quote! {
+                let mut __bytes = [0u8; 4];
+                __bytes.copy_from_slice(__chunk);
+                let __raw = ::core::primitive::u32::from_le_bytes(__bytes);
+            },
+            _ => quote! {
+                let mut __bytes = [0u8; 8];
+                __bytes.copy_from_slice(__chunk);
+                let __raw = ::core::primitive::u64::from_le_bytes(__bytes);
+            },
+        }
+    }
+
     /// The writer call for the value `__r`.
     fn write(&self) -> TokenStream {
         match self.scalar.wire_type() {
@@ -785,6 +802,27 @@ fn count_ident(index: usize) -> Ident {
     format_ident!("__c{}", index)
 }
 
+/// The two fields of a map entry message: the key at 1 and the value at 2,
+/// reached as the two positions of the domain pair.
+fn entry_fields(key: &Wire, value: &Wire) -> [Field; 2] {
+    [
+        Field {
+            number: 1,
+            name: "key".to_string(),
+            wire: key.clone(),
+            optional: false,
+            access: Access::Position(0),
+        },
+        Field {
+            number: 2,
+            name: "value".to_string(),
+            wire: value.clone(),
+            optional: false,
+            access: Access::Position(1),
+        },
+    ]
+}
+
 // ---------------------------------------------------------------------------
 // Emission
 // ---------------------------------------------------------------------------
@@ -830,7 +868,7 @@ impl<'a> Codec<'a> {
                 messages.push(message);
             }
         }
-        let roots = self.interaction_roots();
+        let roots = self.interaction_roots()?;
         for index in self.reachable_tuples(&roots) {
             let induced = self.ctx.tuple(index).ok_or_else(|| GenerateError {
                 message: "the lowered model names a tuple it does not carry".to_string(),
@@ -844,8 +882,9 @@ impl<'a> Codec<'a> {
     /// own — a call's argument message, a query's tuple reply — each with
     /// its bound, the proto3 state the model carries for that interaction's
     /// payload, or with the refusal naming the interaction when that state
-    /// is not bounded.
-    fn interaction_roots(&self) -> HashMap<u32, Result<u32, String>> {
+    /// is not bounded. An interface the model leaves nameless is an error,
+    /// because no refusal could name it.
+    fn interaction_roots(&self) -> Result<HashMap<u32, Result<u32, String>>, GenerateError> {
         let mut roots: HashMap<u32, Result<u32, String>> = HashMap::new();
         for interface in &self.ctx.model.interfaces {
             let interface_name = declared_name(interface)
@@ -854,7 +893,13 @@ impl<'a> Codec<'a> {
                     Some(v1::interface::Identity::Service(service)) => Some(service.dotted.clone()),
                     _ => None,
                 })
-                .unwrap_or_default();
+                .ok_or_else(|| GenerateError {
+                    message: format!(
+                        "an interface of `{}` carries neither a declared name nor a service \
+                         name, so no refusal could name it",
+                        self.ctx.package_name()
+                    ),
+                })?;
             for (_, interaction) in interactions(interface) {
                 let name = declared(interaction.name.as_ref());
                 let payloads: Vec<(Option<&v1::TupleRef>, Option<&v1::PayloadSizes>, &str)> =
@@ -895,7 +940,7 @@ impl<'a> Codec<'a> {
                 }
             }
         }
-        roots
+        Ok(roots)
     }
 
     /// The induced tuples reachable from the declarations and from the
@@ -1820,20 +1865,7 @@ impl<'a> Codec<'a> {
     ) -> Result<TokenStream, GenerateError> {
         let tag_len = Literal::usize_suffixed(tag_len(field.number));
         let number = Literal::u32_suffixed(field.number);
-        let key_field = Field {
-            number: 1,
-            name: "key".to_string(),
-            wire: key.clone(),
-            optional: false,
-            access: Access::Position(0),
-        };
-        let value_field = Field {
-            number: 2,
-            name: "value".to_string(),
-            wire: value.clone(),
-            optional: false,
-            access: Access::Position(1),
-        };
+        let [key_field, value_field] = entry_fields(key, value);
         let base = quote! { __e };
         let key_len = self.field_value(
             owner,
@@ -2021,89 +2053,12 @@ impl<'a> Codec<'a> {
     ) -> Result<TokenStream, GenerateError> {
         let seen = Literal::usize_suffixed(index);
         let counter = count_ident(index);
-        let number = Literal::u32_suffixed(field.number);
         let wrong_type = structure_error("WireType");
         let duplicate = structure_error("Duplicate");
         Ok(match &field.wire {
             Wire::Array { element, .. } => {
                 let run = match element.as_ref() {
-                    Wire::Scalar(scalar) => {
-                        let checks = scalar.raw_checks(owner);
-                        let variant = scalar.value_variant();
-                        let single = if checks.is_empty() {
-                            quote! {
-                                ::ridl_rt::proto3::Value::#variant(_) => { #counter += 1usize; }
-                            }
-                        } else {
-                            quote! {
-                                ::ridl_rt::proto3::Value::#variant(__raw) => {
-                                    #checks
-                                    #counter += 1usize;
-                                }
-                            }
-                        };
-                        let packed = match scalar.fixed_width() {
-                            Some(width) => {
-                                let width = Literal::usize_suffixed(width);
-                                let out_of_bounds = structure_error("OutOfBounds");
-                                let read = match scalar.scalar.wire_type() {
-                                    pb::WireType::I32 => quote! {
-                                        let mut __bytes = [0u8; 4];
-                                        __bytes.copy_from_slice(__chunk);
-                                        let __raw = ::core::primitive::u32::from_le_bytes(__bytes);
-                                    },
-                                    _ => quote! {
-                                        let mut __bytes = [0u8; 8];
-                                        __bytes.copy_from_slice(__chunk);
-                                        let __raw = ::core::primitive::u64::from_le_bytes(__bytes);
-                                    },
-                                };
-                                let elements = if checks.is_empty() {
-                                    quote! { #counter += __run.len() / #width; }
-                                } else {
-                                    quote! {
-                                        for __chunk in __chunks {
-                                            #read
-                                            #checks
-                                            #counter += 1usize;
-                                        }
-                                    }
-                                };
-                                quote! {
-                                    let __chunks = __run.chunks_exact(#width);
-                                    if !__chunks.remainder().is_empty() {
-                                        #out_of_bounds
-                                    }
-                                    #elements
-                                }
-                            }
-                            None => {
-                                let read = if checks.is_empty() {
-                                    quote! {
-                                        ::ridl_rt::proto3::read_varint(__run, &mut __at)
-                                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                                    }
-                                } else {
-                                    quote! {
-                                        let __raw = ::ridl_rt::proto3::read_varint(__run, &mut __at)
-                                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-                                        #checks
-                                    }
-                                };
-                                quote! {
-                                    let mut __at = 0usize;
-                                    while __at < __run.len() {
-                                        #read
-                                        #counter += 1usize;
-                                    }
-                                }
-                            }
-                        };
-                        quote! {
-                            ::ridl_rt::proto3::Value::Len(__run) => { #packed }
-                            #single
-                        }
-                    }
+                    Wire::Scalar(scalar) => self.packed_run_verify(owner, scalar, &counter),
                     other => {
                         let (pattern, checks) = self.present_checks(owner, other)?;
                         quote! {
@@ -2123,55 +2078,12 @@ impl<'a> Codec<'a> {
                 }
             }
             Wire::Map { key, value, .. } => {
-                let entry_fields = [
-                    Field {
-                        number: 1,
-                        name: "key".to_string(),
-                        wire: key.as_ref().clone(),
-                        optional: false,
-                        access: Access::Position(0),
-                    },
-                    Field {
-                        number: 2,
-                        name: "value".to_string(),
-                        wire: value.as_ref().clone(),
-                        optional: false,
-                        access: Access::Position(1),
-                    },
-                ];
-                let entry_walk = self.message_walk(owner, &entry_fields, &quote! { __b })?;
-                let key_of_this = self.key_of(key, &quote! { __b });
-                let key_of_previous = self.key_of(key, &quote! { __pb });
-                let unique = unique_error(owner);
+                let entry =
+                    self.map_entry_verify(owner, field.number, key, value, &counter, buf)?;
                 quote! {
                     __seen[#seen] = true;
                     match __field.value {
-                        ::ridl_rt::proto3::Value::Len(__b) => {
-                            { #entry_walk }
-                            // The entries before this one have passed; their
-                            // keys are read again rather than kept, so no
-                            // index is allocated from an untrusted count.
-                            let __k = #key_of_this;
-                            let mut __left = #counter;
-                            let mut __prev = ::ridl_rt::proto3::Reader::new(#buf);
-                            while __left > 0usize {
-                                match __prev.next() {
-                                    ::core::option::Option::Some(::core::result::Result::Ok(__p)) => {
-                                        if __p.number == #number {
-                                            __left -= 1usize;
-                                            if let ::ridl_rt::proto3::Value::Len(__pb) = __p.value {
-                                                let __pk = #key_of_previous;
-                                                if __pk == __k {
-                                                    #unique
-                                                }
-                                            }
-                                        }
-                                    }
-                                    _ => break,
-                                }
-                            }
-                            #counter += 1usize;
-                        }
+                        ::ridl_rt::proto3::Value::Len(__b) => { #entry }
                         _ => { #wrong_type }
                     }
                 }
@@ -2192,6 +2104,121 @@ impl<'a> Codec<'a> {
         })
     }
 
+    /// The two `match` arms over `__field.value` that verify one record of
+    /// a repeated scalar field, counting its elements in `counter`: a packed
+    /// run, read element by element, and one unpacked element.
+    fn packed_run_verify(&self, owner: &str, scalar: &Scalar, counter: &Ident) -> TokenStream {
+        let checks = scalar.raw_checks(owner);
+        let variant = scalar.value_variant();
+        let single = if checks.is_empty() {
+            quote! {
+                ::ridl_rt::proto3::Value::#variant(_) => { #counter += 1usize; }
+            }
+        } else {
+            quote! {
+                ::ridl_rt::proto3::Value::#variant(__raw) => {
+                    #checks
+                    #counter += 1usize;
+                }
+            }
+        };
+        let packed = match scalar.fixed_width() {
+            Some(width) => {
+                let width = Literal::usize_suffixed(width);
+                let out_of_bounds = structure_error("OutOfBounds");
+                let read = scalar.fixed_read();
+                let elements = if checks.is_empty() {
+                    quote! { #counter += __run.len() / #width; }
+                } else {
+                    quote! {
+                        for __chunk in __chunks {
+                            #read
+                            #checks
+                            #counter += 1usize;
+                        }
+                    }
+                };
+                quote! {
+                    let __chunks = __run.chunks_exact(#width);
+                    if !__chunks.remainder().is_empty() {
+                        #out_of_bounds
+                    }
+                    #elements
+                }
+            }
+            None => {
+                let read = if checks.is_empty() {
+                    quote! {
+                        ::ridl_rt::proto3::read_varint(__run, &mut __at)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                    }
+                } else {
+                    quote! {
+                        let __raw = ::ridl_rt::proto3::read_varint(__run, &mut __at)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        #checks
+                    }
+                };
+                quote! {
+                    let mut __at = 0usize;
+                    while __at < __run.len() {
+                        #read
+                        #counter += 1usize;
+                    }
+                }
+            }
+        };
+        quote! {
+            ::ridl_rt::proto3::Value::Len(__run) => { #packed }
+            #single
+        }
+    }
+
+    /// The statements that verify one map entry `__b` of the field
+    /// `number`, counted in `counter`: the entry's own walk, then its key
+    /// against the keys of the entries before it in the message `buf`.
+    fn map_entry_verify(
+        &self,
+        owner: &str,
+        number: u32,
+        key: &Wire,
+        value: &Wire,
+        counter: &Ident,
+        buf: &TokenStream,
+    ) -> Result<TokenStream, GenerateError> {
+        let number = Literal::u32_suffixed(number);
+        let entry_walk = self.message_walk(owner, &entry_fields(key, value), &quote! { __b })?;
+        let key_of_this = self.key_of(key, &quote! { __b });
+        let key_of_previous = self.key_of(key, &quote! { __pb });
+        let unique = unique_error(owner);
+        Ok(quote! {
+            { #entry_walk }
+            // The entries before this one have passed; their keys are read
+            // again rather than kept, so no index is allocated from an
+            // untrusted count.
+            let __k = #key_of_this;
+            let mut __left = #counter;
+            let mut __prev = ::ridl_rt::proto3::Reader::new(#buf);
+            while __left > 0usize {
+                match __prev.next() {
+                    ::core::option::Option::Some(::core::result::Result::Ok(__p)) => {
+                        if __p.number == #number {
+                            __left -= 1usize;
+                            if let ::ridl_rt::proto3::Value::Len(__pb) = __p.value {
+                                let __pk = #key_of_previous;
+                                if __pk == __k {
+                                    #unique
+                                }
+                            }
+                        }
+                    }
+                    _ => break,
+                }
+            }
+            #counter += 1usize;
+        })
+    }
+
     /// The expression reading a map entry's key from the entry bytes
     /// `bytes`, as a value two entries can be compared by: the language
     /// value of a scalar key, the bytes of a string key, the key's default
@@ -2207,7 +2234,7 @@ impl<'a> Codec<'a> {
                 )
             }
             _ => (
-                quote! { &[][..] },
+                quote! { &[] as &[::core::primitive::u8] },
                 quote! { ::ridl_rt::proto3::Value::Len(__kb) },
                 quote! { __kb },
             ),
@@ -2512,18 +2539,7 @@ impl<'a> Codec<'a> {
                     let packed = match scalar.fixed_width() {
                         Some(width) => {
                             let width = Literal::usize_suffixed(width);
-                            let read = match scalar.scalar.wire_type() {
-                                pb::WireType::I32 => quote! {
-                                    let mut __bytes = [0u8; 4];
-                                    __bytes.copy_from_slice(__chunk);
-                                    let __raw = ::core::primitive::u32::from_le_bytes(__bytes);
-                                },
-                                _ => quote! {
-                                    let mut __bytes = [0u8; 8];
-                                    __bytes.copy_from_slice(__chunk);
-                                    let __raw = ::core::primitive::u64::from_le_bytes(__bytes);
-                                },
-                            };
+                            let read = scalar.fixed_read();
                             quote! {
                                 for __chunk in __run.chunks_exact(#width) {
                                     #read

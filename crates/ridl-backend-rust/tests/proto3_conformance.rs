@@ -648,6 +648,90 @@ fn proto3_layout_matches_the_emitted_schema() {
     );
 }
 
+/// `generate_pipeline` with proto3 succeeds for every package of the two
+/// corpus entries whose every type has a proto3 bound — `examples/cabin` and
+/// the veh-cluster corpus, whose interfaces induce argument and reply
+/// messages — and names the declaration and the cause when it refuses a ros2
+/// package, whose `RosString` carries a length bound the sizer cannot hold.
+#[test]
+fn the_corpus_generates_with_proto3() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let std_ir = ridlc::std_ir();
+    let generate = |entry: &str| -> Vec<(String, Result<String, String>)> {
+        let packages = proto3::compile_workspace(&root.join(entry));
+        packages
+            .iter()
+            .enumerate()
+            .map(|(at, package)| {
+                let mut others: Vec<&v2::Package> = packages
+                    .iter()
+                    .enumerate()
+                    .filter(|(other, _)| *other != at)
+                    .map(|(_, other)| other)
+                    .collect();
+                others.push(&std_ir);
+                let result = ridl_backend_rust::generate_pipeline(
+                    package,
+                    &[ridl_backend_rust::WireEncoding::Proto3],
+                    &others,
+                )
+                .map(|generated| generated.rust_source)
+                .map_err(|error| error.message);
+                (package.name.clone(), result)
+            })
+            .collect()
+    };
+    for entry in ["examples/cabin", "crates/ridlc/tests/corpus/veh-cluster"] {
+        let results = generate(entry);
+        assert!(!results.is_empty(), "{entry} holds a package");
+        for (name, result) in &results {
+            let source = result
+                .as_ref()
+                .unwrap_or_else(|error| panic!("{entry}: `{name}` generates with proto3: {error}"));
+            assert!(
+                source.contains("Payload<::ridl_rt::encoding::Proto3> for "),
+                "{entry}: `{name}` carries a proto3 codec"
+            );
+        }
+    }
+    let cluster = generate("crates/ridlc/tests/corpus/veh-cluster");
+    let (_, veh_cluster) = cluster
+        .iter()
+        .find(|(name, _)| name == "veh.cluster")
+        .expect("the corpus declares `veh.cluster`");
+    // Whitespace aside: the printer breaks a long `impl` line.
+    let dense: String = veh_cluster
+        .as_ref()
+        .expect("generates")
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .collect();
+    for root in [
+        "VehHvacCabinGetBoundsParams",
+        "VehHvacCabinGetBoundsReply",
+        "WheelDiagnosticsReadSpanReply",
+    ] {
+        assert!(
+            dense.contains(&format!(
+                "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>for{root}{{"
+            )),
+            "`{root}` is an induced interaction root with a `Payload<Proto3>`"
+        );
+    }
+    let ros2 = generate("evals/corpus/ros2");
+    let (_, stdsrvs) = ros2
+        .iter()
+        .find(|(name, _)| name == "stdsrvs")
+        .expect("the corpus declares `stdsrvs`");
+    let refusal = stdsrvs
+        .as_ref()
+        .expect_err("`stdsrvs` is refused with proto3");
+    assert!(
+        refusal.starts_with("`stdsrvs.RosString` has no proto3 bound: "),
+        "the refusal names the declaration and the cause, got: {refusal}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The program
 // ---------------------------------------------------------------------------

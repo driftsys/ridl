@@ -14,6 +14,10 @@
 
 #[path = "support/ir.rs"]
 mod ir;
+#[path = "support/proto3.rs"]
+mod proto3;
+#[path = "support/rustc.rs"]
+mod rustc;
 
 use proc_macro2::{TokenStream, TokenTree};
 
@@ -89,9 +93,21 @@ fn assert_clean(label: &str, source: &str) {
 }
 
 /// The two members of the proto3 conformance fixture, which reference each
-/// other across a package boundary and are read as a workspace by
-/// `support/proto3.rs`; a single-file compile cannot resolve the import.
+/// other across a package boundary; a single-file compile cannot resolve the
+/// import, so [`generate_over_the_conformance_workspace_cites_no_issue`]
+/// reads them as the workspace `support/proto3.rs` builds.
 const WORKSPACE_MEMBERS: [&str; 2] = ["proto3_conformance.ridl", "proto3_conformance_other.ridl"];
+
+/// The fixtures the proto3 codec refuses by design — a map keyed by a float
+/// and one keyed by bytes, which proto3 does not admit as a key; a
+/// declaration, then an interaction, with no proto3 bound — so
+/// `generate_pipeline` with `proto3` has no output to scan for them, and must
+/// refuse rather than generate.
+const PROTO3_REFUSED: [&str; 3] = [
+    "payload_constraints.ridl",
+    "proto3_unbounded.ridl",
+    "proto3_unbounded_call.ridl",
+];
 
 fn fixtures() -> Vec<String> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
@@ -144,18 +160,62 @@ fn generate_over_every_fixture_cites_no_issue() {
     }
 }
 
+/// `generate_pipeline` over every fixture with FlatBuffers, and with proto3
+/// for every fixture but the two it refuses by design, which must refuse.
 #[test]
 fn generate_pipeline_over_every_fixture_cites_no_issue() {
+    use ridl_backend_rust::WireEncoding;
     for name in fixtures() {
         let package = ir::compile_fixture(&name);
-        let source = ridl_backend_rust::generate_pipeline(
-            &package,
-            &[ridl_backend_rust::WireEncoding::FlatBuffers],
-            &[],
-        )
-        .unwrap_or_else(|error| panic!("generate_pipeline {name}: {error:?}"))
-        .rust_source;
+        let source =
+            ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::FlatBuffers], &[])
+                .unwrap_or_else(|error| panic!("generate_pipeline {name}: {error:?}"))
+                .rust_source;
         assert_clean(&format!("generate_pipeline({name})"), &source);
+        let proto3 = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[]);
+        if PROTO3_REFUSED.contains(&name.as_str()) {
+            assert!(proto3.is_err(), "{name} is refused with proto3 by design");
+            continue;
+        }
+        let source = proto3
+            .unwrap_or_else(|error| panic!("generate_pipeline {name} with proto3: {error:?}"))
+            .rust_source;
+        assert_clean(&format!("generate_pipeline({name}, proto3)"), &source);
+    }
+}
+
+/// The two-member conformance fixture, read as a workspace: each member
+/// generated with the other as its resolution context, with FlatBuffers and
+/// with proto3, so the proto3 codec's own doc lines — one `MAX_SIZE` line per
+/// `Payload` implementation — are scanned too.
+#[test]
+fn generate_over_the_conformance_workspace_cites_no_issue() {
+    use ridl_backend_rust::WireEncoding;
+    let (main, others) = proto3::fixture();
+    let mut packages = vec![main];
+    packages.extend(others);
+    assert_eq!(packages.len(), WORKSPACE_MEMBERS.len());
+    for (at, package) in packages.iter().enumerate() {
+        let others: Vec<&ridl_ir::v2::Package> = packages
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != at)
+            .map(|(_, other)| other)
+            .collect();
+        for encoding in [WireEncoding::FlatBuffers, WireEncoding::Proto3] {
+            let source = ridl_backend_rust::generate_pipeline(package, &[encoding], &others)
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "generate_pipeline {} with {encoding:?}: {error:?}",
+                        package.name
+                    )
+                })
+                .rust_source;
+            assert_clean(
+                &format!("generate_pipeline({}, {encoding:?})", package.name),
+                &source,
+            );
+        }
     }
 }
 
