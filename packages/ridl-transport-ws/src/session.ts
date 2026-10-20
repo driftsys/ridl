@@ -28,6 +28,7 @@ import {
   SessionError,
   type SessionViolation,
 } from "./errors.ts";
+import { Calls } from "./calls.ts";
 
 /** The state of a signal or a `fixed`, as one `publish` carried it. */
 export interface Sample {
@@ -217,6 +218,8 @@ export class Session {
   #events = new Set<string>();
   /** The last accepted `seq` of each subscribed event. */
   #lastSeq = new Map<string, bigint>();
+  /** The commands and queries in flight. */
+  #calls = new Calls();
 
   /** @internal Use {@link connect}. */
   constructor(
@@ -300,24 +303,44 @@ export class Session {
     return this.#held.get(channel(iface, ord));
   }
 
-  /** Sends a command. Not implemented yet. */
+  /**
+   * Sends a command: one `request` whose `seq` is the session's next caller
+   * number, whose `stamp` is the `clock` option's value, and whose payload is
+   * a copy of `args`. Resolves on `accepted`. Rejects with a
+   * {@link SessionError}: `contract`, `corrupt` or `busy` as the provider
+   * answered, `undelivered` when `opts.bound` milliseconds pass with no
+   * `response`, `down` when the session has ended or ends first. Rejects with
+   * a `RangeError`, and sends nothing, when `opts.bound` is not a finite number
+   * greater than 0.
+   */
   command(
-    _iface: number,
-    _ord: number,
-    _args: Uint8Array,
-    _opts: { bound: number },
+    iface: number,
+    ord: number,
+    args: Uint8Array,
+    opts: { bound: number },
   ): Promise<void> {
-    return Promise.reject(new Error("not implemented"));
+    return this.#calls.command(
+      opts.bound,
+      (seq) => this.#request(Kind.Command, iface, ord, seq, args),
+    );
   }
 
-  /** Sends a query. Not implemented yet. */
+  /**
+   * Sends a query, as {@link Session.command} sends a command. Resolves with
+   * the payload of the `reply`, an empty `Uint8Array` when the reply has no
+   * bytes. Rejects as a command does, except that a passed bound rejects with
+   * `timeout`.
+   */
   query(
-    _iface: number,
-    _ord: number,
-    _args: Uint8Array,
-    _opts: { bound: number },
+    iface: number,
+    ord: number,
+    args: Uint8Array,
+    opts: { bound: number },
   ): Promise<Uint8Array> {
-    return Promise.reject(new Error("not implemented"));
+    return this.#calls.query(
+      opts.bound,
+      (seq) => this.#request(Kind.Query, iface, ord, seq, args),
+    );
   }
 
   /**
@@ -337,6 +360,24 @@ export class Session {
     // `encode` allocates its own `ArrayBuffer`, which the DOM typing of
     // `send` requires.
     this.#socket.send(encode(frame) as Uint8Array<ArrayBuffer>);
+  }
+
+  #request(
+    kind: typeof Kind.Command | typeof Kind.Query,
+    iface: number,
+    ord: number,
+    seq: bigint,
+    args: Uint8Array,
+  ): void {
+    const clock = this.#options.clock ?? (() => BigInt(Date.now()) * 1000n);
+    // `encode` copies `args` into the message it allocates; the session keeps
+    // no reference to `args`.
+    this.#send({
+      form: "request",
+      target: { kind, iface, ord },
+      envelope: { stamp: clock(), seq },
+      payload: args,
+    });
   }
 
   #note(note: Note): void {
@@ -406,7 +447,13 @@ export class Session {
         this.#onOccurrence(frame);
         return;
       case "response":
-        this.#note({ note: "discarded", reason: "unknown-correlation", frame });
+        if (!this.#calls.settle(frame)) {
+          this.#note({
+            note: "discarded",
+            reason: "unknown-correlation",
+            frame,
+          });
+        }
         return;
       default:
         // A second `attached`, or a form only a consumer sends.
@@ -554,9 +601,13 @@ export class Session {
     this.#note({ note: "violation", violation });
   }
 
-  /** Marks the session ended and rejects every waiting operation with `down`. */
+  /**
+   * Marks the session ended and rejects every waiting operation and every call
+   * in flight with `down`.
+   */
   #fail(): void {
     this.#ended = true;
+    this.#calls.fail();
     const waiting = [...this.#waiting.values()].flat();
     this.#waiting.clear();
     this.#signals.clear();
