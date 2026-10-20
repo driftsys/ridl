@@ -832,7 +832,7 @@ non-optional field breaking unless it is a scalar, enum or enum set whose type
 allows 0, which is where the reader reads the old buffers (ADR-0008 decision 14
 as amended). A type the diff cannot resolve is reported as breaking.
 
-**E11.8 landed** (driftsys/ridl#264, PR driftsys/ridl#TBD-PR). When
+**E11.8 landed** (driftsys/ridl#264, PR driftsys/ridl#998). When
 `[backend.rust] encodings` names `proto3`, the Rust backend emits a
 `Payload<Proto3>` for every declaration that projects a type and for every
 induced interaction tuple that crosses the wire, and a `Sizes<Proto3>` for every
