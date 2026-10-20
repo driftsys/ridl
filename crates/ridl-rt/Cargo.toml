@@ -19,8 +19,8 @@ categories = ["no-std", "encoding"]
 rust-version = "1.83"
 
 # One feature per payload encoding (ADR-0020 decision 5). In this version
-# `flatbuffers` enables the module of the same name, `proto3` and `repr-c`
-# enable nothing, and the crate has no dependency in any combination.
+# `flatbuffers` and `proto3` each enable the module of the same name, `repr-c`
+# enables nothing, and the crate has no dependency in any combination.
 # `std` is not an encoding: it links the standard library and enables the
 # `task` module (ADR-0021 decision 8, amended 2026-09-26) and the propagation
 # hook of the `trace` module (ADR-0021 decision 22).
@@ -31,7 +31,7 @@ repr-c = []
 std = []
 
 # docs.rs builds with every feature on, so the crate docs' links to the
-# `flatbuffers` and `task` modules resolve.
+# `flatbuffers`, `proto3` and `task` modules resolve.
 [package.metadata.docs.rs]
 all-features = true
 
