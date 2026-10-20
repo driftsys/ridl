@@ -2210,10 +2210,11 @@ doc-path-check root="":
 # Scanned, as tracked files: crates/, xtask/, examples/, editors/vscode/src/,
 # packages/, the docs/book/, docs/design/ and docs/technotes/ trees, and each
 # file of docs/specification/ that a docs/book/ file names in an
-# `{{#include}}`, because the book renders it. Not scanned, because an id there is the record's own
-# subject: docs/ROADMAP.md, docs/BACKLOG.md, docs/decisions/ (a decision traces
-# to the story it serves), the rest of docs/specification/ (its overview is the
-# ledger of the plan), docs/archive/, docs/wip/, CHANGELOG.md and AGENTS.md.
+# `{{#include}}`, because the book renders it. Not scanned, because an id
+# there is the record's own subject: docs/ROADMAP.md, docs/BACKLOG.md,
+# docs/decisions/ (a decision traces to the story it serves), the rest of
+# docs/specification/ (its overview is the ledger of the plan), docs/archive/,
+# docs/wip/, CHANGELOG.md and AGENTS.md.
 # Files at the repository root, such as Cargo.toml, are outside the scanned
 # trees on purpose.
 #
@@ -2814,7 +2815,8 @@ ts-e2e:
 # e2e/browser.ts uses: RIDL_BROWSER, then google-chrome, google-chrome-stable,
 # chromium and chromium-browser on PATH, then the Google Chrome application on
 # macOS. When none is found, or RIDL_BROWSER names no executable file, the
-# recipe fails and names RIDL_BROWSER. On Linux, RIDL_BROWSER_NO_SANDBOX=1
+# recipe fails and names RIDL_BROWSER. The browser found is passed to the test
+# in RIDL_BROWSER, so the test starts the one the recipe checked. On Linux, RIDL_BROWSER_NO_SANDBOX=1
 # starts the browser with --no-sandbox.
 ts-browser-e2e:
     #!/usr/bin/env bash
@@ -2853,7 +2855,7 @@ ts-browser-e2e:
     cargo build --locked -p ridl-transport-ws --example loopback_server
     server="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/loopback_server"
     cd packages/ridl-transport-ws
-    RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/browser_test.ts
+    RIDL_BROWSER="$browser" RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/browser_test.ts
 
 # Full local gate: confirm the toolchain and CI wiring, check Rust formatting,
 # build the docs book, check the TypeScript package, compile the code, run the

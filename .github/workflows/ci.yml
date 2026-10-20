@@ -61,14 +61,15 @@ jobs:
   # files under docs/specification/ directly, and a trigger list missed three of
   # those on its first draft.
   #
-  # Two jobs are path-filtered, and `book` is not:
-  #   - `rust` and `wasm` skip when every changed file is documentation or
-  #     editor tooling that no Rust test or recipe reads. docs/book/ and
-  #     docs/specification/ are not on the list: book_examples.rs compiles the
-  #     docs/book/ fences, and Rust code reads docs/specification/ files.
-  #     `typescript` uses the same `rust` flag: its end-to-end tests build a
-  #     Rust example, and its unit tests read docs/specification/. packages/ is
-  #     not on the list, so a change to the TypeScript package runs it.
+  # Four jobs are path-filtered, and `book` is not:
+  #   - `rust`, `wasm` and `typescript` skip when every changed file is
+  #     documentation or editor tooling that no Rust test or recipe reads.
+  #     docs/book/ and docs/specification/ are not on the list:
+  #     book_examples.rs compiles the docs/book/ fences, and Rust code reads
+  #     docs/specification/ files. `typescript` reads the same `rust` flag: its
+  #     end-to-end tests build a Rust example, and its unit tests read
+  #     docs/specification/. packages/ is not on the list, so a change to the
+  #     TypeScript package runs it.
   #   - `markdown` (prim) skips when every changed file is Rust source. prim
   #     also covers JSON, YAML and TOML, so any other file runs it.
   #   - `book` always runs on a pull request: `just doc-path-check` scans Rust
