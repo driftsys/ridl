@@ -92,23 +92,28 @@ added to the codegen protocol; it is additive under
 `MAX_SIZE` is finite, and `ridl-rt`'s `Payload` and `Sizes` API is the one the
 FlatBuffers codec implements.
 
-**A type whose size state is not `Bounded` is refused**, exactly as the
-FlatBuffers codec refuses a type with no finite bound. The states are `NoBound`,
-`Overflow`, `RefusedMember` and `Unresolved`, and a state the model does not
-carry is refused the same way. The refusal is a `GenerateError` that names the
-declaration, or the interaction and its induced message, and the cause by its
-name in parentheses (`bound_state` in `codec_proto3.rs`). The codec emitter
-stops at the first refused message, so one refusal fails the package's proto3
-generation, and `ridl build` fails with it; the same package still generates
-with no encoding. `an_unbounded_type_is_refused_under_proto3` pins `NoBound` for
-a string with no length bound and for a struct that holds one, and `Overflow`
-for a call whose argument message is a sum of bounds that does not fit a `u32`;
+**A type whose size state is not `Bounded` is refused**, for a declaration
+exactly as the FlatBuffers codec refuses a declaration with no finite bound.
+Every state but `Bounded` is refused: an absent state (`NoBound`, `Overflow`,
+`RefusedMember` and `Unresolved` are the causes the sizer gives a type),
+`Unbounded`, and a state the model does not carry. The refusal is a
+`GenerateError` that names the declaration, or the interaction and its induced
+message, and the cause, by its name in parentheses for an absent state
+(`bound_state` in `codec_proto3.rs`). The codec emitter stops at the first
+refused message, so one refusal fails the package's proto3 generation, and
+`ridl build` fails with it; the same package still generates with no encoding.
+`an_unbounded_type_is_refused_under_proto3` pins `NoBound` for a string with no
+length bound and for a struct that holds one, and `Overflow` for a call whose
+argument message is a sum of bounds that does not fit a `u32`;
 `an_interface_with_an_unbounded_payload_is_refused`
-(`tests/descriptor_generation.rs`) pins the same refusal through the face. One
-difference from the FlatBuffers codec remains: that codec withholds the codec of
+(`tests/descriptor_generation.rs`) pins the same refusal through the face. Two
+differences from the FlatBuffers codec remain. That codec withholds the codec of
 a type whose bound it cannot judge, while the proto3 sizer resolves
 cross-package references through `others`, so no proto3 type is withheld
-silently.
+silently. And an induced interaction payload with no finite bound fails the
+package's proto3 generation, where the FlatBuffers codec skips only that
+interface's face and descriptors with a `__RIDL_NO_FACE_<NAME>` marker and the
+build succeeds.
 
 The sizer names the cause. `NoBound` is a member with no finite bound: a
 `string` or `bytes` with no length bound, such as the ros2 corpus's

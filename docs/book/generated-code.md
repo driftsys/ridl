@@ -61,12 +61,11 @@ The package module holds:
   the module holds the types only. Each payload type also has a
   `<T as Payload<FlatBuffers>>::Buffer` type and a zeroed `BUFFER` value, sized
   by that type's own `MAX_SIZE`, and the same in `Proto3`. Every `MAX_SIZE` is
-  finite: a type whose encoding has no finite bound, such as a `string` with no
-  length bound, is refused in either encoding, and `ridl build` fails with an
-  error that names the type and the cause. A platform-wide payload ceiling
-  that caps such a bound is driftsys/ridl#996; until it lands, a package such
-  as one of the ros2 corpus, whose strings have no length bound, does not
-  generate a codec. The face calls the codec; an application calls it only when it moves
+  finite: a declared type whose encoding has no finite bound, such as a
+  `string` with no length bound, is refused in either encoding, and
+  `ridl build` fails with an error that names the type and the cause; the
+  [proto3 codec record's known gaps][proto3-gaps] give the limit this sets
+  and its tracking issue. The face calls the codec; an application calls it only when it moves
   payloads by itself.
 - **The interaction descriptors**: one unit type per interface (here
   `api::Cabin`) that implements `ridl_rt::contract::Interface` and carries the
@@ -489,3 +488,4 @@ a reader of the generated source; rustdoc does not show them.
 [face]: https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md
 [consumer-face]: https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md#the-consumer-face
 [ridl-rt]: https://github.com/driftsys/ridl/blob/main/docs/design/ridl-rt.md
+[proto3-gaps]: https://github.com/driftsys/ridl/blob/main/docs/design/proto3-codec.md#known-gaps
