@@ -20,11 +20,13 @@ Version: 0.2.0
 > written from it alone, without reading the code in this repository. Where this
 > document and an ADR disagree, the ADR wins and this document is corrected.
 
-> **As built.** One crate in this workspace, `ridl-transport-ws`, speaks this
-> frame over WebSocket (§11.1). It serves the observe and call ports of a
-> provider runtime, applies the exact-match rule of §6.1 at `attach`, and keeps
-> the last 64 settled responses of a session for duplicate suppression instead
-> of keeping each until its response bound has passed (§7). The runtime here,
+> **As built.** Two packages in this workspace speak this frame over WebSocket
+> (§11.1): the crate `ridl-transport-ws`, the serving side, and the TypeScript
+> package `@driftsys/ridl-transport-ws` (`packages/ridl-transport-ws/`), the
+> consuming side. The crate serves the observe and call ports of a provider
+> runtime, applies the exact-match rule of §6.1 at `attach`, and keeps the last
+> 64 settled responses of a session for duplicate suppression instead of keeping
+> each until its response bound has passed (§7). The runtime here,
 > `ridl-loopback`, runs in process: it carries bytes from a provider handle to a
 > consumer handle over one in-memory store, opens no socket, and has no wire
 > format ([its design record](../design/ridl-loopback.md)). Neither enforces a

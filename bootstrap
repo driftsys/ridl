@@ -95,15 +95,21 @@ else
   if [ -z "$deno_target" ]; then
     log "no Deno release is downloaded for $(uname -s) $(uname -m)"
     deno_hint="$deno_install_page"
+  elif ! command -v unzip >/dev/null 2>&1; then
+    log "unzip is not on PATH, so the Deno release cannot be unpacked"
+    deno_hint="install unzip with your package manager, then run ./bootstrap again; or $deno_install_page"
   else
     log "installing deno $deno_version ($deno_target) into $deno_dir"
     deno_tmp="$(mktemp -d)"
+    # Remove the temp dir when curl or unzip fails and the script exits.
+    trap 'rm -rf "$deno_tmp"' EXIT
     curl -fsSL -o "$deno_tmp/deno.zip" \
       "https://github.com/denoland/deno/releases/download/v${deno_version}/deno-${deno_target}.zip"
     mkdir -p "$deno_dir"
     unzip -o -q "$deno_tmp/deno.zip" deno -d "$deno_dir"
     chmod +x "$deno_dir/deno"
     rm -r "$deno_tmp"
+    trap - EXIT
   fi
 fi
 

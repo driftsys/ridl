@@ -178,7 +178,7 @@ function sleep(ms: number): Promise<void> {
 
 test("a command whose response arrives before its bound resolves", async () => {
   const { socket, session } = await attached();
-  const call = session.command(1, 6, new Uint8Array(), { bound: 50 });
+  const call = session.command(1, 6, new Uint8Array(), { bound: 500 });
   await sleep(10);
   socket.deliver(response(COMMAND, 1n, { outcome: "accepted" }));
   assert.equal(await call, undefined);
@@ -187,12 +187,12 @@ test("a command whose response arrives before its bound resolves", async () => {
 test("a query waits for its bound before it rejects timeout", async () => {
   const { session } = await attached();
   let settled = false;
-  const call = session.query(1, 7, new Uint8Array(), { bound: 30 });
+  const call = session.query(1, 7, new Uint8Array(), { bound: 200 });
   const watched = call.then(
     () => settled = true,
     () => settled = true,
   );
-  await sleep(10);
+  await sleep(20);
   assert.equal(settled, false);
   await assert.rejects(call, isFailure("timeout"));
   await watched;

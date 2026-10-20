@@ -2816,8 +2816,8 @@ ts-e2e:
 # chromium and chromium-browser on PATH, then the Google Chrome application on
 # macOS. When none is found, or RIDL_BROWSER names no executable file, the
 # recipe fails and names RIDL_BROWSER. The browser found is passed to the test
-# in RIDL_BROWSER, so the test starts the one the recipe checked. On Linux, RIDL_BROWSER_NO_SANDBOX=1
-# starts the browser with --no-sandbox.
+# in RIDL_BROWSER, so the test starts the one the recipe checked. On Linux,
+# RIDL_BROWSER_NO_SANDBOX=1 starts the browser with --no-sandbox.
 ts-browser-e2e:
     #!/usr/bin/env bash
     set -euo pipefail
