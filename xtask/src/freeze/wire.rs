@@ -100,9 +100,19 @@ fn schema_file_lines(text: &str) -> Vec<String> {
     out
 }
 
+/// The frozen copy of the veh-cluster corpus that the generated-crate surface
+/// reads, relative to the repository root. The `evals/corpus/` copies declare
+/// no union, so without it the dump would hold no proto3 `oneof` line and no
+/// FlatBuffers `union` line.
+const UNION_SOURCE: (&str, &str) = (
+    "veh-cluster",
+    "xtask/tests/freeze-fixtures/generated/veh-cluster",
+);
+
 /// Each corpus workspace the schema lines are built from, as `(name,
 /// directory)`: the name is the one the dump lines carry, the directory is
 /// the frozen copy that `ridl build` reads, relative to the repository root.
+/// They are the copies of `evals/corpus/` and [`UNION_SOURCE`].
 fn corpora(root: &Path) -> Result<Vec<(String, String)>, String> {
     let dir = format!("{}/evals/corpus", bin::SOURCE_COPIES);
     let entries =
@@ -114,6 +124,8 @@ fn corpora(root: &Path) -> Result<Vec<(String, String)>, String> {
             out.push((name.clone(), format!("{dir}/{name}")));
         }
     }
+    let (name, source) = UNION_SOURCE;
+    out.push((name.to_string(), source.to_string()));
     out.sort();
     Ok(out)
 }
@@ -537,8 +549,12 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let corpora = corpora(root).unwrap();
         let names: Vec<&str> = corpora.iter().map(|(n, _)| n.as_str()).collect();
-        assert_eq!(names, vec!["mavlink", "ros2", "vss"]);
+        assert_eq!(names, vec!["mavlink", "ros2", "veh-cluster", "vss"]);
         for (name, dir) in &corpora {
+            if name == "veh-cluster" {
+                assert_eq!(*dir, "xtask/tests/freeze-fixtures/generated/veh-cluster");
+                continue;
+            }
             assert_eq!(
                 *dir,
                 format!("xtask/tests/freeze-fixtures/sources/evals/corpus/{name}")
@@ -548,6 +564,23 @@ mod tests {
             CATALOG_SOURCE.starts_with("xtask/tests/freeze-fixtures/"),
             "{CATALOG_SOURCE}"
         );
+    }
+
+    #[test]
+    fn reordering_union_arms_removes_a_line() {
+        // A FlatBuffers union sets each arm's tag by its position, and the
+        // proto3 `oneof` sets it by number: in both, a reorder must remove a
+        // line, because the check compares the dumps as sets of lines.
+        let fbs = |arms: &str| schema_file_lines(&format!("union U {{ {arms} }}\n"));
+        assert_ne!(fbs("a: A, b: B"), fbs("b: B, a: A"));
+        let oneof = |a: u32, b: u32| {
+            schema_file_lines(&format!(
+                "message M {{\n  oneof value {{\n    A a = {a};\n    B b = {b};\n  }}\n}}\n"
+            ))
+        };
+        let before = oneof(1, 2);
+        let after = oneof(2, 1);
+        assert!(before.iter().any(|line| !after.contains(line)), "{after:?}");
     }
 
     #[test]

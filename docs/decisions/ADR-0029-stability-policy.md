@@ -48,6 +48,16 @@ a break. The `cli` dump gains `ridl vendor` and its `--check` flag, and the
 `diagnostics` dump gains MANI-017, MANI-018, MANI-109 and MANI-110; those are
 additions.
 
+**Amended 2026-10-20 (driftsys/ridl#917) — the wire dump holds union mappings.**
+The `.proto` and `.fbs` lines are also built from the frozen veh-cluster copy
+that the generated-crate surface reads, because no copy of `evals/corpus/`
+declares a union. The dump therefore holds a proto3 `oneof` and a FlatBuffers
+`union`. A FlatBuffers union is written on one line that lists its arms in
+order, and every other field carries its number or its `id`, so a reorder of
+arms or fields removes a line. The FlatBuffers backend refuses the ros2 corpus,
+so ros2 has no `.fbs` line, and its FlatBuffers mapping is frozen by policy
+only. The Context bullet on the wire dump and decision 3 are changed in place.
+
 **Amended 2026-10-12 — the wire dump holds the frame vectors.** The `wire` dump
 gains one `frame-vector <id> <hex>` line per row of the vector table of the
 frame specification §11.1, so the frame envelope and the `attach` handshake are
@@ -123,9 +133,11 @@ design in each:
   `examples/` and `evals/corpus/`; it does not include the fences of
   `docs/book/`, which a test already compiles.
 - The wire dump holds the encoding names, the `.proto` and `.fbs` lines for the
-  corpus, the catalog hash of the cabin example, and the test vectors of the
-  WebSocket binding (the frame specification §11.1), which cover the frame
-  envelope and the `attach` handshake.
+  corpus and for the veh-cluster copy that declares a union (no `.fbs` line for
+  ros2, which the FlatBuffers backend refuses), the catalog hash of the cabin
+  example, and the test vectors of the WebSocket binding (the frame
+  specification §11.1), which cover the frame envelope and the `attach`
+  handshake.
 - The minimum of Rust 1.83 and edition 2021 applies to `ridl-rt`,
   `ridl-rt-conformance`, `ridl-loopback` and, from 0.12.0, `ridl-transport-ws`.
   `ridl-descriptor` has its own minimum, Rust 1.88 and edition 2024, because
@@ -197,21 +209,23 @@ design in each:
      required, the required set of each schema object that has `properties` or
      `required`, each enum value and const, and each `additionalProperties`,
      `minimum` and `format`, the wire mapping (encoding names, the `.proto` and
-     `.fbs` lines for the corpus, the catalog hash of the cabin example, the
-     test vectors of the frame specification §11.1) and the minimum Rust version
-     and edition. The check fails when a committed dump differs from a
-     regeneration. For a surface with a row in `freeze/surfaces.toml`, it also
-     fails when a line of the dump at the row's `baseline` ref is missing from
-     the dump at `HEAD`. An added line passes. A changed line is a removed line
-     plus an added line, so it fails. The accepted-sources and wire dumps read
-     frozen copies of the packages under `examples/` and `evals/corpus/`, kept
-     under `xtask/tests/freeze-fixtures/sources/` at the path of each original,
-     and the catalog hash is read from the generated-crate copy of
-     `examples/cabin`. An edit to an example or to the corpus therefore changes
-     no dump. A copy is refreshed on purpose: adding a copy adds lines, and
-     replacing a copy so that a line is removed is a break. The frame vectors
-     are read from the frame specification itself, so an edit to a vector
-     changes the dump.
+     `.fbs` lines for the corpus and the veh-cluster copy, the catalog hash of
+     the cabin example, the test vectors of the frame specification §11.1) and
+     the minimum Rust version and edition. The check fails when a committed dump
+     differs from a regeneration. For a surface with a row in
+     `freeze/surfaces.toml`, it also fails when a line of the dump at the row's
+     `baseline` ref is missing from the dump at `HEAD`. An added line passes. A
+     changed line is a removed line plus an added line, so it fails. The
+     accepted-sources and wire dumps read frozen copies of the packages under
+     `examples/` and `evals/corpus/`, kept under
+     `xtask/tests/freeze-fixtures/sources/` at the path of each original, the
+     `.proto` and `.fbs` lines are also built from the generated-crate copy of
+     the veh-cluster corpus, and the catalog hash is read from the
+     generated-crate copy of `examples/cabin`. An edit to an example or to the
+     corpus therefore changes no dump. A copy is refreshed on purpose: adding a
+     copy adds lines, and replacing a copy so that a line is removed is a break.
+     The frame vectors are read from the frame specification itself, so an edit
+     to a vector changes the dump.
 
      Some lines hold a whole set or a requiredness, so a change that adds to a
      set, or that makes a requirement looser, also removes a line and fails. A
