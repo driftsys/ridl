@@ -118,8 +118,10 @@ The wire backends emit the matching positional `.proto` messages and `.fbs`
 tables under the names assigned by lowering. When the manifest names
 `flatbuffers` and an induced payload has no finite FlatBuffers bound, its
 interface is skipped with the refusal constant described above rather than
-emitting a descriptor that names a missing codec. The proto3 codec has a codec
-for every induced payload, so it skips no interface.
+emitting a descriptor that names a missing codec. The proto3 codec skips no
+interface: an induced payload with no proto3 bound gets a codec without a size,
+and one proto3 cannot represent at all makes `ridl build` fail with an error
+that names it.
 
 The face opens no socket and holds no runtime. Each `Client`, `Publisher` and
 `serve` runs over a _port_ that the application passes in, and a port comes from

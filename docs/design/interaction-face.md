@@ -73,23 +73,24 @@ carries no `interfaces.lock`, so `Interface::NUMBER` and
 (`Interface.number`, `Interface.provisional`, added by the lock design's L4).
 
 **The table's two buffer sizes are computed, not counted.** `MAX_BUFFER_SIZE` is
-the maximum over every argument and reply
-`<T as Payload<::ridl_rt::encoding::FlatBuffers>>::MAX_SIZE` the interface's
-calls use — arguments alone would under-size the claim buffer whenever a query's
-reply is larger than its argument, because a reply is encoded into the same
-buffer. `EVENT_SOURCE_BUFFER_SIZE` is the maximum over event payload sizes only,
-because `EventSource::next`'s payload type is not known until the occurrence's
-ordinal is read. Both are emitted as a const-evaluable block (a `while` loop
-over an array), not as a folded literal, so the maximum is computed by the same
-code a consumer compiles, not precomputed and trusted by the emitter.
+the maximum over every argument and reply `<T as Payload<E>>::MAX_SIZE` the
+interface's calls use, in the table's own encoding `E` — arguments alone would
+under-size the claim buffer whenever a query's reply is larger than its
+argument, because a reply is encoded into the same buffer.
+`EVENT_SOURCE_BUFFER_SIZE` is the maximum over event payload sizes only, because
+`EventSource::next`'s payload type is not known until the occurrence's ordinal
+is read. Both are emitted as a const-evaluable block (a `while` loop over an
+array), not as a folded literal, so the maximum is computed by the same code a
+consumer compiles, not precomputed and trusted by the emitter.
 
 The face holds no array whose length it computes. A site that knows the payload
-type holds that payload's own buffer, `<T as Payload<FlatBuffers>>::BUFFER`: a
-signal read, a publisher's send, a call argument and a reply. The two sites that
-read before they know the type hold a buffer of the table: the server's claim
-buffer is `<Iface as Sizes<FlatBuffers>>::CLAIM_BUFFER` and the next-event
-buffer is `EVENT_BUFFER`. The const-evaluable rule applies to the table's items;
-the descriptor has no inherent constant of either name.
+type holds that payload's own buffer in the encoding of its port,
+`<T as Payload<P::Encoding>>::BUFFER`: a signal read, a publisher's send, a call
+argument and a reply. The two sites that read before they know the type hold a
+buffer of the table: the server's claim buffer is
+`<Iface as Sizes<P::Encoding>>::CLAIM_BUFFER` and the next-event buffer is
+`EVENT_BUFFER`. The const-evaluable rule applies to the table's items; the
+descriptor has no inherent constant of either name.
 
 **The catalog hash, and one placeholder until its replacing story lands:**
 
@@ -121,10 +122,10 @@ the descriptor has no inherent constant of either name.
   carry; the package itself still compiles. A face that can serve an unbounded
   payload is not built (driftsys/ridl#TBD-face-unbounded). A `repr(C)` table
   arrives when the backend emits that codec (driftsys/ridl#317). The face reads
-  buffers from `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER` and
-  the table's `CLAIM_BUFFER` and `EVENT_BUFFER`; `reservation::<X, E>()` and
-  `table_budget::<I, E>()` in `ridl_rt::contract` serve a runtime that sizes a
-  store.
+  buffers from `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of its
+  port `P`, and from the `CLAIM_BUFFER` and `EVENT_BUFFER` of
+  `Sizes<P::Encoding>`; `reservation::<X, E>()` and `table_budget::<I, E>()` in
+  `ridl_rt::contract` serve a runtime that sizes a store.
 
 ## The contract-clause translator
 
@@ -185,9 +186,11 @@ lowering wrote, and the backend never builds one. A fallible `T | E` reply, an
 untyped position and a stream are still refused (driftsys/ridl#943). When
 `encodings` names `flatbuffers`, an induced payload with no finite FlatBuffers
 bound is also refused before its descriptor is accepted: the codec cannot
-implement `Payload<FlatBuffers>` for it. The proto3 codec emits a codec for
-every induced root, bounded or not, so a list without `flatbuffers` refuses
-nothing here. The pipeline skips that interface with the same refusal marker,
+implement `Payload<FlatBuffers>` for it. A proto3 induced root with no bound
+gets a codec without a size and is not refused here; one whose proto3 state is
+absent for another reason, such as a member proto3 cannot represent, fails the
+package's proto3 generation with a `GenerateError` rather than skipping the
+interface. The pipeline skips that interface with the same refusal marker,
 leaving the package's domain types and its other interfaces unaffected.
 
 `src/face.rs` emits, per named interface that is not `internal` and has at least
@@ -527,9 +530,9 @@ the generated code.
 
 **`EncodeError::Capacity` is a provider-side invariant violation, never a
 manufactured contract error.** Every buffer the face encodes into is the
-payload's own `<T as Payload<::ridl_rt::encoding::FlatBuffers>>::BUFFER`,
-`MAX_SIZE` bytes, the largest encoded size of any legal value, so a legal value
-cannot exceed it. If `Ref::encode` still returns `Capacity`, the provider
+payload's own `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of its
+port, `MAX_SIZE` bytes, the largest encoded size of any legal value, so a legal
+value cannot exceed it. If `Ref::encode` still returns `Capacity`, the provider
 returned a value outside its own type's range, or a `Payload` implementation
 does not honor `MAX_SIZE` — a defect the generated code has no vocabulary to
 describe as one of the five settlement outcomes, because `EncodeError::Capacity`

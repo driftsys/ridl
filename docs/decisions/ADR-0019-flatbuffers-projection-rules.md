@@ -132,7 +132,7 @@ what it costs if wrong:
     the existing `protox` and `planus` checks already guard validity — until
     then, a `prost`-level regression in the schema is caught only by `protox`.
 
-**Note (2026-10-20) — rulings 6, 7 and 18 are discharged, and ruling 14 is out
+**Amended 2026-10-20 — rulings 6, 7 and 18 are discharged, and ruling 14 is out
 of date.** The proto3 codec is built
 ([the proto3 codec design record](../design/proto3-codec.md)), and the mapping
 rulings above did not change: the `wire` dump is byte-identical.

@@ -65,7 +65,7 @@ choices, see [`../decisions/`](../decisions/).
   the cases and the mutations measured. The decisions behind its choices are
   [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md),
   [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
-  decisions 3 to 5 and
+  decisions 3 and 4 and
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 8
   and 10, as amended 2026-10-20.
 - **catalog-descriptor.md** — the FlatBuffers catalog descriptor per unit as

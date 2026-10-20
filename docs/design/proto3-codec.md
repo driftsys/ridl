@@ -5,8 +5,8 @@ carries, as built. The binding choices are
 [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md) (the projection
 this codec must agree with byte for byte, decisions 6 to 8 especially),
 [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
-decisions 3 to 5 (proto3 on the network, the codec generated rather than
-delegated, byte-level conformance) and its open item 3,
+decisions 3 and 4 (proto3 on the network; the codec generated rather than
+delegated, and its byte-level conformance) and its open item 3,
 [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md)'s 2026-10-12
 review rulings 6, 7 and 18,
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -104,16 +104,23 @@ For a root, one of two implementations:
 
 Every other absent state — `RefusedMember`, `Unresolved`, and a state the model
 does not carry — is refused with a `GenerateError` naming the declaration and
-the cause, per type, so a package keeps its other codecs. The refusals the
-`.proto` emitter makes are made here too: an optional array or map field
-(ADR-0013 decision 7), an array of arrays or of maps, a map whose value is an
-array or a map, a map key outside the integral and string scalars, an enum value
-or a retired enum value outside int32, and a field number proto3 reserves (19000
-to 19999) or does not admit (0, or above 2^29 − 1). The codec alone refuses an
-optional array element and an optional map value, which the schema emits without
-presence (ADR-0019 review ruling 6), as the FlatBuffers codec does. An integer
-with no width, an enum with no value and a union with no arm are refused as
-malformed IR; the compiler produces none of them.
+the cause. The refusal is not per type: the codec emitter stops at the first
+refused message, so one refusal fails the package's proto3 generation, and
+`ridl build` fails with it (`a_refused_member_is_still_refused` pins it). The
+FlatBuffers codec differs here: it withholds a codec per type. The sizer
+attributes to `RefusedMember` every member the `.proto` emitter refuses, so the
+codec refuses each of them too: an optional array or map field (ADR-0013
+decision 7), an array of arrays or of maps, a map whose value is an array or a
+map, a map key outside the integral and string scalars, an enum value or a
+retired enum value outside int32, a field number proto3 reserves (19000 to
+19999) or does not admit (0, or above 2^29 − 1), a stream, and a name that does
+not resolve. A type whose only problem is a member with no bound is `NoBound`,
+and one whose bound does not fit, or whose nesting passes the sizer's depth
+limit, is `Overflow`; each gets a codec without a size. The codec alone refuses
+an optional array element and an optional map value, which the schema emits
+without presence (ADR-0019 review ruling 6), as the FlatBuffers codec does. An
+integer with no width, an enum with no value and a union with no arm are refused
+as malformed IR; the compiler produces none of them.
 
 `descriptors.rs` emits `Sizes<Proto3>` for every interface whose payloads all
 have a proto3 bound, with each row a const expression over the payloads'
@@ -491,8 +498,8 @@ check is a direct-edge check because `ridl-ir` already depends on `prost` and
     against the fixture generated with both codecs; the bytes on the port are
     the proto3 bytes and not the FlatBuffers ones.
 
-No fixture field holds a legal 32-bit NaN: typl cannot declare an `f32` without
-a range (TYPL-110), and a range excludes NaN.
+No fixture field holds a legal 32-bit NaN: the checker derives an `f32` width
+only from a declared range, and a declared range excludes NaN.
 
 **The mutations measured.** Each codec task's review mutated the codec and its
 helpers in a worktree of its own and ran the suites. Every mutation below was
@@ -562,7 +569,7 @@ regenerate byte for byte.
 - Roadmap: [`../ROADMAP.md`](../ROADMAP.md); the issue is driftsys/ridl#264
 - Decisions: [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md),
   [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
-  decisions 3 to 5 and open item 3,
+  decisions 3 and 4 and open item 3,
   [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) review
   rulings 6, 7, 14 and 18,
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
