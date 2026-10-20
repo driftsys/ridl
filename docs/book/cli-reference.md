@@ -1613,7 +1613,8 @@ made `external`, or an instance moved to another machine; **composition
 changed** for a component added to or removed from the system, an `offers` or
 `requires` line added or removed, `instances` changed, a component made
 `external`, a distribution added or removed, or a member line added to or
-removed from a distribution. The verdict and the exit code are the contracts' alone.
+removed from a distribution. The verdict and the exit code are the contracts'
+alone.
 
 Moving `Panel` from machine `Front` to machine `Rear` in deployment `Desk`:
 
