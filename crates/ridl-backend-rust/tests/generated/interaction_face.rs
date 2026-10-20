@@ -3956,6 +3956,14 @@ pub(crate) fn __ridl_pb_verify_Tally(
                             );
                         }
                     }
+                    if __c0 >= 3usize {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                                type_name: ::core::option::Option::Some("Tally"),
+                                rule: ::ridl_rt::payload::Rule::Length,
+                            }),
+                        );
+                    }
                     let __k = {
                         let mut __k = &[] as &[::core::primitive::u8];
                         let mut __reader = ::ridl_rt::proto3::Reader::new(__b);

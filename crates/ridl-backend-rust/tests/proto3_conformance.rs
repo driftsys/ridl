@@ -442,7 +442,23 @@ const CORPUS: &[(&str, &[&str])] = &[
         ],
     ),
     ("evals/corpus/mavlink", &[]),
-    ("evals/corpus/ros2", &[]),
+    (
+        "evals/corpus/ros2",
+        &[
+            // The argument messages of the four calls whose parameters reach
+            // `RosString`, a string with no finite bound: each has no proto3
+            // bound, so, as under the FlatBuffers codec, the tuple gets no
+            // codec and its interface is skipped with a note
+            // (`docs/design/interaction-face.md`, design rule 2). The schema
+            // emitter still appends the message. The layout runs over the
+            // package whatever the ros2 refusal of its declarations, which
+            // `the_ros2_corpus_is_refused_under_proto3` pins separately.
+            "nav2msgs.Nav2MsgsInteractionsIsPathValidParams",
+            "nav2msgs.Nav2MsgsInteractionsSaveMapParams",
+            "navmsgs.NavMsgsInteractionsGetPlanParams",
+            "navmsgs.NavMsgsInteractionsSetMapParams",
+        ],
+    ),
     ("evals/corpus/vss", &[]),
 ];
 

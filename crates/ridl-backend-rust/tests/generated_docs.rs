@@ -106,18 +106,19 @@ const FLATBUFFERS_REFUSED: [(&str, &str); 1] =
 /// The fixtures the proto3 codec refuses by design, each with the text its
 /// refusal must carry — a map keyed by a float and one keyed by bytes, which
 /// proto3 does not admit as a key; a declaration with an enum value outside
-/// int32, a member the proto backend refuses; a string with no length bound;
-/// and a call whose argument message overflows a `u32` bound — so
-/// `generate_pipeline` with `proto3` has no output to scan for them, and
-/// must refuse for that reason rather than generate.
-const PROTO3_REFUSED: [(&str, &str); 4] = [
+/// int32, a member the proto backend refuses; and a string with no length
+/// bound — so `generate_pipeline` with `proto3` has no output to scan for
+/// them, and must refuse for that reason rather than generate. A call whose
+/// argument message overflows a `u32` bound (`proto3_unbounded_call.ridl`)
+/// is not refused: its interface is skipped with a note, which is scanned
+/// like any other output.
+const PROTO3_REFUSED: [(&str, &str); 3] = [
     (
         "payload_constraints.ridl",
         "a map key must be an integral or string type",
     ),
     ("proto3_unbounded.ridl", "` has no proto3 codec: "),
     ("proto3_free.ridl", "` has no proto3 codec: "),
-    ("proto3_unbounded_call.ridl", "` has no proto3 codec: "),
 ];
 
 fn fixtures() -> Vec<String> {

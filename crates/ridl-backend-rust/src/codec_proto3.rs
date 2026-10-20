@@ -110,7 +110,7 @@ use crate::codec::{
     NamedScalar, Operand, count_check_of, encode_count_check, inline_length_check,
     missing_required, named_scalar_check, scalar_constraint_check,
 };
-use crate::descriptors::{declared_name, interactions};
+use crate::descriptors::interactions;
 use crate::{
     Ctx, GenerateError, ScalarBacking, allow_dead_code_if_internal, class_backing, declared, ident,
     pascal_of, snake_of, type_path, zero_is_legal,
@@ -981,16 +981,14 @@ impl<'a> Codec<'a> {
     /// codec leaves out a tuple root with no finite bound: it gets no
     /// `Payload<Proto3>`, and the descriptor emitter skips its interface
     /// with the refusal that names the cause (`descriptors::induced_name`),
-    /// so the package's other interfaces and its types still generate. An
-    /// interface with no declared name — a service's inline shape — is
-    /// skipped as the pipeline skips it: it gets no descriptors, so nothing
-    /// names a `Payload` for its tuples.
+    /// so the package's other interfaces and its types still generate.
+    /// Every interface is walked, a service's inline shape included, as the
+    /// FlatBuffers projection roots every induced tuple that crosses the
+    /// wire whatever its interface's identity; no name is needed, because
+    /// nothing here refuses.
     fn interaction_roots(&self) -> HashMap<u32, u32> {
         let mut roots: HashMap<u32, u32> = HashMap::new();
         for interface in &self.ctx.model.interfaces {
-            if declared_name(interface).is_none() {
-                continue;
-            }
             for (_, interaction) in interactions(interface) {
                 let payloads: Vec<(Option<&v1::TupleRef>, Option<&v1::PayloadSizes>)> =
                     match interaction.shape.as_ref() {
@@ -2920,8 +2918,7 @@ pub(crate) fn bound_state(state: Option<&v1::SizeState>) -> Result<u32, &'static
             match v1::AbsentCause::try_from(absent.cause).unwrap_or(v1::AbsentCause::Unspecified) {
                 v1::AbsentCause::NoBound => {
                     "a member of it has no finite bound (NoBound): a string or bytes with no \
-                     length bound, or a collection whose count has none; declare the bound in \
-                     the type"
+                     length bound; declare the bound in the type"
                 }
                 v1::AbsentCause::Overflow => {
                     "its bound does not fit a u32 (Overflow): a bound past u32::MAX, a sum or \

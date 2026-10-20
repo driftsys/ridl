@@ -509,7 +509,8 @@ fn an_unbounded_type_is_refused_under_proto3() {
         .expect("the package generates with the interface skipped")
         .rust_source;
     assert!(source.contains("__RIDL_NO_FACE_Probe"), "{source}");
-    assert!(!source.contains("ProbeSetParams"), "{source}");
+    assert!(!source.contains("Proto3> for ProbeSetParams"), "{source}");
+    assert!(!source.contains("__ridl_pb_len_ProbeSetParams"), "{source}");
     let layout = ridl_backend_rust::proto3_layout(&package, &[]).expect("the layout does not size");
     assert!(
         !layout
