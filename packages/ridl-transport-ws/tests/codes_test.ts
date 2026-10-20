@@ -257,3 +257,100 @@ Deno.test("a zero-length payload is an empty Uint8Array, not null", () => {
     assert.equal(payload.length, 0);
   }
 });
+
+Deno.test("extreme integers keep their signedness on the wire", () => {
+  const stamp = -1n;
+  const seq = 0xFFFFFFFFFFFFFFFFn;
+  const correlation = 1n << 63n;
+  const iface = 0xFFFFFFFF;
+  const ord = 0x80000000;
+  const t = (kind: number) => [kind, ...u32(iface), ...u32(ord)];
+  const tgt = (kind: Kind) => ({ kind, iface, ord });
+  const env = { stamp, seq };
+  const e = [...u64(stamp), ...u64(seq)];
+  roundTrip([7, ...t(1), ...e, 2, 9], {
+    form: "publish",
+    target: tgt(Kind.Signal),
+    envelope: env,
+    state: { provenance: "live", payload: new Uint8Array([9]) },
+  });
+  roundTrip([8, ...t(2), ...e, 9], {
+    form: "occurrence",
+    target: tgt(Kind.Event),
+    envelope: env,
+    payload: new Uint8Array([9]),
+  });
+  roundTrip([9, ...t(3), ...e, 9], {
+    form: "request",
+    target: tgt(Kind.Command),
+    envelope: env,
+    payload: new Uint8Array([9]),
+  });
+  roundTrip([10, ...t(4), ...e, ...u64(correlation), 1, 0], {
+    form: "response",
+    target: tgt(Kind.Query),
+    envelope: env,
+    correlation,
+    outcome: { outcome: "accepted" },
+  });
+});
+
+Deno.test("a message at a nonzero byte offset decodes to the same frame", () => {
+  const bytes = [9, ...T(3), ...E, 5];
+  const backing = new Uint8Array(bytes.length + 3);
+  backing.set(bytes, 3);
+  const view = backing.subarray(3);
+  assert.deepEqual(decode(view), {
+    ok: true,
+    frame: {
+      form: "request",
+      target: target(Kind.Command),
+      envelope,
+      payload: new Uint8Array([5]),
+    },
+  });
+});
+
+Deno.test("data payloads are views of the message", () => {
+  const cases: number[][] = [
+    [9, ...T(3), ...E, 5],
+    [8, ...T(2), ...E, 5],
+    [10, ...T(4), ...E, ...u64(7n), 2, 0, 5],
+  ];
+  for (const bytes of cases) {
+    const message = new Uint8Array(bytes);
+    const d = decode(message);
+    assert.ok(d.ok);
+    const f = d.frame;
+    const payload = f.form === "response"
+      ? (f.outcome as { payload: Uint8Array }).payload
+      : (f as { payload: Uint8Array }).payload;
+    assert.equal(payload.buffer, message.buffer);
+    assert.equal(payload.length, 1);
+  }
+});
+
+Deno.test("an encoded attach with a bad name length throws a RangeError", () => {
+  const hash = new Uint8Array(32);
+  const frame = (name: string): Frame => ({
+    form: "attach",
+    frameVersion: 1,
+    encoding: 1,
+    hash,
+    name,
+  });
+  assert.throws(() => encode(frame("")), RangeError);
+  assert.throws(() => encode(frame("a".repeat(256))), RangeError);
+  assert.equal(encode(frame("a".repeat(255))).length, 39 + 255);
+});
+
+Deno.test("a name that starts with a byte order mark keeps it", () => {
+  const hash = new Uint8Array(32);
+  roundTrip([1, ...u32(1), 1, ...hash, 4, 0xef, 0xbb, 0xbf, 0x76], {
+    form: "attach",
+    frameVersion: 1,
+    encoding: 1,
+    hash,
+    name: "\uFEFFv",
+  });
+});

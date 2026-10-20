@@ -361,3 +361,43 @@ Deno.test("decode returns payloads as views of the message", () => {
   assert.ok(state.provenance === "live");
   assert.equal(state.payload.buffer, message.buffer);
 });
+
+Deno.test("an init or invalid publish with exactly one trailing byte is discarded", () => {
+  const header = PUBLISH_LIVE.slice(0, 26);
+  assert.equal(violation([...header, 1, 0]), "unexpected-payload");
+  assert.equal(violation([...header, 3, 0]), "unexpected-payload");
+  assert.equal(violation([...header, 1]), "ok");
+  assert.equal(violation([...header, 3]), "ok");
+});
+
+Deno.test("an attach with name len 0 and encoding 0 is a bad name length", () => {
+  assert.equal(
+    violation(patched(attachMessage(0, []), 5, 0)),
+    "bad-name-length",
+  );
+});
+
+Deno.test("an attach with a bad name and encoding 0 is a bad name", () => {
+  const m = patched(attachMessage(2, [0xff, 0xfe]), 5, 0);
+  assert.equal(violation(m), "bad-name");
+});
+
+Deno.test("a response with interface 0 and outcome 10 is a zero number", () => {
+  const m = patched(patched(RESPONSE_ACCEPTED, 2, 0), 34, 10);
+  assert.equal(violation(m), "zero-number");
+});
+
+Deno.test("an answer with a trailing byte and interface 0 is control too long", () => {
+  assert.equal(violation([...patched(ANSWER, 2, 0), 0]), "control-too-long");
+});
+
+Deno.test("a publish with interface 0 and provenance 4 is a zero number", () => {
+  const m = patched(patched(PUBLISH_LIVE, 2, 0), 26, 4);
+  assert.equal(violation(m), "zero-number");
+});
+
+Deno.test("a name that starts with a byte order mark decodes with it", () => {
+  const d = decode(new Uint8Array(attachMessage(4, [0xef, 0xbb, 0xbf, 0x76])));
+  assert.ok(d.ok && d.frame.form === "attach");
+  assert.equal(d.frame.name, "\uFEFFv");
+});

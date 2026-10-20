@@ -539,6 +539,9 @@ function encodedLength(frame: Frame, nameBytes: Uint8Array): number {
 /**
  * Writes one frame as one message. The `detail` byte is the rule code under
  * `contract(invalid-value)` and 0 everywhere else.
+ *
+ * @throws {RangeError} for an `attach` frame whose name is empty or longer
+ * than 255 UTF-8 bytes.
  */
 export function encode(frame: Frame): Uint8Array {
   const nameBytes = frame.form === "attach"
@@ -548,6 +551,9 @@ export function encode(frame: Frame): Uint8Array {
   const view = new DataView(out.buffer);
   switch (frame.form) {
     case "attach":
+      if (nameBytes.length === 0 || nameBytes.length > 255) {
+        throw new RangeError("the unit name must hold 1 to 255 UTF-8 bytes");
+      }
       out[0] = FORM_ATTACH;
       view.setUint32(1, frame.frameVersion, true);
       out[5] = frame.encoding;
