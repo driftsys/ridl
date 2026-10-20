@@ -9,9 +9,7 @@
 //!
 //! The size table of an interface in one encoding is [`Sizes`], which
 //! generated code implements once per interface per codec; [`reservation`]
-//! and [`table_budget`] read it. [`Bounds`] is the same table with a row
-//! that may be `None`, for an interface with a payload whose encoding has
-//! no bound; every `Sizes` is a `Bounds`.
+//! and [`table_budget`] read it.
 
 use crate::encoding::Encoding;
 use crate::sample::Duration;
@@ -97,9 +95,7 @@ pub trait Interaction {
 /// source of a payload's bound, so a table cannot drift from its codec. An
 /// encoding the package does not carry has no table, so naming it is a
 /// compile error at the call site (`Cabin: Sizes<ReprC>` is not satisfied,
-/// because no backend emits a `repr(C)` codec), not a run-time error. An
-/// interface with a payload that has no bound in `E` has no table either: it
-/// implements [`Bounds<E>`] alone.
+/// because no backend emits a `repr(C)` codec), not a run-time error.
 ///
 /// Two buffers are interface-wide because the face fills them before it
 /// knows the payload type: a server reads a claim into one buffer and then
@@ -136,40 +132,6 @@ pub trait Sizes<E: Encoding>: Interface {
     const CLAIM_BUFFER: Self::ClaimBuffer;
     /// A zeroed `EventBuffer`.
     const EVENT_BUFFER: Self::EventBuffer;
-}
-
-/// The reservation table of an interface in encoding `E`, with a row that
-/// may have no bound.
-///
-/// Every [`Sizes<E>`] is a `Bounds<E>` through a blanket implementation,
-/// each row `Some` of the matching row of
-/// [`Sizes::RESERVATIONS`]. Generated code implements `Bounds<E>` directly,
-/// and not `Sizes<E>`, for an interface with a member whose payload has no
-/// bound in `E` — a type that implements
-/// [`Codec<E>`](crate::payload::Codec) and not
-/// [`Payload<E>`](crate::payload::Payload) — so a data-driven runtime can
-/// register the interface and see which members have no bound, while a
-/// face, which holds the `Sizes` buffers, cannot be bound to it.
-///
-/// The rows are reached one at a time rather than as a slice: a blanket
-/// implementation cannot state a slice whose length is that of a generic
-/// `RESERVATIONS` on stable Rust.
-pub trait Bounds<E: Encoding>: Interface {
-    /// The bytes one in-flight instance of `MEMBERS[row]` reserves, on the
-    /// rule of [`Sizes::RESERVATIONS`], or `None` when a payload of the
-    /// member has no bound in `E`.
-    ///
-    /// # Panics
-    ///
-    /// When `row` is not an index of [`Interface::MEMBERS`], as indexing
-    /// `RESERVATIONS` does.
-    fn reservation_bound(row: usize) -> Option<u64>;
-}
-
-impl<I: Sizes<E>, E: Encoding> Bounds<E> for I {
-    fn reservation_bound(row: usize) -> Option<u64> {
-        Some(<I as Sizes<E>>::RESERVATIONS[row])
-    }
 }
 
 /// The bytes one in-flight instance of interaction `X` reserves in encoding

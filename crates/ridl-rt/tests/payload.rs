@@ -7,7 +7,7 @@ use std::cell::Cell;
 
 use ridl_rt::encoding::{Proto3, ReprC};
 use ridl_rt::payload::{
-    Codec, EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError, Violation,
+    EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError, Violation,
 };
 
 thread_local! {
@@ -248,91 +248,4 @@ fn a_violation_admits_no_type_name_and_keeps_its_rule() {
     };
     assert_ne!(decoded, other_rule);
     assert_eq!(other_rule.rule, Rule::Length);
-}
-
-/// Every `Payload<E>` is a `Codec<E>` through the blanket implementation:
-/// its `BOUND` is `Some(MAX_SIZE)`, and a `Ref` built through `Codec` is the
-/// same proof, with the same view, as one built through `Payload`.
-#[test]
-fn a_payload_is_a_codec_with_its_bound() {
-    assert_eq!(
-        <Speed as Codec<ReprC>>::BOUND,
-        Some(<Speed as Payload<ReprC>>::MAX_SIZE)
-    );
-    assert_eq!(<Speed as Codec<Proto3>>::BOUND, Some(3));
-    let mut out = [0u8; 4];
-    let proof = Ref::<Speed, Proto3>::encode(&Speed(88), &mut out).expect("4 bytes is enough");
-    assert_eq!(proof.bytes(), &[88, 0]);
-    assert_eq!(proof.view(), &Parsed { value: 88 });
-    assert_eq!(proof.decode(), Speed(88));
-    let proof = Ref::<Speed, Proto3>::verify(&[0x2c, 0x01]).expect("300 is in range");
-    assert_eq!(
-        <Speed as Codec<Proto3>>::verify(&[0x2c, 0x01]),
-        Ok(Parsed { value: 300 })
-    );
-    assert_eq!(proof.into_view(), Parsed { value: 300 });
-}
-
-/// A text with no length bound: it implements `Codec<ReprC>` alone, so it
-/// has no `MAX_SIZE` and no `Buffer`, and `BOUND` is `None`. Its encoding
-/// is the bytes of the text.
-#[derive(Debug, PartialEq, Eq)]
-struct Free(String);
-
-impl Codec<ReprC> for Free {
-    const BOUND: Option<usize> = None;
-    type View<'a> = &'a str;
-
-    fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o str>, EncodeError> {
-        let available = out.len();
-        let needed = self.0.len();
-        let Some(front) = out.get_mut(..needed) else {
-            return Err(EncodeError::Capacity { needed, available });
-        };
-        front.copy_from_slice(self.0.as_bytes());
-        let bytes: &'o [u8] = front;
-        Ok(Encoded {
-            bytes,
-            view: core::str::from_utf8(bytes).expect("the text was UTF-8"),
-        })
-    }
-
-    fn verify(buf: &[u8]) -> Result<&str, VerifyError> {
-        core::str::from_utf8(buf).map_err(|_| VerifyError::Structure(Malformed::Utf8))
-    }
-
-    fn decode(r: Ref<'_, Self, ReprC>) -> Self {
-        Free(String::from(r.into_view()))
-    }
-}
-
-/// A type that implements `Codec<E>` and not `Payload<E>` builds a `Ref`,
-/// encodes into any buffer that is long enough, reports the exact length it
-/// needs when the buffer is shorter, and decodes back.
-#[test]
-fn a_codec_without_a_size_round_trips_through_ref() {
-    assert_eq!(<Free as Codec<ReprC>>::BOUND, None);
-    let value = Free(String::from("no bound"));
-    let mut out = [0u8; 16];
-    let proof = Ref::<Free, ReprC>::encode(&value, &mut out).expect("16 bytes is enough");
-    assert_eq!(proof.bytes(), b"no bound");
-    assert_eq!(*proof.view(), "no bound");
-    let bytes = proof.bytes();
-    assert_eq!(proof.decode(), value);
-
-    let proof = Ref::<Free, ReprC>::verify(bytes).expect("the bytes are UTF-8");
-    assert_eq!(proof.decode(), value);
-    assert_eq!(
-        Ref::<Free, ReprC>::verify(&[0xff]).err(),
-        Some(VerifyError::Structure(Malformed::Utf8))
-    );
-
-    let mut short = [0u8; 3];
-    assert_eq!(
-        Ref::<Free, ReprC>::encode(&value, &mut short).err(),
-        Some(EncodeError::Capacity {
-            needed: 8,
-            available: 3
-        })
-    );
 }
