@@ -488,59 +488,55 @@ Implements D-17 cases 3, 8, 9, 11 and the worst-case half of 12.
 - [ ] **Step 4: Commit**
       `test(ridl-backend-rust): add the proto3 property, robustness and corpus cases`.
 
-### Task 8: a codec without a size for an unbounded type
+### Task 8: the size limit lives in the type
 
-Implements D-22 (owner ruling R-OWN-1) and the D-4 change it makes.
+Implements D-4 and D-22 as amended by owner ruling R-OWN-2, which replaces
+R-OWN-1. The R-OWN-1 implementation had already landed on this branch (a
+`Codec<E>` and a `Bounds<E>` trait in `ridl-rt`, `Ref` bounded on `Codec<E>`, a
+proto3 codec without a size for an unbounded type, a generated `Bounds<Proto3>`
+for an interface with an unbounded payload); this task removes it.
 
 **Files:**
 
-- Modify: `crates/ridl-rt/src/payload.rs` (`Codec<E>`, its blanket
-  implementation, `Ref`'s bound), `crates/ridl-rt/src/contract.rs` (`Bounds<E>`
-  and its blanket implementation), `crates/ridl-rt` tests and rustdoc,
-  `crates/ridl-backend-rust/src/codec_proto3.rs` (an unbounded root implements
-  `Codec<Proto3>` with `BOUND = None` instead of being refused; `RefusedMember`
-  and `Unresolved` stay refusals), the generated-code tests that pinned the old
-  refusal
-- Test: `crates/ridl-rt/src/payload.rs` and `contract.rs` tests,
-  `crates/ridl-backend-rust/tests/proto3_roundtrip.rs`,
-  `tests/proto3_conformance.rs`
+- Modify: `crates/ridl-rt/src/payload.rs`, `crates/ridl-rt/src/contract.rs`,
+  `crates/ridl-rt` tests and rustdoc (back to their state before R-OWN-1: no
+  `Codec`, no `Bounds`, `Ref` bounded on `Payload<E>`);
+  `crates/ridl-backend-rust/src/codec_proto3.rs` (`bound_state`: only `Bounded`
+  gives a codec, every absent cause is a refusal naming it; the
+  optional-array/map refusal and the field-number refusal stay),
+  `src/descriptors.rs` (no `Bounds<Proto3>`; every proto3 interface table is
+  `Sizes<Proto3>`), the backend tests that pinned R-OWN-1 (rewritten to pin the
+  refusal); `evals/corpus/ros2/**` (finite bounds, one comment beside
+  `RosString`); `crates/ridl-ir/src/projection/size/proto3.rs` tests (the cause
+  attribution stays; pin `RefusedMember` for a stream, an unresolved name and a
+  member naming a constant inside a message, and the field-number check before
+  the leaf's `NoBound`)
+- Test: the files above; `crates/ridl/tests/eval_corpus.rs` and
+  `evals/calibration/` (every result that depends on the ros2 bounds checked and
+  updated or explained)
 
-**Interfaces — Produces:**
-
-- `pub trait Codec<E: Encoding>: Sized { type View<'a>; const BOUND: Option<usize>; fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Self::View<'o>>, EncodeError>; fn verify(buf: &[u8]) -> Result<Self::View<'_>, VerifyError>; fn decode(r: Ref<'_, Self, E>) -> Self; }`
-- `impl<T: Payload<E>, E: Encoding> Codec<E> for T` with
-  `BOUND = Some(<T as Payload<E>>::MAX_SIZE)`
-- `pub struct Ref<'a, T: Codec<E>, E: Encoding>`, every method unchanged in name
-- `pub trait Bounds<E: Encoding>: Interface { const RESERVATION_BOUNDS: &'static [Option<u64>]; }`
-  and `impl<I: Sizes<E>, E: Encoding> Bounds<E> for I`
-
-- [ ] **Step 1: Failing tests:** in `ridl-rt`,
-      `a_payload_is_a_codec_with_its_bound` (a test `Payload` type's
-      `<T as Codec<E>>::BOUND == Some(MAX_SIZE)` and a `Ref` built through it
-      round-trips), `a_codec_without_a_size_round_trips_through_ref` (a test
-      type implementing `Codec<E>` only, `BOUND == None`), and
-      `a_sized_interface_has_every_bound` (`Bounds` rows equal `RESERVATIONS` as
-      `Some`); the existing `Ref` doctests stay green on 1.83. In the Rust
-      backend, `an_unbounded_type_gets_a_codec_without_a_size` (a fixture
-      `type Free : string [0..18446744073709551615]` and a struct holding it:
-      `Codec<Proto3>` with `BOUND == None`, no `Payload<Proto3>`, round trip
-      through `Ref`, a short buffer gives `Capacity { needed }` with the exact
-      length), `a_refused_member_is_still_refused` (an optional array still
-      refuses), and `the_ros2_corpus_generates_with_proto3` (every ros2 corpus
-      package generates under `[Proto3]`, replacing the earlier test that pinned
-      the refusal) and `bytes_this_codec_writes_equal_prost_bytes` gains rows
-      for the unbounded fixture type if the prost oracle can carry it without
-      changing the checked-in oracle; otherwise a second small oracle file.
-- [ ] **Step 2: Run** `cargo test -p ridl-rt --all-features` and the backend
-      suites — FAIL.
-- [ ] **Step 3: Implement.** The FlatBuffers codec's emitted text must not
+- [ ] **Step 1: Failing tests:** `an_unbounded_type_is_refused_under_proto3`
+      (the fixture `type Free : string [0..18446744073709551615]` and a struct
+      holding it are refused with the declaration and `NoBound` named; an
+      overflowing collection with `Overflow`);
+      `bound_state_gives_a_codec_only_to_a_bounded_type` (every `AbsentCause`
+      variant refused, `Bounded` accepted, exhaustive match);
+      `the_ros2_corpus_generates_with_proto3` (with the new bounds); the sizer
+      pins above.
+- [ ] **Step 2: Implement** the removal and the corpus bounds; regenerate any
+      checked-in generated file that changes; `freeze/generated/*` must not
       change.
-- [ ] **Step 4: Run** the suites, `cargo +1.83 test -p ridl-rt --all-features`
-      if the toolchain is installed, `cargo xtask freeze check` (runtime-crates
-      semver must pass: additive), clippy — PASS.
-- [ ] **Step 5: Commit** `feat(ridl-rt): add a codec trait without a size bound`
-      and
-      `feat(ridl-backend-rust): emit a proto3 codec for a type without a bound`.
+- [ ] **Step 3: Run** `cargo test -p ridl-rt --all-features`,
+      `cargo test -p ridl-ir`, `cargo test -p ridl-backend-rust`,
+      `cargo test -p ridlc`, `cargo test -p ridl --test eval_corpus`,
+      `cargo xtask eval` if calibration is affected, clippy,
+      `cargo xtask freeze check` (`runtime-crates` back to the baseline's
+      `ridl-rt` items plus the proto3 module and the three variants).
+- [ ] **Step 4: Commit**
+      `revert(ridl-rt): remove the codec trait without a size bound`,
+      `fix(ridl-backend-rust): refuse a proto3 type without a finite bound`,
+      `fix(repo): give the ros2 corpus finite bounds` (scopes per
+      `.git-std.toml`).
 
 ### Task 9: `Sizes<Proto3>` and `Bounds<Proto3>`, the face over a proto3 port, and the generated crates
 
