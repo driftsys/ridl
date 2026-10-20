@@ -1,7 +1,6 @@
 # A generated probe: one client of every interface — design
 
-Status: draft for review, 2026-10-20. Tracking issue: to be filed with this
-note.
+Status: draft for review, 2026-10-20. Tracking issue: driftsys/ridl#1007.
 
 ## Goal
 
