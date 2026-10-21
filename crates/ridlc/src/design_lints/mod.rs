@@ -44,11 +44,12 @@ pub fn check_design_lints(
 }
 
 /// RIDL-150 over one source set, before lint levels apply. `encodings` are the
-/// names the package enables through `[backend.<name>] encodings`; FlatBuffers
-/// is checked when the list is empty. `std_ir` is the lowered `ridl.std`,
-/// which a package's references resolve against besides `checked`. Run it only
-/// over packages without errors, because it lowers each package to the
-/// codegen model.
+/// names that every `[backend.<name>]` table of the workspace manifest enables,
+/// as one set; FlatBuffers is checked when it is empty. `std_ir` is the lowered
+/// `ridl.std`, which a package's references resolve against besides `checked`.
+/// The check lowers each package to the codegen model, so `blocked` holds, per
+/// entry of `packages`, whether the package or one it depends on has an error;
+/// a blocked package is read as a target and never examined.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_payload_ceiling(
     db: &RidlDatabase,

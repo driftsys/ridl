@@ -171,7 +171,7 @@ workspace has no such warning.
 `bound-above-transfer` (TYPL-116) reports a `string` bound above 4,032
 characters or a `bytes` bound above 16,128 bytes, on the bound.
 `payload-above-ceiling` (RIDL-150) reports a payload whose largest encoded size,
-in an encoding the package enables, is above 16,256 bytes or has no finite
+in an encoding that the workspace manifest enables, is above 16,256 bytes or has no finite
 bound. It reads the encodings from every `[backend.<name>]` table of the
 workspace manifest, as one set, and checks FlatBuffers when that set is empty,
 which is the case for no table and for tables whose `encodings` lists are all
@@ -187,8 +187,11 @@ ceiling is 16,256 bytes and that the codecs do not yet enforce it
 
 `payload-above-ceiling` is raised by `ridl check` and `ridl build`. The language
 server does not run it, so it does not appear in the editor. It skips a package
-that has an error, or that imports a package that has one, and still reports on
-the other packages of the workspace.
+that has an error that stops `ridl build` writing artifacts, or that references
+a package that has one, and still reports on the other packages of the
+workspace. An RSDL-7xx error does not count, because a build still writes code
+after it. An error in no package source file, such as a manifest error, skips
+every package.
 
 Setting `ordinal-changed` to `allow` makes `ridl check --baseline` report
 nothing for ordinal changes, so the baseline desk check no longer warns about

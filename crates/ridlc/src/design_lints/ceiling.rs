@@ -1,5 +1,5 @@
 //! RIDL-150 `payload-above-ceiling`: a payload carried by an interaction whose
-//! largest encoded size, in an encoding the package enables, is above the
+//! largest encoded size, in an encoding that the workspace manifest enables, is above the
 //! payload ceiling, or has no finite bound (ADR-0030 decision 7).
 //!
 //! The sizes are the ones the codegen model carries for each payload, which
@@ -66,9 +66,10 @@ fn problem(size: Size) -> Option<String> {
         }
         Size::Bytes(_) | Size::Other => None,
         Size::NoBound => Some("no finite bound".to_string()),
-        Size::Overflow => {
-            Some("a bound too large to represent, or nesting deeper than 64 levels".to_string())
-        }
+        Size::Overflow => Some(
+            "a bound too large to represent, or, in proto3, nesting deeper than 64 levels"
+                .to_string(),
+        ),
     }
 }
 
@@ -326,6 +327,31 @@ mod tests {
             v1::AbsentCause::Unresolved,
         ] {
             assert_eq!(from_model(&absent(cause)), Size::Other, "{cause:?}");
+        }
+    }
+
+    #[test]
+    fn sizer_states_map_to_sizes() {
+        assert_eq!(from_sizer(size::SizeState::Bounded(9)), Size::Bytes(9));
+        assert_eq!(
+            from_sizer(size::SizeState::Unbounded(size::UnboundedCause::Member)),
+            Size::NoBound
+        );
+        assert_eq!(
+            from_sizer(size::SizeState::Absent(size::AbsentCause::NoBound)),
+            Size::NoBound
+        );
+        assert_eq!(
+            from_sizer(size::SizeState::Absent(size::AbsentCause::Overflow)),
+            Size::Overflow
+        );
+        for cause in [
+            size::AbsentCause::EncodingUndefined,
+            size::AbsentCause::NoMessage,
+            size::AbsentCause::RefusedMember,
+            size::AbsentCause::Unresolved,
+        ] {
+            assert_eq!(from_sizer(size::SizeState::Absent(cause)), Size::Other);
         }
     }
 

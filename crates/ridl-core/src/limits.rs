@@ -1,6 +1,7 @@
-//! The platform's size limits (ADR-0030). The typl checker states the advised
-//! bounds, `ridlc` states the payload ceiling, and every runtime that enforces
-//! the ceiling reads the same number, so the values live in one place.
+//! The platform's size limits (ADR-0030): the payload ceiling and the advised
+//! `string` and `bytes` bounds. The typl checker and `ridlc` read them from
+//! here, so the values live in one place. A runtime that enforces the ceiling
+//! keeps its own constant (ADR-0030 decision 4).
 
 /// The payload ceiling in bytes: the largest single transfer of 16,384 bytes
 /// minus the 128 bytes a transport reserves for its header (ADR-0030

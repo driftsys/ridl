@@ -141,28 +141,33 @@ When accepted, these records gain a dated note or are changed in place:
    - TYPL-116 `bound-above-transfer`: a `string` bound above 4,032 or a `bytes`
      bound above 16,128. It is reported on the bound, in the typl checker.
    - RIDL-150 `payload-above-ceiling`: a payload type whose computed bound, in
-     an encoding the package enables, is larger than the ceiling or has no
-     finite bound. It catches structs, arrays and maps whose members are each
-     within the advised bounds. It runs in `ridlc` after lowering, reads the
-     encodings from the package's `[backend.<name>] encodings`, and checks
-     FlatBuffers when none is named. It is reported on the interaction that
-     carries the payload, so a type no interaction carries is not reported. Its
-     row goes in the ridl reference's diagnostics table, and in the profile
-     codes that the corpus test lists.
-   - Both messages say the payload is capped at the ceiling and refused above it
-     at run time. A package can raise either to `deny` in `[lints]`. The limits
-     are constants beside the check, as ADR-0027 decision 4 does for design
-     lints; neither is a design lint in the sense of ADR-0027, because both
-     check a platform rule, not a quality measured on a corpus.
+     an encoding that a `[backend.<name>]` table of the workspace manifest
+     enables, is larger than the ceiling or has no finite bound. It catches
+     structs, arrays and maps whose members are each within the advised bounds.
+     It runs in `ridlc` after lowering, reads the encodings from the `encodings`
+     of every `[backend.<name>]` table of the workspace manifest, as one set,
+     and checks FlatBuffers when none is named. It is reported on the
+     interaction that carries the payload, so a type no interaction carries is
+     not reported. Its row goes in the ridl reference's diagnostics table, and
+     in the profile codes that the corpus test lists.
+   - Both messages say that the payload ceiling is 16,256 bytes and that the
+     codecs do not yet enforce it; once the codecs refuse a larger value, as
+     decision 4 will make them, the messages will say that. A package can raise
+     either to `deny` in `[lints]`. The limits are constants in
+     `ridl_core::limits`, read by both checks, not `[lints]` settings, as
+     ADR-0027 decision 4 does for design lints; neither is a design lint in the
+     sense of ADR-0027, because both check a platform rule, not a quality
+     measured on a corpus.
 
 8. **The default stays `[0..256]`.** A `string` or `bytes` with no bound written
    keeps the TYPL-103 default and warning.
 
 9. **ADR-0029 decision 2 is amended for these two lints.** A new lint starts at
    `allow` or `info` under that decision. These two start at `warn`, because a
-   payload above the ceiling is refused at run time, and a lower level would
-   hide that failure until then. A `warn` diagnostic does not fail `ridl check`,
-   so no source that compiled before stops compiling.
+   payload above the ceiling will be refused at run time once decision 4 lands,
+   and a lower level would hide that failure until then. A `warn` diagnostic
+   does not fail `ridl check`, so no source that compiled before stops
+   compiling.
 
 10. **The WebSocket default limit becomes 16,384 bytes.** `ridl-transport-ws`
     changes its `max_message_bytes` default from 1 MiB to one transfer, which is

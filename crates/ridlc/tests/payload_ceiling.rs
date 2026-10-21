@@ -9,6 +9,15 @@ use ridl_core::diag::{Diagnostic, Severity};
 /// `(package, source)` pair, each holding its source as one file. Returns the
 /// diagnostics of `ridl check` from the root.
 fn check_members(members: &[(&str, &str)], extra: &str) -> Vec<Diagnostic> {
+    let members: Vec<(&str, Vec<(&str, &str)>)> = members
+        .iter()
+        .map(|(name, source)| (*name, vec![("m.ridl", *source)]))
+        .collect();
+    check_files(&members, extra)
+}
+
+/// Like [`check_members`], with the files of each member given by name.
+fn check_files(members: &[(&str, Vec<(&str, &str)>)], extra: &str) -> Vec<Diagnostic> {
     let root = tempfile::tempdir().expect("a temp dir");
     let list = members
         .iter()
@@ -20,7 +29,7 @@ fn check_members(members: &[(&str, &str)], extra: &str) -> Vec<Diagnostic> {
         format!("[workspace]\nmembers = [{list}]\n{extra}"),
     )
     .unwrap();
-    for (name, source) in members {
+    for (name, files) in members {
         let member = root.path().join(name);
         std::fs::create_dir(&member).unwrap();
         std::fs::write(
@@ -28,7 +37,9 @@ fn check_members(members: &[(&str, &str)], extra: &str) -> Vec<Diagnostic> {
             format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
         )
         .unwrap();
-        std::fs::write(member.join("m.ridl"), source).unwrap();
+        for (file, source) in files {
+            std::fs::write(member.join(file), source).unwrap();
+        }
     }
     ridlc::run_check(root.path(), Frozen::No)
         .unwrap()
@@ -234,7 +245,7 @@ fn nothing_is_reported_while_the_package_has_an_error() {
 /// Two backend tables enable different encodings, and the payload is above the
 /// ceiling only in FlatBuffers, whose bound adds table overhead to the 16,240
 /// bytes: proto3 alone reports nothing, and the union of both tables reports
-/// whichever table comes first.
+/// the same message in either order.
 #[test]
 fn encodings_of_every_backend_table_are_checked() {
     let source = carried("type Payload: bytes [0..16240]\n");
@@ -391,4 +402,112 @@ fn bound_above_transfer_takes_its_level_from_the_lints_table() {
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].severity, Severity::Error);
     assert!(typl_116("[lints]\nbound-above-transfer = \"allow\"\n").is_empty());
+}
+
+/// The error type of a fallible reply is sized too: here it is the large one,
+/// and the success type is small.
+#[test]
+fn a_fallible_reply_with_a_large_error_type_is_reported() {
+    let source = "package demo\ntype Text: string [0..4032]\n\
+                  error struct Failure { a: Text, b: Text }\nstruct Small { n: boolean }\n\
+                  interface I {\n  query get(): Small | Failure @[..1s]\n}\n";
+    let diagnostics = check(source, "");
+    let found = ridl_150(&diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert!(
+        found[0].message.contains("for `Failure`"),
+        "{}",
+        found[0].message
+    );
+}
+
+/// A fallible reply is checked in the encodings the manifest enables, each
+/// against its own bound: `bytes [0..16240]` is above the ceiling only in
+/// FlatBuffers.
+#[test]
+fn a_fallible_reply_is_checked_per_encoding() {
+    let source = "package demo\ntype Payload: bytes [0..16240]\nerror enum Failure { BAD = 0 }\n\
+                  interface I {\n  query get(): Payload | Failure @[..1s]\n}\n";
+    let proto3 = check(source, "[backend.a]\nencodings = [\"proto3\"]\n");
+    assert!(ridl_150(&proto3).is_empty(), "{proto3:?}");
+    let default = check(source, "");
+    let found = ridl_150(&default);
+    assert_eq!(found.len(), 1, "{default:?}");
+    assert!(
+        found[0].message.contains("in flatbuffers"),
+        "{}",
+        found[0].message
+    );
+    let flatbuffers = check(source, "[backend.a]\nencodings = [\"flatbuffers\"]\n");
+    assert_eq!(ridl_150(&flatbuffers).len(), 1, "{flatbuffers:?}");
+}
+
+/// The types of a fallible reply that come from a sibling package are sized
+/// through the sibling.
+#[test]
+fn a_fallible_reply_with_types_from_a_sibling_package_is_sized() {
+    let types = "package types\ntype Text: string [0..4032]\n\
+                 struct Payload { a: Text, b: Text }\nerror enum Failure { BAD = 0 }\n";
+    let user = "package user\nimport types.Payload\nimport types.Failure\n\
+                interface I {\n  query get(): Payload | Failure @[..1s]\n}\n";
+    let diagnostics = check_members(&[("types", types), ("user", user)], "");
+    let found = ridl_150(&diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert!(
+        found[0].message.contains("`user.I.get`"),
+        "{}",
+        found[0].message
+    );
+}
+
+/// The block follows a dependency through a package in between: `atop` reaches
+/// `cbroken` only through `bmid`, and the members are listed so that a single
+/// pass in listing order would reach `atop` first.
+#[test]
+fn a_blocked_package_blocks_its_dependents_transitively() {
+    let cbroken = "package cbroken\ntype Text: string [0..4032]\nstruct Bad { x: Missing }\n";
+    let bmid = "package bmid\nimport cbroken.Text\nstruct Mid { a: Text, b: Text }\n";
+    let atop = "package atop\nimport bmid.Mid\ninterface I {\n  signal s: Mid @[10ms..100ms]\n}\n";
+    let diagnostics = check_members(&[("atop", atop), ("bmid", bmid), ("cbroken", cbroken)], "");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "{diagnostics:?}"
+    );
+    assert!(ridl_150(&diagnostics).is_empty(), "{diagnostics:?}");
+}
+
+/// An RSDL-7xx error stops no artifact of `ridl build`, so it does not turn the
+/// lint off.
+#[test]
+fn an_rsdl_error_does_not_turn_the_lint_off() {
+    let ridl = carried("type Text: string [0..4032]\nstruct Payload { a: Text, b: Text }\n");
+    let rsdl = "package demo\ndeployment Lab for Nowhere {}\n";
+    let diagnostics = check_files(&[("demo", vec![("m.ridl", &ridl), ("m.rsdl", rsdl)])], "");
+    let errors: Vec<_> = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Error)
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect();
+    assert!(
+        !errors.is_empty() && errors.iter().all(|code| code.starts_with("RSDL-7")),
+        "{diagnostics:?}"
+    );
+    assert_eq!(ridl_150(&diagnostics).len(), 1, "{diagnostics:?}");
+}
+
+/// An error that no package source file carries, here in the root manifest,
+/// skips every package.
+#[test]
+fn a_manifest_error_turns_the_lint_off_everywhere() {
+    let source = carried("type Text: string [0..4032]\nstruct Payload { a: Text, b: Text }\n");
+    let diagnostics = check(&source, "[backend.a]\nencodings = \"proto3\"\n");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code.as_str() == "MANI-015"),
+        "{diagnostics:?}"
+    );
+    assert!(ridl_150(&diagnostics).is_empty(), "{diagnostics:?}");
 }

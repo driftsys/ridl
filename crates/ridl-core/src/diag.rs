@@ -815,7 +815,7 @@ diag_codes! {
             "two names in one scope collide after a pinned name transform";
 
         /// A payload carried by an interaction whose largest encoded size, in an
-        /// encoding the package enables, is above the payload ceiling of 16,256
+        /// encoding that the workspace manifest enables, is above the payload ceiling of 16,256
         /// bytes, or has no finite bound (ADR-0030 decision 7). Warning. Emitted
         /// by `ridlc` after lowering, for `ridl check` and `ridl build`.
         RIDL_150 = "RIDL-150", Warning,
