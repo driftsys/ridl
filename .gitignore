@@ -44,3 +44,6 @@ editors/vscode/skills/
 
 # Raw eval transcripts stay local; the result files are committed.
 evals/results/*/transcripts/
+
+# The npm package `just ts-npm-check` builds with dnt.
+/packages/ridl-transport-ws/npm/

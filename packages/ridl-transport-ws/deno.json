@@ -3,7 +3,8 @@
   "version": "0.12.0",
   "license": "MIT",
   "exports": "./mod.ts",
-  "fmt": { "include": ["**/*.ts"] },
-  "lint": { "include": ["**/*.ts"] },
+  "imports": { "@deno/dnt": "jsr:@deno/dnt@0.42.3" },
+  "fmt": { "include": ["**/*.ts"], "exclude": ["npm/"] },
+  "lint": { "include": ["**/*.ts"], "exclude": ["npm/"] },
   "publish": { "include": ["mod.ts", "src/", "README.md", "LICENSE"] }
 }

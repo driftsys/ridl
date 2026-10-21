@@ -1,0 +1,67 @@
+name: npm-release
+
+# Publishes the npm packages of this repository on a `v<version>` tag, the same
+# tag that starts `crates-io-release`. The only package is
+# `@driftsys/ridl-transport-ws`, built from packages/ridl-transport-ws with dnt
+# (`just ts-npm-check` builds the same artifact on every pull request).
+#
+# The job skips a version that is already on npm, so a re-run of a tag after a
+# partial failure does not fail on a duplicate. Publication uses the
+# organization secret NPM_TOKEN, with provenance from the job's OIDC token.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  JUST_VERSION: 1.38.0
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: install just
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" just
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # The version is read from .deno-version, the one place it is pinned.
+      - name: install deno
+        run: |
+          set -o pipefail
+          deno_version="$(tr -d '[:space:]' < .deno-version)"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$RUNNER_TEMP/deno.zip" \
+            "https://github.com/denoland/deno/releases/download/v${deno_version}/deno-x86_64-unknown-linux-gnu.zip"
+          unzip -o -q "$RUNNER_TEMP/deno.zip" -d "$HOME/.local/bin"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          registry-url: https://registry.npmjs.org
+      - run: just ts-check
+      - name: build the npm package at the tag version
+        working-directory: packages/ridl-transport-ws
+        run: deno run -A scripts/build_npm.ts "${GITHUB_REF_NAME}"
+      - name: publish
+        working-directory: packages/ridl-transport-ws/npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "${name}@${version}" version >/dev/null 2>&1; then
+            echo "${name}@${version} is already on npm; skipping."
+            exit 0
+          fi
+          npm publish --access public --provenance

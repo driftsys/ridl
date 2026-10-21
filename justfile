@@ -2509,7 +2509,7 @@ gate-parity:
     # the `build:` line, so removing or adding one has to be done twice. Without
     # this list the check would read its expectation from the line under test,
     # and a member removed from that line would only shrink what is checked.
-    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check"
+    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check"
     removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
     added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
     duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
@@ -2791,6 +2791,26 @@ ts-check:
     deno test --allow-read tests/
     deno publish --dry-run --allow-dirty
 
+# Build the npm package of packages/ridl-transport-ws into its npm/ directory,
+# list what `npm pack` would publish, and import the built package from Node.
+# This is the artifact the `npm-release` workflow publishes, so a build that
+# breaks it fails here and not at the tag. The build needs network access, for
+# dnt.
+ts-npm-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for tool in deno node npm; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            echo "ts-npm-check: $tool is required and is not on PATH." >&2
+            exit 1
+        fi
+    done
+    cd packages/ridl-transport-ws
+    deno run -A scripts/build_npm.ts
+    cd npm
+    npm pack --dry-run
+    node --input-type=module -e "const m = await import('./esm/mod.js'); if (typeof m.connect !== 'function') { throw new Error('connect is not exported'); }"
+
 # Build the loopback server example of `ridl-transport-ws` and run the Deno
 # end-to-end test of packages/ridl-transport-ws against it. The test starts the
 # server from the path in RIDL_TRANSPORT_WS_SERVER. The example is reached
@@ -2883,7 +2903,7 @@ ts-browser-e2e:
 # a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
 # TypeScript check all report before the workspace compiles rather than after a
 # full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

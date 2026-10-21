@@ -291,6 +291,7 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/deno" --version
       - run: just ts-check
+      - run: just ts-npm-check
       - run: just ts-e2e
       - run: just ts-browser-e2e
         env:
