@@ -8,20 +8,25 @@ declare, and how both codecs, the generated interaction face and the Rust
 WebSocket transport apply them. It binds the FlatBuffers backend, the proto3
 backend, `ridl-rt`, `ridl-transport-ws`, the typl and ridl checkers, and every
 later runtime or transport. The TypeScript package `ridl-transport-ws` checks no
-message size today (driftsys/ridl#991) and does not change here.
+message size today (`docs/design/ridl-transport-ws-ts.md`) and does not change
+here; with the new Rust default, a TypeScript peer that sends a message above
+16,384 bytes has its session closed with 1009, as the frame specification §11.1
+says for any message above the limit.
 
 Written from driftsys/ridl#996 and the owner's decisions of 2026-10-21, which
 replace the payload ceiling of 4 MiB + 64 KiB that the owner set on 2026-10-20.
 
 When accepted, these records gain a dated note or are changed in place:
 
-- ADR-0021: its note of 2026-10-20 says a type with no finite bound is refused
-  at generation; decision 3 reverses that, and `ridl-rt` gains `PAYLOAD_CEILING`
-  and `EncodeError::TooLarge`.
+- ADR-0021: decision 17 and the note of 2026-10-20 say a payload with no finite
+  bound is refused at generation; decision 3 of this record reverses that, and
+  `ridl-rt` gains `PAYLOAD_CEILING` and `EncodeError::TooLarge`.
 - ADR-0024: two new lints.
-- ADR-0029 decision 2: amended for the two lints of this record (decision 9).
+- ADR-0029 decision 2 and `docs/book/stability.md`: amended for the two lints of
+  this record (decision 9).
 - `docs/design/flatbuffers-codec.md`, `docs/design/proto3-codec.md`,
-  `docs/design/ridl-rt.md`, `docs/design/interaction-face.md` and
+  `docs/design/ridl-rt.md`, `docs/design/interaction-face.md`,
+  `docs/design/catalog-descriptor.md`, `docs/book/codegen-plugins.md` and
   `docs/design/ridl-transport-ws.md`.
 - The frame specification §9 and §11.1 ("The sizes"), and the typl reference
   §4.4, §4.5 and §16.2.
@@ -43,17 +48,20 @@ When accepted, these records gain a dated note or are changed in place:
   it. The FlatBuffers backend also rejects ros2 for a separate reason: a vector
   whose element is a vector.
 - The proto3 sizer also reports a declaration nested more than 64 levels deep as
-  `Overflow`, through the same refusal.
+  `Overflow`, the same cause as a bound that does not fit a `u32`.
 - A typl `string [N]` bound counts Unicode scalar values. Every encoding carries
   a string as UTF-8, so its byte capacity is 4·N. A `bytes [N]` bound counts
   bytes. A `string` or `bytes` with no bound written gets `[0..256]` and the
   warning TYPL-103.
 - `encode` returns `EncodeError::Capacity` when the caller's buffer is too
   short; the generated face treats that as impossible, because it always passes
-  a buffer of `MAX_SIZE`. A port error already has a `TooLarge { cap }` variant.
+  a buffer of `MAX_SIZE`. The FlatBuffers builder writes from the end of the
+  buffer, so when it returns `Capacity` its `needed` is a lower bound. The port
+  errors `WriteError`, `RaiseError`, `SendError` and `SettleError` already have
+  a `TooLarge { cap }` variant; `CallError` has none.
 - `ridl-transport-ws` limits one WebSocket message to 1 MiB by default. A
-  data-plane frame is 36 bytes of header plus the payload; an `attach` frame is
-  up to 294 bytes.
+  data-plane frame has at most 36 bytes of header before the payload; an
+  `attach` frame is up to 294 bytes.
 - The ridl reference §12 defines streams of bounded elements for transfers with
   no total bound. They are not built (driftsys/ridl#336).
 - The target transport model is shared memory with 4 KiB pages, a seqlock and a
@@ -63,34 +71,49 @@ When accepted, these records gain a dated note or are changed in place:
 
 1. **The largest single transfer is 16,384 bytes, header included.** That is
    four 4 KiB pages. A transport reserves at most 128 bytes of it for the header
-   of a message that carries a payload. The WebSocket data-plane header is 36
-   bytes, so it fits; the `attach` frame carries no payload and is limited by
-   the frame specification alone.
+   of a message that carries a payload. The WebSocket data-plane header is at
+   most 36 bytes, so it fits; the `attach` frame carries no payload and is
+   limited by the frame specification alone.
 
 2. **The payload ceiling is 16,256 bytes** (16,384 − 128). It is a platform
    rule, stated in the specifications, and it is the same for every encoding,
-   runtime and transport. It counts the encoded payload only. A change of the
-   ceiling is a change of the wire format under ADR-0029.
+   runtime and transport. It counts the encoded payload only. The ceiling is
+   changed only by amending this record, because a peer with a lower ceiling
+   refuses what a peer with a higher one sends; ADR-0029's rule that size values
+   are not frozen is otherwise unchanged.
 
-3. **`MAX_SIZE` is capped at the ceiling.** The IR size states stay as computed,
-   so they still describe the type. Each backend, and the catalog descriptor,
-   sets `MAX_SIZE` to the smaller of the computed bound and the ceiling. A type
+3. **`MAX_SIZE` is capped at the ceiling.** The IR size states, the catalog
+   descriptor's size rows and the codegen `Model` stay as computed, so they
+   still describe the type. Each backend sets the generated `MAX_SIZE` to the
+   smaller of the computed bound and the ceiling; the rule that every `MAX_SIZE`
+   equals the descriptor's FlatBuffers bound becomes "equals the smaller of that
+   bound and the ceiling". An out-of-tree codegen plugin applies the same rule
+   from the size state and the ceiling stated in the frame specification; a
+   capped value in the `Model` would be an addition, left for later. A type
    whose computed size is larger than the ceiling, has no finite bound, or
    overflows a `u32` now generates in that codec, with `MAX_SIZE` = 16,256. The
    refusals that are not about size stay: an untyped position, a stream, the
    FlatBuffers rule that a vector's element cannot be a vector, and proto3's
-   nesting limit of 64 levels.
+   nesting limit of 64 levels. So that the two proto3 causes can be told apart,
+   the sizer reports the nesting limit as a new cause, `Depth`; a new enum value
+   in the codegen protocol lands in a minor release (ADR-0029).
 
 4. **A value larger than the ceiling is refused at run time.**
-   - `encode` returns a new variant, `EncodeError::TooLarge { size, ceiling }`,
-     when the encoded size of the value would be larger than the ceiling,
-     whatever the length of the caller's buffer. The proto3 encoder computes the
-     exact length before it writes; the FlatBuffers encoder stops at the
-     ceiling. `Capacity` keeps its meaning: the caller's buffer is shorter than
-     the encoded value.
-   - The generated face maps `EncodeError::TooLarge` to the port error
-     `TooLarge { cap }` with `cap` = the ceiling, so a provider or a consumer
-     gets an error, not a panic.
+   - `encode` returns a new variant, `EncodeError::TooLarge { ceiling }`, when
+     the encoded value would be larger than the ceiling. Both encoders write
+     into at most the first `PAYLOAD_CEILING` bytes of the caller's buffer,
+     whatever its length. The proto3 encoder computes the exact length first and
+     returns `TooLarge` before it writes. The FlatBuffers encoder returns
+     `TooLarge` when it runs out of space and the space it had was the ceiling,
+     and `Capacity` when the caller's buffer was shorter than the ceiling. So
+     `TooLarge` wins whenever the buffer is at least the ceiling, which the face
+     always passes.
+   - The generated face maps `EncodeError::TooLarge` to the port's
+     `TooLarge { cap }`, with `cap` = the ceiling: `WriteError` for a signal,
+     `RaiseError` for an event, `SendError` for a call's arguments, and
+     `SettleError` for a provider's reply. A reply refused this way is answered
+     to the consumer as the transport answers an unsendable reply today, with
+     the outcome `corrupt`. No path panics.
    - `verify` returns `VerifyError::Structure(Malformed::TooLarge)` when the
      input is longer than the ceiling. FlatBuffers keeps its existing, stricter
      refusal of an input longer than `MAX_SIZE`. proto3 gains the ceiling check
@@ -100,9 +123,10 @@ When accepted, these records gain a dated note or are changed in place:
      every runtime and transport reads one constant.
 
 5. **`BUFFER` stays.** Each use creates an array of at most 16,256 bytes on the
-   stack, and a call holds at most four of them, so about 64 KiB. That is within
-   the stack of the embedded targets the platform supports. The encode API that
-   takes a caller's buffer stays as the alternative for a smaller stack.
+   stack. A call holds an argument buffer and a reply buffer; a client also
+   holds its next-event buffer, and a server one interface-wide claim buffer.
+   The owner judged that size acceptable. The encode API that takes a caller's
+   buffer stays as the alternative for a target with a smaller stack.
 
 6. **The largest advised bound is 4,032 characters for `string` and 16,128 bytes
    for `bytes`.** A string at 4,032 characters is at most 16,128 bytes of UTF-8.
@@ -116,13 +140,17 @@ When accepted, these records gain a dated note or are changed in place:
    - RIDL-150 `payload-above-ceiling`: a payload type whose computed bound, in
      an encoding the package enables, is larger than the ceiling or has no
      finite bound. It catches structs, arrays and maps whose members are each
-     within the advised bounds. It is reported on the interaction that carries
-     the payload.
+     within the advised bounds. It runs in `ridlc` after lowering, reads the
+     encodings from the package's `[backend.<name>] encodings`, and checks
+     FlatBuffers when none is named. It is reported on the interaction that
+     carries the payload, so a type no interaction carries is not reported. Its
+     row goes in the ridl reference's diagnostics table, and in the profile
+     codes that the corpus test lists.
    - Both messages say the payload is capped at the ceiling and refused above it
      at run time. A package can raise either to `deny` in `[lints]`. The limits
-     are constants beside the check, as ADR-0027 decision 4 requires; neither is
-     a design lint in the sense of ADR-0027, because both check a platform rule,
-     not a quality measured on a corpus.
+     are constants beside the check, as ADR-0027 decision 4 does for design
+     lints; neither is a design lint in the sense of ADR-0027, because both
+     check a platform rule, not a quality measured on a corpus.
 
 8. **The default stays `[0..256]`.** A `string` or `bytes` with no bound written
    keeps the TYPL-103 default and warning.
@@ -179,21 +207,24 @@ When accepted, these records gain a dated note or are changed in place:
 
 ## Consequences
 
-- The ros2 corpus generates with proto3. FlatBuffers still rejects it for the
-  nested vector, so the `wire` dump gains `.proto` lines only.
+- The ros2 corpus generates a Rust proto3 codec. FlatBuffers still rejects it
+  for the nested vector. The `wire` dump does not change, because it reads the
+  `.proto` and `.fbs` schemas, which never depended on `MAX_SIZE`.
 - TYPL-116 warns on six `RosString` declarations in `evals/corpus/ros2/`, on
   their frozen copies, and on two fixtures in
   `crates/ridl-backend-rust/tests/fixtures/`. The book example
-  `FwBlock : bytes [1..65536]`, the same bound in the typl reference and in
-  `crates/ridl/tests/book_examples.rs`, and the unbounded string in
+  `FwBlock: bytes [1..65536]` in `docs/book/getting-started.md`, the same bound
+  in `crates/ridl/tests/book_examples.rs` and in a code span of the typl
+  reference, and the unbounded string in
   `crates/ridl-backend-rust/tests/proto3_roundtrip.rs` warn, and are changed to
   a bound within the limit. The tests that expect the "no finite bound" generate
   error change to expect a capped `MAX_SIZE`.
 - RIDL-150 warns on the ros2 array fields above the ceiling, and on the frozen
-  veh-cluster fixtures, whose generated `MAX_SIZE` values include 70,649 and
-  31,558 bytes. Their generated crates under `freeze/generated/` change to the
-  capped values, which is a break of the `generated-crate` surface and is
-  approved as `freeze/README.md` describes.
+  veh-cluster fixture, whose `getFaultPage` reply has a generated `MAX_SIZE` of
+  70,649 bytes. The generated crates under `freeze/generated/` change to the
+  capped values; ADR-0029 decision 2 does not freeze size values and the
+  generated-crate check compares the public API, so `cargo xtask freeze update`
+  records the change.
 - A value larger than 16,256 bytes that encoded before is now refused, and a
   deployment that sent larger WebSocket messages must set
   `with_max_message_bytes`. Both are breaking changes, released in a minor
@@ -204,7 +235,7 @@ When accepted, these records gain a dated note or are changed in place:
 
 ## References
 
-- driftsys/ridl#996, driftsys/ridl#336, driftsys/ridl#991, driftsys/ridl#264
+- driftsys/ridl#996, driftsys/ridl#336, driftsys/ridl#264
 - [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md),
   [ADR-0024](ADR-0024-lint-registry-and-levels.md),
   [ADR-0027](ADR-0027-design-lints-calibrated-on-a-corpus.md),
