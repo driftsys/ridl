@@ -72,15 +72,21 @@ jobs:
           node-version: lts/*
           registry-url: https://registry.npmjs.org
       - run: just ts-check
-      # The runtime package comes first. Each package is built at the tag
-      # version, then published unless that version is already on npm.
-      - name: build and publish the npm packages
+      # Both packages are built before either is published, so a build
+      # failure cannot leave a partial release. The runtime package comes
+      # first. A version that is already on npm is skipped.
+      - name: build the npm packages at the tag version
+        run: |
+          set -euo pipefail
+          for package in ridl-runtime ridl-transport-ws; do
+            (cd "packages/${package}" && deno run -A scripts/build_npm.ts "${GITHUB_REF_NAME}")
+          done
+      - name: publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           for package in ridl-runtime ridl-transport-ws; do
-            (cd "packages/${package}" && deno run -A scripts/build_npm.ts "${GITHUB_REF_NAME}")
             (
               cd "packages/${package}/npm"
               name="$(node -p "require('./package.json').name")"

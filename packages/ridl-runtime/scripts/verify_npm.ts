@@ -57,6 +57,9 @@ assertEquals(pkg.version, denoJson.version);
 assertEquals(pkg.license, "MIT");
 assertEquals(pkg.sideEffects, false);
 assertEquals(pkg.engines, { node: ">=22" });
+// The package has no dependency at run time or at build time.
+assertEquals(pkg.dependencies, undefined);
+assertEquals(pkg.devDependencies, undefined);
 assertEquals(pkg.types, "./esm/mod.d.ts");
 const entry = pkg.exports["."];
 for (const key of ["types", "import", "default"]) {
@@ -84,6 +87,14 @@ for (
   ]
 ) {
   assert(listed.includes(required), `${required} is not in the package`);
+}
+
+for (const path of listed) {
+  assert(
+    !/(^|\/)(tests?|fixtures?)(\/|\.|_)/.test(path) &&
+      !path.endsWith("_test.js"),
+    `${path} must not be in the package`,
+  );
 }
 
 // Install the packed tarball and import it by name from Node.
@@ -117,8 +128,64 @@ try {
     tmp,
   );
   assertEquals(names.code, 0, names.stderr);
-  const expected = Object.keys(await import("../mod.ts")).sort();
-  assertEquals(JSON.parse(names.stdout), expected);
+  // The names are written out, so a change to the public API is a change here.
+  assertEquals(JSON.parse(names.stdout), [
+    "CatalogMismatch",
+    "CodecError",
+    "loadCodec",
+  ]);
+
+  // A TypeScript consumer without the DOM library must be able to read the
+  // declarations. The versions are pinned so the check does not drift.
+  const tools = await run(
+    "npm",
+    [
+      "install",
+      "--no-audit",
+      "--no-fund",
+      "--save-dev",
+      "typescript@5.9.3",
+      "@types/node@22.20.5",
+    ],
+    tmp,
+  );
+  assertEquals(tools.code, 0, tools.stderr);
+  await Deno.writeTextFile(
+    `${tmp}/consumer.ts`,
+    `import { CatalogMismatch, CodecError, loadCodec } from "@driftsys/ridl-runtime";
+import type { Codec, VerifyResult } from "@driftsys/ridl-runtime";
+export async function use(bytes: Uint8Array): Promise<VerifyResult> {
+  const codec: Codec = await loadCodec(bytes, {
+    catalogHash: new Uint8Array(32),
+    ruleText: ["rule"],
+    imports: { env: { f: () => 0 } },
+  });
+  void CatalogMismatch;
+  void CodecError;
+  return codec.verify(0, bytes);
+}
+`,
+  );
+  const tsc = await run(
+    `${tmp}/node_modules/.bin/tsc`,
+    [
+      "--noEmit",
+      "--strict",
+      "--lib",
+      "es2022",
+      "--types",
+      "node",
+      "--module",
+      "nodenext",
+      "--moduleResolution",
+      "nodenext",
+      "--target",
+      "es2022",
+      "consumer.ts",
+    ],
+    tmp,
+  );
+  assertEquals(tsc.code, 0, tsc.stdout + tsc.stderr);
   await Deno.stat(
     `${tmp}/node_modules/@driftsys/ridl-runtime/esm/mod.d.ts`,
   );
