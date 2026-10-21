@@ -22,6 +22,20 @@ placed behind a browser playground. The in-place amendments this record causes
 are listed in **Documents amended**; each is written into the record it belongs
 to, not here.
 
+**Amended 2026-10-21 — decision 6 and open item 2, the TypeScript runtime
+package is named and both TypeScript packages publish to npm.** The runtime
+package is `@driftsys/ridl-runtime`. It is not called `ridl-rt`, because
+[ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) already gives that
+name two meanings, the engine and the library, and a third would add to the
+ambiguity. Both TypeScript packages of decision 6, `@driftsys/ridl-runtime` and
+`@driftsys/ridl-transport-ws`, are published to npm under the `driftsys` scope.
+A generated package is published by whoever runs `ridlc`, under a name that
+person chooses. It ships its own wasm codec beside its generated TypeScript, and
+it depends on `@driftsys/ridl-runtime` and never on a transport. Publishing the
+same two packages to JSR as well stays with driftsys/ridl#992. The name is
+changed in place in decision 6's table and in open item 2; no other decision
+changes.
+
 **Amended 2026-10-20 — decision 6, the TypeScript WebSocket package depends on
 nothing until the runtime package exists.** The TypeScript WebSocket package row
 said it depends on "the runtime package". That package is not written, and its
@@ -375,14 +389,14 @@ as its public contract.
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
    each runtime is its own crate or package.
 
-   | Crate or package                           | Holds                                                                                                                                                       | Depends on                                                                                                                                                                                                                              |
-   | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | `ridl-rt`                                  | the library of decision 5                                                                                                                                   | the FlatBuffers runtime, only under its feature — permitted, and not taken: since 2026-09-20 (story E11.7, stage K3) the `flatbuffers` feature gates the crate's own helpers and `ridl-rt` has no dependency in any feature combination |
-   | `ridl-loopback`                            | the in-process reference runtime — every port over a queue and a map, and no IO                                                                             | `ridl-rt`                                                                                                                                                                                                                               |
-   | `ridl-rt-conformance`                      | the port contract tests, generic over a runtime factory, which a runtime runs from its own tests; published (2026-10-08)                                    | `ridl-rt`                                                                                                                                                                                                                               |
-   | `ridl-transport-ws`                        | the ports over a WebSocket, carrying the encoding the session names, proto3 by default (frame specification §11.1); the default of the getting-started path | `ridl-rt`                                                                                                                                                                                                                               |
-   | the TypeScript runtime package (name open) | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec                                                          | nothing outside itself                                                                                                                                                                                                                  |
-   | the TypeScript WebSocket package           | the same binding for Deno and the browser                                                                                                                   | nothing until the runtime package exists; built as `@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`, which carries payload bytes without decoding them                                                                    |
+   | Crate or package                 | Holds                                                                                                                                                       | Depends on                                                                                                                                                                                                                              |
+   | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `ridl-rt`                        | the library of decision 5                                                                                                                                   | the FlatBuffers runtime, only under its feature — permitted, and not taken: since 2026-09-20 (story E11.7, stage K3) the `flatbuffers` feature gates the crate's own helpers and `ridl-rt` has no dependency in any feature combination |
+   | `ridl-loopback`                  | the in-process reference runtime — every port over a queue and a map, and no IO                                                                             | `ridl-rt`                                                                                                                                                                                                                               |
+   | `ridl-rt-conformance`            | the port contract tests, generic over a runtime factory, which a runtime runs from its own tests; published (2026-10-08)                                    | `ridl-rt`                                                                                                                                                                                                                               |
+   | `ridl-transport-ws`              | the ports over a WebSocket, carrying the encoding the session names, proto3 by default (frame specification §11.1); the default of the getting-started path | `ridl-rt`                                                                                                                                                                                                                               |
+   | `@driftsys/ridl-runtime` (npm)   | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec                                                          | nothing outside itself                                                                                                                                                                                                                  |
+   | the TypeScript WebSocket package | the same binding for Deno and the browser                                                                                                                   | nothing until the runtime package exists; built as `@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`, which carries payload bytes without decoding them                                                                    |
 
    Generated Rust links `ridl-rt`, generated TypeScript imports the runtime
    package, and neither ever names a transport.
@@ -606,7 +620,8 @@ as its public contract.
 2. **Where the TypeScript packages live in this workspace, and what the runtime
    package is called.** Decision 6 leaves both open. (Amended 2026-10-20: the
    location is `packages/`, and the first package there is
-   `packages/ridl-transport-ws/`. The runtime package's name is still open.)
+   `packages/ridl-transport-ws/`. Amended 2026-10-21: the runtime package is
+   named `@driftsys/ridl-runtime`.)
 3. **Which wasm runtime `ridlc` embeds** for the second host of decision 10, and
    whether the export signature can be identical to the process host's stdin and
    stdout framing.
