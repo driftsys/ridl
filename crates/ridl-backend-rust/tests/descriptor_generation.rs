@@ -1083,6 +1083,75 @@ fn wasm_module_lists_the_payload_types_sorted() {
     assert!(ridl_backend_rust::generate_wasm_module(&[0; 31], &[&model]).is_err());
 }
 
+/// `wasm = false` is accepted with any `encodings`, or none, because it asks
+/// for nothing; a value that is not `true` or `false` is refused.
+#[test]
+fn wasm_false_is_accepted_without_flatbuffers() {
+    for options in [
+        vec![option("wasm", "false")],
+        vec![option("encodings", "proto3"), option("wasm", "false")],
+    ] {
+        backend_response(options.clone()).unwrap_or_else(|err| panic!("{options:?}: {err:?}"));
+    }
+    let message = refused_options(vec![option("encodings", "flatbuffers"), option("wasm", "")]);
+    assert!(message.contains("`wasm` is ``"), "got: {message}");
+}
+
+/// The module lists a type only when its FlatBuffers root has a finite bound:
+/// a root made unbounded drops out of the list, and the rest stay.
+#[test]
+fn wasm_module_leaves_out_an_unbounded_root() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let list = |model: &v1::Model| -> String {
+        let source = ridl_backend_rust::generate_wasm_module(&[0; 32], &[model])
+            .expect("the module generates")
+            .rust_source;
+        let d = dense(&source);
+        let head = "WASM_PAYLOAD_TYPES:&[&str]=&[";
+        let start = d.find(head).expect("the list") + head.len();
+        d[start..start + d[start..].find(']').expect("the end")].to_string()
+    };
+    let before = list(&model);
+    assert!(before.contains("\"face.demo.Temperature\""), "{before}");
+    let mut unbounded = model.clone();
+    let projection = unbounded.flatbuffers.as_mut().expect("a projection");
+    let root = projection
+        .roots
+        .iter_mut()
+        .find(|root| {
+            root.tuple.is_none()
+                && model.declarations[root.declaration as usize]
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.declared == "Temperature")
+        })
+        .expect("Temperature has a root");
+    root.bound = Some(v1::fb_root::Bound::Unbounded(Default::default()));
+    let after = list(&unbounded);
+    assert_eq!(
+        after,
+        before.replace("\"face.demo.Temperature\",", ""),
+        "only Temperature drops out"
+    );
+}
+
+/// The fallback arms of the generated code, which no rule or error of the
+/// current `ridl-rt` reaches: a rule the list does not name is
+/// `2 + WASM_RULES.len()`, and a `VerifyError` added later is 1.
+#[test]
+fn wasm_module_keeps_its_fallback_codes() {
+    let source = ridl_backend_rust::generate_wasm_module(&[0; 32], &[])
+        .expect("the module generates")
+        .rust_source;
+    let d = dense(&source);
+    assert!(
+        d.contains("_=>2+WASM_RULES.len()as::core::primitive::i32,"),
+        "{source}"
+    );
+    assert!(d.contains("::core::result::Result::Err(_)=>1,"), "{source}");
+}
+
 /// `proto3` is accepted through the contract. Alone, it emits the domain
 /// types, the proto3 codec, the proto3 size table and the face, and nothing
 /// of FlatBuffers; with `flatbuffers`, both codecs and both size tables are

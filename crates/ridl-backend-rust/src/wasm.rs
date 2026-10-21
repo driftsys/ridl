@@ -110,6 +110,58 @@ pub fn generate_wasm_module(
         /// length is a rule this list does not name.
         pub const #rules_const: &[&str] = &[#(#rule_texts),*];
 
+        /// The result code `ridl_verify` returns for `bytes` read as the
+        /// payload type at `type_id`. Compiled for every target, so that a
+        /// native test checks the dispatch the export runs; not a stable API.
+        #[doc(hidden)]
+        #[allow(deprecated)]
+        pub fn verify_by_id(type_id: ::core::primitive::u32, bytes: &[::core::primitive::u8]) -> ::core::primitive::i32 {
+            match type_id {
+                #(#arms)*
+                _ => {
+                    let _ = bytes;
+                    -1
+                }
+            }
+        }
+
+        /// The result code of verifying `bytes` as a `T`.
+        #[allow(dead_code)]
+        fn verify_as<T: ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>(
+            bytes: &[::core::primitive::u8],
+        ) -> ::core::primitive::i32 {
+            verify_result_code(<T as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::verify(bytes).map(|_| ()))
+        }
+
+        /// The result code of one verification: 0, 1 for a malformed buffer,
+        /// or the code of the broken rule. Not a stable API.
+        #[doc(hidden)]
+        pub fn verify_result_code(
+            result: ::core::result::Result<(), ::ridl_rt::payload::VerifyError>,
+        ) -> ::core::primitive::i32 {
+            match result {
+                ::core::result::Result::Ok(()) => 0,
+                ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Structure(_)) => 1,
+                ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
+                    rule_code(violation.rule)
+                }
+                // A failure `VerifyError` adds later is not a typl rule,
+                // so it is reported as a buffer that does not verify.
+                ::core::result::Result::Err(_) => 1,
+            }
+        }
+
+        /// The result code of a broken rule: 2 plus its index in
+        /// `WASM_RULES`, or 2 plus its length for a rule the list does not
+        /// name. Not a stable API.
+        #[doc(hidden)]
+        pub fn rule_code(rule: ::ridl_rt::payload::Rule) -> ::core::primitive::i32 {
+            match rule {
+                #(#rule_arms)*
+                _ => 2 + #rules_const.len() as ::core::primitive::i32,
+            }
+        }
+
         #[cfg(all(target_arch = "wasm32", feature = "wasm-exports"))]
         mod exports {
             /// The catalog hash of the unit, the value of every
@@ -180,7 +232,6 @@ pub fn generate_wasm_module(
             ///
             /// `ptr` is valid for a read of `len` bytes, or `len` is 0.
             #[unsafe(no_mangle)]
-            #[allow(deprecated)]
             pub unsafe extern "C" fn ridl_verify(
                 type_id: ::core::primitive::u32,
                 ptr: *const ::core::primitive::u8,
@@ -199,41 +250,9 @@ pub fn generate_wasm_module(
                     // SAFETY: the caller passes `len` readable bytes at `ptr`.
                     unsafe { ::core::slice::from_raw_parts(ptr, len) }
                 };
-                match type_id {
-                    #(#arms)*
-                    _ => {
-                        let _ = bytes;
-                        -1
-                    }
-                }
+                super::verify_by_id(type_id, bytes)
             }
 
-            /// The result code of verifying `bytes` as a `T`.
-            #[allow(dead_code)]
-            fn verify_as<T: ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>(
-                bytes: &[::core::primitive::u8],
-            ) -> ::core::primitive::i32 {
-                match <T as ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>>::verify(bytes) {
-                    ::core::result::Result::Ok(_) => 0,
-                    ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Structure(_)) => 1,
-                    ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
-                        rule_code(violation.rule)
-                    }
-                    // A failure `VerifyError` adds later is not a typl rule,
-                    // so it is reported as a buffer that does not verify.
-                    ::core::result::Result::Err(_) => 1,
-                }
-            }
-
-            /// The result code of a broken rule: 2 plus its index in
-            /// `WASM_RULES`.
-            #[allow(dead_code)]
-            fn rule_code(rule: ::ridl_rt::payload::Rule) -> ::core::primitive::i32 {
-                match rule {
-                    #(#rule_arms)*
-                    _ => 2 + super::#rules_const.len() as ::core::primitive::i32,
-                }
-            }
         }
     }])
 }
