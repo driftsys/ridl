@@ -224,21 +224,29 @@ member; rsdl is the apex.
                          browser (RIDL_BROWSER names one). Runs in CI; not a
                          member of build, so a contributor's build needs no
                          browser
+    just ts-npm-check    build packages/ridl-transport-ws into an npm package
+                         with dnt, verify the built manifest and tarball,
+                         install the tarball in a temporary directory, and
+                         import it by name from Node. Needs deno, node and npm
+                         on PATH and network access. Not a member of pre-push.
+                         .github/workflows/npm-release.yml publishes the
+                         package to npm on a v* tag
     just build           toolchain-check + gate-parity + install-check +
                          fmt-check + book-check + link-check + doc-path-check +
                          story-id-check + ts-check + freeze-check + compile +
                          test + lint + wasm-check + compat-check + demo +
-                         ts-e2e + check — the full local gate: every member
+                         ts-e2e + ts-npm-check + check — the full local gate: every member
                          ADR-0008 decision 11 names, the four CI checks
                          ADR-0009 brought back to this side, and
                          doc-path-check, story-id-check, freeze-check, demo,
-                         ts-check and ts-e2e, which postdate both
+                         ts-check, ts-e2e and ts-npm-check, which postdate
+                         both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just pre-push        lint-commits + the static-check members of build,
                          ts-check included; skips freeze-check, compile, lint,
-                         test, wasm-check, compat-check, demo, ts-e2e, and
-                         install-check — wired as the pre-push hook
+                         test, wasm-check, compat-check, demo, ts-e2e,
+                         ts-npm-check, and install-check — wired as the pre-push hook
     just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
     just book-build      render the book to ./book — what CI publishes to Pages

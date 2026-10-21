@@ -2509,7 +2509,7 @@ gate-parity:
     # the `build:` line, so removing or adding one has to be done twice. Without
     # this list the check would read its expectation from the line under test,
     # and a member removed from that line would only shrink what is checked.
-    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check"
+    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check"
     removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
     added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
     duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
@@ -2791,6 +2791,24 @@ ts-check:
     deno test --allow-read tests/
     deno publish --dry-run --allow-dirty
 
+# Build the npm package of packages/ridl-transport-ws into its npm/ directory
+# and check it as a consumer would receive it: the built manifest, the files
+# `npm pack` would publish, and an import by name from Node after installing the
+# packed tarball. This is the artifact the `npm-release` workflow publishes, so
+# a build that breaks it fails here and not at the tag. It needs network access,
+# for dnt and the install.
+ts-npm-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for tool in deno node npm; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            echo "ts-npm-check: $tool is required and is not on PATH." >&2
+            exit 1
+        fi
+    done
+    cd packages/ridl-transport-ws
+    deno run -A scripts/verify_npm.ts
+
 # Build the loopback server example of `ridl-transport-ws` and run the Deno
 # end-to-end test of packages/ridl-transport-ws against it. The test starts the
 # server from the path in RIDL_TRANSPORT_WS_SERVER. The example is reached
@@ -2878,12 +2896,12 @@ ts-browser-e2e:
 # reachable from here, because a member that is not a dependency of `build` is
 # not covered by `gate-parity`'s CI-parity check.
 #
-# The ten members before `compile` do not compile the workspace (freeze-check
+# The eleven members before `compile` do not compile the workspace (freeze-check
 # compiles only xtask), so they run first: a wrong toolchain, an unwired CI job,
 # a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
 # TypeScript check all report before the workspace compiles rather than after a
 # full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:
@@ -2930,7 +2948,7 @@ lint-commits base="main":
     fi
 
 # Lint and static-check gate before pushing — skips `freeze-check`, `compile`,
-# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-e2e`, and
+# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-npm-check`, `ts-e2e`, and
 # `install-check`.
 # Wired as the pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs
 # the full `just build` gate on the PR; `just verify` runs that same gate
