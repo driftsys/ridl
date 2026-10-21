@@ -19,9 +19,9 @@ which wires up the repo-local git hooks in `.githooks/`, and then installs the
 Rust toolchain that `rust-toolchain.toml` pins.
 
 `just build` also needs [Deno](https://deno.com), for the TypeScript packages
-`packages/ridl-runtime`, `packages/ridl-transport-ws`, and
+`packages/ridl-runtime` and `packages/ridl-transport-ws`. It also needs
 [Node](https://nodejs.org) 22 or later with npm, for `just ts-npm-check`, which
-builds the package for npm and imports it from Node. `bootstrap` does not
+builds each package for npm and imports it from Node. `bootstrap` does not
 install Node or npm, and the recipe needs network access. When `deno` is not on
 `PATH`, `bootstrap` installs the version that `.deno-version` pins into
 `~/.deno/bin`, and you add that directory to `PATH`. When another version is
