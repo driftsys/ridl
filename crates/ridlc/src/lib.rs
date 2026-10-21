@@ -1662,6 +1662,17 @@ fn write_crate_files(
             wasm.is_some(),
         ),
     )?;
+    // A `wasm` module an earlier build wrote, with the option on, is removed
+    // when the option is off: the crate root no longer names it. A file that
+    // does not start with the generated marker is not one ridlc wrote, and is
+    // left as it is.
+    let wasm_path = out_dir.join(WASM_FILE);
+    if wasm.is_none() && wasm_path.is_file() {
+        let marker = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
+        if std::fs::read_to_string(&wasm_path)?.starts_with(&marker) {
+            std::fs::remove_file(&wasm_path)?;
+        }
+    }
     if let Some(source) = wasm {
         std::fs::write(
             out_dir.join(WASM_FILE),
@@ -1782,12 +1793,14 @@ fn refuse_overwrite(
 /// with default features off. The backend's compile proofs build the emitted
 /// source as edition 2024 as well.
 ///
-/// With `wasm`, which `[backend.rust] wasm = true` sets, the `[lib]` table
-/// also declares `crate-type = ["cdylib", "rlib"]`, and a `[profile.release]`
-/// with `opt-level = "z"`, `lto = true` and `panic = "abort"` follows it, so
-/// that `cargo build --release --target wasm32-unknown-unknown` writes a small
-/// module. Without it the manifest is the one written before the option
-/// existed.
+/// With `wasm`, which `[backend.rust] wasm = true` sets, `[features]` also
+/// declares `wasm-exports = ["std"]`, the feature that compiles the exports of
+/// the `wasm` module. The manifest declares no crate type and no profile: the
+/// module is built with
+/// `cargo rustc --release --target wasm32-unknown-unknown --crate-type cdylib --features wasm-exports`,
+/// so a Rust consumer that depends on the crate links an `rlib` with no
+/// exported symbol, and the size settings come from the caller's environment.
+/// Without it the manifest is the one written before the option existed.
 ///
 /// The `ridl-rt = "0.12"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
@@ -1805,15 +1818,11 @@ fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String], was
             .join(", ");
         format!(r#"ridl-rt = {{ version = "{RIDL_RT_REQUIREMENT}", features = [{features}] }}"#)
     };
-    // `[backend.rust] wasm = true`: a `cdylib` for the WebAssembly host beside
-    // the `rlib` a Rust consumer links, and a release profile that keeps the
-    // module small. Without the option the manifest is unchanged.
-    let wasm_sections = if wasm {
-        "crate-type = [\"cdylib\", \"rlib\"]\n\n\
-         [profile.release]\n\
-         opt-level = \"z\"\n\
-         lto = true\n\
-         panic = \"abort\"\n"
+    // `[backend.rust] wasm = true`: the feature that compiles the exports.
+    // Without the option the manifest is unchanged.
+    let wasm_feature = if wasm {
+        "# Export the `wasm` module's functions from a wasm32 cdylib.\n\
+         wasm-exports = [\"std\"]\n"
     } else {
         ""
     };
@@ -1830,14 +1839,14 @@ default = ["validate-pattern", "std"]
 # regex dependency; range and length checks are unaffected.
 validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
-
+{wasm_feature}
 [dependencies]
 {ridl_rt}
 regex = {{ version = "1.13", optional = true }}
 
 [lib]
 path = "lib.rs"
-{wasm_sections}"#
+"#
     )
 }
 
@@ -2022,16 +2031,9 @@ fn wasm_module_source(
         .iter()
         .map(|package| ridl_ir::v2::unit_of(package))
         .collect();
-    let unit = match (root_unit, units.len()) {
-        (Some(unit), _) => unit,
-        (None, 1) => units.into_iter().next().expect("one unit"),
-        (None, _) => {
-            return refuse(
-                "`[backend.rust] wasm = true` writes the catalog hash of one unit, and this \
-                 build holds no root package and other than one unit"
-                    .to_string(),
-            );
-        }
+    let unit = match wasm_unit(root_unit, &units) {
+        Ok(unit) => unit,
+        Err(message) => return refuse(message),
     };
     let lower = |package: &ridl_ir::v2::Package| {
         let earlier = compatible
@@ -2051,6 +2053,21 @@ fn wasm_module_source(
     match ridl_backend_rust::generate_wasm_module(&hash, &models) {
         Ok(generated) => Some(generated.rust_source),
         Err(err) => refuse(err.message),
+    }
+}
+
+/// The unit whose catalog hash the `wasm` module writes: the root package's
+/// unit when the manifest names a package, otherwise the one unit of `units`,
+/// the units of the workspace's own packages. A remote unit is not in `units`.
+/// Any other build is refused, because the module carries one hash.
+fn wasm_unit<'a>(root_unit: Option<&'a str>, units: &BTreeSet<&'a str>) -> Result<&'a str, String> {
+    match (root_unit, units.len()) {
+        (Some(unit), _) => Ok(unit),
+        (None, 1) => Ok(units.iter().next().copied().expect("one unit")),
+        (None, count) => Err(format!(
+            "`[backend.rust] wasm = true` writes the catalog hash of one unit; this build has \
+             {count} units and no root package"
+        )),
     }
 }
 
@@ -3117,6 +3134,37 @@ mod emit_table_tests {
             Emit::IrBinary,
         ] {
             assert!(!emit.carries_codec(), "{emit:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod wasm_unit_tests {
+    use std::collections::BTreeSet;
+
+    use super::wasm_unit;
+
+    #[test]
+    fn the_root_unit_is_chosen_over_the_others() {
+        let units = BTreeSet::from(["a", "b"]);
+        assert_eq!(wasm_unit(Some("b"), &units), Ok("b"));
+    }
+
+    #[test]
+    fn without_a_root_the_one_unit_is_chosen() {
+        assert_eq!(wasm_unit(None, &BTreeSet::from(["a"])), Ok("a"));
+    }
+
+    #[test]
+    fn without_a_root_several_units_or_none_are_refused() {
+        for (units, count) in [(BTreeSet::from(["a", "b"]), 2), (BTreeSet::new(), 0)] {
+            assert_eq!(
+                wasm_unit(None, &units),
+                Err(format!(
+                    "`[backend.rust] wasm = true` writes the catalog hash of one unit; this \
+                     build has {count} units and no root package"
+                ))
+            );
         }
     }
 }
