@@ -2784,13 +2784,14 @@ ts-check:
         echo "ts-check: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
         exit 1
     fi
-    # ridl-runtime has no browser type check of its own, and its tests start
-    # a local HTTP server and read the test assembler from the npm cache.
+    # The tests of ridl-runtime start a local HTTP server and read the test
+    # assembler from the npm cache.
     (
         cd packages/ridl-runtime
         deno fmt --check
         deno lint
         deno check mod.ts
+        deno check --config browser.deno.json mod.ts
         deno test --allow-read --allow-write --allow-net --allow-env tests/
         deno publish --dry-run --allow-dirty
     )

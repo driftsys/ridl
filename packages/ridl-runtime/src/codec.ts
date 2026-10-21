@@ -25,7 +25,11 @@ export type CodecSource =
   | URL
   | Response
   | Promise<Response>
-  | BufferSource;
+  | ArrayBuffer
+  | ArrayBufferView;
+
+/** Imports for the module, in the shape `WebAssembly.instantiate` takes. */
+export type CodecImports = Record<string, Record<string, unknown>>;
 
 export interface LoadOptions {
   /** The 32-byte catalog hash that the generated TypeScript expects. */
@@ -33,7 +37,7 @@ export interface LoadOptions {
   /** The text of rule code `n` is at index `n - 2`. */
   ruleText?: readonly string[];
   /** Imports for the module. The ABI needs none. */
-  imports?: WebAssembly.Imports;
+  imports?: CodecImports;
 }
 
 const HASH_LENGTH = 32;
@@ -50,7 +54,7 @@ async function instantiate(
   source: CodecSource,
   imports: WebAssembly.Imports,
 ): Promise<WebAssembly.Instance> {
-  let input: Response | BufferSource;
+  let input: Response | ArrayBuffer | ArrayBufferView;
   if (source instanceof URL) {
     const denoHost =
       (globalThis as { Deno?: { readFile(u: URL): Promise<Uint8Array> } })
@@ -79,7 +83,8 @@ async function instantiate(
     const bytes = await input.arrayBuffer();
     return (await WebAssembly.instantiate(bytes, imports)).instance;
   }
-  return (await WebAssembly.instantiate(input, imports)).instance;
+  return (await WebAssembly.instantiate(input as BufferSource, imports))
+    .instance;
 }
 
 function fn(
@@ -109,7 +114,10 @@ export async function loadCodec(
   }
   let instance: WebAssembly.Instance;
   try {
-    instance = await instantiate(source, options.imports ?? {});
+    instance = await instantiate(
+      source,
+      (options.imports ?? {}) as WebAssembly.Imports,
+    );
   } catch (error) {
     if (error instanceof CodecError) throw error;
     throw new CodecError(
@@ -155,6 +163,11 @@ export async function loadCodec(
   return {
     catalogHash: actual,
     verify(typeId: number, bytes: Uint8Array): VerifyResult {
+      if (!Number.isInteger(typeId) || typeId < 0 || typeId > 0xffffffff) {
+        throw new CodecError(
+          `typeId must be an integer in [0, 2^32), got ${String(typeId)}`,
+        );
+      }
       const ptr = alloc(bytes.length);
       let code: number;
       try {
@@ -168,6 +181,9 @@ export async function loadCodec(
       if (code === 0) return { ok: true };
       if (code === 1) return { ok: false, kind: "malformed", code };
       if (code === -1) return { ok: false, kind: "unknown-type", code };
+      if (code < -1) {
+        throw new CodecError(`ridl_verify returned the invalid code ${code}`);
+      }
       const result: VerifyResult = { ok: false, kind: "rule", code };
       const text = ruleText?.[code - 2];
       if (text !== undefined) result.rule = text;
