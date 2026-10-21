@@ -1079,7 +1079,7 @@ fn wasm_module_lists_the_payload_types_sorted() {
         ]
     );
     assert_eq!(source.matches("no_mangle").count(), 4);
-    assert!(d.contains("#[cfg(target_arch=\"wasm32\")]modexports{"));
+    assert!(d.contains("#[cfg(all(target_arch=\"wasm32\",feature=\"wasm-exports\"))]modexports{"));
     assert!(ridl_backend_rust::generate_wasm_module(&[0; 31], &[&model]).is_err());
 }
 

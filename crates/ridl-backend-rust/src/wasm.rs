@@ -9,7 +9,9 @@
 //!
 //! The exports are `ridl_alloc`, `ridl_free`, `ridl_catalog_hash` and
 //! `ridl_verify`, and no other. They are compiled only for
-//! `target_arch = "wasm32"`. The two lists a host needs to read the results,
+//! `target_arch = "wasm32"` with the generated crate's feature `wasm-exports`
+//! on, so a Rust consumer that links the crate for wasm32 gets no second copy
+//! of the symbols. The two lists a host needs to read the results,
 //! [`PAYLOAD_TYPES_CONST`] and [`RULES_CONST`], are compiled for every target,
 //! so a native build and a test can read them.
 
@@ -108,7 +110,7 @@ pub fn generate_wasm_module(
         /// length is a rule this list does not name.
         pub const #rules_const: &[&str] = &[#(#rule_texts),*];
 
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", feature = "wasm-exports"))]
         mod exports {
             /// The catalog hash of the unit, the value of every
             /// `Interface::CATALOG` the unit generates.
@@ -155,9 +157,13 @@ pub fn generate_wasm_module(
             ///
             /// # Safety
             ///
-            /// `out_ptr` is valid for a write of 32 bytes.
+            /// `out_ptr` is null, which writes nothing, or is valid for a
+            /// write of 32 bytes.
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn ridl_catalog_hash(out_ptr: *mut ::core::primitive::u8) {
+                if out_ptr.is_null() {
+                    return;
+                }
                 // SAFETY: the caller passes a buffer of 32 writable bytes.
                 unsafe { ::core::ptr::copy_nonoverlapping(CATALOG_HASH.as_ptr(), out_ptr, 32) }
             }
@@ -165,18 +171,29 @@ pub fn generate_wasm_module(
             /// Checks the `len` bytes at `ptr` as the payload type `type_id`
             /// names in `WASM_PAYLOAD_TYPES`. Returns 0 when the bytes verify,
             /// 1 for a malformed buffer, 2 or more for a broken typl rule
-            /// (`WASM_RULES`), and -1 for an unknown `type_id`.
+            /// (`WASM_RULES`), and -1 for an unknown `type_id`. A null `ptr`
+            /// with a `len` that is not 0, a `len` above `isize::MAX`, and a
+            /// range that passes the end of the address space return 1
+            /// without reading.
             ///
             /// # Safety
             ///
             /// `ptr` is valid for a read of `len` bytes, or `len` is 0.
             #[unsafe(no_mangle)]
+            #[allow(deprecated)]
             pub unsafe extern "C" fn ridl_verify(
                 type_id: ::core::primitive::u32,
                 ptr: *const ::core::primitive::u8,
                 len: ::core::primitive::usize,
             ) -> ::core::primitive::i32 {
-                let bytes: &[::core::primitive::u8] = if len == 0 || ptr.is_null() {
+                if len > 0
+                    && (ptr.is_null()
+                        || len > ::core::primitive::isize::MAX as ::core::primitive::usize
+                        || (ptr as ::core::primitive::usize).checked_add(len).is_none())
+                {
+                    return 1;
+                }
+                let bytes: &[::core::primitive::u8] = if len == 0 {
                     &[]
                 } else {
                     // SAFETY: the caller passes `len` readable bytes at `ptr`.
@@ -184,7 +201,10 @@ pub fn generate_wasm_module(
                 };
                 match type_id {
                     #(#arms)*
-                    _ => -1,
+                    _ => {
+                        let _ = bytes;
+                        -1
+                    }
                 }
             }
 
