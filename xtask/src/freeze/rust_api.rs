@@ -12,9 +12,14 @@
 //! `cargo semver-checks` runs with `CARGO_NET_OFFLINE=true`, so every
 //! dependency must already be in the local cargo cache. Before the first run,
 //! the check runs `cargo fetch --locked` with the network allowed, which puts
-//! every package of `Cargo.lock` there, for every platform. It also runs with `--release-type minor`:
-//! a frozen surface accepts no break, whatever version the crates carry. The
-//! lints of [`DENIED_LINTS`] are raised to `deny` (see there).
+//! every package of `Cargo.lock` there, for every platform. The `runtime-crates`
+//! baseline is built offline too, so when its `Cargo.lock` differs from the
+//! working tree's, the check also fetches that lockfile's packages, from the
+//! baseline's extracted tree. The `runtime-crates` comparison is skipped when
+//! no input of it differs from the baseline ([`runtime_skip`]). The check also
+//! runs with `--release-type minor`: a frozen surface accepts no break,
+//! whatever version the crates carry. The lints of [`DENIED_LINTS`] are raised
+//! to `deny` (see there).
 
 use super::Row;
 use super::bin;
@@ -76,11 +81,96 @@ const BREAK_FOUND: i32 = 100;
 /// in one `cargo semver-checks` run.
 pub fn runtime_compare(root: &Path, row: &Row) -> Result<Vec<String>, String> {
     fetch_dependencies(root)?;
+    if baseline_lock_differs(root, row)? {
+        let tree = scratch_dir(root, "baseline-tree")?;
+        fetch_baseline_dependencies(root, row, &tree)?;
+    }
     let command = runtime_command(root, row);
     let what = format!("the crates {}", RUNTIME_CRATES.join(", "));
     Ok(run_semver(command, &row.surface, &row.baseline, &what)?
         .into_iter()
         .collect())
+}
+
+/// The paths whose content the `runtime-crates` comparison depends on: the
+/// directory of each runtime crate, `crates/ridl-ir` (whose items the runtime
+/// crates wrap or take in signatures), and the root manifest and lockfile
+/// (which pin every dependency). `rust-toolchain.toml` and the sources of
+/// `xtask` are not inputs: the comparison reads the rustdoc of the crates, and
+/// neither changes an item of them.
+fn runtime_inputs() -> Vec<String> {
+    RUNTIME_CRATES
+        .iter()
+        .map(|name| format!("crates/{name}"))
+        .chain(
+            ["crates/ridl-ir", "Cargo.toml", "Cargo.lock"]
+                .into_iter()
+                .map(String::from),
+        )
+        .collect()
+}
+
+/// Whether `paths` are the same in the baseline and in the working tree:
+/// `git diff --quiet <baseline> -- <paths>` reports no change, and no untracked
+/// file is under `paths`. The working tree is compared, not HEAD, so an edit
+/// that is not committed yet is not skipped. In CI the working tree is HEAD.
+fn unchanged_since(root: &Path, baseline: &str, paths: &[String]) -> Result<bool, String> {
+    let status = bin::git(root)
+        .args(["diff", "--quiet", "--end-of-options", baseline, "--"])
+        .args(paths)
+        .status()
+        .map_err(|e| format!("cannot run git: {e}"))?;
+    match status.code() {
+        Some(0) => {}
+        Some(1) => return Ok(false),
+        code => {
+            return Err(format!(
+                "`git diff --quiet {baseline}` failed (exit {})",
+                code.map_or_else(|| "by signal".to_string(), |c| c.to_string())
+            ));
+        }
+    }
+    let output = bin::git(root)
+        .args(["ls-files", "--others", "--exclude-standard", "--"])
+        .args(paths)
+        .output()
+        .map_err(|e| format!("cannot run git: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "`git ls-files --others` failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    Ok(output.stdout.is_empty())
+}
+
+/// Whether the working tree's `Cargo.lock` differs from the baseline's, or is
+/// untracked.
+fn baseline_lock_differs(root: &Path, row: &Row) -> Result<bool, String> {
+    super::verify_baseline(root, row)?;
+    Ok(!unchanged_since(
+        root,
+        &row.baseline,
+        &["Cargo.lock".to_string()],
+    )?)
+}
+
+/// The reason to skip the `runtime-crates` comparison: no input of
+/// [`runtime_inputs`] differs between the baseline and the working tree (and
+/// none is untracked), so the comparison cannot find a break. `None` when one
+/// differs. A baseline that names no commit is an error with the instruction
+/// to fetch it.
+pub fn runtime_skip(root: &Path, row: &Row) -> Result<Option<String>, String> {
+    super::verify_baseline(root, row)?;
+    if unchanged_since(root, &row.baseline, &runtime_inputs())? {
+        Ok(Some(format!(
+            "no runtime crate, `crates/ridl-ir`, `Cargo.toml` or `Cargo.lock` differs from the \
+baseline `{}`",
+            row.baseline
+        )))
+    } else {
+        Ok(None)
+    }
 }
 
 fn runtime_command(root: &Path, row: &Row) -> Command {
@@ -134,7 +224,7 @@ pub fn generated_compare(root: &Path, row: &Row) -> Result<Vec<String>, String> 
     let head = scratch_dir(root, "head")?;
     copy_tree(&root.join(GENERATED_DIR), &head)?;
     let baseline = scratch_dir(root, "baseline")?;
-    extract_baseline(root, row, &baseline)?;
+    extract_baseline(root, row, &baseline, &[GENERATED_DIR])?;
     let baseline = baseline.join(GENERATED_DIR);
     let ridl_rt = root.join("crates").join("ridl-rt");
     let mut failures = Vec::new();
@@ -259,23 +349,25 @@ fn copy_tree(from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Extracts `freeze/generated` of the row's baseline into `dir` with
-/// `git archive`.
-fn extract_baseline(root: &Path, row: &Row, dir: &Path) -> Result<(), String> {
+/// Extracts `paths` of the row's baseline into `dir` with `git archive`; no
+/// path extracts the whole tree.
+fn extract_baseline(root: &Path, row: &Row, dir: &Path, paths: &[&str]) -> Result<(), String> {
     super::verify_baseline(root, row)?;
-    let archive = dir.join("baseline.tar");
+    // The archive is written beside `dir`, so it is not part of the extracted tree.
+    let archive = dir.with_extension("tar");
     let output = bin::git(root)
         .args(["archive", "--format=tar", "-o"])
         .arg(&archive)
         .arg(&row.baseline)
-        .arg(GENERATED_DIR)
+        .args(paths)
         .output()
         .map_err(|e| format!("cannot run git: {e}"))?;
     if !output.status.success() {
         return Err(format!(
-            "surface `{}`: cannot read `{}:{GENERATED_DIR}` (baseline `{}`): {}",
+            "surface `{}`: cannot read `{}:{}` (baseline `{}`): {}",
             row.surface,
             row.baseline,
+            paths.join(" "),
             row.baseline,
             String::from_utf8_lossy(&output.stderr).trim()
         ));
@@ -287,6 +379,7 @@ fn extract_baseline(root: &Path, row: &Row, dir: &Path) -> Result<(), String> {
         .arg(dir)
         .output()
         .map_err(|e| format!("cannot run tar: {e}"))?;
+    let _ = std::fs::remove_file(&archive);
     if !output.status.success() {
         return Err(format!(
             "cannot extract {}: {}",
@@ -370,6 +463,32 @@ fn fetch_command(root: &Path) -> Command {
         .env_remove("CARGO_NET_OFFLINE");
     bin::without_git_env(&mut command);
     command
+}
+
+/// `cargo fetch --locked` against the lockfile of the row's baseline, with the
+/// network allowed. The baseline's runtime crates are built offline, and a
+/// package that only the baseline's `Cargo.lock` names (an exact pin or a
+/// requirement that HEAD's lockfile no longer satisfies) is not in the cache
+/// that [`fetch_dependencies`] fills. The baseline tree is extracted into a
+/// directory `tree` first, because `cargo fetch` needs the manifests of every
+/// workspace member.
+fn fetch_baseline_dependencies(root: &Path, row: &Row, tree: &Path) -> Result<(), String> {
+    extract_baseline(root, row, tree, &[])?;
+    let output = fetch_command(tree)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("cannot run cargo fetch: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "surface `{}`: `cargo fetch --locked` of the baseline `{}` failed, so the baseline \
+cannot be built offline:\n{}",
+            row.surface,
+            row.baseline,
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
 }
 
 static FETCH: OnceLock<Result<(), String>> = OnceLock::new();
@@ -596,6 +715,178 @@ ridl-rt = { version = \"0.8\", features = [\"flatbuffers\"] }\nregex = \"1\"\n";
                 .any(|(k, v)| k == "CARGO_NET_OFFLINE" && v.is_none()),
             "the fetch must read the network"
         );
+    }
+
+    fn git_in(dir: &Path, args: &[&str]) {
+        let status = bin::git(dir)
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+            .args(["-c", "commit.gpgsign=false"])
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    }
+
+    /// A temporary directory that is removed when it is dropped.
+    struct Scratch(PathBuf);
+
+    impl std::ops::Deref for Scratch {
+        type Target = Path;
+        fn deref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// A repository with one commit `base`, then one commit that changes
+    /// `change` (a path relative to the repository).
+    fn repo_with_change(name: &str, change: &str) -> Scratch {
+        let dir = std::env::temp_dir().join(format!("xtask-freeze-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let dir = Scratch(dir);
+        for path in runtime_inputs()
+            .iter()
+            .map(String::as_str)
+            .chain(["docs/x"])
+        {
+            let file = if path.ends_with(".toml") || path.ends_with(".lock") {
+                dir.join(path)
+            } else {
+                dir.join(path).join("f")
+            };
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, "a").unwrap();
+        }
+        git_in(&dir, &["init", "-q", "-b", "main"]);
+        git_in(&dir, &["add", "-A"]);
+        git_in(&dir, &["commit", "-q", "-m", "base"]);
+        git_in(&dir, &["tag", "base"]);
+        std::fs::write(dir.join(change), "b").unwrap();
+        git_in(&dir, &["add", "-A"]);
+        git_in(&dir, &["commit", "-q", "-m", "change"]);
+        dir
+    }
+
+    fn runtime_row() -> Row {
+        Row {
+            surface: "runtime-crates".into(),
+            baseline: "base".into(),
+        }
+    }
+
+    #[test]
+    fn runtime_inputs_name_every_runtime_crate_ridl_ir_and_the_root_files() {
+        let inputs = runtime_inputs();
+        for name in RUNTIME_CRATES {
+            assert!(inputs.contains(&format!("crates/{name}")), "{inputs:?}");
+        }
+        for path in ["crates/ridl-ir", "Cargo.toml", "Cargo.lock"] {
+            assert!(inputs.contains(&path.to_string()), "{inputs:?}");
+        }
+    }
+
+    #[test]
+    fn runtime_skip_skips_when_only_other_files_changed() {
+        let dir = repo_with_change("skip", "docs/x/f");
+        let reason = runtime_skip(&dir, &runtime_row()).unwrap();
+        assert!(reason.unwrap().contains("baseline `base`"));
+        assert!(!baseline_lock_differs(&dir, &runtime_row()).unwrap());
+    }
+
+    #[test]
+    fn runtime_skip_runs_the_comparison_when_a_listed_path_changed() {
+        for changed in [
+            "crates/ridl-descriptor/f",
+            "crates/ridl-transport-ws/f",
+            "crates/ridl-ir/f",
+            "Cargo.toml",
+            "Cargo.lock",
+        ] {
+            let dir = repo_with_change("run", changed);
+            assert_eq!(
+                runtime_skip(&dir, &runtime_row()).unwrap(),
+                None,
+                "{changed}"
+            );
+        }
+    }
+
+    #[test]
+    fn runtime_skip_runs_the_comparison_for_an_uncommitted_change() {
+        let dir = repo_with_change("dirty", "docs/x/f");
+        std::fs::write(dir.join("crates/ridl-rt/f"), "edited").unwrap();
+        assert_eq!(runtime_skip(&dir, &runtime_row()).unwrap(), None);
+    }
+
+    #[test]
+    fn runtime_skip_runs_the_comparison_for_an_untracked_file() {
+        let dir = repo_with_change("untracked", "docs/x/f");
+        std::fs::write(dir.join("crates/ridl-ir/new.rs"), "x").unwrap();
+        assert_eq!(runtime_skip(&dir, &runtime_row()).unwrap(), None);
+    }
+
+    #[test]
+    fn runtime_skip_fails_for_a_baseline_that_names_no_commit() {
+        let dir = repo_with_change("nobase", "docs/x/f");
+        let row = Row {
+            surface: "runtime-crates".into(),
+            baseline: "missing".into(),
+        };
+        let error = runtime_skip(&dir, &row).unwrap_err();
+        assert!(
+            error.contains("names no commit") && error.contains("`git fetch origin missing`"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn the_baseline_lockfile_is_fetched_from_the_baseline_tree() {
+        let dir = std::env::temp_dir().join(format!("xtask-freeze-{}-fetch", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let dir = Scratch(dir);
+        let tree = Scratch(
+            std::env::temp_dir().join(format!("xtask-freeze-{}-fetch-tree", std::process::id())),
+        );
+        std::fs::create_dir_all(dir.join("src")).unwrap();
+        std::fs::write(dir.join("src/lib.rs"), "").unwrap();
+        std::fs::write(
+            dir.join("Cargo.toml"),
+            "[package]\nname = \"p\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("Cargo.lock"),
+            "version = 4\n\n[[package]]\nname = \"p\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        git_in(&dir, &["init", "-q", "-b", "main"]);
+        git_in(&dir, &["add", "-A"]);
+        git_in(&dir, &["commit", "-q", "-m", "base"]);
+        git_in(&dir, &["tag", "base"]);
+        // At HEAD the lockfile no longer matches the manifest. The fetch must
+        // read the baseline's tree, not the working tree.
+        std::fs::write(dir.join("Cargo.lock"), "garbage").unwrap();
+        assert!(baseline_lock_differs(&dir, &runtime_row()).unwrap());
+        std::fs::create_dir_all(&*tree).unwrap();
+        fetch_baseline_dependencies(&dir, &runtime_row(), &tree).unwrap();
+        assert!(!tree.with_extension("tar").exists());
+        assert!(!tree.join("baseline.tar").exists());
+        // A baseline whose lockfile is out of date for its manifest fails.
+        std::fs::write(dir.join("Cargo.lock"), "").unwrap();
+        git_in(&dir, &["add", "-A"]);
+        git_in(&dir, &["commit", "-q", "-m", "empty lock"]);
+        git_in(&dir, &["tag", "bad"]);
+        let bad = Row {
+            surface: "runtime-crates".into(),
+            baseline: "bad".into(),
+        };
+        let error = fetch_baseline_dependencies(&dir, &bad, &tree).unwrap_err();
+        assert!(error.contains("baseline `bad`"), "{error}");
     }
 
     #[test]

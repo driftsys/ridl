@@ -53,3 +53,26 @@ fn the_corpus_hash_is_pinned() {
     let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
     assert_eq!(hex, CORPUS_HASH);
 }
+
+#[test]
+fn the_wrappers_return_what_the_ridl_ir_functions_return() {
+    let package = numbered_corpus();
+    let unit = ridl_ir::v2::unit_of(&package);
+    let packages = [&package];
+
+    let reduced = ridl_descriptor::hash::reduced_unit(unit, &packages);
+    assert_eq!(
+        reduced,
+        ridl_ir::catalog_hash::reduced_unit(unit, &packages)
+    );
+    assert!(reduced.shapes().next().is_some());
+
+    let reachable = ridl_descriptor::hash::reachable_decls(unit, &packages);
+    let expected = ridl_ir::catalog_hash::reachable_decls(unit, &packages);
+    assert!(!expected.is_empty());
+    assert_eq!(
+        reachable.keys().collect::<Vec<_>>(),
+        expected.keys().collect::<Vec<_>>()
+    );
+    assert!(reachable.iter().all(|(name, decl)| expected[name] == *decl));
+}

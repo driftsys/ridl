@@ -149,6 +149,10 @@ pub type UpdateStep = fn(&Path) -> Result<(), String>;
 /// regeneration.
 pub type CurrentStep = fn(&Path) -> Result<Vec<String>, String>;
 
+/// Returns the reason an API surface's comparison can be skipped, or `None`
+/// when it must run.
+pub type SkipStep = fn(&Path, &Row) -> Result<Option<String>, String>;
+
 /// A frozen surface that is compared with `cargo semver-checks`, not as lines.
 pub struct ApiSurface {
     pub name: &'static str,
@@ -160,6 +164,50 @@ pub struct ApiSurface {
     pub current: Option<CurrentStep>,
     /// The failures of HEAD against the row's baseline. Runs for a row only.
     pub compare: fn(&Path, &Row) -> Result<Vec<String>, String>,
+    /// For a row, the reason the comparison can be skipped because nothing it
+    /// reads changed since the baseline, or `None` when it must run. `None`
+    /// for a surface whose comparison always runs.
+    pub skip: Option<SkipStep>,
+}
+
+/// What the check did for one API surface.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ApiOutcome {
+    /// The surface was compared with its baseline.
+    Compared,
+    /// The comparison was skipped, for the reason given.
+    Skipped(String),
+    /// The surface has no row, so no comparison ran.
+    NoRow,
+}
+
+/// The result of [`check_api_surfaces`].
+#[derive(Debug, Default)]
+pub struct ApiChecks {
+    pub failures: Vec<String>,
+    pub outcomes: Vec<(&'static str, ApiOutcome)>,
+}
+
+/// The passing line of the check: the number of surfaces, and which Rust API
+/// comparisons ran and which were skipped.
+pub fn summary(surfaces: usize, outcomes: &[(&str, ApiOutcome)]) -> String {
+    let mut line = format!("freeze: {surfaces} surface(s) checked.");
+    if outcomes.is_empty() {
+        line.push_str(" No Rust API comparison ran.");
+        return line;
+    }
+    let parts: Vec<String> = outcomes
+        .iter()
+        .map(|(name, outcome)| match outcome {
+            ApiOutcome::Compared => format!("`{name}` compared with its baseline"),
+            ApiOutcome::Skipped(reason) => format!("`{name}` skipped ({reason})"),
+            ApiOutcome::NoRow => format!("`{name}` not compared (no row in surfaces.toml)"),
+        })
+        .collect();
+    line.push_str(" Rust API comparisons: ");
+    line.push_str(&parts.join("; "));
+    line.push('.');
+    line
 }
 
 /// The registry of frozen surfaces that are Rust APIs.
@@ -170,12 +218,14 @@ pub fn api_surfaces() -> &'static [ApiSurface] {
             update: Some(rust_api::generated_update),
             current: Some(rust_api::generated_current),
             compare: rust_api::generated_compare,
+            skip: None,
         },
         ApiSurface {
             name: "runtime-crates",
             update: None,
             current: None,
             compare: rust_api::runtime_compare,
+            skip: Some(rust_api::runtime_skip),
         },
     ]
 }
@@ -333,27 +383,48 @@ fn update_api_surfaces(apis: &[(&ApiSurface, bool)], root: &Path) -> Result<(), 
 }
 
 /// The failures of the API surfaces: the `current` step of each surface whose
-/// flag is set, and the `compare` step of each surface that has a row.
-fn check_api_surfaces(apis: &[(&ApiSurface, bool)], rows: &[Row], root: &Path) -> Vec<String> {
-    let mut failures = Vec::new();
+/// flag is set, and the `compare` step of each surface that has a row and
+/// whose `skip` step gives no reason. The outcomes say which surfaces were
+/// compared.
+fn check_api_surfaces(
+    apis: &[(&'static ApiSurface, bool)],
+    rows: &[Row],
+    root: &Path,
+) -> ApiChecks {
+    let mut checks = ApiChecks::default();
     for (surface, regenerate) in apis {
         let name = surface.name;
         if let (true, Some(current)) = (*regenerate, surface.current) {
             match current(root) {
-                Ok(lines) => {
-                    failures.extend(lines.into_iter().map(|l| format!("surface `{name}`: {l}")))
-                }
-                Err(error) => failures.push(format!("surface `{name}`: {error}")),
+                Ok(lines) => checks
+                    .failures
+                    .extend(lines.into_iter().map(|l| format!("surface `{name}`: {l}"))),
+                Err(error) => checks.failures.push(format!("surface `{name}`: {error}")),
             }
         }
-        if let Some(row) = rows.iter().find(|r| r.surface == name) {
-            match (surface.compare)(root, row) {
-                Ok(lines) => failures.extend(lines),
-                Err(error) => failures.push(error),
+        let Some(row) = rows.iter().find(|r| r.surface == name) else {
+            checks.outcomes.push((name, ApiOutcome::NoRow));
+            continue;
+        };
+        let skipped = match surface.skip.map(|skip| skip(root, row)) {
+            Some(Ok(reason)) => reason,
+            Some(Err(error)) => {
+                checks.failures.push(error);
+                continue;
             }
+            None => None,
+        };
+        if let Some(reason) = skipped {
+            checks.outcomes.push((name, ApiOutcome::Skipped(reason)));
+            continue;
         }
+        match (surface.compare)(root, row) {
+            Ok(lines) => checks.failures.extend(lines),
+            Err(error) => checks.failures.push(error),
+        }
+        checks.outcomes.push((name, ApiOutcome::Compared));
     }
-    failures
+    checks
 }
 
 /// Fails with an instruction to fetch the row's baseline when the ref does
@@ -493,10 +564,14 @@ baseline before the next release"
         }
     }
 
-    failures.extend(check_api_surfaces(&apis, rows, &options.root));
+    let api_checks = check_api_surfaces(&apis, rows, &options.root);
+    failures.extend(api_checks.failures);
 
     if failures.is_empty() {
-        println!("freeze: {} surface(s) checked.", dumps.len() + apis.len());
+        println!(
+            "{}",
+            summary(dumps.len() + apis.len(), &api_checks.outcomes)
+        );
         Ok(())
     } else {
         Err(failures.join("\n"))
@@ -576,16 +651,33 @@ mod tests {
         update: Some(stub_update),
         current: Some(stub_current),
         compare: stub_compare,
+        skip: None,
+    };
+
+    fn stub_skip(_: &Path, row: &Row) -> Result<Option<String>, String> {
+        Ok(Some(format!("nothing changed since `{}`", row.baseline)))
+    }
+
+    const SKIPPING: ApiSurface = ApiSurface {
+        name: "skipping",
+        update: None,
+        current: None,
+        compare: stub_compare,
+        skip: Some(stub_skip),
     };
 
     #[test]
     fn check_api_surfaces_runs_current_when_regenerating() {
         let root = Path::new(".");
         assert_eq!(
-            check_api_surfaces(&[(&STUB, true)], &[], root),
+            check_api_surfaces(&[(&STUB, true)], &[], root).failures,
             vec!["surface `stub`: stale file"]
         );
-        assert!(check_api_surfaces(&[(&STUB, false)], &[], root).is_empty());
+        assert!(
+            check_api_surfaces(&[(&STUB, false)], &[], root)
+                .failures
+                .is_empty()
+        );
     }
 
     #[test]
@@ -596,14 +688,107 @@ mod tests {
             baseline: "v1".into(),
         }];
         assert_eq!(
-            check_api_surfaces(&[(&STUB, false)], &rows, root),
+            check_api_surfaces(&[(&STUB, false)], &rows, root).failures,
             vec!["break since `v1`"]
         );
         let other = [Row {
             surface: "other".into(),
             baseline: "v1".into(),
         }];
-        assert!(check_api_surfaces(&[(&STUB, false)], &other, root).is_empty());
+        let checks = check_api_surfaces(&[(&STUB, false)], &other, root);
+        assert!(checks.failures.is_empty());
+        assert_eq!(checks.outcomes, vec![("stub", ApiOutcome::NoRow)]);
+    }
+
+    #[test]
+    fn check_api_surfaces_skips_the_comparison_when_the_skip_step_gives_a_reason() {
+        let root = Path::new(".");
+        let rows = [Row {
+            surface: "skipping".into(),
+            baseline: "v1".into(),
+        }];
+        let checks = check_api_surfaces(&[(&SKIPPING, false)], &rows, root);
+        assert!(checks.failures.is_empty(), "{:?}", checks.failures);
+        assert_eq!(
+            checks.outcomes,
+            vec![(
+                "skipping",
+                ApiOutcome::Skipped("nothing changed since `v1`".into())
+            )]
+        );
+    }
+
+    fn stub_skip_none(_: &Path, _: &Row) -> Result<Option<String>, String> {
+        Ok(None)
+    }
+
+    fn stub_skip_error(_: &Path, row: &Row) -> Result<Option<String>, String> {
+        Err(format!("cannot read the baseline `{}`", row.baseline))
+    }
+
+    #[test]
+    fn check_api_surfaces_compares_when_the_skip_step_gives_no_reason() {
+        const SURFACE: ApiSurface = ApiSurface {
+            skip: Some(stub_skip_none),
+            ..STUB
+        };
+        let rows = [Row {
+            surface: "stub".into(),
+            baseline: "v1".into(),
+        }];
+        let checks = check_api_surfaces(&[(&SURFACE, false)], &rows, Path::new("."));
+        assert_eq!(checks.failures, vec!["break since `v1`"]);
+        assert_eq!(checks.outcomes, vec![("stub", ApiOutcome::Compared)]);
+    }
+
+    #[test]
+    fn check_api_surfaces_fails_when_the_skip_step_fails() {
+        const SURFACE: ApiSurface = ApiSurface {
+            skip: Some(stub_skip_error),
+            ..STUB
+        };
+        let rows = [Row {
+            surface: "stub".into(),
+            baseline: "v1".into(),
+        }];
+        let checks = check_api_surfaces(&[(&SURFACE, false)], &rows, Path::new("."));
+        assert_eq!(checks.failures, vec!["cannot read the baseline `v1`"]);
+        assert!(checks.outcomes.is_empty());
+    }
+
+    #[test]
+    fn check_api_surfaces_records_a_compared_surface() {
+        let rows = [Row {
+            surface: "stub".into(),
+            baseline: "v1".into(),
+        }];
+        let checks = check_api_surfaces(&[(&STUB, false)], &rows, Path::new("."));
+        assert_eq!(checks.outcomes, vec![("stub", ApiOutcome::Compared)]);
+    }
+
+    #[test]
+    fn summary_says_which_comparisons_ran_and_which_were_skipped() {
+        let line = summary(
+            11,
+            &[
+                ("generated-crate", ApiOutcome::Compared),
+                (
+                    "runtime-crates",
+                    ApiOutcome::Skipped("no change since `v1`".into()),
+                ),
+                ("other", ApiOutcome::NoRow),
+            ],
+        );
+        assert_eq!(
+            line,
+            "freeze: 11 surface(s) checked. Rust API comparisons: `generated-crate` compared \
+with its baseline; `runtime-crates` skipped (no change since `v1`); `other` not compared (no \
+row in surfaces.toml)."
+        );
+        assert_eq!(
+            summary(9, &[]),
+            "freeze: 9 surface(s) checked. No Rust API comparison ran."
+        );
     }
 
     #[test]

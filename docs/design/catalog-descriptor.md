@@ -50,7 +50,7 @@ Sebastien reviews the lane's delegated decisions in the driver's
 | The proto3 state                                                                 | `crates/ridl-ir/src/projection/size/proto3.rs`                                                                 |
 | The FlatBuffers state                                                            | `crates/ridl-ir/src/projection/size/flatbuffers.rs`                                                            |
 | The JSON view                                                                    | `crates/ridl-descriptor/src/describe.rs`                                                                       |
-| The catalog hash (re-exported as `ridl_descriptor::hash`)                        | `crates/ridl-ir/src/catalog_hash.rs`                                                                           |
+| The catalog hash (wrapped as `ridl_descriptor::hash`)                            | `crates/ridl-ir/src/catalog_hash.rs`                                                                           |
 | The proto3 scalar table and field-number limits both sides read                  | `crates/ridl-ir/src/projection/proto3.rs`                                                                      |
 | `Emit::Catalog`, `write_emits`, `lower_workspace_system`, `embed_catalog_hashes` | `crates/ridlc/src/lib.rs`                                                                                      |
 | `ridl describe` (`run_describe`)                                                 | `crates/ridl/src/main.rs`                                                                                      |
@@ -300,7 +300,7 @@ differing only in the list have the same hash. The rule is
 It is computed in `ridl-ir`, not in `ridl-descriptor`, because three artifacts
 carry it and `ridl-ir` is below all of them:
 
-- the catalog descriptor, through `ridl_descriptor::hash`, which re-exports
+- the catalog descriptor, through `ridl_descriptor::hash`, which wraps
   `catalog_hash`, `reduced_unit` and `reachable_decls`;
 - the codegen model's `Catalog.hash`, which the Rust backend writes into the
   `CATALOG` of every generated interface descriptor type. The Rust backend

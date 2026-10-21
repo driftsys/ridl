@@ -12,7 +12,7 @@
 //!
 //! The hash lives in this crate, not in `ridl-descriptor`, because three
 //! artifacts carry it: the codegen model's `Catalog.hash`, lowered in
-//! [`crate::codegen`]; the catalog descriptor, whose crate re-exports these
+//! [`crate::codegen`]; the catalog descriptor, whose crate wraps these
 //! functions as `ridl_descriptor::hash`; and each `Region` of the lowered rsdl
 //! system, where `ridlc` embeds it.
 

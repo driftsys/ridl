@@ -66,6 +66,13 @@ verdict. Ruling R-H2-3 of
 is amended to match, and the change is tracked as driftsys/ridl#787. Decisions 1
 to 14 are unchanged.
 
+**Amended 2026-10-20 — decision 15, where the hash functions are named.**
+`ridl-descriptor` no longer re-exports the hash functions of `ridl-ir`. It
+declares a wrapper function for each, with the same signature, so that the
+freeze check compares them as items of `ridl-descriptor`
+([ADR-0029](ADR-0029-stability-policy.md)). The hash is unchanged. Decisions 1
+to 14 are unchanged.
+
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
@@ -591,8 +598,8 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     (`crates/ridl-ir/src/catalog_hash.rs`), because two artifacts carry it and
     `ridl-ir` is the crate both depend on: the codegen model's `Catalog.hash`,
     which the Rust backend writes into every generated `Interface::CATALOG`, and
-    the catalog descriptor, whose crate `ridl-descriptor` re-exports the
-    functions as `ridl_descriptor::hash`.
+    the catalog descriptor, whose crate `ridl-descriptor` wraps the functions as
+    `ridl_descriptor::hash`.
 
     **The golden-hash test.** `crates/ridl-descriptor/tests/golden_hash.rs`
     hashes the corpus package's checked-in IR snapshot, read with `from_json`,
