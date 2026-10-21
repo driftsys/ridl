@@ -876,16 +876,36 @@ names the encoding in that port's `Encoded` implementation instead
 
 `[backend.rust] wasm = true` adds a module `wasm` to the generated crate,
 written to `__ridl_wasm.rs`. The module lists the payload types that have a
-FlatBuffers codec, sorted by qualified name, in `WASM_PAYLOAD_TYPES`, and the
-typl rule names, sorted, in `WASM_RULES`. For `target_arch = "wasm32"` only, it
-exports `ridl_alloc`, `ridl_free`, `ridl_catalog_hash` and `ridl_verify`.
+FlatBuffers codec in `WASM_PAYLOAD_TYPES`, sorted by qualified name
+(`veh.cabin.Temperature`; an induced tuple by its Rust name), and the typl rule
+names in `WASM_RULES`, sorted. A `type_id` is an index into the list of the same
+build. When the target is `wasm32` and the generated crate's feature
+`wasm-exports` is on, the module exports `ridl_alloc`, `ridl_free`,
+`ridl_catalog_hash` and `ridl_verify`, and no other function.
 `ridl_verify(type_id, ptr, len)` returns 0 when the bytes verify as the type at
 index `type_id`, 1 for a malformed buffer, 2 plus the index of the broken rule
-in `WASM_RULES`, and -1 for an unknown `type_id`. The generated `Cargo.toml`
-then declares `crate-type = ["cdylib", "rlib"]` and a `[profile.release]` with
-`opt-level = "z"`, `lto = true` and `panic = "abort"`. The option needs
-`encodings` to name `flatbuffers`, and the Rust backend refuses it otherwise. A
-package whose first segment is `wasm` refuses it too.
+in `WASM_RULES`, and -1 for an unknown `type_id`. A null `ptr` with a length,
+and a range past the end of memory, return 1. `ridl_alloc` returns 0 when the
+length is 0 or the allocation fails. The generated `Cargo.toml` declares the
+feature `wasm-exports = ["std"]` and no crate type, so a Rust consumer of the
+crate links no export. The module is built with:
+
+```sh
+CARGO_PROFILE_RELEASE_OPT_LEVEL=z CARGO_PROFILE_RELEASE_LTO=true \
+CARGO_PROFILE_RELEASE_PANIC=abort \
+cargo rustc --release --target wasm32-unknown-unknown --crate-type cdylib \
+  --features wasm-exports
+```
+
+The three variables are the recommended size settings; `cargo` reads them from
+the environment. The module writes the catalog hash of one unit: the root
+package's unit, or the one unit of the workspace's own packages when the
+manifest is a `[workspace]`. A build with no root package and other than one
+unit is refused. The option needs `encodings` to name `flatbuffers`, and the
+Rust backend refuses it otherwise. A package whose first segment is `wasm`
+refuses it too. A build with the option off removes a `__ridl_wasm.rs` that an
+earlier build wrote. Single-file mode has no manifest, so it has no `wasm`
+module.
 
 MANI-015 is an error when the `encodings` value is not an array of the known
 names or repeats a name, or when `wasm` is not a boolean, and MANI-016 is an error when the manifest of a
