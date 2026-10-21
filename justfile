@@ -2791,11 +2791,12 @@ ts-check:
     deno test --allow-read tests/
     deno publish --dry-run --allow-dirty
 
-# Build the npm package of packages/ridl-transport-ws into its npm/ directory,
-# list what `npm pack` would publish, and import the built package from Node.
-# This is the artifact the `npm-release` workflow publishes, so a build that
-# breaks it fails here and not at the tag. The build needs network access, for
-# dnt.
+# Build the npm package of packages/ridl-transport-ws into its npm/ directory
+# and check it as a consumer would receive it: the built manifest, the files
+# `npm pack` would publish, and an import by name from Node after installing the
+# packed tarball. This is the artifact the `npm-release` workflow publishes, so
+# a build that breaks it fails here and not at the tag. It needs network access,
+# for dnt and the install.
 ts-npm-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -2806,10 +2807,7 @@ ts-npm-check:
         fi
     done
     cd packages/ridl-transport-ws
-    deno run -A scripts/build_npm.ts
-    cd npm
-    npm pack --dry-run
-    node --input-type=module -e "const m = await import('./esm/mod.js'); if (typeof m.connect !== 'function') { throw new Error('connect is not exported'); }"
+    deno run -A scripts/verify_npm.ts
 
 # Build the loopback server example of `ridl-transport-ws` and run the Deno
 # end-to-end test of packages/ridl-transport-ws against it. The test starts the
@@ -2898,7 +2896,7 @@ ts-browser-e2e:
 # reachable from here, because a member that is not a dependency of `build` is
 # not covered by `gate-parity`'s CI-parity check.
 #
-# The ten members before `compile` do not compile the workspace (freeze-check
+# The eleven members before `compile` do not compile the workspace (freeze-check
 # compiles only xtask), so they run first: a wrong toolchain, an unwired CI job,
 # a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
 # TypeScript check all report before the workspace compiles rather than after a
@@ -2950,7 +2948,7 @@ lint-commits base="main":
     fi
 
 # Lint and static-check gate before pushing — skips `freeze-check`, `compile`,
-# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-e2e`, and
+# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-npm-check`, `ts-e2e`, and
 # `install-check`.
 # Wired as the pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs
 # the full `just build` gate on the PR; `just verify` runs that same gate

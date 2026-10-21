@@ -255,7 +255,7 @@ jobs:
       - run: just wasm-check
       - run: just compat-check
 
-  # The TypeScript package packages/ridl-transport-ws. `ts-check` and `ts-e2e`
+  # The TypeScript package packages/ridl-transport-ws. `ts-check`, `ts-npm-check` and `ts-e2e`
   # are members of `just build`; `ts-browser-e2e` is not, because a
   # contributor's build needs no browser, so `gate-parity` does not see its step
   # here and it is checked by reading. ubuntu-latest has Google Chrome on PATH.

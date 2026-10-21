@@ -47,3 +47,4 @@ evals/results/*/transcripts/
 
 # The npm package `just ts-npm-check` builds with dnt.
 /packages/ridl-transport-ws/npm/
+/packages/ridl-transport-ws/deno.lock

@@ -9,6 +9,11 @@ import { build, emptyDir } from "@deno/dnt";
 
 const denoJson = JSON.parse(await Deno.readTextFile("deno.json"));
 const version = (Deno.args[0] ?? denoJson.version).replace(/^v/, "");
+// A version that is not semver would build and fail only at `npm publish`.
+if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
+  console.error(`build_npm: "${version}" is not a semantic version`);
+  Deno.exit(1);
+}
 
 await emptyDir("./npm");
 
@@ -46,7 +51,13 @@ await build({
     const manifest = JSON.parse(Deno.readTextFileSync(path));
     manifest.types = "./esm/mod.d.ts";
     manifest.exports = {
-      ".": { types: "./esm/mod.d.ts", import: "./esm/mod.js" },
+      // `default` lets a CommonJS `require` reach the ESM entry on a Node
+      // that can load ES modules from `require`.
+      ".": {
+        types: "./esm/mod.d.ts",
+        import: "./esm/mod.js",
+        default: "./esm/mod.js",
+      },
     };
     Deno.writeTextFileSync(path, JSON.stringify(manifest, null, 2) + "\n");
   },

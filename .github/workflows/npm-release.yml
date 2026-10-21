@@ -3,10 +3,15 @@ name: npm-release
 # Publishes the npm packages of this repository on a `v<version>` tag, the same
 # tag that starts `crates-io-release`. The only package is
 # `@driftsys/ridl-transport-ws`, built from packages/ridl-transport-ws with dnt
-# (`just ts-npm-check` builds the same artifact on every pull request).
+# (`just ts-npm-check` builds and checks the same package on every pull request
+# that runs the typescript job).
 #
-# The job skips a version that is already on npm, so a re-run of a tag after a
-# partial failure does not fail on a duplicate. Publication uses the
+# Before it builds, the job confirms that the tag's commit is on main (as
+# `crates-io-release` does) and that the tag version equals the version in
+# deno.json, so the npm and JSR versions cannot differ. A prerelease version
+# publishes under the `next` dist-tag. The job skips a version that is already
+# on npm, so a re-run of a tag after a partial failure does not fail on a
+# duplicate. Publication uses the
 # organization secret NPM_TOKEN, with provenance from the job's OIDC token.
 
 on:
@@ -28,6 +33,21 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: confirm the tag's commit is on main and matches deno.json
+        run: |
+          set -euo pipefail
+          release_commit=$(git rev-parse "$GITHUB_REF^{commit}")
+          test "$release_commit" = "$GITHUB_SHA"
+          git fetch origin main --quiet
+          git merge-base --is-ancestor "$release_commit" origin/main
+          tag_version="${GITHUB_REF_NAME#v}"
+          manifest_version="$(node -p "require('./packages/ridl-transport-ws/deno.json').version")"
+          if [ "$tag_version" != "$manifest_version" ]; then
+            echo "tag version ${tag_version} differs from deno.json version ${manifest_version}" >&2
+            exit 1
+          fi
       - name: install just
         run: |
           set -o pipefail
@@ -64,4 +84,6 @@ jobs:
             echo "${name}@${version} is already on npm; skipping."
             exit 0
           fi
-          npm publish --access public --provenance
+          dist_tag=latest
+          case "$version" in *-*) dist_tag=next ;; esac
+          npm publish --access public --provenance --tag "$dist_tag"
