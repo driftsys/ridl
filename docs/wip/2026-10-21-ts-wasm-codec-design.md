@@ -148,7 +148,12 @@ Each slice is one pull request, reviewed on its own.
    and a test that builds the cabin crate for wasm and runs `ridl_verify` in a
    wasm host. That test is the guard for the `wasm` module, because
    `just wasm-check` does not reach generated code. Done when the test fails if
-   the range check is removed.
+   the range check is removed. As built, the module is one per crate, not one
+   per package, because its exports are unmangled symbols:
+   `ridl_backend_rust::generate_wasm_module` renders it over every package of
+   the crate, and `ridlc` writes it to `__ridl_wasm.rs` and names it in
+   `lib.rs`. The per-package backend reads the `wasm` option only to refuse it
+   without `flatbuffers`.
 2. **Runtime package.** `packages/ridl-runtime/`, `loadCodec`,
    `CatalogMismatch`, a Deno test against the built cabin wasm, the dnt build
    and `ts-npm-check` style verification.
