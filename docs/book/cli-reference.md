@@ -874,8 +874,21 @@ write names an encoding only where it builds that runtime — over
 names the encoding in that port's `Encoded` implementation instead
 ([Writing a port](writing-a-port.md)).
 
+`[backend.rust] wasm = true` adds a module `wasm` to the generated crate,
+written to `__ridl_wasm.rs`. The module lists the payload types that have a
+FlatBuffers codec, sorted by qualified name, in `WASM_PAYLOAD_TYPES`, and the
+typl rule names, sorted, in `WASM_RULES`. For `target_arch = "wasm32"` only, it
+exports `ridl_alloc`, `ridl_free`, `ridl_catalog_hash` and `ridl_verify`.
+`ridl_verify(type_id, ptr, len)` returns 0 when the bytes verify as the type at
+index `type_id`, 1 for a malformed buffer, 2 plus the index of the broken rule
+in `WASM_RULES`, and -1 for an unknown `type_id`. The generated `Cargo.toml`
+then declares `crate-type = ["cdylib", "rlib"]` and a `[profile.release]` with
+`opt-level = "z"`, `lto = true` and `panic = "abort"`. The option needs
+`encodings` to name `flatbuffers`, and the Rust backend refuses it otherwise. A
+package whose first segment is `wasm` refuses it too.
+
 MANI-015 is an error when the `encodings` value is not an array of the known
-names or repeats a name, and MANI-016 is an error when the manifest of a
+names or repeats a name, or when `wasm` is not a boolean, and MANI-016 is an error when the manifest of a
 workspace member holds a `backend` key or `[backend.<name>]` table: only the workspace root,
 or a standalone package, sets it. Any other key under `[backend.<name>]` is
 MANI-005. The table is not the `backend.` attribute namespace of an rsdl
