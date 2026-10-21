@@ -1391,7 +1391,7 @@ diag_codes! {
         /// value and lists the known names. A `wasm` that is not a boolean is
         /// MANI-015 too, and its message names the value.
         MANI_015 = "MANI-015", Error,
-            "`[backend.<name>] encodings` is not an array of encoding names, names an unknown encoding, or names one twice, or `wasm` is not a boolean";
+            "a `[backend.<name>]` value has the wrong shape: `encodings` is not an array of known, distinct encoding names, or `wasm` is not a boolean";
 
         /// A workspace member's manifest holds a `backend` key or a
         /// `[backend.<name>]` table. Only the workspace root's manifest, or a
