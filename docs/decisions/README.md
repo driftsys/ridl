@@ -509,15 +509,18 @@ other entry below is Accepted.
   is declined: both stay doc tags. Amends ADR-0026 decisions 4, 6 and 9 in
   place.
 
-- **ADR-0030 — Transfer and bound limits.** _Proposed._ Ten decisions: one
+- **ADR-0030 — Transfer and bound limits.** _Proposed._ Eleven decisions: one
   transfer is at most 16,384 bytes with a header of up to 128 bytes, so the
-  payload ceiling is 16,256 bytes for every encoding and transport; a payload's
-  `MAX_SIZE` is capped at the ceiling, so a type with no finite bound now
-  generates; encode and verify refuse a larger value with `Capacity` and
-  `TooLarge`; the per-type `BUFFER` stays; a `string` bound above 4,032
-  characters or a `bytes` bound above 16,128 bytes draws the lint TYPL-116
-  `bound-above-transfer`; the `[0..256]` default stays; the WebSocket default
-  limit becomes 16,384 bytes; larger data is a stream (driftsys/ridl#996).
+  payload ceiling is 16,256 bytes for every encoding and transport; each backend
+  caps `MAX_SIZE` at the ceiling while the IR size states stay as computed, so a
+  type with no finite bound now generates; encode refuses a larger value with a
+  new `EncodeError::TooLarge`, which the face maps to the port's `TooLarge`, and
+  verify refuses it with `Malformed::TooLarge`; `BUFFER` stays; TYPL-116
+  `bound-above-transfer` warns on a `string` bound above 4,032 characters or a
+  `bytes` bound above 16,128 bytes, and RIDL-150 `payload-above-ceiling` on a
+  payload above the ceiling, both at `warn` under an amendment of ADR-0029
+  decision 2; the `[0..256]` default stays; the WebSocket default limit becomes
+  16,384 bytes; larger data is a stream (driftsys/ridl#996).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
