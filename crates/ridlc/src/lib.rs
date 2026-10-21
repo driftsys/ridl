@@ -2166,9 +2166,12 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
     // RIDL-150 lowers each package to the codegen model, so it runs only when
     // nothing so far is an error. The encodings are those of every
     // `[backend.<name>]` table; none named means FlatBuffers is checked.
+    // A workspace with no interface has nothing to report, so `ridl.std` is
+    // not checked for it either.
     if !diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error)
+        && checked.iter().any(|pkg| pkg.ir.shapes().next().is_some())
     {
         let mut encodings: Vec<String> = backends
             .values()

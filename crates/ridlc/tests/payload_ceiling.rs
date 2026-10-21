@@ -149,3 +149,89 @@ fn a_payload_holding_a_std_type_has_a_finite_bound() {
     let diagnostics = check(&source, "");
     assert!(ridl_150(&diagnostics).is_empty(), "{diagnostics:?}");
 }
+
+const BIG: &str =
+    "type Text: string [0..4032]\nstruct Payload { a: Text, b: Text }\ntype Flag: boolean\n";
+
+fn with_interface(body: &str) -> String {
+    format!("package demo\n{BIG}interface I {{\n  {body}\n}}\n")
+}
+
+fn assert_one(source: &str, role: &str, member: &str) {
+    let diagnostics = check(source, "");
+    let found = ridl_150(&diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert!(
+        found[0].message.starts_with(&format!("the {role} of ")),
+        "{}",
+        found[0].message
+    );
+    let text = &source
+        [usize::from(found[0].primary.range.start())..usize::from(found[0].primary.range.end())];
+    assert_eq!(text, member);
+}
+
+#[test]
+fn a_command_request_above_the_ceiling_is_reported() {
+    assert_one(
+        &with_interface("command put(data: Payload) @[..1s]"),
+        "request",
+        "put",
+    );
+}
+
+#[test]
+fn a_query_request_above_the_ceiling_is_reported() {
+    assert_one(
+        &with_interface("query get(data: Payload): Flag @[..1s]"),
+        "request",
+        "get",
+    );
+}
+
+#[test]
+fn a_query_reply_above_the_ceiling_is_reported() {
+    assert_one(
+        &with_interface("query get(): Payload @[..1s]"),
+        "reply",
+        "get",
+    );
+}
+
+#[test]
+fn nothing_is_reported_while_the_package_has_an_error() {
+    let source = format!(
+        "{}struct Broken {{ x: Missing }}\n",
+        carried("type Text: string [0..4032]\nstruct Payload { a: Text, b: Text }\n")
+    );
+    let diagnostics = check(&source, "");
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Severity::Error),
+        "{diagnostics:?}"
+    );
+    assert!(ridl_150(&diagnostics).is_empty(), "{diagnostics:?}");
+}
+
+/// Two backend tables enable different encodings, and the payload is above the
+/// ceiling only in FlatBuffers, whose bound adds table overhead to the 16,240
+/// bytes: proto3 alone reports nothing, and the union of both tables reports.
+#[test]
+fn encodings_of_every_backend_table_are_checked() {
+    let source = carried("type Payload: bytes [0..16240]\n");
+    let proto3_only = check(&source, "[backend.a]\nencodings = [\"proto3\"]\n");
+    assert!(ridl_150(&proto3_only).is_empty(), "{proto3_only:?}");
+    let both = check(
+        &source,
+        "[backend.a]\nencodings = [\"proto3\"]\n[backend.b]\nencodings = [\"flatbuffers\"]\n",
+    );
+    let found = ridl_150(&both);
+    assert_eq!(found.len(), 1, "{both:?}");
+    assert!(
+        found[0].message.contains("flatbuffers"),
+        "{}",
+        found[0].message
+    );
+    assert!(!found[0].message.contains("proto3"), "{}", found[0].message);
+}
