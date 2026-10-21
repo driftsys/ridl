@@ -1436,7 +1436,7 @@ fn run_build_inner<E: From<std::io::Error>>(
         // names, so this is the check that keeps a build from truncating
         // sources a person wrote.
         if writes_crate_files {
-            let refusals = crate_file_refusals(out_dir)?;
+            let refusals = crate_file_refusals(out_dir, wasm_backends.contains("rust"))?;
             if !refusals.is_empty() {
                 diagnostics.extend(refusals);
                 return Ok(CliRun {
@@ -1700,12 +1700,18 @@ fn write_crate_files(
 /// Both destinations are checked even once the first has refused, so a build
 /// into a hand-written crate reports every file it declined rather than one at
 /// a time.
-fn crate_file_refusals(out_dir: &Path) -> std::io::Result<Vec<Diagnostic>> {
+fn crate_file_refusals(out_dir: &Path, wasm: bool) -> std::io::Result<Vec<Diagnostic>> {
     let mut refusals = Vec::new();
-    for (path, comment, old_marker) in [
+    let mut files = vec![
         (out_dir.join("lib.rs"), "//", OLD_LIB_RS_MARKER),
         (out_dir.join("Cargo.toml"), "#", OLD_CARGO_TOML_MARKER),
-    ] {
+    ];
+    // The `wasm` module's file, when this build writes it. No earlier
+    // release wrote it, so the old crate-root marker stands in for one.
+    if wasm {
+        files.push((out_dir.join(WASM_FILE), "//", OLD_LIB_RS_MARKER));
+    }
+    for (path, comment, old_marker) in files {
         if let Some(diagnostic) = refuse_overwrite(&path, comment, old_marker)? {
             refusals.push(diagnostic);
         }

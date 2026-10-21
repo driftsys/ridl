@@ -113,8 +113,10 @@ fn cargo(what: &str, dir: &Path, target_dir: &Path, args: &[&str]) {
 const NATIVE_PROGRAM: &str = r#"
 use ridl_rt::contract::Interface;
 use ridl_rt::encoding::FlatBuffers;
-use ridl_rt::payload::Payload;
-use veh_cabin::veh::cabin::{Cabin, Temperature};
+use ridl_rt::payload::{Payload, Rule};
+use veh_cabin::veh::cabin::{
+    Average, Cabin, Diagnostic, Health, Level, Subsystems, Temperature, Warning, Window,
+};
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
@@ -127,7 +129,46 @@ fn encode(value: &Temperature) -> String {
     hex(encoded.bytes)
 }
 
+/// The FlatBuffers bytes of one value of `$ty`, as hex.
+macro_rules! bytes_of {
+    ($ty:ty, $value:expr) => {{
+        let mut buf = <$ty as Payload<FlatBuffers>>::BUFFER;
+        hex(<$ty as Payload<FlatBuffers>>::encode(&$value, &mut buf)
+            .expect("the value encodes")
+            .bytes)
+    }};
+}
+
 fn main() {
+    // One valid value of every payload type of the package.
+    println!("payload veh.cabin.Average {}", bytes_of!(Average, Average::new(7).unwrap()));
+    println!(
+        "payload veh.cabin.Diagnostic {}",
+        bytes_of!(
+            Diagnostic,
+            Diagnostic { covers: Subsystems::HORN, health: Health::Ok, r#loop: Level::new(3).unwrap() }
+        )
+    );
+    println!("payload veh.cabin.Health {}", bytes_of!(Health, Health::Warn));
+    println!("payload veh.cabin.Level {}", bytes_of!(Level, Level::new(42).unwrap()));
+    println!("payload veh.cabin.Subsystems {}", bytes_of!(Subsystems, Subsystems::CLIMATE));
+    println!("payload veh.cabin.Temperature {}", bytes_of!(Temperature, Temperature::new(-3).unwrap()));
+    println!(
+        "payload veh.cabin.Warning {}",
+        bytes_of!(Warning, Warning { code: Level::new(5).unwrap(), health: Health::Fail })
+    );
+    println!("payload veh.cabin.Window {}", bytes_of!(Window, Window::new(250).unwrap()));
+    // The code each rule maps to, paired here with the variant by hand.
+    for (text, rule) in [
+        ("length", Rule::Length),
+        ("pattern", Rule::Pattern),
+        ("range", Rule::Range),
+        ("step", Rule::Step),
+        ("unique", Rule::Unique),
+        ("variant", Rule::Variant),
+    ] {
+        println!("rulecode {text} {}", veh_cabin::wasm::rule_code(rule));
+    }
     println!("valid {}", encode(&Temperature::new(21).expect("21 is in range")));
     println!("range {}", encode(&Temperature::new_unchecked(100)));
     println!("catalog {}", hex(&<Cabin as Interface>::CATALOG.hash.0));
@@ -171,7 +212,40 @@ const before = Buffer.from(new Uint8Array(memory.buffer, 0, 32)).toString("hex")
 ridl_catalog_hash(0);
 const after = Buffer.from(new Uint8Array(memory.buffer, 0, 32)).toString("hex");
 
-console.log(JSON.stringify({ results, hash, nullHashWrites: before !== after }));
+// The export table: exactly the memory and the four functions.
+const exports = WebAssembly.Module.exports(new WebAssembly.Module(readFileSync(wasmPath)))
+  .map((entry) => entry.name)
+  .sort();
+
+// Every buffer is aligned to 8, a length of 0 allocates nothing, and freeing
+// a null pointer does not trap.
+const aligned = [1, 3, 5, 7].every((len) => {
+  const ptr = ridl_alloc(len);
+  const ok = ptr !== 0 && ptr % 8 === 0;
+  ridl_free(ptr, len);
+  return ok;
+});
+const zeroAlloc = ridl_alloc(0);
+ridl_free(0, 0);
+ridl_free(0, 5);
+
+// A freed buffer is reused: memory does not grow over many cycles.
+const grownBefore = memory.buffer.byteLength;
+for (let i = 0; i < 5000; i++) {
+  const ptr = ridl_alloc(4096);
+  ridl_free(ptr, 4096);
+}
+const grows = memory.buffer.byteLength !== grownBefore;
+
+console.log(JSON.stringify({
+  results,
+  hash,
+  nullHashWrites: before !== after,
+  exports,
+  aligned,
+  zeroAlloc,
+  grows,
+}));
 "#;
 
 #[test]
@@ -279,6 +353,41 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
         .position(|rule| rule == "range")
         .expect("range is a rule") as i64;
     assert_ne!(valid, out_of_range, "the two values encode differently");
+    let payloads: Vec<(String, String)> = stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("payload "))
+        .map(|rest| {
+            let (name, hex) = rest.split_once(' ').expect("a name and bytes");
+            (name.to_string(), hex.to_string())
+        })
+        .collect();
+    assert_eq!(
+        types,
+        payloads
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>(),
+        "WASM_PAYLOAD_TYPES is every payload type of the package, sorted"
+    );
+    // Each rule maps to 2 plus its index in WASM_RULES.
+    for line in stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("rulecode "))
+    {
+        let (text, code) = line.split_once(' ').expect("a rule and a code");
+        let index = rules
+            .iter()
+            .position(|rule| rule == text)
+            .expect("a listed rule");
+        assert_eq!(code, (2 + index).to_string(), "the code of rule `{text}`");
+    }
+    assert_eq!(
+        stdout
+            .lines()
+            .filter(|l| l.starts_with("rulecode "))
+            .count(),
+        6
+    );
     assert_eq!(catalog.len(), 64);
 
     // 3 — the same crate as a wasm32 cdylib, built the way the generated
@@ -336,13 +445,29 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
         format!("{temperature}:{out_of_range}"),
         format!("{temperature}:{truncated}"),
         format!("{}:{valid}", types.len()),
-        // A range past the end of the 32-bit address space.
-        format!("raw:{temperature}:{}:{}", 0xffff_fff0_u32, 0x40),
+        // A range past the end of the 32-bit address space, with a length
+        // below the type's largest buffer, so that only the guard stops it.
+        format!("raw:{temperature}:{}:{}", 0xffff_fff8_u32, 0x10),
         // A null pointer with a length.
         format!("raw:{temperature}:0:5"),
         // A length above `isize::MAX` on wasm32.
         format!("raw:{temperature}:8:{}", 0xffff_ffff_u32),
+        // A length of 0.
+        format!("raw:{temperature}:8:0"),
+        // A `type_id` of `u32::MAX`.
+        format!("{}:{valid}", u32::MAX),
+        // The valid bytes with four more bytes after them.
+        format!("{temperature}:{valid}00000000"),
+        // The valid bytes less their last byte, which is alignment padding
+        // after the 1-byte value, so the buffer still verifies.
+        format!("{temperature}:{}", &valid[..valid.len() - 2]),
     ];
+    // Every payload type, with its valid bytes and with its first half only.
+    let mut cases = cases.to_vec();
+    for (index, (_, hex)) in payloads.iter().enumerate() {
+        cases.push(format!("{index}:{hex}"));
+        cases.push(format!("{index}:{}", &hex[..hex.len() / 4 * 2]));
+    }
     let node = std::process::Command::new("node")
         .arg(&host)
         .arg(&module)
@@ -363,11 +488,32 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
         .map(|code| code.as_i64().expect("an integer code"))
         .collect();
     assert_eq!(
-        results,
-        [0, range_code, 1, -1, 1, 1, 1],
+        results[..11],
+        [0, range_code, 1, -1, 1, 1, 1, 1, -1, 0, 0],
         "valid, out of range, truncated, unknown type_id, overflowing range, null \
-         pointer, huge length; cases: {cases:?}"
+         pointer, huge length, length 0, type_id u32::MAX, trailing bytes, one byte \
+         less; cases: \
+         {cases:?}"
     );
+    // Each type: its valid bytes verify, and its first half is malformed.
+    assert_eq!(
+        results[11..],
+        payloads.iter().flat_map(|_| [0, 1]).collect::<Vec<i64>>(),
+        "cases: {cases:?}"
+    );
+    assert_eq!(
+        report["exports"],
+        serde_json::json!([
+            "memory",
+            "ridl_alloc",
+            "ridl_catalog_hash",
+            "ridl_free",
+            "ridl_verify"
+        ])
+    );
+    assert_eq!(report["aligned"], serde_json::Value::Bool(true));
+    assert_eq!(report["zeroAlloc"], serde_json::json!(0));
+    assert_eq!(report["grows"], serde_json::Value::Bool(false));
     assert_eq!(
         report["hash"].as_str(),
         Some(catalog.as_str()),
@@ -583,4 +729,142 @@ fn a_workspace_of_two_units_refuses_the_option() {
         "{messages:?}"
     );
     assert!(!out.join("lib.rs").exists());
+}
+
+/// Builds the cabin copy in `src` into `out` and fails on an error.
+fn build_clean(src: &Path, out: &Path) {
+    let run = ridlc::run_build(src, out, &[Emit::Rust], false.into()).expect("the build runs");
+    assert!(!run.has_error(), "{:?}", run.diagnostics);
+}
+
+/// With the option off, nothing of the module is written; with it on, the
+/// manifest declares the feature as a TOML value, not only as a line.
+#[test]
+fn the_option_adds_the_feature_the_module_and_nothing_else() {
+    let work = tempfile::tempdir().expect("a temp dir is created");
+    let src = work.path().join("src");
+    std::fs::create_dir_all(&src).expect("the directory is created");
+    cabin_with_wasm(&src);
+    let on = work.path().join("on");
+    build_clean(&src, &on);
+    std::fs::copy(example_dir().join("ridl.toml"), src.join("ridl.toml"))
+        .expect("the manifest is restored");
+    let off = work.path().join("off");
+    build_clean(&src, &off);
+
+    let cargo_off = std::fs::read_to_string(off.join("Cargo.toml")).expect("Cargo.toml");
+    assert!(!cargo_off.contains("wasm"), "{cargo_off}");
+    let lib_off = std::fs::read_to_string(off.join("lib.rs")).expect("lib.rs");
+    assert!(!lib_off.contains("wasm"), "{lib_off}");
+    assert!(!off.join("__ridl_wasm.rs").exists());
+
+    let manifest: toml::Table = std::fs::read_to_string(on.join("Cargo.toml"))
+        .expect("Cargo.toml")
+        .parse()
+        .expect("the generated manifest is TOML");
+    assert_eq!(
+        manifest["features"]["wasm-exports"],
+        toml::Value::Array(vec![toml::Value::String("std".to_string())])
+    );
+    assert!(manifest.get("profile").is_none());
+    assert!(manifest["lib"].get("crate-type").is_none());
+    let mut on_features = manifest["features"].as_table().expect("a table").clone();
+    on_features.remove("wasm-exports");
+    let off_manifest: toml::Table = cargo_off.parse().expect("TOML");
+    assert_eq!(
+        &on_features,
+        off_manifest["features"].as_table().expect("a table"),
+        "the option adds one feature and changes no other"
+    );
+
+    // The module carries the generated marker, as every generated file does.
+    let module = std::fs::read_to_string(on.join("__ridl_wasm.rs")).expect("the module");
+    assert!(
+        module.starts_with("// @generated by ridl"),
+        "{}",
+        &module[..80.min(module.len())]
+    );
+}
+
+/// A hand-written `__ridl_wasm.rs` is not overwritten: the build is refused,
+/// as it is for a hand-written `lib.rs`.
+#[test]
+fn a_hand_written_module_file_is_refused() {
+    let work = tempfile::tempdir().expect("a temp dir is created");
+    let src = work.path().join("src");
+    let out = work.path().join("out");
+    std::fs::create_dir_all(&src).expect("the directory is created");
+    std::fs::create_dir_all(&out).expect("the directory is created");
+    cabin_with_wasm(&src);
+    std::fs::write(out.join("__ridl_wasm.rs"), "// mine\n").expect("the file is written");
+    let run = ridlc::run_build(&src, &out, &[Emit::Rust], false.into()).expect("the build runs");
+    assert!(run.has_error());
+    assert!(
+        run.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains("__ridl_wasm.rs")),
+        "{:?}",
+        run.diagnostics
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.join("__ridl_wasm.rs")).expect("the file"),
+        "// mine\n"
+    );
+    assert!(!out.join("lib.rs").exists());
+}
+
+/// Builds a one-package manifest named `name` with the option `wasm`, and
+/// returns the messages of its error diagnostics.
+fn build_named(name: &str, wasm: bool) -> Vec<String> {
+    let work = tempfile::tempdir().expect("a temp dir is created");
+    let src = work.path().join("src");
+    std::fs::create_dir_all(&src).expect("the directory is created");
+    let manifest_name = name.split('.').next().expect("a segment");
+    std::fs::write(
+        src.join("ridl.toml"),
+        format!(
+            "[package]\nname = \"{manifest_name}\"\nversion = \"1.0.0\"\n\n[backend.rust]\n\
+             encodings = [\"flatbuffers\"]\nwasm = {wasm}\n"
+        ),
+    )
+    .expect("the manifest is written");
+    // A package below the manifest's own lives in the directory its later
+    // segments name.
+    let dir = name
+        .split('.')
+        .skip(1)
+        .fold(src.clone(), |dir, segment| dir.join(segment));
+    std::fs::create_dir_all(&dir).expect("the package directory is created");
+    std::fs::write(
+        dir.join("p.ridl"),
+        format!("package {name}\n\n/// A level.\ntype Level: integer [0..100]\n"),
+    )
+    .expect("the source is written");
+    let run = ridlc::run_build(&src, &work.path().join("out"), &[Emit::Rust], false.into())
+        .expect("the build runs");
+    run.diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == ridl_core::Severity::Error)
+        .map(|diagnostic| diagnostic.message.clone())
+        .collect()
+}
+
+/// Only a first segment `wasm` claims the module name.
+#[test]
+fn only_a_first_segment_wasm_refuses_the_option() {
+    for name in ["wasm", "wasm.sub"] {
+        let errors = build_named(name, true);
+        assert!(
+            errors.len() == 1 && errors[0].contains("already uses that module name"),
+            "{name}: {errors:?}"
+        );
+        assert_eq!(
+            build_named(name, false),
+            Vec::<String>::new(),
+            "{name} with the option off"
+        );
+    }
+    for name in ["wasmx", "veh.wasm"] {
+        assert_eq!(build_named(name, true), Vec::<String>::new(), "{name}");
+    }
 }

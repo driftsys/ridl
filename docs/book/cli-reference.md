@@ -904,7 +904,8 @@ manifest is a `[workspace]`. A build with no root package and other than one
 unit is refused. The option needs `encodings` to name `flatbuffers`, and the
 Rust backend refuses it otherwise. A package whose first segment is `wasm`
 refuses it too. A build with the option off removes a `__ridl_wasm.rs` that an
-earlier build wrote. Single-file mode has no manifest, so it has no `wasm`
+earlier build wrote, and a build with it on refuses to overwrite a
+`__ridl_wasm.rs` that does not start with the generated marker. Single-file mode has no manifest, so it has no `wasm`
 module.
 
 MANI-015 is an error when the `encodings` value is not an array of the known
