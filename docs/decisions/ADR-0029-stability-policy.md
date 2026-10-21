@@ -110,9 +110,9 @@ against `v0.10.0`, so the later baseline does not accept a break of an item that
 that a new lint starts at `allow` or `info` has two exceptions,
 [ADR-0030](ADR-0030-transfer-and-bound-limits.md) TYPL-116
 `bound-above-transfer` and RIDL-150 `payload-above-ceiling`, which start at
-`warn`. A payload above the payload ceiling is refused at run time, and a lower
-level would hide that failure until then. A `warn` diagnostic does not fail
-`ridl check`, so no source that compiled before stops compiling.
+`warn`. A payload above the payload ceiling will be refused at run time, and a
+lower level would hide that failure until then. A `warn` diagnostic does not
+fail `ridl check`, so no source that compiled before stops compiling.
 
 ## Context
 

@@ -20,6 +20,7 @@ pub mod diag;
 #[cfg(feature = "fetch")]
 pub mod fetch;
 pub mod interface_lock;
+pub mod limits;
 pub mod lint;
 #[cfg(feature = "fs")]
 pub mod lock;

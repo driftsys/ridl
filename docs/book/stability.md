@@ -62,7 +62,7 @@ Rust 1.83.
   fail a build that passed before. TYPL-116 (`bound-above-transfer`) and RIDL-150
   (`payload-above-ceiling`) are the two exceptions: they start at `warn`, which
   does not fail `ridl check` either, because a payload above the payload ceiling
-  is refused at run time.
+  is a defect, even though the codecs do not yet enforce the ceiling.
 - **Message text.** The text of a diagnostic message, of a doc comment and of
   generated docs.
 - **Size and budget values.** For example the size of a header or the sum that a

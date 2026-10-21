@@ -49,11 +49,13 @@ pub fn check_design_lints(
 /// which a package's references resolve against besides `checked`. Run it only
 /// over packages without errors, because it lowers each package to the
 /// codegen model.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn check_payload_ceiling(
     db: &RidlDatabase,
     packages: &[Package],
     checked: &[CheckedPackage],
     resolutions: &[Resolution],
+    blocked: &[bool],
     std_ir: &ridl_ir::v2::Package,
     encodings: &[String],
     sources: &mut SourceMap,
@@ -61,7 +63,10 @@ pub(crate) fn check_payload_ceiling(
     let sites = SiteIndex::new(db, packages, resolutions, sources);
     let subject = packages
         .iter()
-        .map(|package| !matches!(package.origin(db), PackageOrigin::Remote { .. }))
+        .zip(blocked)
+        .map(|(package, blocked)| {
+            !blocked && !matches!(package.origin(db), PackageOrigin::Remote { .. })
+        })
         .collect();
     ceiling::check(
         &Ctx {

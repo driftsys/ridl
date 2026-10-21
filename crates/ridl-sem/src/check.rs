@@ -32,6 +32,7 @@ use std::sync::{LazyLock, Mutex, PoisonError};
 use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span};
 use ridl_core::interface_lock::{self, InterfaceLock, LockEntry, LockKey};
+use ridl_core::limits::{ADVISED_BYTES_MAX, ADVISED_STRING_MAX_CHARS, PAYLOAD_CEILING};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_ir::name::{camel_case, pascal_case, snake_case};
 use ridl_ir::v2;
@@ -55,16 +56,6 @@ use crate::scalar::{
 };
 use crate::timing;
 use crate::ucum::parse_ucum;
-
-/// The largest `string` bound, in characters, that TYPL-116 accepts. A string
-/// of this many characters is at most 16,128 bytes of UTF-8, which fits the
-/// 16,256-byte payload ceiling with room for the encoding overhead
-/// (ADR-0030 decision 6).
-const ADVISED_STRING_MAX_CHARS: u64 = 4_032;
-
-/// The largest `bytes` bound, in bytes, that TYPL-116 accepts: the encoded size
-/// of a string at [`ADVISED_STRING_MAX_CHARS`] (ADR-0030 decision 6).
-const ADVISED_BYTES_MAX: u64 = 16_128;
 
 /// A checked package: its lowered IR and the checker's own diagnostics.
 ///
@@ -2147,8 +2138,8 @@ impl Checker<'_> {
                         bound.syntax().text_range(),
                         format!(
                             "the `{noun}` bound {len_max} is above the advised limit of {limit} \
-                             {unit}; a payload is capped at 16256 bytes and a larger value is \
-                             refused at run time"
+                             {unit}; the payload ceiling is {PAYLOAD_CEILING} bytes, which the \
+                             codecs do not yet enforce (driftsys/ridl#996)"
                         ),
                     );
                 }
@@ -6732,7 +6723,12 @@ mod tests {
         let diagnostic = &checked.diagnostics[0];
         assert_eq!(diagnostic.severity, Severity::Warning);
         assert!(
-            diagnostic.message.contains("16256"),
+            diagnostic.message.contains("16256") && diagnostic.message.contains("#996"),
+            "{}",
+            diagnostic.message
+        );
+        assert!(
+            diagnostic.message.contains("4032 characters"),
             "{}",
             diagnostic.message
         );
@@ -6748,9 +6744,19 @@ mod tests {
     fn typl_116_bytes_bound_boundary() {
         let checked = check_source("app", "package app\ntype Blob : bytes [0..16128]\n");
         assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
-        let checked = check_source("app", "package app\ntype Blob : bytes [0..16129]\n");
+        let text = "package app\ntype Blob : bytes [0..16129]\n";
+        let checked = check_source("app", text);
         assert_eq!(codes(&checked), vec!["TYPL-116"]);
-        assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+        let diagnostic = &checked.diagnostics[0];
+        assert_eq!(diagnostic.severity, Severity::Warning);
+        assert!(
+            diagnostic.message.contains("16128 bytes"),
+            "{}",
+            diagnostic.message
+        );
+        let start = usize::from(diagnostic.primary.range.start());
+        let end = usize::from(diagnostic.primary.range.end());
+        assert_eq!(&text[start..end], "0..16129");
     }
 
     /// A fixed length `[N]` and an inline field type are bounds too, and a

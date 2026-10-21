@@ -398,8 +398,8 @@ diag_codes! {
 
         /// `string` bound above 4,032 characters or `bytes` bound above 16,128
         /// bytes (typl §4.4–§4.5, §16.2; ADR-0030 decision 7). Warning. The
-        /// payload is capped at the payload ceiling and refused above it at
-        /// run time.
+        /// payload ceiling is 16,256 bytes; the codecs do not yet enforce it
+        /// (driftsys/ridl#996).
         TYPL_116 = "TYPL-116", Warning,
             "`string`/`bytes` bound above the advised transfer limit", lint = "bound-above-transfer";
 

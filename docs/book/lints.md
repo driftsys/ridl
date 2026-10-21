@@ -172,15 +172,23 @@ workspace has no such warning.
 characters or a `bytes` bound above 16,128 bytes, on the bound.
 `payload-above-ceiling` (RIDL-150) reports a payload whose largest encoded size,
 in an encoding the package enables, is above 16,256 bytes or has no finite
-bound. It reads the encodings from the `[backend.<name>] encodings` tables of
-the manifest and checks FlatBuffers when none is named. It reports on the
+bound. It reads the encodings from every `[backend.<name>]` table of the
+workspace manifest, as one set, and checks FlatBuffers when that set is empty,
+which is the case for no table and for tables whose `encodings` lists are all
+empty. It reports on the
 interaction that carries the payload, so a type that no interaction carries is
 not reported. A `fixed` is provisioned and never in flight, so it is not
-checked. Both messages say the same thing: a payload is capped at 16,256 bytes,
-and a larger value is refused at run time. Both default to `warn`, because a
-level below it would hide that failure until run time, and a package can set
-either to `deny`. The limits are stated in
+checked. A `query` whose reply is a fallible `T | E` is checked through both
+types, and the larger problem is reported. Both messages say that the payload
+ceiling is 16,256 bytes and that the codecs do not yet enforce it
+(driftsys/ridl#996). Both default to `warn`, and a package can set either to
+`deny`. The limits are stated in
 [ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md).
+
+`payload-above-ceiling` is raised by `ridl check` and `ridl build`. The language
+server does not run it, so it does not appear in the editor. It skips a package
+that has an error, or that imports a package that has one, and still reports on
+the other packages of the workspace.
 
 Setting `ordinal-changed` to `allow` makes `ridl check --baseline` report
 nothing for ordinal changes, so the baseline desk check no longer warns about
