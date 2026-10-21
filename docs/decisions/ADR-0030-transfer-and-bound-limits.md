@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — 2026-10-21. Scope: the largest payload any runtime encodes, verifies
+Accepted — 2026-10-21. Scope: the largest payload any runtime encodes, verifies
 or carries, the largest `string` and `bytes` bound an author is advised to
 declare, and how both codecs, the generated interaction face and the Rust
 WebSocket transport apply them. It binds the FlatBuffers backend, the proto3
@@ -12,6 +12,9 @@ message size today (`docs/design/ridl-transport-ws-ts.md`) and does not change
 here; with the new Rust default, a TypeScript peer that sends a message above
 16,384 bytes has its session closed with 1009, as the frame specification §11.1
 says for any message above the limit.
+
+The two lints (decisions 6 to 9) land first. The codec cap, `PAYLOAD_CEILING`,
+`EncodeError::TooLarge` and the WebSocket default follow in later changes.
 
 Written from driftsys/ridl#996 and the owner's decisions of 2026-10-21, which
 replace the payload ceiling of 4 MiB + 64 KiB that the owner set on 2026-10-20.

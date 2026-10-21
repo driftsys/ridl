@@ -2163,6 +2163,30 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         &resolutions,
         &mut sources,
     ));
+    // RIDL-150 lowers each package to the codegen model, so it runs only when
+    // nothing so far is an error. The encodings are those of every
+    // `[backend.<name>]` table; none named means FlatBuffers is checked.
+    if !diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        let mut encodings: Vec<String> = backends
+            .values()
+            .flat_map(|table| table.encodings.iter().map(|(name, _)| name.clone()))
+            .collect();
+        encodings.sort();
+        encodings.dedup();
+        let std_ir = check_package(db, workspace, std, std).ir;
+        diagnostics.extend(design_lints::check_payload_ceiling(
+            db,
+            &packages,
+            &checked,
+            &resolutions,
+            &std_ir,
+            &encodings,
+            &mut sources,
+        ));
+    }
     drop_remote_non_errors(&mut diagnostics, &sources, &remote_units);
 
     Compiled {

@@ -59,7 +59,10 @@ Rust 1.83.
   required one to an existing subcommand or tool, and does not make an optional
   one required. A new subcommand or tool may have required ones.
 - **New lints.** A new lint starts at the `allow` or `info` level, so it does not
-  fail a build that passed before.
+  fail a build that passed before. TYPL-116 (`bound-above-transfer`) and RIDL-150
+  (`payload-above-ceiling`) are the two exceptions: they start at `warn`, which
+  does not fail `ridl check` either, because a payload above the payload ceiling
+  is refused at run time.
 - **Message text.** The text of a diagnostic message, of a doc comment and of
   generated docs.
 - **Size and budget values.** For example the size of a header or the sum that a

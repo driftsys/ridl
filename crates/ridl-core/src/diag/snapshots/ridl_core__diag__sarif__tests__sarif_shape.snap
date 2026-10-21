@@ -334,6 +334,16 @@ expression: log
               }
             },
             {
+              "id": "TYPL-116",
+              "name": "bound-above-transfer",
+              "shortDescription": {
+                "text": "`string`/`bytes` bound above the advised transfer limit"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "TYPL-201",
               "shortDescription": {
                 "text": "array without explicit bounds"
@@ -804,6 +814,16 @@ expression: log
               },
               "defaultConfiguration": {
                 "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-150",
+              "name": "payload-above-ceiling",
+              "shortDescription": {
+                "text": "payload above the payload ceiling or with no finite bound"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
               }
             },
             {
@@ -1655,7 +1675,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 68,
+          "ruleIndex": 69,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1720,7 +1740,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 167,
+          "ruleIndex": 169,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

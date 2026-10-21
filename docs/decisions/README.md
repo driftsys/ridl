@@ -509,7 +509,7 @@ other entry below is Accepted.
   is declined: both stay doc tags. Amends ADR-0026 decisions 4, 6 and 9 in
   place.
 
-- **ADR-0030 — Transfer and bound limits.** _Proposed._ Eleven decisions: one
+- **ADR-0030 — Transfer and bound limits.** _Accepted._ Eleven decisions: one
   transfer is at most 16,384 bytes with a header of up to 128 bytes, so the
   payload ceiling is 16,256 bytes for every encoding and transport; each backend
   caps `MAX_SIZE` at the ceiling while the IR size states stay as computed, so a

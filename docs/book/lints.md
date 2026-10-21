@@ -129,6 +129,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unbounded-float` | TYPL-102 | warn | `float` without both a range and a `step` |
 | `unbounded-length` | TYPL-103 | warn | `string`/`bytes` without explicit bounds |
 | `no-init-value` | TYPL-115 | info | type has no derivable init value and no declared `= value` |
+| `bound-above-transfer` | TYPL-116 | warn | `string`/`bytes` bound above the advised transfer limit |
 | `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
 | `inconsistent-unit` | TYPL-222 | info | one field name used with different units |
 | `duplicate-shape` | TYPL-224 | info | duplicate declaration shape |
@@ -143,6 +144,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `missing-timing` | RIDL-100 | warn | `signal` or `event` without a timing annotation |
 | `degenerate-timing-range` | RIDL-108 | warn | degenerate timing range `@[X..X]` |
 | `missing-response-bound` | RIDL-112 | warn | `command` or `query` takes the default response bound |
+| `payload-above-ceiling` | RIDL-150 | warn | payload above the payload ceiling or with no finite bound |
 | `error-typed-parameter` | RIDL-304 | warn | `error`-typed or result-union parameter on a `command` or `query` |
 | `ensure-without-result` | RIDL-305 | warn | `ensure` clause that never references `result` |
 | `contract-error-name-in-enum` | RIDL-307 | warn | contract-error category name declared in an `error` enum |
@@ -165,6 +167,20 @@ MANI-010 is itself a lint, so the table can set its level.
 
 `vendor-source-not-loaded` (MANI-018) is raised in standalone mode only; a
 workspace has no such warning.
+
+`bound-above-transfer` (TYPL-116) reports a `string` bound above 4,032
+characters or a `bytes` bound above 16,128 bytes, on the bound.
+`payload-above-ceiling` (RIDL-150) reports a payload whose largest encoded size,
+in an encoding the package enables, is above 16,256 bytes or has no finite
+bound. It reads the encodings from the `[backend.<name>] encodings` tables of
+the manifest and checks FlatBuffers when none is named. It reports on the
+interaction that carries the payload, so a type that no interaction carries is
+not reported. A `fixed` is provisioned and never in flight, so it is not
+checked. Both messages say the same thing: a payload is capped at 16,256 bytes,
+and a larger value is refused at run time. Both default to `warn`, because a
+level below it would hide that failure until run time, and a package can set
+either to `deny`. The limits are stated in
+[ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md).
 
 Setting `ordinal-changed` to `allow` makes `ridl check --baseline` report
 nothing for ordinal changes, so the baseline desk check no longer warns about

@@ -5,6 +5,7 @@ use ridl_core::diag::{Diagnostic, SourceMap};
 use ridl_core::package::{Package, PackageOrigin};
 use ridl_sem::{CheckedPackage, Resolution};
 
+mod ceiling;
 mod cohesion;
 mod shapes;
 mod sites;
@@ -40,6 +41,37 @@ pub fn check_design_lints(
         subject,
         sites,
     })
+}
+
+/// RIDL-150 over one source set, before lint levels apply. `encodings` are the
+/// names the package enables through `[backend.<name>] encodings`; FlatBuffers
+/// is checked when the list is empty. `std_ir` is the lowered `ridl.std`,
+/// which a package's references resolve against besides `checked`. Run it only
+/// over packages without errors, because it lowers each package to the
+/// codegen model.
+pub(crate) fn check_payload_ceiling(
+    db: &RidlDatabase,
+    packages: &[Package],
+    checked: &[CheckedPackage],
+    resolutions: &[Resolution],
+    std_ir: &ridl_ir::v2::Package,
+    encodings: &[String],
+    sources: &mut SourceMap,
+) -> Vec<Diagnostic> {
+    let sites = SiteIndex::new(db, packages, resolutions, sources);
+    let subject = packages
+        .iter()
+        .map(|package| !matches!(package.origin(db), PackageOrigin::Remote { .. }))
+        .collect();
+    ceiling::check(
+        &Ctx {
+            checked,
+            subject,
+            sites,
+        },
+        std_ir,
+        encodings,
+    )
 }
 
 // The design checks consume the checked packages and the indexed sites.

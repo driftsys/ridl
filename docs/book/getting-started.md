@@ -794,7 +794,7 @@ package veh.common
 
 type LogLine: string [1..1024] = "-"
 
-type FwBlock: bytes [1..65536]
+type FwBlock: bytes [1..4096]
 
 struct SensorSample {
   value: Speed

@@ -106,6 +106,14 @@ that row moved to `v0.12.0`. Every release since `v0.10.0` passed the check
 against `v0.10.0`, so the later baseline does not accept a break of an item that
 `v0.10.0` holds.
 
+**Amended 2026-10-21 — decision 2, two new lints start at `warn`.** The rule
+that a new lint starts at `allow` or `info` has two exceptions,
+[ADR-0030](ADR-0030-transfer-and-bound-limits.md) TYPL-116
+`bound-above-transfer` and RIDL-150 `payload-above-ceiling`, which start at
+`warn`. A payload above the payload ceiling is refused at run time, and a lower
+level would hide that failure until then. A `warn` diagnostic does not fail
+`ridl check`, so no source that compiled before stops compiling.
+
 ## Context
 
 Until 0.9.x, a breaking change could land in any release. 0.10.0 is the first
@@ -193,7 +201,8 @@ design in each:
      a new required CLI flag or argument, or a new required MCP input property,
      fails the check, as does one that becomes required. A new subcommand or
      tool may have required ones.
-   - A new lint, which starts at the `allow` or `info` level.
+   - A new lint, which starts at the `allow` or `info` level (the amendment of
+     2026-10-21 names the two exceptions that start at `warn`).
    - The crates that are not published: `xtask`, `ridlc-gen-model` and
      `ridlc-gen-rust`.
 

@@ -56,6 +56,16 @@ use crate::scalar::{
 use crate::timing;
 use crate::ucum::parse_ucum;
 
+/// The largest `string` bound, in characters, that TYPL-116 accepts. A string
+/// of this many characters is at most 16,128 bytes of UTF-8, which fits the
+/// 16,256-byte payload ceiling with room for the encoding overhead
+/// (ADR-0030 decision 6).
+const ADVISED_STRING_MAX_CHARS: u64 = 4_032;
+
+/// The largest `bytes` bound, in bytes, that TYPL-116 accepts: the encoded size
+/// of a string at [`ADVISED_STRING_MAX_CHARS`] (ADR-0030 decision 6).
+const ADVISED_BYTES_MAX: u64 = 16_128;
+
 /// A checked package: its lowered IR and the checker's own diagnostics.
 ///
 /// The diagnostics' spans carry a [`FileId`] indexing `pkg.files(db)` in order
@@ -2117,13 +2127,32 @@ impl Checker<'_> {
                     .max()
                     .and_then(|literal| self.numeric_literal(&literal))
                     .and_then(|value| exact_to_u64(&value));
-                if bound.dotdot_token().is_some() {
+                let (len_min, len_max) = if bound.dotdot_token().is_some() {
                     (min.unwrap_or(0), max.unwrap_or(256))
                 } else {
                     // A single length is a fixed bound: `[N]` (§5.3–§5.4).
                     let n = min.unwrap_or(0);
                     (n, n)
+                };
+                // TYPL-116 (ADR-0030 decision 7): an upper limit above the
+                // advised transfer limit.
+                let (limit, unit) = if noun == "string" {
+                    (ADVISED_STRING_MAX_CHARS, "characters")
+                } else {
+                    (ADVISED_BYTES_MAX, "bytes")
+                };
+                if len_max > limit {
+                    self.warning(
+                        DiagCode::TYPL_116,
+                        bound.syntax().text_range(),
+                        format!(
+                            "the `{noun}` bound {len_max} is above the advised limit of {limit} \
+                             {unit}; a payload is capped at 16256 bytes and a larger value is \
+                             refused at run time"
+                        ),
+                    );
                 }
+                (len_min, len_max)
             }
             None => {
                 // §4.4–§4.5: the `[0..256]` default applies, with a warning.
@@ -6688,6 +6717,62 @@ mod tests {
             type_def(&checked, "Gain").width,
             Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F64 as i32)),
         );
+    }
+
+    /// TYPL-116: the limits are 4,032 characters for `string` and 16,128 bytes
+    /// for `bytes`. The limit itself passes and one above it warns, on the
+    /// bound, whichever way the bound is written.
+    #[test]
+    fn typl_116_string_bound_boundary() {
+        let checked = check_source("app", "package app\ntype Tag : string [0..4032]\n");
+        assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
+        let text = "package app\ntype Tag : string [0..4033]\n";
+        let checked = check_source("app", text);
+        assert_eq!(codes(&checked), vec!["TYPL-116"]);
+        let diagnostic = &checked.diagnostics[0];
+        assert_eq!(diagnostic.severity, Severity::Warning);
+        assert!(
+            diagnostic.message.contains("16256"),
+            "{}",
+            diagnostic.message
+        );
+        let start = usize::from(diagnostic.primary.range.start());
+        let end = usize::from(diagnostic.primary.range.end());
+        assert_eq!(&text[start..end], "0..4033");
+        // The bound is the value the IR carries, unchanged.
+        let constraint = type_def(&checked, "Tag").constraint.as_ref().unwrap();
+        assert_eq!(constraint.len_max, Some(4033));
+    }
+
+    #[test]
+    fn typl_116_bytes_bound_boundary() {
+        let checked = check_source("app", "package app\ntype Blob : bytes [0..16128]\n");
+        assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
+        let checked = check_source("app", "package app\ntype Blob : bytes [0..16129]\n");
+        assert_eq!(codes(&checked), vec!["TYPL-116"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+    }
+
+    /// A fixed length `[N]` and an inline field type are bounds too, and a
+    /// string limit is not a bytes limit: 5,000 characters warns, 5,000 bytes
+    /// does not.
+    #[test]
+    fn typl_116_fixed_inline_and_per_type_limits() {
+        let checked = check_source("app", "package app\ntype Tag : string [5000]\n");
+        assert!(
+            codes(&checked).contains(&"TYPL-116"),
+            "{:?}",
+            checked.diagnostics
+        );
+        let checked = check_source(
+            "app",
+            "package app\nstruct S { a: string [0..5000], b: bytes [0..5000] }\n",
+        );
+        let found: Vec<_> = codes(&checked)
+            .into_iter()
+            .filter(|code| *code == "TYPL-116")
+            .collect();
+        assert_eq!(found.len(), 1, "{:?}", checked.diagnostics);
     }
 
     /// §4.4: a string without explicit bounds warns and the `[0..256]`
