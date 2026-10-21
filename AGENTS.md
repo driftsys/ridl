@@ -17,7 +17,8 @@ frame), `ridl-rt-conformance` (the port contract tests any runtime runs,
 published for runtimes outside this repository), and `ridlc-gen-model` and
 `ridlc-gen-rust` (the reference codegen plugins, test-only) — plus `xtask` at
 the root, `packages/` (the TypeScript packages; `packages/ridl-transport-ws` is
-the Deno and browser client of the WebSocket binding), the `editors/vscode`
+the Deno and browser client of the WebSocket binding, and
+`packages/ridl-runtime` loads the generated wasm codec), the `editors/vscode`
 extension, `skills/` (the `ridl-authoring` agent skill, which the extension and
 the editor release package), `evals/` (the public corpus, the calibration
 records and the eval tasks for design evaluation, which `cargo xtask eval` runs,
@@ -211,7 +212,8 @@ member; rsdl is the apex.
                          cargo workspace, outside this one, and carries the fmt
                          and clippy checks for its consumer, which --all over
                          this workspace cannot reach
-    just ts-check        in packages/ridl-transport-ws, with Deno:
+    just ts-check        in packages/ridl-runtime and packages/ridl-transport-ws,
+                         with Deno:
                          deno fmt --check, deno lint, deno check for Deno
                          and against the DOM library, the unit tests under
                          tests/, and deno publish --dry-run. The Deno version
@@ -224,13 +226,13 @@ member; rsdl is the apex.
                          browser (RIDL_BROWSER names one). Runs in CI; not a
                          member of build, so a contributor's build needs no
                          browser
-    just ts-npm-check    build packages/ridl-transport-ws into an npm package
-                         with dnt, verify the built manifest and tarball,
+    just ts-npm-check    build packages/ridl-runtime and packages/ridl-transport-ws
+                         into npm packages with dnt, verify the built manifest and tarball,
                          install the tarball in a temporary directory, and
                          import it by name from Node. Needs deno, node and npm
                          on PATH and network access. Not a member of pre-push.
                          .github/workflows/npm-release.yml publishes the
-                         package to npm on a v* tag
+                         packages to npm on a v* tag
     just build           toolchain-check + gate-parity + install-check +
                          fmt-check + book-check + link-check + doc-path-check +
                          story-id-check + ts-check + freeze-check + compile +

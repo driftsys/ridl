@@ -1,14 +1,15 @@
 name: npm-release
 
 # Publishes the npm packages of this repository on a `v<version>` tag, the same
-# tag that starts `crates-io-release`. The only package is
-# `@driftsys/ridl-transport-ws`, built from packages/ridl-transport-ws with dnt
-# (`just ts-npm-check` builds and checks the same package on every pull request
+# tag that starts `crates-io-release`. The packages are
+# `@driftsys/ridl-runtime` and `@driftsys/ridl-transport-ws`, built from
+# packages/ridl-runtime and packages/ridl-transport-ws with dnt
+# (`just ts-npm-check` builds and checks the same packages on every pull request
 # that runs the typescript job).
 #
 # Before it builds, the job confirms that the tag's commit is on main (as
-# `crates-io-release` does) and that the tag version equals the version in
-# deno.json, so the npm and JSR versions cannot differ. A prerelease version
+# `crates-io-release` does) and that the tag version equals the version in the
+# deno.json of each package, so the npm and JSR versions cannot differ. A prerelease version
 # publishes under the `next` dist-tag. The job skips a version that is already
 # on npm, so a re-run of a tag after a partial failure does not fail on a
 # duplicate. Publication uses the
@@ -43,11 +44,13 @@ jobs:
           git fetch origin main --quiet
           git merge-base --is-ancestor "$release_commit" origin/main
           tag_version="${GITHUB_REF_NAME#v}"
-          manifest_version="$(node -p "require('./packages/ridl-transport-ws/deno.json').version")"
-          if [ "$tag_version" != "$manifest_version" ]; then
-            echo "tag version ${tag_version} differs from deno.json version ${manifest_version}" >&2
-            exit 1
-          fi
+          for package in ridl-runtime ridl-transport-ws; do
+            manifest_version="$(node -p "require('./packages/${package}/deno.json').version")"
+            if [ "$tag_version" != "$manifest_version" ]; then
+              echo "tag version ${tag_version} differs from the deno.json version ${manifest_version} of ${package}" >&2
+              exit 1
+            fi
+          done
       - name: install just
         run: |
           set -o pipefail
@@ -69,21 +72,25 @@ jobs:
           node-version: lts/*
           registry-url: https://registry.npmjs.org
       - run: just ts-check
-      - name: build the npm package at the tag version
-        working-directory: packages/ridl-transport-ws
-        run: deno run -A scripts/build_npm.ts "${GITHUB_REF_NAME}"
-      - name: publish
-        working-directory: packages/ridl-transport-ws/npm
+      # The runtime package comes first. Each package is built at the tag
+      # version, then published unless that version is already on npm.
+      - name: build and publish the npm packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
-          name="$(node -p "require('./package.json').name")"
-          version="$(node -p "require('./package.json').version")"
-          if npm view "${name}@${version}" version >/dev/null 2>&1; then
-            echo "${name}@${version} is already on npm; skipping."
-            exit 0
-          fi
-          dist_tag=latest
-          case "$version" in *-*) dist_tag=next ;; esac
-          npm publish --access public --provenance --tag "$dist_tag"
+          for package in ridl-runtime ridl-transport-ws; do
+            (cd "packages/${package}" && deno run -A scripts/build_npm.ts "${GITHUB_REF_NAME}")
+            (
+              cd "packages/${package}/npm"
+              name="$(node -p "require('./package.json').name")"
+              version="$(node -p "require('./package.json').version")"
+              if npm view "${name}@${version}" version >/dev/null 2>&1; then
+                echo "${name}@${version} is already on npm; skipping."
+                exit 0
+              fi
+              dist_tag=latest
+              case "$version" in *-*) dist_tag=next ;; esac
+              npm publish --access public --provenance --tag "$dist_tag"
+            )
+          done

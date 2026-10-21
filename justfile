@@ -2763,8 +2763,9 @@ install-check:
         echo "install-check: install.ps1 rejects an unknown RIDL_INSTALL_BINARY"
     fi
 
-# Check the TypeScript package packages/ridl-transport-ws with Deno: formatting
-# and lint of its .ts files, a type check for Deno and a second one against the
+# Check the TypeScript packages packages/ridl-runtime and
+# packages/ridl-transport-ws with Deno: formatting and lint of their .ts files,
+# a type check for Deno and a second one against the
 # browser's DOM library (browser.deno.json), the unit tests under tests/, and a
 # dry run of the publish. The unit tests are named by their directory, because
 # a bare `deno test` also runs the end-to-end tests under e2e/, which need the
@@ -2783,6 +2784,16 @@ ts-check:
         echo "ts-check: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
         exit 1
     fi
+    # ridl-runtime has no browser type check of its own, and its tests start
+    # a local HTTP server and read the test assembler from the npm cache.
+    (
+        cd packages/ridl-runtime
+        deno fmt --check
+        deno lint
+        deno check mod.ts
+        deno test --allow-read --allow-write --allow-net --allow-env tests/
+        deno publish --dry-run --allow-dirty
+    )
     cd packages/ridl-transport-ws
     deno fmt --check
     deno lint
@@ -2791,9 +2802,9 @@ ts-check:
     deno test --allow-read tests/
     deno publish --dry-run --allow-dirty
 
-# Build the npm package of packages/ridl-transport-ws into its npm/ directory
-# and check it as a consumer would receive it: the built manifest, the files
-# `npm pack` would publish, and an import by name from Node after installing the
+# Build the npm packages of packages/ridl-runtime and packages/ridl-transport-ws
+# into their npm/ directories and check each as a consumer would receive it:
+# the built manifest, the files `npm pack` would publish, and an import by name from Node after installing the
 # packed tarball. This is the artifact the `npm-release` workflow publishes, so
 # a build that breaks it fails here and not at the tag. It needs network access,
 # for dnt and the install.
@@ -2806,8 +2817,9 @@ ts-npm-check:
             exit 1
         fi
     done
-    cd packages/ridl-transport-ws
-    deno run -A scripts/verify_npm.ts
+    for package in ridl-runtime ridl-transport-ws; do
+        (cd "packages/$package" && deno run -A scripts/verify_npm.ts)
+    done
 
 # Build the loopback server example of `ridl-transport-ws` and run the Deno
 # end-to-end test of packages/ridl-transport-ws against it. The test starts the
