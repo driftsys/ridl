@@ -199,6 +199,9 @@ pub fn generate_wasm_module(
                     ::core::result::Result::Err(::ridl_rt::payload::VerifyError::Contract(violation)) => {
                         rule_code(violation.rule)
                     }
+                    // A failure `VerifyError` adds later is not a typl rule,
+                    // so it is reported as a buffer that does not verify.
+                    ::core::result::Result::Err(_) => 1,
                 }
             }
 
