@@ -362,6 +362,14 @@ crate the workspace holds — see `AGENTS.md` for that.
   in its `deno.json` follows the workspace version. See
   [its design record](../design/ridl-transport-ws-ts.md).
 
+- **`packages/ridl-runtime`** — the loader of the wasm codec module,
+  `@driftsys/ridl-runtime`, for Deno, Bun, Node and the browser. `loadCodec`
+  takes a `URL`, a `Response` or bytes, compares the module's catalog hash with
+  the one the caller expects, and returns a codec whose `verify` calls the
+  module's `ridl_verify`. It has no dependency and is not published. Deno builds
+  and tests it (`just ts-check`, `just ts-npm-check`), and the version in its
+  `deno.json` follows the workspace version.
+
 - **`evals/`** — the public corpus of translated upstream definitions, the
   calibration records and the eval tasks that set the design lints' levels. It
   is not a workspace member and holds no crate; see

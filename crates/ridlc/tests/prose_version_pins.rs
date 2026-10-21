@@ -21,7 +21,7 @@ const ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 /// pattern): one pin in the README, four in the book chapters, the skill's
 /// version, and the TypeScript package's version. Each pattern must match exactly once, because `git std bump`
 /// rewrites only the first match.
-const EXPECTED_ENTRIES: [(&str, &str); 7] = [
+const EXPECTED_ENTRIES: [(&str, &str); 8] = [
     (
         "crates/ridl-rt-conformance/README.md",
         r#"ridl-rt-conformance = "=([^"]+)""#,
@@ -45,6 +45,10 @@ const EXPECTED_ENTRIES: [(&str, &str); 7] = [
     ),
     (
         "packages/ridl-transport-ws/deno.json",
+        r#"(?m)^  "version": "([^"]+)""#,
+    ),
+    (
+        "packages/ridl-runtime/deno.json",
         r#"(?m)^  "version": "([^"]+)""#,
     ),
 ];

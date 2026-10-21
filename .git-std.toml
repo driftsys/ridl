@@ -62,6 +62,8 @@ scopes = [
   "ridl-transport-ws",
   # the TypeScript client of the same binding (packages/ridl-transport-ws/)
   "ts-transport-ws",
+  # the TypeScript loader of the generated wasm codec (packages/ridl-runtime/)
+  "ts-runtime",
   # the port contract tests any runtime runs (docs/ROADMAP.md,
   # E11.20; ADR-0020 decision 6)
   "ridl-rt-conformance",
@@ -120,4 +122,8 @@ regex = '(?m)^ridl-rt = \{ version = "([^"]+)"'
 
 [[version_files]]
 path = "packages/ridl-transport-ws/deno.json"
+regex = '(?m)^  "version": "([^"]+)"'
+
+[[version_files]]
+path = "packages/ridl-runtime/deno.json"
 regex = '(?m)^  "version": "([^"]+)"'
