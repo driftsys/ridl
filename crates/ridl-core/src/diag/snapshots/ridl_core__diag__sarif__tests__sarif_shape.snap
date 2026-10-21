@@ -1520,7 +1520,7 @@ expression: log
             {
               "id": "MANI-015",
               "shortDescription": {
-                "text": "`[backend.<name>] encodings` is not an array of encoding names, names an unknown encoding, or names one twice"
+                "text": "`[backend.<name>] encodings` is not an array of encoding names, names an unknown encoding, or names one twice, or `wasm` is not a boolean"
               },
               "defaultConfiguration": {
                 "level": "error"

@@ -1,5 +1,6 @@
 backend table<table>
 backend.*.encodings array<string>
+backend.*.wasm boolean
 codegen table
 codegen.header-file string
 defaults table
