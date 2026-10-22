@@ -5,3 +5,6 @@ version = "1.0.0"
 [backend.rust]
 encodings = ["flatbuffers", "proto3"]
 wasm = true
+
+[backend.typescript]
+codec = true

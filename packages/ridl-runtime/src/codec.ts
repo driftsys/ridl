@@ -1,4 +1,4 @@
-import { CatalogMismatch, CodecError } from "./errors.ts";
+import { CatalogMismatch, CodecError, UnknownPayloadType } from "./errors.ts";
 
 /** The outcome of `Codec.verify`. */
 export type VerifyResult =
@@ -12,10 +12,34 @@ export type VerifyResult =
     rule?: string;
   };
 
+/** The kind of an interface member. */
+export type MemberKind = "signal" | "event" | "command" | "query" | "fixed";
+
+/** Encodes and decodes the payloads of one type. */
+export interface PayloadCodec<T> {
+  /** The name of the payload type, as the wasm module spells it. */
+  readonly type: string;
+  encode(value: T): Uint8Array;
+  decode(bytes: Uint8Array): T;
+}
+
+/** Names one member of one interface. */
+export interface MemberRef {
+  readonly iface: number;
+  readonly ord: number;
+  readonly kind: MemberKind;
+}
+
 /** A loaded wasm codec module. */
 export interface Codec {
   /** The 32-byte catalog hash that the module reports. */
   readonly catalogHash: Uint8Array;
+  /**
+   * Returns the `type_id` of the payload type with the given name. The module
+   * resolves the name once; later calls with the same name use the cached id.
+   * Throws `UnknownPayloadType` when the module has no such type.
+   */
+  typeId(name: string): number;
   /** Verifies the encoded payload of the type with the given `type_id`. */
   verify(typeId: number, bytes: Uint8Array): VerifyResult;
 }
@@ -34,6 +58,11 @@ export type CodecImports = Record<string, Record<string, unknown>>;
 export interface LoadOptions {
   /** The 32-byte catalog hash that the generated TypeScript expects. */
   catalogHash: Uint8Array;
+  /**
+   * Payload type names to resolve at load, in order. `loadCodec` rejects with
+   * `UnknownPayloadType` for the first name that the module does not hold.
+   */
+  payloadTypes?: readonly string[];
   /** The text of rule code `n` is at index `n - 2`. */
   ruleText?: readonly string[];
   /** Imports for the module. The ABI needs none. */
@@ -152,6 +181,10 @@ export async function loadCodec(
     ptr: number,
     len: number,
   ) => number;
+  const typeIdOf = fn(exports, "ridl_type_id") as (
+    ptr: number,
+    len: number,
+  ) => number;
 
   // The hash is read through a buffer that the module allocates.
   const hashPtr = alloc(HASH_LENGTH) >>> 0;
@@ -169,8 +202,38 @@ export async function loadCodec(
   }
 
   const ruleText = options.ruleText;
+  const typeIds = new Map<string, number>();
+  const typeId = (name: string): number => {
+    const cached = typeIds.get(name);
+    if (cached !== undefined) return cached;
+    const encoded = new TextEncoder().encode(name);
+    let code: number;
+    if (encoded.length === 0) {
+      // An empty name needs no buffer.
+      code = typeIdOf(0, 0);
+    } else {
+      const ptr = alloc(encoded.length) >>> 0;
+      if (ptr === 0) throw outOfMemory();
+      try {
+        // The allocation may have grown the memory, so the buffer is read
+        // again here and not kept from an earlier call.
+        new Uint8Array(memory.buffer, ptr, encoded.length).set(encoded);
+        code = typeIdOf(ptr, encoded.length);
+      } finally {
+        free(ptr, encoded.length);
+      }
+    }
+    if (code === -1) throw new UnknownPayloadType(name);
+    if (code < -1) {
+      throw new CodecError(`ridl_type_id returned the invalid code ${code}`);
+    }
+    typeIds.set(name, code);
+    return code;
+  };
+  for (const name of options.payloadTypes ?? []) typeId(name);
   return {
     catalogHash: actual,
+    typeId,
     verify(typeId: number, bytes: Uint8Array): VerifyResult {
       if (!Number.isInteger(typeId) || typeId < 0 || typeId > 0xffffffff) {
         throw new CodecError(

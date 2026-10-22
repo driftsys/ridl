@@ -4,15 +4,24 @@
 //! **Transition.** The backend reads its doc comments from `request.model`,
 //! and everything else from the raw IR: it is ported onto the model in steps,
 //! after the Rust backend (`docs/design/codegen-plugins.md`). Until the port
-//! is complete the backend value holds a [`RawIr`] as well.
+//! is complete the backend value holds a [`RawIr`] as well. The codec file
+//! reads the model only.
 
 use ridl_ir::codegen::{self, RawIr, v1};
 
-use crate::{GenerateError, generate_with};
+use crate::{GenerateError, generate_codec, generate_with};
 
-/// The TypeScript backend as a [`codegen::Backend`]: one file,
+/// The option that asks for the codec file beside the module, as the
+/// manifest's `[backend.typescript] codec = true` sets it, with the value
+/// `true` or `false`.
+pub const CODEC_OPTION: &str = "codec";
+
+/// The TypeScript backend as a [`codegen::Backend`]: the file
 /// `<artifact_base>.ts`, the module [`crate::generate`] emits with the doc
-/// comments read from the request's model. It takes no option.
+/// comments read from the request's model, and, when the option
+/// [`CODEC_OPTION`] is `true` and the package has a payload root that gets a
+/// codec, local or foreign, the file `<artifact_base>.codec.ts` that
+/// [`crate::generate_codec`] emits.
 pub struct Backend<'a> {
     raw: RawIr<'a>,
 }
@@ -30,11 +39,24 @@ impl codegen::Backend for Backend<'_> {
     }
 
     fn generate(&self, request: &v1::CodegenRequest) -> v1::CodegenResponse {
-        if let Some(option) = request.options.first() {
-            return refusal(format!(
-                "the typescript backend takes no option; `{}` is not one it knows",
-                option.key
-            ));
+        let mut codec = false;
+        for option in &request.options {
+            if option.key != CODEC_OPTION {
+                return refusal(format!(
+                    "the typescript backend takes the option `{CODEC_OPTION}`; `{}` is not one \
+                     it knows",
+                    option.key
+                ));
+            }
+            match option.value.as_str() {
+                "true" => codec = true,
+                "false" => codec = false,
+                other => {
+                    return refusal(format!(
+                        "`{CODEC_OPTION}` is `{other}`; the value is `true` or `false`"
+                    ));
+                }
+            }
         }
         let preamble = codegen::comment_preamble(&request.generated_marker, &request.header, "//");
         // A request built without a model is lowered here from the raw IR,
@@ -47,15 +69,29 @@ impl codegen::Backend for Backend<'_> {
                 &lowered
             }
         };
-        match generate_with(self.raw.package, model) {
-            Ok(generated) => v1::CodegenResponse {
-                files: vec![codegen::text_file(
-                    format!("{}.ts", request.artifact_base),
-                    format!("{preamble}/* eslint-disable */\n\n{}", generated.source),
-                )],
-                diagnostics: Vec::new(),
-            },
-            Err(GenerateError::Unrepresentable(message)) => refusal(message),
+        let generated = match generate_with(self.raw.package, model) {
+            Ok(generated) => generated,
+            Err(GenerateError::Unrepresentable(message)) => return refusal(message),
+        };
+        let mut files = vec![codegen::text_file(
+            format!("{}.ts", request.artifact_base),
+            format!("{preamble}/* eslint-disable */\n\n{}", generated.source),
+        )];
+        if codec {
+            match generate_codec(model, &request.artifact_base) {
+                Ok(Some(codec)) => files.push(codegen::text_file(
+                    format!("{}.codec.ts", request.artifact_base),
+                    format!("{preamble}/* eslint-disable */\n\n{}", codec.source),
+                )),
+                // A package with no payload root that gets a codec has no
+                // codec file.
+                Ok(None) => {}
+                Err(GenerateError::Unrepresentable(message)) => return refusal(message),
+            }
+        }
+        v1::CodegenResponse {
+            files,
+            diagnostics: Vec::new(),
         }
     }
 }

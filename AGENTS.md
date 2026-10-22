@@ -221,14 +221,22 @@ member; rsdl is the apex.
     just ts-e2e          build the loopback_server example of
                          ridl-transport-ws and run the package's Deno
                          end-to-end test against it
-    just cabin-ws-demo   generate cabin's crate and its FlatBuffers schema with
-                         ridl build, run flatc over the schema, check the
+    just cabin-ws-demo   generate cabin's crate, its TypeScript codec module and
+                         its FlatBuffers schema with ridl build, run flatc
+                         over the schema, check the
                          format and lint of examples/cabin/server and build it,
-                         build cabin's wasm codec (wasm32 cdylib), run the
+                         build cabin's wasm codec (wasm32 cdylib), lint,
+                         type-check and round-trip the generated TypeScript
+                         codec modules of the two fixtures under
+                         crates/ridl-backend-ts/tests/fixtures/ against
+                         flatc's output (_codec-ts-check), run the
                          unit tests of the check (check_test.ts),
-                         then run the Deno program of examples/cabin/web
+                         then run the Deno program of examples/cabin/web,
+                         which reads the catalog, the interaction table and
+                         the decode function from the generated codec module
                          against it: the program decodes the server's
-                         temperature payloads with the flatc code and fails
+                         temperature payloads through the generated codec
+                         module and fails
                          unless every value is inside [-40..85], every
                          received value is 1 to 63 steps ahead of the previous
                          one on the ring of the 126 values (85 is followed by

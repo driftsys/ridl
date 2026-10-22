@@ -1,0 +1,65 @@
+package veh.common
+
+/// An enum with no zero member, so a field of it is `= null` in the `.fbs`.
+enum Mode {
+  LOW = 1
+  HIGH = 2
+}
+
+/// A struct whose one field reads as absent when the buffer leaves it out.
+struct Setting {
+  mode: Mode
+}
+
+/// A union whose arm names differ from their snake spelling on the `fb` side.
+union Outcome {
+  okReading : SensorReading
+  errFault  : SensorFault
+}
+
+/// A string with no length bound, so a payload that holds one has no finite
+/// FlatBuffers bound.
+type Free : string [0..18446744073709551615]
+
+/// A struct with no finite FlatBuffers bound.
+struct Note {
+  text : Free
+}
+
+/// The conversions the other structs do not exercise: an inline tuple with a
+/// 64-bit integer and an array, a bytes field, arrays of structs and of
+/// enums, optional collections, and fields named after TypeScript keywords.
+struct Extras {
+  wide     : (big: integer [0..1099511627776], sparse: [Speed; 0..2])
+  blob     : bytes [0..8]
+  readings : [SensorReading; 0..4]
+  gears    : [GearPosition; 0..4]
+  maybe    : [Speed; 0..4]?
+  tag      : bytes [0..8]?
+  notes    : [Label : Name; 0..8]?
+  default  : Counter
+  new      : Counter
+  class    : Counter
+}
+
+/// A union with a scalar arm and an enum arm, which `flatc` boxes.
+union Pick {
+  speed   : Speed
+  gear    : GearPosition
+  reading : SensorReading
+}
+
+interface Sensors {
+  signal latest : SensorReading @100ms
+  reserved legacyRaw
+  event result : SensorResult @[100ms..1s]
+  event bounds : SensorBounds @[100ms..1s]
+  command setLimit(limit: Speed, actual: Speed) @[..50ms]
+  query profile(name: Name): DriverProfile @[..100ms]
+  query span(): (min: Speed, max: Speed) @[..100ms]
+  signal setting : Setting @1s
+  signal note : Note @1s
+  query fetch(code: Counter): DriverProfile | SensorFault @[..100ms]
+  signal extras : Extras @1s
+  signal pick : Pick @1s
+}

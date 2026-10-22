@@ -649,7 +649,7 @@ Options:
           - ir-json:         The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
           - ir-text:         The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
           - ir-binary:       The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`
+          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
@@ -881,7 +881,9 @@ FlatBuffers codec in `WASM_PAYLOAD_TYPES`, sorted by qualified name
 names in `WASM_RULES`, sorted. A `type_id` is an index into the list of the same
 build. When the target is `wasm32` and the generated crate's feature
 `wasm-exports` is on, the module exports `ridl_alloc`, `ridl_free`,
-`ridl_catalog_hash` and `ridl_verify`, and no other function.
+`ridl_catalog_hash`, `ridl_verify` and `ridl_type_id`, and no other function.
+`ridl_type_id` returns the type id of a payload type named by its qualified
+name, or -1 for a name the list does not hold.
 `ridl_verify(type_id, ptr, len)` returns 0 when the bytes verify as the type at
 index `type_id`, 1 for a malformed buffer, 2 plus the index of the broken rule
 in `WASM_RULES`, and -1 for an unknown `type_id`. A null `ptr` with a length,
@@ -899,8 +901,16 @@ earlier build wrote, and a build with it on refuses to overwrite a
 `__ridl_wasm.rs` that does not start with the generated marker. Single-file
 mode has no manifest, so it has no `wasm` module.
 
+`[backend.typescript] codec = true` writes `<base>.codec.ts` beside the
+TypeScript module of every package that has a payload root with a codec (its
+own, or one of another package that its interfaces name), and turns the `wasm`
+module on when `[backend.rust]` writes
+no `wasm` key. A written `wasm = false`, and a manifest with no
+`[backend.rust]` table, are MANI-019. `[backend.rust] encodings` must still name
+`flatbuffers`, and the Rust backend refuses an implied `wasm` module otherwise.
+
 MANI-015 is an error when the `encodings` value is not an array of the known
-names or repeats a name, or when `wasm` is not a boolean, and MANI-016 is an
+names or repeats a name, or when `wasm` or `codec` is not a boolean, and MANI-016 is an
 error when the manifest of a workspace member holds a `backend` key or `[backend.<name>]` table: only the workspace root,
 or a standalone package, sets it. Any other key under `[backend.<name>]` is
 MANI-005. The table is not the `backend.` attribute namespace of an rsdl
@@ -1027,7 +1037,9 @@ When a package names a type from `ridl.std`, the standard package is written
 beside your own as one more file per `--emit` target — `ridl.std.rs`,
 `ridl.std.ts`, `ridl.std.codegen.json` — because generated code refers to
 standard types by package path and does not compile without it, and the model
-is lowered over the same scope. The three IR targets —
+is lowered over the same scope. `ridl.std.codec.ts` joins them under
+`[backend.typescript] codec = true` only when a package's codec module imports
+it, for a payload type that is a `ridl.std` scalar. The three IR targets —
 `ir-json`, `ir-text`, `ir-binary` — get no such file: a direct IR dump
 records the packages the workspace declares, and `ridl.std` ships with the
 compiler rather than with the workspace ([ADR-0007][adr-0007] decision 15).
@@ -2430,7 +2442,7 @@ Options:
           - ir-json:         The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
           - ir-text:         The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
           - ir-binary:       The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`
+          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`

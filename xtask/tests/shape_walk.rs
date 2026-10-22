@@ -342,6 +342,23 @@ const ALLOWED: &[Allowed] = &[
               shapes are outside this check's scope",
     },
     Allowed {
+        path: "crates/ridl-backend-ts/src/codec.rs",
+        lines: 4,
+        why: "the reads are of `ridl_ir::codegen::v1::Model::interfaces`, not \
+              of `Package::interfaces`: the model's list is lowered from \
+              `Package::shapes()`, so the codec module's interface tables and \
+              the interaction paths of its induced tuples cover an inline \
+              shape",
+    },
+    Allowed {
+        path: "crates/ridl-backend-ts/tests/codec.rs",
+        lines: 8,
+        why: "a test fixture over `ridl_ir::codegen::v1::Model::interfaces`, \
+              which is lowered from `Package::shapes()` and so holds an inline \
+              shape too: the tests edit and rename the lowered model's \
+              interfaces to build the refused shapes",
+    },
+    Allowed {
         path: "crates/ridlc/src/design_lints/ceiling.rs",
         lines: 1,
         why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \

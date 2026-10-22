@@ -1,0 +1,4 @@
+package pin.a
+
+/// A value whose short name sorts after the one of `pin.b`.
+type Zed : integer [0..1]

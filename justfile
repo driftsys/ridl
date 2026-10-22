@@ -2849,9 +2849,12 @@ ts-e2e:
     RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts
 
 # The steps `cabin-ws-demo` and `cabin-browser-demo` share: the `flatc` and
-# `deno` checks, the `.fbs` schema and the `flatc` TypeScript, then the server's
-# format, lint and build, then the wasm codec (`_cabin-wasm`). `name` is the
-# recipe named in each failure message.
+# `deno` checks, the TypeScript types, codec module and `.fbs` schema that
+# `ridl build --emit typescript --emit flatbuffers` writes
+# (examples/cabin/ridl.toml sets `[backend.typescript] codec = true`), the
+# `flatc` object API that the codec module imports, then the server's format,
+# lint and build, then the wasm codec (`_cabin-wasm`). `name` is the recipe
+# named in each failure message.
 _cabin-web-generate name:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -2873,12 +2876,60 @@ _cabin-web-generate name:
     target="${CARGO_TARGET_DIR:-target}"
     # Cleared first, as `_cabin-generate` does for the crates.
     rm -rf examples/cabin/web/generated
-    "$target/debug/ridl" build examples/cabin --emit flatbuffers --out-dir examples/cabin/web/generated/schema
-    flatc --ts --gen-object-api -o examples/cabin/web/generated examples/cabin/web/generated/schema/veh.cabin.fbs
+    "$target/debug/ridl" build examples/cabin --emit typescript --emit flatbuffers --out-dir examples/cabin/web/generated
+    flatc --ts --gen-object-api -I examples/cabin/web/generated -o examples/cabin/web/generated examples/cabin/web/generated/veh.cabin.fbs
     cargo fmt --manifest-path examples/cabin/server/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p server --locked --all-targets --no-deps -- -D warnings
     cargo build --manifest-path examples/cabin/Cargo.toml -p server --locked
     "{{just_executable()}}" _cabin-wasm
+
+# The lint, the type check and the round trip of the codec module over the
+# kinds cabin does not exercise: the fixture
+# crates/ridl-backend-ts/tests/fixtures/codec (the veh-cluster corpus's
+# `common` package plus an interface) is built with `ridl build --emit
+# typescript --emit flatbuffers` into a directory under the target directory,
+# `flatc` writes the object API of both schemas (the fixture names
+# `ridl.std.Name` as a payload, whose codec is `ridl.std.codec.ts`), the
+# fixture's deno.json and roundtrip_test.ts are copied beside the generated
+# files with the path of packages/ridl-runtime made absolute, then `deno lint`
+# reads the two codec modules, `deno check` type-checks them and `deno test`
+# runs the round trips: a union, a tuple, an array, a map, an optional field,
+# an induced tuple, an enum with no zero member, a bytes field, arrays of
+# structs and enums, a 64-bit integer, optional vectors, boxed union arms and
+# keyword field names, each `decode(encode(v))` deep-equal to `v`. The same
+# for the fixture crates/ridl-backend-ts/tests/fixtures/codec-foreign-only,
+# a package whose only payload root is `ridl.std.Name`, so its module holds
+# an interface table over `ridl.std.codec.ts` and imports no barrel of its
+# own. `cabin-ws-demo` runs it once, after `_cabin-web-generate` has checked
+# the `flatc` and `deno` versions.
+[private]
+_codec-ts-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="${CARGO_TARGET_DIR:-target}"
+    cargo build -p ridl-cli --locked
+    tmp="$target/codec-ts-check"
+    rm -rf "$tmp"
+    mkdir -p "$tmp"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec --emit typescript --emit flatbuffers --out-dir "$tmp"
+    flatc --ts --gen-object-api -I "$tmp" -o "$tmp" "$tmp/veh.common.fbs" "$tmp/ridl.std.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec/deno.json > "$tmp/deno.json"
+    cp crates/ridl-backend-ts/tests/fixtures/codec/roundtrip_test.ts "$tmp/roundtrip_test.ts"
+    deno lint --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts"
+    deno check --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts"
+    deno test --config "$tmp/deno.json" "$tmp/roundtrip_test.ts"
+    # The second fixture: a package whose only payload root is a `ridl.std`
+    # scalar, so its module imports `ridl.std.codec.ts` and no barrel of its
+    # own (`flatc` runs on `ridl.std.fbs` alone: the package has no table).
+    foreign="$tmp/foreign-only"
+    mkdir -p "$foreign"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-foreign-only --emit typescript --emit flatbuffers --out-dir "$foreign"
+    flatc --ts --gen-object-api -I "$foreign" -o "$foreign" "$foreign/ridl.std.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-foreign-only/deno.json > "$foreign/deno.json"
+    cp crates/ridl-backend-ts/tests/fixtures/codec-foreign-only/check_test.ts "$foreign/check_test.ts"
+    deno lint --config "$foreign/deno.json" "$foreign/veh.names.codec.ts" "$foreign/ridl.std.codec.ts"
+    deno check --config "$foreign/deno.json" "$foreign/veh.names.codec.ts" "$foreign/ridl.std.codec.ts"
+    deno test --config "$foreign/deno.json" "$foreign/check_test.ts"
 
 # The wasm codec of the cabin demos: the generated cabin crate, which
 # `_cabin-generate` writes with the `wasm` module because
@@ -2908,27 +2959,35 @@ _cabin-wasm:
 # Prove a Deno program can read a value from a Rust server and decode it with
 # code that `flatc` generated from the `ridl build` output. The server is
 # examples/cabin/server, which publishes cabin's `temperature` signal over
-# `ridl-transport-ws`. The program is examples/cabin/web/main.ts, which attaches
-# with the encoding `flatbuffers`, subscribes, verifies each payload through
-# cabin's wasm codec and fails with the codec's cause on a rejection, decodes
-# each verified payload with the `flatc` code, and fails unless every value is
-# inside [-40..85], every
-# received value is 1 to 63 steps ahead of the previous one on the ring of the
-# 126 values (85 is followed by -40; a repeated value is ignored), 85 is reached
-# by such a step, and -40 is seen after 85 (the first sample counts for neither
-# bound). One 30 s deadline covers the whole run, and a server that exits early
-# fails the run at once. It prints the number of samples, the number of wraps,
-# whether 85 was seen, and whether -40 was seen after 85. Before it connects,
+# `ridl-transport-ws`. The program is examples/cabin/web/main.ts, which takes
+# the catalog name and hash, the interface number and ordinal of the signal,
+# and the decode function from the generated codec module
+# examples/cabin/web/generated/veh.cabin.codec.ts. It fails when the catalog
+# hash the server announces is not the generated one, attaches with the
+# encoding `flatbuffers`, subscribes, verifies each payload through cabin's
+# wasm codec and fails with the codec's cause on a rejection, decodes each
+# verified payload with the generated codec module, and fails unless every
+# value is inside [-40..85], every received value is 1 to 63 steps ahead of
+# the previous one on the ring of the 126 values (85 is followed by -40; a
+# repeated value is ignored), 85 is reached by such a step, and -40 is seen
+# after 85 (the first sample counts for neither bound). One 30 s deadline
+# covers the whole run, and a server that exits early fails the run at once.
+# It prints the number of samples, the number of wraps, whether 85 was seen,
+# and whether -40 was seen after 85. Before it connects,
 # it loads the codec, examples/cabin/web/generated/veh_cabin.wasm, with the
-# catalog hash the server announces, and runs a self-test: the codec must
-# accept 20 and reject -41 and 86 with the range rule.
+# generated catalog hash, payload type names and rule texts, and runs a
+# self-test: the codec must accept 20 and reject -41 and 86 with the range
+# rule.
 #
 # Written in order: the CLI and the generated crates (both members of the
-# examples/cabin workspace, written by the private recipe `_cabin-generate` that
-# `demo` shares, because the workspace does not resolve without both); the
-# `.fbs` schema; the `flatc` TypeScript; then the server's format, lint and
-# build, because no other gate reaches the server; then the wasm codec
-# (`_cabin-wasm`, which needs the wasm32-unknown-unknown target); then the
+# examples/cabin workspace, written by the private recipe `_cabin-generate`
+# that `demo` shares, because the workspace does not resolve without both); the
+# TypeScript types, codec module and `.fbs` schema; the `flatc` TypeScript;
+# then the server's format, lint and build, because no other gate reaches the
+# server; then the wasm codec (`_cabin-wasm`, which needs the
+# wasm32-unknown-unknown target); then the lint, type check and round trip of
+# the codec module over the fixture of `crates/ridl-backend-ts`
+# (`_codec-ts-check`); then the
 # type check of the program, the unit tests of the check (`deno test
 # --allow-read check_test.ts`, which loads the wasm codec), and the program.
 # The program closes the server's standard input to stop it.
@@ -2936,13 +2995,13 @@ _cabin-wasm:
 # `flatc` has to be the version in .flatc-version (the version whose output the
 # program's imports were written against; CI and `./bootstrap` read the same
 # file); the recipe fails with a message if it is missing or is another
-# version. Deno is the version in .deno-version. The `flatc` output, the `.fbs`
-# and veh_cabin.wasm are build outputs under examples/cabin/web/generated/, not
-# in git. Like `demo`, the recipe
+# version. Deno is the version in .deno-version. The `ridl build` and `flatc`
+# output and veh_cabin.wasm are build outputs under
+# examples/cabin/web/generated/, not in git. Like `demo`, the recipe
 # reads `CARGO_TARGET_DIR` for the CLI; the server is built in the cabin
 # workspace, so its executable is in examples/cabin/target unless the
 # variable is set.
-cabin-ws-demo: _cabin-generate (_cabin-web-generate "cabin-ws-demo")
+cabin-ws-demo: _cabin-generate (_cabin-web-generate "cabin-ws-demo") _codec-ts-check
     #!/usr/bin/env bash
     set -euo pipefail
     server_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
@@ -3124,8 +3183,8 @@ lint-commits base="main":
     fi
 
 # Lint and static-check gate before pushing — skips `freeze-check`, `compile`,
-# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-npm-check`, `ts-e2e`,
-# `cabin-ws-demo`, and `install-check`.
+# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-npm-check`,
+# `ts-e2e`, `cabin-ws-demo`, and `install-check`.
 # Wired as the pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs
 # the full `just build` gate on the PR; `just verify` runs that same gate
 # locally before opening one.

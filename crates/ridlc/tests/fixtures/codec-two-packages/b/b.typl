@@ -1,0 +1,4 @@
+package pin.b
+
+/// A value whose short name sorts before the one of `pin.a`.
+type Alpha : integer [0..1]

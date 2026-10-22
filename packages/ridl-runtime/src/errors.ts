@@ -31,3 +31,17 @@ export class CatalogMismatch extends Error {
     this.actual = actual;
   }
 }
+
+/**
+ * Thrown when the wasm module has no payload type of the given name. The name
+ * is the one that `ridl_type_id` looks up, for example `cabin.Door`.
+ */
+export class UnknownPayloadType extends Error {
+  readonly type: string;
+
+  constructor(type: string) {
+    super(`the wasm module has no payload type "${type}"`);
+    this.name = "UnknownPayloadType";
+    this.type = type;
+  }
+}

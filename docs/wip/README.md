@@ -151,6 +151,12 @@ on 2026-10-22, once both demos verified each payload through the wasm codec;
 `examples/cabin/web/check.ts` and the `_cabin-wasm` recipe are its durable
 record.
 
+The TypeScript codec table design and plan
+(`2026-10-22-ts-codec-table-{design,plan}.md`) were archived on 2026-10-22, once
+`<base>.codec.ts` and `ridl_type_id` landed;
+[the codec table design record](../design/ts-codec-table.md) is their durable
+record.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)

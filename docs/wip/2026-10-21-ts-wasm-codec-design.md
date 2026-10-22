@@ -237,7 +237,8 @@ The remaining slices, in order, replace slices 3 to 5 above:
 5. **Generated codec table** (`[backend.typescript] codec = true`,
    `<base>.codec.ts`) replaces the hand-written map. The TypeScript backend
    emits typl types only today, so this slice must first give it the interface
-   declarations.
+   declarations. Step 5 landed; its as-built record is
+   [the codec table design record](../design/ts-codec-table.md).
 6. **Publish**: the first `v*` tag for both npm packages.
 
 **Spike result (2026-10-22).** Bytes interoperate in both directions for

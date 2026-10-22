@@ -47,6 +47,14 @@ choices, see [`../decisions/`](../decisions/).
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 6 and 7, with decision 6 as amended 2026-10-20, and
   [ADR-0009](../decisions/ADR-0009-toolchain-and-gate-parity.md) for the gates.
+- **ts-codec-table.md** — the generated TypeScript codec module
+  `<base>.codec.ts` as built: the `encode`/`decode` functions over plain
+  objects, the conversion rules per typl kind, the interface tables, the catalog
+  facts and the payload type names the wasm codec is loaded with, the `codec`
+  manifest option that implies the wasm module, the `ridl_type_id` export, and
+  the known gaps. The decisions behind its choices are
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decisions 6 and 7.
 - **flatbuffers-codec.md** — the generated `Payload<FlatBuffers>` implementation
   a package carries: where the projection facts both emitters read live, what
   `generate` emits per table, what `encode`, `verify`, `decode` and `MAX_SIZE`

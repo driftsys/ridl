@@ -2115,6 +2115,134 @@ fn the_contract_lowers_a_request_without_a_model_with_the_other_packages() {
     );
 }
 
+/// The backend takes the option `codec` with the value `true` or `false`, and
+/// refuses another value and another key.
+#[test]
+fn the_codec_option_is_accepted_and_other_keys_are_refused() {
+    use ridl_ir::codegen::Backend as _;
+
+    let (local, _) = contract_packages();
+    let generate = |key: &str, value: &str| {
+        let request = v1::CodegenRequest {
+            model: Some(ridl_ir::codegen::lower(&local, &[])),
+            artifact_base: "veh.common".to_string(),
+            options: vec![v1::BackendOption {
+                key: key.to_string(),
+                value: value.to_string(),
+            }],
+            ..Default::default()
+        };
+        let raw = ridl_ir::codegen::RawIr {
+            package: &local,
+            others: &[],
+        };
+        crate::Backend::new(raw).generate(&request)
+    };
+    let response = generate("codec", "false");
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:?}",
+        response.diagnostics
+    );
+    let names: Vec<&str> = response
+        .files
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect();
+    assert_eq!(names, ["veh.common.ts"]);
+    for (key, value, message) in [
+        (
+            "codec",
+            "yes",
+            "`codec` is `yes`; the value is `true` or `false`",
+        ),
+        (
+            "wasm",
+            "true",
+            "the typescript backend takes the option `codec`; `wasm` is not one it knows",
+        ),
+    ] {
+        let response = generate(key, value);
+        assert!(response.files.is_empty(), "{key}");
+        let messages: Vec<&str> = response
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.message.as_str())
+            .collect();
+        assert_eq!(messages, [message]);
+    }
+}
+
+/// With `codec = true` the backend writes `<base>.codec.ts` after
+/// `<base>.ts`, under the same generated marker and header, then
+/// `/* eslint-disable */`; with `codec = false` it writes `<base>.ts` alone.
+/// The package is the Rust backend's `interaction_face.ridl` fixture,
+/// compiled as one file.
+#[test]
+fn the_codec_option_writes_a_second_file() {
+    use ridl_ir::codegen::Backend as _;
+
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ridl-backend-rust/tests/fixtures/interaction_face.ridl");
+    let text = std::fs::read_to_string(&path).expect("read interaction_face.ridl");
+    let package = ridlc::compile(&path.display().to_string(), &text).package;
+    let generate = |value: &str| {
+        let request = v1::CodegenRequest {
+            model: Some(ridl_ir::codegen::lower(&package, &[])),
+            artifact_base: "face.demo".to_string(),
+            generated_marker: ridl_ir::codegen::generated_marker(Some("face.demo")),
+            header: "Copyright: the example.\nLicense: none.".to_string(),
+            options: vec![v1::BackendOption {
+                key: "codec".to_string(),
+                value: value.to_string(),
+            }],
+            ..Default::default()
+        };
+        let raw = ridl_ir::codegen::RawIr {
+            package: &package,
+            others: &[],
+        };
+        crate::Backend::new(raw).generate(&request)
+    };
+    let response = generate("true");
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:?}",
+        response.diagnostics
+    );
+    let names: Vec<&str> = response
+        .files
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect();
+    assert_eq!(names, ["face.demo.ts", "face.demo.codec.ts"]);
+    let Some(v1::generated_file::Content::Text(codec)) = &response.files[1].content else {
+        panic!("the codec file is text");
+    };
+    let marker = ridl_ir::codegen::generated_marker(Some("face.demo"));
+    let preamble = ridl_ir::codegen::comment_preamble(
+        &marker,
+        "Copyright: the example.\nLicense: none.",
+        "//",
+    );
+    assert!(
+        preamble.starts_with(&format!("// {marker}\n"))
+            && preamble.contains("// Copyright: the example.\n// License: none.\n"),
+        "the preamble is the marker then the header: {preamble}"
+    );
+    assert!(
+        codec.starts_with(&format!("{preamble}/* eslint-disable */\n\nimport ")),
+        "got:\n{codec}"
+    );
+    assert!(codec.contains("export const Cabin = {"), "got:\n{codec}");
+    let names: Vec<String> = generate("false")
+        .files
+        .into_iter()
+        .map(|file| file.path)
+        .collect();
+    assert_eq!(names, ["face.demo.ts"]);
+}
+
 /// A target whose name begins with the name of another declaration resolves
 /// to its own declaration: `[SpeedLimit]` is not `Speed`.
 #[test]
