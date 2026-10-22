@@ -24,6 +24,7 @@
 import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   decodeTemperature,
+  hashFromHex,
   HIGHEST,
   LOWEST,
   TEMPERATURE,
@@ -73,9 +74,7 @@ const { port } = server;
 void server.status.then((status) => {
   if (!stopping) fail(`the server exited with status ${status.code}`);
 });
-const hash = Uint8Array.from(
-  server.hash.match(/../g)!.map((h) => parseInt(h, 16)),
-);
+const hash = hashFromHex(server.hash);
 
 const check = new TemperatureCheck();
 let failure: string | undefined;
@@ -144,5 +143,8 @@ if (failure) {
   fail(failure);
 }
 if (status.code !== 0) fail(`the server exited with status ${status.code}`);
+if (!check.progress.sawLowestAfter) {
+  fail(`the check ended without seeing ${LOWEST} after ${HIGHEST}`);
+}
 console.log("cabin-web: ok");
 Deno.exit(0);

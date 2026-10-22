@@ -11,11 +11,12 @@
 //! then starts again at -40, with no pause at any value. The process exits
 //! with status 0 when its standard input reaches the end.
 //!
-//! The Deno program of `examples/cabin/web` passes only if every value is
-//! inside [-40..85], every received value is 1 to 63 steps ahead of the
-//! previous one on the ring of the 126 values (85 is followed by -40; a
-//! repeated value is ignored), 85 is reached by such a step, and -40 is seen
-//! after 85 (the first sample counts for neither bound).
+//! The Deno program `main.ts` and the browser page `page.ts` of
+//! `examples/cabin/web` pass only if every value is inside [-40..85], every
+//! received value is 1 to 63 steps ahead of the previous one on the ring of
+//! the 126 values (85 is followed by -40; a repeated value is ignored), 85 is
+//! reached by such a step, and -40 is seen after 85 (the first sample counts
+//! for neither bound).
 
 use std::io::{self, Write};
 use std::net::TcpListener;

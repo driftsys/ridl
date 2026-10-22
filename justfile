@@ -2895,7 +2895,8 @@ _cabin-web-generate name:
 # examples/cabin workspace, written by the private recipe `_cabin-generate` that
 # `demo` shares, because the workspace does not resolve without both); the `.fbs` schema; the `flatc` TypeScript; then the
 # server's format, lint and build, because no other gate reaches the server;
-# then the program. The program closes the server's standard input to stop it.
+# then the type check of the program, the unit tests of the check
+# (`deno test check_test.ts`), and the program. The program closes the server's standard input to stop it.
 #
 # `flatc` has to be the version in .flatc-version (the version whose output the
 # program's imports were written against; CI and `./bootstrap` read the same

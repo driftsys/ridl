@@ -224,6 +224,7 @@ member; rsdl is the apex.
     just cabin-ws-demo   generate cabin's crate and its FlatBuffers schema with
                          ridl build, run flatc over the schema, check the
                          format and lint of examples/cabin/server and build it,
+                         run the unit tests of the check (check_test.ts),
                          then run the Deno program of examples/cabin/web
                          against it: the program decodes the server's
                          temperature payloads with the flatc code and fails

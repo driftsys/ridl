@@ -1,6 +1,6 @@
 // The check of the cabin demo, without any Deno API, so that a browser page
 // can load it too. It decodes the payload of `Cabin.temperature` and judges
-// the sequence of received values; main.ts supplies the transport.
+// the sequence of received values; main.ts and page.ts supply the transport.
 
 import * as flatbuffers from "flatbuffers";
 import { TemperatureBox } from "./generated/veh/cabin.ts";
@@ -45,7 +45,7 @@ export const TEMPERATURE = { iface: 1, ord: 1 };
 export interface Progress {
   /** The number of values accepted, repeats included. */
   received: number;
-  /** The number of steps that crossed from 85 to -40. */
+  /** The number of steps from 85 to -40 or across it. */
   wraps: number;
   /** True when 85 was reached by a checked step. */
   sawHighest: boolean;
@@ -58,6 +58,11 @@ export type Verdict =
   | { kind: "continue" }
   | { kind: "pass" }
   | { kind: "fail"; cause: string };
+
+/** Converts the catalog hash, 64 hex digits, to its 32 bytes. */
+export function hashFromHex(hex: string): Uint8Array {
+  return Uint8Array.from(hex.match(/../g)!.map((h) => parseInt(h, 16)));
+}
 
 /** Decodes the payload of a `TemperatureBox`. */
 export function decodeTemperature(payload: Uint8Array): number {

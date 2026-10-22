@@ -315,10 +315,10 @@ jobs:
       - run: just ts-check
       - run: just ts-npm-check
       - run: just ts-e2e
-      # `just cabin-ws-demo` needs `flatc` at the version the recipe checks,
-      # which is read from .flatc-version, the one place it is pinned. The
-      # official release archive is used because the distribution packages
-      # carry other versions.
+      # `just cabin-ws-demo` and `just cabin-browser-demo` need `flatc` at the
+      # version the recipes check, which is read from .flatc-version, the one
+      # place it is pinned. The official release archive is used because the
+      # distribution packages carry other versions.
       - name: install flatc
         run: |
           set -o pipefail

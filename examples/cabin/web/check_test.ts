@@ -13,6 +13,7 @@ Deno.test("a full lap passes", () => {
   }
   assert.deepEqual(check.accept(-40), { kind: "pass" });
   assert.equal(check.progress.wraps, 1);
+  assert.equal(check.progress.received, 127);
 });
 
 Deno.test("a value outside the range fails", () => {
@@ -22,6 +23,25 @@ Deno.test("a value outside the range fails", () => {
     (verdict as { cause: string }).cause,
     /temperature 86 is outside \[-40\.\.85\]/,
   );
+});
+
+Deno.test("a value below the range fails", () => {
+  const verdict = new TemperatureCheck().accept(-41);
+  assert.equal(verdict.kind, "fail");
+  assert.match(
+    (verdict as { cause: string }).cause,
+    /temperature -41 is outside \[-40\.\.85\]/,
+  );
+  const later = new TemperatureCheck();
+  assert.equal(later.accept(22).kind, "continue");
+  assert.equal(later.accept(-41).kind, "fail");
+});
+
+Deno.test("a step across 85 counts as a wrap", () => {
+  const check = new TemperatureCheck();
+  check.accept(80);
+  assert.deepEqual(check.accept(-30), { kind: "continue" });
+  assert.equal(check.progress.wraps, 1);
 });
 
 Deno.test("a step of 64 fails", () => {

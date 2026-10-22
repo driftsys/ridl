@@ -9,6 +9,7 @@
 import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   decodeTemperature,
+  hashFromHex,
   type Progress,
   TEMPERATURE,
   TemperatureCheck,
@@ -22,9 +23,7 @@ async function run(): Promise<Progress> {
   if (!/^[0-9a-f]{64}$/.test(hex)) {
     throw new Error("the page URL has no hash parameter of 64 hex digits");
   }
-  const hash = Uint8Array.from(
-    hex.match(/../g)!.map((h) => parseInt(h, 16)),
-  );
+  const hash = hashFromHex(hex);
 
   const check = new TemperatureCheck();
   // Set once the check has given its first `pass` or `fail`; later values

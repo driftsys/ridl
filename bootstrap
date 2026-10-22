@@ -131,9 +131,10 @@ require mdbook "cargo install mdbook --locked"
 require deno "$deno_hint"
 require jq "see https://jqlang.org/download/ — just demo filters clippy output with it"
 require cargo-semver-checks "cargo install cargo-semver-checks --locked --version 0.51.0 — just freeze-check compares the public API against a baseline"
-# flatc, for `just cabin-ws-demo`. Unlike Deno it is not installed here, and a
-# different version is an error, not a note: the recipe refuses it, because the
-# TypeScript the program imports was written against the pinned version's output.
+# flatc, for `just cabin-ws-demo` and `just cabin-browser-demo`. Unlike Deno it
+# is not installed here, and a different version is an error, not a note: the
+# recipes refuse it, because the TypeScript the programs import was written
+# against the pinned version's output.
 flatc_version="$(tr -d '[:space:]' < .flatc-version)"
 flatc_hint="download flatc $flatc_version from https://github.com/google/flatbuffers/releases"
 if command -v flatc >/dev/null 2>&1; then
@@ -144,7 +145,7 @@ if command -v flatc >/dev/null 2>&1; then
     missing=1
   fi
 else
-  log "MISSING flatc — $flatc_hint (just cabin-ws-demo needs it)"
+  log "MISSING flatc — $flatc_hint (just cabin-ws-demo and just cabin-browser-demo need it)"
   missing=1
 fi
 

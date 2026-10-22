@@ -65,6 +65,14 @@ export async function startServer(
     announced += value;
   }
   const port = Number(/^port (\d+)$/m.exec(announced)?.[1]);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    kill();
+    await child.status;
+    throw new Error(
+      `the server ${path} announced no port from 1 to 65535: ` +
+        JSON.stringify(announced),
+    );
+  }
   const hash = /^hash ([0-9a-f]{64})$/m.exec(announced)![1];
   return {
     port,

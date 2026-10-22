@@ -19,10 +19,12 @@ import type { Progress } from "./check.ts";
 import { type CabinServer, startServer } from "./server.ts";
 
 /**
- * The time from the start of the program to its end, in milliseconds. It is
- * the deadline of main.ts, for the same reason: the worst pass measured is
- * about 12 s. It covers every step: the bundle, the start of the server, the
- * start of the browser, the page's verdict and the exit of the server.
+ * The time from the start of the program to its end, in milliseconds. It
+ * covers every step: the bundle, the start of the server, the start of the
+ * browser, the page's verdict and the exit of the server. A passing run
+ * measured on macOS with Google Chrome took from 3.7 s to 8.5 s over five
+ * runs. The page's verdict, like that of main.ts, depends on the phase of the
+ * server's tick, and the worst case measured for main.ts is about 12 s.
  */
 const DEADLINE_MS = 30_000;
 
@@ -34,40 +36,87 @@ const HTML = `<!doctype html>
 <script type="module" src="/page.js"></script>
 `;
 
+// What the program has started, so that the deadline can stop it too.
+let dir: string | undefined;
+let bundler: Deno.ChildProcess | undefined;
+let killServer: (() => void) | undefined;
+let server: CabinServer | undefined;
+let http: Deno.HttpServer<Deno.NetAddr> | undefined;
+// The browser's start, pending or done.
+let launching: Promise<Browser> | undefined;
+
 /** Bundles page.ts for the browser into `out`. */
 async function bundle(out: string): Promise<void> {
-  const { code, stderr } = await new Deno.Command(Deno.execPath(), {
+  bundler = new Deno.Command(Deno.execPath(), {
     args: ["bundle", "--quiet", "--platform=browser", "--output", out, PAGE],
     // The import map and the options in deno.json are found from here.
     cwd: import.meta.dirname,
     stdout: "null",
     stderr: "piped",
-  }).output();
+  }).spawn();
+  const { code, stderr } = await bundler.output();
   if (code !== 0) {
     throw new Error(`deno bundle failed: ${new TextDecoder().decode(stderr)}`);
   }
 }
 
-// What the program has started, so that the deadline can stop it too.
-let dir: string | undefined;
-let killServer: (() => void) | undefined;
-let server: CabinServer | undefined;
-let http: Deno.HttpServer<Deno.NetAddr> | undefined;
-let browser: Browser | undefined;
+function kill(child: Deno.ChildProcess | undefined): void {
+  try {
+    child?.kill();
+  } catch {
+    // The process has already exited.
+  }
+}
 
 /**
  * Stops every process and listener the program started and removes its
  * temporary directory. Every step runs even when an earlier one fails, so that
- * nothing outlives the program.
+ * nothing outlives the program; each step that fails is reported. A browser
+ * that is still starting is closed once its start ends, which takes at most the
+ * 10 s that launch() waits for it.
  */
 async function cleanUp(): Promise<void> {
+  kill(bundler);
   killServer?.();
-  await Promise.allSettled([
-    browser?.close(),
-    http?.shutdown(),
-    server?.status,
-    dir === undefined ? undefined : Deno.remove(dir, { recursive: true }),
-  ]);
+  const steps: [string, Promise<unknown> | undefined][] = [
+    ["closing the browser", launching?.then((browser) => browser.close())],
+    ["stopping the page server", http?.shutdown()],
+    ["waiting for the server to exit", server?.status],
+    [
+      "removing the temporary directory",
+      dir === undefined ? undefined : Deno.remove(dir, { recursive: true }),
+    ],
+  ];
+  const settled = await Promise.allSettled(steps.map(([, step]) => step));
+  settled.forEach((result, i) => {
+    // A browser whose start failed has nothing to close; that failure is
+    // reported as the cause of the run.
+    if (result.status === "rejected" && !(i === 0 && !started)) {
+      console.error(
+        `cabin-browser: clean-up: ${steps[i][0]} failed: ${result.reason}`,
+      );
+    }
+  });
+}
+
+// Set once launch() has resolved.
+let started = false;
+
+/** Throws unless the page's result is a progress that passed the check. */
+function passed(result: unknown): Progress {
+  if (typeof result !== "object" || result === null) {
+    throw new Error("the page set no result");
+  }
+  const progress = result as Progress;
+  if (
+    !(progress.received > 0) || progress.sawHighest !== true ||
+    progress.sawLowestAfter !== true
+  ) {
+    throw new Error(
+      `the page's result is not a pass: ${JSON.stringify(result)}`,
+    );
+  }
+  return progress;
 }
 
 async function run(serverPath: string): Promise<Progress> {
@@ -95,8 +144,27 @@ async function run(serverPath: string): Promise<Progress> {
   );
   const url = `http://127.0.0.1:${http.addr.port}/` +
     `?port=${server.port}&hash=${server.hash}`;
-  browser = await launch();
-  const progress = await browser.evaluate(url, "globalThis.result") as Progress;
+  launching = launch();
+  const browser = await launching;
+  started = true;
+  let result: unknown;
+  try {
+    result = await browser.evaluate(url, "globalThis.result");
+  } catch (e) {
+    // A server that exited closes the connection too. Wait briefly for its
+    // exit status, so that a failure of the server is reported first.
+    const exited = await Promise.race([
+      server.status,
+      new Promise<undefined>((resolve) =>
+        setTimeout(() => resolve(undefined), 500)
+      ),
+    ]);
+    if (exited && exited.code !== 0) {
+      throw new Error(`the server exited with status ${exited.code}`);
+    }
+    throw e;
+  }
+  const progress = passed(result);
   const status = await server.stop();
   if (status.code !== 0) {
     throw new Error(`the server exited with status ${status.code}`);
@@ -104,18 +172,28 @@ async function run(serverPath: string): Promise<Progress> {
   return progress;
 }
 
+// The clean-up after the first cause, so that only that cause is reported
+// and a later cause waits for the same clean-up.
+let failing: Promise<void> | undefined;
+
+async function failWith(message: string): Promise<never> {
+  if (!failing) {
+    console.error(`cabin-browser: ${message}`);
+    failing = cleanUp();
+  }
+  await failing;
+  Deno.exit(1);
+}
+
 const serverPath = Deno.args[0];
 if (!serverPath) {
   console.error("cabin-browser: usage: browser.ts <server-executable>");
   Deno.exit(1);
 }
-const deadline = setTimeout(async () => {
-  console.error(
-    `cabin-browser: the deadline of ${DEADLINE_MS} ms expired`,
-  );
-  await cleanUp();
-  Deno.exit(1);
-}, DEADLINE_MS);
+const deadline = setTimeout(
+  () => failWith(`the deadline of ${DEADLINE_MS} ms expired`),
+  DEADLINE_MS,
+);
 try {
   const progress = await run(serverPath);
   clearTimeout(deadline);
@@ -128,7 +206,5 @@ try {
   Deno.exit(0);
 } catch (e) {
   clearTimeout(deadline);
-  console.error(`cabin-browser: ${(e as Error).message}`);
-  await cleanUp();
-  Deno.exit(1);
+  await failWith((e as Error).message);
 }
