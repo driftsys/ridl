@@ -2848,6 +2848,36 @@ ts-e2e:
     cd packages/ridl-transport-ws
     RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts
 
+# The steps `cabin-ws-demo` and `cabin-browser-demo` share: the `flatc` and
+# `deno` checks, the `.fbs` schema and the `flatc` TypeScript, then the server's
+# format, lint and build. `name` is the recipe named in each failure message.
+_cabin-web-generate name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    flatc_version="$(tr -d '[:space:]' < .flatc-version)"
+    if ! command -v flatc >/dev/null 2>&1; then
+        echo "{{name}}: flatc is required and is not on PATH." >&2
+        echo "{{name}}: install version $flatc_version from https://github.com/google/flatbuffers/releases" >&2
+        exit 1
+    fi
+    if [ "$(flatc --version)" != "flatc version $flatc_version" ]; then
+        echo "{{name}}: flatc is '$(flatc --version)', and this recipe needs 'flatc version $flatc_version'." >&2
+        exit 1
+    fi
+    if ! command -v deno >/dev/null 2>&1; then
+        echo "{{name}}: deno is required and is not on PATH." >&2
+        echo "{{name}}: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
+        exit 1
+    fi
+    target="${CARGO_TARGET_DIR:-target}"
+    # Cleared first, as `_cabin-generate` does for the crates.
+    rm -rf examples/cabin/web/generated
+    "$target/debug/ridl" build examples/cabin --emit flatbuffers --out-dir examples/cabin/web/generated/schema
+    flatc --ts --gen-object-api -o examples/cabin/web/generated examples/cabin/web/generated/schema/veh.cabin.fbs
+    cargo fmt --manifest-path examples/cabin/server/Cargo.toml --check
+    cargo clippy --manifest-path examples/cabin/Cargo.toml -p server --locked --all-targets --no-deps -- -D warnings
+    cargo build --manifest-path examples/cabin/Cargo.toml -p server --locked
+
 # Prove a Deno program can read a value from a Rust server and decode it with
 # code that `flatc` generated from the `ridl build` output. The server is
 # examples/cabin/server, which publishes cabin's `temperature` signal over
@@ -2875,32 +2905,9 @@ ts-e2e:
 # reads `CARGO_TARGET_DIR` for the CLI; the server is built in the cabin
 # workspace, so its executable is in examples/cabin/target unless the
 # variable is set.
-cabin-ws-demo: _cabin-generate
+cabin-ws-demo: _cabin-generate (_cabin-web-generate "cabin-ws-demo")
     #!/usr/bin/env bash
     set -euo pipefail
-    flatc_version="$(tr -d '[:space:]' < .flatc-version)"
-    if ! command -v flatc >/dev/null 2>&1; then
-        echo "cabin-ws-demo: flatc is required and is not on PATH." >&2
-        echo "cabin-ws-demo: install version $flatc_version from https://github.com/google/flatbuffers/releases" >&2
-        exit 1
-    fi
-    if [ "$(flatc --version)" != "flatc version $flatc_version" ]; then
-        echo "cabin-ws-demo: flatc is '$(flatc --version)', and this recipe needs 'flatc version $flatc_version'." >&2
-        exit 1
-    fi
-    if ! command -v deno >/dev/null 2>&1; then
-        echo "cabin-ws-demo: deno is required and is not on PATH." >&2
-        echo "cabin-ws-demo: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
-        exit 1
-    fi
-    target="${CARGO_TARGET_DIR:-target}"
-    # Cleared first, as `_cabin-generate` does for the crates.
-    rm -rf examples/cabin/web/generated
-    "$target/debug/ridl" build examples/cabin --emit flatbuffers --out-dir examples/cabin/web/generated/schema
-    flatc --ts --gen-object-api -o examples/cabin/web/generated examples/cabin/web/generated/schema/veh.cabin.fbs
-    cargo fmt --manifest-path examples/cabin/server/Cargo.toml --check
-    cargo clippy --manifest-path examples/cabin/Cargo.toml -p server --locked --all-targets --no-deps -- -D warnings
-    cargo build --manifest-path examples/cabin/Cargo.toml -p server --locked
     server_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
     server="$(cd "$server_target" && pwd)/debug/server"
     cd examples/cabin/web
@@ -2910,6 +2917,56 @@ cabin-ws-demo: _cabin-generate
     deno check main.ts
     deno test check_test.ts
     deno run -A main.ts "$server"
+
+# Run the check of `cabin-ws-demo` in a headless browser: the same server and
+# the same check (examples/cabin/web/check.ts), loaded by a page instead of a
+# Deno program. examples/cabin/web/browser.ts starts the server, bundles
+# page.ts with `deno bundle --platform=browser`, serves the page from
+# 127.0.0.1, and opens it in the browser, which attaches with the encoding
+# `flatbuffers` and decodes each payload with the `flatc` code. One 30 s limit
+# covers the page's verdict; the server is then stopped and must exit with
+# status 0. It prints the number of samples and the number of wraps.
+#
+# Not a member of `build`, on purpose, for the reason `ts-browser-e2e` gives:
+# a contributor's build needs no browser. CI's `typescript` job runs it, so
+# `gate-parity` does not cover it and the CI step is checked by reading. The
+# browser is looked up as `ts-browser-e2e` looks it up, after the generation
+# steps it shares with `cabin-ws-demo`, and the one found is passed on in
+# RIDL_BROWSER.
+cabin-browser-demo: _cabin-generate (_cabin-web-generate "cabin-browser-demo")
+    #!/usr/bin/env bash
+    set -euo pipefail
+    browser=""
+    if [ -n "${RIDL_BROWSER:-}" ]; then
+        if [ ! -f "$RIDL_BROWSER" ] || [ ! -x "$RIDL_BROWSER" ]; then
+            echo "cabin-browser-demo: RIDL_BROWSER is '$RIDL_BROWSER', which is not an executable file." >&2
+            echo "cabin-browser-demo: set RIDL_BROWSER to the path of a Chromium-family browser." >&2
+            exit 1
+        fi
+        browser="$RIDL_BROWSER"
+    else
+        for name in google-chrome google-chrome-stable chromium chromium-browser; do
+            if found="$(command -v "$name" 2>/dev/null)"; then
+                browser="$found"
+                break
+            fi
+        done
+        mac_chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        if [ -z "$browser" ] && [ -f "$mac_chrome" ]; then
+            browser="$mac_chrome"
+        fi
+    fi
+    if [ -z "$browser" ]; then
+        echo "cabin-browser-demo: no browser found." >&2
+        echo "cabin-browser-demo: set RIDL_BROWSER to the path of a Chromium-family browser, or install Google Chrome (https://www.google.com/chrome/) or Chromium (https://www.chromium.org/getting-involved/download-chromium/)." >&2
+        exit 1
+    fi
+    echo "cabin-browser-demo: browser: $browser"
+    server_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
+    server="$(cd "$server_target" && pwd)/debug/server"
+    cd examples/cabin/web
+    deno check browser.ts page.ts
+    RIDL_BROWSER="$browser" deno run -A browser.ts "$server"
 
 # Build the same loopback server example and run the browser end-to-end test
 # of packages/ridl-transport-ws: a headless Chromium-family browser opens a

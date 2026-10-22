@@ -29,6 +29,7 @@ import {
   TEMPERATURE,
   TemperatureCheck,
 } from "./check.ts";
+import { type CabinServer, startServer } from "./server.ts";
 
 /**
  * The time from the start of the program to its end, in milliseconds. A correct
@@ -40,18 +41,14 @@ const DEADLINE_MS = 30_000;
 
 // The stage the program is in, named in the failure message.
 let stage = "starting the server";
-// The server process, once it has started.
-const started: Deno.ChildProcess[] = [];
+// The server, once it has started.
+let server: CabinServer | undefined;
 // Set when the program has begun to stop the server on purpose.
 let stopping = false;
 
 function fail(message: string): never {
   console.error(`cabin-web: ${message} (stage: ${stage})`);
-  try {
-    for (const process of started) process.kill();
-  } catch {
-    // The server has already ended.
-  }
+  server?.kill();
   Deno.exit(1);
 }
 
@@ -63,28 +60,20 @@ setTimeout(
 const serverPath = Deno.args[0];
 if (!serverPath) fail("usage: main.ts <server-executable>");
 
-const server = new Deno.Command(serverPath, {
-  stdin: "piped",
-  stdout: "piped",
-  stderr: "inherit",
-}).spawn();
-started.push(server);
+// The announcement of the server is read inside `startServer`.
+stage = "reading the announcement of the server";
+try {
+  server = await startServer(serverPath);
+} catch (e) {
+  fail((e as Error).message);
+}
+const { port } = server;
 void server.status.then((status) => {
   if (!stopping) fail(`the server exited with status ${status.code}`);
 });
-
-// Reads standard output until both announcement lines have arrived.
-stage = "reading the announcement of the server";
-const output = server.stdout.pipeThrough(new TextDecoderStream()).getReader();
-let announced = "";
-while (!/^hash [0-9a-f]{64}$/m.test(announced)) {
-  const { value, done } = await output.read();
-  if (done) fail(`the server ended before it printed its port and hash`);
-  announced += value;
-}
-const port = Number(/^port (\d+)$/m.exec(announced)?.[1]);
-const hex = /^hash ([0-9a-f]{64})$/m.exec(announced)?.[1] ?? "";
-const hash = Uint8Array.from(hex.match(/../g)!.map((h) => parseInt(h, 16)));
+const hash = Uint8Array.from(
+  server.hash.match(/../g)!.map((h) => parseInt(h, 16)),
+);
 
 const check = new TemperatureCheck();
 let failure: string | undefined;
@@ -117,7 +106,7 @@ void session.closed.then(async (ended) => {
   // A server that exited closes the connection too. Wait briefly for its exit
   // status, so that a failure of the server is reported before the closure.
   const exited = await Promise.race([
-    server.status,
+    server!.status,
     new Promise<undefined>((resolve) =>
       setTimeout(() => resolve(undefined), 500)
     ),
@@ -140,8 +129,7 @@ await done;
 // Ends the server: it exits when its standard input reaches the end.
 stage = "waiting for the server to exit";
 stopping = true;
-await server.stdin.close();
-const status = await server.status;
+const status = await server.stop();
 
 console.log(
   `cabin-web: received ${check.progress.received} sample(s), ` +

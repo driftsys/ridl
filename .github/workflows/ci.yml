@@ -265,9 +265,9 @@ jobs:
 
   # The TypeScript packages packages/ridl-runtime and packages/ridl-transport-ws.
   # `ts-check`, `ts-npm-check`, `ts-e2e` and `cabin-ws-demo`
-  # are members of `just build`; `ts-browser-e2e` is not, because a
-  # contributor's build needs no browser, so `gate-parity` does not see its step
-  # here and it is checked by reading. ubuntu-latest has Google Chrome on PATH.
+  # are members of `just build`; `ts-browser-e2e` and `cabin-browser-demo` are
+  # not, because a contributor's build needs no browser, so `gate-parity` does
+  # not see their steps here and they are checked by reading. ubuntu-latest has Google Chrome on PATH.
   # RIDL_BROWSER_NO_SANDBOX starts it with --no-sandbox, which a runner may need
   # and which is harmless where it is not.
   typescript:
@@ -332,6 +332,10 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: just cabin-ws-demo
       - run: just ts-browser-e2e
+        env:
+          RIDL_BROWSER_NO_SANDBOX: "1"
+      # Uses the flatc installed above.
+      - run: just cabin-browser-demo
         env:
           RIDL_BROWSER_NO_SANDBOX: "1"
 

@@ -239,6 +239,13 @@ member; rsdl is the apex.
                          browser (RIDL_BROWSER names one). Runs in CI; not a
                          member of build, so a contributor's build needs no
                          browser
+    just cabin-browser-demo
+                         the generation and server build of cabin-ws-demo,
+                         then the same temperature check in a page that a
+                         headless browser opens (RIDL_BROWSER names one);
+                         needs Deno, flatc and a Chromium-family browser.
+                         Runs in CI; not a member of build, for the same
+                         reason as ts-browser-e2e
     just ts-npm-check    build packages/ridl-runtime and packages/ridl-transport-ws
                          into npm packages with dnt, verify the built manifest and tarball,
                          install the tarball in a temporary directory, and
