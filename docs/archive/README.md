@@ -730,3 +730,12 @@ provenance. Nothing here is normative — the current references live in
   Archived with one edit, the link to the design note. The durable record is
   `examples/cabin/web/check.ts` and its tests, the `_cabin-wasm` recipe, and the
   out-of-memory check in `packages/ridl-runtime`.
+
+- **2026-10-22-ts-codec-table-design.md** and
+  **2026-10-22-ts-codec-table-plan.md** — the design and the plan for the
+  generated TypeScript codec table (step 5 of
+  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)):
+  `<base>.codec.ts`, the `codec` manifest key and MANI-019, and the
+  `ridl_type_id` export. Archived with two edits, the links to that design note.
+  The durable record is
+  [the codec table design record](../design/ts-codec-table.md).

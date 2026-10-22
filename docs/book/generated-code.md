@@ -400,6 +400,7 @@ payload type of another package that is one goes through that package's own
 codec file; a payload type that reaches a struct, a union or an enum of
 another package is refused with an error that names both. An internal payload
 type has no `encode`/`decode`, because `<base>.ts` does not export its type.
+[The codec table design record][codec-table] gives the rules in full.
 
 ## Documentation in the generated code
 
@@ -539,3 +540,4 @@ a reader of the generated source; rustdoc does not show them.
 [consumer-face]: https://github.com/driftsys/ridl/blob/main/docs/design/interaction-face.md#the-consumer-face
 [ridl-rt]: https://github.com/driftsys/ridl/blob/main/docs/design/ridl-rt.md
 [proto3-gaps]: https://github.com/driftsys/ridl/blob/main/docs/design/proto3-codec.md#known-gaps
+[codec-table]: https://github.com/driftsys/ridl/blob/main/docs/design/ts-codec-table.md

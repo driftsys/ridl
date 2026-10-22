@@ -23,7 +23,7 @@ demos switch to the generated table last.
 
 **Spec:**
 [2026-10-22-ts-codec-table-design.md](2026-10-22-ts-codec-table-design.md), over
-[2026-10-21-ts-wasm-codec-design.md](2026-10-21-ts-wasm-codec-design.md).
+[2026-10-21-ts-wasm-codec-design.md](../wip/2026-10-21-ts-wasm-codec-design.md).
 
 ## Global Constraints
 

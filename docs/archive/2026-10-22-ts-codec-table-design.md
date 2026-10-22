@@ -3,7 +3,7 @@
 Status: as built, 2026-10-22 (branch `feat/ts-codec-table`); D-4, D-14 and the
 fixtures record what the implementation settled. Written 2026-10-22 as step 5 of
 the plan change in
-[the TypeScript wasm codec design](2026-10-21-ts-wasm-codec-design.md).
+[the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md).
 Decisions marked **(ruling)** were taken by the author; Sebastien accepted the
 six recommendations at the end on 2026-10-22, and they are recorded there as
 rulings. The implementation plan is
