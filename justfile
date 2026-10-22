@@ -2908,6 +2908,7 @@ cabin-ws-demo: _cabin-generate
     deno fmt --check
     deno lint
     deno check main.ts
+    deno test check_test.ts
     deno run -A main.ts "$server"
 
 # Build the same loopback server example and run the browser end-to-end test
