@@ -2853,11 +2853,12 @@ ts-e2e:
 # examples/cabin/server, which publishes cabin's `temperature` signal over
 # `ridl-transport-ws`. The program is examples/cabin/web/main.ts, which attaches
 # with the encoding `flatbuffers`, subscribes, decodes each payload with the
-# `flatc` code, and fails unless every value is inside [-40..85], a decrease
-# lands at or below -35 at least once (a restart), and 85 is seen; any other
-# decrease fails, and so do two decreases in a row and an increase larger than
-# 20. One 20 s deadline covers the whole run, and a server that
-# exits early fails the run at once. It prints the number of samples.
+# `flatc` code, and fails unless every value is inside [-40..85], every
+# received value is 1 to 63 steps ahead of the previous one on the ring of the
+# 126 values (85 is followed by -40), and both -40 and 85 are seen. One 30 s
+# deadline covers the whole run, and a server that exits early fails the run at
+# once. It prints the number of samples, the number of wraps, and whether each
+# bound was seen.
 #
 # Written in order: the CLI and the generated crates (both members of the
 # examples/cabin workspace, written by the private recipe `_cabin-generate` that

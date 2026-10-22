@@ -8,13 +8,13 @@
 //! serves every connection on its own thread with its own attachment to one
 //! shared runtime. A publisher thread publishes a new temperature at a fixed
 //! period, which steps through the whole range of the type, from -40 to 85, and
-//! then starts again at -40, with no pause at any value. The process exits with status 0 when its standard
-//! input reaches the end.
+//! then starts again at -40, with no pause at any value. The process exits
+//! with status 0 when its standard input reaches the end.
 //!
 //! The Deno program of `examples/cabin/web` passes only if every value is
-//! inside [-40..85], a decrease lands at or below -35 at least once (a
-//! restart), and 85 is seen; any other decrease fails, and so do two decreases
-//! in a row and an increase larger than 20.
+//! inside [-40..85], every received value is 1 to 63 steps ahead of the
+//! previous one on the ring of the 126 values (85 is followed by -40), and
+//! both -40 and 85 are seen.
 
 use std::io::{self, Write};
 use std::net::TcpListener;
@@ -38,8 +38,13 @@ const CATALOG: CatalogRef = *<api::Cabin as Interface>::CATALOG;
 const LOWEST: i64 = -40;
 const HIGHEST: i64 = 85;
 
-/// The time between two publications.
-const PERIOD: Duration = Duration::from_millis(10);
+/// The time between two publications. The transport sends the newest value of
+/// a signal once per poll tick (20 ms by default). 7 ms does not divide 20 ms,
+/// so the value that each tick samples moves by 2 ms of phase in every cycle of
+/// 882 ms (126 values), and every value, the bounds included, is eventually
+/// received. A period that divides the tick would sample the same values in
+/// every cycle and could never receive the others.
+const PERIOD: Duration = Duration::from_millis(7);
 
 fn main() {
     let rt = Arc::new(Mutex::new(Loopback::new(CATALOG)));

@@ -227,10 +227,10 @@ member; rsdl is the apex.
                          then run the Deno program of examples/cabin/web
                          against it: the program decodes the server's
                          temperature payloads with the flatc code and fails
-                         unless every value is inside [-40..85], a decrease
-                         lands at or below -35 at least once (a restart), and
-                         85 is seen; any other decrease fails, and so do two
-                         decreases in a row and an increase larger than 20.
+                         unless every value is inside [-40..85], every
+                         received value is 1 to 63 steps ahead of the previous
+                         one on the ring of the 126 values (85 is followed by
+                         -40), and both -40 and 85 are seen.
                          Needs Deno and flatc at the version in .flatc-version
     just ts-browser-e2e  the same build, then the package's end-to-end test
                          in a headless browser; needs a Chromium-family
