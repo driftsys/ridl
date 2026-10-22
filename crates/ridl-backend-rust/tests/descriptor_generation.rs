@@ -1075,10 +1075,15 @@ fn wasm_module_lists_the_payload_types_sorted() {
             "ridl_alloc",
             "ridl_catalog_hash",
             "ridl_free",
+            "ridl_type_id",
             "ridl_verify"
         ]
     );
-    assert_eq!(source.matches("no_mangle").count(), 4);
+    assert_eq!(source.matches("no_mangle").count(), 5);
+    assert!(
+        d.contains("pubfntype_id_of(name:&str)->::core::primitive::i32"),
+        "got:\n{source}"
+    );
     assert!(d.contains("#[cfg(all(target_arch=\"wasm32\",feature=\"wasm-exports\"))]modexports{"));
     assert!(ridl_backend_rust::generate_wasm_module(&[0; 31], &[&model]).is_err());
 }

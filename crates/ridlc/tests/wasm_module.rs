@@ -200,6 +200,13 @@ fn main() {
     println!("catalog {}", hex(&<Cabin as Interface>::CATALOG.hash.0));
     println!("types {}", veh_cabin::wasm::WASM_PAYLOAD_TYPES.join(","));
     println!("rules {}", veh_cabin::wasm::WASM_RULES.join(","));
+    for name in veh_cabin::wasm::WASM_PAYLOAD_TYPES {
+        println!("typeid {name} {}", veh_cabin::wasm::type_id_of(name));
+    }
+    println!(
+        "typeid veh.cabin.Nothing {}",
+        veh_cabin::wasm::type_id_of("veh.cabin.Nothing")
+    );
 }
 "#;
 
@@ -211,7 +218,8 @@ import { readFileSync } from "node:fs";
 
 const [wasmPath, ...cases] = process.argv.slice(2);
 const { instance } = await WebAssembly.instantiate(readFileSync(wasmPath), {});
-const { memory, ridl_alloc, ridl_free, ridl_verify, ridl_catalog_hash } = instance.exports;
+const { memory, ridl_alloc, ridl_free, ridl_verify, ridl_catalog_hash, ridl_type_id } =
+  instance.exports;
 
 const results = cases.map((testCase) => {
   if (testCase.startsWith("raw:")) {
@@ -227,6 +235,15 @@ const results = cases.map((testCase) => {
     new Uint8Array(memory.buffer, 0, bytes.length).set(bytes);
     const code = ridl_verify(Number(typeId), 0, bytes.length);
     new Uint8Array(memory.buffer, 0, bytes.length).set(saved);
+    return code;
+  }
+  if (testCase.startsWith("name:")) {
+    // A qualified type name, written as UTF-8 bytes.
+    const bytes = new TextEncoder().encode(testCase.slice("name:".length));
+    const ptr = ridl_alloc(bytes.length);
+    new Uint8Array(memory.buffer, ptr, bytes.length).set(bytes);
+    const code = ridl_type_id(ptr, bytes.length);
+    ridl_free(ptr, bytes.length);
     return code;
   }
   const [typeId, hex] = testCase.split(":");
@@ -248,7 +265,14 @@ const before = Buffer.from(new Uint8Array(memory.buffer, 0, 32)).toString("hex")
 ridl_catalog_hash(0);
 const after = Buffer.from(new Uint8Array(memory.buffer, 0, 32)).toString("hex");
 
-// The export table: exactly the memory and the four functions.
+// A null pointer with a length of 0, and a real pointer with a length of 0,
+// are the empty name, which no list holds.
+const typeIdNull = ridl_type_id(0, 0);
+const emptyPtr = ridl_alloc(1);
+const typeIdEmpty = ridl_type_id(emptyPtr, 0);
+ridl_free(emptyPtr, 1);
+
+// The export table: exactly the memory and the five functions.
 const exports = WebAssembly.Module.exports(new WebAssembly.Module(readFileSync(wasmPath)))
   .map((entry) => entry.name)
   .sort();
@@ -281,6 +305,8 @@ console.log(JSON.stringify({
   aligned,
   zeroAlloc,
   grows,
+  typeIdNull,
+  typeIdEmpty,
 }));
 "#;
 
@@ -515,6 +541,14 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
         cases.push(format!("{index}:{hex}"));
         cases.push(format!("{index}:{}", &hex[..hex.len() / 4 * 2]));
     }
+    // Type names, resolved by `ridl_type_id`: a listed name, a prefix of one,
+    // and a name the list does not hold.
+    let name_cases = [
+        "name:veh.cabin.Temperature",
+        "name:veh.cabin.Temp",
+        "name:veh.cabin.Nothing",
+    ];
+    cases.extend(name_cases.iter().map(|case| case.to_string()));
     let node = std::process::Command::new("node")
         .arg(&host)
         .arg(&module)
@@ -544,19 +578,57 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
     );
     // Each type: its valid bytes verify, and its first half is malformed.
     assert_eq!(
-        results[13..],
+        results[13..13 + 2 * payloads.len()],
         payloads.iter().flat_map(|_| [0, 1]).collect::<Vec<i64>>(),
         "cases: {cases:?}"
     );
     // The native dispatch gives the codes the wasm export gives.
     assert_eq!(
-        results[13..],
+        results[13..13 + 2 * payloads.len()],
         payloads
             .iter()
             .flat_map(|(_, _, valid, half)| [valid.parse::<i64>().unwrap(), half.parse().unwrap()])
             .collect::<Vec<i64>>(),
         "native verify_by_id against the wasm ridl_verify"
     );
+    // The name cases come after the payload cases.
+    let type_ids = &results[13 + 2 * payloads.len()..];
+    let native_type_ids: Vec<(String, i64)> = stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("typeid "))
+        .map(|rest| {
+            let (name, id) = rest.split_once(' ').expect("a name and an id");
+            (name.to_string(), id.parse().expect("an integer id"))
+        })
+        .collect();
+    assert_eq!(
+        type_ids,
+        [temperature as i64, -1, -1],
+        "ridl_type_id of a listed name, a prefix of one, and an unknown name"
+    );
+    assert_eq!(
+        type_ids[0],
+        native_type_ids
+            .iter()
+            .find(|(name, _)| name == "veh.cabin.Temperature")
+            .expect("a native line")
+            .1,
+        "the wasm export gives the id the native lookup gives"
+    );
+    assert_eq!(native_type_ids.len(), types.len() + 1);
+    for (name, id) in &native_type_ids {
+        let expected = types
+            .iter()
+            .position(|listed| listed == name)
+            .map_or(-1, |index| index as i64);
+        assert_eq!(*id, expected, "native type_id_of(`{name}`)");
+    }
+    assert_eq!(
+        native_type_ids.last().expect("the unknown name line"),
+        &("veh.cabin.Nothing".to_string(), -1)
+    );
+    assert_eq!(report["typeIdNull"], serde_json::json!(-1));
+    assert_eq!(report["typeIdEmpty"], serde_json::json!(-1));
     assert_eq!(
         report["exports"],
         serde_json::json!([
@@ -564,6 +636,7 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
             "ridl_alloc",
             "ridl_catalog_hash",
             "ridl_free",
+            "ridl_type_id",
             "ridl_verify"
         ])
     );

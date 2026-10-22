@@ -303,6 +303,10 @@ cargo rustc --release --target wasm32-unknown-unknown --crate-type cdylib \
   --features wasm-exports
 ```
 
+The module exports `ridl_alloc`, `ridl_free`, `ridl_catalog_hash`,
+`ridl_verify` and `ridl_type_id`. `ridl_type_id` returns the type id of a payload
+type named by its qualified name, or -1.
+
 The three variables are the recommended size settings, and `cargo` reads them
 from the environment. The module is
 `target/wasm32-unknown-unknown/release/<crate name>.wasm`.

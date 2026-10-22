@@ -7,8 +7,8 @@
 //! every package of the crate, and writes the result beside the crate root
 //! when `[backend.rust] wasm = true`.
 //!
-//! The exports are `ridl_alloc`, `ridl_free`, `ridl_catalog_hash` and
-//! `ridl_verify`, and no other. They are compiled only for
+//! The exports are `ridl_alloc`, `ridl_free`, `ridl_catalog_hash`,
+//! `ridl_type_id` and `ridl_verify`, and no other. They are compiled only for
 //! `target_arch = "wasm32"` with the generated crate's feature `wasm-exports`
 //! on, so a Rust consumer that links the crate for wasm32 gets no second copy
 //! of the symbols. The two lists a host needs to read the results,
@@ -123,6 +123,23 @@ pub fn generate_wasm_module(
                     -1
                 }
             }
+        }
+
+        /// The position of `name` in `WASM_PAYLOAD_TYPES`, which is the
+        /// `type_id` of that payload type, or -1 when the list does not hold
+        /// `name`. The comparison is byte by byte over the whole name.
+        /// Compiled for every target, so that a native test checks the lookup
+        /// the export runs; not a stable API.
+        #[doc(hidden)]
+        pub fn type_id_of(name: &str) -> ::core::primitive::i32 {
+            let mut index = 0;
+            while index < #types_const.len() {
+                if #types_const[index].as_bytes() == name.as_bytes() {
+                    return index as ::core::primitive::i32;
+                }
+                index += 1;
+            }
+            -1
         }
 
         /// The result code of verifying `bytes` as a `T`.
@@ -253,6 +270,40 @@ pub fn generate_wasm_module(
                 super::verify_by_id(type_id, bytes)
             }
 
+            /// Returns the `type_id` of the payload type named by the
+            /// `name_len` bytes at `name_ptr`, which is the position of that
+            /// qualified name in `WASM_PAYLOAD_TYPES`. Returns -1 when the
+            /// list does not hold the name, when the bytes are not UTF-8, and
+            /// when `name_len` is 0. A null `name_ptr` with a `name_len` that
+            /// is not 0, a `name_len` above `isize::MAX`, and a range that
+            /// passes the end of the address space return -1 without reading.
+            ///
+            /// # Safety
+            ///
+            /// `name_ptr` is valid for a read of `name_len` bytes, or
+            /// `name_len` is 0.
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn ridl_type_id(
+                name_ptr: *const ::core::primitive::u8,
+                name_len: ::core::primitive::usize,
+            ) -> ::core::primitive::i32 {
+                if name_len == 0 {
+                    return -1;
+                }
+                if name_ptr.is_null()
+                    || name_len > ::core::primitive::isize::MAX as ::core::primitive::usize
+                    || (name_ptr as ::core::primitive::usize).checked_add(name_len).is_none()
+                {
+                    return -1;
+                }
+                // SAFETY: the caller passes `name_len` readable bytes at
+                // `name_ptr`.
+                let bytes = unsafe { ::core::slice::from_raw_parts(name_ptr, name_len) };
+                match ::core::str::from_utf8(bytes) {
+                    ::core::result::Result::Ok(name) => super::type_id_of(name),
+                    ::core::result::Result::Err(_) => -1,
+                }
+            }
         }
     }])
 }
