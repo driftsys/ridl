@@ -1,9 +1,12 @@
 // The script of the page that browser.ts opens. It reads the server's `port`
-// and the catalog `hash` (64 hex digits) from the page's query string, fetches
-// the cabin wasm codec from /veh_cabin.wasm and loads it with that hash, runs
-// the codec self-test of check.ts, attaches with the encoding `flatbuffers`,
-// subscribes to `Cabin.temperature`, verifies each payload through the codec,
-// and feeds each decoded value to the check of check.ts. It sets
+// and the catalog `hash` (64 hex digits) that the server announced from the
+// page's query string, rejects when that hash is not the `CATALOG_HASH` of the
+// generated codec module, fetches the cabin wasm codec from /veh_cabin.wasm
+// and loads it with the generated hash, payload types and rules, runs the
+// codec self-test of check.ts, attaches with the encoding `flatbuffers`,
+// subscribes to `Cabin.temperature` at the interface number and ordinal of the
+// generated `Cabin` table, verifies each payload through the codec, decodes it
+// with the generated codec module, and feeds each decoded value to the check of check.ts. It sets
 // `globalThis.result` to a promise that resolves with the check's progress on
 // the first `pass` verdict, and rejects with the cause when the codec cannot
 // be loaded, the self-test fails, the codec rejects a payload, the check gives
@@ -12,14 +15,19 @@
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
 import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
-  decodeTemperature,
-  hashFromHex,
+  hexFromHash,
   type Progress,
   selfTest,
-  TEMPERATURE,
   TemperatureCheck,
   verifyPayload,
 } from "./check.ts";
+import {
+  Cabin,
+  CATALOG_HASH,
+  CATALOG_NAME,
+  PAYLOAD_TYPES,
+  RULES,
+} from "./generated/veh.cabin.codec.ts";
 
 async function run(): Promise<Progress> {
   const query = new URLSearchParams(location.search);
@@ -29,11 +37,21 @@ async function run(): Promise<Progress> {
   if (!/^[0-9a-f]{64}$/.test(hex)) {
     throw new Error("the page URL has no hash parameter of 64 hex digits");
   }
-  const hash = hashFromHex(hex);
+  const generatedHex = hexFromHash(CATALOG_HASH);
+  if (hex !== generatedHex) {
+    throw new Error(
+      `the server announces catalog hash ${hex}, ` +
+        `the generated table has ${generatedHex}`,
+    );
+  }
 
   let codec: Codec;
   try {
-    codec = await loadCodec(fetch("/veh_cabin.wasm"), { catalogHash: hash });
+    codec = await loadCodec(fetch("/veh_cabin.wasm"), {
+      catalogHash: CATALOG_HASH,
+      payloadTypes: PAYLOAD_TYPES,
+      ruleText: RULES,
+    });
   } catch (e) {
     throw new Error(`loading the codec: ${(e as Error).message}`);
   }
@@ -52,19 +70,20 @@ async function run(): Promise<Progress> {
   });
 
   const session = await connect(`ws://127.0.0.1:${port}`, {
-    catalog: { name: "veh.cabin", hash },
+    catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
     encoding: "flatbuffers",
     onPublish(target, sample) {
       if (settled || !sample.payload) return;
       if (
-        target.iface !== TEMPERATURE.iface || target.ord !== TEMPERATURE.ord
+        target.iface !== Cabin.temperature.iface ||
+        target.ord !== Cabin.temperature.ord
       ) return;
       let outcome;
       try {
         const rejected = verifyPayload(codec, sample.payload);
         outcome = rejected
           ? { kind: "fail" as const, cause: rejected }
-          : check.accept(decodeTemperature(sample.payload));
+          : check.accept(Cabin.temperature.payload.decode(sample.payload));
       } catch (e) {
         settled = true;
         reject(new Error(`verifying the payload: ${(e as Error).message}`));
@@ -87,8 +106,8 @@ async function run(): Promise<Progress> {
   try {
     await session.subscribe({
       kind: Kind.Signal,
-      iface: TEMPERATURE.iface,
-      ord: TEMPERATURE.ord,
+      iface: Cabin.temperature.iface,
+      ord: Cabin.temperature.ord,
     });
     return await verdict;
   } finally {

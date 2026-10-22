@@ -1,12 +1,17 @@
 // The check of the cabin demo, without any Deno API, so that a browser page
-// can load it too. It decodes the payload of `Cabin.temperature` and judges
-// the sequence of received values; main.ts and page.ts supply the transport.
-// It also builds a payload and verifies payloads through the wasm codec that
-// main.ts and page.ts load.
+// can load it too. It judges the sequence of received temperature values;
+// main.ts and page.ts supply the transport and decode each payload with the
+// generated codec module, generated/veh.cabin.codec.ts. It also verifies
+// payloads through the wasm codec that main.ts and page.ts load, and builds
+// the payloads of its self-test with the generated `encodeTemperature`.
 
-import * as flatbuffers from "flatbuffers";
 import type { Codec } from "../../../packages/ridl-runtime/mod.ts";
-import { TemperatureBox } from "./generated/veh/cabin.ts";
+import {
+  Cabin,
+  encodeTemperature,
+  RULES,
+} from "./generated/veh.cabin.codec.ts";
+import type { Temperature } from "./generated/veh.cabin.ts";
 
 /** The lowest and the highest value of `Temperature` in cabin.ridl. */
 export const LOWEST = -40;
@@ -37,13 +42,6 @@ export const RING = HIGHEST - LOWEST + 1;
  */
 export const MAX_STEP = RING / 2;
 
-/**
- * The (interface, ordinal) pair of the interaction the check reads. The pair
- * is the one in cabin.ridl: interface 1 is `Cabin`, and its interaction 1 is
- * the signal `temperature`.
- */
-export const TEMPERATURE = { iface: 1, ord: 1 };
-
 /** What the check has seen so far. */
 export interface Progress {
   /** The number of values accepted, repeats included. */
@@ -72,36 +70,24 @@ export type Verdict =
   | { kind: "pass" }
   | { kind: "fail"; cause: string };
 
-/** Converts the catalog hash, 64 hex digits, to its 32 bytes. */
-export function hashFromHex(hex: string): Uint8Array {
-  return Uint8Array.from(hex.match(/../g)!.map((h) => parseInt(h, 16)));
+/** Converts the catalog hash, 32 bytes, to its 64 hex digits. */
+export function hexFromHash(hash: Uint8Array): string {
+  return Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /**
- * The `type_id` of the payload type that carries `Temperature`: its index in
- * `WASM_PAYLOAD_TYPES` of the generated
- * examples/cabin/generated/__ridl_wasm.rs, which lists the payload types
- * sorted by qualified name. The entry is `veh.cabin.Temperature`, the sixth
- * one; its payload is the `TemperatureBox` table that `decodeTemperature`
- * reads. check_test.ts reads that file and checks this index.
- */
-export const TEMPERATURE_TYPE_ID = 5;
-
-/**
  * The code `ridl_verify` returns for a broken range: 2 plus the index of
- * `range` in `WASM_RULES` (`length`, `pattern`, `range`, ...).
+ * `range` in the generated `RULES`.
  */
-export const RANGE_RULE = 4;
+export const RANGE_RULE = 2 + RULES.indexOf("range");
 
 /**
- * Builds the payload of a `TemperatureBox`, the root type that
- * `decodeTemperature` reads, with the `flatc` builder. It does not check the
- * range, so that a payload the codec rejects can be built.
+ * The payload of a temperature, built with the generated `encodeTemperature`,
+ * which does not check the range, so that a payload the codec rejects can be
+ * built.
  */
-export function encodeTemperature(value: number): Uint8Array {
-  const builder = new flatbuffers.Builder(16);
-  builder.finish(TemperatureBox.createTemperatureBox(builder, value));
-  return builder.asUint8Array();
+function encode(value: number): Uint8Array {
+  return encodeTemperature(value as Temperature);
 }
 
 /**
@@ -112,7 +98,8 @@ export function verifyPayload(
   codec: Codec,
   payload: Uint8Array,
 ): string | undefined {
-  const result = codec.verify(TEMPERATURE_TYPE_ID, payload);
+  const id = codec.typeId(Cabin.temperature.payload.type);
+  const result = codec.verify(id, payload);
   if (result.ok) return undefined;
   switch (result.kind) {
     case "rule":
@@ -121,7 +108,7 @@ export function verifyPayload(
     case "malformed":
       return "the codec found the payload malformed (code 1)";
     case "unknown-type":
-      return `the codec does not know type id ${TEMPERATURE_TYPE_ID}`;
+      return `the codec does not know type id ${id}`;
   }
 }
 
@@ -132,13 +119,14 @@ export function verifyPayload(
  * payload, so that a codec that accepts every payload cannot pass them.
  */
 export function selfTest(codec: Codec): string | undefined {
-  const accepted = codec.verify(TEMPERATURE_TYPE_ID, encodeTemperature(20));
+  const id = codec.typeId(Cabin.temperature.payload.type);
+  const accepted = codec.verify(id, encode(20));
   if (!accepted.ok) {
     return `the codec rejected 20, which is inside [${LOWEST}..${HIGHEST}]: ` +
       JSON.stringify(accepted);
   }
   for (const value of [LOWEST - 1, HIGHEST + 1]) {
-    const result = codec.verify(TEMPERATURE_TYPE_ID, encodeTemperature(value));
+    const result = codec.verify(id, encode(value));
     if (result.ok) {
       return `the codec accepted ${value}, which is outside ` +
         `[${LOWEST}..${HIGHEST}]`;
@@ -149,13 +137,6 @@ export function selfTest(codec: Codec): string | undefined {
     }
   }
   return undefined;
-}
-
-/** Decodes the payload of a `TemperatureBox`. */
-export function decodeTemperature(payload: Uint8Array): number {
-  return TemperatureBox.getRootAsTemperatureBox(
-    new flatbuffers.ByteBuffer(payload),
-  ).value();
 }
 
 /** Judges the sequence of received temperature values. */

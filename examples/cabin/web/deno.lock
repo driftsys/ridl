@@ -11,6 +11,15 @@
   "workspace": {
     "dependencies": [
       "npm:flatbuffers@25.9.23"
-    ]
+    ],
+    "links": {
+      "jsr:@driftsys/ridl-runtime@0.12.0": {
+        "dependencies": [
+          "jsr:@deno/dnt@0.42.3",
+          "jsr:@std/assert@1.0.13",
+          "npm:wabt@1.0.37"
+        ]
+      }
+    }
   }
 }

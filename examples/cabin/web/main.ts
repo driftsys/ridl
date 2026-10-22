@@ -1,13 +1,17 @@
 // Reads cabin's `temperature` signal from the WebSocket server in
-// ../server and decodes each payload with the code that `flatc` generated
-// from the `.fbs` file that `ridl build --emit flatbuffers` wrote. Before it
-// decodes a payload, it verifies the payload through the cabin wasm codec,
-// generated/veh_cabin.wasm, loaded with packages/ridl-runtime.
+// ../server and decodes each payload with the codec module that
+// `ridl build --emit typescript` wrote, generated/veh.cabin.codec.ts, which
+// calls the code `flatc` generated from the `.fbs` file. The interface number
+// and the ordinal of the signal come from the same module's `Cabin` table.
+// Before it decodes a payload, it verifies the payload through the cabin wasm
+// codec, generated/veh_cabin.wasm, loaded with packages/ridl-runtime.
 //
 // Usage: deno run -A main.ts <server-executable>
 //
 // The program starts the server, reads the `port` and `hash` lines it prints,
-// loads the wasm codec with the announced hash, runs the codec self-test (20
+// fails when the announced hash is not the generated `CATALOG_HASH`, loads the
+// wasm codec with the generated hash, payload types and rules, runs the codec
+// self-test (20
 // is accepted, -41 and 86 are rejected with the range rule), attaches with the
 // encoding `flatbuffers`, and subscribes to
 // `Cabin.temperature`. The server steps the value through the whole range of
@@ -29,17 +33,22 @@
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
 import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
-  decodeTemperature,
-  hashFromHex,
+  hexFromHash,
   HIGHEST,
   isPass,
   LOWEST,
   RANGE_RULE,
   selfTest,
-  TEMPERATURE,
   TemperatureCheck,
   verifyPayload,
 } from "./check.ts";
+import {
+  Cabin,
+  CATALOG_HASH,
+  CATALOG_NAME,
+  PAYLOAD_TYPES,
+  RULES,
+} from "./generated/veh.cabin.codec.ts";
 import { type CabinServer, startServer } from "./server.ts";
 
 /**
@@ -96,12 +105,23 @@ const { port } = server;
 void server.status.then((status) => {
   if (!stopping) fail(`the server exited with status ${status.code}`);
 });
-const hash = hashFromHex(server.hash);
+stage = "comparing the catalog hash";
+const generatedHex = hexFromHash(CATALOG_HASH);
+if (server.hash !== generatedHex) {
+  fail(
+    `the server announces catalog hash ${server.hash}, ` +
+      `the generated table has ${generatedHex}`,
+  );
+}
 
 stage = "loading the codec";
 let codec: Codec;
 try {
-  codec = await loadCodec(wasm, { catalogHash: hash });
+  codec = await loadCodec(wasm, {
+    catalogHash: CATALOG_HASH,
+    payloadTypes: PAYLOAD_TYPES,
+    ruleText: RULES,
+  });
 } catch (e) {
   fail(`loading the codec: ${(e as Error).message}`);
 }
@@ -118,19 +138,20 @@ const done = new Promise<void>((resolve) => (enough = resolve));
 
 stage = "connecting";
 const session = await connect(`ws://127.0.0.1:${port}`, {
-  catalog: { name: "veh.cabin", hash },
+  catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
   encoding: "flatbuffers",
   onPublish(target, sample) {
     if (!sample.payload || failure) return;
     if (
-      target.iface !== TEMPERATURE.iface || target.ord !== TEMPERATURE.ord
+      target.iface !== Cabin.temperature.iface ||
+      target.ord !== Cabin.temperature.ord
     ) return;
     let verdict;
     try {
       const rejected = verifyPayload(codec, sample.payload);
       verdict = rejected
         ? { kind: "fail" as const, cause: rejected }
-        : check.accept(decodeTemperature(sample.payload));
+        : check.accept(Cabin.temperature.payload.decode(sample.payload));
     } catch (e) {
       fail(`verifying the payload: ${(e as Error).message}`);
     }
@@ -161,8 +182,8 @@ void session.closed.then(async (ended) => {
 stage = "subscribing";
 await session.subscribe({
   kind: Kind.Signal,
-  iface: TEMPERATURE.iface,
-  ord: TEMPERATURE.ord,
+  iface: Cabin.temperature.iface,
+  ord: Cabin.temperature.ord,
 });
 
 stage = "waiting for the highest value and the lowest after it";

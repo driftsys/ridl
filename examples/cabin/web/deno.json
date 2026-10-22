@@ -1,6 +1,7 @@
 {
   "imports": {
-    "flatbuffers": "npm:flatbuffers@25.9.23"
+    "flatbuffers": "npm:flatbuffers@25.9.23",
+    "@driftsys/ridl-runtime": "../../../packages/ridl-runtime/mod.ts"
   },
   "unstable": ["sloppy-imports"],
   "nodeModulesDir": "none",

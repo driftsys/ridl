@@ -2849,7 +2849,10 @@ ts-e2e:
     RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts
 
 # The steps `cabin-ws-demo` and `cabin-browser-demo` share: the `flatc` and
-# `deno` checks, the `.fbs` schema and the `flatc` TypeScript, then the server's
+# `deno` checks, the TypeScript types, codec module and `.fbs` schema that
+# `ridl build --emit typescript --emit flatbuffers` writes (examples/cabin/ridl.toml
+# sets `[backend.typescript] codec = true`), the `flatc` object API that the
+# codec module imports, then the server's
 # format, lint and build, then the wasm codec (`_cabin-wasm`). `name` is the
 # recipe named in each failure message.
 _cabin-web-generate name:
@@ -2873,8 +2876,8 @@ _cabin-web-generate name:
     target="${CARGO_TARGET_DIR:-target}"
     # Cleared first, as `_cabin-generate` does for the crates.
     rm -rf examples/cabin/web/generated
-    "$target/debug/ridl" build examples/cabin --emit flatbuffers --out-dir examples/cabin/web/generated/schema
-    flatc --ts --gen-object-api -o examples/cabin/web/generated examples/cabin/web/generated/schema/veh.cabin.fbs
+    "$target/debug/ridl" build examples/cabin --emit typescript --emit flatbuffers --out-dir examples/cabin/web/generated
+    flatc --ts --gen-object-api -I examples/cabin/web/generated -o examples/cabin/web/generated examples/cabin/web/generated/veh.cabin.fbs
     cargo fmt --manifest-path examples/cabin/server/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p server --locked --all-targets --no-deps -- -D warnings
     cargo build --manifest-path examples/cabin/Cargo.toml -p server --locked
@@ -2937,10 +2940,14 @@ _cabin-wasm:
 # Prove a Deno program can read a value from a Rust server and decode it with
 # code that `flatc` generated from the `ridl build` output. The server is
 # examples/cabin/server, which publishes cabin's `temperature` signal over
-# `ridl-transport-ws`. The program is examples/cabin/web/main.ts, which attaches
-# with the encoding `flatbuffers`, subscribes, verifies each payload through
-# cabin's wasm codec and fails with the codec's cause on a rejection, decodes
-# each verified payload with the `flatc` code, and fails unless every value is
+# `ridl-transport-ws`. The program is examples/cabin/web/main.ts, which takes
+# the catalog name and hash, the interface number and ordinal of the signal,
+# and the decode function from the generated codec module
+# examples/cabin/web/generated/veh.cabin.codec.ts. It fails when the catalog
+# hash the server announces is not the generated one, attaches with the
+# encoding `flatbuffers`, subscribes, verifies each payload through cabin's
+# wasm codec and fails with the codec's cause on a rejection, decodes each
+# verified payload with the generated codec module, and fails unless every value is
 # inside [-40..85], every
 # received value is 1 to 63 steps ahead of the previous one on the ring of the
 # 126 values (85 is followed by -40; a repeated value is ignored), 85 is reached
@@ -2949,13 +2956,13 @@ _cabin-wasm:
 # fails the run at once. It prints the number of samples, the number of wraps,
 # whether 85 was seen, and whether -40 was seen after 85. Before it connects,
 # it loads the codec, examples/cabin/web/generated/veh_cabin.wasm, with the
-# catalog hash the server announces, and runs a self-test: the codec must
+# generated catalog hash, payload type names and rule texts, and runs a self-test: the codec must
 # accept 20 and reject -41 and 86 with the range rule.
 #
 # Written in order: the CLI and the generated crates (both members of the
 # examples/cabin workspace, written by the private recipe `_cabin-generate` that
 # `demo` shares, because the workspace does not resolve without both); the
-# `.fbs` schema; the `flatc` TypeScript; then the server's format, lint and
+# TypeScript types, codec module and `.fbs` schema; the `flatc` TypeScript; then the server's format, lint and
 # build, because no other gate reaches the server; then the wasm codec
 # (`_cabin-wasm`, which needs the wasm32-unknown-unknown target); then the
 # type check of the program, the unit tests of the check (`deno test
@@ -2965,8 +2972,8 @@ _cabin-wasm:
 # `flatc` has to be the version in .flatc-version (the version whose output the
 # program's imports were written against; CI and `./bootstrap` read the same
 # file); the recipe fails with a message if it is missing or is another
-# version. Deno is the version in .deno-version. The `flatc` output, the `.fbs`
-# and veh_cabin.wasm are build outputs under examples/cabin/web/generated/, not
+# version. Deno is the version in .deno-version. The `ridl build` and `flatc`
+# output and veh_cabin.wasm are build outputs under examples/cabin/web/generated/, not
 # in git. Like `demo`, the recipe
 # reads `CARGO_TARGET_DIR` for the CLI; the server is built in the cabin
 # workspace, so its executable is in examples/cabin/target unless the
