@@ -273,6 +273,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
+    # The job takes about 3 minutes; a hung server or program ends here.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: install the pinned toolchain
@@ -281,7 +283,13 @@ jobs:
         with:
           workspaces: |
             . -> target
-            examples/cabin -> target
+      # The cabin workspace is a separate cargo workspace whose members are
+      # written by the recipe, so rust-cache cannot read its metadata before
+      # the recipe runs. Its target directory is cached by path instead.
+      - uses: actions/cache@v4
+        with:
+          path: examples/cabin/target
+          key: cabin-target-${{ runner.os }}-${{ hashFiles('examples/cabin/Cargo.lock', 'rust-toolchain.toml') }}
       - name: install just
         run: |
           set -o pipefail
@@ -304,15 +312,17 @@ jobs:
       - run: just ts-check
       - run: just ts-npm-check
       - run: just ts-e2e
-      # `just cabin-ws-demo` needs `flatc` at the version the recipe checks. The
+      # `just cabin-ws-demo` needs `flatc` at the version the recipe checks,
+      # which is read from .flatc-version, the one place it is pinned. The
       # official release archive is used because the distribution packages
       # carry other versions.
       - name: install flatc
         run: |
           set -o pipefail
+          flatc_version="$(tr -d '[:space:]' < .flatc-version)"
           mkdir -p "$HOME/.local/bin"
           curl -fsSL -o "$RUNNER_TEMP/flatc.zip" \
-            "https://github.com/google/flatbuffers/releases/download/v25.12.19/Linux.flatc.binary.g++-13.zip"
+            "https://github.com/google/flatbuffers/releases/download/v${flatc_version}/Linux.flatc.binary.g++-13.zip"
           unzip -o -q "$RUNNER_TEMP/flatc.zip" -d "$HOME/.local/bin"
           chmod +x "$HOME/.local/bin/flatc"
           "$HOME/.local/bin/flatc" --version

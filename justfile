@@ -765,6 +765,25 @@ compat-check: toolchain-check
     echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, dedup only)"
     CARGO_HOME="$descriptor_home" cargo "+$descriptor_minimum" build --offline --locked --no-default-features --features dedup --manifest-path "$pkg_descriptor/Cargo.toml"
 
+# The generation both `demo` and `cabin-ws-demo` start with: the CLI, then the
+# two generated crates of the examples/cabin workspace, which does not resolve
+# without both.
+[private]
+_cabin-generate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="${CARGO_TARGET_DIR:-target}"
+    cargo build --locked -p ridl-cli
+    # Cleared first: `--out-dir` writes over what it writes and leaves
+    # everything else, so a file the emitter stops writing would survive here
+    # and keep this green while a fresh clone failed.
+    rm -rf examples/cabin/generated examples/cabin/generated-corpus
+    "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
+    # For the `no_std` check and the clippy run in `demo`: cabin's schema has no
+    # string, bytes, array, map or pattern, and this workspace has each of them.
+    "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
+        --out-dir examples/cabin/generated-corpus
+
 # Generate the cabin example's crate and run the program that links it.
 #
 # This is the one place the whole chain runs as a person runs it: `ridl build`
@@ -852,20 +871,9 @@ compat-check: toolchain-check
 # a schema change that moves either one fails here with cargo's own `--locked`
 # message, which does not name its remedy: rerun without `--locked` once and
 # commit the new `examples/cabin/Cargo.lock`.
-demo:
+demo: _cabin-generate
     #!/usr/bin/env bash
     set -euo pipefail
-    target="${CARGO_TARGET_DIR:-target}"
-    cargo build --locked -p ridl-cli
-    # Cleared first: `--out-dir` writes over what it writes and leaves
-    # everything else, so a file the emitter stops writing would survive here
-    # and keep this green while a fresh clone failed.
-    rm -rf examples/cabin/generated examples/cabin/generated-corpus
-    "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
-    # For the `no_std` check and the clippy run below: cabin's schema has no
-    # string, bytes, array, map or pattern, and this workspace has each of them.
-    "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
-        --out-dir examples/cabin/generated-corpus
     # This line is the only one that runs the generated crate's planus and
     # prost checks, which are ignored for a plain `cargo test`. A filter that
     # matches no test exits 0, so a renamed test would pass here unseen: the
@@ -2845,27 +2853,29 @@ ts-e2e:
 # examples/cabin/server, which publishes cabin's `temperature` signal over
 # `ridl-transport-ws`. The program is examples/cabin/web/main.ts, which attaches
 # with the encoding `flatbuffers`, subscribes, decodes each payload with the
-# `flatc` code, and fails unless it sees at least two distinct values inside
-# the range of `Temperature`. It prints the values it received.
+# `flatc` code, and fails unless it sees the lowest and the highest value of
+# `Temperature`, every value inside the range, and the server's restart at the
+# lowest value. One 20 s deadline covers the whole run, and a server that
+# exits early fails the run at once. It prints the number of samples.
 #
-# Written in order: the CLI; the generated crates (both members of the
-# examples/cabin workspace, as `demo` writes them, because the workspace does
-# not resolve without both); the `.fbs` schema; the `flatc` TypeScript; then the
+# Written in order: the CLI and the generated crates (both members of the
+# examples/cabin workspace, written by the private recipe `_cabin-generate` that
+# `demo` shares, because the workspace does not resolve without both); the `.fbs` schema; the `flatc` TypeScript; then the
 # server's format, lint and build, because no other gate reaches the server;
 # then the program. The program closes the server's standard input to stop it.
 #
-# `flatc` has to be version 25.12.19 (the pin in .github/workflows/ci.yml and the
-# version whose output the program's imports were written against); the recipe
-# fails with a message if it is missing or is another version. Deno is the
+# `flatc` has to be the version in .flatc-version (the version whose output the
+# program's imports were written against; CI and `./bootstrap` read the same
+# file); the recipe fails with a message if it is missing or is another version. Deno is the
 # version in .deno-version. The `flatc` output and the `.fbs` are build outputs
 # under examples/cabin/web/generated/, not in git. Like `demo`, the recipe
 # reads `CARGO_TARGET_DIR` for the CLI; the server is built in the cabin
 # workspace, so its executable is in examples/cabin/target unless the
 # variable is set.
-cabin-ws-demo:
+cabin-ws-demo: _cabin-generate
     #!/usr/bin/env bash
     set -euo pipefail
-    flatc_version="25.12.19"
+    flatc_version="$(tr -d '[:space:]' < .flatc-version)"
     if ! command -v flatc >/dev/null 2>&1; then
         echo "cabin-ws-demo: flatc is required and is not on PATH." >&2
         echo "cabin-ws-demo: install version $flatc_version from https://github.com/google/flatbuffers/releases" >&2
@@ -2881,13 +2891,8 @@ cabin-ws-demo:
         exit 1
     fi
     target="${CARGO_TARGET_DIR:-target}"
-    cargo build --locked -p ridl-cli
-    # Cleared first, as in `demo`: `--out-dir` leaves a file the emitter stops
-    # writing, and that file would keep this green while a fresh clone failed.
-    rm -rf examples/cabin/generated examples/cabin/generated-corpus examples/cabin/web/generated
-    "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
-    "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
-        --out-dir examples/cabin/generated-corpus
+    # Cleared first, as `_cabin-generate` does for the crates.
+    rm -rf examples/cabin/web/generated
     "$target/debug/ridl" build examples/cabin --emit flatbuffers --out-dir examples/cabin/web/generated/schema
     flatc --ts --gen-object-api -o examples/cabin/web/generated examples/cabin/web/generated/schema/veh.cabin.fbs
     cargo fmt --manifest-path examples/cabin/server/Cargo.toml --check
@@ -3023,8 +3028,8 @@ lint-commits base="main":
     fi
 
 # Lint and static-check gate before pushing — skips `freeze-check`, `compile`,
-# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-npm-check`, `ts-e2e`, and
-# `install-check`.
+# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-npm-check`, `ts-e2e`,
+# `cabin-ws-demo`, and `install-check`.
 # Wired as the pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs
 # the full `just build` gate on the PR; `just verify` runs that same gate
 # locally before opening one.

@@ -138,6 +138,10 @@ amendments of [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md),
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) are their
 durable records.
 
+The cabin WebSocket server plan (`2026-10-22-cabin-ws-server-plan.md`) was
+archived on 2026-10-22, once the server and the Deno demo landed; the example in
+`examples/cabin` and `just cabin-ws-demo` are its durable record.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)

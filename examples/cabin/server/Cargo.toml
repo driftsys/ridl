@@ -4,8 +4,8 @@
 #
 # `generated/` and the workspace's other generated member,
 # `generated-corpus/`, are written by `ridl build --emit rust` and are not in
-# git, so this manifest resolves only after `just demo` has run both builds
-# once.
+# git, so this manifest resolves only after `just demo` or `just cabin-ws-demo`
+# has run both builds once.
 [package]
 name = "server"
 version = "0.0.0"

@@ -227,8 +227,8 @@ member; rsdl is the apex.
                          then run the Deno program of examples/cabin/web
                          against it: the program decodes the server's
                          temperature payloads with the flatc code and fails
-                         unless it sees two distinct values in [-40..85].
-                         Needs flatc 25.12.19 and Deno
+                         unless it sees the whole range [-40..85] in order.
+                         Needs Deno and flatc at the version in .flatc-version
     just ts-browser-e2e  the same build, then the package's end-to-end test
                          in a headless browser; needs a Chromium-family
                          browser (RIDL_BROWSER names one). Runs in CI; not a
@@ -256,7 +256,7 @@ member; rsdl is the apex.
     just pre-push        lint-commits + the static-check members of build,
                          ts-check included; skips freeze-check, compile, lint,
                          test, wasm-check, compat-check, demo, ts-e2e,
-                         ts-npm-check, and install-check — wired as the pre-push hook
+                         cabin-ws-demo, ts-npm-check, and install-check — wired as the pre-push hook
     just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
     just book-build      render the book to ./book — what CI publishes to Pages

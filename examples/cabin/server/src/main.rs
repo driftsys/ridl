@@ -6,9 +6,9 @@
 //! flushed: `port <n>`, and `hash <64 lowercase hexadecimal digits>`, the
 //! catalog hash of the generated crate, which a client passes to `attach`. It
 //! serves every connection on its own thread with its own attachment to one
-//! shared runtime. A publisher thread publishes a new temperature every 10 ms,
-//! which steps through the whole range of the type, from -40 to 85. The
-//! process exits with status 0 when its standard input reaches the end.
+//! shared runtime. A publisher thread publishes a new temperature at a fixed
+//! period, which steps through the whole range of the type, from -40 to 85, and
+//! then starts again at -40. The process exits with status 0 when its standard input reaches the end.
 
 use std::io::{self, Write};
 use std::net::TcpListener;

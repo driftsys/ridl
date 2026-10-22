@@ -1,11 +1,11 @@
 # Cabin WebSocket server and Deno demo — plan
 
 Step 2 of the plan change in
-[the TypeScript wasm codec design](2026-10-21-ts-wasm-codec-design.md): a Deno
-program reads cabin's `temperature` signal from a Rust server over a WebSocket
-session with the encoding `flatbuffers`, and decodes the payload with code that
-`flatc --ts` generates from the `.fbs` that `ridl build --emit flatbuffers`
-writes.
+[the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md): a
+Deno program reads cabin's `temperature` signal from a Rust server over a
+WebSocket session with the encoding `flatbuffers`, and decodes the payload with
+code that `flatc --ts` generates from the `.fbs` that
+`ridl build --emit flatbuffers` writes.
 
 ## Decisions (delegated, to report to Sebastien)
 

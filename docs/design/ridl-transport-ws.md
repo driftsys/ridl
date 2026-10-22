@@ -726,8 +726,9 @@ What the crate already does so that the addition is local:
 - The retention of a settled response for a provider without bounds, a question
   for the frame specification (driftsys/ridl#986).
 - The stand-in ports (driftsys/ridl#988).
-- A public Rust client, and `examples/cabin` over the transport
-  (driftsys/ridl#989).
+- A public Rust client, and the generated face of `examples/cabin` across the
+  transport (driftsys/ridl#989). `examples/cabin/server` already serves the
+  `temperature` signal to a TypeScript client.
 
 ## Alternatives considered
 
