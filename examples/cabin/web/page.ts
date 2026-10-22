@@ -1,18 +1,24 @@
 // The script of the page that browser.ts opens. It reads the server's `port`
-// and the catalog `hash` (64 hex digits) from the page's query string,
-// attaches with the encoding `flatbuffers`, subscribes to `Cabin.temperature`,
+// and the catalog `hash` (64 hex digits) from the page's query string, fetches
+// the cabin wasm codec from /veh_cabin.wasm and loads it with that hash, runs
+// the codec self-test of check.ts, attaches with the encoding `flatbuffers`,
+// subscribes to `Cabin.temperature`, verifies each payload through the codec,
 // and feeds each decoded value to the check of check.ts. It sets
 // `globalThis.result` to a promise that resolves with the check's progress on
-// the first `pass` verdict, and rejects with the cause on a `fail` verdict or
-// when the connection closes first.
+// the first `pass` verdict, and rejects with the cause when the codec cannot
+// be loaded, the self-test fails, the codec rejects a payload, the check gives
+// a `fail` verdict, or the connection closes first.
 
+import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
 import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   decodeTemperature,
   hashFromHex,
   type Progress,
+  selfTest,
   TEMPERATURE,
   TemperatureCheck,
+  verifyPayload,
 } from "./check.ts";
 
 async function run(): Promise<Progress> {
@@ -24,6 +30,15 @@ async function run(): Promise<Progress> {
     throw new Error("the page URL has no hash parameter of 64 hex digits");
   }
   const hash = hashFromHex(hex);
+
+  let codec: Codec;
+  try {
+    codec = await loadCodec(fetch("/veh_cabin.wasm"), { catalogHash: hash });
+  } catch (e) {
+    throw new Error(`loading the codec: ${(e as Error).message}`);
+  }
+  const selfTestFailure = selfTest(codec);
+  if (selfTestFailure) throw new Error(`self-test: ${selfTestFailure}`);
 
   const check = new TemperatureCheck();
   // Set once the check has given its first `pass` or `fail`; later values
@@ -44,7 +59,17 @@ async function run(): Promise<Progress> {
       if (
         target.iface !== TEMPERATURE.iface || target.ord !== TEMPERATURE.ord
       ) return;
-      const outcome = check.accept(decodeTemperature(sample.payload));
+      let outcome;
+      try {
+        const rejected = verifyPayload(codec, sample.payload);
+        outcome = rejected
+          ? { kind: "fail" as const, cause: rejected }
+          : check.accept(decodeTemperature(sample.payload));
+      } catch (e) {
+        settled = true;
+        reject(new Error(`verifying the payload: ${(e as Error).message}`));
+        return;
+      }
       if (outcome.kind === "pass") {
         settled = true;
         resolve({ ...check.progress });

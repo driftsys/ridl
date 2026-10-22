@@ -1,6 +1,10 @@
 /** Thrown when a module cannot be loaded or does not follow the codec ABI. */
 export class CodecError extends Error {
-  /** The name of the export that is missing or has the wrong type, if any. */
+  /**
+   * The name of the export that is missing or has the wrong type, or
+   * `ridl_alloc` when the module is out of memory (it returned 0 for a
+   * request of more than 0 bytes); undefined otherwise.
+   */
   readonly exportName?: string;
 
   constructor(message: string, exportName?: string) {

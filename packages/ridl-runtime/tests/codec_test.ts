@@ -365,3 +365,40 @@ Deno.test("an invalid typeId is a CodecError and allocates nothing", async () =>
   assertEquals(global(instance, "allocs"), allocs);
   assertEquals(codec.verify(2 ** 32 - 1, new Uint8Array(1)).ok, false);
 });
+
+Deno.test("loadCodec rejects when the hash buffer cannot be allocated", async () => {
+  const error = await assertRejects(
+    () => loadCodec(fixtureBytes({ allocFails: "always" }), options),
+    CodecError,
+    "out of memory",
+  );
+  assertEquals(error.exportName, "ridl_alloc");
+});
+
+Deno.test("verify throws when the payload buffer cannot be allocated", async () => {
+  const codec = await loadCodec(fixtureBytes({ allocFails: 32 }), options);
+  const error = assertThrows(
+    () => codec.verify(0, new Uint8Array(64)),
+    CodecError,
+    "out of memory",
+  );
+  assertEquals(error.exportName, "ridl_alloc");
+});
+
+Deno.test("verify throws when a 1-byte payload buffer cannot be allocated", async () => {
+  const codec = await loadCodec(fixtureBytes({ allocFailsFor: 1 }), options);
+  const error = assertThrows(
+    () => codec.verify(0, new Uint8Array(1)),
+    CodecError,
+    "out of memory",
+  );
+  assertEquals(error.exportName, "ridl_alloc");
+});
+
+Deno.test("verify of an empty payload does not throw", async () => {
+  const codec = await loadCodec(
+    fixtureBytes({ allocNullForEmpty: true }),
+    options,
+  );
+  assertEquals(codec.verify(0, new Uint8Array(0)).ok, false);
+});

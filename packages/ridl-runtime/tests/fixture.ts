@@ -1,7 +1,9 @@
 // A wasm module that follows the codec ABI, built from text for the tests.
 //
 // - ridl_alloc is a bump allocator that grows the memory when it needs room,
-//   and counts its calls in the exported global `allocs`.
+//   and counts its calls in the exported global `allocs`. The option
+//   `allocFails` and `allocFailsFor` make it return 0, as an allocator does
+//   when out of memory.
 // - ridl_free only counts its calls, in the exported global `frees`.
 // - ridl_catalog_hash writes the 32 bytes at offset 16 of the data segment.
 // - ridl_verify returns -1 for a type_id of 2 or more, 1 for a length of 0,
@@ -23,6 +25,15 @@ export interface FixtureOptions {
   badCode?: boolean;
   /** Make type_id 1 trap with `unreachable`. Default false. */
   trap?: boolean;
+  /**
+   * Make ridl_alloc return 0, the failure value. `"always"` fails every call;
+   * a number fails only a request of more than that many bytes.
+   */
+  allocFails?: "always" | number;
+  /** Make ridl_alloc return 0 for a request of exactly this many bytes. */
+  allocFailsFor?: number;
+  /** Make ridl_alloc return 0 for a request of 0 bytes. Default false. */
+  allocNullForEmpty?: boolean;
 }
 
 function wat(o: FixtureOptions): string {
@@ -48,6 +59,25 @@ function wat(o: FixtureOptions): string {
   (func (export "ridl_alloc") (param $len i32) (result i32)
     (local $ptr i32) (local $end i32)
     (global.set $allocs (i32.add (global.get $allocs) (i32.const 1)))
+    ${
+    o.allocFails === "always"
+      ? "(return (i32.const 0))"
+      : o.allocFails !== undefined
+      ? `(if (i32.gt_u (local.get $len) (i32.const ${o.allocFails}))
+      (then (return (i32.const 0))))`
+      : ""
+  }
+    ${
+    o.allocFailsFor !== undefined
+      ? `(if (i32.eq (local.get $len) (i32.const ${o.allocFailsFor}))
+      (then (return (i32.const 0))))`
+      : ""
+  }
+    ${
+    o.allocNullForEmpty
+      ? "(if (i32.eqz (local.get $len)) (then (return (i32.const 0))))"
+      : ""
+  }
     (local.set $ptr (global.get $next))
     (local.set $end (i32.add (local.get $ptr) (local.get $len)))
     ;; Grow by one page when the end passes the memory size.

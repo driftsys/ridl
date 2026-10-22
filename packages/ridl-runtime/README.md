@@ -36,7 +36,9 @@ if (!result.ok) {
   `catalogHash`. Its fields `expected` and `actual` are lower-case hexadecimal.
 - `CodecError` is thrown when the module cannot be fetched or compiled, or when
   an export is missing or has the wrong type. Its message and its `exportName`
-  name the export.
+  name the export. It is also thrown, by `loadCodec` or by `verify`, when
+  `ridl_alloc` returns 0 for a request of more than 0 bytes: the module is out
+  of memory, and `exportName` is `ridl_alloc`.
 
 ## Source of the module
 
