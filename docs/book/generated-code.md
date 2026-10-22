@@ -287,6 +287,26 @@ dependency releases that the resolving Rust supports. To resolve for Rust 1.83
 with a later cargo, first add `rust-version = "1.83"` to the emitted manifest,
 as `just compat-check` does.
 
+### The `wasm-exports` feature
+
+With `[backend.rust] wasm = true` in the manifest, the generated `Cargo.toml`
+declares a third feature, `wasm-exports`, off by default, which turns `std` on.
+It compiles the exports of the crate's `wasm` module when the target is
+`wasm32`, and nothing on any other target. The manifest declares no crate type,
+so a Rust program that depends on the crate links no export. The WebAssembly
+module is built from the crate's directory with:
+
+```sh
+CARGO_PROFILE_RELEASE_OPT_LEVEL=z CARGO_PROFILE_RELEASE_LTO=true \
+CARGO_PROFILE_RELEASE_PANIC=abort \
+cargo rustc --release --target wasm32-unknown-unknown --crate-type cdylib \
+  --features wasm-exports
+```
+
+The three variables are the recommended size settings, and `cargo` reads them
+from the environment. The module is
+`target/wasm32-unknown-unknown/release/<crate name>.wasm`.
+
 ## Failures
 
 A call reports its failure as a value. `ClientError`, `CallError`, `Contract`,

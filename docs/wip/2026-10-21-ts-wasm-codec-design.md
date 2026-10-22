@@ -68,9 +68,14 @@ generator such as `wasm-bindgen` adds a build tool, a JavaScript glue file and a
 version coupling for no gain.
 
 **D-2. The generated crate gets an optional `wasm` module (ruling).** An option
-`[backend.rust] wasm = true` makes `ridl-backend-rust` emit a module `wasm`,
-compiled only for `target_arch = "wasm32"`, and makes `render_cargo_toml` write
-`crate-type = ["cdylib", "rlib"]`. The exports are:
+`[backend.rust] wasm = true` makes the build write a module `wasm`, once per
+crate rather than once per package, because its exports are unmangled symbols.
+`ridl_backend_rust::generate_wasm_module` renders it over every package of the
+crate, and `ridlc` writes it to `__ridl_wasm.rs` and names it in `lib.rs`. The
+exports are compiled only for `target_arch = "wasm32"` with the generated
+crate's feature `wasm-exports` on, which `render_cargo_toml` declares as
+`wasm-exports = ["std"]`; the manifest declares no crate type and no profile (as
+amended in the slice 1 review). The exports are:
 
 | Export                                  | Behaviour                                                                                   |
 | --------------------------------------- | ------------------------------------------------------------------------------------------- |
@@ -80,17 +85,26 @@ compiled only for `target_arch = "wasm32"`, and makes `render_cargo_toml` write
 | `ridl_verify(type_id, ptr, len) -> i32` | run `Payload<FlatBuffers>::verify` for payload type `type_id`; return 0, or a positive code |
 
 The catalog hash is per unit: every interface of a unit shares the value of its
-`Interface::CATALOG`. In `ridl_verify`, code 1 means a malformed buffer
+`Interface::CATALOG`. The module writes the hash of the root package's unit, or
+of the one unit of the workspace's own packages when the manifest names no
+package; any other build is refused. `ridl_alloc` returns 0 for a length of 0
+and when the allocation fails, so the loader (slice 2) treats 0 with a length
+above 0 as out of memory. In `ridl_verify`, code 1 means a malformed buffer
 (`VerifyError::Structure`), a code of 2 or more is a typl rule, and an unknown
 `type_id` returns -1.
 
 The option requires `encodings` to name `flatbuffers`, and the backend reports
 an error otherwise. A `type_id` is the index of the payload type in a sorted
-list of the types that have a `Payload<FlatBuffers>` impl. The same run also
-writes that list into the TypeScript (D-4). A session must attach with the
-encoding `flatbuffers`, because the transport defaults to proto3. One
-`ridl_verify` with a table replaces one export per type, so the export set does
-not grow with the package.
+list of the types that have a `Payload<FlatBuffers>` impl, `WASM_PAYLOAD_TYPES`.
+The sort key is the qualified name, `<package>.<name>`, compared byte by byte;
+an induced tuple is named by its Rust spelling. The rule codes index
+`WASM_RULES`, the lower-case names of `ridl_rt::payload::Rule` sorted (`length`,
+`pattern`, `range`, `step`, `unique`, `variant`); code 2 is `length`. Both lists
+are those of one build, so the TypeScript table of slice 3 must come from the
+same run as the module. The same run also writes that list into the TypeScript
+(D-4). A session must attach with the encoding `flatbuffers`, because the
+transport defaults to proto3. One `ridl_verify` with a table replaces one export
+per type, so the export set does not grow with the package.
 
 **D-3. Reading is in place, and construction is a later slice (ruling).** The
 first slice checks bytes. Reading a field of a verified buffer is done by
@@ -122,10 +136,13 @@ hash that the IR already defines, and no new hash is added. The loader returns
 
 **D-6. The build is two commands (ruling).** `ridl build` with the Rust and
 TypeScript targets writes the crate and the TypeScript, and
-`cargo build --release --target wasm32-unknown-unknown` compiles it. The profile
-for the wasm crate is `opt-level = "z"`, `lto = true`, `panic = "abort"`,
-written into the generated `Cargo.toml`. `ridlc` does not run `cargo`: ADR-0020
-open item 4 leaves open who compiles, and a tool that spawns a build in a user's
+`cargo rustc --release --target wasm32-unknown-unknown --crate-type cdylib --features wasm-exports`
+compiles it. The size settings `opt-level = "z"`, `lto = true` and
+`panic = "abort"` come from the caller's environment
+(`CARGO_PROFILE_RELEASE_OPT_LEVEL=z`, `CARGO_PROFILE_RELEASE_LTO=true`,
+`CARGO_PROFILE_RELEASE_PANIC=abort`), not from the generated `Cargo.toml` (as
+amended in the slice 1 review). `ridlc` does not run `cargo`: ADR-0020 open item
+4 leaves open who compiles, and a tool that spawns a build in a user's
 environment is a larger decision than this slice needs. A recipe
 `just wasm-codec-demo` does both steps for `examples/cabin`.
 
@@ -148,7 +165,12 @@ Each slice is one pull request, reviewed on its own.
    and a test that builds the cabin crate for wasm and runs `ridl_verify` in a
    wasm host. That test is the guard for the `wasm` module, because
    `just wasm-check` does not reach generated code. Done when the test fails if
-   the range check is removed.
+   the range check is removed. As built, the module is one per crate, not one
+   per package, because its exports are unmangled symbols:
+   `ridl_backend_rust::generate_wasm_module` renders it over every package of
+   the crate, and `ridlc` writes it to `__ridl_wasm.rs` and names it in
+   `lib.rs`. The per-package backend reads the `wasm` option only to refuse it
+   without `flatbuffers`.
 2. **Runtime package.** `packages/ridl-runtime/`, `loadCodec`,
    `CatalogMismatch`, a Deno test against the built cabin wasm, the dnt build
    and `ts-npm-check` style verification.

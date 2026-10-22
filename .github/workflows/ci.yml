@@ -227,6 +227,12 @@ jobs:
       - run: just fmt-check
       - run: just freeze-check
       - run: just compile
+      # One test of `just test` (crates/ridlc/tests/wasm_module.rs) runs the
+      # generated wasm module in Node. ubuntu-latest has Node on PATH; the
+      # step pins the major version the test is run with.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - run: just test
       - run: just lint
       # The demo: `ridl build` writes a crate from examples/cabin, and cargo

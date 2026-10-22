@@ -69,6 +69,11 @@ jobs:
       # It is built with `cargo install` at the version ci.yml names.
       - name: install cargo-semver-checks
         run: cargo install cargo-semver-checks --locked --version 0.51.0
+      # One test of `just test` (crates/ridlc/tests/wasm_module.rs) runs the
+      # generated wasm module in Node, as in ci.yml's rust job.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: install mdbook
         run: |
           set -o pipefail

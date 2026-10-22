@@ -41,9 +41,11 @@ mod descriptors;
 mod docs;
 mod face;
 mod scalar_step;
+mod wasm;
 
 pub use codec_proto3::{Label as Proto3Label, MessageLayout as Proto3MessageLayout};
-pub use contract::{Backend, ENCODINGS_OPTION};
+pub use contract::{Backend, ENCODINGS_OPTION, WASM_OPTION};
+pub use wasm::{PAYLOAD_TYPES_CONST, RULES_CONST, generate_wasm_module};
 
 /// The generated artifact for one package: Rust source.
 #[derive(Debug, Clone, PartialEq, Eq)]

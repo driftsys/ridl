@@ -28,6 +28,14 @@ install Node or npm, and the recipe needs network access. When `deno` is not on
 installed, `bootstrap` prints a note and leaves it in place; CI runs the pinned
 one.
 
+`just test` needs Node on `PATH` too: one test,
+`crates/ridlc/tests/wasm_module.rs`, builds a generated crate for
+`wasm32-unknown-unknown` and runs it in Node. It fails, and does not skip, when
+`node` is missing. The test also needs network access, because it builds the
+module with `cargo rustc`, which fetches the crate's crates.io dependencies, and
+the `wasm32-unknown-unknown` target, which `rust-toolchain.toml` installs. The
+CI `rust` job installs Node with `actions/setup-node`.
+
 The package's browser test, `just ts-browser-e2e`, is not part of `just build`,
 so the build needs no browser. CI runs it. To run it locally you need a
 Chromium-family browser, such as Google Chrome or Chromium; set `RIDL_BROWSER`

@@ -92,6 +92,10 @@ pub const ENCODING_NAMES: [&str; 3] = ["flatbuffers", "proto3", "repr-c"];
 /// the backend request option that carries the same list.
 pub const ENCODINGS_KEY: &str = "encodings";
 
+/// The key of a `[backend.<name>]` table that asks the Rust backend for the
+/// `wasm` module, and the key of the backend request option that carries it.
+pub const WASM_KEY: &str = "wasm";
+
 /// One `[backend.<name>]` table (ADR-0002 §4). The table is the same for every
 /// backend name; whether a backend honours it is the backend's concern.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -100,6 +104,10 @@ pub struct BackendTable {
     /// range of its string in the manifest text. Empty for an absent key and
     /// for `encodings = []`, both of which mean types only.
     pub encodings: Vec<(String, Range<usize>)>,
+    /// The `wasm` value: `true` asks the Rust backend for the `wasm` module of
+    /// the generated crate. `false` for an absent key and for a value that is
+    /// not a boolean, which is MANI-015.
+    pub wasm: bool,
 }
 
 /// The raw `[defaults]` timing strings of one manifest, or the merge of
@@ -383,6 +391,7 @@ type RawBackendTables = BTreeMap<String, Spanned<Shape<RawBackend>>>;
 #[derive(Default)]
 struct RawBackend {
     encodings: Option<Spanned<Shape<Vec<Spanned<toml::Value>>>>>,
+    wasm: Option<Spanned<toml::Value>>,
 }
 
 /// A value that is either the table or array shape a reader expects (`Right`)
@@ -499,6 +508,8 @@ shape_visitor!(
             }
             if key == ENCODINGS_KEY {
                 table.encodings = Some(map.next_value()?);
+            } else if key == WASM_KEY {
+                table.wasm = Some(map.next_value()?);
             } else {
                 map.next_value::<serde::de::IgnoredAny>()?;
             }
@@ -572,6 +583,17 @@ fn collect_backends(
             continue;
         };
         let mut entry = BackendTable::default();
+        if let Some(wasm) = table.wasm {
+            match wasm.get_ref() {
+                toml::Value::Boolean(value) => entry.wasm = *value,
+                other => diags.push(error(
+                    DiagCode::MANI_015,
+                    file_id,
+                    wasm.span(),
+                    format!("`[backend.{name}] wasm` holds `{other}`, which is not a boolean"),
+                )),
+            }
+        }
         match table.encodings {
             None => {}
             Some(encodings) => {
@@ -709,7 +731,7 @@ pub const BACKEND_SECTION: &str = "backend.*";
 ///
 /// The value type is the TOML type the reader accepts for the key: `string`,
 /// `table`, `array<string>` (an array of strings), `table<string>` (a table of
-/// strings) or `table<table>` (a table of tables).
+/// strings), `table<table>` (a table of tables) or `boolean`.
 pub const KNOWN_KEYS: &[(&str, &[(&str, &str)])] = &[
     (
         "",
@@ -734,7 +756,10 @@ pub const KNOWN_KEYS: &[(&str, &[(&str, &str)])] = &[
         ],
     ),
     ("codegen", &[("header-file", "string")]),
-    (BACKEND_SECTION, &[(ENCODINGS_KEY, "array<string>")]),
+    (
+        BACKEND_SECTION,
+        &[(ENCODINGS_KEY, "array<string>"), (WASM_KEY, "boolean")],
+    ),
 ];
 
 /// The allowed keys of `section` in [`KNOWN_KEYS`]; empty for an unlisted one.
@@ -1459,6 +1484,35 @@ version = \"1.0.0\"
     }
 
     #[test]
+    fn backend_wasm_parses_as_a_boolean() {
+        let text =
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\"]\nwasm = true\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        assert!(manifest.expect("the manifest parses").backends["rust"].wasm);
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nwasm = false\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        assert!(!manifest.expect("the manifest parses").backends["rust"].wasm);
+        let (manifest, _) = parse(&format!("{PACKAGE_HEAD}[backend.rust]\n"));
+        assert!(!manifest.expect("the manifest parses").backends["rust"].wasm);
+    }
+
+    #[test]
+    fn backend_wasm_not_a_boolean_is_mani_015() {
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nwasm = \"yes\"\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        let message = &diags[0].message;
+        assert_eq!(
+            message,
+            "`[backend.rust] wasm` holds `\"yes\"`, which is not a boolean"
+        );
+        assert_eq!(span_text(&text, &diags[0]), "\"yes\"");
+        assert!(!manifest.expect("the manifest parses").backends["rust"].wasm);
+    }
+
+    #[test]
     fn backend_table_for_any_name_is_accepted() {
         let text = format!("{PACKAGE_HEAD}[backend.kotlin]\n");
         let (manifest, diags) = parse(&text);
@@ -1718,6 +1772,7 @@ version = \"1.0.0\"
                 &["1", "{ missing-docs = 1 }"],
             ),
             "table<table>" => (&["{ rust = {} }"], &["1", "{ rust = 1 }"]),
+            "boolean" => (&["true", "false"], &["1", "\"true\""]),
             other => panic!("KNOWN_KEYS names the unknown value type `{other}`"),
         }
     }

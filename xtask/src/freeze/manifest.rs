@@ -39,6 +39,7 @@ mod tests {
         let lines = dump(Path::new(".")).unwrap();
         for line in [
             "backend.*.encodings array<string>",
+            "backend.*.wasm boolean",
             "package.name string",
             "backend table<table>",
             "lints table<string>",

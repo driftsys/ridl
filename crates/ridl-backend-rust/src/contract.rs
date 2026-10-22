@@ -20,6 +20,16 @@ use crate::{WireEncoding, generate_pipeline_over};
 /// encodings that join it).
 pub const ENCODINGS_OPTION: &str = "encodings";
 
+/// The option that says the crate carries the `wasm` module, as the manifest's
+/// `[backend.rust] wasm = true` sets it, with the value `true`. The module is
+/// written once per crate by `ridlc` ([`generate_wasm_module`]), so this
+/// backend's per-package output does not change with it; the backend reads it
+/// to refuse a package whose `encodings` does not name `flatbuffers`, because
+/// every export of the module checks FlatBuffers bytes.
+///
+/// [`generate_wasm_module`]: crate::generate_wasm_module
+pub const WASM_OPTION: &str = "wasm";
+
 /// The Rust backend as a [`codegen::Backend`]: one file,
 /// `<artifact_base>.rs`, from
 /// [`generate_pipeline`](crate::generate_pipeline) over the request's model.
@@ -32,11 +42,24 @@ impl codegen::Backend for Backend {
 
     fn generate(&self, request: &v1::CodegenRequest) -> v1::CodegenResponse {
         let mut encodings: Vec<WireEncoding> = Vec::new();
+        let mut wasm = false;
         for option in &request.options {
+            if option.key == WASM_OPTION {
+                match option.value.as_str() {
+                    "true" => wasm = true,
+                    "false" => wasm = false,
+                    other => {
+                        return refusal(format!(
+                            "`{WASM_OPTION}` is `{other}`; the value is `true` or `false`"
+                        ));
+                    }
+                }
+                continue;
+            }
             if option.key != ENCODINGS_OPTION {
                 return refusal(format!(
-                    "the Rust backend takes one option, `{ENCODINGS_OPTION}`; `{}` is not one \
-                     it knows",
+                    "the Rust backend takes the options `{ENCODINGS_OPTION}` and \
+                     `{WASM_OPTION}`; `{}` is not one it knows",
                     option.key
                 ));
             }
@@ -52,6 +75,12 @@ impl codegen::Backend for Backend {
                     Err(message) => return refusal(message),
                 }
             }
+        }
+        if wasm && !encodings.contains(&WireEncoding::FlatBuffers) {
+            return refusal(format!(
+                "`[backend.rust] {WASM_OPTION} = true` needs `{ENCODINGS_OPTION}` to name \
+                 `flatbuffers`, because the `wasm` module checks FlatBuffers payloads"
+            ));
         }
         let Some(model) = &request.model else {
             return refusal("the request carries no model".to_string());
