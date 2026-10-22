@@ -1112,11 +1112,27 @@ fn run_build_inner<E: From<std::io::Error>>(
         .map_err(|err| E::from(load_io_error(err)))?;
     // The backends whose table sets `wasm = true`; only the Rust backend acts
     // on it, and a backend that takes no such option refuses it.
-    let wasm_backends: BTreeSet<String> = backends
+    let mut wasm_backends: BTreeSet<String> = backends
         .iter()
-        .filter(|(_, table)| table.wasm)
+        .filter(|(_, table)| table.wasm == Some(true))
         .map(|(language, _)| language.clone())
         .collect();
+    // The backends whose table sets `codec = true`.
+    let codec_backends: BTreeSet<String> = backends
+        .iter()
+        .filter(|(_, table)| table.codec)
+        .map(|(language, _)| language.clone())
+        .collect();
+    // `codec = true` turns the `wasm` module on when the `rust` table writes no
+    // `wasm` key; a written `wasm = false` or a missing `rust` table is
+    // MANI-019 from the manifest parser.
+    let implied_wasm = !codec_backends.is_empty()
+        && backends
+            .get("rust")
+            .is_some_and(|table| table.wasm.is_none());
+    if implied_wasm {
+        wasm_backends.insert("rust".to_string());
+    }
     // The backends read names only; the spans served the loader's diagnostics.
     let backends: BTreeMap<String, Vec<String>> = backends
         .into_iter()
@@ -1482,6 +1498,8 @@ fn run_build_inner<E: From<std::io::Error>>(
                 codegen_header.as_deref(),
                 &backends,
                 &wasm_backends,
+                implied_wasm,
+                &codec_backends,
                 &mut diagnostics,
             )?;
         }
@@ -1504,6 +1522,8 @@ fn run_build_inner<E: From<std::io::Error>>(
                 codegen_header.as_deref(),
                 &backends,
                 &wasm_backends,
+                implied_wasm,
+                &codec_backends,
                 &mut diagnostics,
             )?;
         }
@@ -2799,6 +2819,8 @@ fn write_emits(
     header: Option<&str>,
     backends: &BTreeMap<String, Vec<String>>,
     wasm_backends: &BTreeSet<String>,
+    implied_wasm: bool,
+    codec_backends: &BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
     // One request per package, built only when something reads it: an IR
@@ -2819,7 +2841,13 @@ fn write_emits(
     // options; a table for another backend is not visible to it.
     let request_for = |language: &str| {
         request.as_ref().map(|request| v1::CodegenRequest {
-            options: backend_options(backends, wasm_backends, language),
+            options: backend_options(
+                backends,
+                wasm_backends,
+                implied_wasm,
+                codec_backends,
+                language,
+            ),
             ..request.clone()
         })
     };
@@ -2947,10 +2975,14 @@ fn write_emits(
 /// The options a backend receives for its `[backend.<name>]` table: an
 /// `encodings` option whose value joins the names with `,` in manifest order
 /// when the table names an encoding, then a `wasm` option with the value
-/// `true` when `wasm_backends` holds `language`, and no other option.
+/// `implied` for `rust` when `implied_wasm`, or `true` when `wasm_backends`
+/// holds `language`, then a `codec` option with the value `true` when
+/// `codec_backends` holds `language`, and no other option.
 fn backend_options(
     backends: &BTreeMap<String, Vec<String>>,
     wasm_backends: &BTreeSet<String>,
+    implied_wasm: bool,
+    codec_backends: &BTreeSet<String>,
     language: &str,
 ) -> Vec<v1::BackendOption> {
     let mut options = Vec::new();
@@ -2960,9 +2992,22 @@ fn backend_options(
             value: names.join(","),
         });
     }
-    if wasm_backends.contains(language) {
+    let wasm = if implied_wasm && language == "rust" {
+        Some("implied")
+    } else if wasm_backends.contains(language) {
+        Some("true")
+    } else {
+        None
+    };
+    if let Some(value) = wasm {
         options.push(v1::BackendOption {
             key: ridl_core::manifest::WASM_KEY.to_string(),
+            value: value.to_string(),
+        });
+    }
+    if codec_backends.contains(language) {
+        options.push(v1::BackendOption {
+            key: ridl_core::manifest::CODEC_KEY.to_string(),
             value: "true".to_string(),
         });
     }
@@ -3288,10 +3333,52 @@ mod backend_options_tests {
     }
 
     fn encodings(language: &str) -> Vec<(String, String)> {
-        backend_options(&tables(), &BTreeSet::new(), language)
-            .into_iter()
-            .map(|option| (option.key, option.value))
-            .collect()
+        backend_options(
+            &tables(),
+            &BTreeSet::new(),
+            false,
+            &BTreeSet::new(),
+            language,
+        )
+        .into_iter()
+        .map(|option| (option.key, option.value))
+        .collect()
+    }
+
+    /// `codec = true` sends a `codec` option to its own table only, and an
+    /// implied `wasm` reaches the `rust` request as `implied`, a written one as
+    /// `true`, and neither adds a `wasm` option on its own.
+    #[test]
+    fn backend_options_carries_codec_and_the_implied_wasm() {
+        let options = |wasm: &BTreeSet<String>,
+                       implied: bool,
+                       codec: &BTreeSet<String>,
+                       language: &str|
+         -> Vec<(String, String)> {
+            backend_options(&tables(), wasm, implied, codec, language)
+                .into_iter()
+                .map(|option| (option.key, option.value))
+                .collect()
+        };
+        let pair = |key: &str, value: &str| (key.to_string(), value.to_string());
+        let rust_encodings = pair("encodings", "flatbuffers,proto3");
+        let codec = BTreeSet::from(["typescript".to_string()]);
+        let none = BTreeSet::new();
+        assert_eq!(
+            options(&none, true, &codec, "rust"),
+            vec![rust_encodings.clone(), pair("wasm", "implied")]
+        );
+        assert_eq!(
+            options(&none, true, &codec, "typescript"),
+            vec![pair("codec", "true")]
+        );
+        let rust = BTreeSet::from(["rust".to_string()]);
+        assert_eq!(
+            options(&rust, false, &codec, "rust"),
+            vec![rust_encodings.clone(), pair("wasm", "true")]
+        );
+        assert_eq!(options(&none, false, &none, "rust"), vec![rust_encodings]);
+        assert!(options(&none, false, &none, "typescript").is_empty());
     }
 
     #[test]
@@ -3317,7 +3404,7 @@ mod backend_options_tests {
     fn a_wasm_table_adds_the_wasm_option() {
         let wasm = BTreeSet::from(["rust".to_string(), "proto".to_string()]);
         let options = |language: &str| -> Vec<(String, String)> {
-            backend_options(&tables(), &wasm, language)
+            backend_options(&tables(), &wasm, false, &BTreeSet::new(), language)
                 .into_iter()
                 .map(|option| (option.key, option.value))
                 .collect()

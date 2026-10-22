@@ -8,16 +8,22 @@ use std::path::Path;
 
 /// `<section>.<key> <type>` for every entry of `KNOWN_KEYS`; a key of the top
 /// level is written without a section. A key whose value type changes
-/// therefore removes a line.
+/// therefore removes a line. The `codec` key of a backend table carries a note
+/// that it implies `backend.rust.wasm`, so a change to that rule removes its
+/// line too.
 pub fn dump(_root: &Path) -> Result<Vec<String>, String> {
     let mut lines = Vec::new();
     for (section, keys) in KNOWN_KEYS {
         for (key, value_type) in *keys {
-            lines.push(if section.is_empty() {
+            let mut line = if section.is_empty() {
                 format!("{key} {value_type}")
             } else {
                 format!("{section}.{key} {value_type}")
-            });
+            };
+            if line == format!("backend.*.{} boolean", ridl_core::manifest::CODEC_KEY) {
+                line.push_str(" (implies backend.rust.wasm)");
+            }
+            lines.push(line);
         }
     }
     for (key, value_type) in ridl_core::lock::LOCK_KEYS {
@@ -40,6 +46,7 @@ mod tests {
         for line in [
             "backend.*.encodings array<string>",
             "backend.*.wasm boolean",
+            "backend.*.codec boolean (implies backend.rust.wasm)",
             "package.name string",
             "backend table<table>",
             "lints table<string>",

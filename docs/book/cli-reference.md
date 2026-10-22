@@ -899,8 +899,14 @@ earlier build wrote, and a build with it on refuses to overwrite a
 `__ridl_wasm.rs` that does not start with the generated marker. Single-file
 mode has no manifest, so it has no `wasm` module.
 
+`[backend.typescript] codec = true` writes `<base>.codec.ts` beside the
+TypeScript module, and turns the `wasm` module on when `[backend.rust]` writes
+no `wasm` key. A written `wasm = false`, and a manifest with no
+`[backend.rust]` table, are MANI-019. `[backend.rust] encodings` must still name
+`flatbuffers`, and the Rust backend refuses an implied `wasm` module otherwise.
+
 MANI-015 is an error when the `encodings` value is not an array of the known
-names or repeats a name, or when `wasm` is not a boolean, and MANI-016 is an
+names or repeats a name, or when `wasm` or `codec` is not a boolean, and MANI-016 is an
 error when the manifest of a workspace member holds a `backend` key or `[backend.<name>]` table: only the workspace root,
 or a standalone package, sets it. Any other key under `[backend.<name>]` is
 MANI-005. The table is not the `backend.` attribute namespace of an rsdl

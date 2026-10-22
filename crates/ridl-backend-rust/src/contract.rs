@@ -25,7 +25,9 @@ pub const ENCODINGS_OPTION: &str = "encodings";
 /// written once per crate by `ridlc` ([`generate_wasm_module`]), so this
 /// backend's per-package output does not change with it; the backend reads it
 /// to refuse a package whose `encodings` does not name `flatbuffers`, because
-/// every export of the module checks FlatBuffers bytes.
+/// every export of the module checks FlatBuffers bytes. The value `implied`,
+/// which `ridlc` sends when `codec = true` turns the module on, reads as `true`
+/// and changes only the wording of that refusal.
 ///
 /// [`generate_wasm_module`]: crate::generate_wasm_module
 pub const WASM_OPTION: &str = "wasm";
@@ -43,11 +45,13 @@ impl codegen::Backend for Backend {
     fn generate(&self, request: &v1::CodegenRequest) -> v1::CodegenResponse {
         let mut encodings: Vec<WireEncoding> = Vec::new();
         let mut wasm = false;
+        let mut implied = false;
         for option in &request.options {
             if option.key == WASM_OPTION {
                 match option.value.as_str() {
-                    "true" => wasm = true,
-                    "false" => wasm = false,
+                    "true" => (wasm, implied) = (true, false),
+                    "implied" => (wasm, implied) = (true, true),
+                    "false" => (wasm, implied) = (false, false),
                     other => {
                         return refusal(format!(
                             "`{WASM_OPTION}` is `{other}`; the value is `true` or `false`"
@@ -75,6 +79,13 @@ impl codegen::Backend for Backend {
                     Err(message) => return refusal(message),
                 }
             }
+        }
+        if implied && !encodings.contains(&WireEncoding::FlatBuffers) {
+            return refusal(format!(
+                "`{WASM_OPTION}` is implied by `codec = true` in the manifest, and \
+                 `[backend.rust] {ENCODINGS_OPTION}` does not name `flatbuffers`, which every \
+                 export of the `{WASM_OPTION}` module checks"
+            ));
         }
         if wasm && !encodings.contains(&WireEncoding::FlatBuffers) {
             return refusal(format!(

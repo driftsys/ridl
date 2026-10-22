@@ -10,9 +10,15 @@ use ridl_ir::codegen::{self, RawIr, v1};
 
 use crate::{GenerateError, generate_with};
 
+/// The option that asks for the codec file beside the module, as the
+/// manifest's `[backend.typescript] codec = true` sets it, with the value
+/// `true` or `false`.
+pub const CODEC_OPTION: &str = "codec";
+
 /// The TypeScript backend as a [`codegen::Backend`]: one file,
 /// `<artifact_base>.ts`, the module [`crate::generate`] emits with the doc
-/// comments read from the request's model. It takes no option.
+/// comments read from the request's model. It takes the option
+/// [`CODEC_OPTION`].
 pub struct Backend<'a> {
     raw: RawIr<'a>,
 }
@@ -30,12 +36,28 @@ impl codegen::Backend for Backend<'_> {
     }
 
     fn generate(&self, request: &v1::CodegenRequest) -> v1::CodegenResponse {
-        if let Some(option) = request.options.first() {
-            return refusal(format!(
-                "the typescript backend takes no option; `{}` is not one it knows",
-                option.key
-            ));
+        let mut codec = false;
+        for option in &request.options {
+            if option.key != CODEC_OPTION {
+                return refusal(format!(
+                    "the typescript backend takes the option `{CODEC_OPTION}`; `{}` is not one \
+                     it knows",
+                    option.key
+                ));
+            }
+            match option.value.as_str() {
+                "true" => codec = true,
+                "false" => codec = false,
+                other => {
+                    return refusal(format!(
+                        "`{CODEC_OPTION}` is `{other}`; the value is `true` or `false`"
+                    ));
+                }
+            }
         }
+        // The flag is read and checked here; the codec file is not written
+        // yet, so the response is the same with either value.
+        let _ = codec;
         let preamble = codegen::comment_preamble(&request.generated_marker, &request.header, "//");
         // A request built without a model is lowered here from the raw IR,
         // the same lowering `ridlc` performs for the request.

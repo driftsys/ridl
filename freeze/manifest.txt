@@ -1,4 +1,5 @@
 backend table<table>
+backend.*.codec boolean (implies backend.rust.wasm)
 backend.*.encodings array<string>
 backend.*.wasm boolean
 codegen table

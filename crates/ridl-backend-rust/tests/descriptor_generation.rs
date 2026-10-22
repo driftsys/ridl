@@ -998,6 +998,50 @@ fn wasm_without_flatbuffers_is_refused() {
     assert!(message.contains("`wasm` is `1`"), "got: {message}");
 }
 
+/// `wasm = implied` is what `ridlc` sends when `codec = true` turns the module
+/// on; with `flatbuffers` it is accepted like `true`.
+#[test]
+fn an_implied_wasm_is_accepted_with_flatbuffers() {
+    backend_response(vec![
+        option("encodings", "flatbuffers"),
+        option("wasm", "implied"),
+    ])
+    .expect("a file is written");
+}
+
+/// Without `flatbuffers`, an implied `wasm` is refused with a message that
+/// names `codec = true`; a written `wasm = true` keeps its own message.
+#[test]
+fn an_implied_wasm_without_flatbuffers_is_refused_with_the_implied_wording() {
+    assert_eq!(
+        refused_options(vec![
+            option("encodings", "proto3"),
+            option("wasm", "implied")
+        ]),
+        "`wasm` is implied by `codec = true` in the manifest, and `[backend.rust] encodings` \
+         does not name `flatbuffers`, which every export of the `wasm` module checks"
+    );
+    let message = refused_options(vec![option("encodings", "proto3"), option("wasm", "true")]);
+    assert!(
+        message.starts_with("`[backend.rust] wasm = true` needs "),
+        "got: {message}"
+    );
+}
+
+/// `codec` is an option of the backend that writes the codec file, not of the
+/// Rust backend.
+#[test]
+fn codec_on_the_rust_table_is_refused_by_the_rust_backend() {
+    let message = refused_options(vec![
+        option("encodings", "flatbuffers"),
+        option("codec", "true"),
+    ]);
+    assert!(
+        message.contains("`codec` is not one it knows"),
+        "got: {message}"
+    );
+}
+
 /// The module is written once per crate by `ridlc`, so the option leaves a
 /// package's own file byte for byte as it is without the option.
 #[test]

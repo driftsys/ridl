@@ -1575,6 +1575,15 @@ expression: log
               }
             },
             {
+              "id": "MANI-019",
+              "shortDescription": {
+                "text": "a backend table sets `codec = true` without a Rust wasm codec to run on"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1740,7 +1749,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 169,
+          "ruleIndex": 170,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

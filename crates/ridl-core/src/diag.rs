@@ -1429,6 +1429,14 @@ diag_codes! {
         MANI_018 = "MANI-018", Warning,
             "a source file under the root's `vendor/` is not loaded", lint = "vendor-source-not-loaded";
 
+        /// A `[backend.<name>]` table sets `codec = true`, and the Rust `wasm`
+        /// module the codec runs on cannot be built: `[backend.rust]` writes
+        /// `wasm = false`, or the manifest has no `[backend.rust]` table. A
+        /// `rust` table with no `wasm` key has the module implied. Reported on
+        /// the `codec` value.
+        MANI_019 = "MANI-019", Error,
+            "a backend table sets `codec = true` without a Rust wasm codec to run on";
+
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
         MANI_101 = "MANI-101", Error,

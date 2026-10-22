@@ -2115,6 +2115,64 @@ fn the_contract_lowers_a_request_without_a_model_with_the_other_packages() {
     );
 }
 
+/// The backend takes the option `codec` with the value `true` or `false`, and
+/// refuses another value and another key.
+#[test]
+fn the_codec_option_is_accepted_and_other_keys_are_refused() {
+    use ridl_ir::codegen::Backend as _;
+
+    let (local, _) = contract_packages();
+    let generate = |key: &str, value: &str| {
+        let request = v1::CodegenRequest {
+            model: Some(ridl_ir::codegen::lower(&local, &[])),
+            artifact_base: "veh.common".to_string(),
+            options: vec![v1::BackendOption {
+                key: key.to_string(),
+                value: value.to_string(),
+            }],
+            ..Default::default()
+        };
+        let raw = ridl_ir::codegen::RawIr {
+            package: &local,
+            others: &[],
+        };
+        crate::Backend::new(raw).generate(&request)
+    };
+    let response = generate("codec", "true");
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:?}",
+        response.diagnostics
+    );
+    let names: Vec<&str> = response
+        .files
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect();
+    assert_eq!(names, ["veh.common.ts"]);
+    for (key, value, message) in [
+        (
+            "codec",
+            "yes",
+            "`codec` is `yes`; the value is `true` or `false`",
+        ),
+        (
+            "wasm",
+            "true",
+            "the typescript backend takes the option `codec`; `wasm` is not one it knows",
+        ),
+    ] {
+        let response = generate(key, value);
+        assert!(response.files.is_empty(), "{key}");
+        let messages: Vec<&str> = response
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.message.as_str())
+            .collect();
+        assert_eq!(messages, [message]);
+    }
+}
+
 /// A target whose name begins with the name of another declaration resolves
 /// to its own declaration: `[SpeedLimit]` is not `Speed`.
 #[test]

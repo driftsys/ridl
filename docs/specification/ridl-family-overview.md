@@ -355,6 +355,7 @@ are `1xx`.
 | MANI-016 | `[backend.<name>]` is set in a workspace member                                                   | error    |
 | MANI-017 | a workspace member is `vendor` or a path under it                                                 | error    |
 | MANI-018 | in standalone mode, a source file under the root's `vendor/` is not loaded                        | warning  |
+| MANI-019 | a backend table sets `codec = true` without a Rust wasm codec to run on                           | error    |
 | MANI-101 | remote import fetch failed                                                                        | error    |
 | MANI-102 | fetched content hash does not match the lockfile                                                  | error    |
 | MANI-103 | `--frozen` or `ridl vendor --check`: no lockfile entry for a remote import                        | error    |
