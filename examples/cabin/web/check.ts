@@ -53,6 +53,16 @@ export interface Progress {
   sawLowestAfter: boolean;
 }
 
+/**
+ * True when `progress` is a progress that passed the check: an object with at
+ * least one received value, 85 seen, and -40 seen after 85.
+ */
+export function isPass(progress: unknown): progress is Progress {
+  if (typeof progress !== "object" || progress === null) return false;
+  const p = progress as Progress;
+  return p.received > 0 && p.sawHighest === true && p.sawLowestAfter === true;
+}
+
 /** The result of accepting one value. */
 export type Verdict =
   | { kind: "continue" }

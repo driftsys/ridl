@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import * as flatbuffers from "flatbuffers";
 import { TemperatureBox } from "./generated/veh/cabin.ts";
-import { decodeTemperature, TemperatureCheck } from "./check.ts";
+import { decodeTemperature, isPass, TemperatureCheck } from "./check.ts";
 
 Deno.test("a full lap passes", () => {
   const check = new TemperatureCheck();
@@ -72,6 +72,32 @@ Deno.test("a fail is sticky", () => {
   const first = check.accept(86);
   assert.equal(first.kind, "fail");
   assert.deepEqual(check.accept(0), first);
+  assert.equal(check.progress.received, 1);
+});
+
+Deno.test("isPass accepts only a passed progress", () => {
+  assert.equal(
+    isPass({ received: 1, wraps: 0, sawHighest: false, sawLowestAfter: false }),
+    false,
+  );
+  assert.equal(
+    isPass({ received: 5, wraps: 0, sawHighest: true, sawLowestAfter: false }),
+    false,
+  );
+  assert.equal(
+    isPass({ received: 0, wraps: 1, sawHighest: true, sawLowestAfter: true }),
+    false,
+  );
+  assert.equal(
+    isPass({ received: 5, wraps: 1, sawHighest: false, sawLowestAfter: true }),
+    false,
+  );
+  assert.equal(isPass(undefined), false);
+  assert.equal(isPass(3), false);
+  const check = new TemperatureCheck();
+  for (let value = -40; value <= 85; value++) check.accept(value);
+  check.accept(-40);
+  assert.equal(isPass(check.progress), true);
 });
 
 Deno.test("decodeTemperature reads a TemperatureBox", () => {

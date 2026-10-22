@@ -15,15 +15,16 @@ import {
   type Browser,
   launch,
 } from "../../../packages/ridl-transport-ws/e2e/browser.ts";
-import type { Progress } from "./check.ts";
+import { isPass, type Progress } from "./check.ts";
 import { type CabinServer, startServer } from "./server.ts";
 
 /**
  * The time from the start of the program to its end, in milliseconds. It
  * covers every step: the bundle, the start of the server, the start of the
- * browser, the page's verdict and the exit of the server. A passing run
- * measured on macOS with Google Chrome took from 3.7 s to 8.5 s over five
- * runs. The page's verdict, like that of main.ts, depends on the phase of the
+ * browser, the page's verdict and the exit of the server. When this example
+ * was written (2026-10-22), five passing runs measured on macOS with Google
+ * Chrome took from 3.7 s to 8.5 s; that is a measurement, not a guarantee. The
+ * page's verdict, like that of main.ts, depends on the phase of the
  * server's tick, and the worst case measured for main.ts is about 12 s.
  */
 const DEADLINE_MS = 30_000;
@@ -89,8 +90,9 @@ async function cleanUp(): Promise<void> {
   ];
   const settled = await Promise.allSettled(steps.map(([, step]) => step));
   settled.forEach((result, i) => {
-    // A browser whose start failed has nothing to close; that failure is
-    // reported as the cause of the run.
+    // A browser whose start failed has nothing to close. That failure is
+    // reported as the cause of the run, unless an earlier cause, such as the
+    // deadline, was already reported.
     if (result.status === "rejected" && !(i === 0 && !started)) {
       console.error(
         `cabin-browser: clean-up: ${steps[i][0]} failed: ${result.reason}`,
@@ -107,16 +109,12 @@ function passed(result: unknown): Progress {
   if (typeof result !== "object" || result === null) {
     throw new Error("the page set no result");
   }
-  const progress = result as Progress;
-  if (
-    !(progress.received > 0) || progress.sawHighest !== true ||
-    progress.sawLowestAfter !== true
-  ) {
+  if (!isPass(result)) {
     throw new Error(
       `the page's result is not a pass: ${JSON.stringify(result)}`,
     );
   }
-  return progress;
+  return result;
 }
 
 async function run(serverPath: string): Promise<Progress> {

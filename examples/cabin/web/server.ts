@@ -21,7 +21,10 @@ export interface CabinServer {
 /**
  * Starts the server executable at `path` and resolves once it has printed
  * its port and its hash. Rejects, naming `path`, when the executable cannot
- * be started or ends before it prints both lines. `onSpawn`, when given,
+ * be started or ends before it prints both lines, and when no port line
+ * from 1 to 65535 precedes the hash line: a missing port, an invalid port,
+ * and a port line that arrives after the hash line are all rejected, and the
+ * server is killed. `onSpawn`, when given,
  * receives a function that kills the server as soon as the server is
  * spawned, before its announcement is read, so that a caller's deadline can
  * stop a server that never prints it.

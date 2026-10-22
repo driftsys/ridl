@@ -26,6 +26,7 @@ import {
   decodeTemperature,
   hashFromHex,
   HIGHEST,
+  isPass,
   LOWEST,
   TEMPERATURE,
   TemperatureCheck,
@@ -143,7 +144,7 @@ if (failure) {
   fail(failure);
 }
 if (status.code !== 0) fail(`the server exited with status ${status.code}`);
-if (!check.progress.sawLowestAfter) {
+if (!isPass(check.progress)) {
   fail(`the check ended without seeing ${LOWEST} after ${HIGHEST}`);
 }
 console.log("cabin-web: ok");
