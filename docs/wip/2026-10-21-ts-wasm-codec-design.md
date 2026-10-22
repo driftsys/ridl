@@ -236,6 +236,19 @@ The remaining slices, in order, replace slices 3 to 5 above:
    declarations.
 6. **Publish**: the first `v*` tag for both npm packages.
 
+**Spike result (2026-10-22).** Bytes interoperate in both directions for
+structs, enums, bit flags, named scalars, unions, maps, tuples, optionals,
+strings and arrays, and the Rust verifier rejects out-of-range values that the
+TypeScript code builds. The `flatc` object API does not match the
+`ridl-backend-ts` types: it returns class instances, gives enums as `long`
+(bigint fields and string-valued enums), gives unions as `{valueType, value}`
+with boxed scalar arms, gives maps as arrays of `{key, value}` entries, loses
+tuple field names (`field_1`), uses `null` for absent values, and wraps scalar
+payloads in `XBox` tables. So `ridl-backend-ts` generates the `encodeX` and
+`decodeX` wrappers from the IR, which knows the tuple names and union arms that
+the `.fbs` loses. The wrappers convert enums between `bigint` and `number`; the
+`.fbs` enum width does not change (ruling, Sebastien, 2026-10-22).
+
 The proto3 route is a later, separate design: a browser on proto3 sessions with
 `protobuf-es` code from `ridl-backend-proto`, and a generated per-package
 transcoder between FlatBuffers and proto3 in the server. The Rust WebSocket
