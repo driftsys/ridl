@@ -19,7 +19,8 @@ pub const CODEC_OPTION: &str = "codec";
 /// The TypeScript backend as a [`codegen::Backend`]: the file
 /// `<artifact_base>.ts`, the module [`crate::generate`] emits with the doc
 /// comments read from the request's model, and, when the option
-/// [`CODEC_OPTION`] is `true`, the file `<artifact_base>.codec.ts` that
+/// [`CODEC_OPTION`] is `true` and the package has a payload root that gets a
+/// codec, local or foreign, the file `<artifact_base>.codec.ts` that
 /// [`crate::generate_codec`] emits.
 pub struct Backend<'a> {
     raw: RawIr<'a>,
@@ -82,7 +83,8 @@ impl codegen::Backend for Backend<'_> {
                     format!("{}.codec.ts", request.artifact_base),
                     format!("{preamble}/* eslint-disable */\n\n{}", codec.source),
                 )),
-                // A package with no payload type has no codec file.
+                // A package with no payload root that gets a codec has no
+                // codec file.
                 Ok(None) => {}
                 Err(GenerateError::Unrepresentable(message)) => return refusal(message),
             }

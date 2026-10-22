@@ -361,3 +361,23 @@ fn a_std_payload_type_writes_the_std_codec_file() {
         "{std_codec}"
     );
 }
+
+/// A package whose only payload root is a `ridl.std` scalar gets its codec
+/// file, which imports `ridl.std.codec.ts`, and that file is written too.
+#[test]
+fn a_package_whose_only_payload_root_is_foreign_writes_both_codec_files() {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ridl-backend-ts/tests/fixtures/codec-foreign-only");
+    let work = tempfile::tempdir().expect("a temp dir is created");
+    let out = work.path().join("out");
+    let run = ridlc::run_build(&fixture, &out, &[Emit::TypeScript], false.into())
+        .expect("the build runs");
+    assert_clean(&run);
+    let codec = std::fs::read_to_string(out.join("veh.names.codec.ts")).expect("the codec file");
+    assert!(
+        codec.contains("import * as ridl_std_codec from \"./ridl.std.codec.js\";"),
+        "{codec}"
+    );
+    assert!(!codec.contains("./veh/names.js"), "{codec}");
+    assert!(out.join("ridl.std.codec.ts").exists());
+}

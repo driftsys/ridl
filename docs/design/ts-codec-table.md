@@ -1,10 +1,11 @@
 # The generated TypeScript codec table
 
 With `[backend.typescript] codec = true`, `ridl-backend-ts` writes
-`<base>.codec.ts` beside `<base>.ts` for every package that has a payload type,
-and for `ridl.std` when a package's codec file imports it. The file gives a
-TypeScript program the facts it needs to send and read the payloads of a package
-through the wasm codec of
+`<base>.codec.ts` beside `<base>.ts` for every package that has a payload root
+with a codec, its own or a foreign scalar its interfaces name, and for
+`ridl.std` when a package's codec file imports it. The file gives a TypeScript
+program the facts it needs to send and read the payloads of a package through
+the wasm codec of
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 7: one `encode<Name>` and one `decode<Name>` per payload type, over
 plain objects; one table per interface that gives each interaction its address,
@@ -76,11 +77,15 @@ the package's part of `WASM_PAYLOAD_TYPES`, but gets no `encode` or `decode`,
 because `<base>.ts` does not export its type; an interaction whose payload type
 is internal is refused (D-2).
 
-The file is written only where it can be used. A package with no payload type
-gets none: its `.fbs` has no table, so `flatc` writes no barrel for the file to
-import. `ridl.std` gets one only when a package's codec file imports it, for a
-payload type that is a `ridl.std` scalar; `ridlc` asks the backend
-(`codec_imports`) before it writes the standard package's emits. A private
+The file is written only where it can be used. A package gets one when it has at
+least one payload root that gets a codec, local or foreign (an interface whose
+one payload type is `ridl.std.Name` is enough); a package with none gets no
+file. The file imports the builder, `<base>.ts` and `flatc`'s barrel only when
+it has a local payload type, because a package without one has no table and
+`flatc` writes no barrel for it. `ridl.std` gets a file only when a package's
+codec file imports it, for a payload type that is a `ridl.std` scalar; `ridlc`
+asks the backend (`codec_imports`, which applies the same predicate as
+`generate_codec`) before it writes the standard package's emits. A private
 `codec<Name>` constant, the `PayloadCodec` an interface entry holds, is written
 only for a payload type an entry names, so that `deno lint` reports nothing
 unused in the file.

@@ -196,9 +196,9 @@ const FAKE_ID = 7;
  * passes.
  */
 function fakeCodec(judge: (value: number) => VerifyResult): Codec {
-  // The id is 7, which is not the id of any cabin payload type in the wasm
-  // module (0 to 7 are taken, and Temperature is 5), so a caller that passes
-  // a constant id, or the id of another type, fails here.
+  // The id is 7, the id of `veh.cabin.Window` in the wasm module, not
+  // Temperature's 5, so a caller that passes a constant 5, or looks another
+  // name up, fails here.
   let resolved = false;
   return {
     catalogHash: new Uint8Array(32),

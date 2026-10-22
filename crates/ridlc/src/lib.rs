@@ -3000,13 +3000,13 @@ fn write_emits(
     Ok(())
 }
 
-/// The options a backend receives for its `[backend.<name>]` table: an
-/// `encodings` option whose value joins the names with `,` in manifest order
-/// when the table names an encoding, then a `wasm` option with the value
-/// `implied` for `rust` when `implied_wasm`, or `true` when `wasm_backends`
-/// holds `language`, then a `codec` option with the value `true` when
-/// `codec_backends` holds `language`, and no other option, sorted by key as
-/// the codegen protocol states.
+/// The options a backend receives for its `[backend.<name>]` table, sorted by
+/// key as the codegen protocol states: a `codec` option with the value `true`
+/// when `codec_backends` holds `language`, an `encodings` option whose value
+/// joins the names with `,` in manifest order when the table names an
+/// encoding, a `wasm` option with the value `implied` for `rust` when
+/// `implied_wasm`, or `true` when `wasm_backends` holds `language`, and no
+/// other option.
 fn backend_options(
     backends: &BTreeMap<String, Vec<String>>,
     wasm_backends: &BTreeSet<String>,
@@ -3408,8 +3408,21 @@ mod backend_options_tests {
             options(&rust, false, &codec, "rust"),
             vec![rust_encodings.clone(), pair("wasm", "true")]
         );
-        assert_eq!(options(&none, false, &none, "rust"), vec![rust_encodings]);
+        assert_eq!(
+            options(&none, false, &none, "rust"),
+            vec![rust_encodings.clone()]
+        );
         assert!(options(&none, false, &none, "typescript").is_empty());
+        // One table with every option: sorted by key, `codec` first.
+        let rust_codec = BTreeSet::from(["rust".to_string()]);
+        assert_eq!(
+            options(&none, true, &rust_codec, "rust"),
+            vec![
+                pair("codec", "true"),
+                rust_encodings,
+                pair("wasm", "implied")
+            ]
+        );
     }
 
     #[test]

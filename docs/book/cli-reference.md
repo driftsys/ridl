@@ -902,7 +902,9 @@ earlier build wrote, and a build with it on refuses to overwrite a
 mode has no manifest, so it has no `wasm` module.
 
 `[backend.typescript] codec = true` writes `<base>.codec.ts` beside the
-TypeScript module, and turns the `wasm` module on when `[backend.rust]` writes
+TypeScript module of every package that has a payload root with a codec (its
+own, or one of another package that its interfaces name), and turns the `wasm`
+module on when `[backend.rust]` writes
 no `wasm` key. A written `wasm = false`, and a manifest with no
 `[backend.rust]` table, are MANI-019. `[backend.rust] encodings` must still name
 `flatbuffers`, and the Rust backend refuses an implied `wasm` module otherwise.

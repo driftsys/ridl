@@ -378,7 +378,9 @@ descriptor](catalog-descriptor.md).
 and init functions. It emits no face and no feature selection, so there is no
 async or blocking API to choose between.
 
-With `[backend.typescript] codec = true` it also writes `<base>.codec.ts`: one
+With `[backend.typescript] codec = true` it also writes `<base>.codec.ts`, for
+every package that has a payload root with a codec (its own, or one of another
+package that its interfaces name): one
 `encode<Name>` and one `decode<Name>` function per payload type, which take
 and return the plain objects of `<base>.ts` and call the object API that
 `flatc` generates; one table per interface, which gives each interaction its
@@ -404,13 +406,14 @@ that package's schema too, in the same directory:
 flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs <out-dir>/<package>.fbs
 ```
 
-A package with no payload type, and `ridl.std` when no codec file imports its
-module, gets no codec file. The converters cover every typl kind: a union by
+A package with no such payload root, and `ridl.std` when no codec file imports
+its module, gets no codec file. The converters cover every typl kind: a union by
 its `kind` and `value`, a tuple by its named fields, an array, a map by its
 entries, an optional field (absent when the buffer leaves it out; an optional
 array, bytes or map field reads back as empty, because the object API cannot
 leave a vector out of the buffer), and an induced tuple of an interaction,
-which the codec file exports as an `interface`. An optional array element, map
+which the codec file exports as an `interface` (`export type X = Record<string,
+never>` for one with no field). An optional array element, map
 key or map value is refused, as the Rust codec refuses it. A named scalar or an
 enum set of another package converts by a type assertion, and a payload type of
 another package that is one goes through that package's own codec file; a

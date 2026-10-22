@@ -7,7 +7,8 @@
 //! internal one, whose type `<base>.ts` does not export. A private converter
 //! pair `pack<Name>` and `unpack<Name>` is written for each struct, union and
 //! induced tuple a payload type reaches. An induced tuple of an interaction
-//! is exported as an `interface`. The module also exports the catalog's name
+//! is exported as an `interface`, or as the type alias
+//! `Record<string, never>` when it has no field. The module also exports the catalog's name
 //! and hash, the qualified names of the payload types, the text of the rule
 //! codes of the wasm module, and one member table per declared interface.
 //!
@@ -33,15 +34,16 @@ const RULES: [&str; 6] = ["length", "pattern", "range", "step", "unique", "varia
 const HASH_LEN: usize = 32;
 
 /// Generates `<artifact_base>.codec.ts` for the package `model` describes,
-/// or `None` for a package with no payload type, which has nothing the
-/// module could carry. The returned source starts at the imports; the caller
-/// writes the generated marker and the header above it.
+/// or `None` for a package with no payload root that gets a codec, local or
+/// foreign, which has nothing the module could carry. The returned source
+/// starts at the imports; the caller writes the generated marker and the
+/// header above it.
 pub fn generate_codec(
     model: &v1::Model,
     artifact_base: &str,
 ) -> Result<Option<GeneratedTs>, GenerateError> {
     let mut codec = Codec::new(model)?;
-    if !codec.has_payload() {
+    if !codec.has_codec_payload() {
         return Ok(None);
     }
     codec.emit(artifact_base).map(Some)
@@ -49,8 +51,10 @@ pub fn generate_codec(
 
 /// The packages whose codec modules the module of `model` imports: those of
 /// a payload type of another package that is a named scalar or an enum set.
-/// `ridlc` reads it to write `ridl.std.codec.ts` only when a module imports
-/// it.
+/// A foreign payload type is a payload root that gets a codec, so the set is
+/// non-empty only when [`generate_codec`] writes the module
+/// (`has_codec_payload`). `ridlc` reads it to write `ridl.std.codec.ts` only
+/// when a module imports it.
 pub fn codec_imports(model: &v1::Model) -> Result<BTreeSet<String>, GenerateError> {
     Ok(Codec::new(model)?
         .foreign_payloads
@@ -130,9 +134,9 @@ struct Codec<'a> {
     foreign_payloads: BTreeMap<String, ForeignPayload>,
     /// The packages whose types the module names, for the type imports.
     foreign_types: BTreeSet<String>,
-    /// The `codec<Name>` constants an interface entry names: the only ones
-    /// the module declares.
-    used_codecs: BTreeSet<String>,
+    /// The local payload types an interface entry names, by declared name:
+    /// the only ones whose `codec<Name>` constant the module declares.
+    used_locals: BTreeSet<String>,
     /// Whether a converter reads a required field the buffer may leave out.
     needs_absent: bool,
 }
@@ -188,7 +192,7 @@ impl<'a> Codec<'a> {
             reached_tuples: HashSet::new(),
             foreign_payloads: BTreeMap::new(),
             foreign_types: BTreeSet::new(),
-            used_codecs: BTreeSet::new(),
+            used_locals: BTreeSet::new(),
             needs_absent: false,
         };
         let roots = model
@@ -255,21 +259,23 @@ impl<'a> Codec<'a> {
                     .name
                     .as_ref()
                     .map_or("", |name| name.declared.as_str());
-                for (_, payload) in codec.roles(interaction, &spelled.declared, member)? {
-                    if let Ok(constant) = payload {
-                        codec.used_codecs.insert(constant);
-                    }
-                }
+                codec.roles(interaction, &spelled.declared, member)?;
             }
         }
         codec.check_names()?;
         Ok(codec)
     }
 
-    /// Whether the module has anything to write: a payload type with a
-    /// codec. A package without one, `ridl.std` included, gets no file: its
-    /// `.fbs` has no table, so `flatc` writes no barrel to import.
-    fn has_payload(&self) -> bool {
+    /// Whether the module has anything to write: a payload root that gets a
+    /// codec, local or foreign (an interface table over foreign scalars is
+    /// one). A package without one, `ridl.std` included, gets no file.
+    fn has_codec_payload(&self) -> bool {
+        self.has_local_payload() || !self.foreign_payloads.is_empty()
+    }
+
+    /// Whether the package has a payload type of its own: the one case the
+    /// module needs `flatc`'s barrel, `<base>.ts` and the builder.
+    fn has_local_payload(&self) -> bool {
         !self.payload_types().is_empty()
     }
 
@@ -329,12 +335,12 @@ impl<'a> Codec<'a> {
             if payload.declaration.is_none() {
                 register(name.to_string(), name.to_string())?;
             }
-            for prefix in ["encode", "decode", "codec"] {
-                let identifier = format!("{prefix}{name}");
-                if prefix == "codec" && !self.used_codecs.contains(&identifier) {
-                    continue;
-                }
-                register(identifier, name.to_string())?;
+            for prefix in ["encode", "decode"] {
+                register(format!("{prefix}{name}"), name.to_string())?;
+            }
+            // The constant is declared only when an entry names it.
+            if self.used_locals.contains(name) {
+                register(format!("codec{name}"), name.to_string())?;
             }
         }
         // In declaration order, so that the refusal names the same pair on
@@ -902,7 +908,7 @@ impl<'a> Codec<'a> {
             if payload
                 .declaration
                 .is_some_and(|declaration| declaration.visibility() == v1::Visibility::Internal)
-                || !self.used_codecs.contains(&format!("codec{}", payload.name))
+                || !self.used_locals.contains(payload.name)
             {
                 continue;
             }
@@ -938,14 +944,23 @@ impl<'a> Codec<'a> {
 
         let mut out = String::new();
         let segments = self.package.replace('.', "/");
-        out.push_str("import * as flatbuffers from \"flatbuffers\";\n");
+        // The builder, `<base>.ts` and `flatc`'s barrel are named only by a
+        // local payload type's functions and converters; a package whose
+        // payload roots are all foreign has no table, so `flatc` writes no
+        // barrel for it to import.
+        let local = self.has_local_payload();
+        if local {
+            out.push_str("import * as flatbuffers from \"flatbuffers\";\n");
+        }
         // The one import from the runtime package, written only when a
         // `codec<Name>` constant uses it, so that `deno lint` reads nothing
         // unused in a module with no interface.
-        if !self.used_codecs.is_empty() {
+        if !self.used_locals.is_empty() || !self.foreign_payloads.is_empty() {
             out.push_str("import type { PayloadCodec } from \"@driftsys/ridl-runtime\";\n");
         }
-        let _ = writeln!(out, "import type * as t from \"./{artifact_base}.js\";");
+        if local {
+            let _ = writeln!(out, "import type * as t from \"./{artifact_base}.js\";");
+        }
         for package in &self.foreign_types {
             let _ = writeln!(
                 out,
@@ -953,11 +968,13 @@ impl<'a> Codec<'a> {
                 package_alias(package)
             );
         }
-        out.push_str(
-            "// `flatc --ts --gen-object-api` writes this module when its `-o` is the directory\n\
-             // of this file.\n",
-        );
-        let _ = writeln!(out, "import * as fb from \"./{segments}.js\";");
+        if local {
+            out.push_str(
+                "// `flatc --ts --gen-object-api` writes this module when its `-o` is the \
+                 directory\n// of this file.\n",
+            );
+            let _ = writeln!(out, "import * as fb from \"./{segments}.js\";");
+        }
         let foreign_codecs: BTreeSet<&str> = self
             .foreign_payloads
             .values()
@@ -1585,6 +1602,7 @@ impl<'a> Codec<'a> {
                     }
                     let bounded = self.declaration_bounded.get(&index) == Some(&true);
                     Ok(if bounded {
+                        self.used_locals.insert(name.to_string());
                         Ok(format!("codec{name}"))
                     } else {
                         Err(self.qualified(name))
@@ -1641,6 +1659,7 @@ impl<'a> Codec<'a> {
             let name = tuple_name(induced);
             let bounded = self.tuple_bounded.get(&(tuple.index as usize)) == Some(&true);
             return Ok(if bounded {
+                self.used_locals.insert(name.to_string());
                 Ok(format!("codec{name}"))
             } else {
                 Err(self.qualified(name))
@@ -1897,7 +1916,66 @@ fn interaction_path(model: &v1::Model, path: &v1::InteractionPath) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::accessor;
+    use super::{FLATC_TS_KEYWORDS, accessor};
+
+    /// The list is the one `flatc` 25.12.19 escapes, read from the keyword
+    /// table of its TypeScript generator, `src/idl_gen_ts.cpp`, and checked
+    /// against its output for a table with every name as a field.
+    #[test]
+    fn the_keyword_list_is_the_one_flatc_escapes() {
+        assert_eq!(
+            FLATC_TS_KEYWORDS,
+            [
+                "arguments",
+                "as",
+                "break",
+                "case",
+                "catch",
+                "class",
+                "const",
+                "continue",
+                "debugger",
+                "default",
+                "delete",
+                "do",
+                "else",
+                "enum",
+                "export",
+                "extends",
+                "false",
+                "finally",
+                "for",
+                "function",
+                "if",
+                "implements",
+                "import",
+                "in",
+                "instanceof",
+                "interface",
+                "let",
+                "new",
+                "null",
+                "package",
+                "private",
+                "protected",
+                "public",
+                "return",
+                "static",
+                "super",
+                "switch",
+                "this",
+                "throw",
+                "true",
+                "try",
+                "typeof",
+                "var",
+                "void",
+                "while",
+                "with",
+                "yield",
+            ]
+        );
+    }
 
     /// `flatc --ts` lower-camels the snake case `.fbs` name, so an acronym
     /// or a SCREAMING_SNAKE name is not spelled as declared.

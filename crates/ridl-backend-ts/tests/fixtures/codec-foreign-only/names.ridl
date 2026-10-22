@@ -1,0 +1,9 @@
+package veh.names
+
+/// A package whose only payload root is a scalar of `ridl.std`: its codec
+/// module holds the interface table and imports `ridl.std.codec.ts`, and
+/// nothing else, because the package has no table of its own.
+interface Names {
+  /// Renames the driver.
+  command rename(name: Name) @[..50ms]
+}

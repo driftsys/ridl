@@ -2896,9 +2896,12 @@ _cabin-web-generate name:
 # runs the round trips: a union, a tuple, an array, a map, an optional field,
 # an induced tuple, an enum with no zero member, a bytes field, arrays of
 # structs and enums, a 64-bit integer, optional vectors, boxed union arms and
-# keyword field names, each `decode(encode(v))` deep-equal to `v`.
-# `cabin-ws-demo` runs it once, after `_cabin-web-generate` has checked the
-# `flatc` and `deno` versions.
+# keyword field names, each `decode(encode(v))` deep-equal to `v`. The same
+# for the fixture crates/ridl-backend-ts/tests/fixtures/codec-foreign-only,
+# a package whose only payload root is `ridl.std.Name`, so its module holds
+# an interface table over `ridl.std.codec.ts` and imports no barrel of its
+# own. `cabin-ws-demo` runs it once, after `_cabin-web-generate` has checked
+# the `flatc` and `deno` versions.
 [private]
 _codec-ts-check:
     #!/usr/bin/env bash
@@ -2915,6 +2918,18 @@ _codec-ts-check:
     deno lint --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts"
     deno check --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts"
     deno test --config "$tmp/deno.json" "$tmp/roundtrip_test.ts"
+    # The second fixture: a package whose only payload root is a `ridl.std`
+    # scalar, so its module imports `ridl.std.codec.ts` and no barrel of its
+    # own (`flatc` runs on `ridl.std.fbs` alone: the package has no table).
+    foreign="$tmp/foreign-only"
+    mkdir -p "$foreign"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-foreign-only --emit typescript --emit flatbuffers --out-dir "$foreign"
+    flatc --ts --gen-object-api -I "$foreign" -o "$foreign" "$foreign/ridl.std.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-foreign-only/deno.json > "$foreign/deno.json"
+    cp crates/ridl-backend-ts/tests/fixtures/codec-foreign-only/check_test.ts "$foreign/check_test.ts"
+    deno lint --config "$foreign/deno.json" "$foreign/veh.names.codec.ts" "$foreign/ridl.std.codec.ts"
+    deno check --config "$foreign/deno.json" "$foreign/veh.names.codec.ts" "$foreign/ridl.std.codec.ts"
+    deno test --config "$foreign/deno.json" "$foreign/check_test.ts"
 
 # The wasm codec of the cabin demos: the generated cabin crate, which
 # `_cabin-generate` writes with the `wasm` module because

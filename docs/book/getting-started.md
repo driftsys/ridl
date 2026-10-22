@@ -932,7 +932,7 @@ Ten emit targets exist today:
 | `ir-json`         | `<package>.ir.json`              | the lowered IR v2 as exact-decimal JSON                                       |
 | `ir-text`         | `<package>.ir.txtpb`             | the lowered IR v2 as prototext                                                |
 | `ir-binary`       | `<package>.ir.binpb`             | the lowered IR v2 as protobuf binary                                          |
-| `typescript`      | `<package>.ts`                   | idiomatic TypeScript source, and `<package>.codec.ts` under `codec = true`    |
+| `typescript`      | `<package>.ts`                   | idiomatic TypeScript source, and `<package>.codec.ts` under `codec = true` for a package with a payload root that gets a codec |
 | `proto`           | `<package>.proto`                | the proto3 schema — types and the ordinals                                    |
 | `flatbuffers`     | `<package>.fbs`                  | the FlatBuffers schema — types and the ordinals                               |
 | `codegen-model`   | `<package>.codegen.json`         | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON      |

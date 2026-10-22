@@ -955,3 +955,179 @@ fn an_optional_element_key_or_value_is_refused() {
         );
     }
 }
+
+/// The model of the fixture `tests/fixtures/codec-foreign-only`, package
+/// `veh.names`, whose only payload root is `ridl.std.Name`.
+fn names_model() -> v1::Model {
+    let mut db = ridl_core::RidlDatabase::default();
+    let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codec-foreign-only");
+    let output = ridlc::compile_workspace(&mut db, &entry)
+        .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity != ridl_core::diag::Severity::Error),
+        "the fixture must compile with no error, got: {:?}",
+        output.diagnostics,
+    );
+    let package = output
+        .checked
+        .iter()
+        .find(|checked| checked.ir.name == "veh.names")
+        .expect("the fixture declares veh.names")
+        .ir
+        .clone();
+    codegen::lower(&package, &[&output.std_ir])
+}
+
+/// A package whose only payload root is a foreign scalar gets a module: its
+/// interface table, over the foreign package's codec module, with no builder,
+/// `<base>.ts` or barrel import, because the package has no table of its own.
+/// `codec_imports` names the foreign package, under the same predicate.
+#[test]
+fn a_package_whose_only_payload_root_is_foreign_gets_a_module_without_a_barrel() {
+    let model = names_model();
+    let source = module(&model, "veh.names");
+    for line in [
+        "import type { PayloadCodec } from \"@driftsys/ridl-runtime\";",
+        "import type * as ridl_std from \"./ridl.std.js\";",
+        "import * as ridl_std_codec from \"./ridl.std.codec.js\";",
+        "export const PAYLOAD_TYPES = [\n] as const;",
+        "const codecRidlStdName: PayloadCodec<ridl_std.Name> = { type: \"ridl.std.Name\", encode: ridl_std_codec.encodeName, decode: ridl_std_codec.decodeName };",
+        "  rename: { iface: 1, ord: 1, kind: \"command\", request: codecRidlStdName },",
+    ] {
+        assert!(source.contains(line), "no `{line}` in:\n{source}");
+    }
+    for absent in [
+        "flatbuffers",
+        "import type * as t",
+        "import * as fb",
+        "./veh/names.js",
+    ] {
+        assert!(!source.contains(absent), "`{absent}` in:\n{source}");
+    }
+    assert_eq!(
+        ridl_backend_ts::codec_imports(&model).expect("the module generates"),
+        BTreeSet::from(["ridl.std".to_string()])
+    );
+    // A package with no payload root at all imports nothing.
+    let output = ridlc::compile(
+        "only.ridl",
+        "package only\n\n/// A limit.\nconst LIMIT : integer = 6\n",
+    );
+    let model = codegen::lower(&output.package, &[]);
+    assert!(
+        ridl_backend_ts::codec_imports(&model)
+            .expect("generates")
+            .is_empty()
+    );
+}
+
+/// The interface of `model` named `name`.
+fn interface<'a>(model: &'a mut v1::Model, name: &str) -> &'a mut v1::Interface {
+    model
+        .interfaces
+        .iter_mut()
+        .find(|interface| {
+            matches!(&interface.identity, Some(v1::interface::Identity::Declared(spelled)) if spelled.declared == name)
+        })
+        .unwrap_or_else(|| panic!("the model declares the interface `{name}`"))
+}
+
+/// Renames the interface `Sensors` of `model` to `name`.
+fn rename_sensors(model: &mut v1::Model, name: &str) {
+    interface(model, "Sensors").identity = Some(v1::interface::Identity::Declared(v1::Spellings {
+        declared: name.to_string(),
+        ..Default::default()
+    }));
+}
+
+/// Every reserved name of the file, taken by an interface, is refused.
+#[test]
+fn every_reserved_name_is_refused() {
+    for reserved in [
+        "flatbuffers",
+        "PayloadCodec",
+        "t",
+        "fb",
+        "CATALOG_NAME",
+        "CATALOG_HASH",
+        "PAYLOAD_TYPES",
+        "RULES",
+    ] {
+        let mut model = common_model();
+        rename_sensors(&mut model, reserved);
+        assert_eq!(
+            refusal(&model),
+            format!(
+                "`{reserved}` in package `veh.common` collides with `{reserved}`, which the codec module also declares"
+            )
+        );
+    }
+}
+
+/// The alias of a foreign package reached through a field only (`ridl_std`
+/// for `DriverProfile.name`) is a name of the file, so an interface of that
+/// name is refused.
+#[test]
+fn an_interface_named_as_a_foreign_type_alias_is_refused() {
+    let mut model = common_model();
+    // Without `profile`, no payload type is foreign: `ridl.std` is reached
+    // through fields alone.
+    interface(&mut model, "Sensors").slots.retain(|slot| {
+        !matches!(&slot.occupant, Some(v1::interaction_slot::Occupant::Interaction(interaction))
+            if interaction.name.as_ref().is_some_and(|name| name.declared == "profile"))
+    });
+    let source = module(&model, "veh.common");
+    assert!(!source.contains("ridl_std_codec"), "{source}");
+    assert!(
+        source.contains("import type * as ridl_std from"),
+        "{source}"
+    );
+    rename_sensors(&mut model, "ridl_std");
+    assert_eq!(
+        refusal(&model),
+        "`ridl_std` in package `veh.common` collides with `ridl_std`, which the codec module also declares"
+    );
+}
+
+/// A struct named after an induced tuple of a field (`ExtrasWide`, the
+/// tuple of `Extras.wide`) would give two `pack<Name>` converters, and is
+/// refused.
+#[test]
+fn a_struct_named_as_a_reached_tuple_is_refused() {
+    let mut model = common_model();
+    declaration(&mut model, "SensorFault")
+        .name
+        .as_mut()
+        .expect("named")
+        .declared = "ExtrasWide".to_string();
+    assert_eq!(
+        refusal(&model),
+        "`ExtrasWide` in package `veh.common` collides with `ExtrasWide`, which the codec module also declares"
+    );
+}
+
+/// A `codec<Name>` constant no entry names is not declared, so it is not
+/// registered: a local payload type `RidlStdName` that no entry names
+/// generates beside the foreign `codecRidlStdName`.
+#[test]
+fn an_unused_constant_does_not_collide() {
+    let mut model = common_model();
+    declaration(&mut model, "SpeedLimitPayload")
+        .name
+        .as_mut()
+        .expect("named")
+        .declared = "RidlStdName".to_string();
+    let source = module(&model, "veh.common");
+    assert!(
+        source.contains("export function encodeRidlStdName("),
+        "{source}"
+    );
+    assert!(
+        source.contains("const codecRidlStdName: PayloadCodec<ridl_std.Name>"),
+        "{source}"
+    );
+    assert_eq!(source.matches("const codecRidlStdName").count(), 1);
+}
