@@ -8,13 +8,14 @@
 //! serves every connection on its own thread with its own attachment to one
 //! shared runtime. A publisher thread publishes a new temperature at a fixed
 //! period, which steps through the whole range of the type, from -40 to 85, and
-//! then starts again at -40, where it stays for 50 ms so that a client always
-//! receives the lowest value. The process exits with status 0 when its standard
-//! input reaches the end.
+//! then starts again at -40, with no pause at any value. The process exits
+//! with status 0 when its standard input reaches the end.
 //!
 //! The Deno program of `examples/cabin/web` passes only if every value is
-//! inside [-40..85], a decrease lands on -40 at least once, and 85 is seen; it
-//! also fails on two decreases in a row or on an increase larger than 20.
+//! inside [-40..85], every received value is 1 to 63 steps ahead of the
+//! previous one on the ring of the 126 values (85 is followed by -40; a
+//! repeated value is ignored), 85 is reached by such a step, and -40 is seen
+//! after 85 (the first sample counts for neither bound).
 
 use std::io::{self, Write};
 use std::net::TcpListener;
@@ -38,14 +39,13 @@ const CATALOG: CatalogRef = *<api::Cabin as Interface>::CATALOG;
 const LOWEST: i64 = -40;
 const HIGHEST: i64 = 85;
 
-/// The time between two publications.
-const PERIOD: Duration = Duration::from_millis(10);
-
-/// The time the lowest value stays published. The transport sends the newest
-/// value once per tick of 20 ms and drops the ones before it, so a value
-/// published for one period can be skipped. The lowest value stays for more
-/// than two ticks, so a client always receives it after a restart.
-const LOWEST_DWELL: Duration = Duration::from_millis(50);
+/// The time between two publications. The transport sends the newest value of
+/// a signal once per poll tick (20 ms by default), so a client receives only
+/// the values that the ticks sample. 7 ms is not a divisor of 20 ms, so the
+/// sampled phase differs from one cycle of 126 values to the next, and the
+/// bounds are sampled within a few cycles. The real period is longer than 7 ms
+/// because a sleep overshoots, and that overshoot also varies between cycles.
+const PERIOD: Duration = Duration::from_millis(7);
 
 fn main() {
     let rt = Arc::new(Mutex::new(Loopback::new(CATALOG)));
@@ -77,11 +77,7 @@ fn main() {
                     .temperature(temperature)
                     .expect("publish temperature");
                 publisher.commit();
-                thread::sleep(if value == LOWEST {
-                    LOWEST_DWELL
-                } else {
-                    PERIOD
-                });
+                thread::sleep(PERIOD);
                 value = if value == HIGHEST { LOWEST } else { value + 1 };
             }
         }));

@@ -10,13 +10,16 @@
 // `Temperature` and starts again at the lowest value. The transport may
 // coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
 // expect every step. It exits with status 0 only if every value is inside
-// [-40..85], a decrease lands on -40 at least once (a restart), and 85 is
-// seen. It also fails on two decreases in a row, and on an increase larger
-// than MAX_INCREASE. Otherwise it exits with a non-zero status and names the
-// cause and the stage. One deadline, counted
-// from the start of the program, covers every stage including the exit of the
-// server. A server that exits or a connection that closes before the end of
-// the check fails the program at once. It prints how many samples it received.
+// [-40..85], every received value is 1 to 63 steps ahead of the previous one
+// on the ring of the 126 values (85 is followed by -40; a repeated value is
+// ignored), 85 is reached by such a step, and -40 is seen after 85 (the first
+// sample counts for neither bound). Otherwise it exits with a non-zero status
+// and names the cause and the stage. One deadline, counted from the start of
+// the program, covers every stage including the exit of the server. A server
+// that exits or a connection that closes before the end of the check fails the
+// program at once. It prints the number of samples it received, the number of
+// wraps (a step from 85 to -40 or across it), whether 85 was seen, and whether
+// -40 was seen after 85.
 
 import * as flatbuffers from "flatbuffers";
 import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
@@ -26,18 +29,38 @@ import { TemperatureBox } from "./generated/veh/cabin.ts";
 const LOWEST = -40;
 const HIGHEST = 85;
 
-/**
- * The largest increase between two received values that is not an error. The
- * server publishes every 10 ms, and the transport sends the newest value of a
- * signal once per tick, so samples published between two ticks are coalesced
- * (docs/design/ridl-transport-ws.md). A step larger than one is therefore
- * normal. 20 is generous: it is about 200 ms of publications, which is many
- * ticks, and a server that jumps between the bounds exceeds it.
- */
-const MAX_INCREASE = 20;
+/** The number of values in the range of `Temperature`. */
+const RING = HIGHEST - LOWEST + 1;
 
-/** The time from the start of the program to its end, in milliseconds. */
-const DEADLINE_MS = 20_000;
+/**
+ * The largest forward step between two received values that is not an error.
+ * The server publishes forward on the ring of RING values, and the transport
+ * sends only the newest value of a signal per tick, so samples between two
+ * ticks are skipped and a step larger than one is normal. A forward step of s
+ * and a backward step of RING - s give the same difference modulo RING, so only
+ * steps up to half the ring can be told apart from a backward move: 63 is
+ * RING / 2. A gap of more than 63 publications between two received values
+ * therefore fails a correct server. The measured period of the server is about
+ * 10 ms (the 7 ms sleep overshoots), so that is a gap of about 630 ms. A step
+ * of 0 is a value sent twice, which the transport can do; it is ignored.
+ *
+ * Seeing 85 reached by a step, and then -40, is what rejects a server that
+ * wraps to another value, a server that alternates the bounds, and a decoder
+ * that is off by a constant c. The -40 of the first sample does not count,
+ * because it comes before any wrap, and neither does an 85 in the first
+ * sample, because no step has checked it. With c < 0 the range check fails, or
+ * 85 is never seen. With c > 0 the range check fails when 85 + c is received,
+ * and otherwise -40 is never seen after 85.
+ */
+const MAX_STEP = RING / 2;
+
+/**
+ * The time from the start of the program to its end, in milliseconds. A correct
+ * run needs a sample of 85 and then one of -40, each taken from a window of one
+ * value, so the time varies with the phase of the tick. The worst pass measured
+ * at the default tick of 20 ms is about 12 s; 30 s leaves margin over it.
+ */
+const DEADLINE_MS = 30_000;
 
 // The (interface, ordinal) pair of every interaction the program reads, and
 // the function that decodes its payload. Written by hand: the pairs are the
@@ -108,10 +131,11 @@ const hash = Uint8Array.from(hex.match(/../g)!.map((h) => parseInt(h, 16)));
 
 let received = 0;
 let previous: number | undefined;
+// True when -40 was received after 85 had been received.
+let sawLowestAfter = false;
 let sawHighest = false;
-// True when the previous step was a decrease.
-let decreased = false;
-let restarts = 0;
+// The number of steps that crossed from 85 to -40.
+let wraps = 0;
 let failure: string | undefined;
 // The stage in which the value that caused `failure` arrived.
 let failureStage = "";
@@ -138,35 +162,23 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
       return;
     }
     if (previous !== undefined) {
-      if (value < previous) {
-        // A decrease is valid only as the restart, at the lowest value, and
-        // never twice in a row.
-        if (value !== LOWEST) {
-          reject(
-            `temperature fell from ${previous} to ${value}, not to ${LOWEST}`,
-          );
-          return;
-        }
-        if (decreased) {
-          reject(`temperature fell twice in a row, to ${value}`);
-          return;
-        }
-        restarts++;
-        decreased = true;
-      } else {
-        decreased = false;
-        if (value - previous > MAX_INCREASE) {
-          reject(
-            `temperature rose from ${previous} to ${value}, ` +
-              `more than ${MAX_INCREASE}`,
-          );
-          return;
-        }
+      // The same value again is a repeated send, not progress.
+      if (value === previous) return;
+      const step = (value - previous + RING) % RING;
+      if (step < 1 || step > MAX_STEP) {
+        reject(
+          `temperature went from ${previous} to ${value}, a step of ` +
+            `${step} on the ring of ${RING} values, not 1 to ${MAX_STEP}`,
+        );
+        return;
       }
+      if (value < previous) wraps++;
+      // Only a value reached by a checked step counts as seen.
+      if (value === HIGHEST) sawHighest = true;
+      if (value === LOWEST && sawHighest) sawLowestAfter = true;
     }
     previous = value;
-    if (value === HIGHEST) sawHighest = true;
-    if (sawHighest && restarts > 0) enough();
+    if (sawLowestAfter) enough();
   },
 });
 void session.closed.then(async (ended) => {
@@ -187,7 +199,7 @@ void session.closed.then(async (ended) => {
 stage = "subscribing";
 await session.subscribe({ kind: Kind.Signal, iface: 1, ord: 1 });
 
-stage = "waiting for a restart and the highest value";
+stage = "waiting for the highest value and the lowest after it";
 await done;
 
 // Ends the server: it exits when its standard input reaches the end.
@@ -197,8 +209,9 @@ await server.stdin.close();
 const status = await server.status;
 
 console.log(
-  `cabin-web: received ${received} sample(s), ${restarts} restart(s), ` +
-    `highest ${HIGHEST} seen: ${sawHighest}`,
+  `cabin-web: received ${received} sample(s), ${wraps} wrap(s), ` +
+    `highest ${HIGHEST} seen: ${sawHighest}, ` +
+    `lowest ${LOWEST} seen after it: ${sawLowestAfter}`,
 );
 if (failure) {
   stage = failureStage;
