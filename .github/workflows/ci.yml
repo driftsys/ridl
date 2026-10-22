@@ -267,9 +267,9 @@ jobs:
   # `ts-check`, `ts-npm-check`, `ts-e2e` and `cabin-ws-demo`
   # are members of `just build`; `ts-browser-e2e` and `cabin-browser-demo` are
   # not, because a contributor's build needs no browser, so `gate-parity` does
-  # not see their steps here and they are checked by reading. ubuntu-latest has Google Chrome on PATH.
-  # RIDL_BROWSER_NO_SANDBOX starts it with --no-sandbox, which a runner may need
-  # and which is harmless where it is not.
+  # not see their steps here and they are checked by reading. ubuntu-latest has
+  # Google Chrome on PATH. RIDL_BROWSER_NO_SANDBOX starts it with --no-sandbox,
+  # which a runner may need and which is harmless where it is not.
   typescript:
     name: typescript
     needs: changes

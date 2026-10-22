@@ -2918,29 +2918,21 @@ cabin-ws-demo: _cabin-generate (_cabin-web-generate "cabin-ws-demo")
     deno test check_test.ts
     deno run -A main.ts "$server"
 
-# Run the check of `cabin-ws-demo` in a headless browser: the same server and
-# the same check (examples/cabin/web/check.ts), loaded by a page instead of a
-# Deno program. examples/cabin/web/browser.ts starts the server, bundles
-# page.ts with `deno bundle --platform=browser`, serves the page from
-# 127.0.0.1, and opens it in the browser, which attaches with the encoding
-# `flatbuffers` and decodes each payload with the `flatc` code. One 30 s limit
-# covers the page's verdict; the server is then stopped and must exit with
-# status 0. It prints the number of samples and the number of wraps.
-#
-# Not a member of `build`, on purpose, for the reason `ts-browser-e2e` gives:
-# a contributor's build needs no browser. CI's `typescript` job runs it, so
-# `gate-parity` does not cover it and the CI step is checked by reading. The
-# browser is looked up as `ts-browser-e2e` looks it up, after the generation
-# steps it shares with `cabin-ws-demo`, and the one found is passed on in
-# RIDL_BROWSER.
-cabin-browser-demo: _cabin-generate (_cabin-web-generate "cabin-browser-demo")
+# Prints the path of the browser that `cabin-browser-demo` and
+# `ts-browser-e2e` start, in the order e2e/browser.ts of
+# packages/ridl-transport-ws uses: RIDL_BROWSER, then google-chrome,
+# google-chrome-stable, chromium and chromium-browser on PATH, then the Google
+# Chrome application on macOS. When none is found, or RIDL_BROWSER names no
+# executable file, it fails with a message that names RIDL_BROWSER. `name` is
+# the recipe named in each failure message.
+_find-browser name:
     #!/usr/bin/env bash
     set -euo pipefail
     browser=""
     if [ -n "${RIDL_BROWSER:-}" ]; then
         if [ ! -f "$RIDL_BROWSER" ] || [ ! -x "$RIDL_BROWSER" ]; then
-            echo "cabin-browser-demo: RIDL_BROWSER is '$RIDL_BROWSER', which is not an executable file." >&2
-            echo "cabin-browser-demo: set RIDL_BROWSER to the path of a Chromium-family browser." >&2
+            echo "{{name}}: RIDL_BROWSER is '$RIDL_BROWSER', which is not an executable file." >&2
+            echo "{{name}}: set RIDL_BROWSER to the path of a Chromium-family browser." >&2
             exit 1
         fi
         browser="$RIDL_BROWSER"
@@ -2957,11 +2949,36 @@ cabin-browser-demo: _cabin-generate (_cabin-web-generate "cabin-browser-demo")
         fi
     fi
     if [ -z "$browser" ]; then
-        echo "cabin-browser-demo: no browser found." >&2
-        echo "cabin-browser-demo: set RIDL_BROWSER to the path of a Chromium-family browser, or install Google Chrome (https://www.google.com/chrome/) or Chromium (https://www.chromium.org/getting-involved/download-chromium/)." >&2
+        echo "{{name}}: no browser found." >&2
+        echo "{{name}}: set RIDL_BROWSER to the path of a Chromium-family browser, or install Google Chrome (https://www.google.com/chrome/) or Chromium (https://www.chromium.org/getting-involved/download-chromium/)." >&2
         exit 1
     fi
+    echo "$browser"
+
+# Run the check of `cabin-ws-demo` in a headless browser: the same server and
+# the same check (examples/cabin/web/check.ts), loaded by a page instead of a
+# Deno program. examples/cabin/web/browser.ts starts the server, bundles
+# page.ts with `deno bundle --platform=browser`, serves the page from
+# 127.0.0.1, and opens it in the browser, which attaches with the encoding
+# `flatbuffers` and decodes each payload with the `flatc` code. One 30 s limit
+# covers the page's verdict; the server is then stopped and must exit with
+# status 0. It prints the number of samples and the number of wraps.
+#
+# Not a member of `build`, on purpose, for the reason `ts-browser-e2e` gives:
+# a contributor's build needs no browser. CI's `typescript` job runs it, so
+# `gate-parity` does not cover it and the CI step is checked by reading. The
+# browser is looked up by `_find-browser`, as for `ts-browser-e2e`, before
+# anything is generated or built, and the one found is passed on in
+# RIDL_BROWSER. The generation steps it shares with `cabin-ws-demo` are then
+# run from the body rather than as dependencies, because dependencies would run
+# before the lookup.
+cabin-browser-demo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    browser="$("{{just_executable()}}" _find-browser cabin-browser-demo)"
     echo "cabin-browser-demo: browser: $browser"
+    "{{just_executable()}}" _cabin-generate
+    "{{just_executable()}}" _cabin-web-generate cabin-browser-demo
     server_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
     server="$(cd "$server_target" && pwd)/debug/server"
     cd examples/cabin/web
@@ -2992,31 +3009,7 @@ ts-browser-e2e:
         echo "ts-browser-e2e: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
         exit 1
     fi
-    browser=""
-    if [ -n "${RIDL_BROWSER:-}" ]; then
-        if [ ! -f "$RIDL_BROWSER" ] || [ ! -x "$RIDL_BROWSER" ]; then
-            echo "ts-browser-e2e: RIDL_BROWSER is '$RIDL_BROWSER', which is not an executable file." >&2
-            echo "ts-browser-e2e: set RIDL_BROWSER to the path of a Chromium-family browser." >&2
-            exit 1
-        fi
-        browser="$RIDL_BROWSER"
-    else
-        for name in google-chrome google-chrome-stable chromium chromium-browser; do
-            if found="$(command -v "$name" 2>/dev/null)"; then
-                browser="$found"
-                break
-            fi
-        done
-        mac_chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-        if [ -z "$browser" ] && [ -f "$mac_chrome" ]; then
-            browser="$mac_chrome"
-        fi
-    fi
-    if [ -z "$browser" ]; then
-        echo "ts-browser-e2e: no browser found." >&2
-        echo "ts-browser-e2e: set RIDL_BROWSER to the path of a Chromium-family browser, or install Google Chrome (https://www.google.com/chrome/) or Chromium (https://www.chromium.org/getting-involved/download-chromium/)." >&2
-        exit 1
-    fi
+    browser="$("{{just_executable()}}" _find-browser ts-browser-e2e)"
     echo "ts-browser-e2e: browser: $browser"
     cargo build --locked -p ridl-transport-ws --example loopback_server
     server="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/loopback_server"

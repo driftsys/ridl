@@ -19,11 +19,12 @@ import type { Progress } from "./check.ts";
 import { type CabinServer, startServer } from "./server.ts";
 
 /**
- * The time the page has to give its verdict, in milliseconds. It is the
- * deadline of main.ts, for the same reason: the worst pass measured is about
- * 12 s.
+ * The time from the start of the program to its end, in milliseconds. It is
+ * the deadline of main.ts, for the same reason: the worst pass measured is
+ * about 12 s. It covers every step: the bundle, the start of the server, the
+ * start of the browser, the page's verdict and the exit of the server.
  */
-const LIMIT_MS = 30_000;
+const DEADLINE_MS = 30_000;
 
 const PAGE = `${import.meta.dirname}/page.ts`;
 
@@ -47,73 +48,60 @@ async function bundle(out: string): Promise<void> {
   }
 }
 
-/** Rejects after `ms` unless `promise` settles first. */
-async function limit<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const late = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`the page gave no verdict within ${ms} ms`)),
-      ms,
-    );
-  });
-  try {
-    return await Promise.race([promise, late]);
-  } finally {
-    clearTimeout(timer);
-  }
+// What the program has started, so that the deadline can stop it too.
+let dir: string | undefined;
+let killServer: (() => void) | undefined;
+let server: CabinServer | undefined;
+let http: Deno.HttpServer<Deno.NetAddr> | undefined;
+let browser: Browser | undefined;
+
+/**
+ * Stops every process and listener the program started and removes its
+ * temporary directory. Every step runs even when an earlier one fails, so that
+ * nothing outlives the program.
+ */
+async function cleanUp(): Promise<void> {
+  killServer?.();
+  await Promise.allSettled([
+    browser?.close(),
+    http?.shutdown(),
+    server?.status,
+    dir === undefined ? undefined : Deno.remove(dir, { recursive: true }),
+  ]);
 }
 
 async function run(serverPath: string): Promise<Progress> {
-  const dir = await Deno.makeTempDir({ prefix: "cabin-page-" });
-  let server: CabinServer | undefined;
-  let http: Deno.HttpServer<Deno.NetAddr> | undefined;
-  let browser: Browser | undefined;
-  try {
-    const script = `${dir}/page.js`;
-    await bundle(script);
-    const js = await Deno.readFile(script);
-    server = await startServer(serverPath);
-    http = Deno.serve(
-      { hostname: "127.0.0.1", port: 0, onListen() {} },
-      (request) => {
-        switch (new URL(request.url).pathname) {
-          case "/":
-            return new Response(HTML, {
-              headers: { "content-type": "text/html; charset=utf-8" },
-            });
-          case "/page.js":
-            return new Response(js, {
-              headers: { "content-type": "text/javascript; charset=utf-8" },
-            });
-          default:
-            return new Response("not found", { status: 404 });
-        }
-      },
-    );
-    const url = `http://127.0.0.1:${http.addr.port}/` +
-      `?port=${server.port}&hash=${server.hash}`;
-    browser = await launch();
-    const progress = await limit(
-      browser.evaluate(url, "globalThis.result"),
-      LIMIT_MS,
-    ) as Progress;
-    const status = await server.stop();
-    server = undefined;
-    if (status.code !== 0) {
-      throw new Error(`the server exited with status ${status.code}`);
-    }
-    return progress;
-  } finally {
-    // Every step runs even when an earlier one fails, so that no process,
-    // listener or directory outlives the program.
-    server?.kill();
-    await Promise.allSettled([
-      browser?.close(),
-      http?.shutdown(),
-      server?.status,
-      Deno.remove(dir, { recursive: true }),
-    ]);
+  dir = await Deno.makeTempDir({ prefix: "cabin-page-" });
+  const script = `${dir}/page.js`;
+  await bundle(script);
+  const js = await Deno.readFile(script);
+  server = await startServer(serverPath, (kill) => (killServer = kill));
+  http = Deno.serve(
+    { hostname: "127.0.0.1", port: 0, onListen() {} },
+    (request) => {
+      switch (new URL(request.url).pathname) {
+        case "/":
+          return new Response(HTML, {
+            headers: { "content-type": "text/html; charset=utf-8" },
+          });
+        case "/page.js":
+          return new Response(js, {
+            headers: { "content-type": "text/javascript; charset=utf-8" },
+          });
+        default:
+          return new Response("not found", { status: 404 });
+      }
+    },
+  );
+  const url = `http://127.0.0.1:${http.addr.port}/` +
+    `?port=${server.port}&hash=${server.hash}`;
+  browser = await launch();
+  const progress = await browser.evaluate(url, "globalThis.result") as Progress;
+  const status = await server.stop();
+  if (status.code !== 0) {
+    throw new Error(`the server exited with status ${status.code}`);
   }
+  return progress;
 }
 
 const serverPath = Deno.args[0];
@@ -121,8 +109,17 @@ if (!serverPath) {
   console.error("cabin-browser: usage: browser.ts <server-executable>");
   Deno.exit(1);
 }
+const deadline = setTimeout(async () => {
+  console.error(
+    `cabin-browser: the deadline of ${DEADLINE_MS} ms expired`,
+  );
+  await cleanUp();
+  Deno.exit(1);
+}, DEADLINE_MS);
 try {
   const progress = await run(serverPath);
+  clearTimeout(deadline);
+  await cleanUp();
   console.log(
     `cabin-browser: received ${progress.received} sample(s), ` +
       `${progress.wraps} wrap(s)`,
@@ -130,6 +127,8 @@ try {
   console.log("cabin-browser: ok");
   Deno.exit(0);
 } catch (e) {
+  clearTimeout(deadline);
   console.error(`cabin-browser: ${(e as Error).message}`);
+  await cleanUp();
   Deno.exit(1);
 }

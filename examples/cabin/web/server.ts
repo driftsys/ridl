@@ -21,9 +21,15 @@ export interface CabinServer {
 /**
  * Starts the server executable at `path` and resolves once it has printed
  * its port and its hash. Rejects, naming `path`, when the executable cannot
- * be started or ends before it prints both lines.
+ * be started or ends before it prints both lines. `onSpawn`, when given,
+ * receives a function that kills the server as soon as the server is
+ * spawned, before its announcement is read, so that a caller's deadline can
+ * stop a server that never prints it.
  */
-export async function startServer(path: string): Promise<CabinServer> {
+export async function startServer(
+  path: string,
+  onSpawn?: (kill: () => void) => void,
+): Promise<CabinServer> {
   let child: Deno.ChildProcess;
   try {
     child = new Deno.Command(path, {
@@ -43,6 +49,7 @@ export async function startServer(path: string): Promise<CabinServer> {
       // The server has already exited.
     }
   };
+  onSpawn?.(kill);
   const output = child.stdout.pipeThrough(new TextDecoderStream())
     .getReader();
   let announced = "";

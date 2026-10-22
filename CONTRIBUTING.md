@@ -44,9 +44,9 @@ CI `rust` job installs Node with `actions/setup-node`.
 
 The package's browser test, `just ts-browser-e2e`, and the cabin browser demo,
 `just cabin-browser-demo`, are not part of `just build`, so the build needs no
-browser. CI runs it. To run it locally you need a Chromium-family browser, such
-as Google Chrome or Chromium; set `RIDL_BROWSER` to its path when the recipe
-does not find it.
+browser. CI runs them. To run it locally you need a Chromium-family browser,
+such as Google Chrome or Chromium; set `RIDL_BROWSER` to its path when the
+recipe does not find it.
 
 The gate needs four tools `bootstrap` does not install, because they come from
 package managers it should not write into on your behalf:

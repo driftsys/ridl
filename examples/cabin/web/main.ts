@@ -41,14 +41,16 @@ const DEADLINE_MS = 30_000;
 
 // The stage the program is in, named in the failure message.
 let stage = "starting the server";
-// The server, once it has started.
+// The server, once it has announced its port and hash.
 let server: CabinServer | undefined;
+// Kills the server; set as soon as the server is spawned.
+let killServer: (() => void) | undefined;
 // Set when the program has begun to stop the server on purpose.
 let stopping = false;
 
 function fail(message: string): never {
   console.error(`cabin-web: ${message} (stage: ${stage})`);
-  server?.kill();
+  killServer?.();
   Deno.exit(1);
 }
 
@@ -63,7 +65,7 @@ if (!serverPath) fail("usage: main.ts <server-executable>");
 // The announcement of the server is read inside `startServer`.
 stage = "reading the announcement of the server";
 try {
-  server = await startServer(serverPath);
+  server = await startServer(serverPath, (kill) => (killServer = kill));
 } catch (e) {
   fail((e as Error).message);
 }
