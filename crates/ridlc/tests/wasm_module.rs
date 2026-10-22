@@ -65,10 +65,7 @@ fn cabin_manifest_without_wasm() -> String {
 
 /// A copy of `examples/cabin`'s sources and manifest, with `wasm = true`.
 fn cabin_with_wasm(dir: &Path) {
-    for file in ["cabin.ridl", "system.rsdl"] {
-        std::fs::copy(example_dir().join(file), dir.join(file)).expect("the source is copied");
-    }
-    std::fs::write(dir.join("ridl.toml"), cabin_manifest()).expect("the manifest copy is written");
+    support::copy_cabin(dir, &cabin_manifest());
 }
 
 /// Writes the copy's manifest without `wasm = true`, which turns the option

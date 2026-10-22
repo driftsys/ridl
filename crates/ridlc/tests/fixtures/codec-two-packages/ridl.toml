@@ -1,0 +1,10 @@
+[package]
+name = "pin"
+version = "1.0.0"
+
+[backend.rust]
+encodings = ["flatbuffers"]
+wasm = true
+
+[backend.typescript]
+codec = true

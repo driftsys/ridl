@@ -138,3 +138,23 @@ pub fn ridl_loopback_rlib(dir: &Path, ridl_rt: &Path) -> PathBuf {
     );
     rlib
 }
+
+/// Copies the sources of `examples/cabin` into `dst` and writes `manifest`
+/// as the copy's `ridl.toml`, so a test chooses the backend options of the
+/// build without editing the example.
+#[allow(
+    dead_code,
+    reason = "every test target in this crate compiles this module, and only \
+              the tests that build a copy of the cabin example call it"
+)]
+pub fn copy_cabin(dst: &Path, manifest: &str) {
+    let example = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("examples")
+        .join("cabin");
+    for file in ["cabin.ridl", "system.rsdl"] {
+        std::fs::copy(example.join(file), dst.join(file)).expect("the source is copied");
+    }
+    std::fs::write(dst.join("ridl.toml"), manifest).expect("the manifest copy is written");
+}
