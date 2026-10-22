@@ -372,8 +372,28 @@ descriptor](catalog-descriptor.md).
 
 `ridl build --emit typescript` writes the domain types of a package as one
 `.ts` file: branded scalars, interfaces, enums, enum sets, discriminated unions
-and init functions. It emits no face, no codec and no feature selection, so
-there is no async or blocking API to choose between.
+and init functions. It emits no face and no feature selection, so there is no
+async or blocking API to choose between.
+
+With `[backend.typescript] codec = true` it also writes `<base>.codec.ts`: one
+`encode<Name>` and one `decode<Name>` function per payload type, which take
+and return the plain objects of `<base>.ts` and call the object API that
+`flatc` generates; one table per interface, which gives each interaction its
+interface number, its ordinal, its kind and the functions of its payloads; and
+the catalog's name and hash, the payload type names and the rule texts that
+the wasm codec takes at load. `ridl` does not run `flatc`. Build the files in
+two steps:
+
+```sh
+ridl build --emit typescript --emit flatbuffers --out-dir <out-dir>
+flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs
+```
+
+The codec file imports `flatc`'s output from `./<package path>.js` (for
+`veh.cabin`, `./veh/cabin.js`), so `flatc`'s `-o` is the directory of the
+TypeScript files. The first version converts named scalars, enums, enum sets
+and structs; a payload type that reaches another kind is refused with an
+error that names it.
 
 ## Documentation in the generated code
 

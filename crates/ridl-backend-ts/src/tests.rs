@@ -2138,7 +2138,7 @@ fn the_codec_option_is_accepted_and_other_keys_are_refused() {
         };
         crate::Backend::new(raw).generate(&request)
     };
-    let response = generate("codec", "true");
+    let response = generate("codec", "false");
     assert!(
         response.diagnostics.is_empty(),
         "{:?}",
@@ -2171,6 +2171,66 @@ fn the_codec_option_is_accepted_and_other_keys_are_refused() {
             .collect();
         assert_eq!(messages, [message]);
     }
+}
+
+/// With `codec = true` the backend writes `<base>.codec.ts` after
+/// `<base>.ts`, under the same generated marker; with `codec = false` it
+/// writes `<base>.ts` alone. The package is `examples/cabin`'s, compiled as
+/// one file.
+#[test]
+fn the_codec_option_writes_a_second_file() {
+    use ridl_ir::codegen::Backend as _;
+
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin/cabin.ridl");
+    let text = std::fs::read_to_string(&path).expect("read examples/cabin/cabin.ridl");
+    let package = ridlc::compile(&path.display().to_string(), &text).package;
+    let generate = |value: &str| {
+        let request = v1::CodegenRequest {
+            model: Some(ridl_ir::codegen::lower(&package, &[])),
+            artifact_base: "veh.cabin".to_string(),
+            generated_marker: ridl_ir::codegen::generated_marker(Some("veh.cabin")),
+            options: vec![v1::BackendOption {
+                key: "codec".to_string(),
+                value: value.to_string(),
+            }],
+            ..Default::default()
+        };
+        let raw = ridl_ir::codegen::RawIr {
+            package: &package,
+            others: &[],
+        };
+        crate::Backend::new(raw).generate(&request)
+    };
+    let response = generate("true");
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:?}",
+        response.diagnostics
+    );
+    let names: Vec<&str> = response
+        .files
+        .iter()
+        .map(|file| file.path.as_str())
+        .collect();
+    assert_eq!(names, ["veh.cabin.ts", "veh.cabin.codec.ts"]);
+    let Some(v1::generated_file::Content::Text(codec)) = &response.files[1].content else {
+        panic!("the codec file is text");
+    };
+    assert!(
+        codec.starts_with(&format!(
+            "// {}\n",
+            ridl_ir::codegen::generated_marker(Some("veh.cabin"))
+        )),
+        "got:\n{codec}"
+    );
+    assert!(codec.contains("export const Cabin = {"), "got:\n{codec}");
+    let names: Vec<String> = generate("false")
+        .files
+        .into_iter()
+        .map(|file| file.path)
+        .collect();
+    assert_eq!(names, ["veh.cabin.ts"]);
 }
 
 /// A target whose name begins with the name of another declaration resolves

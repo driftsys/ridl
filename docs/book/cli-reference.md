@@ -881,7 +881,9 @@ FlatBuffers codec in `WASM_PAYLOAD_TYPES`, sorted by qualified name
 names in `WASM_RULES`, sorted. A `type_id` is an index into the list of the same
 build. When the target is `wasm32` and the generated crate's feature
 `wasm-exports` is on, the module exports `ridl_alloc`, `ridl_free`,
-`ridl_catalog_hash` and `ridl_verify`, and no other function.
+`ridl_catalog_hash`, `ridl_verify` and `ridl_type_id`, and no other function.
+`ridl_type_id` returns the type id of a payload type named by its qualified
+name, or -1 for a name the list does not hold.
 `ridl_verify(type_id, ptr, len)` returns 0 when the bytes verify as the type at
 index `type_id`, 1 for a malformed buffer, 2 plus the index of the broken rule
 in `WASM_RULES`, and -1 for an unknown `type_id`. A null `ptr` with a length,

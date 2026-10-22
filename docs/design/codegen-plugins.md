@@ -24,8 +24,9 @@ backend** reads the lowered model, so it reads the request's model, options and
 artifact base and never the raw IR, and is run as a plugin, `ridlc-gen-rust`;
 the parity test over it is the exit test of the plugin split. The other three
 in-tree backends — TypeScript, proto3 and FlatBuffers — still read the raw IR
-through `RawIr` and are not plugins; each waits to be ported. §6 says what each
-parity test proves.
+through `RawIr` and are not plugins; each waits to be ported. The TypeScript
+backend's codec file, `<base>.codec.ts`, is written from the request's model
+only. §6 says what each parity test proves.
 
 ## 1. Where the code is
 
