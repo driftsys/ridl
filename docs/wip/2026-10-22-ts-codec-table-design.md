@@ -214,17 +214,32 @@ a payload the codec rejects can be built, as the demos' self-test needs.
 ADR-0013 decision 8's checking constructor for TypeScript stays
 driftsys/ridl#923.
 
-**D-12. The option is a boolean key on a backend table, validated in `ridlc`
-(ruling).** The manifest parser accepts `codec` as it accepts `wasm` (a
-non-boolean is MANI-015 with the same wording). `ridlc` passes it to the
-TypeScript backend as `BackendOption { key: "codec", value: "true" }`; the
-TypeScript backend accepts `codec` and still refuses every other key; a backend
-that does not take `codec` refuses it as the TypeScript backend refuses `wasm`
-today. `ridlc` reports an error when `[backend.typescript] codec = true` is set
-without `[backend.rust] wasm = true`: the table's hash and names are meaningful
-only against the module, and the two must come from one manifest. The reverse is
-not required: a crate with the wasm module and no TypeScript consumer is a valid
-build (the Node host test is one).
+**D-12. The option is a boolean key on a backend table, and `codec = true`
+implies the wasm codec (ruling, Sebastien, 2026-10-22).** The manifest parser
+accepts `codec` as it accepts `wasm` (a non-boolean is MANI-015 with the same
+wording). `ridlc` passes it to the TypeScript backend as
+`BackendOption { key: "codec", value: "true" }`; the TypeScript backend accepts
+`codec` and still refuses every other key; a backend that does not take `codec`
+refuses it as the TypeScript backend refuses `wasm` today. The table's hash and
+names are meaningful only against the wasm module, so a `codec = true` table
+turns the module on, under four rules:
+
+1. `codec = true` and `[backend.rust]` has no `wasm` key: `wasm` is turned on
+   implicitly; `ridlc` passes `wasm` to the Rust backend as if the manifest had
+   written `wasm = true`, with the value `implied`, so a later message can say
+   where it came from.
+2. `codec = true` and `[backend.rust]` writes `wasm = false`: MANI-019, an error
+   on the `codec` value, whose message names both keys.
+3. `codec = true` and no `[backend.rust]` table: MANI-019 with its own message,
+   because there is no Rust crate for the module to come from.
+4. An implied `wasm` whose `[backend.rust] encodings` does not name
+   `flatbuffers`: the existing refusal of `wasm` without `flatbuffers`, worded
+   to say that the module was implied by `codec = true`.
+
+The reverse is not required: a crate with the wasm module and no TypeScript
+consumer is a valid build (the Node host test is one). The manifest's `wasm` key
+keeps its meaning, and `BackendTable.wasm` becomes `Option<bool>` so that an
+absent key and a written `false` are told apart.
 
 **D-13. The codec file carries the generated marker and header, and a
 one-sentence doc per exported item (ruling).** The preamble is the one
@@ -468,18 +483,25 @@ Three layers hold it:
 ```toml
 [backend.rust]
 encodings = ["flatbuffers", "proto3"]
-wasm = true
 
 [backend.typescript]
 codec = true
 ```
 
 - `codec` is a boolean; any other value is MANI-015, as for `wasm`.
-- `codec = true` on the `typescript` table requires `wasm = true` on the `rust`
-  table; otherwise `ridl build` reports an error and writes no artifact, as it
-  does for `wasm` without `flatbuffers`. The `wasm` option already requires
-  `encodings` to name `flatbuffers`, so the `.fbs` the wrappers need is always
-  emittable.
+- `codec = true` implies `[backend.rust] wasm = true` when the `rust` table
+  writes no `wasm` key (D-12 rule 1): the manifest above builds the crate with
+  its `wasm` module. A written `wasm = true` beside it is the same build.
+- `codec = true` with a written `[backend.rust] wasm = false` is MANI-019:
+  `` `[backend.typescript] codec = true` needs the wasm codec, but `[backend.rust]` sets `wasm = false` ``.
+  `codec = true` with no `[backend.rust]` table is MANI-019 too:
+  `` `[backend.typescript] codec = true` needs the wasm codec, and there is no `[backend.rust]` table to build it from ``.
+  Both report on the `codec` value, and `ridl build` writes no artifact, as for
+  any manifest error.
+- An implied `wasm` still needs `encodings` to name `flatbuffers`; the Rust
+  backend's refusal then reads
+  `` `wasm` is implied by `codec = true` in the manifest, and `[backend.rust] encodings` does not name `flatbuffers`, which every export of the `wasm` module checks ``.
+  So the `.fbs` the wrappers need is always emittable when the build passes.
 - The key is passed only to the backend whose table carries it. The TypeScript
   backend takes `codec`; the Rust backend and a plugin that take no such option
   refuse it with the message their unknown-option path already gives.
@@ -520,11 +542,11 @@ codec = true
 
 | Surface                  | Effect                                                                                                                                          |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `manifest`               | one added line, `backend.*.codec boolean`; an addition passes                                                                                   |
+| `manifest`               | one added line, `backend.*.codec boolean (implies backend.rust.wasm)`; an addition passes; the `backend.*.wasm boolean` line is unchanged       |
 | `codegen-protocol`       | none: `BackendOption` carries the new key as it carries `wasm`                                                                                  |
 | `generated-crate`        | none: the frozen copies do not set `wasm = true`, so the `wasm` module and its new export are not in a dump; the export is additive in any case |
 | `runtime-crates`         | none: no Rust runtime crate changes                                                                                                             |
-| `wire`, `diagnostics`    | none; a new error diagnostic for `codec` without `wasm` adds a line if it gets a code                                                           |
+| `wire`, `diagnostics`    | `wire` none; `diagnostics` gains the line `MANI-019 error` (the two `codec` conflicts of D-12), an addition                                     |
 | the TypeScript emit      | not a frozen surface (ADR-0029 decision 2); `<base>.ts` is unchanged in any case                                                                |
 | `@driftsys/ridl-runtime` | not frozen and not yet published; `typeId`, `payloadTypes`, `UnknownPayloadType`, `PayloadCodec` and `MemberRef` are additions                  |
 
@@ -538,10 +560,15 @@ codec = true
   with no catalog hash. The existing `model_drift` test gains the codec file:
   every payload type of the model has an `encode` and a `decode`, and every live
   interaction of every interface has an entry.
-- **`ridl-core`.** `codec` parses as a boolean; a non-boolean is MANI-015.
-- **`ridlc`.** `codec` without `wasm` is an error and writes nothing; the pin
-  test of "The type-id agreement" (two cases); `wasm_module.rs` extended with
-  `ridl_type_id` and `type_id_of`.
+- **`ridl-core`.** `codec` parses as a boolean; a non-boolean is MANI-015;
+  `codec = true` with a written `wasm = false`, and with no `[backend.rust]`
+  table, are the two MANI-019 cases; `codec = true` with no `wasm` key draws no
+  diagnostic.
+- **`ridlc`.** `codec = true` with no `wasm` key builds the `wasm` module and
+  the codec file; an implied `wasm` without `flatbuffers` is refused with the
+  implied wording; a MANI-019 manifest writes nothing; the pin test of "The
+  type-id agreement" (two cases); `wasm_module.rs` extended with `ridl_type_id`
+  and `type_id_of`.
 - **`ridl-backend-rust`.** `descriptor_generation.rs` checks that the module's
   source holds `type_id_of` and the export.
 - **`packages/ridl-runtime`.** The wabt fixture of `tests/fixture.ts` gains
@@ -567,20 +594,21 @@ codec = true
 
 ## Alternatives considered
 
-| Alternative                                                                  | Rejected because                                                                                                                                                                    |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The type id written into the TypeScript, by a shared sort rule               | the list spans every package of the crate and `ridl.std`; a per-package file cannot compute it from its model, and a wrong id is a silent wrong check (D-5)                         |
-| The type id carried in the codegen model (`FbRoot.wasm_type_id`)             | the lowering is per package and does not see the crate's member list; `ridlc` would have to compute the index and patch every model, which is a second lowering step                |
-| `ridlc` passes the crate's list as a backend option string                   | couples `ridlc` to one backend's needs through a comma-joined option, and a plugin would have to parse it; the module already holds the list, so asking the module is simpler       |
-| An export that enumerates the names (`ridl_payload_type_name(id, out, cap)`) | needs a buffer protocol and a loop in the loader for the same result as one lookup per name; `ridl_type_id` is symmetric with `ridl_verify`                                         |
-| Wrappers over the accessor API, no object API                                | a generated reader per field and builder per table; the object API makes the generator a tree walk (D-3)                                                                            |
-| The table typed with the transport's `Kind` enum                             | the runtime package would depend on the transport package; a string kind is enough to pick a transport call (D-8)                                                                   |
-| `PayloadCodec` and `MemberRef` declared in every generated file              | one copy per package of the same two interfaces; the runtime package is the one place they are versioned                                                                            |
-| `RULES` in the runtime package instead of the codec file                     | the list is the module's, and the codec file is the artifact generated beside the module; the pin test compares the two generated outputs, which a hand-written list would not join |
-| `ridlc` runs `flatc`                                                         | a tool spawned in the user's environment, the reason the earlier note gave for not running `cargo` (D-6 there)                                                                      |
-| `codec = true` implied by `wasm = true`, no second key                       | a Rust crate with the module and no TypeScript consumer would get a `.ts` file it did not ask for, and the TypeScript backend would read another backend's table                    |
-| One codec file per workspace instead of per package                          | the backend contract is per package; the module's crate-wide list is reached through D-5 without a crate-wide file                                                                  |
-| A checking `encode<Name>` that refuses an out-of-range value                 | duplicates the Rust check in TypeScript, which ADR-0020 decision 7 rules out; the self-test needs to build a rejected payload (D-11)                                                |
+| Alternative                                                                  | Rejected because                                                                                                                                                                                            |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The type id written into the TypeScript, by a shared sort rule               | the list spans every package of the crate and `ridl.std`; a per-package file cannot compute it from its model, and a wrong id is a silent wrong check (D-5)                                                 |
+| The type id carried in the codegen model (`FbRoot.wasm_type_id`)             | the lowering is per package and does not see the crate's member list; `ridlc` would have to compute the index and patch every model, which is a second lowering step                                        |
+| `ridlc` passes the crate's list as a backend option string                   | couples `ridlc` to one backend's needs through a comma-joined option, and a plugin would have to parse it; the module already holds the list, so asking the module is simpler                               |
+| An export that enumerates the names (`ridl_payload_type_name(id, out, cap)`) | needs a buffer protocol and a loop in the loader for the same result as one lookup per name; `ridl_type_id` is symmetric with `ridl_verify`                                                                 |
+| Wrappers over the accessor API, no object API                                | a generated reader per field and builder per table; the object API makes the generator a tree walk (D-3)                                                                                                    |
+| The table typed with the transport's `Kind` enum                             | the runtime package would depend on the transport package; a string kind is enough to pick a transport call (D-8)                                                                                           |
+| `PayloadCodec` and `MemberRef` declared in every generated file              | one copy per package of the same two interfaces; the runtime package is the one place they are versioned                                                                                                    |
+| `RULES` in the runtime package instead of the codec file                     | the list is the module's, and the codec file is the artifact generated beside the module; the pin test compares the two generated outputs, which a hand-written list would not join                         |
+| `ridlc` runs `flatc`                                                         | a tool spawned in the user's environment, the reason the earlier note gave for not running `cargo` (D-6 there)                                                                                              |
+| `codec = true` implied by `wasm = true`, no second key                       | a Rust crate with the module and no TypeScript consumer would get a `.ts` file it did not ask for, and the TypeScript backend would read another backend's table; the implication runs the other way (D-12) |
+| `codec = true` requires a written `wasm = true`                              | a user who asks for the TypeScript codec has asked for the module it runs on; a second key to write, and an error when it is missing, is work with no decision in it (D-12, ruling of 2026-10-22)           |
+| One codec file per workspace instead of per package                          | the backend contract is per package; the module's crate-wide list is reached through D-5 without a crate-wide file                                                                                          |
+| A checking `encode<Name>` that refuses an out-of-range value                 | duplicates the Rust check in TypeScript, which ADR-0020 decision 7 rules out; the self-test needs to build a rejected payload (D-11)                                                                        |
 
 ## Rulings on the open questions
 

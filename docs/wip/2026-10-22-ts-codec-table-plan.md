@@ -49,8 +49,11 @@ Copied from the design note; every task's requirements include them.
   `<Scope.package>.<InducedName.rust>` for an induced tuple." (D-6)
 - "`decode<Name>` does not verify, and `encode<Name>` does not check a
   constraint." (D-11)
-- "`ridlc` reports an error when `[backend.typescript] codec = true` is set
-  without `[backend.rust] wasm = true`"; "The reverse is not required." (D-12)
+- "`codec = true` implies the wasm codec": with no `wasm` key, "`wasm` is turned
+  on implicitly"; with a written `wasm = false`, or no `[backend.rust]` table,
+  MANI-019; an implied `wasm` without `flatbuffers` is "the existing refusal of
+  `wasm` without `flatbuffers`, worded to say that the module was implied by
+  `codec = true`". "The reverse is not required." (D-12)
 - "The refusal covers a foreign declaration that needs a converter or `flatc`'s
   output for its package: a struct, a union and an enum. A foreign named scalar
   and a foreign enum set need neither". (D-14)
@@ -310,19 +313,23 @@ guard removed (`allocs` grows on `""`).
 
 ---
 
-### Task 3: The `codec` manifest key, its validation and its delivery
+### Task 3: The `codec` manifest key, the implied wasm codec, and the delivery
 
 **Files:**
 
 - Modify: `crates/ridl-core/src/manifest.rs` (`CODEC_KEY`, `BackendTable.codec`,
-  `RawBackend.codec`, the parse, the cross-table check, tests)
+  `BackendTable.wasm` as `Option<bool>`, `RawBackend.codec`, the parse, the
+  cross-table check, tests)
 - Modify: `crates/ridl-core/src/diag.rs` (`MANI_019`)
-- Modify: `crates/ridlc/src/lib.rs` (`codec_backends`, `backend_options`, tests)
+- Modify: `crates/ridlc/src/lib.rs` (`wasm_backends` with the implied case,
+  `codec_backends`, `backend_options`, tests)
+- Modify: `crates/ridl-backend-rust/src/contract.rs` (the `implied` value of
+  `wasm`, the implied wording of the `flatbuffers` refusal)
+- Modify: `crates/ridl-backend-rust/tests/descriptor_generation.rs` (the
+  `implied` cases, one `codec` refusal case)
 - Modify: `crates/ridl-backend-ts/src/contract.rs` (`CODEC_OPTION`, the option
   loop)
 - Modify: `crates/ridl-backend-ts/src/tests.rs` (option tests)
-- Modify: `crates/ridl-backend-rust/tests/descriptor_generation.rs` (one refusal
-  case)
 - Modify: `xtask/src/freeze/manifest.rs`, `freeze/manifest.txt`,
   `freeze/diagnostics.txt`
 - Modify: `docs/book/cli-reference.md` (the manifest paragraph that documents
@@ -332,18 +339,34 @@ guard removed (`allocs` grows on `""`).
 
 - Produces:
   - `ridl_core::manifest::CODEC_KEY: &str = "codec"`;
-    `BackendTable { encodings, wasm, codec: bool }`.
+    `BackendTable { encodings, wasm: Option<bool>, codec: bool }`, where `wasm`
+    is `None` for an absent key and for a non-boolean (MANI-015), and
+    `Some(value)` for a written boolean. Every reader of `table.wasm` (`ridlc`'s
+    `wasm_backends`, the manifest tests) changes with it.
   - `DiagCode::MANI_019`, code `MANI-019`, severity `Error`, catalogue text "a
-    backend table sets `codec = true` without `[backend.rust] wasm = true`".
+    backend table sets `codec = true` without a Rust wasm codec to run on".
     Raised by the manifest parser on the span of the `codec` value, for every
-    table whose `codec` is `true` when the `rust` table is absent or its `wasm`
-    is not `true`, with the message
-    `` `[backend.<name>] codec = true` needs `[backend.rust] wasm = true`: the codec table is generated beside the wasm module ``.
-  - `ridlc`:
-    `backend_options(backends, wasm_backends, codec_backends, language)` pushes
-    `BackendOption { key: "codec", value: "true" }` after the `wasm` option when
-    `codec_backends` holds `language`; `codec_backends` is computed beside
-    `wasm_backends` from `table.codec`.
+    table `<name>` whose `codec` is `true`, in two cases:
+    - the `rust` table writes `wasm = false`:
+      `` `[backend.<name>] codec = true` needs the wasm codec, but `[backend.rust]` sets `wasm = false` ``;
+    - there is no `rust` table:
+      `` `[backend.<name>] codec = true` needs the wasm codec, and there is no `[backend.rust]` table to build it from ``.
+      A `rust` table with no `wasm` key, or with `wasm = true`, draws nothing.
+  - `ridlc`, in `run_build_inner`: `codec_backends` is the set of tables whose
+    `codec` is `true`; `wasm_backends` is the set of tables whose `wasm` is
+    `Some(true)`; `implied_wasm` is `true` when `codec_backends` is not empty,
+    the `rust` table exists and its `wasm` is `None`, and then `"rust"` joins
+    the set every reader of `wasm_backends` uses (`wasm_module_source`,
+    `render_cargo_toml`, `crate_file_refusals`).
+    `backend_options(backends, wasm_backends, implied_wasm, codec_backends, language)`
+    pushes `BackendOption { key: "wasm", value: "implied" }` for `"rust"` when
+    `implied_wasm`, `value: "true"` when the table wrote it, then
+    `BackendOption { key: "codec", value: "true" }` when `codec_backends` holds
+    `language`.
+  - `ridl_backend_rust::contract`: the `wasm` option takes the value `implied`
+    as `true`; the `flatbuffers` refusal reads, for `implied`,
+    `` `wasm` is implied by `codec = true` in the manifest, and `[backend.rust] encodings` does not name `flatbuffers`, which every export of the `wasm` module checks ``,
+    and keeps its current text for `true`.
   - `ridl_backend_ts::contract::CODEC_OPTION: &str = "codec"`; the backend
     accepts `codec` with the value `true` or `false`, refuses another value with
     `` `codec` is `<other>`; the value is `true` or `false` ``, and refuses
@@ -353,30 +376,38 @@ guard removed (`allocs` grows on `""`).
 
 - [ ] **Step 1: Write the failing manifest tests**
 
-In `manifest.rs` `tests`, beside the `wasm` tests:
+In `manifest.rs` `tests`, beside the `wasm` tests (which now assert
+`Some(true)`, `Some(false)` and `None`):
 
 - `backend_codec_parses_as_a_boolean`:
-  `[backend.rust] encodings = ["flatbuffers"]\nwasm = true\n[backend.typescript]\ncodec = true`
-  parses with no diagnostic and `backends["typescript"].codec`; `codec = false`
-  and an absent key give `false`.
+  `[backend.rust]\nencodings = ["flatbuffers"]\n[backend.typescript]\ncodec = true`
+  parses with no diagnostic, `backends["typescript"].codec` is `true` and
+  `backends["rust"].wasm` is `None`; `codec = false` and an absent key give
+  `false`.
 - `backend_codec_not_a_boolean_is_mani_015`:
   `[backend.typescript]\ncodec = "yes"` gives `["MANI-015"]` with the message
   `` `[backend.typescript] codec` holds `"yes"`, which is not a boolean `` and
   the span text `"yes"`.
-- `backend_codec_without_rust_wasm_is_mani_019`:
-  `[backend.typescript]\ncodec = true` alone gives `["MANI-019"]`, the message
-  above with `<name>` = `typescript`, and the span text `true`; the same with
-  `[backend.rust]\nencodings = ["flatbuffers"]` and no `wasm` gives
-  `["MANI-019"]`.
-- `backend_codec_on_any_table_needs_rust_wasm`: `[backend.kotlin]\ncodec = true`
-  alone gives `["MANI-019"]` naming `kotlin`.
+- `backend_codec_with_wasm_false_is_mani_019`:
+  `[backend.rust]\nencodings = ["flatbuffers"]\nwasm = false\n[backend.typescript]\ncodec = true`
+  gives `["MANI-019"]`, the `wasm = false` message above with `<name>` =
+  `typescript`, and the span text `true` (the `codec` value).
+- `backend_codec_without_a_rust_table_is_mani_019`:
+  `[backend.typescript]\ncodec = true` alone gives `["MANI-019"]` and the
+  no-table message above.
+- `backend_codec_with_wasm_true_or_no_wasm_key_is_accepted`: the manifest of the
+  first test, and the same with `wasm = true` added, each parse with no
+  diagnostic.
+- `backend_codec_on_any_table_is_checked`: `[backend.kotlin]\ncodec = true`
+  alone gives `["MANI-019"]` naming `kotlin` in the no-table message.
 
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `cargo test -p ridl-core manifest::tests::backend_codec` Expected: FAIL
-(`codec` is not a field; no `MANI_019`).
+(`codec` is not a field; no `MANI_019`; `wasm` is a `bool`).
 
-- [ ] **Step 3: Implement the key, the parse and `MANI_019`**
+- [ ] **Step 3: Implement the key, the `Option<bool>` change, the parse and
+      `MANI_019`**
 
 The parse mirrors `wasm` in `RawBackend`, the visitor and the table loop. The
 cross-table check runs after every table is read, in the function that builds
@@ -384,15 +415,31 @@ the `backends` map.
 
 - [ ] **Step 4: Run the manifest tests to see them pass**
 
-Run: `cargo test -p ridl-core manifest` Expected: PASS.
+Run: `cargo test -p ridl-core` Expected: PASS.
 
 - [ ] **Step 5: Write the failing delivery tests**
 
 - `ridlc` (`crates/ridlc/src/lib.rs` tests, beside the `encodings("typescript")`
-  helper): `backend_options_carries_codec_for_the_table_that_sets_it`: with
-  `codec_backends = {"typescript"}` and `wasm_backends = {"rust"}`,
-  `backend_options(…, "typescript")` is `[("codec", "true")]` and
-  `backend_options(…, "rust")` has no `codec` entry.
+  helper): `backend_options_carries_codec_and_the_implied_wasm`: with
+  `codec_backends = {"typescript"}`, `wasm_backends = {}` and
+  `implied_wasm = true`, `backend_options(…, "rust")` is
+  `[("encodings", …), ("wasm", "implied")]` and
+  `backend_options(…, "typescript")` is `[("codec", "true")]`; with
+  `wasm_backends = {"rust"}` and `implied_wasm = false`, the `rust` entry is
+  `("wasm", "true")`; with both empty and `implied_wasm = false`, `rust` has no
+  `wasm` entry and `typescript` has no `codec` entry.
+- `ridl-backend-rust` `descriptor_generation.rs`:
+  `an_implied_wasm_is_accepted_with_flatbuffers`:
+  `backend_response(vec![option("encodings", "flatbuffers"), option("wasm", "implied")])`
+  is `Ok`;
+  `an_implied_wasm_without_flatbuffers_is_refused_with_the_implied_wording`:
+  `refused_options(vec![option("encodings", "proto3"), option("wasm", "implied")])`
+  equals the implied message above, and
+  `refused_options(vec![option("encodings", "proto3"), option("wasm", "true")])`
+  still starts with `` `[backend.rust] wasm = true` needs ``;
+  `codec_on_the_rust_table_is_refused_by_the_rust_backend`:
+  `refused_options(vec![option("encodings", "flatbuffers"), option("codec", "true")])`
+  contains `` `codec` is not one it knows ``.
 - `ridl-backend-ts` `tests.rs`:
   `the_codec_option_is_accepted_and_other_keys_are_refused`: a request with
   `options = [BackendOption { key: "codec", value: "true" }]` gives a response
@@ -400,22 +447,20 @@ Run: `cargo test -p ridl-core manifest` Expected: PASS.
   diagnostic with the message
   `` `codec` is `yes`; the value is `true` or `false` ``; `key: "wasm"` gives
   ``the typescript backend takes the option `codec`; `wasm` is not one it knows``.
-- `ridl-backend-rust` `descriptor_generation.rs`:
-  `codec_on_the_rust_table_is_refused_by_the_rust_backend`:
-  `refused_options(vec![option("encodings", "flatbuffers"), option("codec", "true")])`
-  contains `` `codec` is not one it knows ``.
 
 - [ ] **Step 6: Run them to see them fail, implement, run to see them pass**
 
 Run:
-`cargo test -p ridlc backend_options_carries_codec && cargo test -p ridl-backend-ts the_codec_option && cargo test -p ridl-backend-rust --test descriptor_generation codec_on_the_rust_table`
-Expected: FAIL, then PASS after the `ridlc` and `contract.rs` changes.
+`cargo test -p ridlc backend_options_carries && cargo test -p ridl-backend-rust --test descriptor_generation implied_wasm codec_on_the_rust_table && cargo test -p ridl-backend-ts the_codec_option`
+Expected: FAIL, then PASS after the `ridlc` and the two `contract.rs` changes.
 
 - [ ] **Step 7: Update the frozen manifest dump and the diagnostics dump**
 
-Add `"backend.*.codec boolean"` to the dumper in `xtask/src/freeze/manifest.rs`
-and to its unit test's expected list, then run `cargo xtask freeze update`.
-Expected: `freeze/manifest.txt` gains the line `backend.*.codec boolean` and
+Add `"backend.*.codec boolean (implies backend.rust.wasm)"` to the dumper in
+`xtask/src/freeze/manifest.rs` and to its unit test's expected list; the
+`"backend.*.wasm boolean"` line stays. Run `cargo xtask freeze update`.
+Expected: `freeze/manifest.txt` gains the line
+`backend.*.codec boolean (implies backend.rust.wasm)` and
 `freeze/diagnostics.txt` gains `MANI-019 error`; `just freeze-check` passes
 (both are added lines).
 
@@ -423,20 +468,27 @@ Expected: `freeze/manifest.txt` gains the line `backend.*.codec boolean` and
 
 In `docs/book/cli-reference.md`, after the `wasm` paragraph, one paragraph:
 `[backend.typescript] codec = true` writes `<base>.codec.ts` beside the
-TypeScript module (Task 4 fills in what it holds); it needs
-`[backend.rust] wasm = true`, and MANI-019 reports a manifest that sets it
-without.
+TypeScript module (Task 4 fills in what it holds) and turns the `wasm` module on
+when `[backend.rust]` writes no `wasm` key; a written `wasm = false`, and a
+manifest with no `[backend.rust]` table, are MANI-019; `encodings` must still
+name `flatbuffers`.
 
 ```bash
-git add crates/ridl-core crates/ridlc/src/lib.rs crates/ridl-backend-ts crates/ridl-backend-rust/tests/descriptor_generation.rs xtask/src/freeze/manifest.rs freeze docs/book/cli-reference.md
-git commit -m "feat(ridlc): add the codec key of a backend table"
+git add crates/ridl-core crates/ridlc/src/lib.rs crates/ridl-backend-rust crates/ridl-backend-ts xtask/src/freeze/manifest.rs freeze docs/book/cli-reference.md
+git commit -m "feat(ridlc): add the codec key of a backend table, which implies the wasm codec"
 ```
 
-**Semantic mutations the tests must kill:** `MANI_019` raised when `wasm` is
-`true` (the accepted case fails); the check reading `backends["typescript"]`
-only (the `kotlin` case); `backend_options` passing `codec` to every language
-(the `rust` assertion); the TypeScript backend accepting any value (the `yes`
-case).
+**Semantic mutations the tests must kill:** `MANI_019` raised when the `rust`
+table has no `wasm` key
+(`backend_codec_with_wasm_true_or_no_wasm_key_is_accepted`); `MANI_019` not
+raised for a written `wasm = false` (the `wasm = false` case); the no-table case
+reported with the `wasm = false` message (the two message assertions); the check
+reading `backends["typescript"]` only (the `kotlin` case); `implied_wasm`
+computed when the `rust` table wrote `wasm = false` (the `ridlc` options test,
+with `wasm_backends` empty, asserts no `wasm` entry unless `implied_wasm`);
+`implied` passed as `true` to the Rust backend (the implied-wording refusal);
+`backend_options` passing `codec` to every language (the `rust` assertion); the
+TypeScript backend accepting any value (the `yes` case).
 
 ---
 
@@ -867,9 +919,18 @@ a local one (the refusal test); `ord` as the slot position (the
   `pin.a.codec.ts` and `pin.b.codec.ts`; assert the crate list is
   `["pin.a.Zed", "pin.b.Alpha"]`, each package's list is a subsequence of it in
   order, and their concatenation in package order equals it.
-- `codec_without_wasm_writes_nothing`: copy cabin with `wasm = true` removed and
-  the `codec` table added; `run_build` has an error diagnostic with code
-  `MANI-019`, and `out` holds no `veh.cabin.codec.ts` and no `veh.cabin.ts`.
+- `codec_implies_the_wasm_module`: copy cabin with its `wasm = true` line
+  removed and the `codec` table added; `run_build` with both emits has no error,
+  writes `veh.cabin.codec.ts` and `__ridl_wasm.rs`, and the generated
+  `Cargo.toml` has the line `wasm-exports = ["std"]`.
+- `codec_with_wasm_false_writes_nothing`: copy cabin with `wasm = true` replaced
+  by `wasm = false` and the `codec` table added; `run_build` has an error
+  diagnostic with code `MANI-019`, and `out` holds no `veh.cabin.codec.ts` and
+  no `veh.cabin.ts`.
+- `an_implied_wasm_without_flatbuffers_is_refused_with_the_implied_wording`:
+  copy cabin with `wasm = true` removed, `encodings = ["proto3"]`, and the
+  `codec` table added; `run_build` has an error diagnostic whose message is the
+  implied wording of Task 3, and `out` holds no `__ridl_wasm.rs`.
 
 - [ ] **Step 2: Run to see them fail**
 
