@@ -102,6 +102,14 @@ function fn(
   return value;
 }
 
+/** The error for an allocation that the module reports as failed (pointer 0). */
+function outOfMemory(): CodecError {
+  return new CodecError(
+    "ridl_alloc returned 0: the wasm module is out of memory",
+    "ridl_alloc",
+  );
+}
+
 /** Loads a wasm codec module and checks its catalog hash. */
 export async function loadCodec(
   source: CodecSource,
@@ -147,6 +155,7 @@ export async function loadCodec(
 
   // The hash is read through a buffer that the module allocates.
   const hashPtr = alloc(HASH_LENGTH);
+  if (hashPtr === 0) throw outOfMemory();
   let actual: Uint8Array;
   try {
     catalogHash(hashPtr);
@@ -169,6 +178,8 @@ export async function loadCodec(
         );
       }
       const ptr = alloc(bytes.length);
+      // A zero length may legitimately return 0; any other 0 is a failure.
+      if (ptr === 0 && bytes.length > 0) throw outOfMemory();
       let code: number;
       try {
         // The allocation may have grown the memory, so the buffer is read
