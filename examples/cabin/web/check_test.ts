@@ -214,23 +214,24 @@ Deno.test("selfTest passes with a codec that checks the range", () => {
 });
 
 Deno.test("selfTest fails a codec that accepts every payload", () => {
-  assert.match(selfTest(fakeCodec(() => ({ ok: true }))) ?? "", /-41/);
+  assert.match(selfTest(fakeCodec(() => ({ ok: true }))) ?? "", /accepted -41/);
 });
 
 Deno.test("selfTest fails a codec that accepts 86", () => {
   const cause = selfTest(fakeCodec((v) => (v < -40 ? RANGE : { ok: true })));
-  assert.match(cause ?? "", /86/);
+  assert.match(cause ?? "", /accepted 86/);
 });
 
 Deno.test("selfTest fails a codec that rejects 20", () => {
   const cause = selfTest(fakeCodec(() => RANGE));
-  assert.match(cause ?? "", /\b20\b/);
+  assert.match(cause ?? "", /rejected 20\b/);
 });
 
 Deno.test("selfTest fails a codec that rejects with another kind or code", () => {
   for (
     const other of [
       { ok: false, kind: "malformed", code: 1 },
+      { ok: false, kind: "malformed", code: RANGE_RULE },
       { ok: false, kind: "rule", code: 3 },
     ] as VerifyResult[]
   ) {
