@@ -21,7 +21,8 @@ use ridlc::{CliRun, Emit};
 )]
 mod support;
 
-/// The manifest of `examples/cabin`, which sets `wasm = true`.
+/// The manifest of `examples/cabin`, which sets `wasm = true`, with its
+/// `[backend.typescript]` table removed: each test adds the tables it needs.
 fn cabin_manifest() -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin/ridl.toml");
     let manifest = std::fs::read_to_string(path).expect("the manifest is read");
@@ -29,7 +30,9 @@ fn cabin_manifest() -> String {
         manifest.lines().any(|line| line.trim() == "wasm = true"),
         "the tests expect `wasm = true` in the example's manifest:\n{manifest}"
     );
-    manifest
+    let stripped = support::without_typescript_table(&manifest);
+    assert!(!stripped.contains("codec"), "{stripped}");
+    stripped
 }
 
 /// The table that turns the codec module on.

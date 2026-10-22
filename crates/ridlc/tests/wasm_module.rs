@@ -54,13 +54,16 @@ fn cabin_manifest() -> String {
     manifest
 }
 
-/// The manifest of `examples/cabin` without its `wasm = true` line.
+/// The manifest of `examples/cabin` without its `wasm = true` line and
+/// without its `[backend.typescript]` table, whose `codec = true` would imply
+/// the module again.
 fn cabin_manifest_without_wasm() -> String {
-    cabin_manifest()
+    let manifest: String = cabin_manifest()
         .lines()
         .filter(|line| line.trim() != "wasm = true")
         .map(|line| format!("{line}\n"))
-        .collect()
+        .collect();
+    support::without_typescript_table(&manifest)
 }
 
 /// A copy of `examples/cabin`'s sources and manifest, with `wasm = true`.

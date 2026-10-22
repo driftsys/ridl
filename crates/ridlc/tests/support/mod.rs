@@ -158,3 +158,38 @@ pub fn copy_cabin(dst: &Path, manifest: &str) {
     }
     std::fs::write(dst.join("ridl.toml"), manifest).expect("the manifest copy is written");
 }
+
+/// `manifest` without its `[backend.typescript]` table: the header line and
+/// every line under it up to the next table header or the end. A test that
+/// needs the table adds its own, so what the example's manifest holds does
+/// not decide what the test builds.
+#[allow(
+    dead_code,
+    reason = "every test target in this crate compiles this module, and only \
+              the tests that build a copy of the cabin example call it"
+)]
+pub fn without_typescript_table(manifest: &str) -> String {
+    assert!(
+        manifest
+            .lines()
+            .any(|line| line.trim() == "[backend.typescript]"),
+        "the tests expect a `[backend.typescript]` table in the example's manifest:\n{manifest}"
+    );
+    let mut inside = false;
+    let mut out = String::new();
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[backend.typescript]" {
+            inside = true;
+            continue;
+        }
+        if inside && trimmed.starts_with('[') {
+            inside = false;
+        }
+        if !inside {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+    out.trim_end().to_string() + "\n"
+}
