@@ -22,9 +22,10 @@ recipe `just cabin-browser-demo` runs it; it is not a member of `build`, like
 `examples/cabin/web/deno.json`, Chromium-family browser over the Chrome DevTools
 Protocol.
 
-**Spec:** `docs/wip/2026-10-21-ts-wasm-codec-design.md` (D-7, slice 4: "the
-end-to-end proof of D-7 in Deno, then in a browser, wired into `just` and CI").
-The wasm verify half of D-7 is step 4 of the web-session plan, not this plan.
+**Spec:** [the design note](../wip/2026-10-21-ts-wasm-codec-design.md) (D-7,
+slice 4: "the end-to-end proof of D-7 in Deno, then in a browser, wired into
+`just` and CI"). The wasm verify half of D-7 is step 4 of the web-session plan,
+not this plan.
 
 ## Global Constraints
 
