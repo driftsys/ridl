@@ -233,7 +233,10 @@ member; rsdl is the apex.
                          one on the ring of the 126 values (85 is followed by
                          -40; a repeated value is ignored), 85 is reached by
                          such a step, and -40 is seen after 85 (the first
-                         sample counts for neither bound).
+                         sample counts for neither bound). It first builds
+                         cabin's wasm codec (wasm32 cdylib) and, with it,
+                         accepts 20 and rejects -41 and 86 with the range
+                         rule, then verifies every received payload with it.
                          Needs Deno and flatc at the version in .flatc-version
     just ts-browser-e2e  the same build, then the package's end-to-end test
                          in a headless browser; needs a Chromium-family
@@ -242,7 +245,8 @@ member; rsdl is the apex.
                          browser
     just cabin-browser-demo
                          the generation and server build of cabin-ws-demo,
-                         then the same temperature check in a page that a
+                         then the same codec self-test, payload verification
+                         and temperature check in a page that a
                          headless browser opens (RIDL_BROWSER names one);
                          needs Deno, flatc and a Chromium-family browser.
                          Runs in CI; not a member of build, for the same

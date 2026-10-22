@@ -1,10 +1,27 @@
-// Tests of the check in check.ts. Run with `deno test check_test.ts` after
-// `just cabin-ws-demo` has written generated/.
+// Tests of the check in check.ts. Run with `deno test --allow-read
+// check_test.ts` after `just cabin-ws-demo` has written generated/, which
+// holds the `flatc` code and the wasm codec veh_cabin.wasm.
 
 import assert from "node:assert/strict";
 import * as flatbuffers from "flatbuffers";
 import { TemperatureBox } from "./generated/veh/cabin.ts";
-import { decodeTemperature, isPass, TemperatureCheck } from "./check.ts";
+import {
+  CatalogMismatch,
+  type Codec,
+  loadCodec,
+  type VerifyResult,
+} from "../../../packages/ridl-runtime/mod.ts";
+import {
+  decodeTemperature,
+  encodeTemperature,
+  hashFromHex,
+  isPass,
+  RANGE_RULE,
+  selfTest,
+  TEMPERATURE_TYPE_ID,
+  TemperatureCheck,
+  verifyPayload,
+} from "./check.ts";
 
 Deno.test("a full lap passes", () => {
   const check = new TemperatureCheck();
@@ -105,5 +122,95 @@ Deno.test("decodeTemperature reads a TemperatureBox", () => {
     const builder = new flatbuffers.Builder(16);
     builder.finish(TemperatureBox.createTemperatureBox(builder, value));
     assert.equal(decodeTemperature(builder.asUint8Array()), value);
+  }
+});
+
+/**
+ * The wasm codec. The catalog hash is known only to the server, so the module
+ * is first loaded with a placeholder hash, and then again with the hash that
+ * the mismatch reports.
+ */
+async function codec(): Promise<Codec> {
+  const bytes = await Deno.readFile(
+    new URL("./generated/veh_cabin.wasm", import.meta.url),
+  );
+  try {
+    return await loadCodec(bytes, { catalogHash: new Uint8Array(32) });
+  } catch (e) {
+    if (!(e instanceof CatalogMismatch)) throw e;
+    return await loadCodec(bytes, { catalogHash: hashFromHex(e.actual) });
+  }
+}
+
+Deno.test("TEMPERATURE_TYPE_ID names Temperature in WASM_PAYLOAD_TYPES", async () => {
+  const source = await Deno.readTextFile(
+    new URL("../generated/__ridl_wasm.rs", import.meta.url),
+  );
+  const list = source.match(/WASM_PAYLOAD_TYPES[^=]*=\s*&\[([^\]]*)\]/);
+  assert.ok(list, "WASM_PAYLOAD_TYPES is in __ridl_wasm.rs");
+  const names = [...list[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  // decodeTemperature reads a TemperatureBox, the payload of
+  // veh.cabin.Temperature.
+  assert.equal(names[TEMPERATURE_TYPE_ID], "veh.cabin.Temperature");
+});
+
+Deno.test("the codec accepts 20 and rejects -41 and 86 with the range rule", async () => {
+  const c = await codec();
+  assert.equal(RANGE_RULE, 4);
+  assert.deepEqual(c.verify(TEMPERATURE_TYPE_ID, encodeTemperature(20)), {
+    ok: true,
+  });
+  for (const value of [-41, 86]) {
+    const result = c.verify(TEMPERATURE_TYPE_ID, encodeTemperature(value));
+    assert.equal(result.ok, false);
+    assert.equal((result as { kind: string }).kind, "rule");
+    assert.equal((result as { code: number }).code, 4);
+  }
+});
+
+Deno.test("the codec rejects a truncated payload as malformed", async () => {
+  const c = await codec();
+  const result = c.verify(
+    TEMPERATURE_TYPE_ID,
+    encodeTemperature(20).slice(0, 4),
+  );
+  assert.equal(result.ok, false);
+  assert.equal((result as { kind: string }).kind, "malformed");
+});
+
+Deno.test("selfTest passes with the cabin codec", async () => {
+  assert.equal(selfTest(await codec()), undefined);
+});
+
+Deno.test("verifyPayload gives the cause of each rejection", async () => {
+  const c = await codec();
+  assert.equal(verifyPayload(c, encodeTemperature(20)), undefined);
+  assert.equal(
+    verifyPayload(c, encodeTemperature(-41)),
+    "the codec rejected the payload with rule code 4 (range)",
+  );
+  assert.equal(
+    verifyPayload(c, encodeTemperature(20).slice(0, 4)),
+    "the codec found the payload malformed (code 1)",
+  );
+  // A codec that reports the other kinds, to check the remaining strings.
+  const fake = (result: VerifyResult) =>
+    ({ catalogHash: new Uint8Array(32), verify: () => result }) as Codec;
+  assert.equal(
+    verifyPayload(fake({ ok: false, kind: "rule", code: 3 }), new Uint8Array()),
+    "the codec rejected the payload with rule code 3",
+  );
+  assert.equal(
+    verifyPayload(
+      fake({ ok: false, kind: "unknown-type", code: -1 }),
+      new Uint8Array(),
+    ),
+    `the codec does not know type id ${TEMPERATURE_TYPE_ID}`,
+  );
+});
+
+Deno.test("encodeTemperature round-trips through decodeTemperature", () => {
+  for (const value of [-41, 20, 86]) {
+    assert.equal(decodeTemperature(encodeTemperature(value)), value);
   }
 });

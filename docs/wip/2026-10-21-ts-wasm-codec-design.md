@@ -230,7 +230,10 @@ The remaining slices, in order, replace slices 3 to 5 above:
 3. **Browser demo**, on the `ts-browser-e2e` harness.
 4. **Wasm verify in the demo**: a `Temperature` outside `[-40..85]` is rejected.
    The loader treats `ridl_alloc` returning 0 for a length above 0 as out of
-   memory.
+   memory. Step 4 landed: `examples/cabin/ridl.toml` sets `wasm = true`, the
+   private recipe `_cabin-wasm` builds the codec, and both demos run a codec
+   self-test (20 accepted, -41 and 86 rejected with rule 4) and verify every
+   received payload before the check sees its value.
 5. **Generated codec table** (`[backend.typescript] codec = true`,
    `<base>.codec.ts`) replaces the hand-written map. The TypeScript backend
    emits typl types only today, so this slice must first give it the interface

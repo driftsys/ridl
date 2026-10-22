@@ -1,11 +1,15 @@
 // Reads cabin's `temperature` signal from the WebSocket server in
 // ../server and decodes each payload with the code that `flatc` generated
-// from the `.fbs` file that `ridl build --emit flatbuffers` wrote.
+// from the `.fbs` file that `ridl build --emit flatbuffers` wrote. Before it
+// decodes a payload, it verifies the payload through the cabin wasm codec,
+// generated/veh_cabin.wasm, loaded with packages/ridl-runtime.
 //
 // Usage: deno run -A main.ts <server-executable>
 //
 // The program starts the server, reads the `port` and `hash` lines it prints,
-// attaches with the encoding `flatbuffers`, and subscribes to
+// loads the wasm codec with the announced hash, runs the codec self-test (20
+// is accepted, -41 and 86 are rejected with the range rule), attaches with the
+// encoding `flatbuffers`, and subscribes to
 // `Cabin.temperature`. The server steps the value through the whole range of
 // `Temperature` and starts again at the lowest value. The transport may
 // coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
@@ -19,8 +23,10 @@
 // that exits or a connection that closes before the end of the check fails the
 // program at once. It prints the number of samples it received, the number of
 // wraps (a step from 85 to -40 or across it), whether 85 was seen, and whether
-// -40 was seen after 85.
+// -40 was seen after 85. A payload the codec rejects fails the program with
+// the cause.
 
+import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
 import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   decodeTemperature,
@@ -28,8 +34,11 @@ import {
   HIGHEST,
   isPass,
   LOWEST,
+  RANGE_RULE,
+  selfTest,
   TEMPERATURE,
   TemperatureCheck,
+  verifyPayload,
 } from "./check.ts";
 import { type CabinServer, startServer } from "./server.ts";
 
@@ -77,6 +86,20 @@ void server.status.then((status) => {
 });
 const hash = hashFromHex(server.hash);
 
+stage = "loading the codec";
+let codec: Codec;
+try {
+  codec = await loadCodec(
+    await Deno.readFile(new URL("./generated/veh_cabin.wasm", import.meta.url)),
+    { catalogHash: hash },
+  );
+} catch (e) {
+  fail(`loading the codec: ${(e as Error).message}`);
+}
+stage = "running the self-test";
+const selfTestFailure = selfTest(codec);
+if (selfTestFailure) fail(`self-test: ${selfTestFailure}`);
+
 const check = new TemperatureCheck();
 let failure: string | undefined;
 // The stage in which the value that caused `failure` arrived.
@@ -93,7 +116,10 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
     if (
       target.iface !== TEMPERATURE.iface || target.ord !== TEMPERATURE.ord
     ) return;
-    const verdict = check.accept(decodeTemperature(sample.payload));
+    const rejected = verifyPayload(codec, sample.payload);
+    const verdict = rejected
+      ? { kind: "fail" as const, cause: rejected }
+      : check.accept(decodeTemperature(sample.payload));
     if (verdict.kind === "fail") {
       failure = verdict.cause;
       failureStage = stage;
@@ -147,5 +173,8 @@ if (status.code !== 0) fail(`the server exited with status ${status.code}`);
 if (!isPass(check.progress)) {
   fail(`the check ended without seeing ${LOWEST} after ${HIGHEST}`);
 }
-console.log("cabin-web: ok");
+console.log(
+  `cabin-web: ok, self-test rejected ${LOWEST - 1} and ${HIGHEST + 1} ` +
+    `with rule ${RANGE_RULE}`,
+);
 Deno.exit(0);

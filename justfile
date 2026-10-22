@@ -2850,7 +2850,8 @@ ts-e2e:
 
 # The steps `cabin-ws-demo` and `cabin-browser-demo` share: the `flatc` and
 # `deno` checks, the `.fbs` schema and the `flatc` TypeScript, then the server's
-# format, lint and build. `name` is the recipe named in each failure message.
+# format, lint and build, then the wasm codec (`_cabin-wasm`). `name` is the
+# recipe named in each failure message.
 _cabin-web-generate name:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -2877,6 +2878,30 @@ _cabin-web-generate name:
     cargo fmt --manifest-path examples/cabin/server/Cargo.toml --check
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p server --locked --all-targets --no-deps -- -D warnings
     cargo build --manifest-path examples/cabin/Cargo.toml -p server --locked
+    "{{just_executable()}}" _cabin-wasm
+
+# The wasm codec of the cabin demos: the generated cabin crate, which
+# `_cabin-generate` writes with the `wasm` module because examples/cabin/ridl.toml
+# sets `[backend.rust] wasm = true`, compiled as a `cdylib` for
+# `wasm32-unknown-unknown` with the feature `wasm-exports`. The size settings
+# come from the environment, not from the generated Cargo.toml (design note
+# D-6). The module is copied to examples/cabin/web/generated/veh_cabin.wasm,
+# which main.ts reads and browser.ts serves to the page. It is a build output,
+# not in git.
+[private]
+_cabin-wasm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    wasm_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
+    if ! rustc --print sysroot >/dev/null || [ ! -d "$(rustc --print sysroot)/lib/rustlib/wasm32-unknown-unknown" ]; then
+        echo "_cabin-wasm: the wasm32-unknown-unknown target is not installed; run 'rustup target add wasm32-unknown-unknown'" >&2
+        exit 1
+    fi
+    CARGO_PROFILE_RELEASE_OPT_LEVEL=z CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_PANIC=abort \
+        cargo rustc --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked --release \
+        --target wasm32-unknown-unknown --crate-type cdylib --features wasm-exports
+    mkdir -p examples/cabin/web/generated
+    cp "$wasm_target/wasm32-unknown-unknown/release/veh_cabin.wasm" examples/cabin/web/generated/veh_cabin.wasm
 
 # Prove a Deno program can read a value from a Rust server and decode it with
 # code that `flatc` generated from the `ridl build` output. The server is
@@ -2896,7 +2921,7 @@ _cabin-web-generate name:
 # `demo` shares, because the workspace does not resolve without both); the `.fbs` schema; the `flatc` TypeScript; then the
 # server's format, lint and build, because no other gate reaches the server;
 # then the type check of the program, the unit tests of the check
-# (`deno test check_test.ts`), and the program. The program closes the server's standard input to stop it.
+# (`deno test --allow-read check_test.ts`, which loads the wasm codec), and the program. The program closes the server's standard input to stop it.
 #
 # `flatc` has to be the version in .flatc-version (the version whose output the
 # program's imports were written against; CI and `./bootstrap` read the same
@@ -2916,7 +2941,7 @@ cabin-ws-demo: _cabin-generate (_cabin-web-generate "cabin-ws-demo")
     deno fmt --check
     deno lint
     deno check main.ts
-    deno test check_test.ts
+    deno test --allow-read check_test.ts
     deno run -A main.ts "$server"
 
 # Prints the path of the browser that `cabin-browser-demo` and

@@ -3,9 +3,11 @@
 // Usage: deno run -A browser.ts <server-executable>
 //
 // The program starts the server and reads its port and hash, bundles page.ts
-// for the browser, serves the page and its script from 127.0.0.1, and opens
-// the page in a headless Chromium-family browser. The page runs the check of
-// check.ts against the server's `Cabin.temperature` signal. The program then
+// for the browser, serves the page, its script and the cabin wasm codec
+// (generated/veh_cabin.wasm, as `application/wasm` at /veh_cabin.wasm) from
+// 127.0.0.1, and opens the page in a headless Chromium-family browser. The
+// page runs the codec self-test, then verifies each payload of the server's
+// `Cabin.temperature` signal through the codec and runs the check of check.ts. The program then
 // stops the server and checks that it exited with status 0. It prints the
 // number of samples and wraps and exits 0, or names the cause and exits 1.
 // Every process, listener and temporary directory it started is stopped or
@@ -15,7 +17,7 @@ import {
   type Browser,
   launch,
 } from "../../../packages/ridl-transport-ws/e2e/browser.ts";
-import { isPass, type Progress } from "./check.ts";
+import { HIGHEST, isPass, LOWEST, type Progress, RANGE_RULE } from "./check.ts";
 import { type CabinServer, startServer } from "./server.ts";
 
 /**
@@ -30,6 +32,7 @@ import { type CabinServer, startServer } from "./server.ts";
 const DEADLINE_MS = 30_000;
 
 const PAGE = `${import.meta.dirname}/page.ts`;
+const WASM = `${import.meta.dirname}/generated/veh_cabin.wasm`;
 
 const HTML = `<!doctype html>
 <meta charset="utf-8">
@@ -122,6 +125,7 @@ async function run(serverPath: string): Promise<Progress> {
   const script = `${dir}/page.js`;
   await bundle(script);
   const js = await Deno.readFile(script);
+  const wasm = await Deno.readFile(WASM);
   server = await startServer(serverPath, (kill) => (killServer = kill));
   http = Deno.serve(
     { hostname: "127.0.0.1", port: 0, onListen() {} },
@@ -134,6 +138,10 @@ async function run(serverPath: string): Promise<Progress> {
         case "/page.js":
           return new Response(js, {
             headers: { "content-type": "text/javascript; charset=utf-8" },
+          });
+        case "/veh_cabin.wasm":
+          return new Response(wasm, {
+            headers: { "content-type": "application/wasm" },
           });
         default:
           return new Response("not found", { status: 404 });
@@ -200,7 +208,11 @@ try {
     `cabin-browser: received ${progress.received} sample(s), ` +
       `${progress.wraps} wrap(s)`,
   );
-  console.log("cabin-browser: ok");
+  // The page resolves only after its codec self-test has passed.
+  console.log(
+    `cabin-browser: ok, self-test rejected ${LOWEST - 1} and ${HIGHEST + 1} ` +
+      `with rule ${RANGE_RULE}`,
+  );
   Deno.exit(0);
 } catch (e) {
   clearTimeout(deadline);

@@ -41,26 +41,40 @@ fn rustc(what: &str, args: &[&std::ffi::OsStr]) {
     );
 }
 
-/// A copy of `examples/cabin`'s sources with `wasm = true` added to its
-/// `[backend.rust]` table.
+/// The manifest of `examples/cabin`, which sets `wasm = true` in its
+/// `[backend.rust]` table for its demos.
+fn cabin_manifest() -> String {
+    let manifest =
+        std::fs::read_to_string(example_dir().join("ridl.toml")).expect("the manifest is read");
+    assert!(
+        manifest.lines().any(|line| line.trim() == "wasm = true"),
+        "the tests expect `wasm = true` in the example's manifest:\n{manifest}"
+    );
+    manifest
+}
+
+/// The manifest of `examples/cabin` without its `wasm = true` line.
+fn cabin_manifest_without_wasm() -> String {
+    cabin_manifest()
+        .lines()
+        .filter(|line| line.trim() != "wasm = true")
+        .map(|line| format!("{line}\n"))
+        .collect()
+}
+
+/// A copy of `examples/cabin`'s sources and manifest, with `wasm = true`.
 fn cabin_with_wasm(dir: &Path) {
     for file in ["cabin.ridl", "system.rsdl"] {
         std::fs::copy(example_dir().join(file), dir.join(file)).expect("the source is copied");
     }
-    let manifest =
-        std::fs::read_to_string(example_dir().join("ridl.toml")).expect("the manifest is read");
-    assert!(
-        manifest
-            .trim_end()
-            .ends_with("encodings = [\"flatbuffers\", \"proto3\"]"),
-        "the test appends `wasm` to the `[backend.rust]` table, which must end the manifest:\n\
-         {manifest}"
-    );
-    std::fs::write(
-        dir.join("ridl.toml"),
-        format!("{}\nwasm = true\n", manifest.trim_end()),
-    )
-    .expect("the manifest copy is written");
+    std::fs::write(dir.join("ridl.toml"), cabin_manifest()).expect("the manifest copy is written");
+}
+
+/// Writes the copy's manifest without `wasm = true`, which turns the option
+/// off.
+fn turn_wasm_off(dir: &Path) {
+    std::fs::write(dir.join("ridl.toml"), cabin_manifest_without_wasm())
+        .expect("the manifest without the option is written");
 }
 
 /// Writes the cargo workspace around the generated crate: the crate, a
@@ -722,8 +736,7 @@ fn turning_the_option_off_removes_the_module() {
     };
     build();
     assert!(out.join("__ridl_wasm.rs").is_file());
-    std::fs::copy(example_dir().join("ridl.toml"), src.join("ridl.toml"))
-        .expect("the manifest is restored");
+    turn_wasm_off(&src);
     build();
     assert!(!out.join("__ridl_wasm.rs").exists());
     let lib_rs = std::fs::read_to_string(out.join("lib.rs")).expect("lib.rs");
@@ -789,8 +802,7 @@ fn the_option_adds_the_feature_the_module_and_nothing_else() {
     cabin_with_wasm(&src);
     let on = work.path().join("on");
     build_clean(&src, &on);
-    std::fs::copy(example_dir().join("ridl.toml"), src.join("ridl.toml"))
-        .expect("the manifest is restored");
+    turn_wasm_off(&src);
     let off = work.path().join("off");
     build_clean(&src, &off);
 
@@ -920,7 +932,11 @@ fn the_option_off_leaves_a_hand_written_module_file_alone() {
     let out = work.path().join("out");
     std::fs::create_dir_all(&out).expect("the directory is created");
     std::fs::write(out.join("__ridl_wasm.rs"), "// mine\n").expect("the file is written");
-    build_clean(&example_dir(), &out);
+    let src = work.path().join("src");
+    std::fs::create_dir_all(&src).expect("the directory is created");
+    cabin_with_wasm(&src);
+    turn_wasm_off(&src);
+    build_clean(&src, &out);
     assert!(out.join("lib.rs").is_file());
     assert_eq!(
         std::fs::read_to_string(out.join("__ridl_wasm.rs")).expect("the file"),
