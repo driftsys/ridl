@@ -129,35 +129,46 @@ fn encode(value: &Temperature) -> String {
     hex(encoded.bytes)
 }
 
-/// The FlatBuffers bytes of one value of `$ty`, as hex.
+/// The FlatBuffers bytes of one value of `$ty`, as hex, then the codes the
+/// native `verify_by_id` gives those bytes and their first half.
 macro_rules! bytes_of {
-    ($ty:ty, $value:expr) => {{
+    ($name:literal, $ty:ty, $value:expr) => {{
         let mut buf = <$ty as Payload<FlatBuffers>>::BUFFER;
-        hex(<$ty as Payload<FlatBuffers>>::encode(&$value, &mut buf)
+        let bytes = <$ty as Payload<FlatBuffers>>::encode(&$value, &mut buf)
             .expect("the value encodes")
-            .bytes)
+            .bytes;
+        let id = veh_cabin::wasm::WASM_PAYLOAD_TYPES
+            .iter()
+            .position(|name| *name == $name)
+            .expect("a listed type") as u32;
+        format!(
+            "{} {} {}",
+            hex(bytes),
+            veh_cabin::wasm::verify_by_id(id, bytes),
+            veh_cabin::wasm::verify_by_id(id, &bytes[..bytes.len() / 2])
+        )
     }};
 }
 
 fn main() {
     // One valid value of every payload type of the package.
-    println!("payload veh.cabin.Average {}", bytes_of!(Average, Average::new(7).unwrap()));
+    println!("payload veh.cabin.Average {}", bytes_of!("veh.cabin.Average", Average, Average::new(7).unwrap()));
     println!(
         "payload veh.cabin.Diagnostic {}",
-        bytes_of!(
+        bytes_of!("veh.cabin.Diagnostic", 
             Diagnostic,
             Diagnostic { covers: Subsystems::HORN, health: Health::Ok, r#loop: Level::new(3).unwrap() }
         )
     );
-    println!("payload veh.cabin.Health {}", bytes_of!(Health, Health::Warn));
-    println!("payload veh.cabin.Level {}", bytes_of!(Level, Level::new(42).unwrap()));
-    println!("payload veh.cabin.Subsystems {}", bytes_of!(Subsystems, Subsystems::CLIMATE));
-    println!("payload veh.cabin.Temperature {}", bytes_of!(Temperature, Temperature::new(-3).unwrap()));
+    println!("payload veh.cabin.Health {}", bytes_of!("veh.cabin.Health", Health, Health::Warn));
+    println!("payload veh.cabin.Level {}", bytes_of!("veh.cabin.Level", Level, Level::new(42).unwrap()));
+    println!("payload veh.cabin.Subsystems {}", bytes_of!("veh.cabin.Subsystems", Subsystems, Subsystems::CLIMATE));
+    println!("payload veh.cabin.Temperature {}", bytes_of!("veh.cabin.Temperature", Temperature, Temperature::new(-3).unwrap()));
     println!(
         "payload veh.cabin.Warning {}",
-        bytes_of!(Warning, Warning { code: Level::new(5).unwrap(), health: Health::Fail })
+        bytes_of!("veh.cabin.Warning", Warning, Warning { code: Level::new(5).unwrap(), health: Health::Fail })
     );
-    println!("payload veh.cabin.Window {}", bytes_of!(Window, Window::new(250).unwrap()));
+    println!("payload veh.cabin.Window {}", bytes_of!("veh.cabin.Window", Window, Window::new(250).unwrap()));
     // The code each rule maps to, paired here with the variant by hand.
     for (text, rule) in [
         ("length", Rule::Length),
@@ -192,6 +203,16 @@ const results = cases.map((testCase) => {
     // A pointer and a length passed as they are, with no buffer behind them.
     const [, typeId, ptr, len] = testCase.split(":");
     return ridl_verify(Number(typeId), Number(ptr), Number(len));
+  }
+  if (testCase.startsWith("at0:")) {
+    // Valid bytes written at address 0, then passed as a null pointer.
+    const [, typeId, hex] = testCase.split(":");
+    const bytes = Uint8Array.from(hex.match(/../g), (pair) => parseInt(pair, 16));
+    const saved = new Uint8Array(memory.buffer, 0, bytes.length).slice();
+    new Uint8Array(memory.buffer, 0, bytes.length).set(bytes);
+    const code = ridl_verify(Number(typeId), 0, bytes.length);
+    new Uint8Array(memory.buffer, 0, bytes.length).set(saved);
+    return code;
   }
   const [typeId, hex] = testCase.split(":");
   const bytes = Uint8Array.from(hex.match(/../g) ?? [], (pair) => parseInt(pair, 16));
@@ -353,19 +374,22 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
         .position(|rule| rule == "range")
         .expect("range is a rule") as i64;
     assert_ne!(valid, out_of_range, "the two values encode differently");
-    let payloads: Vec<(String, String)> = stdout
+    // Name, bytes, and the native `verify_by_id` codes of the bytes and of
+    // their first half.
+    let payloads: Vec<(String, String, String, String)> = stdout
         .lines()
         .filter_map(|line| line.strip_prefix("payload "))
         .map(|rest| {
-            let (name, hex) = rest.split_once(' ').expect("a name and bytes");
-            (name.to_string(), hex.to_string())
+            let mut fields = rest.split(' ');
+            let mut next = || fields.next().expect("four fields").to_string();
+            (next(), next(), next(), next())
         })
         .collect();
     assert_eq!(
         types,
         payloads
             .iter()
-            .map(|(name, _)| name.clone())
+            .map(|(name, ..)| name.clone())
             .collect::<Vec<_>>(),
         "WASM_PAYLOAD_TYPES is every payload type of the package, sorted"
     );
@@ -450,7 +474,7 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
         format!("raw:{temperature}:{}:{}", 0xffff_fff8_u32, 0x10),
         // A null pointer with a length.
         format!("raw:{temperature}:0:5"),
-        // A length above `isize::MAX` on wasm32.
+        // A length of `u32::MAX`, above `isize::MAX` on wasm32.
         format!("raw:{temperature}:8:{}", 0xffff_ffff_u32),
         // A length of 0.
         format!("raw:{temperature}:8:0"),
@@ -461,10 +485,18 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
         // The valid bytes less their last byte, which is alignment padding
         // after the 1-byte value, so the buffer still verifies.
         format!("{temperature}:{}", &valid[..valid.len() - 2]),
+        // Valid bytes copied to address 0 and passed as a null pointer: only
+        // the null guard returns 1.
+        format!("at0:{temperature}:{valid}"),
+        // A length of `isize::MAX + 1` on wasm32. The length guard returns
+        // 1 before `from_raw_parts`; without it, the codec's own check of
+        // `MAX_SIZE` would also return 1, so this case cannot tell the two
+        // apart. It pins the result, not the guard.
+        format!("raw:{temperature}:8:{}", 0x8000_0000_u32),
     ];
     // Every payload type, with its valid bytes and with its first half only.
     let mut cases = cases.to_vec();
-    for (index, (_, hex)) in payloads.iter().enumerate() {
+    for (index, (_, hex, ..)) in payloads.iter().enumerate() {
         cases.push(format!("{index}:{hex}"));
         cases.push(format!("{index}:{}", &hex[..hex.len() / 4 * 2]));
     }
@@ -488,18 +520,27 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
         .map(|code| code.as_i64().expect("an integer code"))
         .collect();
     assert_eq!(
-        results[..11],
-        [0, range_code, 1, -1, 1, 1, 1, 1, -1, 0, 0],
+        results[..13],
+        [0, range_code, 1, -1, 1, 1, 1, 1, -1, 0, 0, 1, 1],
         "valid, out of range, truncated, unknown type_id, overflowing range, null \
          pointer, huge length, length 0, type_id u32::MAX, trailing bytes, one byte \
-         less; cases: \
+         less, null pointer over valid bytes, isize::MAX + 1; cases: \
          {cases:?}"
     );
     // Each type: its valid bytes verify, and its first half is malformed.
     assert_eq!(
-        results[11..],
+        results[13..],
         payloads.iter().flat_map(|_| [0, 1]).collect::<Vec<i64>>(),
         "cases: {cases:?}"
+    );
+    // The native dispatch gives the codes the wasm export gives.
+    assert_eq!(
+        results[13..],
+        payloads
+            .iter()
+            .flat_map(|(_, _, valid, half)| [valid.parse::<i64>().unwrap(), half.parse().unwrap()])
+            .collect::<Vec<i64>>(),
+        "native verify_by_id against the wasm ridl_verify"
     );
     assert_eq!(
         report["exports"],
@@ -724,7 +765,8 @@ fn a_workspace_of_two_units_refuses_the_option() {
     assert!(
         messages.contains(
             &"`[backend.rust] wasm = true` writes the catalog hash of one unit; this build has 2 \
-              units and no root package"
+              units and no root package. Build one package whose manifest is its own root, or set \
+              `wasm = true` in the build of one member"
         ),
         "{messages:?}"
     );
@@ -867,4 +909,21 @@ fn only_a_first_segment_wasm_refuses_the_option() {
     for name in ["wasmx", "veh.wasm"] {
         assert_eq!(build_named(name, true), Vec::<String>::new(), "{name}");
     }
+}
+
+/// With the option off, a hand-written `__ridl_wasm.rs` in the output
+/// directory is neither refused nor removed: the build succeeds and the file
+/// is unchanged.
+#[test]
+fn the_option_off_leaves_a_hand_written_module_file_alone() {
+    let work = tempfile::tempdir().expect("a temp dir is created");
+    let out = work.path().join("out");
+    std::fs::create_dir_all(&out).expect("the directory is created");
+    std::fs::write(out.join("__ridl_wasm.rs"), "// mine\n").expect("the file is written");
+    build_clean(&example_dir(), &out);
+    assert!(out.join("lib.rs").is_file());
+    assert_eq!(
+        std::fs::read_to_string(out.join("__ridl_wasm.rs")).expect("the file"),
+        "// mine\n"
+    );
 }
