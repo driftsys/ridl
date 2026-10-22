@@ -142,6 +142,10 @@ The cabin WebSocket server plan (`2026-10-22-cabin-ws-server-plan.md`) was
 archived on 2026-10-22, once the server and the Deno demo landed; the example in
 `examples/cabin` and `just cabin-ws-demo` are its durable record.
 
+The cabin browser demo plan (`2026-10-22-cabin-browser-demo-plan.md`) was
+archived on 2026-10-22, once the browser demo landed; `examples/cabin/web` and
+`just cabin-browser-demo` are its durable record.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)

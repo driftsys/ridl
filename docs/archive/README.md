@@ -716,3 +716,10 @@ provenance. Nothing here is normative — the current references live in
   `just cabin-ws-demo`;
   [the transport design record](../design/ridl-transport-ws.md) lists what
   remains (driftsys/ridl#989).
+
+- **2026-10-22-cabin-browser-demo-plan.md** — the plan for the browser demo of
+  the cabin temperature check (step 3 of
+  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)).
+  Archived with one edit, the link to the design note. The durable record is
+  `examples/cabin/web` (`check.ts`, `page.ts`, `browser.ts`), run by
+  `just cabin-browser-demo`.
