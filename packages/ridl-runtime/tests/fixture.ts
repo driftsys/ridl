@@ -9,6 +9,9 @@
 // - ridl_verify returns -1 for a type_id of 2 or more, 1 for a length of 0,
 //   and otherwise the value of byte 0 of the buffer (type_id 0).
 //   For type_id 1 it returns 0.
+// - ridl_type_id counts in the same sequence as ridl_free. It returns -1 for a
+//   name length other than 1, 0 for the name "a", 1 for the name "b", and -1
+//   for any other name. The option `badTypeId` makes it return -5 for "b".
 
 import wabt from "wabt";
 
@@ -17,6 +20,10 @@ export const HASH = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
 export interface FixtureOptions {
   /** Export ridl_verify. Default true. */
   verify?: boolean;
+  /** Export ridl_type_id. Default true. */
+  typeId?: boolean;
+  /** Make ridl_type_id return -5, an invalid code, for the name "b". */
+  badTypeId?: boolean;
   /** Export memory. Default true. */
   memory?: boolean;
   /** Export ridl_free as a global, not a function. Default false. */
@@ -38,6 +45,7 @@ export interface FixtureOptions {
 
 function wat(o: FixtureOptions): string {
   const withVerify = o.verify ?? true;
+  const withTypeId = o.typeId ?? true;
   const hashData = Array.from(
     HASH,
     (b) => "\\" + b.toString(16).padStart(2, "0"),
@@ -103,6 +111,18 @@ function wat(o: FixtureOptions): string {
   }
   (func (export "ridl_catalog_hash") (param $out i32)
     (memory.copy (local.get $out) (i32.const 16) (i32.const 32)))
+  ${
+    withTypeId
+      ? `(func (export "ridl_type_id") (param $p i32) (param $l i32) (result i32)
+    (global.set $ops (i32.add (global.get $ops) (i32.const 1)))
+    (if (i32.ne (local.get $l) (i32.const 1)) (then (return (i32.const -1))))
+    (if (i32.eq (i32.load8_u (local.get $p)) (i32.const 0x61))
+      (then (return (i32.const 0))))
+    (if (i32.eq (i32.load8_u (local.get $p)) (i32.const 0x62))
+      (then (return (i32.const ${o.badTypeId ? -5 : 1}))))
+    (i32.const -1))`
+      : ""
+  }
   ${
     withVerify
       ? `(func (export "ridl_verify") (param $t i32) (param $p i32) (param $l i32) (result i32)

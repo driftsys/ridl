@@ -14,9 +14,11 @@ import { CatalogMismatch, CodecError, loadCodec } from "@driftsys/ridl-runtime";
 
 const codec = await loadCodec(new URL("./cabin.wasm", import.meta.url), {
   catalogHash, // the 32 bytes that the generated TypeScript expects
+  payloadTypes, // optional: payload type names to resolve at load
   ruleText, // optional: the text of rule code n is at index n - 2
 });
 
+const typeId = codec.typeId("cabin.Door"); // throws UnknownPayloadType
 const result = codec.verify(typeId, bytes);
 if (!result.ok) {
   // result.kind is "malformed", "rule" or "unknown-type".
@@ -27,13 +29,21 @@ if (!result.ok) {
 
 - `loadCodec(source, options)` returns a `Promise<Codec>`. `source` is a `URL`,
   a `Response` or a promise of one, or a `BufferSource`. `options` has
-  `catalogHash`, and optionally `ruleText` and `imports`.
+  `catalogHash`, and optionally `payloadTypes`, `ruleText` and `imports`.
+  `payloadTypes` names the payload types to resolve at load; the promise rejects
+  with `UnknownPayloadType` for the first name that the module does not hold.
 - `Codec.catalogHash` is the hash that the module reports.
+- `Codec.typeId(name)` returns the `type_id` of the payload type with that name,
+  through the export `ridl_type_id`. The module resolves each name once and the
+  package caches the id. It throws `UnknownPayloadType` when the module has no
+  such type.
 - `Codec.verify(typeId, bytes)` returns `{ ok: true }` or a failure. The code
   `1` is `malformed`, a code of `2` or more is `rule`, and `-1` is
   `unknown-type`.
 - `CatalogMismatch` is thrown at load when the hash of the module differs from
   `catalogHash`. Its fields `expected` and `actual` are lower-case hexadecimal.
+- `UnknownPayloadType` is thrown by `typeId`, and rejects `loadCodec` for a name
+  in `payloadTypes`. Its field `type` is the name.
 - `CodecError` is thrown when the module cannot be fetched or compiled, or when
   an export is missing or has the wrong type. Its message and its `exportName`
   name the export. It is also thrown, by `loadCodec` or by `verify`, when
@@ -51,8 +61,8 @@ otherwise. Any other URL is fetched.
 ## Limits
 
 - The module must export `memory`, `ridl_alloc`, `ridl_free`,
-  `ridl_catalog_hash` and `ridl_verify`. The package does not read other
-  exports.
+  `ridl_catalog_hash`, `ridl_type_id` and `ridl_verify`. The package does not
+  read other exports.
 - `verify` is synchronous and copies the payload into the module memory on each
   call. It frees the copy before it returns, also when the call throws.
 - The package does not decode a payload. It reports whether the payload is

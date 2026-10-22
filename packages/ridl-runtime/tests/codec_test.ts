@@ -1,5 +1,10 @@
 import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
-import { CatalogMismatch, CodecError, loadCodec } from "../mod.ts";
+import {
+  CatalogMismatch,
+  CodecError,
+  loadCodec,
+  UnknownPayloadType,
+} from "../mod.ts";
 import { fixtureBytes, type FixtureOptions, HASH } from "./fixture.ts";
 
 const hex = (b: Uint8Array) =>
@@ -401,4 +406,72 @@ Deno.test("verify of an empty payload does not throw", async () => {
     options,
   );
   assertEquals(codec.verify(0, new Uint8Array(0)).ok, false);
+});
+
+Deno.test("typeId resolves a name through ridl_type_id", async () => {
+  const { codec } = await counted();
+  assertEquals(codec.typeId("a"), 0);
+  assertEquals(codec.typeId("b"), 1);
+});
+
+Deno.test("typeId throws UnknownPayloadType with the name", async () => {
+  const { codec } = await counted();
+  const error = assertThrows(() => codec.typeId("c"), UnknownPayloadType);
+  assertEquals(error.type, "c");
+  assertEquals(error.message, 'the wasm module has no payload type "c"');
+});
+
+Deno.test("payloadTypes are resolved at load and a miss rejects", async () => {
+  const error = await assertRejects(
+    () =>
+      loadCodec(fixtureBytes(), {
+        catalogHash: HASH,
+        payloadTypes: ["a", "c"],
+      }),
+    UnknownPayloadType,
+  );
+  assertEquals(error.type, "c");
+  const codec = await loadCodec(fixtureBytes(), {
+    catalogHash: HASH,
+    payloadTypes: ["a", "b"],
+  });
+  assertEquals(codec.typeId("a"), 0);
+});
+
+Deno.test("typeId is resolved once per name", async () => {
+  const { codec, instance } = await counted();
+  const before = global(instance, "allocs");
+  codec.typeId("a");
+  codec.typeId("a");
+  assertEquals(global(instance, "allocs"), before + 1);
+});
+
+Deno.test("typeId frees the name buffer", async () => {
+  const { codec, instance } = await counted();
+  const before = global(instance, "frees");
+  codec.typeId("a");
+  assertEquals(global(instance, "frees"), before + 1);
+  assertEquals(global(instance, "freeLen"), 1);
+});
+
+Deno.test("typeId of an empty name throws UnknownPayloadType and allocates nothing", async () => {
+  const { codec, instance } = await counted();
+  const before = global(instance, "allocs");
+  const error = assertThrows(() => codec.typeId(""), UnknownPayloadType);
+  assertEquals(error.type, "");
+  assertEquals(global(instance, "allocs"), before);
+});
+
+Deno.test("a module without ridl_type_id is a CodecError naming it", async () => {
+  const error = await assertRejects(
+    () => loadCodec(fixtureBytes({ typeId: false }), options),
+    CodecError,
+  );
+  assertEquals(error.exportName, "ridl_type_id");
+});
+
+Deno.test("a typeId code below -1 is a CodecError", async () => {
+  const { codec } = await counted(options, { badTypeId: true });
+  const error = assertThrows(() => codec.typeId("b"), CodecError);
+  assertEquals(error.message, "ridl_type_id returned the invalid code -5");
 });
