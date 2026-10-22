@@ -888,29 +888,20 @@ in `WASM_RULES`, and -1 for an unknown `type_id`. A null `ptr` with a length,
 and a range past the end of memory, return 1. `ridl_alloc` returns 0 when the
 length is 0 or the allocation fails. The generated `Cargo.toml` declares the
 feature `wasm-exports = ["std"]` and no crate type, so a Rust consumer of the
-crate links no export. The module is built with:
-
-```sh
-CARGO_PROFILE_RELEASE_OPT_LEVEL=z CARGO_PROFILE_RELEASE_LTO=true \
-CARGO_PROFILE_RELEASE_PANIC=abort \
-cargo rustc --release --target wasm32-unknown-unknown --crate-type cdylib \
-  --features wasm-exports
-```
-
-The three variables are the recommended size settings; `cargo` reads them from
-the environment. The module writes the catalog hash of one unit: the root
+crate links no export. [The `wasm-exports` feature](generated-code.md#the-wasm-exports-feature) gives the
+command that builds the module. The module writes the catalog hash of one unit: the root
 package's unit, or the one unit of the workspace's own packages when the
 manifest is a `[workspace]`. A build with no root package and other than one
 unit is refused. The option needs `encodings` to name `flatbuffers`, and the
 Rust backend refuses it otherwise. A package whose first segment is `wasm`
 refuses it too. A build with the option off removes a `__ridl_wasm.rs` that an
 earlier build wrote, and a build with it on refuses to overwrite a
-`__ridl_wasm.rs` that does not start with the generated marker. Single-file mode has no manifest, so it has no `wasm`
-module.
+`__ridl_wasm.rs` that does not start with the generated marker. Single-file
+mode has no manifest, so it has no `wasm` module.
 
 MANI-015 is an error when the `encodings` value is not an array of the known
-names or repeats a name, or when `wasm` is not a boolean, and MANI-016 is an error when the manifest of a
-workspace member holds a `backend` key or `[backend.<name>]` table: only the workspace root,
+names or repeats a name, or when `wasm` is not a boolean, and MANI-016 is an
+error when the manifest of a workspace member holds a `backend` key or `[backend.<name>]` table: only the workspace root,
 or a standalone package, sets it. Any other key under `[backend.<name>]` is
 MANI-005. The table is not the `backend.` attribute namespace of an rsdl
 declaration. The lint RSDL-807 `link-encoding-not-emitted` warns when a link of
