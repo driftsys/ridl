@@ -64,7 +64,7 @@ jobs:
       # `just build` runs every member in one recipe, unlike ci.yml's split
       # across jobs — so this one job needs every tool ci.yml provisions
       # across all of them: mdbook for book-check, prim for the trailing
-      # `check` recipe.
+      # `check` recipe, deno and flatc for the TypeScript gates.
       # `just build` runs `just freeze-check`, which runs cargo-semver-checks.
       # It is built with `cargo install` at the version ci.yml names.
       - name: install cargo-semver-checks
@@ -96,7 +96,7 @@ jobs:
           PRIM_INSTALL_DIR: /usr/local/bin
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # `just build` runs `ts-check` and `ts-e2e`, which need deno. The
+      # `just build` runs `ts-check`, `ts-e2e` and `cabin-ws-demo`, which need deno. The
       # version is read from .deno-version, as ci.yml's typescript job does.
       - name: install deno
         run: |
@@ -108,6 +108,19 @@ jobs:
           unzip -o -q "$RUNNER_TEMP/deno.zip" -d "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/deno" --version
+      # `just build` runs `cabin-ws-demo`, which needs `flatc` at the version in
+      # .flatc-version, as ci.yml's typescript job installs it.
+      - name: install flatc
+        run: |
+          set -o pipefail
+          flatc_version="$(tr -d '[:space:]' < .flatc-version)"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$RUNNER_TEMP/flatc.zip" \
+            "https://github.com/google/flatbuffers/releases/download/v${flatc_version}/Linux.flatc.binary.g++-13.zip"
+          unzip -o -q "$RUNNER_TEMP/flatc.zip" -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/flatc"
+          "$HOME/.local/bin/flatc" --version
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       # The full local gate, re-run on the tagged commit rather than trusted
       # from its earlier run on main: a crates.io publish cannot be retracted,
       # only yanked, so the version number is spent either way.

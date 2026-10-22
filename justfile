@@ -765,6 +765,25 @@ compat-check: toolchain-check
     echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, dedup only)"
     CARGO_HOME="$descriptor_home" cargo "+$descriptor_minimum" build --offline --locked --no-default-features --features dedup --manifest-path "$pkg_descriptor/Cargo.toml"
 
+# The generation both `demo` and `cabin-ws-demo` start with: the CLI, then the
+# two generated crates of the examples/cabin workspace, which does not resolve
+# without both.
+[private]
+_cabin-generate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="${CARGO_TARGET_DIR:-target}"
+    cargo build --locked -p ridl-cli
+    # Cleared first: `--out-dir` writes over what it writes and leaves
+    # everything else, so a file the emitter stops writing would survive here
+    # and keep this green while a fresh clone failed.
+    rm -rf examples/cabin/generated examples/cabin/generated-corpus
+    "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
+    # For the `no_std` check and the clippy run in `demo`: cabin's schema has no
+    # string, bytes, array, map or pattern, and this workspace has each of them.
+    "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
+        --out-dir examples/cabin/generated-corpus
+
 # Generate the cabin example's crate and run the program that links it.
 #
 # This is the one place the whole chain runs as a person runs it: `ridl build`
@@ -852,20 +871,9 @@ compat-check: toolchain-check
 # a schema change that moves either one fails here with cargo's own `--locked`
 # message, which does not name its remedy: rerun without `--locked` once and
 # commit the new `examples/cabin/Cargo.lock`.
-demo:
+demo: _cabin-generate
     #!/usr/bin/env bash
     set -euo pipefail
-    target="${CARGO_TARGET_DIR:-target}"
-    cargo build --locked -p ridl-cli
-    # Cleared first: `--out-dir` writes over what it writes and leaves
-    # everything else, so a file the emitter stops writing would survive here
-    # and keep this green while a fresh clone failed.
-    rm -rf examples/cabin/generated examples/cabin/generated-corpus
-    "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
-    # For the `no_std` check and the clippy run below: cabin's schema has no
-    # string, bytes, array, map or pattern, and this workspace has each of them.
-    "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
-        --out-dir examples/cabin/generated-corpus
     # This line is the only one that runs the generated crate's planus and
     # prost checks, which are ignored for a plain `cargo test`. A filter that
     # matches no test exits 0, so a renamed test would pass here unseen: the
@@ -2509,7 +2517,7 @@ gate-parity:
     # the `build:` line, so removing or adding one has to be done twice. Without
     # this list the check would read its expectation from the line under test,
     # and a member removed from that line would only shrink what is checked.
-    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check"
+    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check"
     removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
     added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
     duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
@@ -2840,6 +2848,65 @@ ts-e2e:
     cd packages/ridl-transport-ws
     RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts
 
+# Prove a Deno program can read a value from a Rust server and decode it with
+# code that `flatc` generated from the `ridl build` output. The server is
+# examples/cabin/server, which publishes cabin's `temperature` signal over
+# `ridl-transport-ws`. The program is examples/cabin/web/main.ts, which attaches
+# with the encoding `flatbuffers`, subscribes, decodes each payload with the
+# `flatc` code, and fails unless every value is inside [-40..85], a decrease
+# lands on -40 at least once, and 85 is seen; it also fails on two decreases in
+# a row or on an increase larger than 20. One 20 s deadline covers the whole run, and a server that
+# exits early fails the run at once. It prints the number of samples.
+#
+# Written in order: the CLI and the generated crates (both members of the
+# examples/cabin workspace, written by the private recipe `_cabin-generate` that
+# `demo` shares, because the workspace does not resolve without both); the `.fbs` schema; the `flatc` TypeScript; then the
+# server's format, lint and build, because no other gate reaches the server;
+# then the program. The program closes the server's standard input to stop it.
+#
+# `flatc` has to be the version in .flatc-version (the version whose output the
+# program's imports were written against; CI and `./bootstrap` read the same
+# file); the recipe fails with a message if it is missing or is another version. Deno is the
+# version in .deno-version. The `flatc` output and the `.fbs` are build outputs
+# under examples/cabin/web/generated/, not in git. Like `demo`, the recipe
+# reads `CARGO_TARGET_DIR` for the CLI; the server is built in the cabin
+# workspace, so its executable is in examples/cabin/target unless the
+# variable is set.
+cabin-ws-demo: _cabin-generate
+    #!/usr/bin/env bash
+    set -euo pipefail
+    flatc_version="$(tr -d '[:space:]' < .flatc-version)"
+    if ! command -v flatc >/dev/null 2>&1; then
+        echo "cabin-ws-demo: flatc is required and is not on PATH." >&2
+        echo "cabin-ws-demo: install version $flatc_version from https://github.com/google/flatbuffers/releases" >&2
+        exit 1
+    fi
+    if [ "$(flatc --version)" != "flatc version $flatc_version" ]; then
+        echo "cabin-ws-demo: flatc is '$(flatc --version)', and this recipe needs 'flatc version $flatc_version'." >&2
+        exit 1
+    fi
+    if ! command -v deno >/dev/null 2>&1; then
+        echo "cabin-ws-demo: deno is required and is not on PATH." >&2
+        echo "cabin-ws-demo: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
+        exit 1
+    fi
+    target="${CARGO_TARGET_DIR:-target}"
+    # Cleared first, as `_cabin-generate` does for the crates.
+    rm -rf examples/cabin/web/generated
+    "$target/debug/ridl" build examples/cabin --emit flatbuffers --out-dir examples/cabin/web/generated/schema
+    flatc --ts --gen-object-api -o examples/cabin/web/generated examples/cabin/web/generated/schema/veh.cabin.fbs
+    cargo fmt --manifest-path examples/cabin/server/Cargo.toml --check
+    cargo clippy --manifest-path examples/cabin/Cargo.toml -p server --locked --all-targets --no-deps -- -D warnings
+    cargo build --manifest-path examples/cabin/Cargo.toml -p server --locked
+    server_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
+    server="$(cd "$server_target" && pwd)/debug/server"
+    cd examples/cabin/web
+    # `deno run` does not type-check, and `ts-check` covers `packages/` only.
+    deno fmt --check
+    deno lint
+    deno check main.ts
+    deno run -A main.ts "$server"
+
 # Build the same loopback server example and run the browser end-to-end test
 # of packages/ridl-transport-ws: a headless Chromium-family browser opens a
 # page that loads the package and receives a live signal from the server.
@@ -2914,7 +2981,7 @@ ts-browser-e2e:
 # a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
 # TypeScript check all report before the workspace compiles rather than after a
 # full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:
@@ -2961,8 +3028,8 @@ lint-commits base="main":
     fi
 
 # Lint and static-check gate before pushing — skips `freeze-check`, `compile`,
-# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-npm-check`, `ts-e2e`, and
-# `install-check`.
+# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-npm-check`, `ts-e2e`,
+# `cabin-ws-demo`, and `install-check`.
 # Wired as the pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs
 # the full `just build` gate on the PR; `just verify` runs that same gate
 # locally before opening one.

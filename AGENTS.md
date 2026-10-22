@@ -221,6 +221,17 @@ member; rsdl is the apex.
     just ts-e2e          build the loopback_server example of
                          ridl-transport-ws and run the package's Deno
                          end-to-end test against it
+    just cabin-ws-demo   generate cabin's crate and its FlatBuffers schema with
+                         ridl build, run flatc over the schema, check the
+                         format and lint of examples/cabin/server and build it,
+                         then run the Deno program of examples/cabin/web
+                         against it: the program decodes the server's
+                         temperature payloads with the flatc code and fails
+                         unless every value is inside [-40..85], a decrease
+                         lands on -40 at least once, and 85 is seen; it also
+                         fails on two decreases in a row or on an increase
+                         larger than 20.
+                         Needs Deno and flatc at the version in .flatc-version
     just ts-browser-e2e  the same build, then the package's end-to-end test
                          in a headless browser; needs a Chromium-family
                          browser (RIDL_BROWSER names one). Runs in CI; not a
@@ -237,18 +248,18 @@ member; rsdl is the apex.
                          fmt-check + book-check + link-check + doc-path-check +
                          story-id-check + ts-check + freeze-check + compile +
                          test + lint + wasm-check + compat-check + demo +
-                         ts-e2e + ts-npm-check + check — the full local gate: every member
+                         ts-e2e + cabin-ws-demo + ts-npm-check + check — the full local gate: every member
                          ADR-0008 decision 11 names, the four CI checks
                          ADR-0009 brought back to this side, and
                          doc-path-check, story-id-check, freeze-check, demo,
-                         ts-check, ts-e2e and ts-npm-check, which postdate
+                         ts-check, ts-e2e, cabin-ws-demo and ts-npm-check, which postdate
                          both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just pre-push        lint-commits + the static-check members of build,
                          ts-check included; skips freeze-check, compile, lint,
                          test, wasm-check, compat-check, demo, ts-e2e,
-                         ts-npm-check, and install-check — wired as the pre-push hook
+                         cabin-ws-demo, ts-npm-check, and install-check — wired as the pre-push hook
     just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
     just book-build      render the book to ./book — what CI publishes to Pages

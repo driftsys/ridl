@@ -13,7 +13,7 @@
 # decision 10; decided by Sebastien on 2026-09-14 in driftsys/ridl#352).
 resolver = "2"
 members = ["crates/*", "xtask"]
-# `examples/cabin` is its own workspace (`just demo`). Two of its three
+# `examples/cabin` is its own workspace (`just demo`). Two of its four
 # members, `generated/` and `generated-corpus/`, are written by
 # `ridl build --emit rust` and are not in git, so they have no place in the
 # workspace the gate builds. This exclusion states that

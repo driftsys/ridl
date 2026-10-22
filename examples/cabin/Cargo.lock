@@ -67,11 +67,28 @@ name = "ridl-rt"
 version = "0.12.0"
 
 [[package]]
+name = "ridl-transport-ws"
+version = "0.12.0"
+dependencies = [
+ "ridl-rt",
+]
+
+[[package]]
 name = "ridl_generated"
 version = "0.0.0"
 dependencies = [
  "regex",
  "ridl-rt",
+]
+
+[[package]]
+name = "server"
+version = "0.0.0"
+dependencies = [
+ "ridl-loopback",
+ "ridl-rt",
+ "ridl-transport-ws",
+ "veh_cabin",
 ]
 
 [[package]]

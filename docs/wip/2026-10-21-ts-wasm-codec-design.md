@@ -225,7 +225,8 @@ The remaining slices, in order, replace slices 3 to 5 above:
 2. **Cabin server** in `examples/cabin`, which links the generated crate and
    `ridl-transport-ws` and serves a session with the encoding `flatbuffers`. A
    Deno demo reads the signal. A hand-written map from (interface, ordinal) to
-   type is acceptable at first.
+   type is acceptable at first. Step 2 landed; its plan is archived as
+   [the cabin WebSocket server plan](../archive/2026-10-22-cabin-ws-server-plan.md).
 3. **Browser demo**, on the `ts-browser-e2e` harness.
 4. **Wasm verify in the demo**: a `Temperature` outside `[-40..85]` is rejected.
    The loader treats `ridl_alloc` returning 0 for a length above 0 as out of

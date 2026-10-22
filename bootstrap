@@ -14,7 +14,8 @@
 # a choice this script should not make for them. It names each missing tool
 # with the command that installs it and exits non-zero, so a fresh clone
 # reports what the gate needs up front instead of failing part-way through a
-# gate run (ADR-0009). Deno is the exception: when `deno` is not on PATH, it
+# gate run (ADR-0009). That includes flatc, at the version .flatc-version pins.
+# Deno is the exception: when `deno` is not on PATH, it
 # downloads the release that .deno-version names into ~/.deno/bin.
 
 set -euo pipefail
@@ -130,6 +131,22 @@ require mdbook "cargo install mdbook --locked"
 require deno "$deno_hint"
 require jq "see https://jqlang.org/download/ — just demo filters clippy output with it"
 require cargo-semver-checks "cargo install cargo-semver-checks --locked --version 0.51.0 — just freeze-check compares the public API against a baseline"
+# flatc, for `just cabin-ws-demo`. Unlike Deno it is not installed here, and a
+# different version is an error, not a note: the recipe refuses it, because the
+# TypeScript the program imports was written against the pinned version's output.
+flatc_version="$(tr -d '[:space:]' < .flatc-version)"
+flatc_hint="download flatc $flatc_version from https://github.com/google/flatbuffers/releases"
+if command -v flatc >/dev/null 2>&1; then
+  if [ "$(flatc --version)" = "flatc version $flatc_version" ]; then
+    log "flatc found: $(command -v flatc) ($flatc_version)"
+  else
+    log "WRONG flatc version: '$(flatc --version)', and .flatc-version pins $flatc_version — $flatc_hint"
+    missing=1
+  fi
+else
+  log "MISSING flatc — $flatc_hint (just cabin-ws-demo needs it)"
+  missing=1
+fi
 
 if [ "$missing" -ne 0 ]; then
   log "'just build' cannot run until the tools listed above are installed"

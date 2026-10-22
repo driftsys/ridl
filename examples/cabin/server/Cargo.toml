@@ -1,0 +1,27 @@
+# A WebSocket provider for the cabin example. It serves the `temperature`
+# signal of the generated crate over `ridl-transport-ws`, the way the
+# repository's loopback test server does, with cabin's own catalog.
+#
+# `generated/` and the workspace's other generated member,
+# `generated-corpus/`, are written by `ridl build --emit rust` and are not in
+# git, so this manifest resolves only after `just demo` or `just cabin-ws-demo`
+# has run both builds once.
+[package]
+name = "server"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+# The crate `ridlc` wrote, reached by path as in `consumer`.
+veh_cabin = { path = "../generated", features = ["std"] }
+# The in-process runtime that holds the published values.
+ridl-loopback = { path = "../../../crates/ridl-loopback" }
+# The WebSocket binding of the frame, with its server.
+ridl-transport-ws = { path = "../../../crates/ridl-transport-ws", features = [
+  "server",
+] }
+# Named directly for `CatalogRef`. The `[patch.crates-io]` block in
+# `examples/cabin/Cargo.toml` resolves this to `crates/ridl-rt`.
+ridl-rt = { version = "0.12", features = ["std"] }

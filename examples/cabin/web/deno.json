@@ -1,0 +1,9 @@
+{
+  "imports": {
+    "flatbuffers": "npm:flatbuffers@25.9.23"
+  },
+  "unstable": ["sloppy-imports"],
+  "nodeModulesDir": "none",
+  "fmt": { "exclude": ["generated/"] },
+  "lint": { "exclude": ["generated/"] }
+}
