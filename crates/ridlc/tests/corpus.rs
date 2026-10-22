@@ -513,6 +513,18 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-144", Showcase),
     ("RIDL-145", Showcase),
     ("RIDL-149", Showcase),
+    (
+        "RIDL-150",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/payload_ceiling.rs",
+            reason: "the payload ceiling check runs inside the shared check pass, over the codegen \
+                     model and the manifest's `[backend.<name>]` encodings, and the corpus \
+                     runner assembles its own passes, so the showcase compile never reaches \
+                     it. Provoked by \
+                     `a_struct_of_two_strings_at_the_advised_bound_is_above_the_ceiling` \
+                     and the other tests in `crates/ridlc/tests/payload_ceiling.rs`",
+        },
+    ),
     ("RIDL-201", Showcase),
     ("RIDL-202", Showcase),
     ("RIDL-301", Showcase),

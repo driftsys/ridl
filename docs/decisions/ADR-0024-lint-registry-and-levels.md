@@ -36,6 +36,13 @@ lints): the catalogue severity of a design lint, and so its default level, is
 derived from its precision on the evaluation corpus under `evals/`, and its
 threshold is a constant beside the check, not a `[lints]` setting (decision 1).
 
+Amended 2026-10-21 by [ADR-0030](ADR-0030-transfer-and-bound-limits.md)
+(transfer and bound limits): two lints join the registry, TYPL-116
+`bound-above-transfer` and RIDL-150 `payload-above-ceiling`, both at `warn`.
+TYPL-116 is raised by the typl checker. RIDL-150 is raised by `ridlc` after
+lowering, in `ridl check` and `ridl build`, and the language server does not run
+it. Both take their level from `[lints]` like any other lint.
+
 It amends two records in place, in the same change:
 [ADR-0002](ADR-0002-module-system.md) §4 (the `[lints]` table and its resolution
 order) and [ADR-0010](ADR-0010-cli-conventions.md) decision 1 (a lint at `deny`

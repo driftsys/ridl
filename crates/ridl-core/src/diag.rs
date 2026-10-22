@@ -396,6 +396,13 @@ diag_codes! {
         TYPL_115 = "TYPL-115", Info,
             "type has no derivable init value and no declared `= value`", lint = "no-init-value";
 
+        /// `string` bound above 4,032 characters or `bytes` bound above 16,128
+        /// bytes (typl §4.4–§4.5, §16.2; ADR-0030 decision 7). Warning. The
+        /// payload ceiling is 16,256 bytes; the codecs do not yet enforce it
+        /// (driftsys/ridl#996).
+        TYPL_116 = "TYPL-116", Warning,
+            "`string`/`bytes` bound above the advised transfer limit", lint = "bound-above-transfer";
+
         /// Array without explicit bounds (typl §16.3).
         TYPL_201 = "TYPL-201", Error,
             "array without explicit bounds";
@@ -806,6 +813,13 @@ diag_codes! {
         /// transform that collided. Emitted per-package by the checker.
         RIDL_149 = "RIDL-149", Error,
             "two names in one scope collide after a pinned name transform";
+
+        /// A payload carried by an interaction whose largest encoded size, in an
+        /// encoding that the workspace manifest enables, is above the payload ceiling of 16,256
+        /// bytes, or has no finite bound (ADR-0030 decision 7). Warning. Emitted
+        /// by `ridlc` after lowering, for `ridl check` and `ridl build`.
+        RIDL_150 = "RIDL-150", Warning,
+            "payload above the payload ceiling or with no finite bound", lint = "payload-above-ceiling";
 
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker.
@@ -2276,6 +2290,7 @@ mod tests {
             ("TYPL-102", "unbounded-float"),
             ("TYPL-103", "unbounded-length"),
             ("TYPL-115", "no-init-value"),
+            ("TYPL-116", "bound-above-transfer"),
             ("TYPL-211", "duplicate-reserved"),
             ("TYPL-222", "inconsistent-unit"),
             ("TYPL-224", "duplicate-shape"),
@@ -2290,6 +2305,7 @@ mod tests {
             ("RIDL-100", "missing-timing"),
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),
+            ("RIDL-150", "payload-above-ceiling"),
             ("RIDL-304", "error-typed-parameter"),
             ("RIDL-305", "ensure-without-result"),
             ("RIDL-307", "contract-error-name-in-enum"),

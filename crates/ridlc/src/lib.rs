@@ -2347,6 +2347,33 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         &resolutions,
         &mut sources,
     ));
+    // RIDL-150 lowers each package to the codegen model, so it skips a package
+    // that has an error, or that depends on one, and still examines the clean
+    // packages of the workspace. The errors that count are the ones that stop
+    // `ridl build` writing any artifact (`blocks_every_artifact`). The
+    // encodings are those of every `[backend.<name>]` table; none named means
+    // FlatBuffers is checked. A workspace with no interface has nothing to
+    // report, so `ridl.std` is not checked for it either.
+    if checked.iter().any(|pkg| pkg.ir.shapes().next().is_some()) {
+        let blocked = payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources);
+        let mut encodings: Vec<String> = backends
+            .values()
+            .flat_map(|table| table.encodings.iter().map(|(name, _)| name.clone()))
+            .collect();
+        encodings.sort();
+        encodings.dedup();
+        let std_ir = check_package(db, workspace, std, std).ir;
+        diagnostics.extend(design_lints::check_payload_ceiling(
+            db,
+            &packages,
+            &checked,
+            &resolutions,
+            &blocked,
+            &std_ir,
+            &encodings,
+            &mut sources,
+        ));
+    }
     drop_remote_non_errors(&mut diagnostics, &sources, &remote_units);
 
     Compiled {
@@ -2364,6 +2391,63 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         report_scope,
         root_package,
         remote_units,
+    }
+}
+
+/// Per entry of `packages`, whether RIDL-150 skips it: the package has an
+/// error that blocks every artifact, or depends on a package that does. An
+/// error that no package's source file carries, such as a manifest error, blocks
+/// every package.
+fn payload_ceiling_blocked(
+    db: &RidlDatabase,
+    packages: &[Package],
+    checked: &[CheckedPackage],
+    diagnostics: &[Diagnostic],
+    sources: &SourceMap,
+) -> Vec<bool> {
+    let paths: Vec<BTreeSet<String>> = packages
+        .iter()
+        .map(|package| {
+            package
+                .files(db)
+                .iter()
+                .map(|file| file.path(db).to_string())
+                .collect()
+        })
+        .collect();
+    let mut blocked = vec![false; packages.len()];
+    let mut everywhere = false;
+    for diagnostic in diagnostics.iter().filter(|d| blocks_every_artifact(d)) {
+        let owner = sources
+            .path(diagnostic.primary.file)
+            .and_then(|path| paths.iter().position(|set| set.contains(path)));
+        match owner {
+            Some(index) => blocked[index] = true,
+            None => everywhere = true,
+        }
+    }
+    if everywhere {
+        return vec![true; packages.len()];
+    }
+    // A dependent of a blocked package is blocked, transitively.
+    loop {
+        let mut changed = false;
+        for index in 0..checked.len() {
+            if blocked[index] {
+                continue;
+            }
+            let referenced = ridl_ir::v2::referenced_packages(&checked[index].ir);
+            let depends = checked.iter().zip(&blocked).any(|(other, other_blocked)| {
+                *other_blocked && referenced.contains(&other.ir.name)
+            });
+            if depends {
+                blocked[index] = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            return blocked;
+        }
     }
 }
 

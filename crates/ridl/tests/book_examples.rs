@@ -1154,7 +1154,7 @@ fn a_warned_example_is_rejected() {
 /// ship unexplained.
 #[test]
 fn a_noted_example_is_rejected_unless_allowed() {
-    const BODY: &str = "package veh.noted\n\ntype FwBlock : bytes [1..65536]\n";
+    const BODY: &str = "package veh.noted\n\ntype FwBlock : bytes [1..4096]\n";
 
     let book = book_of("noted", &format!("```ridl\n{BODY}```\n"));
     let report = verify_book(book.path()).expect_err("an unexplained note must be rejected");
@@ -1175,7 +1175,7 @@ fn a_noted_example_is_rejected_unless_allowed() {
 fn an_allowance_does_not_cover_another_code() {
     let book = book_of(
         "allow-narrow",
-        "```ridl,allow=RIDL-406\npackage veh.narrow\n\ntype FwBlock : bytes [1..65536]\n```\n",
+        "```ridl,allow=RIDL-406\npackage veh.narrow\n\ntype FwBlock : bytes [1..4096]\n```\n",
     );
 
     let report = verify_book(book.path()).expect_err("an unrelated code must still fail");
