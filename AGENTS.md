@@ -221,6 +221,14 @@ member; rsdl is the apex.
     just ts-e2e          build the loopback_server example of
                          ridl-transport-ws and run the package's Deno
                          end-to-end test against it
+    just cabin-ws-demo   generate cabin's crate and its FlatBuffers schema with
+                         ridl build, run flatc over the schema, check the
+                         format and lint of examples/cabin/server and build it,
+                         then run the Deno program of examples/cabin/web
+                         against it: the program decodes the server's
+                         temperature payloads with the flatc code and fails
+                         unless it sees two distinct values in [-40..85].
+                         Needs flatc 25.12.19 and Deno
     just ts-browser-e2e  the same build, then the package's end-to-end test
                          in a headless browser; needs a Chromium-family
                          browser (RIDL_BROWSER names one). Runs in CI; not a
@@ -237,11 +245,11 @@ member; rsdl is the apex.
                          fmt-check + book-check + link-check + doc-path-check +
                          story-id-check + ts-check + freeze-check + compile +
                          test + lint + wasm-check + compat-check + demo +
-                         ts-e2e + ts-npm-check + check — the full local gate: every member
+                         ts-e2e + cabin-ws-demo + ts-npm-check + check — the full local gate: every member
                          ADR-0008 decision 11 names, the four CI checks
                          ADR-0009 brought back to this side, and
                          doc-path-check, story-id-check, freeze-check, demo,
-                         ts-check, ts-e2e and ts-npm-check, which postdate
+                         ts-check, ts-e2e, cabin-ws-demo and ts-npm-check, which postdate
                          both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)

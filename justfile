@@ -2509,7 +2509,7 @@ gate-parity:
     # the `build:` line, so removing or adding one has to be done twice. Without
     # this list the check would read its expectation from the line under test,
     # and a member removed from that line would only shrink what is checked.
-    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check"
+    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check"
     removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
     added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
     duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
@@ -2840,6 +2840,64 @@ ts-e2e:
     cd packages/ridl-transport-ws
     RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts
 
+# Prove a Deno program can read a value from a Rust server and decode it with
+# code that `flatc` generated from the `ridl build` output. The server is
+# examples/cabin/server, which publishes cabin's `temperature` signal over
+# `ridl-transport-ws`. The program is examples/cabin/web/main.ts, which attaches
+# with the encoding `flatbuffers`, subscribes, decodes each payload with the
+# `flatc` code, and fails unless it sees at least two distinct values inside
+# the range of `Temperature`. It prints the values it received.
+#
+# Written in order: the CLI; the generated crates (both members of the
+# examples/cabin workspace, as `demo` writes them, because the workspace does
+# not resolve without both); the `.fbs` schema; the `flatc` TypeScript; then the
+# server's format, lint and build, because no other gate reaches the server;
+# then the program. The program closes the server's standard input to stop it.
+#
+# `flatc` has to be version 25.12.19 (the pin in .github/workflows/ci.yml and the
+# version whose output the program's imports were written against); the recipe
+# fails with a message if it is missing or is another version. Deno is the
+# version in .deno-version. The `flatc` output and the `.fbs` are build outputs
+# under examples/cabin/web/generated/, not in git. Like `demo`, the recipe
+# reads `CARGO_TARGET_DIR` for the CLI; the server is built in the cabin
+# workspace, so its executable is in examples/cabin/target unless the
+# variable is set.
+cabin-ws-demo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    flatc_version="25.12.19"
+    if ! command -v flatc >/dev/null 2>&1; then
+        echo "cabin-ws-demo: flatc is required and is not on PATH." >&2
+        echo "cabin-ws-demo: install version $flatc_version from https://github.com/google/flatbuffers/releases" >&2
+        exit 1
+    fi
+    if [ "$(flatc --version)" != "flatc version $flatc_version" ]; then
+        echo "cabin-ws-demo: flatc is '$(flatc --version)', and this recipe needs 'flatc version $flatc_version'." >&2
+        exit 1
+    fi
+    if ! command -v deno >/dev/null 2>&1; then
+        echo "cabin-ws-demo: deno is required and is not on PATH." >&2
+        echo "cabin-ws-demo: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
+        exit 1
+    fi
+    target="${CARGO_TARGET_DIR:-target}"
+    cargo build --locked -p ridl-cli
+    # Cleared first, as in `demo`: `--out-dir` leaves a file the emitter stops
+    # writing, and that file would keep this green while a fresh clone failed.
+    rm -rf examples/cabin/generated examples/cabin/generated-corpus examples/cabin/web/generated
+    "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
+    "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
+        --out-dir examples/cabin/generated-corpus
+    "$target/debug/ridl" build examples/cabin --emit flatbuffers --out-dir examples/cabin/web/generated/schema
+    flatc --ts --gen-object-api -o examples/cabin/web/generated examples/cabin/web/generated/schema/veh.cabin.fbs
+    cargo fmt --manifest-path examples/cabin/server/Cargo.toml --check
+    cargo clippy --manifest-path examples/cabin/Cargo.toml -p server --locked --all-targets --no-deps -- -D warnings
+    cargo build --manifest-path examples/cabin/Cargo.toml -p server --locked
+    server_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
+    server="$(cd "$server_target" && pwd)/debug/server"
+    cd examples/cabin/web
+    deno run -A main.ts "$server"
+
 # Build the same loopback server example and run the browser end-to-end test
 # of packages/ridl-transport-ws: a headless Chromium-family browser opens a
 # page that loads the package and receives a live signal from the server.
@@ -2914,7 +2972,7 @@ ts-browser-e2e:
 # a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
 # TypeScript check all report before the workspace compiles rather than after a
 # full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

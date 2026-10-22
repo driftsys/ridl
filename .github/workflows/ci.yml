@@ -262,7 +262,7 @@ jobs:
       - run: just compat-check
 
   # The TypeScript packages packages/ridl-runtime and packages/ridl-transport-ws.
-  # `ts-check`, `ts-npm-check` and `ts-e2e`
+  # `ts-check`, `ts-npm-check`, `ts-e2e` and `cabin-ws-demo`
   # are members of `just build`; `ts-browser-e2e` is not, because a
   # contributor's build needs no browser, so `gate-parity` does not see its step
   # here and it is checked by reading. ubuntu-latest has Google Chrome on PATH.
@@ -300,6 +300,19 @@ jobs:
       - run: just ts-check
       - run: just ts-npm-check
       - run: just ts-e2e
+      # `just cabin-ws-demo` needs `flatc` at the version the recipe checks. The
+      # official release archive is used because the distribution packages
+      # carry other versions.
+      - name: install flatc
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$RUNNER_TEMP/flatc.zip" \
+            "https://github.com/google/flatbuffers/releases/download/v25.12.19/Linux.flatc.binary.g++-13.zip"
+          unzip -o -q "$RUNNER_TEMP/flatc.zip" -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/flatc"
+          "$HOME/.local/bin/flatc" --version
+      - run: just cabin-ws-demo
       - run: just ts-browser-e2e
         env:
           RIDL_BROWSER_NO_SANDBOX: "1"
