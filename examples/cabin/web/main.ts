@@ -10,9 +10,9 @@
 // `Temperature` and starts again at the lowest value. The transport may
 // coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
 // expect every step. It exits with status 0 only if every value is inside
-// [-40..85], a decrease lands on -40 at least once (a restart), and 85 is
-// seen. It also fails on two decreases in a row, and on an increase larger
-// than MAX_INCREASE. Otherwise it exits with a non-zero status and names the
+// [-40..85], a decrease lands at or below -35 at least once (a restart), and
+// 85 is seen. Any other decrease fails, and so do two decreases in a row and
+// an increase larger than MAX_INCREASE. Otherwise it exits with a non-zero status and names the
 // cause and the stage. One deadline, counted
 // from the start of the program, covers every stage including the exit of the
 // server. A server that exits or a connection that closes before the end of
@@ -35,6 +35,13 @@ const HIGHEST = 85;
  * ticks, and a server that jumps between the bounds exceeds it.
  */
 const MAX_INCREASE = 20;
+
+/**
+ * The highest value a restart may land on. The server wraps from 85 to -40, but
+ * the transport sends only the newest value per tick, so the client may miss
+ * the first few values after a wrap and see a later one.
+ */
+const RESTART_CEILING = -35;
 
 /** The time from the start of the program to its end, in milliseconds. */
 const DEADLINE_MS = 20_000;
@@ -139,11 +146,12 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
     }
     if (previous !== undefined) {
       if (value < previous) {
-        // A decrease is valid only as the restart, at the lowest value, and
-        // never twice in a row.
-        if (value !== LOWEST) {
+        // A decrease is valid only as the restart, at or below the ceiling,
+        // and never twice in a row.
+        if (value > RESTART_CEILING) {
           reject(
-            `temperature fell from ${previous} to ${value}, not to ${LOWEST}`,
+            `temperature fell from ${previous} to ${value}, ` +
+              `not to ${RESTART_CEILING} or lower`,
           );
           return;
         }

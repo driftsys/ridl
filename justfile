@@ -2854,8 +2854,9 @@ ts-e2e:
 # `ridl-transport-ws`. The program is examples/cabin/web/main.ts, which attaches
 # with the encoding `flatbuffers`, subscribes, decodes each payload with the
 # `flatc` code, and fails unless every value is inside [-40..85], a decrease
-# lands on -40 at least once, and 85 is seen; it also fails on two decreases in
-# a row or on an increase larger than 20. One 20 s deadline covers the whole run, and a server that
+# lands at or below -35 at least once (a restart), and 85 is seen; any other
+# decrease fails, and so do two decreases in a row and an increase larger than
+# 20. One 20 s deadline covers the whole run, and a server that
 # exits early fails the run at once. It prints the number of samples.
 #
 # Written in order: the CLI and the generated crates (both members of the
