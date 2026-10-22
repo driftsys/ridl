@@ -305,7 +305,9 @@ cargo rustc --release --target wasm32-unknown-unknown --crate-type cdylib \
 
 The module exports `ridl_alloc`, `ridl_free`, `ridl_catalog_hash`,
 `ridl_verify` and `ridl_type_id`. `ridl_type_id` returns the type id of a payload
-type named by its qualified name, or -1.
+type named by its qualified name. It returns -1 for a name the list does not hold,
+an empty name, bytes that are not UTF-8, and a pointer and length that do not
+describe readable memory.
 
 The three variables are the recommended size settings, and `cargo` reads them
 from the environment. The module is

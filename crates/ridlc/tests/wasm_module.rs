@@ -237,6 +237,30 @@ const results = cases.map((testCase) => {
     new Uint8Array(memory.buffer, 0, bytes.length).set(saved);
     return code;
   }
+  if (testCase.startsWith("namerawptr:")) {
+    // A pointer and a length passed as they are, with no buffer behind them.
+    const [, ptr, len] = testCase.split(":");
+    return ridl_type_id(Number(ptr), Number(len));
+  }
+  if (testCase.startsWith("name0:")) {
+    // A valid name written at address 0, then passed as a null pointer.
+    const bytes = new TextEncoder().encode(testCase.slice("name0:".length));
+    const saved = new Uint8Array(memory.buffer, 0, bytes.length).slice();
+    new Uint8Array(memory.buffer, 0, bytes.length).set(bytes);
+    const code = ridl_type_id(0, bytes.length);
+    new Uint8Array(memory.buffer, 0, bytes.length).set(saved);
+    return code;
+  }
+  if (testCase.startsWith("namehex:")) {
+    // Name bytes given in hex, so that a name need not be UTF-8.
+    const hex = testCase.slice("namehex:".length);
+    const bytes = Uint8Array.from(hex.match(/../g), (pair) => parseInt(pair, 16));
+    const ptr = ridl_alloc(bytes.length);
+    new Uint8Array(memory.buffer, ptr, bytes.length).set(bytes);
+    const code = ridl_type_id(ptr, bytes.length);
+    ridl_free(ptr, bytes.length);
+    return code;
+  }
   if (testCase.startsWith("name:")) {
     // A qualified type name, written as UTF-8 bytes.
     const bytes = new TextEncoder().encode(testCase.slice("name:".length));
@@ -547,6 +571,15 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
         "name:veh.cabin.Temperature",
         "name:veh.cabin.Temp",
         "name:veh.cabin.Nothing",
+        // A valid name written at address 0 and passed as a null pointer:
+        // only the null guard returns -1.
+        "name0:veh.cabin.Temperature",
+        // A length above `isize::MAX` on wasm32.
+        "namerawptr:8:2147483648",
+        // A range past the end of the 32-bit address space.
+        "namerawptr:4294967288:16",
+        // Bytes that are not UTF-8.
+        "namehex:ff",
     ];
     cases.extend(name_cases.iter().map(|case| case.to_string()));
     let node = std::process::Command::new("node")
@@ -603,8 +636,10 @@ fn the_cabin_wasm_module_verifies_payloads_in_a_node_host() {
         .collect();
     assert_eq!(
         type_ids,
-        [temperature as i64, -1, -1],
-        "ridl_type_id of a listed name, a prefix of one, and an unknown name"
+        [temperature as i64, -1, -1, -1, -1, -1, -1],
+        "ridl_type_id of a listed name, a prefix of one, an unknown name, a null \
+         pointer over a valid name, a huge length, an overflowing range, and \
+         bytes that are not UTF-8"
     );
     assert_eq!(
         type_ids[0],
