@@ -1,9 +1,11 @@
 # The generated TypeScript codec table — design
 
-Status: draft for review. Written 2026-10-22 as step 5 of the plan change in
+Status: approved 2026-10-22. Written 2026-10-22 as step 5 of the plan change in
 [the TypeScript wasm codec design](2026-10-21-ts-wasm-codec-design.md).
-Decisions marked **(ruling)** were taken by the author; Sebastien reviews them.
-The open questions at the end each carry the author's recommendation.
+Decisions marked **(ruling)** were taken by the author; Sebastien accepted the
+six recommendations at the end on 2026-10-22, and they are recorded there as
+rulings. The implementation plan is
+[2026-10-22-ts-codec-table-plan.md](2026-10-22-ts-codec-table-plan.md).
 
 ## Problem
 
@@ -241,6 +243,16 @@ limit is loud. The path when a package needs it is self-contained converters:
 `model.foreign` carries the full declaration, so the converters can be emitted
 into the reaching package's file, with an import of `./<foreign segments>.js`
 for `flatc`'s output, and no exported converter API between codec files.
+
+The refusal covers a foreign declaration that needs a converter or `flatc`'s
+output for its package: a struct, a union and an enum. A foreign named scalar
+and a foreign enum set need neither: the `.fbs` inlines both at the field
+position, and the conversion is a type assertion that reads the width from
+`model.foreign`. `ridl.std` declares named scalars and regex constants only, so
+a package that uses `ridl.std.Label` or `ridl.std.Timestamp` in a payload is not
+refused. The veh-cluster corpus is refused as a whole, because its `cluster`
+package takes `veh.common.GearPosition` as a command's payload, so the fixture
+for the converters is the corpus's `common` package alone (see the plan).
 
 **D-15. Every import of the codec file carries the `.js` suffix (ruling, see
 Q-3).** `flatc`'s barrels use `.js` (`export { X } from './cabin/x.js'`), and
@@ -541,14 +553,17 @@ codec = true
   `page.ts`, and `deno test` runs the round trips against the real `flatc`
   output and the real module — that is the one place the generated wrappers meet
   `flatc`'s generated classes.
-- **Interop beyond cabin.** `_cabin-web-generate` also builds the veh-cluster
-  corpus with `--emit typescript --emit flatbuffers` into a temporary directory,
-  runs `flatc` on it, and runs `deno check` on its codec file with an import map
-  for `flatbuffers` and `@driftsys/ridl-runtime`. That is the type-level proof
-  for the union, map, tuple and multi-parameter rules of D-4 and D-9 against the
-  pinned `flatc`, which cabin does not exercise. A round-trip test of those
-  kinds through the corpus wasm module is a follow-up once the corpus has a wasm
-  build.
+- **Interop beyond cabin.** `_cabin-web-generate` also builds the codec fixture
+  (`crates/ridl-backend-ts/tests/fixtures/codec/`: the veh-cluster corpus's
+  `common.typl`, copied verbatim and pinned equal by a test, plus an interface
+  file in the same package) with `--emit typescript --emit flatbuffers` into a
+  temporary directory, runs `flatc` on it, runs `deno check` on its codec file
+  with an import map for `flatbuffers` and `@driftsys/ridl-runtime`, and runs a
+  wasm-free round-trip test, `decode(encode(v))` deep-equal to `v`, over a
+  union, a map, a tuple, an optional field and a two-parameter call. That is the
+  proof for the union, map, tuple and multi-parameter rules of D-4 and D-9
+  against the pinned `flatc`, which cabin does not exercise. A round trip
+  through a wasm module of the fixture is a follow-up once it has a wasm build.
 
 ## Alternatives considered
 
@@ -567,42 +582,44 @@ codec = true
 | One codec file per workspace instead of per package                          | the backend contract is per package; the module's crate-wide list is reached through D-5 without a crate-wide file                                                                  |
 | A checking `encode<Name>` that refuses an out-of-range value                 | duplicates the Rust check in TypeScript, which ADR-0020 decision 7 rules out; the self-test needs to build a rejected payload (D-11)                                                |
 
-## Open questions for Sebastien
+## Rulings on the open questions
 
-**Q-1. Resolve the type id by name through a new export (D-5), or keep a static
-id?** A static id needs the crate-wide list in every package's file, which the
-model does not give. Recommendation: the export. It is one
-`#[unsafe(no_mangle)]` function and a linear scan, it is additive to the ABI,
-and it makes a mismatch a load-time error with the name in it.
+Each question was put to Sebastien with the author's recommendation; he accepted
+all six on 2026-10-22.
 
-**Q-2. Refuse a foreign reference in the first slice (D-14), or implement the
-self-contained converters now?** Cabin reaches no other package; a user's
-package often does, through a shared `common` package. Recommendation: refuse
-now, with the message naming the payload type and the foreign declaration, and
-implement the converters in the slice after the cabin demos run on the table.
-The refusal is loud, and the path is designed.
+**Q-1. Accepted 2026-10-22: the type id is resolved by name through the new
+export `ridl_type_id` (D-5), not written as a static id.** A static id needs the
+crate-wide list in every package's file, which the model does not give. The
+export is one `#[unsafe(no_mangle)]` function and a linear scan, it is additive
+to the ABI, and it makes a mismatch a load-time error with the name in it.
 
-**Q-3. `.js` import suffixes in the codec file (D-15) while `<base>.ts` imports
-its siblings without a suffix?** The two forms in one output directory read as
-an inconsistency. Recommendation: `.js` in the codec file now, and a follow-up
-issue to move `<base>.ts` to `.js` as well; that change touches a snapshot per
-test of the backend and is better reviewed alone.
+**Q-2. Accepted 2026-10-22: a foreign reference is refused in the first slice
+(D-14), with the message naming the payload type and the foreign declaration;
+the self-contained converters come in the slice after the cabin demos run on the
+table.** Cabin reaches no other package. The refusal is loud, and the path is
+designed. The refusal's scope is the one D-14 states: a foreign struct, union or
+enum; a foreign named scalar or enum set, `ridl.std`'s included, is converted by
+a type assertion.
 
-**Q-4. Does the table carry `CATALOG_HASH`, or does the demo keep taking the
-hash from the server's announcement?** With the hash in the file, the generated
-unit is self-describing, and `loadCodec` and `connect` both read it from one
-place; the announcement becomes a cross-check. Recommendation: carry it, as the
-earlier note's D-4 already said, and keep the server's line as the cross-check.
+**Q-3. Accepted 2026-10-22: `.js` import suffixes in the codec file (D-15), and
+a follow-up issue, filed with the pull request, to move `<base>.ts` to `.js` as
+well.** That change touches a snapshot per test of the backend and is better
+reviewed alone.
 
-**Q-5. Is the veh-cluster `deno check` in `_cabin-web-generate` the right home
-for the union, map and tuple proof, or should it wait for a corpus wasm build
-and a round-trip test?** Recommendation: the `deno check` now, because it is
-cheap and it is the only check of D-4's rules against the pinned `flatc` before
-a user hits them; the round trip later, as its own task.
+**Q-4. Accepted 2026-10-22: the table carries `CATALOG_HASH`, and the demo keeps
+the server's announced hash as a cross-check.** The generated unit is
+self-describing, and `loadCodec` and `connect` read the hash from one place.
 
-**Q-6. Should `codec = true` also require `--emit flatbuffers` in the same
-build?** The codec file is useless without the `.fbs` and `flatc`'s output.
-`ridl build` cannot see a later `flatc` run, and a build with
-`--emit typescript` alone is a valid way to regenerate the wrappers after a
-schema change. Recommendation: no requirement; the header comment of the file
-states the two steps, and the demo recipe runs them.
+**Q-5. Accepted 2026-10-22: the type-level proof of the union, map and tuple
+rules runs now, as a `deno check` in `_cabin-web-generate` against the pinned
+`flatc`; a round trip through a wasm module of that fixture is a later task.**
+Because the `cluster` package of veh-cluster is refused under D-14, the fixture
+is the corpus's `common` package, copied verbatim, plus one interface file in
+the same package (the plan's Task 5); the plan adds a wasm-free round trip
+(`decode(encode(v))`) to it, which pins the values the type check cannot.
+
+**Q-6. Accepted 2026-10-22: `codec = true` does not require `--emit flatbuffers`
+in the same build.** `ridl build` cannot see a later `flatc` run, and a build
+with `--emit typescript` alone is a valid way to regenerate the wrappers after a
+schema change; the header comment of the file states the two steps, and the demo
+recipe runs them.
