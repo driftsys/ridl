@@ -278,6 +278,10 @@ jobs:
       - name: install the pinned toolchain
         run: rustup show
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            examples/cabin -> target
       - name: install just
         run: |
           set -o pipefail
@@ -312,6 +316,7 @@ jobs:
           unzip -o -q "$RUNNER_TEMP/flatc.zip" -d "$HOME/.local/bin"
           chmod +x "$HOME/.local/bin/flatc"
           "$HOME/.local/bin/flatc" --version
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: just cabin-ws-demo
       - run: just ts-browser-e2e
         env:

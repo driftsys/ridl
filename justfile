@@ -2896,6 +2896,10 @@ cabin-ws-demo:
     server_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
     server="$(cd "$server_target" && pwd)/debug/server"
     cd examples/cabin/web
+    # `deno run` does not type-check, and `ts-check` covers `packages/` only.
+    deno fmt --check
+    deno lint
+    deno check main.ts
     deno run -A main.ts "$server"
 
 # Build the same loopback server example and run the browser end-to-end test
