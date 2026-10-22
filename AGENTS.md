@@ -230,7 +230,7 @@ member; rsdl is the apex.
                          unless every value is inside [-40..85], every
                          received value is 1 to 63 steps ahead of the previous
                          one on the ring of the 126 values (85 is followed by
-                         -40), and both -40 and 85 are seen.
+                         -40), 85 is seen, and -40 is seen after 85.
                          Needs Deno and flatc at the version in .flatc-version
     just ts-browser-e2e  the same build, then the package's end-to-end test
                          in a headless browser; needs a Chromium-family

@@ -11,13 +11,14 @@
 // coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
 // expect every step. It exits with status 0 only if every value is inside
 // [-40..85], every received value is 1 to 63 steps ahead of the previous one
-// on the ring of the 126 values (85 is followed by -40), and both -40 and 85
-// are seen. Otherwise it exits with a non-zero status and names the cause and
-// the stage. One deadline, counted from the start of the program, covers every
-// stage including the exit of the server. A server that exits or a connection
-// that closes before the end of the check fails the program at once. It prints
-// the number of samples it received, the number of wraps (a step from 85 to
-// -40 or across it), and whether each bound was seen.
+// on the ring of the 126 values (85 is followed by -40), 85 is seen, and -40
+// is seen after 85 (the -40 of the first sample does not count). Otherwise it
+// exits with a non-zero status and names the cause and the stage. One
+// deadline, counted from the start of the program, covers every stage
+// including the exit of the server. A server that exits or a connection that
+// closes before the end of the check fails the program at once. It prints the
+// number of samples it received, the number of wraps (a step from 85 to -40
+// or across it), whether 85 was seen, and whether -40 was seen after 85.
 
 import * as flatbuffers from "flatbuffers";
 import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
@@ -39,11 +40,12 @@ const RING = HIGHEST - LOWEST + 1;
  * steps up to half the ring can be told apart from a backward move: 63 is
  * RING / 2. A step of 0 (the same value again) is not forward and is rejected.
  *
- * Seeing both exact bounds is what rejects a decoder that is off by a constant
- * c. Its values still step forward on the ring, but the value that the server
- * publishes as -40 decodes as -40 + c, and the value that it publishes as 85
- * decodes as 85 + c, so the two bounds are never both received as such (and
- * the range check fails first when c moves a value outside [-40..85]).
+ * Seeing 85 and then -40 is what rejects a decoder that is off by a constant c
+ * and a server that wraps to another value. A decoder off by c shows the value
+ * that the server publishes as 85 as 85 + c, so either the range check fails
+ * or 85 is never seen. A server that wraps to a value other than -40 never
+ * shows -40 after 85; the -40 of the first sample does not count, because it
+ * comes before any wrap.
  */
 const MAX_STEP = RING / 2;
 
@@ -119,7 +121,8 @@ const hash = Uint8Array.from(hex.match(/../g)!.map((h) => parseInt(h, 16)));
 
 let received = 0;
 let previous: number | undefined;
-let sawLowest = false;
+// True when -40 was received after 85 had been received.
+let sawLowestAfter = false;
 let sawHighest = false;
 // The number of steps that crossed from 85 to -40.
 let wraps = 0;
@@ -160,9 +163,9 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
       if (value < previous) wraps++;
     }
     previous = value;
-    if (value === LOWEST) sawLowest = true;
+    if (value === LOWEST && sawHighest) sawLowestAfter = true;
     if (value === HIGHEST) sawHighest = true;
-    if (sawLowest && sawHighest) enough();
+    if (sawLowestAfter) enough();
   },
 });
 void session.closed.then(async (ended) => {
@@ -183,7 +186,7 @@ void session.closed.then(async (ended) => {
 stage = "subscribing";
 await session.subscribe({ kind: Kind.Signal, iface: 1, ord: 1 });
 
-stage = "waiting for the lowest and the highest value";
+stage = "waiting for the highest value and the lowest after it";
 await done;
 
 // Ends the server: it exits when its standard input reaches the end.
@@ -194,7 +197,8 @@ const status = await server.status;
 
 console.log(
   `cabin-web: received ${received} sample(s), ${wraps} wrap(s), ` +
-    `lowest ${LOWEST} seen: ${sawLowest}, highest ${HIGHEST} seen: ${sawHighest}`,
+    `highest ${HIGHEST} seen: ${sawHighest}, ` +
+    `lowest ${LOWEST} seen after it: ${sawLowestAfter}`,
 );
 if (failure) {
   stage = failureStage;

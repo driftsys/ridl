@@ -13,8 +13,8 @@
 //!
 //! The Deno program of `examples/cabin/web` passes only if every value is
 //! inside [-40..85], every received value is 1 to 63 steps ahead of the
-//! previous one on the ring of the 126 values (85 is followed by -40), and
-//! both -40 and 85 are seen.
+//! previous one on the ring of the 126 values (85 is followed by -40), 85 is
+//! seen, and -40 is seen after 85.
 
 use std::io::{self, Write};
 use std::net::TcpListener;

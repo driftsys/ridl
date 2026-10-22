@@ -2855,10 +2855,10 @@ ts-e2e:
 # with the encoding `flatbuffers`, subscribes, decodes each payload with the
 # `flatc` code, and fails unless every value is inside [-40..85], every
 # received value is 1 to 63 steps ahead of the previous one on the ring of the
-# 126 values (85 is followed by -40), and both -40 and 85 are seen. One 30 s
-# deadline covers the whole run, and a server that exits early fails the run at
-# once. It prints the number of samples, the number of wraps, and whether each
-# bound was seen.
+# 126 values (85 is followed by -40), 85 is seen, and -40 is seen after 85. One
+# 30 s deadline covers the whole run, and a server that exits early fails the
+# run at once. It prints the number of samples, the number of wraps, whether 85
+# was seen, and whether -40 was seen after 85.
 #
 # Written in order: the CLI and the generated crates (both members of the
 # examples/cabin workspace, written by the private recipe `_cabin-generate` that
