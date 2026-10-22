@@ -129,6 +129,15 @@ impl<'a> Codec<'a> {
         }
         for payload in codec.payload_types() {
             let qualified = codec.qualified(payload.name);
+            if payload
+                .declaration
+                .is_some_and(|declaration| declaration.visibility() == v1::Visibility::Internal)
+            {
+                return refuse(format!(
+                    "`{qualified}` is an internal payload type, which `<base>.ts` does not \
+                     export, so the codec module cannot name it"
+                ));
+            }
             match payload.declaration {
                 Some(declaration) => codec.reach(declaration, &qualified)?,
                 None => return refuse(not_converted(&qualified, "a tuple")),
@@ -359,7 +368,12 @@ impl<'a> Codec<'a> {
             Some(Kind::Scalar(_) | Kind::EnumSet(_)) => {
                 (format!("new fb.{name}BoxT(value)"), Some(false))
             }
-            _ => return refuse(not_converted(&qualified, "a union")),
+            _ => {
+                return refuse(format!(
+                    "malformed codegen model: the payload type `{qualified}` is not a scalar, \
+                     an enum, an enum set or a struct"
+                ));
+            }
         };
         let _ = writeln!(out, "  builder.finish({packed}.pack(builder));");
         out.push_str("  return builder.asUint8Array();\n}\n");
@@ -412,7 +426,7 @@ impl<'a> Codec<'a> {
         for field in &fields {
             let spelled = field.name.as_ref();
             let declared = spelled.map_or("", |name| name.declared.as_str());
-            let camel = accessor(spelled.map_or("", |name| name.camel.as_str()));
+            let camel = accessor(declared);
             let (pack, unpack) = self.field_rule(field, &qualified)?;
             let _ = writeln!(
                 out,
@@ -632,15 +646,25 @@ fn not_converted(qualified: &str, kind: &str) -> String {
     format!("`{qualified}` reaches {kind}, which the codec module does not convert yet")
 }
 
-/// The name `flatc --ts` gives a field's member: `Spellings.camel` with its
-/// first letter in lower case, as `flatc` spells the `.fbs` field's snake
-/// case name in TypeScript.
-fn accessor(camel: &str) -> String {
-    let mut chars = camel.chars();
-    match chars.next() {
-        Some(first) => first.to_lowercase().chain(chars).collect(),
-        None => String::new(),
+/// The name `flatc --ts` gives a field's member. The `.fbs` field is
+/// `ridl_ir::name::snake_case` of the declared name, and `flatc` writes it in
+/// lower camel case: each `_` is dropped and the character after it is upper
+/// case; every other character is kept, digits included.
+fn accessor(declared: &str) -> String {
+    let snake = ridl_ir::name::snake_case(declared);
+    let mut out = String::with_capacity(snake.len());
+    let mut upper = false;
+    for c in snake.chars() {
+        if c == '_' {
+            upper = true;
+        } else if upper {
+            out.extend(c.to_uppercase());
+            upper = false;
+        } else {
+            out.push(c);
+        }
     }
+    out
 }
 
 fn declared_name(declaration: &v1::Declaration) -> &str {
@@ -695,4 +719,25 @@ fn interaction_path(model: &v1::Model, path: &v1::InteractionPath) -> String {
         })
         .unwrap_or_default();
     format!("{interface_name}.{member}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::accessor;
+
+    /// `flatc --ts` lower-camels the snake case `.fbs` name, so an acronym
+    /// or a SCREAMING_SNAKE name is not spelled as declared.
+    #[test]
+    fn the_accessor_is_the_lower_camel_case_of_the_snake_case_name() {
+        for (declared, expected) in [
+            ("code", "code"),
+            ("setLevel", "setLevel"),
+            ("getVIN", "getVin"),
+            ("HTTPServer", "httpServer"),
+            ("MAX_RPM", "maxRpm"),
+            ("sensor2Value", "sensor2Value"),
+        ] {
+            assert_eq!(accessor(declared), expected, "{declared}");
+        }
+    }
 }
