@@ -201,7 +201,48 @@ Each slice is one pull request, reviewed on its own.
 - `just wasm-check` and the `thumbv7em-none-eabihf` build of the generated crate
   keep passing with the option off.
 
-## Open question for Sebastien
+## Plan change (2026-10-22)
+
+Slices 1 and 2 landed (#1018, #1017). The open question below is answered:
+Sebastien chose FlatBuffers now and proto3 later, and dropped the JSON choice. A
+TypeScript caller builds and reads payloads with code that `flatc --ts`
+generates from the `.fbs` that `ridl-backend-flatbuffers` emits. The wasm module
+still verifies payloads (D-7).
+
+The public TypeScript API takes and returns plain objects only: generated
+`encodeX(obj): Uint8Array` and `decodeX(bytes): X` over the types that
+`ridl-backend-ts` already emits. The `flatc` accessors and builders stay inside
+the generated wrappers, so a proto3 codec or a generated TypeScript codec can
+replace them later without a change in user code.
+
+The remaining slices, in order, replace slices 3 to 5 above:
+
+1. **Interop spike** on `examples/cabin`: `.fbs` to
+   `flatc --ts --gen-object-api`; bytes that the Rust crate encodes are read in
+   Deno, and bytes that the TypeScript code builds are verified in Rust. It
+   checks unions, maps and named scalars, and that the object API gives plain
+   objects. Its result decides whether the path holds.
+2. **Cabin server** in `examples/cabin`, which links the generated crate and
+   `ridl-transport-ws` and serves a session with the encoding `flatbuffers`. A
+   Deno demo reads the signal. A hand-written map from (interface, ordinal) to
+   type is acceptable at first.
+3. **Browser demo**, on the `ts-browser-e2e` harness.
+4. **Wasm verify in the demo**: a `Temperature` outside `[-40..85]` is rejected.
+   The loader treats `ridl_alloc` returning 0 for a length above 0 as out of
+   memory.
+5. **Generated codec table** (`[backend.typescript] codec = true`,
+   `<base>.codec.ts`) replaces the hand-written map. The TypeScript backend
+   emits typl types only today, so this slice must first give it the interface
+   declarations.
+6. **Publish**: the first `v*` tag for both npm packages.
+
+The proto3 route is a later, separate design: a browser on proto3 sessions with
+`protobuf-es` code from `ridl-backend-proto`, and a generated per-package
+transcoder between FlatBuffers and proto3 in the server. The Rust WebSocket
+server is built on `ridl-rt` with FlatBuffers and passes payload bytes through
+without reading them.
+
+## Open question for Sebastien (answered 2026-10-22, see above)
 
 How does a TypeScript caller build a payload without a TypeScript codec? Three
 choices, with the author's lean first:
