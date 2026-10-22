@@ -26,10 +26,10 @@ above 0 as out of memory.
 --crate-type cdylib --features wasm-exports`),
 Deno, `flatc` 25.12.19, the `flatbuffers` npm package, `packages/ridl-runtime`.
 
-**Spec:** [the design note](2026-10-21-ts-wasm-codec-design.md), D-2 (export
-contract, return codes, the out-of-memory rule), D-6 (size settings come from
-the environment), D-7 (the end-to-end proof), and "Plan change (2026-10-22)"
-step 4.
+**Spec:** [the design note](../wip/2026-10-21-ts-wasm-codec-design.md), D-2
+(export contract, return codes, the out-of-memory rule), D-6 (size settings come
+from the environment), D-7 (the end-to-end proof), and "Plan change
+(2026-10-22)" step 4.
 
 ## Global Constraints
 

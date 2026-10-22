@@ -146,6 +146,11 @@ The cabin browser demo plan (`2026-10-22-cabin-browser-demo-plan.md`) was
 archived on 2026-10-22, once the browser demo landed; `examples/cabin/web` and
 `just cabin-browser-demo` are its durable record.
 
+The cabin wasm verify plan (`2026-10-22-cabin-wasm-verify-plan.md`) was archived
+on 2026-10-22, once both demos verified each payload through the wasm codec;
+`examples/cabin/web/check.ts` and the `_cabin-wasm` recipe are its durable
+record.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)

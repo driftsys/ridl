@@ -723,3 +723,10 @@ provenance. Nothing here is normative — the current references live in
   Archived with one edit, the link to the design note. The durable record is
   `examples/cabin/web` (`check.ts`, `page.ts`, `browser.ts`), run by
   `just cabin-browser-demo`.
+
+- **2026-10-22-cabin-wasm-verify-plan.md** — the plan for verifying the cabin
+  temperature through the wasm codec in both demos (step 4 of
+  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)).
+  Archived with one edit, the link to the design note. The durable record is
+  `examples/cabin/web/check.ts` and its tests, the `_cabin-wasm` recipe, and the
+  out-of-memory check in `packages/ridl-runtime`.
