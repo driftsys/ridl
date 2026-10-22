@@ -649,7 +649,7 @@ Options:
           - ir-json:         The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
           - ir-text:         The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
           - ir-binary:       The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`
+          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
@@ -1035,7 +1035,9 @@ When a package names a type from `ridl.std`, the standard package is written
 beside your own as one more file per `--emit` target — `ridl.std.rs`,
 `ridl.std.ts`, `ridl.std.codegen.json` — because generated code refers to
 standard types by package path and does not compile without it, and the model
-is lowered over the same scope. The three IR targets —
+is lowered over the same scope. `ridl.std.codec.ts` joins them under
+`[backend.typescript] codec = true` only when a package's codec module imports
+it, for a payload type that is a `ridl.std` scalar. The three IR targets —
 `ir-json`, `ir-text`, `ir-binary` — get no such file: a direct IR dump
 records the packages the workspace declares, and `ridl.std` ships with the
 compiler rather than with the workspace ([ADR-0007][adr-0007] decision 15).
@@ -2438,7 +2440,7 @@ Options:
           - ir-json:         The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
           - ir-text:         The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
           - ir-binary:       The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`
+          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`

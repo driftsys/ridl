@@ -32,6 +32,8 @@ if (!result.ok) {
   `catalogHash`, and optionally `payloadTypes`, `ruleText` and `imports`.
   `payloadTypes` names the payload types to resolve at load; the promise rejects
   with `UnknownPayloadType` for the first name that the module does not hold.
+  `loadCodec` needs the export `ridl_type_id`, so a module built by ridl 0.12 or
+  earlier must be rebuilt.
 - `Codec.catalogHash` is the hash that the module reports.
 - `Codec.typeId(name)` returns the `type_id` of the payload type with that name,
   through the export `ridl_type_id`. The module resolves each name once and the
@@ -46,9 +48,10 @@ if (!result.ok) {
   in `payloadTypes`. Its field `type` is the name.
 - `CodecError` is thrown when the module cannot be fetched or compiled, or when
   an export is missing or has the wrong type. Its message and its `exportName`
-  name the export. It is also thrown, by `loadCodec` or by `verify`, when
-  `ridl_alloc` returns 0 for a request of more than 0 bytes: the module is out
-  of memory, and `exportName` is `ridl_alloc`.
+  name the export. It is also thrown, by `loadCodec`, by `typeId` or by
+  `verify`, when `ridl_alloc` returns 0 for a request of more than 0 bytes: the
+  module is out of memory, and `exportName` is `ridl_alloc`. `typeId` also
+  throws it when `ridl_type_id` returns a code below -1.
 
 ## Source of the module
 

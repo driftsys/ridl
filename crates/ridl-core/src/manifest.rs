@@ -772,44 +772,52 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
 /// loader accepts any backend name, and the keys are the same for each.
 pub const BACKEND_SECTION: &str = "backend.*";
 
-/// The keys the manifest schema defines, as `(section, [(key, value type)])`.
-/// The top level has the section name `""`. `[imports]` and `[lints]` hold
-/// user-chosen names and are not listed as sections. MANI-005 warns on any key
-/// outside these lists.
+/// One entry of [`KNOWN_KEYS`]: the key, its value type and its note.
+pub type KnownKey = (&'static str, &'static str, &'static str);
+
+/// The keys the manifest schema defines, as
+/// `(section, [(key, value type, note)])`. The top level has the section
+/// name `""`. `[imports]` and `[lints]` hold user-chosen names and are not
+/// listed as sections. MANI-005 warns on any key outside these lists.
 ///
 /// The value type is the TOML type the reader accepts for the key: `string`,
 /// `table`, `array<string>` (an array of strings), `table<string>` (a table of
-/// strings), `table<table>` (a table of tables) or `boolean`.
-pub const KNOWN_KEYS: &[(&str, &[(&str, &str)])] = &[
+/// strings), `table<table>` (a table of tables) or `boolean`. The note is
+/// what the key means beyond its own table, part of the frozen `manifest`
+/// surface, or `""`: `codec` implies `backend.rust.wasm`.
+pub const KNOWN_KEYS: &[(&str, &[KnownKey])] = &[
     (
         "",
         &[
-            ("package", "table"),
-            ("workspace", "table"),
-            ("defaults", "table"),
-            ("codegen", "table"),
-            ("backend", "table<table>"),
-            ("imports", "table<string>"),
-            ("lints", "table<string>"),
+            ("package", "table", ""),
+            ("workspace", "table", ""),
+            ("defaults", "table", ""),
+            ("codegen", "table", ""),
+            ("backend", "table<table>", ""),
+            ("imports", "table<string>", ""),
+            ("lints", "table<string>", ""),
         ],
     ),
-    ("package", &[("name", "string"), ("version", "string")]),
-    ("workspace", &[("members", "array<string>")]),
+    (
+        "package",
+        &[("name", "string", ""), ("version", "string", "")],
+    ),
+    ("workspace", &[("members", "array<string>", "")]),
     (
         "defaults",
         &[
-            ("timing", "string"),
-            ("command_timing", "string"),
-            ("query_timing", "string"),
+            ("timing", "string", ""),
+            ("command_timing", "string", ""),
+            ("query_timing", "string", ""),
         ],
     ),
-    ("codegen", &[("header-file", "string")]),
+    ("codegen", &[("header-file", "string", "")]),
     (
         BACKEND_SECTION,
         &[
-            (ENCODINGS_KEY, "array<string>"),
-            (WASM_KEY, "boolean"),
-            (CODEC_KEY, "boolean"),
+            (ENCODINGS_KEY, "array<string>", ""),
+            (WASM_KEY, "boolean", ""),
+            (CODEC_KEY, "boolean", "implies backend.rust.wasm"),
         ],
     ),
 ];
@@ -820,7 +828,7 @@ fn known_keys(section: &str) -> Vec<&'static str> {
         .iter()
         .find(|(name, _)| *name == section)
         .map_or(Vec::new(), |(_, keys)| {
-            keys.iter().map(|(key, _)| *key).collect()
+            keys.iter().map(|(key, ..)| *key).collect()
         })
 }
 
@@ -1890,7 +1898,7 @@ version = \"1.0.0\"
         // a string or an array is expected draws a diagnostic other than
         // MANI-005. A key the reader ignores draws none.
         for (section, keys) in KNOWN_KEYS {
-            for (key, _) in *keys {
+            for (key, ..) in *keys {
                 let text = manifest_with(section, key, "1");
                 let (_, diags) = parse(&text);
                 assert!(
@@ -1930,7 +1938,7 @@ version = \"1.0.0\"
     #[test]
     fn known_key_types_are_the_types_the_reader_accepts() {
         for (section, keys) in KNOWN_KEYS {
-            for (key, value_type) in *keys {
+            for (key, value_type, _) in *keys {
                 let (right, wrong) = type_samples(value_type);
                 for value in right {
                     let text = manifest_with(section, key, value);

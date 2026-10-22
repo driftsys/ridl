@@ -1539,7 +1539,7 @@ fn ts_string(text: &str) -> String {
 mod codec;
 mod contract;
 
-pub use codec::generate_codec;
+pub use codec::{codec_imports, generate_codec};
 pub use contract::Backend;
 
 #[cfg(test)]

@@ -19,15 +19,17 @@ function absent(type: string, field: string): never {
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "veh.common";
 /** The hash of the catalog unit, which the wasm module carries. */
-export const CATALOG_HASH: Uint8Array = Uint8Array.from([223, 225, 162, 41, 146, 95, 47, 169, 16, 82, 155, 70, 113, 176, 17, 27, 62, 152, 110, 51, 140, 54, 126, 37, 56, 145, 179, 58, 123, 215, 182, 63]);
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([25, 244, 177, 124, 125, 238, 238, 72, 181, 225, 56, 137, 205, 13, 187, 142, 190, 215, 11, 159, 128, 248, 115, 203, 202, 172, 163, 30, 21, 156, 102, 137]);
 /** The qualified names of the payload types of this package, which name the wasm type ids. */
 export const PAYLOAD_TYPES = [
   "veh.common.Counter",
   "veh.common.DriverProfile",
+  "veh.common.Extras",
   "veh.common.Gain",
   "veh.common.GearPosition",
   "veh.common.Mode",
   "veh.common.Outcome",
+  "veh.common.Pick",
   "veh.common.RPM",
   "veh.common.Ratio",
   "veh.common.RawWheelFrame",
@@ -55,7 +57,7 @@ export interface SensorsSetLimitParams {
 }
 
 /** The induced tuple of `Sensors.span`. */
-export interface SensorsSpanParams {}
+export type SensorsSpanParams = Record<string, never>;
 
 /** The induced tuple of `Sensors.span`. */
 export interface SensorsSpanReply {
@@ -384,6 +386,80 @@ function unpackOutcome(object: fb.OutcomeT): t.Outcome {
   }
 }
 
+/** Encodes a `veh.common.Extras` payload. */
+export function encodeExtras(value: t.Extras): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packExtras(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Extras` payload the codec has verified. */
+export function decodeExtras(bytes: Uint8Array): t.Extras {
+  return unpackExtras(fb.Extras.getRootAsExtras(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packExtras(value: t.Extras): fb.ExtrasT {
+  const object = new fb.ExtrasT();
+  object.wide = packExtrasWide(value.wide);
+  object.blob = Array.from(value.blob);
+  object.readings = value.readings.map((element) => packSensorReading(element));
+  object.gears = value.gears.map((element) => BigInt(element));
+  object.maybe = value.maybe === undefined ? [] : [...value.maybe];
+  object.tag = value.tag === undefined ? [] : Array.from(value.tag);
+  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = key; entry.value = value; return entry; });
+  object.default_ = value.default;
+  object.new_ = value.new;
+  object.class_ = value.class;
+  return object;
+}
+function unpackExtras(object: fb.ExtrasT): t.Extras {
+  return {
+    wide: object.wide === null ? absent("veh.common.Extras", "wide") : unpackExtrasWide(object.wide),
+    blob: Uint8Array.from(object.blob) as Uint8Array,
+    readings: object.readings.map((element) => unpackSensorReading(element)),
+    gears: object.gears.map((element) => Number(element) as t.GearPosition),
+    maybe: object.maybe.map((element) => element as t.Speed),
+    tag: Uint8Array.from(object.tag) as Uint8Array,
+    notes: object.notes.map((entry) => [entry.key as ridl_std.Label, entry.value as ridl_std.Name] as const),
+    default: object.default_ as t.Counter,
+    new: object.new_ as t.Counter,
+    class: object.class_ as t.Counter,
+  };
+}
+
+/** Encodes a `veh.common.Pick` payload. */
+export function encodePick(value: t.Pick): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packPick(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Pick` payload the codec has verified. */
+export function decodePick(bytes: Uint8Array): t.Pick {
+  return unpackPick(fb.Pick.getRootAsPick(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packPick(value: t.Pick): fb.PickT {
+  switch (value.kind) {
+    case "speed":
+      return new fb.PickT(fb.PickUnion.speed, new fb.PickSpeedBoxT(value.value));
+    case "gear":
+      return new fb.PickT(fb.PickUnion.gear, new fb.PickGearBoxT(BigInt(value.value)));
+    case "reading":
+      return new fb.PickT(fb.PickUnion.reading, packSensorReading(value.value));
+  }
+}
+function unpackPick(object: fb.PickT): t.Pick {
+  switch (object.valueType) {
+    case fb.PickUnion.speed:
+      return { kind: "speed", value: (object.value as fb.PickSpeedBoxT).value as t.Speed };
+    case fb.PickUnion.gear:
+      return { kind: "gear", value: Number((object.value as fb.PickGearBoxT).value) as t.GearPosition };
+    case fb.PickUnion.reading:
+      return { kind: "reading", value: unpackSensorReading(object.value as fb.SensorReadingT) };
+    default:
+      throw new RangeError("union veh.common.Pick carries no arm");
+  }
+}
+
 function packSensorBoundsRange(value: { min: t.Speed; max: t.Speed }): fb.SensorBoundsRangeT {
   const tuple = new fb.SensorBoundsRangeT();
   tuple.field1 = value.min;
@@ -392,6 +468,16 @@ function packSensorBoundsRange(value: { min: t.Speed; max: t.Speed }): fb.Sensor
 }
 function unpackSensorBoundsRange(object: fb.SensorBoundsRangeT): { min: t.Speed; max: t.Speed } {
   return { min: object.field1 as t.Speed, max: object.field2 as t.Speed };
+}
+
+function packExtrasWide(value: { big: bigint; sparse: readonly t.Speed[] }): fb.ExtrasWideT {
+  const tuple = new fb.ExtrasWideT();
+  tuple.field1 = value.big;
+  tuple.field2 = [...value.sparse];
+  return tuple;
+}
+function unpackExtrasWide(object: fb.ExtrasWideT): { big: bigint; sparse: readonly t.Speed[] } {
+  return { big: object.field1, sparse: object.field2.map((element) => element as t.Speed) };
 }
 
 /** Encodes a `veh.common.SensorsSetLimitParams` payload. */
@@ -426,11 +512,11 @@ export function decodeSensorsSpanParams(bytes: Uint8Array): SensorsSpanParams {
   return unpackSensorsSpanParams(fb.SensorsSpanParams.getRootAsSensorsSpanParams(new flatbuffers.ByteBuffer(bytes)).unpack());
 }
 
-function packSensorsSpanParams(value: SensorsSpanParams): fb.SensorsSpanParamsT {
+function packSensorsSpanParams(_value: SensorsSpanParams): fb.SensorsSpanParamsT {
   const tuple = new fb.SensorsSpanParamsT();
   return tuple;
 }
-function unpackSensorsSpanParams(object: fb.SensorsSpanParamsT): SensorsSpanParams {
+function unpackSensorsSpanParams(_object: fb.SensorsSpanParamsT): SensorsSpanParams {
   return {};
 }
 
@@ -455,24 +541,14 @@ function unpackSensorsSpanReply(object: fb.SensorsSpanReplyT): SensorsSpanReply 
   return { min: object.field1 as t.Speed, max: object.field2 as t.Speed };
 }
 
-const codecSpeed: PayloadCodec<t.Speed> = { type: "veh.common.Speed", encode: encodeSpeed, decode: decodeSpeed };
-const codecTemperature: PayloadCodec<t.Temperature> = { type: "veh.common.Temperature", encode: encodeTemperature, decode: decodeTemperature };
-const codecRPM: PayloadCodec<t.RPM> = { type: "veh.common.RPM", encode: encodeRPM, decode: decodeRPM };
-const codecRatio: PayloadCodec<t.Ratio> = { type: "veh.common.Ratio", encode: encodeRatio, decode: decodeRatio };
 const codecCounter: PayloadCodec<t.Counter> = { type: "veh.common.Counter", encode: encodeCounter, decode: decodeCounter };
-const codecGain: PayloadCodec<t.Gain> = { type: "veh.common.Gain", encode: encodeGain, decode: decodeGain };
-const codecGearPosition: PayloadCodec<t.GearPosition> = { type: "veh.common.GearPosition", encode: encodeGearPosition, decode: decodeGearPosition };
-const codecWarning: PayloadCodec<t.Warning> = { type: "veh.common.Warning", encode: encodeWarning, decode: decodeWarning };
-const codecWarningFlags: PayloadCodec<t.WarningFlags> = { type: "veh.common.WarningFlags", encode: encodeWarningFlags, decode: decodeWarningFlags };
-const codecSpeedLimitPayload: PayloadCodec<t.SpeedLimitPayload> = { type: "veh.common.SpeedLimitPayload", encode: encodeSpeedLimitPayload, decode: decodeSpeedLimitPayload };
 const codecDriverProfile: PayloadCodec<t.DriverProfile> = { type: "veh.common.DriverProfile", encode: encodeDriverProfile, decode: decodeDriverProfile };
 const codecSensorBounds: PayloadCodec<t.SensorBounds> = { type: "veh.common.SensorBounds", encode: encodeSensorBounds, decode: decodeSensorBounds };
 const codecSensorResult: PayloadCodec<t.SensorResult> = { type: "veh.common.SensorResult", encode: encodeSensorResult, decode: decodeSensorResult };
 const codecSensorReading: PayloadCodec<t.SensorReading> = { type: "veh.common.SensorReading", encode: encodeSensorReading, decode: decodeSensorReading };
-const codecSensorFault: PayloadCodec<t.SensorFault> = { type: "veh.common.SensorFault", encode: encodeSensorFault, decode: decodeSensorFault };
-const codecMode: PayloadCodec<t.Mode> = { type: "veh.common.Mode", encode: encodeMode, decode: decodeMode };
 const codecSetting: PayloadCodec<t.Setting> = { type: "veh.common.Setting", encode: encodeSetting, decode: decodeSetting };
-const codecOutcome: PayloadCodec<t.Outcome> = { type: "veh.common.Outcome", encode: encodeOutcome, decode: decodeOutcome };
+const codecExtras: PayloadCodec<t.Extras> = { type: "veh.common.Extras", encode: encodeExtras, decode: decodeExtras };
+const codecPick: PayloadCodec<t.Pick> = { type: "veh.common.Pick", encode: encodePick, decode: decodePick };
 const codecSensorsSetLimitParams: PayloadCodec<SensorsSetLimitParams> = { type: "veh.common.SensorsSetLimitParams", encode: encodeSensorsSetLimitParams, decode: decodeSensorsSetLimitParams };
 const codecSensorsSpanParams: PayloadCodec<SensorsSpanParams> = { type: "veh.common.SensorsSpanParams", encode: encodeSensorsSpanParams, decode: decodeSensorsSpanParams };
 const codecSensorsSpanReply: PayloadCodec<SensorsSpanReply> = { type: "veh.common.SensorsSpanReply", encode: encodeSensorsSpanReply, decode: decodeSensorsSpanReply };
@@ -488,4 +564,8 @@ export const Sensors = {
   profile: { iface: 1, ord: 6, kind: "query", request: codecRidlStdName, reply: codecDriverProfile },
   span: { iface: 1, ord: 7, kind: "query", request: codecSensorsSpanParams, reply: codecSensorsSpanReply },
   setting: { iface: 1, ord: 8, kind: "signal", payload: codecSetting },
+  // note has no entry: veh.common.Note has no finite FlatBuffers bound
+  fetch: { iface: 1, ord: 10, kind: "query", request: codecCounter },
+  extras: { iface: 1, ord: 11, kind: "signal", payload: codecExtras },
+  pick: { iface: 1, ord: 12, kind: "signal", payload: codecPick },
 } as const;

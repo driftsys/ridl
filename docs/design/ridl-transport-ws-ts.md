@@ -12,12 +12,14 @@ hands to its caller as it arrived, and sends as the caller gave it.
 
 The Rust crate `ridl-transport-ws` is the providing side of the same binding;
 its as-built record is [`ridl-transport-ws.md`](ridl-transport-ws.md), which
-this record follows in structure. Decoding a payload is the generated binding's,
-through the wasm codec of
+this record follows in structure. Verifying a payload is the wasm codec's, of
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 7, which is not built. ADR-0020 decision 6 places the package; its
-dependency row was amended on 2026-10-20 (D-4). The wire rules are the frame
-specification §3 to §9 and §11.1 (binding version 1).
+decision 7, loaded by `@driftsys/ridl-runtime`, and decoding and encoding one is
+the generated codec module's, `<base>.codec.ts`
+([`ts-codec-table.md`](ts-codec-table.md)); the generated faces over this
+package are not built. ADR-0020 decision 6 places the package; its dependency
+row was amended on 2026-10-20 (D-4). The wire rules are the frame specification
+§3 to §9 and §11.1 (binding version 1).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
@@ -451,9 +453,11 @@ generated code uses it yet.
 
 ## What is not built
 
-- Decoding, verifying and encoding a payload, the wasm codec of ADR-0020
-  decision 7, the TypeScript runtime package of decision 6 and generated faces
-  over this package (driftsys/ridl#287).
+- Generated faces over this package (driftsys/ridl#287). The wasm codec of
+  ADR-0020 decision 7, the runtime package `@driftsys/ridl-runtime` that loads
+  it, and the generated codec module that decodes and encodes a payload are
+  built ([`ts-codec-table.md`](ts-codec-table.md)); the cabin demo joins them to
+  this package by hand.
 - The providing side in TypeScript, an emulator (driftsys/ridl#290), and the
   stand-in roles of the crate's "Adding the stand-in ports later".
 - Reading a catalog descriptor: the `kind` check, the response bound, the

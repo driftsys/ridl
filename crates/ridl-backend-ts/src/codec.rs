@@ -32,14 +32,31 @@ const RULES: [&str; 6] = ["length", "pattern", "range", "step", "unique", "varia
 /// The length of `Catalog.hash`.
 const HASH_LEN: usize = 32;
 
-/// Generates `<artifact_base>.codec.ts` for the package `model` describes.
-/// The returned source starts at the imports; the caller writes the
-/// generated marker and the header above it.
+/// Generates `<artifact_base>.codec.ts` for the package `model` describes,
+/// or `None` for a package with no payload type, which has nothing the
+/// module could carry. The returned source starts at the imports; the caller
+/// writes the generated marker and the header above it.
 pub fn generate_codec(
     model: &v1::Model,
     artifact_base: &str,
-) -> Result<GeneratedTs, GenerateError> {
-    Codec::new(model)?.emit(artifact_base)
+) -> Result<Option<GeneratedTs>, GenerateError> {
+    let mut codec = Codec::new(model)?;
+    if !codec.has_payload() {
+        return Ok(None);
+    }
+    codec.emit(artifact_base).map(Some)
+}
+
+/// The packages whose codec modules the module of `model` imports: those of
+/// a payload type of another package that is a named scalar or an enum set.
+/// `ridlc` reads it to write `ridl.std.codec.ts` only when a module imports
+/// it.
+pub fn codec_imports(model: &v1::Model) -> Result<BTreeSet<String>, GenerateError> {
+    Ok(Codec::new(model)?
+        .foreign_payloads
+        .values()
+        .map(|foreign| foreign.package.clone())
+        .collect())
 }
 
 fn refuse<T>(message: String) -> Result<T, GenerateError> {
@@ -71,6 +88,9 @@ struct Rule {
     plain: bool,
     /// The `flatc` object API holds the value as `T | null`: a nested table.
     nullable: bool,
+    /// The `flatc` object API holds the value as a `T[]` that is never
+    /// `null`: a vector, which is an array, a map or bytes.
+    vector: bool,
 }
 
 /// One field of a struct or an induced tuple, with its conversion.
@@ -110,6 +130,9 @@ struct Codec<'a> {
     foreign_payloads: BTreeMap<String, ForeignPayload>,
     /// The packages whose types the module names, for the type imports.
     foreign_types: BTreeSet<String>,
+    /// The `codec<Name>` constants an interface entry names: the only ones
+    /// the module declares.
+    used_codecs: BTreeSet<String>,
     /// Whether a converter reads a required field the buffer may leave out.
     needs_absent: bool,
 }
@@ -165,6 +188,7 @@ impl<'a> Codec<'a> {
             reached_tuples: HashSet::new(),
             foreign_payloads: BTreeMap::new(),
             foreign_types: BTreeSet::new(),
+            used_codecs: BTreeSet::new(),
             needs_absent: false,
         };
         let roots = model
@@ -231,10 +255,118 @@ impl<'a> Codec<'a> {
                     .name
                     .as_ref()
                     .map_or("", |name| name.declared.as_str());
-                codec.roles(interaction, &spelled.declared, member)?;
+                for (_, payload) in codec.roles(interaction, &spelled.declared, member)? {
+                    if let Ok(constant) = payload {
+                        codec.used_codecs.insert(constant);
+                    }
+                }
             }
         }
+        codec.check_names()?;
         Ok(codec)
+    }
+
+    /// Whether the module has anything to write: a payload type with a
+    /// codec. A package without one, `ridl.std` included, gets no file: its
+    /// `.fbs` has no table, so `flatc` writes no barrel to import.
+    fn has_payload(&self) -> bool {
+        !self.payload_types().is_empty()
+    }
+
+    /// Refuses two declarations of the module that spell the same name: a
+    /// reserved name of the file (an import alias or an export of the
+    /// module) taken by an interface or an induced tuple, and two
+    /// `codec<Name>` constants that spell the same. Each name is registered
+    /// with the declaration it stands for, and the second one is refused.
+    fn check_names(&self) -> Result<(), GenerateError> {
+        let mut names: BTreeMap<String, String> = BTreeMap::new();
+        let mut register = |identifier: String, label: String| -> Result<(), GenerateError> {
+            match names.get(&identifier) {
+                Some(other) => refuse(format!(
+                    "`{label}` in package `{}` collides with `{other}`, which the codec module \
+                     also declares",
+                    self.package
+                )),
+                None => {
+                    names.insert(identifier, label);
+                    Ok(())
+                }
+            }
+        };
+        for reserved in [
+            "flatbuffers",
+            "PayloadCodec",
+            "t",
+            "fb",
+            "CATALOG_NAME",
+            "CATALOG_HASH",
+            "PAYLOAD_TYPES",
+            "RULES",
+        ] {
+            register(reserved.to_string(), reserved.to_string())?;
+        }
+        for package in &self.foreign_types {
+            let alias = package_alias(package);
+            register(alias.clone(), alias)?;
+        }
+        let foreign_codecs: BTreeSet<&str> = self
+            .foreign_payloads
+            .values()
+            .map(|foreign| foreign.package.as_str())
+            .collect();
+        for package in foreign_codecs {
+            let alias = format!("{}_codec", package_alias(package));
+            register(alias.clone(), alias)?;
+        }
+        for payload in self.payload_types() {
+            if payload
+                .declaration
+                .is_some_and(|declaration| declaration.visibility() == v1::Visibility::Internal)
+            {
+                continue;
+            }
+            let name = payload.name;
+            if payload.declaration.is_none() {
+                register(name.to_string(), name.to_string())?;
+            }
+            for prefix in ["encode", "decode", "codec"] {
+                let identifier = format!("{prefix}{name}");
+                if prefix == "codec" && !self.used_codecs.contains(&identifier) {
+                    continue;
+                }
+                register(identifier, name.to_string())?;
+            }
+        }
+        // In declaration order, so that the refusal names the same pair on
+        // every run.
+        let mut reached: Vec<&usize> = self.reached.iter().collect();
+        reached.sort();
+        for index in reached {
+            let name = declared_name(&self.model.declarations[*index]);
+            for prefix in ["pack", "unpack"] {
+                register(format!("{prefix}{name}"), name.to_string())?;
+            }
+        }
+        let mut reached_tuples: Vec<&usize> = self.reached_tuples.iter().collect();
+        reached_tuples.sort();
+        for index in reached_tuples {
+            let name = tuple_name(&self.model.tuples[*index]);
+            for prefix in ["pack", "unpack"] {
+                register(format!("{prefix}{name}"), name.to_string())?;
+            }
+        }
+        for (constant, foreign) in &self.foreign_payloads {
+            register(
+                constant.clone(),
+                format!("{}.{}", foreign.package, foreign.name),
+            )?;
+        }
+        for interface in &self.model.interfaces {
+            if let Some(v1::interface::Identity::Declared(spelled)) = &interface.identity {
+                register(spelled.declared.clone(), spelled.declared.clone())?;
+            }
+        }
+        Ok(())
     }
 
     /// The payload types, in the order of the roots.
@@ -362,7 +494,12 @@ impl<'a> Codec<'a> {
                     declared_name(declaration),
                     word,
                 )),
-                None => Ok(()),
+                None => {
+                    // The converter names the type through the package's
+                    // alias, which the name check needs before emit.
+                    self.foreign_types.insert(package.to_string());
+                    Ok(())
+                }
             },
         }
     }
@@ -374,13 +511,18 @@ impl<'a> Codec<'a> {
             Some(Kind::Primitive(_) | Kind::Inline(_)) => Ok(()),
             Some(Kind::Tuple(tuple)) => self.reach_tuple(tuple.index as usize, qualified),
             Some(Kind::Array(array)) => match array.element.as_deref() {
-                Some(element) => self.reach_type(element, qualified),
+                Some(element) => {
+                    refuse_optional(element, qualified, "an array element")?;
+                    self.reach_type(element, qualified)
+                }
                 None => refuse(format!(
                     "malformed codegen model: an array of `{qualified}` has no element type"
                 )),
             },
             Some(Kind::Map(map)) => match (map.key.as_deref(), map.value.as_deref()) {
                 (Some(key), Some(value)) => {
+                    refuse_optional(key, qualified, "a map key")?;
+                    refuse_optional(value, qualified, "a map value")?;
                     self.reach_type(key, qualified)?;
                     self.reach_type(value, qualified)
                 }
@@ -485,36 +627,27 @@ impl<'a> Codec<'a> {
                     Ok(format!("{{ {} }}", fields.join("; ")))
                 }
             }
+            // An element, a key or a value is never optional here: the reach
+            // pass refused one before any type is spelled.
             Some(Kind::Array(array)) => {
                 let element = match array.element.as_deref() {
-                    Some(element) => self.nested_ts_type(element, qualified)?,
+                    Some(element) => self.ts_type(element, qualified)?,
                     None => "unknown".to_string(),
                 };
                 Ok(format!("readonly {}[]", parenthesized(element)))
             }
             Some(Kind::Map(map)) => {
                 let key = match map.key.as_deref() {
-                    Some(key) => self.nested_ts_type(key, qualified)?,
+                    Some(key) => self.ts_type(key, qualified)?,
                     None => "unknown".to_string(),
                 };
                 let value = match map.value.as_deref() {
-                    Some(value) => self.nested_ts_type(value, qualified)?,
+                    Some(value) => self.ts_type(value, qualified)?,
                     None => "unknown".to_string(),
                 };
                 Ok(format!("ReadonlyArray<readonly [{key}, {value}]>"))
             }
             Some(Kind::Stream(_)) | None => refuse(not_converted(qualified, "a stream")),
-        }
-    }
-
-    /// The type of an element, a key or a value: an optional one is
-    /// `| undefined`, as `<base>.ts` spells it.
-    fn nested_ts_type(&mut self, ty: &v1::Type, qualified: &str) -> Result<String, GenerateError> {
-        let inner = self.ts_type(ty, qualified)?;
-        if ty.optional {
-            Ok(format!("{inner} | undefined"))
-        } else {
-            Ok(inner)
         }
     }
 
@@ -555,26 +688,24 @@ impl<'a> Codec<'a> {
                         unpack: format!("Number({{}}) as {spelled}"),
                         plain: false,
                         nullable: false,
+                        vector: false,
                     },
                     Some(Kind::Struct(_) | Kind::Union(_)) if nested => Rule {
                         pack: format!("pack{name}({{}})"),
                         unpack: format!("unpack{name}({{}})"),
                         plain: false,
                         nullable: true,
+                        vector: false,
                     },
                     Some(Kind::Scalar(scalar)) if scalar.class() == v1::ScalarClass::Bytes => {
-                        Rule {
-                            pack: "Array.from({})".to_string(),
-                            unpack: format!("Uint8Array.from({{}}) as {spelled}"),
-                            plain: false,
-                            nullable: false,
-                        }
+                        bytes_rule(&spelled)
                     }
                     Some(Kind::Scalar(_) | Kind::EnumSet(_)) => Rule {
                         pack: "{}".to_string(),
                         unpack: format!("{{}} as {spelled}"),
                         plain: true,
                         nullable: false,
+                        vector: false,
                     },
                     _ => {
                         return refuse(format!(
@@ -611,6 +742,7 @@ impl<'a> Codec<'a> {
                     unpack: format!("unpack{name}({{}})"),
                     plain: false,
                     nullable: true,
+                    vector: false,
                 })
             }
             Some(TypeKind::Array(array)) => {
@@ -643,6 +775,7 @@ impl<'a> Codec<'a> {
                     unpack: spread(&rule.unpack),
                     plain: false,
                     nullable: false,
+                    vector: true,
                 })
             }
             Some(TypeKind::Map(map)) => {
@@ -674,6 +807,7 @@ impl<'a> Codec<'a> {
                     unpack: format!("{{}}.map((entry) => [{unpack_key}, {unpack_value}] as const)"),
                     plain: false,
                     nullable: false,
+                    vector: true,
                 })
             }
             Some(TypeKind::Stream(_)) | None => refuse(not_converted(qualified, "a stream")),
@@ -768,6 +902,7 @@ impl<'a> Codec<'a> {
             if payload
                 .declaration
                 .is_some_and(|declaration| declaration.visibility() == v1::Visibility::Internal)
+                || !self.used_codecs.contains(&format!("codec{}", payload.name))
             {
                 continue;
             }
@@ -804,7 +939,12 @@ impl<'a> Codec<'a> {
         let mut out = String::new();
         let segments = self.package.replace('.', "/");
         out.push_str("import * as flatbuffers from \"flatbuffers\";\n");
-        out.push_str("import type { PayloadCodec } from \"@driftsys/ridl-runtime\";\n");
+        // The one import from the runtime package, written only when a
+        // `codec<Name>` constant uses it, so that `deno lint` reads nothing
+        // unused in a module with no interface.
+        if !self.used_codecs.is_empty() {
+            out.push_str("import type { PayloadCodec } from \"@driftsys/ridl-runtime\";\n");
+        }
         let _ = writeln!(out, "import type * as t from \"./{artifact_base}.js\";");
         for package in &self.foreign_types {
             let _ = writeln!(
@@ -869,7 +1009,9 @@ impl<'a> Codec<'a> {
         out.push('\n');
         let _ = writeln!(out, "/** The induced tuple of `{origin}`. */");
         if tuple.fields.is_empty() {
-            let _ = writeln!(out, "export interface {name} {{}}");
+            // An empty `interface` is what `deno lint` refuses as
+            // `no-empty-interface`; the alias names the same object type.
+            let _ = writeln!(out, "export type {name} = Record<string, never>;");
             return Ok(());
         }
         let _ = writeln!(out, "export interface {name} {{");
@@ -1123,7 +1265,13 @@ impl<'a> Codec<'a> {
         qualified: &str,
     ) {
         out.push('\n');
-        let _ = writeln!(out, "function pack{name}(value: {spelled}): fb.{table}T {{");
+        // A record with no field reads nothing from its parameter, which
+        // `deno lint` accepts under a `_` prefix.
+        let unused = if fields.is_empty() { "_" } else { "" };
+        let _ = writeln!(
+            out,
+            "function pack{name}({unused}value: {spelled}): fb.{table}T {{"
+        );
         let _ = writeln!(out, "  const {object} = new fb.{table}T();");
         for field in fields {
             let packed = field
@@ -1131,9 +1279,14 @@ impl<'a> Codec<'a> {
                 .pack
                 .replace("{}", &format!("value.{}", field.declared));
             if field.optional {
+                // The object API holds a vector as `T[]`, never `null`, and
+                // `pack` always writes it, so an absent optional vector
+                // packs as the empty vector: the wire does not keep absent
+                // and empty apart (the record's known gaps).
+                let absent = if field.rule.vector { "[]" } else { "null" };
                 let _ = writeln!(
                     out,
-                    "  {object}.{} = value.{} === undefined ? null : {packed};",
+                    "  {object}.{} = value.{} === undefined ? {absent} : {packed};",
                     field.accessor, field.declared
                 );
             } else {
@@ -1143,13 +1296,15 @@ impl<'a> Codec<'a> {
         let _ = writeln!(out, "  return {object};\n}}");
         let _ = writeln!(
             out,
-            "function unpack{name}(object: fb.{table}T): {spelled} {{"
+            "function unpack{name}({unused}object: fb.{table}T): {spelled} {{"
         );
         let mut required = Vec::new();
         let mut optional = Vec::new();
         for field in fields {
             let read = format!("object.{}", field.accessor);
-            if field.optional {
+            // An optional vector is read as present: the object API gives
+            // `[]` for a vector the buffer leaves out.
+            if field.optional && !field.rule.vector {
                 let unpacked = field.rule.unpack.replace("{}", &read);
                 optional.push(format!(
                     "  if ({read} !== null) result.{} = {unpacked};",
@@ -1454,6 +1609,17 @@ impl<'a> Codec<'a> {
                         "codec{}{name}",
                         ridl_ir::name::pascal_case(&package.replace('.', "_"))
                     );
+                    // Two foreign payload types can spell one constant
+                    // (`a.b` / `C` and `a` / `BC`); the second is refused.
+                    if let Some(other) = self.foreign_payloads.get(&constant)
+                        && (other.package != package || other.name != name)
+                    {
+                        return refuse(format!(
+                            "`{qualified}` in package `{}` collides with `{}.{}`, which the codec \
+                             module also declares",
+                            self.package, other.package, other.name
+                        ));
+                    }
                     self.foreign_payloads.insert(
                         constant.clone(),
                         ForeignPayload {
@@ -1487,6 +1653,19 @@ impl<'a> Codec<'a> {
     }
 }
 
+/// Refuses an optional `ty` at a position that is not a table field, as the
+/// generated Rust codec does: FlatBuffers has no absent vector element, map
+/// key or map value, so the object API has no form for one.
+fn refuse_optional(ty: &v1::Type, qualified: &str, what: &str) -> Result<(), GenerateError> {
+    if ty.optional {
+        return refuse(format!(
+            "`{qualified}` reaches {what} that is optional, which FlatBuffers cannot represent: \
+             only a table field may be absent"
+        ));
+    }
+    Ok(())
+}
+
 fn not_converted(qualified: &str, kind: &str) -> String {
     format!("`{qualified}` reaches {kind}, which the codec module does not convert yet")
 }
@@ -1518,6 +1697,7 @@ fn copy_rule() -> Rule {
         unpack: "{}".to_string(),
         plain: true,
         nullable: false,
+        vector: false,
     }
 }
 
@@ -1528,6 +1708,7 @@ fn string_rule() -> Rule {
         unpack: "{} as string".to_string(),
         plain: true,
         nullable: false,
+        vector: false,
     }
 }
 
@@ -1538,6 +1719,7 @@ fn bytes_rule(spelled: &str) -> Rule {
         unpack: format!("Uint8Array.from({{}}) as {spelled}"),
         plain: false,
         nullable: false,
+        vector: true,
     }
 }
 
@@ -1588,13 +1770,68 @@ fn parenthesized(spelled: String) -> String {
     }
 }
 
+/// The names `flatc --ts` 25.12.19 escapes with a trailing `_`, from the
+/// keyword list of its TypeScript generator, `src/idl_gen_ts.cpp`. The check
+/// runs on the lower camel case name, so `my_class` is `myClass` and is not
+/// escaped.
+const FLATC_TS_KEYWORDS: [&str; 47] = [
+    "arguments",
+    "as",
+    "break",
+    "case",
+    "catch",
+    "class",
+    "const",
+    "continue",
+    "debugger",
+    "default",
+    "delete",
+    "do",
+    "else",
+    "enum",
+    "export",
+    "extends",
+    "false",
+    "finally",
+    "for",
+    "function",
+    "if",
+    "implements",
+    "import",
+    "in",
+    "instanceof",
+    "interface",
+    "let",
+    "new",
+    "null",
+    "package",
+    "private",
+    "protected",
+    "public",
+    "return",
+    "static",
+    "super",
+    "switch",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typeof",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
+];
+
 /// The name `flatc --ts` gives a field's member. The `.fbs` field is
 /// `ridl_ir::name::snake_case` of the declared name, and `flatc` writes it in
 /// lower camel case: each `_` is dropped and the character after it is upper
-/// case; every other character is kept, digits included.
+/// case; every other character is kept, digits included. A name in
+/// [`FLATC_TS_KEYWORDS`] gets a trailing `_`, as `flatc` writes it.
 fn accessor(declared: &str) -> String {
     let snake = ridl_ir::name::snake_case(declared);
-    let mut out = String::with_capacity(snake.len());
+    let mut out = String::with_capacity(snake.len() + 1);
     let mut upper = false;
     for c in snake.chars() {
         if c == '_' {
@@ -1605,6 +1842,9 @@ fn accessor(declared: &str) -> String {
         } else {
             out.push(c);
         }
+    }
+    if FLATC_TS_KEYWORDS.contains(&out.as_str()) {
+        out.push('_');
     }
     out
 }
@@ -1670,6 +1910,16 @@ mod tests {
             ("HTTPServer", "httpServer"),
             ("MAX_RPM", "maxRpm"),
             ("sensor2Value", "sensor2Value"),
+            // A TypeScript keyword gets the `_` that `flatc` appends; a
+            // name that camel-cases to a keyword is one, and `eval`,
+            // `object` and `toString` are not on `flatc`'s list.
+            ("default", "default_"),
+            ("new", "new_"),
+            ("class", "class_"),
+            ("myClass", "myClass"),
+            ("eval", "eval"),
+            ("object", "object"),
+            ("toString", "toString"),
         ] {
             assert_eq!(accessor(declared), expected, "{declared}");
         }

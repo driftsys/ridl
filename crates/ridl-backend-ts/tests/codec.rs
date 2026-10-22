@@ -57,19 +57,23 @@ fn rust_fixture(file_name: &str) -> v2::Package {
 
 fn refusal(model: &v1::Model) -> String {
     match generate_codec(model, "base") {
-        Ok(generated) => panic!("the model must be refused, got:\n{}", generated.source),
+        Ok(Some(generated)) => panic!("the model must be refused, got:\n{}", generated.source),
+        Ok(None) => panic!("the model must be refused, got no file"),
         Err(GenerateError::Unrepresentable(message)) => message,
     }
 }
 
+/// The source of the codec module of `model`, which must generate one.
+fn module(model: &v1::Model, base: &str) -> String {
+    generate_codec(model, base)
+        .expect("the codec module generates")
+        .expect("the package has a payload type")
+        .source
+}
+
 #[test]
 fn the_cabin_codec_module() {
-    insta::assert_snapshot!(
-        "cabin",
-        generate_codec(&cabin_model(), "veh.cabin")
-            .expect("cabin's codec module generates")
-            .source
-    );
+    insta::assert_snapshot!("cabin", module(&cabin_model(), "veh.cabin"));
 }
 
 /// The names `<prefix><Name>(` of the functions the source exports.
@@ -124,6 +128,71 @@ fn assert_complete(label: &str, model: &v1::Model, source: &str) {
         roots,
         "{label}: decode"
     );
+    // The bounded roots by declaration index and by tuple index.
+    let projection = model.flatbuffers.as_ref().expect("a projection");
+    let bounded = |root: &v1::FbRoot| matches!(root.bound, Some(v1::fb_root::Bound::MaxSize(_)));
+    let declaration_bounded = |index: u32| {
+        projection
+            .roots
+            .iter()
+            .any(|root| root.tuple.is_none() && root.declaration == index && bounded(root))
+    };
+    let tuple_bounded = |index: u32| {
+        projection
+            .roots
+            .iter()
+            .any(|root| root.tuple == Some(index) && bounded(root))
+    };
+    // The `codec<Name>` constant of a role, or the qualified name of a
+    // payload type with no finite bound, computed from the model the way the
+    // record states it.
+    let constant = |payload: Option<&v1::Payload>, tuple: Option<&v1::TupleRef>| {
+        if let Some(reference) = payload.and_then(|payload| payload.r#type.as_ref()) {
+            if reference.foreign {
+                let foreign = &model.foreign[reference.index as usize];
+                let name = &foreign
+                    .declaration
+                    .as_ref()
+                    .expect("declared")
+                    .name
+                    .as_ref()
+                    .expect("named")
+                    .declared;
+                return if payload.expect("a payload").flatbuffers_max_size.is_some() {
+                    Ok(format!(
+                        "codec{}{name}",
+                        ridl_ir::name::pascal_case(&foreign.package.replace('.', "_"))
+                    ))
+                } else {
+                    Err(format!("{}.{name}", foreign.package))
+                };
+            }
+            let name = &model.declarations[reference.index as usize]
+                .name
+                .as_ref()
+                .expect("named")
+                .declared;
+            return if declaration_bounded(reference.index) {
+                Ok(format!("codec{name}"))
+            } else {
+                Err(format!("{}.{name}", reference.package))
+            };
+        }
+        let tuple = tuple.expect("a named payload or a tuple");
+        let name = &model.tuples[tuple.index as usize]
+            .name
+            .as_ref()
+            .expect("named")
+            .rust;
+        if tuple_bounded(tuple.index) {
+            Ok(format!("codec{name}"))
+        } else {
+            Err(format!(
+                "{}.{name}",
+                model.scope.as_ref().expect("a scope").package
+            ))
+        }
+    };
     for interface in &model.interfaces {
         let Some(v1::interface::Identity::Declared(_)) = interface.identity else {
             continue;
@@ -141,12 +210,71 @@ fn assert_complete(label: &str, model: &v1::Model, source: &str) {
                 v1::Kind::Fixed => "fixed",
                 v1::Kind::Unspecified => panic!("{label}: an interaction has a kind"),
             };
+            use v1::interaction::Shape;
+            let roles: Vec<(&str, Result<String, String>)> = match &interaction.shape {
+                Some(Shape::Signal(signal)) => {
+                    vec![("payload", constant(signal.payload.as_ref(), None))]
+                }
+                Some(Shape::Event(event)) => {
+                    vec![("payload", constant(event.payload.as_ref(), None))]
+                }
+                Some(Shape::Fixed(fixed)) => {
+                    vec![("payload", constant(fixed.named.as_ref(), None))]
+                }
+                Some(Shape::Command(command)) => vec![(
+                    "request",
+                    constant(command.request.as_ref(), command.request_tuple.as_ref()),
+                )],
+                Some(Shape::Query(query)) => {
+                    let mut roles = vec![(
+                        "request",
+                        constant(query.request.as_ref(), query.request_tuple.as_ref()),
+                    )];
+                    let fallible = matches!(
+                        query.reply.as_ref().and_then(|reply| reply.kind.as_ref()),
+                        Some(v1::reply::Kind::Fallible(_))
+                    );
+                    // A fallible `T | E` reply has no reply role.
+                    if query.reply_payload.is_some() || query.reply_tuple.is_some() || !fallible {
+                        roles.push((
+                            "reply",
+                            constant(query.reply_payload.as_ref(), query.reply_tuple.as_ref()),
+                        ));
+                    }
+                    roles
+                }
+                None => panic!("{label}: an interaction has a shape"),
+            };
             let name = &interaction.name.as_ref().expect("named").declared;
-            let line = format!(
-                "{name}: {{ iface: {}, ord: {}, kind: \"{kind}\"",
+            let entry = format!(
+                "  {name}: {{ iface: {}, ord: {}, kind: \"{kind}\"",
                 interface.number, slot.ordinal
             );
-            assert!(source.contains(&line), "{label}: no `{line}` in:\n{source}");
+            let unbounded = roles
+                .iter()
+                .find_map(|(_, constant)| constant.as_ref().err());
+            match unbounded {
+                Some(qualified) => {
+                    let line = format!(
+                        "  // {name} has no entry: {qualified} has no finite FlatBuffers bound\n"
+                    );
+                    assert!(source.contains(&line), "{label}: no `{line}` in:\n{source}");
+                    assert!(
+                        !source.contains(&entry),
+                        "{label}: an entry for `{name}` in:\n{source}"
+                    );
+                }
+                None => {
+                    let roles: Vec<String> = roles
+                        .iter()
+                        .map(|(role, constant)| {
+                            format!("{role}: {}", constant.as_ref().expect("bounded"))
+                        })
+                        .collect();
+                    let line = format!("{entry}, {} }},\n", roles.join(", "));
+                    assert!(source.contains(&line), "{label}: no `{line}` in:\n{source}");
+                }
+            }
         }
     }
     assert!(!source.contains("field_1"), "{label}: a positional name");
@@ -155,9 +283,7 @@ fn assert_complete(label: &str, model: &v1::Model, source: &str) {
 #[test]
 fn every_bounded_root_has_a_codec_and_every_live_interaction_an_entry() {
     let model = cabin_model();
-    let source = generate_codec(&model, "veh.cabin")
-        .expect("cabin's codec module generates")
-        .source;
+    let source = module(&model, "veh.cabin");
     assert_complete("examples/cabin", &model, &source);
 }
 
@@ -277,13 +403,15 @@ fn common_model() -> v1::Model {
     let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codec");
     let output = ridlc::compile_workspace(&mut db, &entry)
         .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
-    // TYPL-406 (`missing-docs`), RIDL-406 (an info on `SensorReading.timestamp`)
-    // and RIDL-150 (the payload ceiling `bounds` is above, which the codecs
-    // do not enforce) are the diagnostics the fixture draws.
+    // TYPL-406 (`missing-docs`), RIDL-406 (an info on `SensorReading.timestamp`),
+    // RIDL-150 (the payload ceiling `bounds` and `note` are above, which the
+    // codecs do not enforce), TYPL-116 (the bound of `Free` is above the
+    // advised limit) and RIDL-414 (an info on the cohesion of `Sensors`) are
+    // the diagnostics the fixture draws.
     assert!(
         output.diagnostics.iter().all(|diagnostic| matches!(
             diagnostic.code.as_str(),
-            "TYPL-406" | "RIDL-406" | "RIDL-150"
+            "TYPL-406" | "RIDL-406" | "RIDL-150" | "TYPL-116" | "RIDL-414"
         )),
         "the fixture must compile with no error, got: {:?}",
         output.diagnostics,
@@ -331,9 +459,7 @@ fn induced_name(model: &v1::Model, member: &str, segment: &str) -> String {
 #[test]
 fn the_common_codec_module() {
     let model = common_model();
-    let source = generate_codec(&model, "veh.common")
-        .expect("the fixture's codec module generates")
-        .source;
+    let source = module(&model, "veh.common");
     insta::assert_snapshot!("common", source);
     // The union packs by the arm's declared name and the `flatc` member.
     assert!(
@@ -427,14 +553,10 @@ fn the_common_codec_module() {
 #[test]
 fn every_bounded_root_of_the_fixture_has_a_codec_and_every_live_interaction_an_entry() {
     let model = common_model();
-    let source = generate_codec(&model, "veh.common")
-        .expect("generates")
-        .source;
+    let source = module(&model, "veh.common");
     assert_complete("tests/fixtures/codec", &model, &source);
     let model = codegen::lower(&rust_fixture("interaction_face.ridl"), &[]);
-    let source = generate_codec(&model, "face.demo")
-        .expect("generates")
-        .source;
+    let source = module(&model, "face.demo");
     assert_complete("interaction_face.ridl", &model, &source);
 }
 
@@ -442,9 +564,7 @@ fn every_bounded_root_of_the_fixture_has_a_codec_and_every_live_interaction_an_e
 /// to the type `<base>.ts` imports from the foreign module.
 #[test]
 fn a_foreign_named_scalar_converts_by_assertion() {
-    let source = generate_codec(&common_model(), "veh.common")
-        .expect("generates")
-        .source;
+    let source = module(&common_model(), "veh.common");
     assert!(
         source.contains("import type * as ridl_std from \"./ridl.std.js\";"),
         "{source}"
@@ -463,9 +583,7 @@ fn a_foreign_named_scalar_converts_by_assertion() {
 /// package's own codec module.
 #[test]
 fn a_foreign_scalar_payload_uses_the_foreign_codec_module() {
-    let source = generate_codec(&common_model(), "veh.common")
-        .expect("generates")
-        .source;
+    let source = module(&common_model(), "veh.common");
     assert!(
         source.contains("import * as ridl_std_codec from \"./ridl.std.codec.js\";"),
         "{source}"
@@ -585,9 +703,7 @@ fn a_foreign_struct_payload_type_is_refused() {
 /// export its type. It stays in `PAYLOAD_TYPES`, which equals the wasm list.
 #[test]
 fn an_internal_payload_root_is_skipped() {
-    let source = generate_codec(&common_model(), "veh.common")
-        .expect("generates")
-        .source;
+    let source = module(&common_model(), "veh.common");
     assert!(
         source.contains("  \"veh.common.RawWheelFrame\",\n"),
         "{source}"
@@ -612,4 +728,230 @@ fn an_internal_interaction_payload_is_refused() {
         refusal(&model),
         "`Sensors.latest` has the payload type `veh.common.SensorReading`, which is internal; `<base>.ts` does not export it, so the codec module cannot name it"
     );
+}
+
+/// An interface named after an export of the module is refused, with both
+/// names.
+#[test]
+fn an_interface_named_as_a_reserved_name_is_refused() {
+    for reserved in ["RULES", "PayloadCodec", "fb", "ridl_std_codec"] {
+        let mut model = common_model();
+        let interface = model
+            .interfaces
+            .iter_mut()
+            .find(|interface| {
+                matches!(&interface.identity, Some(v1::interface::Identity::Declared(name)) if name.declared == "Sensors")
+            })
+            .expect("Sensors");
+        interface.identity = Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: reserved.to_string(),
+            ..Default::default()
+        }));
+        assert_eq!(
+            refusal(&model),
+            format!(
+                "`{reserved}` in package `veh.common` collides with `{reserved}`, which the codec module also declares"
+            )
+        );
+    }
+}
+
+/// Sets the payload of `Sensors.<member>`, a signal or an event, to a
+/// foreign named scalar `<package>.<name>` with a finite bound.
+fn set_foreign_scalar_payload(model: &mut v1::Model, member: &str, package: &str, name: &str) {
+    let index = model.foreign.len() as u32;
+    model.foreign.push(v1::ForeignDeclaration {
+        package: package.to_string(),
+        declaration: Some(v1::Declaration {
+            name: Some(v1::Spellings {
+                declared: name.to_string(),
+                ..Default::default()
+            }),
+            visibility: v1::Visibility::Public as i32,
+            kind: Some(v1::declaration::Kind::Scalar(v1::Scalar::default())),
+            ..Default::default()
+        }),
+    });
+    let reference = v1::TypeRef {
+        reference: format!("{package}.{name}"),
+        resolved: true,
+        package: package.to_string(),
+        foreign: true,
+        index,
+        kind: v1::DeclKind::Unspecified as i32,
+    };
+    let interface = model.interfaces.iter_mut().find(|interface| {
+        matches!(&interface.identity, Some(v1::interface::Identity::Declared(name)) if name.declared == "Sensors")
+    }).expect("Sensors");
+    let slot = interface
+        .slots
+        .iter_mut()
+        .find(|slot| {
+            matches!(&slot.occupant, Some(v1::interaction_slot::Occupant::Interaction(interaction))
+                if interaction.name.as_ref().is_some_and(|name| name.declared == member))
+        })
+        .expect("the member");
+    let Some(v1::interaction_slot::Occupant::Interaction(interaction)) = &mut slot.occupant else {
+        panic!("an interaction");
+    };
+    let payload = match &mut interaction.shape {
+        Some(v1::interaction::Shape::Signal(signal)) => signal.payload.as_mut(),
+        Some(v1::interaction::Shape::Event(event)) => event.payload.as_mut(),
+        _ => panic!("a signal or an event"),
+    }
+    .expect("a payload");
+    payload.r#type = Some(reference);
+    payload.flatbuffers_max_size = Some(16);
+}
+
+/// Two foreign payload types whose `codec<Package><Name>` constants spell
+/// the same are refused, with both names.
+#[test]
+fn two_foreign_payload_types_that_spell_one_constant_are_refused() {
+    let mut model = common_model();
+    set_foreign_scalar_payload(&mut model, "latest", "a.b", "C");
+    set_foreign_scalar_payload(&mut model, "result", "a", "BC");
+    assert_eq!(
+        refusal(&model),
+        "`a.BC` in package `veh.common` collides with `a.b.C`, which the codec module also declares"
+    );
+}
+
+/// A local payload type whose `codec<Name>` constant spells a foreign one is
+/// refused, with both names.
+#[test]
+fn a_local_payload_type_that_spells_a_foreign_constant_is_refused() {
+    let mut model = common_model();
+    // `Sensors.profile` names `ridl.std.Name`, whose constant is
+    // `codecRidlStdName`.
+    declaration(&mut model, "SensorReading")
+        .name
+        .as_mut()
+        .expect("named")
+        .declared = "RidlStdName".to_string();
+    assert_eq!(
+        refusal(&model),
+        "`ridl.std.Name` in package `veh.common` collides with `RidlStdName`, which the codec module also declares"
+    );
+}
+
+/// A package with no payload type gets no codec module: `ridl build` writes
+/// no file for it.
+#[test]
+fn a_package_without_a_payload_type_has_no_codec_module() {
+    let output = ridlc::compile(
+        "only.ridl",
+        "package only\n\n/// A limit.\nconst LIMIT : integer = 6\n",
+    );
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity != ridl_core::diag::Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    let model = codegen::lower(&output.package, &[]);
+    assert!(
+        generate_codec(&model, "only").expect("generates").is_none(),
+        "a package with no payload type has no codec module"
+    );
+}
+
+/// The conversions the record's table states, over the fixture's `Extras`
+/// and `Pick`: a 64-bit integer is a `bigint`, bytes are read back as a
+/// `Uint8Array`, a boxed arm is
+/// unboxed, an array of structs or enums is converted element by element,
+/// an optional vector packs as `[]` when absent and reads as present, and a
+/// field named after a TypeScript keyword is read through `flatc`'s `_`.
+#[test]
+fn the_extras_and_pick_conversions() {
+    let source = module(&common_model(), "veh.common");
+    for line in [
+        "function packExtrasWide(value: { big: bigint; sparse: readonly t.Speed[] }): fb.ExtrasWideT {",
+        "  tuple.field2 = [...value.sparse];",
+        "  object.blob = Array.from(value.blob);",
+        "    blob: Uint8Array.from(object.blob) as Uint8Array,",
+        "  object.readings = value.readings.map((element) => packSensorReading(element));",
+        "    readings: object.readings.map((element) => unpackSensorReading(element)),",
+        "  object.gears = value.gears.map((element) => BigInt(element));",
+        "    gears: object.gears.map((element) => Number(element) as t.GearPosition),",
+        "  object.maybe = value.maybe === undefined ? [] : [...value.maybe];",
+        "    maybe: object.maybe.map((element) => element as t.Speed),",
+        "  object.tag = value.tag === undefined ? [] : Array.from(value.tag);",
+        "    tag: Uint8Array.from(object.tag) as Uint8Array,",
+        "  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = key; entry.value = value; return entry; });",
+        "    notes: object.notes.map((entry) => [entry.key as ridl_std.Label, entry.value as ridl_std.Name] as const),",
+        "  object.default_ = value.default;",
+        "    new: object.new_ as t.Counter,",
+        "  object.class_ = value.class;",
+        "      return new fb.PickT(fb.PickUnion.speed, new fb.PickSpeedBoxT(value.value));",
+        "      return { kind: \"speed\", value: (object.value as fb.PickSpeedBoxT).value as t.Speed };",
+        "      return new fb.PickT(fb.PickUnion.gear, new fb.PickGearBoxT(BigInt(value.value)));",
+        "      return { kind: \"gear\", value: Number((object.value as fb.PickGearBoxT).value) as t.GearPosition };",
+    ] {
+        assert!(source.contains(line), "no `{line}` in:\n{source}");
+    }
+    assert!(!source.contains("if (object.maybe !== null)"), "{source}");
+}
+
+/// A `codec<Name>` constant is declared only for a payload type an interface
+/// entry names; a foreign one is always named by an entry.
+#[test]
+fn only_the_constants_an_entry_names_are_declared() {
+    let source = module(&common_model(), "veh.common");
+    for name in [
+        "SpeedLimitPayload",
+        "GearPosition",
+        "WarningFlags",
+        "SensorFault",
+    ] {
+        assert!(
+            !source.contains(&format!("const codec{name}:")),
+            "`codec{name}` in:\n{source}"
+        );
+        assert!(
+            source.contains(&format!("export function encode{name}(")),
+            "{source}"
+        );
+    }
+    assert!(
+        source.contains("const codecSetting: PayloadCodec<t.Setting>"),
+        "{source}"
+    );
+}
+
+/// An optional array element, map key or map value is refused, as the
+/// generated Rust codec refuses it: FlatBuffers has no absent element.
+#[test]
+fn an_optional_element_key_or_value_is_refused() {
+    let mut model = common_model();
+    let Some(v1::r#type::Kind::Array(array)) = &mut field(&mut model, "SensorBounds", 1).kind
+    else {
+        panic!("`SensorBounds.readings` is an array");
+    };
+    array.element.as_mut().expect("an element").optional = true;
+    assert_eq!(
+        refusal(&model),
+        "`veh.common.SensorBounds` reaches an array element that is optional, which FlatBuffers cannot represent: only a table field may be absent"
+    );
+    for (position, what) in [(0, "a map key"), (1, "a map value")] {
+        let mut model = common_model();
+        let Some(v1::r#type::Kind::Map(map)) = &mut field(&mut model, "SensorBounds", 3).kind
+        else {
+            panic!("`SensorBounds.meta` is a map");
+        };
+        let ty = if position == 0 {
+            map.key.as_mut()
+        } else {
+            map.value.as_mut()
+        };
+        ty.expect("typed").optional = true;
+        assert_eq!(
+            refusal(&model),
+            format!(
+                "`veh.common.SensorBounds` reaches {what} that is optional, which FlatBuffers cannot represent: only a table field may be absent"
+            )
+        );
+    }
 }

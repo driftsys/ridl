@@ -452,6 +452,35 @@ Deno.test("typeId frees the name buffer", async () => {
   codec.typeId("a");
   assertEquals(global(instance, "frees"), before + 1);
   assertEquals(global(instance, "freeLen"), 1);
+  assertEquals(global(instance, "freePtr"), global(instance, "allocPtr"));
+});
+
+Deno.test("typeId writes the whole name, in UTF-8", async () => {
+  const { codec, instance } = await counted();
+  assertEquals(codec.typeId("ab"), 2);
+  assertEquals(global(instance, "allocLen"), 2);
+  assertEquals(global(instance, "freeLen"), 2);
+  // One character, two bytes: the buffer is the encoded length, not the
+  // string length.
+  assertEquals(codec.typeId("é"), 3);
+  assertEquals(global(instance, "allocLen"), 2);
+  assertEquals(global(instance, "freeLen"), 2);
+  assertEquals(global(instance, "freePtr"), global(instance, "allocPtr"));
+});
+
+Deno.test("typeId throws CodecError when the name buffer cannot be allocated", async () => {
+  const codec = await loadCodec(fixtureBytes({ allocFailsFor: 2 }), options);
+  assertEquals(codec.typeId("a"), 0);
+  const error = assertThrows(() => codec.typeId("ab"), CodecError);
+  assertEquals(error.exportName, "ridl_alloc");
+});
+
+Deno.test("typeId frees the name buffer when ridl_type_id traps", async () => {
+  const { codec, instance } = await counted(options, { typeIdTraps: true });
+  const before = global(instance, "frees");
+  assertThrows(() => codec.typeId("a"), WebAssembly.RuntimeError);
+  assertEquals(global(instance, "frees"), before + 1);
+  assertEquals(global(instance, "freePtr"), global(instance, "allocPtr"));
 });
 
 Deno.test("typeId of an empty name throws UnknownPayloadType and allocates nothing", async () => {

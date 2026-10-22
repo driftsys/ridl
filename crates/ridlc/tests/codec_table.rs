@@ -259,3 +259,105 @@ fn an_implied_wasm_without_flatbuffers_is_refused_with_the_implied_wording() {
     );
     assert!(!out.join("__ridl_wasm.rs").exists());
 }
+
+/// A written `wasm = true` beside `codec = true` keeps the written wording
+/// when `encodings` does not name `flatbuffers`: the module is not implied.
+#[test]
+fn a_written_wasm_without_flatbuffers_keeps_the_written_wording() {
+    let manifest = cabin_manifest().replace(
+        "encodings = [\"flatbuffers\", \"proto3\"]",
+        "encodings = [\"proto3\"]",
+    );
+    assert!(manifest.contains("wasm = true"), "{manifest}");
+    let work = tempfile::tempdir().expect("a temp dir is created");
+    let (run, out) = build_cabin(work.path(), &format!("{manifest}{CODEC_TABLE}"));
+    let messages: Vec<&str> = run
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error)
+        .map(|diagnostic| diagnostic.message.as_str())
+        .collect();
+    assert!(
+        messages.contains(
+            &"`[backend.rust] wasm = true` needs `encodings` to name `flatbuffers`, because the \
+              `wasm` module checks FlatBuffers payloads"
+        ),
+        "{messages:?}"
+    );
+    assert!(!out.join("__ridl_wasm.rs").exists());
+}
+
+/// Writes a one-package workspace with `codec = true` whose one source is
+/// `source`, builds it with the TypeScript emit, and returns the output
+/// directory.
+fn build_only(work: &Path, source: &str) -> std::path::PathBuf {
+    let src = work.join("src");
+    let out = work.join("out");
+    std::fs::create_dir_all(&src).expect("the source directory is created");
+    std::fs::write(
+        src.join("ridl.toml"),
+        "[package]\nname = \"only\"\nversion = \"1.0.0\"\n\n[backend.rust]\n\
+         encodings = [\"flatbuffers\"]\n\n[backend.typescript]\ncodec = true\n",
+    )
+    .expect("the manifest is written");
+    std::fs::write(src.join("only.ridl"), source).expect("the source is written");
+    let run =
+        ridlc::run_build(&src, &out, &[Emit::TypeScript], false.into()).expect("the build runs");
+    assert_clean(&run);
+    out
+}
+
+/// A package that names a `ridl.std` type as a field only gets `ridl.std.ts`
+/// and no `ridl.std.codec.ts`: no codec module imports one.
+#[test]
+fn a_std_type_used_as_a_field_writes_no_std_codec_file() {
+    let work = tempfile::tempdir().expect("a temp dir is created");
+    let out = build_only(
+        work.path(),
+        "package only\n\n/// A tag.\nstruct Tag {\n  /// The label.\n  label : Label\n}\n\n\
+         /// Tags.\ninterface Tags {\n  /// The tag.\n  event tag : Tag @[100ms..1s]\n}\n",
+    );
+    assert!(out.join("only.ts").exists());
+    assert!(out.join("only.codec.ts").exists());
+    assert!(out.join("ridl.std.ts").exists());
+    assert!(
+        !out.join("ridl.std.codec.ts").exists(),
+        "no codec module imports ridl.std's"
+    );
+}
+
+/// A package with no payload type gets no codec file.
+#[test]
+fn a_package_with_only_a_constant_writes_no_codec_file() {
+    let work = tempfile::tempdir().expect("a temp dir is created");
+    let out = build_only(
+        work.path(),
+        "package only\n\n/// A limit.\nconst LIMIT : integer = 6\n",
+    );
+    assert!(out.join("only.ts").exists());
+    assert!(!out.join("only.codec.ts").exists());
+}
+
+/// A payload type that is a `ridl.std` scalar makes its package's codec
+/// module import `ridl.std.codec.ts`, which is then written.
+#[test]
+fn a_std_payload_type_writes_the_std_codec_file() {
+    let fixture =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../ridl-backend-ts/tests/fixtures/codec");
+    let work = tempfile::tempdir().expect("a temp dir is created");
+    let out = work.path().join("out");
+    let run = ridlc::run_build(&fixture, &out, &[Emit::TypeScript], false.into())
+        .expect("the build runs");
+    assert_clean(&run);
+    let codec = std::fs::read_to_string(out.join("veh.common.codec.ts")).expect("the codec file");
+    assert!(
+        codec.contains("import * as ridl_std_codec from \"./ridl.std.codec.js\";"),
+        "{codec}"
+    );
+    let std_codec =
+        std::fs::read_to_string(out.join("ridl.std.codec.ts")).expect("the std codec file");
+    assert!(
+        std_codec.contains("export function encodeName("),
+        "{std_codec}"
+    );
+}

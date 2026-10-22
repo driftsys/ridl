@@ -9,9 +9,10 @@
 // - ridl_verify returns -1 for a type_id of 2 or more, 1 for a length of 0,
 //   and otherwise the value of byte 0 of the buffer (type_id 0).
 //   For type_id 1 it returns 0.
-// - ridl_type_id counts in the same sequence as ridl_free. It returns -1 for a
-//   name length other than 1, 0 for the name "a", 1 for the name "b", and -1
-//   for any other name. The option `badTypeId` makes it return -5 for "b".
+// - ridl_type_id counts in the same sequence as ridl_free. It returns 0 for
+//   the name "a", 1 for the name "b", 2 for the name "ab", 3 for the name "é"
+//   (two bytes of UTF-8), and -1 for any other name. The option `badTypeId`
+//   makes it return -5 for "b"; `typeIdTraps` makes every call trap.
 
 import wabt from "wabt";
 
@@ -24,6 +25,8 @@ export interface FixtureOptions {
   typeId?: boolean;
   /** Make ridl_type_id return -5, an invalid code, for the name "b". */
   badTypeId?: boolean;
+  /** Make ridl_type_id trap with `unreachable` on every call. Default false. */
+  typeIdTraps?: boolean;
   /** Export memory. Default true. */
   memory?: boolean;
   /** Export ridl_free as a global, not a function. Default false. */
@@ -115,6 +118,15 @@ function wat(o: FixtureOptions): string {
     withTypeId
       ? `(func (export "ridl_type_id") (param $p i32) (param $l i32) (result i32)
     (global.set $ops (i32.add (global.get $ops) (i32.const 1)))
+    ${o.typeIdTraps ? "unreachable" : ""}
+    (if (i32.eq (local.get $l) (i32.const 2))
+      (then
+        ;; "ab" is 0x61 0x62, read little-endian; "é" is 0xC3 0xA9.
+        (if (i32.eq (i32.load16_u (local.get $p)) (i32.const 0x6261))
+          (then (return (i32.const 2))))
+        (if (i32.eq (i32.load16_u (local.get $p)) (i32.const 0xa9c3))
+          (then (return (i32.const 3))))
+        (return (i32.const -1))))
     (if (i32.ne (local.get $l) (i32.const 1)) (then (return (i32.const -1))))
     (if (i32.eq (i32.load8_u (local.get $p)) (i32.const 0x61))
       (then (return (i32.const 0))))

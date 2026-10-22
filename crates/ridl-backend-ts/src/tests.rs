@@ -2174,9 +2174,10 @@ fn the_codec_option_is_accepted_and_other_keys_are_refused() {
 }
 
 /// With `codec = true` the backend writes `<base>.codec.ts` after
-/// `<base>.ts`, under the same generated marker; with `codec = false` it
-/// writes `<base>.ts` alone. The package is the Rust backend's
-/// `interaction_face.ridl` fixture, compiled as one file.
+/// `<base>.ts`, under the same generated marker and header, then
+/// `/* eslint-disable */`; with `codec = false` it writes `<base>.ts` alone.
+/// The package is the Rust backend's `interaction_face.ridl` fixture,
+/// compiled as one file.
 #[test]
 fn the_codec_option_writes_a_second_file() {
     use ridl_ir::codegen::Backend as _;
@@ -2190,6 +2191,7 @@ fn the_codec_option_writes_a_second_file() {
             model: Some(ridl_ir::codegen::lower(&package, &[])),
             artifact_base: "face.demo".to_string(),
             generated_marker: ridl_ir::codegen::generated_marker(Some("face.demo")),
+            header: "Copyright: the example.\nLicense: none.".to_string(),
             options: vec![v1::BackendOption {
                 key: "codec".to_string(),
                 value: value.to_string(),
@@ -2217,11 +2219,19 @@ fn the_codec_option_writes_a_second_file() {
     let Some(v1::generated_file::Content::Text(codec)) = &response.files[1].content else {
         panic!("the codec file is text");
     };
+    let marker = ridl_ir::codegen::generated_marker(Some("face.demo"));
+    let preamble = ridl_ir::codegen::comment_preamble(
+        &marker,
+        "Copyright: the example.\nLicense: none.",
+        "//",
+    );
     assert!(
-        codec.starts_with(&format!(
-            "// {}\n",
-            ridl_ir::codegen::generated_marker(Some("face.demo"))
-        )),
+        preamble.starts_with(&format!("// {marker}\n"))
+            && preamble.contains("// Copyright: the example.\n// License: none.\n"),
+        "the preamble is the marker then the header: {preamble}"
+    );
+    assert!(
+        codec.starts_with(&format!("{preamble}/* eslint-disable */\n\nimport ")),
         "got:\n{codec}"
     );
     assert!(codec.contains("export const Cabin = {"), "got:\n{codec}");

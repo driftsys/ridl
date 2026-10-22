@@ -1,6 +1,6 @@
 ---
 source: crates/ridl-backend-ts/tests/codec.rs
-expression: "generate_codec(&cabin_model(),\n\"veh.cabin\").expect(\"cabin's codec module generates\").source"
+expression: "module(&cabin_model(), \"veh.cabin\")"
 ---
 import * as flatbuffers from "flatbuffers";
 import type { PayloadCodec } from "@driftsys/ridl-runtime";
@@ -149,8 +149,6 @@ const codecWindow: PayloadCodec<t.Window> = { type: "veh.cabin.Window", encode: 
 const codecAverage: PayloadCodec<t.Average> = { type: "veh.cabin.Average", encode: encodeAverage, decode: decodeAverage };
 const codecHealth: PayloadCodec<t.Health> = { type: "veh.cabin.Health", encode: encodeHealth, decode: decodeHealth };
 const codecWarning: PayloadCodec<t.Warning> = { type: "veh.cabin.Warning", encode: encodeWarning, decode: decodeWarning };
-const codecSubsystems: PayloadCodec<t.Subsystems> = { type: "veh.cabin.Subsystems", encode: encodeSubsystems, decode: decodeSubsystems };
-const codecDiagnostic: PayloadCodec<t.Diagnostic> = { type: "veh.cabin.Diagnostic", encode: encodeDiagnostic, decode: decodeDiagnostic };
 
 /** The members of interface `Cabin`, interface number `1`. */
 export const Cabin = {

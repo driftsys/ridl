@@ -104,6 +104,63 @@ Deno.test("an absent required enum field throws on decode", () => {
   );
 });
 
+Deno.test("a bytes field, arrays of structs and enums, a 64-bit integer and a keyword field round-trip", () => {
+  const extras: t.Extras = {
+    wide: { big: 1099511627776n, sparse: [speed(1), speed(2)] },
+    blob: Uint8Array.from([1, 2, 3]),
+    readings: [{ value: speed(5), timestamp: 9n as ridl_std.Timestamp }],
+    gears: [t.GearPosition.REVERSE, t.GearPosition.PARK],
+    maybe: [speed(7)],
+    tag: Uint8Array.from([255]),
+    notes: [[label("k"), name("v")]],
+    default: 1 as t.Counter,
+    new: 2 as t.Counter,
+    class: 3 as t.Counter,
+  };
+  const decoded = codec.decodeExtras(codec.encodeExtras(extras));
+  assert.deepEqual(decoded, extras);
+  assert.ok(decoded.blob instanceof Uint8Array);
+  assert.equal(typeof decoded.wide.big, "bigint");
+});
+
+Deno.test("an absent optional vector reads back as the empty vector", () => {
+  // The object API cannot leave a vector out of the buffer, so absent and
+  // empty encode the same (the record's known gaps).
+  const absent: t.Extras = {
+    wide: { big: 0n, sparse: [] },
+    blob: new Uint8Array(),
+    readings: [],
+    gears: [],
+    default: 0 as t.Counter,
+    new: 0 as t.Counter,
+    class: 0 as t.Counter,
+  };
+  const decoded = codec.decodeExtras(codec.encodeExtras(absent));
+  assert.deepEqual(decoded.maybe, []);
+  assert.deepEqual(decoded.tag, new Uint8Array());
+  assert.deepEqual(decoded.notes, []);
+  const empty: t.Extras = { ...absent, maybe: [], tag: new Uint8Array(), notes: [] };
+  assert.deepEqual(codec.decodeExtras(codec.encodeExtras(empty)), decoded);
+});
+
+Deno.test("a union with a scalar arm and an enum arm round-trips through each arm", () => {
+  for (
+    const pick of [
+      { kind: "speed", value: speed(3) },
+      { kind: "gear", value: t.GearPosition.NEUTRAL },
+      { kind: "reading", value: { value: speed(1), timestamp: 2n as ridl_std.Timestamp } },
+    ] as t.Pick[]
+  ) {
+    assert.deepEqual(codec.decodePick(codec.encodePick(pick)), pick);
+  }
+});
+
+Deno.test("an unbounded payload has no entry and a fallible query has no reply", () => {
+  assert.equal("note" in codec.Sensors, false);
+  assert.equal(codec.Sensors.fetch.request.type, "veh.common.Counter");
+  assert.equal("reply" in codec.Sensors.fetch, false);
+});
+
 Deno.test("a foreign scalar payload goes through its own package's codec", () => {
   const value = name("ann");
   assert.equal(codec.Sensors.profile.request.type, "ridl.std.Name");

@@ -886,8 +886,9 @@ fn a_workspace_of_two_units_refuses_the_option() {
         .collect();
     assert!(
         messages.contains(
-            &"`[backend.rust] wasm = true` writes the catalog hash of one unit; this build has 2 \
-              units and no root package. Build one package whose manifest is its own root, or set \
+            &"`[backend.rust] wasm = true`, or `codec = true` on another backend table, which \
+              implies it, writes the catalog hash of one unit; this build has 2 units and no \
+              root package. Build one package whose manifest is its own root, or set \
               `wasm = true` in the build of one member"
         ),
         "{messages:?}"

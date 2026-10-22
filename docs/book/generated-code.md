@@ -289,8 +289,9 @@ as `just compat-check` does.
 
 ### The `wasm-exports` feature
 
-With `[backend.rust] wasm = true` in the manifest, the generated `Cargo.toml`
-declares a third feature, `wasm-exports`, off by default, which turns `std` on.
+With `[backend.rust] wasm = true` in the manifest, or `codec = true` on another
+backend table, which implies it, the generated `Cargo.toml` declares a third
+feature, `wasm-exports`, off by default, which turns `std` on.
 It compiles the exports of the crate's `wasm` module when the target is
 `wasm32`, and nothing on any other target. The manifest declares no crate type,
 so a Rust program that depends on the crate links no export. The WebAssembly
@@ -306,8 +307,10 @@ cargo rustc --release --target wasm32-unknown-unknown --crate-type cdylib \
 The module exports `ridl_alloc`, `ridl_free`, `ridl_catalog_hash`,
 `ridl_verify` and `ridl_type_id`. `ridl_type_id` returns the type id of a payload
 type named by its qualified name. It returns -1 for a name the list does not hold,
-an empty name, bytes that are not UTF-8, and a pointer and length that do not
-describe readable memory.
+an empty name, bytes that are not UTF-8, a null pointer with a length, a length
+above `isize::MAX`, and a pointer and length whose sum overflows the address
+space. A range past the end of the module's memory traps, as any read past it
+does.
 
 The three variables are the recommended size settings, and `cargo` reads them
 from the environment. The module is
@@ -391,15 +394,29 @@ flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs
 
 The codec file imports `flatc`'s output from `./<package path>.js` (for
 `veh.cabin`, `./veh/cabin.js`), so `flatc`'s `-o` is the directory of the
-TypeScript files. The converters cover every typl kind: a union by its `kind`
-and `value`, a tuple by its named fields, an array, a map by its entries, an
-optional field (absent when the buffer leaves it out), and an induced tuple
-of an interaction, which the codec file exports as an `interface`. A named
-scalar or an enum set of another package converts by a type assertion, and a
-payload type of another package that is one goes through that package's own
-codec file; a payload type that reaches a struct, a union or an enum of
-another package is refused with an error that names both. An internal payload
-type has no `encode`/`decode`, because `<base>.ts` does not export its type.
+TypeScript files. When a payload type of an interaction is a named scalar or
+an enum set of another package (`ridl.std.Name` as the request of a query, for
+example), the codec file goes through that package's own codec file,
+`<package>.codec.ts`, which the build writes beside it; `flatc` then runs on
+that package's schema too, in the same directory:
+
+```sh
+flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs <out-dir>/<package>.fbs
+```
+
+A package with no payload type, and `ridl.std` when no codec file imports its
+module, gets no codec file. The converters cover every typl kind: a union by
+its `kind` and `value`, a tuple by its named fields, an array, a map by its
+entries, an optional field (absent when the buffer leaves it out; an optional
+array, bytes or map field reads back as empty, because the object API cannot
+leave a vector out of the buffer), and an induced tuple of an interaction,
+which the codec file exports as an `interface`. An optional array element, map
+key or map value is refused, as the Rust codec refuses it. A named scalar or an
+enum set of another package converts by a type assertion, and a payload type of
+another package that is one goes through that package's own codec file; a
+payload type that reaches a struct, a union or an enum of another package is
+refused with an error that names both. An internal payload type has no
+`encode`/`decode`, because `<base>.ts` does not export its type.
 [The codec table design record][codec-table] gives the rules in full.
 
 ## Documentation in the generated code

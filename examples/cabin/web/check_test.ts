@@ -187,25 +187,29 @@ Deno.test("selfTest passes with the cabin codec", () => {
   assert.equal(selfTest(codec), undefined);
 });
 
+/** The id the fakes give `veh.cabin.Temperature`: not the real one. */
+const FAKE_ID = 7;
+
 /**
  * A codec whose `verify` gives, for each temperature, the result `judge`
  * returns. It also checks the type name and the type id that the caller
  * passes.
  */
 function fakeCodec(judge: (value: number) => VerifyResult): Codec {
-  // Set when the caller has looked the id up by name, so that a caller that
-  // passes a constant id fails even when the constant is 5.
+  // The id is 7, which is not the id of any cabin payload type in the wasm
+  // module (0 to 7 are taken, and Temperature is 5), so a caller that passes
+  // a constant id, or the id of another type, fails here.
   let resolved = false;
   return {
     catalogHash: new Uint8Array(32),
     typeId(name) {
       assert.equal(name, "veh.cabin.Temperature");
       resolved = true;
-      return 5;
+      return FAKE_ID;
     },
     verify(typeId, bytes) {
       assert.ok(resolved, "verify is called before typeId");
-      assert.equal(typeId, 5);
+      assert.equal(typeId, FAKE_ID);
       return judge(decodeTemperature(bytes));
     },
   };
@@ -257,12 +261,16 @@ Deno.test("verifyPayload gives the cause of each rejection", () => {
     verifyPayload(codec, encode(20).slice(0, 4)),
     "the codec found the payload malformed (code 1)",
   );
-  // A codec that reports the other kinds, to check the remaining strings.
+  // A codec that reports the other kinds, to check the remaining strings,
+  // and that gives the id its `verify` must receive.
   const fake = (result: VerifyResult) =>
     ({
       catalogHash: new Uint8Array(32),
-      typeId: () => temperatureId,
-      verify: () => result,
+      typeId: () => FAKE_ID,
+      verify: (typeId: number) => {
+        assert.equal(typeId, FAKE_ID);
+        return result;
+      },
     }) as Codec;
   assert.equal(
     verifyPayload(fake({ ok: false, kind: "rule", code: 3 }), new Uint8Array()),
@@ -273,7 +281,7 @@ Deno.test("verifyPayload gives the cause of each rejection", () => {
       fake({ ok: false, kind: "unknown-type", code: -1 }),
       new Uint8Array(),
     ),
-    `the codec does not know type id ${temperatureId}`,
+    `the codec does not know type id ${FAKE_ID}`,
   );
 });
 

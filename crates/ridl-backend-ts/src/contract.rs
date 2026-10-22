@@ -78,10 +78,12 @@ impl codegen::Backend for Backend<'_> {
         )];
         if codec {
             match generate_codec(model, &request.artifact_base) {
-                Ok(codec) => files.push(codegen::text_file(
+                Ok(Some(codec)) => files.push(codegen::text_file(
                     format!("{}.codec.ts", request.artifact_base),
                     format!("{preamble}/* eslint-disable */\n\n{}", codec.source),
                 )),
+                // A package with no payload type has no codec file.
+                Ok(None) => {}
                 Err(GenerateError::Unrepresentable(message)) => return refusal(message),
             }
         }

@@ -932,7 +932,7 @@ Ten emit targets exist today:
 | `ir-json`         | `<package>.ir.json`              | the lowered IR v2 as exact-decimal JSON                                       |
 | `ir-text`         | `<package>.ir.txtpb`             | the lowered IR v2 as prototext                                                |
 | `ir-binary`       | `<package>.ir.binpb`             | the lowered IR v2 as protobuf binary                                          |
-| `typescript`      | `<package>.ts`                   | idiomatic TypeScript source                                                   |
+| `typescript`      | `<package>.ts`                   | idiomatic TypeScript source, and `<package>.codec.ts` under `codec = true`    |
 | `proto`           | `<package>.proto`                | the proto3 schema — types and the ordinals                                    |
 | `flatbuffers`     | `<package>.fbs`                  | the FlatBuffers schema — types and the ordinals                               |
 | `codegen-model`   | `<package>.codegen.json`         | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON      |
@@ -943,7 +943,9 @@ One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by
 package path and does not compile without the standard package beside it.
 The command above therefore writes `out/ridl.std.rs` as well, and
-`--emit typescript` writes `ridl.std.ts` the same way. The three IR targets
+`--emit typescript` writes `ridl.std.ts` the same way (and `ridl.std.codec.ts`
+under `[backend.typescript] codec = true`, when a codec module imports it). The
+three IR targets
 are an exception: a direct IR dump records the packages the workspace
 declares, and `ridl.std` ships with the compiler. `catalog` is the other
 exception: `ridl.std` declares no interface, so no `ridl.std.catalog.binfb`

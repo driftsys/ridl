@@ -234,7 +234,8 @@ member; rsdl is the apex.
                          which reads the catalog, the interaction table and
                          the decode function from the generated codec module
                          against it: the program decodes the server's
-                         temperature payloads with the flatc code and fails
+                         temperature payloads through the generated codec
+                         module and fails
                          unless every value is inside [-40..85], every
                          received value is 1 to 63 steps ahead of the previous
                          one on the ring of the 126 values (85 is followed by

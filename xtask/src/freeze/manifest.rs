@@ -6,22 +6,23 @@
 use ridl_core::manifest::KNOWN_KEYS;
 use std::path::Path;
 
-/// `<section>.<key> <type>` for every entry of `KNOWN_KEYS`; a key of the top
-/// level is written without a section. A key whose value type changes
-/// therefore removes a line. The `codec` key of a backend table carries a note
-/// that it implies `backend.rust.wasm`, so a change to that rule removes its
-/// line too.
+/// `<section>.<key> <type>` for every entry of `KNOWN_KEYS`, followed by
+/// ` (<note>)` for a key that carries a note; a key of the top level is
+/// written without a section. A key whose value type or note changes
+/// therefore removes a line: the `codec` key's note says that it implies
+/// `backend.rust.wasm`, and it is a field of `KNOWN_KEYS`, so the note is
+/// part of the key the way the type is.
 pub fn dump(_root: &Path) -> Result<Vec<String>, String> {
     let mut lines = Vec::new();
     for (section, keys) in KNOWN_KEYS {
-        for (key, value_type) in *keys {
+        for (key, value_type, note) in *keys {
             let mut line = if section.is_empty() {
                 format!("{key} {value_type}")
             } else {
                 format!("{section}.{key} {value_type}")
             };
-            if line == format!("backend.*.{} boolean", ridl_core::manifest::CODEC_KEY) {
-                line.push_str(" (implies backend.rust.wasm)");
+            if !note.is_empty() {
+                line.push_str(&format!(" ({note})"));
             }
             lines.push(line);
         }

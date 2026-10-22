@@ -5,7 +5,8 @@
 //! unmangled symbols: two packages that each emitted `ridl_alloc` would not
 //! link. `ridlc` calls [`generate_wasm_module`] once with the lowered model of
 //! every package of the crate, and writes the result beside the crate root
-//! when `[backend.rust] wasm = true`.
+//! when `[backend.rust] wasm = true`, or when `codec = true` on another
+//! backend table implies it.
 //!
 //! The exports are `ridl_alloc`, `ridl_free`, `ridl_catalog_hash`,
 //! `ridl_type_id` and `ridl_verify`, and no other. They are compiled only for
