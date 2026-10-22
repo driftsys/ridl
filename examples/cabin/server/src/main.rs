@@ -6,7 +6,7 @@
 //! flushed: `port <n>`, and `hash <64 lowercase hexadecimal digits>`, the
 //! catalog hash of the generated crate, which a client passes to `attach`. It
 //! serves every connection on its own thread with its own attachment to one
-//! shared runtime. A second thread publishes a new temperature every 10 ms,
+//! shared runtime. A publisher thread publishes a new temperature every 10 ms,
 //! which steps through the whole range of the type, from -40 to 85. The
 //! process exits with status 0 when its standard input reaches the end.
 
@@ -53,16 +53,24 @@ fn main() {
 
     let mut publisher = cabin::Publisher::new(rt.lock().expect("an unpoisoned runtime").attach());
     thread::spawn(move || {
-        let mut value = LOWEST;
-        loop {
-            let temperature =
-                Temperature::new(value).expect("the value is inside Temperature's range");
-            publisher
-                .temperature(temperature)
-                .expect("publish temperature");
-            publisher.commit();
-            value = if value == HIGHEST { LOWEST } else { value + 1 };
-            thread::sleep(PERIOD);
+        // A panic here would leave the server serving stale samples, and a
+        // client would fail on a timeout instead of on the cause, so it ends
+        // the process. A panic on a connection's thread does not.
+        let publishing = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut value = LOWEST;
+            loop {
+                let temperature =
+                    Temperature::new(value).expect("the value is inside Temperature's range");
+                publisher
+                    .temperature(temperature)
+                    .expect("publish temperature");
+                publisher.commit();
+                value = if value == HIGHEST { LOWEST } else { value + 1 };
+                thread::sleep(PERIOD);
+            }
+        }));
+        if publishing.is_err() {
+            std::process::exit(1);
         }
     });
 
