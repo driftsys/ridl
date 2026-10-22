@@ -11,14 +11,15 @@
 // coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
 // expect every step. It exits with status 0 only if every value is inside
 // [-40..85], every received value is 1 to 63 steps ahead of the previous one
-// on the ring of the 126 values (85 is followed by -40), 85 is seen, and -40
-// is seen after 85 (the -40 of the first sample does not count). Otherwise it
-// exits with a non-zero status and names the cause and the stage. One
-// deadline, counted from the start of the program, covers every stage
-// including the exit of the server. A server that exits or a connection that
-// closes before the end of the check fails the program at once. It prints the
-// number of samples it received, the number of wraps (a step from 85 to -40
-// or across it), whether 85 was seen, and whether -40 was seen after 85.
+// on the ring of the 126 values (85 is followed by -40; a repeated value is
+// ignored), 85 is reached by such a step, and -40 is seen after 85 (the first
+// sample counts for neither bound). Otherwise it exits with a non-zero status
+// and names the cause and the stage. One deadline, counted from the start of
+// the program, covers every stage including the exit of the server. A server
+// that exits or a connection that closes before the end of the check fails the
+// program at once. It prints the number of samples it received, the number of
+// wraps (a step from 85 to -40 or across it), whether 85 was seen, and whether
+// -40 was seen after 85.
 
 import * as flatbuffers from "flatbuffers";
 import { connect, Kind } from "../../../packages/ridl-transport-ws/mod.ts";
@@ -38,18 +39,27 @@ const RING = HIGHEST - LOWEST + 1;
  * ticks are skipped and a step larger than one is normal. A forward step of s
  * and a backward step of RING - s give the same difference modulo RING, so only
  * steps up to half the ring can be told apart from a backward move: 63 is
- * RING / 2. A step of 0 (the same value again) is not forward and is rejected.
+ * RING / 2. A gap of more than 63 publications between two received values
+ * therefore fails a correct server. The measured period of the server is about
+ * 10 ms (the 7 ms sleep overshoots), so that is a gap of about 630 ms. A step
+ * of 0 is a value sent twice, which the transport can do; it is ignored.
  *
- * Seeing 85 and then -40 is what rejects a decoder that is off by a constant c
- * and a server that wraps to another value. A decoder off by c shows the value
- * that the server publishes as 85 as 85 + c, so either the range check fails
- * or 85 is never seen. A server that wraps to a value other than -40 never
- * shows -40 after 85; the -40 of the first sample does not count, because it
- * comes before any wrap.
+ * Seeing 85 reached by a step, and then -40, is what rejects a server that
+ * wraps to another value, a server that alternates the bounds, and a decoder
+ * that is off by a constant c. The -40 of the first sample does not count,
+ * because it comes before any wrap, and neither does an 85 in the first
+ * sample, because no step has checked it. With c < 0 the range check fails, or
+ * 85 is never seen. With c > 0 the range check fails when 85 + c is received,
+ * and otherwise -40 is never seen after 85.
  */
 const MAX_STEP = RING / 2;
 
-/** The time from the start of the program to its end, in milliseconds. */
+/**
+ * The time from the start of the program to its end, in milliseconds. A correct
+ * run needs a sample of 85 and then one of -40, each taken from a window of one
+ * value, so the time varies with the phase of the tick. The worst pass measured
+ * at the default tick of 20 ms is about 12 s; 30 s leaves margin over it.
+ */
 const DEADLINE_MS = 30_000;
 
 // The (interface, ordinal) pair of every interaction the program reads, and
@@ -152,6 +162,8 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
       return;
     }
     if (previous !== undefined) {
+      // The same value again is a repeated send, not progress.
+      if (value === previous) return;
       const step = (value - previous + RING) % RING;
       if (step < 1 || step > MAX_STEP) {
         reject(
@@ -161,10 +173,11 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
         return;
       }
       if (value < previous) wraps++;
+      // Only a value reached by a checked step counts as seen.
+      if (value === HIGHEST) sawHighest = true;
+      if (value === LOWEST && sawHighest) sawLowestAfter = true;
     }
     previous = value;
-    if (value === LOWEST && sawHighest) sawLowestAfter = true;
-    if (value === HIGHEST) sawHighest = true;
     if (sawLowestAfter) enough();
   },
 });

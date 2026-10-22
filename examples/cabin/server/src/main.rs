@@ -13,8 +13,9 @@
 //!
 //! The Deno program of `examples/cabin/web` passes only if every value is
 //! inside [-40..85], every received value is 1 to 63 steps ahead of the
-//! previous one on the ring of the 126 values (85 is followed by -40), 85 is
-//! seen, and -40 is seen after 85.
+//! previous one on the ring of the 126 values (85 is followed by -40; a
+//! repeated value is ignored), 85 is reached by such a step, and -40 is seen
+//! after 85 (the first sample counts for neither bound).
 
 use std::io::{self, Write};
 use std::net::TcpListener;
@@ -39,11 +40,11 @@ const LOWEST: i64 = -40;
 const HIGHEST: i64 = 85;
 
 /// The time between two publications. The transport sends the newest value of
-/// a signal once per poll tick (20 ms by default). 7 ms does not divide 20 ms,
-/// so the value that each tick samples moves by 2 ms of phase in every cycle of
-/// 882 ms (126 values), and every value, the bounds included, is eventually
-/// received. A period that divides the tick would sample the same values in
-/// every cycle and could never receive the others.
+/// a signal once per poll tick (20 ms by default), so a client receives only
+/// the values that the ticks sample. 7 ms is not a divisor of 20 ms, so the
+/// sampled phase differs from one cycle of 126 values to the next, and the
+/// bounds are sampled within a few cycles. The real period is longer than 7 ms
+/// because a sleep overshoots, and that overshoot also varies between cycles.
 const PERIOD: Duration = Duration::from_millis(7);
 
 fn main() {
