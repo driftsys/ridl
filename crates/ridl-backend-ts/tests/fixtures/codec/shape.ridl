@@ -1,0 +1,29 @@
+package veh.common
+
+/// An enum with no zero member, so a field of it is `= null` in the `.fbs`.
+enum Mode {
+  LOW = 1
+  HIGH = 2
+}
+
+/// A struct whose one field reads as absent when the buffer leaves it out.
+struct Setting {
+  mode: Mode
+}
+
+/// A union whose arm names differ from their snake spelling on the `fb` side.
+union Outcome {
+  okReading : SensorReading
+  errFault  : SensorFault
+}
+
+interface Sensors {
+  signal latest : SensorReading @100ms
+  reserved legacyRaw
+  event result : SensorResult @[100ms..1s]
+  event bounds : SensorBounds @[100ms..1s]
+  command setLimit(limit: Speed, actual: Speed) @[..50ms]
+  query profile(name: Name): DriverProfile @[..100ms]
+  query span(): (min: Speed, max: Speed) @[..100ms]
+  signal setting : Setting @1s
+}

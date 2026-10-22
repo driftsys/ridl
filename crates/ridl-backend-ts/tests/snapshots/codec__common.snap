@@ -1,0 +1,491 @@
+---
+source: crates/ridl-backend-ts/tests/codec.rs
+expression: source
+---
+import * as flatbuffers from "flatbuffers";
+import type { PayloadCodec } from "@driftsys/ridl-runtime";
+import type * as t from "./veh.common.js";
+import type * as ridl_std from "./ridl.std.js";
+// `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
+// of this file.
+import * as fb from "./veh/common.js";
+import * as ridl_std_codec from "./ridl.std.codec.js";
+
+/** Throws for a required field the buffer leaves out. */
+function absent(type: string, field: string): never {
+  throw new RangeError(`field ${field} of ${type} is absent`);
+}
+
+/** The name of the catalog unit this package belongs to. */
+export const CATALOG_NAME = "veh.common";
+/** The hash of the catalog unit, which the wasm module carries. */
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([223, 225, 162, 41, 146, 95, 47, 169, 16, 82, 155, 70, 113, 176, 17, 27, 62, 152, 110, 51, 140, 54, 126, 37, 56, 145, 179, 58, 123, 215, 182, 63]);
+/** The qualified names of the payload types of this package, which name the wasm type ids. */
+export const PAYLOAD_TYPES = [
+  "veh.common.Counter",
+  "veh.common.DriverProfile",
+  "veh.common.Gain",
+  "veh.common.GearPosition",
+  "veh.common.Mode",
+  "veh.common.Outcome",
+  "veh.common.RPM",
+  "veh.common.Ratio",
+  "veh.common.RawWheelFrame",
+  "veh.common.SensorBounds",
+  "veh.common.SensorFault",
+  "veh.common.SensorReading",
+  "veh.common.SensorResult",
+  "veh.common.SensorsSetLimitParams",
+  "veh.common.SensorsSpanParams",
+  "veh.common.SensorsSpanReply",
+  "veh.common.Setting",
+  "veh.common.Speed",
+  "veh.common.SpeedLimitPayload",
+  "veh.common.Temperature",
+  "veh.common.Warning",
+  "veh.common.WarningFlags",
+] as const;
+/** The text of each rule code the wasm module reports, rule code n at index n - 2. */
+export const RULES = ["length", "pattern", "range", "step", "unique", "variant"] as const;
+
+/** The induced tuple of `Sensors.setLimit`. */
+export interface SensorsSetLimitParams {
+  limit: t.Speed;
+  actual: t.Speed;
+}
+
+/** The induced tuple of `Sensors.span`. */
+export interface SensorsSpanParams {}
+
+/** The induced tuple of `Sensors.span`. */
+export interface SensorsSpanReply {
+  min: t.Speed;
+  max: t.Speed;
+}
+
+/** Encodes a `veh.common.Speed` payload. */
+export function encodeSpeed(value: t.Speed): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.SpeedBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Speed` payload the codec has verified. */
+export function decodeSpeed(bytes: Uint8Array): t.Speed {
+  return fb.SpeedBox.getRootAsSpeedBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Speed;
+}
+
+/** Encodes a `veh.common.Temperature` payload. */
+export function encodeTemperature(value: t.Temperature): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.TemperatureBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Temperature` payload the codec has verified. */
+export function decodeTemperature(bytes: Uint8Array): t.Temperature {
+  return fb.TemperatureBox.getRootAsTemperatureBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Temperature;
+}
+
+/** Encodes a `veh.common.RPM` payload. */
+export function encodeRPM(value: t.RPM): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.RPMBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.RPM` payload the codec has verified. */
+export function decodeRPM(bytes: Uint8Array): t.RPM {
+  return fb.RPMBox.getRootAsRPMBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.RPM;
+}
+
+/** Encodes a `veh.common.Ratio` payload. */
+export function encodeRatio(value: t.Ratio): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.RatioBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Ratio` payload the codec has verified. */
+export function decodeRatio(bytes: Uint8Array): t.Ratio {
+  return fb.RatioBox.getRootAsRatioBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Ratio;
+}
+
+/** Encodes a `veh.common.Counter` payload. */
+export function encodeCounter(value: t.Counter): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.CounterBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Counter` payload the codec has verified. */
+export function decodeCounter(bytes: Uint8Array): t.Counter {
+  return fb.CounterBox.getRootAsCounterBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Counter;
+}
+
+/** Encodes a `veh.common.Gain` payload. */
+export function encodeGain(value: t.Gain): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.GainBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Gain` payload the codec has verified. */
+export function decodeGain(bytes: Uint8Array): t.Gain {
+  return fb.GainBox.getRootAsGainBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Gain;
+}
+
+/** Encodes a `veh.common.GearPosition` payload. */
+export function encodeGearPosition(value: t.GearPosition): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.GearPositionBoxT(BigInt(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.GearPosition` payload the codec has verified. */
+export function decodeGearPosition(bytes: Uint8Array): t.GearPosition {
+  return Number(fb.GearPositionBox.getRootAsGearPositionBox(new flatbuffers.ByteBuffer(bytes)).unpack().value) as t.GearPosition;
+}
+
+/** Encodes a `veh.common.Warning` payload. */
+export function encodeWarning(value: t.Warning): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.WarningBoxT(BigInt(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Warning` payload the codec has verified. */
+export function decodeWarning(bytes: Uint8Array): t.Warning {
+  return Number(fb.WarningBox.getRootAsWarningBox(new flatbuffers.ByteBuffer(bytes)).unpack().value) as t.Warning;
+}
+
+/** Encodes a `veh.common.WarningFlags` payload. */
+export function encodeWarningFlags(value: t.WarningFlags): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.WarningFlagsBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.WarningFlags` payload the codec has verified. */
+export function decodeWarningFlags(bytes: Uint8Array): t.WarningFlags {
+  return fb.WarningFlagsBox.getRootAsWarningFlagsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.WarningFlags;
+}
+
+/** Encodes a `veh.common.SpeedLimitPayload` payload. */
+export function encodeSpeedLimitPayload(value: t.SpeedLimitPayload): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packSpeedLimitPayload(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.SpeedLimitPayload` payload the codec has verified. */
+export function decodeSpeedLimitPayload(bytes: Uint8Array): t.SpeedLimitPayload {
+  return unpackSpeedLimitPayload(fb.SpeedLimitPayload.getRootAsSpeedLimitPayload(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packSpeedLimitPayload(value: t.SpeedLimitPayload): fb.SpeedLimitPayloadT {
+  const object = new fb.SpeedLimitPayloadT();
+  object.limit = value.limit;
+  object.actual = value.actual;
+  return object;
+}
+function unpackSpeedLimitPayload(object: fb.SpeedLimitPayloadT): t.SpeedLimitPayload {
+  return {
+    limit: object.limit as t.Speed,
+    actual: object.actual as t.Speed,
+  };
+}
+
+/** Encodes a `veh.common.DriverProfile` payload. */
+export function encodeDriverProfile(value: t.DriverProfile): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packDriverProfile(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.DriverProfile` payload the codec has verified. */
+export function decodeDriverProfile(bytes: Uint8Array): t.DriverProfile {
+  return unpackDriverProfile(fb.DriverProfile.getRootAsDriverProfile(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packDriverProfile(value: t.DriverProfile): fb.DriverProfileT {
+  const object = new fb.DriverProfileT();
+  object.name = value.name;
+  object.speed = value.speed;
+  object.override = value.override === undefined ? null : value.override;
+  object.gears = value.gears;
+  return object;
+}
+function unpackDriverProfile(object: fb.DriverProfileT): t.DriverProfile {
+  const result: t.DriverProfile = {
+    name: object.name as ridl_std.Name,
+    speed: object.speed as t.Speed,
+    gears: object.gears,
+  };
+  if (object.override !== null) result.override = object.override as t.Speed;
+  return result;
+}
+
+/** Encodes a `veh.common.SensorBounds` payload. */
+export function encodeSensorBounds(value: t.SensorBounds): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packSensorBounds(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.SensorBounds` payload the codec has verified. */
+export function decodeSensorBounds(bytes: Uint8Array): t.SensorBounds {
+  return unpackSensorBounds(fb.SensorBounds.getRootAsSensorBounds(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packSensorBounds(value: t.SensorBounds): fb.SensorBoundsT {
+  const object = new fb.SensorBoundsT();
+  object.range = packSensorBoundsRange(value.range);
+  object.readings = [...value.readings];
+  object.labels = [...value.labels];
+  object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = key; entry.value = value; return entry; });
+  return object;
+}
+function unpackSensorBounds(object: fb.SensorBoundsT): t.SensorBounds {
+  return {
+    range: object.range === null ? absent("veh.common.SensorBounds", "range") : unpackSensorBoundsRange(object.range),
+    readings: object.readings.map((element) => element as t.Speed),
+    labels: object.labels.map((element) => element as ridl_std.Label),
+    meta: object.meta.map((entry) => [entry.key as ridl_std.Label, entry.value as ridl_std.Name] as const),
+  };
+}
+
+/** Encodes a `veh.common.SensorResult` payload. */
+export function encodeSensorResult(value: t.SensorResult): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packSensorResult(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.SensorResult` payload the codec has verified. */
+export function decodeSensorResult(bytes: Uint8Array): t.SensorResult {
+  return unpackSensorResult(fb.SensorResult.getRootAsSensorResult(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packSensorResult(value: t.SensorResult): fb.SensorResultT {
+  switch (value.kind) {
+    case "ok":
+      return new fb.SensorResultT(fb.SensorResultUnion.ok, packSensorReading(value.value));
+    case "err":
+      return new fb.SensorResultT(fb.SensorResultUnion.err, packSensorFault(value.value));
+  }
+}
+function unpackSensorResult(object: fb.SensorResultT): t.SensorResult {
+  switch (object.valueType) {
+    case fb.SensorResultUnion.ok:
+      return { kind: "ok", value: unpackSensorReading(object.value as fb.SensorReadingT) };
+    case fb.SensorResultUnion.err:
+      return { kind: "err", value: unpackSensorFault(object.value as fb.SensorFaultT) };
+    default:
+      throw new RangeError("union veh.common.SensorResult carries no arm");
+  }
+}
+
+/** Encodes a `veh.common.SensorReading` payload. */
+export function encodeSensorReading(value: t.SensorReading): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packSensorReading(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.SensorReading` payload the codec has verified. */
+export function decodeSensorReading(bytes: Uint8Array): t.SensorReading {
+  return unpackSensorReading(fb.SensorReading.getRootAsSensorReading(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packSensorReading(value: t.SensorReading): fb.SensorReadingT {
+  const object = new fb.SensorReadingT();
+  object.value = value.value;
+  object.timestamp = value.timestamp;
+  return object;
+}
+function unpackSensorReading(object: fb.SensorReadingT): t.SensorReading {
+  return {
+    value: object.value as t.Speed,
+    timestamp: object.timestamp as ridl_std.Timestamp,
+  };
+}
+
+/** Encodes a `veh.common.SensorFault` payload. */
+export function encodeSensorFault(value: t.SensorFault): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packSensorFault(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.SensorFault` payload the codec has verified. */
+export function decodeSensorFault(bytes: Uint8Array): t.SensorFault {
+  return unpackSensorFault(fb.SensorFault.getRootAsSensorFault(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packSensorFault(value: t.SensorFault): fb.SensorFaultT {
+  const object = new fb.SensorFaultT();
+  object.code = value.code;
+  object.message = value.message;
+  return object;
+}
+function unpackSensorFault(object: fb.SensorFaultT): t.SensorFault {
+  return {
+    code: object.code as t.Counter,
+    message: object.message as ridl_std.Message,
+  };
+}
+
+/** Encodes a `veh.common.Mode` payload. */
+export function encodeMode(value: t.Mode): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.ModeBoxT(BigInt(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Mode` payload the codec has verified. */
+export function decodeMode(bytes: Uint8Array): t.Mode {
+  return Number(fb.ModeBox.getRootAsModeBox(new flatbuffers.ByteBuffer(bytes)).unpack().value) as t.Mode;
+}
+
+/** Encodes a `veh.common.Setting` payload. */
+export function encodeSetting(value: t.Setting): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packSetting(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Setting` payload the codec has verified. */
+export function decodeSetting(bytes: Uint8Array): t.Setting {
+  return unpackSetting(fb.Setting.getRootAsSetting(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packSetting(value: t.Setting): fb.SettingT {
+  const object = new fb.SettingT();
+  object.mode = BigInt(value.mode);
+  return object;
+}
+function unpackSetting(object: fb.SettingT): t.Setting {
+  return {
+    mode: object.mode === null ? absent("veh.common.Setting", "mode") : Number(object.mode) as t.Mode,
+  };
+}
+
+/** Encodes a `veh.common.Outcome` payload. */
+export function encodeOutcome(value: t.Outcome): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packOutcome(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Outcome` payload the codec has verified. */
+export function decodeOutcome(bytes: Uint8Array): t.Outcome {
+  return unpackOutcome(fb.Outcome.getRootAsOutcome(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packOutcome(value: t.Outcome): fb.OutcomeT {
+  switch (value.kind) {
+    case "okReading":
+      return new fb.OutcomeT(fb.OutcomeUnion.ok_reading, packSensorReading(value.value));
+    case "errFault":
+      return new fb.OutcomeT(fb.OutcomeUnion.err_fault, packSensorFault(value.value));
+  }
+}
+function unpackOutcome(object: fb.OutcomeT): t.Outcome {
+  switch (object.valueType) {
+    case fb.OutcomeUnion.ok_reading:
+      return { kind: "okReading", value: unpackSensorReading(object.value as fb.SensorReadingT) };
+    case fb.OutcomeUnion.err_fault:
+      return { kind: "errFault", value: unpackSensorFault(object.value as fb.SensorFaultT) };
+    default:
+      throw new RangeError("union veh.common.Outcome carries no arm");
+  }
+}
+
+function packSensorBoundsRange(value: { min: t.Speed; max: t.Speed }): fb.SensorBoundsRangeT {
+  const tuple = new fb.SensorBoundsRangeT();
+  tuple.field1 = value.min;
+  tuple.field2 = value.max;
+  return tuple;
+}
+function unpackSensorBoundsRange(object: fb.SensorBoundsRangeT): { min: t.Speed; max: t.Speed } {
+  return { min: object.field1 as t.Speed, max: object.field2 as t.Speed };
+}
+
+/** Encodes a `veh.common.SensorsSetLimitParams` payload. */
+export function encodeSensorsSetLimitParams(value: SensorsSetLimitParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packSensorsSetLimitParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.SensorsSetLimitParams` payload the codec has verified. */
+export function decodeSensorsSetLimitParams(bytes: Uint8Array): SensorsSetLimitParams {
+  return unpackSensorsSetLimitParams(fb.SensorsSetLimitParams.getRootAsSensorsSetLimitParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packSensorsSetLimitParams(value: SensorsSetLimitParams): fb.SensorsSetLimitParamsT {
+  const tuple = new fb.SensorsSetLimitParamsT();
+  tuple.field1 = value.limit;
+  tuple.field2 = value.actual;
+  return tuple;
+}
+function unpackSensorsSetLimitParams(object: fb.SensorsSetLimitParamsT): SensorsSetLimitParams {
+  return { limit: object.field1 as t.Speed, actual: object.field2 as t.Speed };
+}
+
+/** Encodes a `veh.common.SensorsSpanParams` payload. */
+export function encodeSensorsSpanParams(value: SensorsSpanParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packSensorsSpanParams(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.SensorsSpanParams` payload the codec has verified. */
+export function decodeSensorsSpanParams(bytes: Uint8Array): SensorsSpanParams {
+  return unpackSensorsSpanParams(fb.SensorsSpanParams.getRootAsSensorsSpanParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packSensorsSpanParams(value: SensorsSpanParams): fb.SensorsSpanParamsT {
+  const tuple = new fb.SensorsSpanParamsT();
+  return tuple;
+}
+function unpackSensorsSpanParams(object: fb.SensorsSpanParamsT): SensorsSpanParams {
+  return {};
+}
+
+/** Encodes a `veh.common.SensorsSpanReply` payload. */
+export function encodeSensorsSpanReply(value: SensorsSpanReply): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packSensorsSpanReply(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.SensorsSpanReply` payload the codec has verified. */
+export function decodeSensorsSpanReply(bytes: Uint8Array): SensorsSpanReply {
+  return unpackSensorsSpanReply(fb.SensorsSpanReply.getRootAsSensorsSpanReply(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packSensorsSpanReply(value: SensorsSpanReply): fb.SensorsSpanReplyT {
+  const tuple = new fb.SensorsSpanReplyT();
+  tuple.field1 = value.min;
+  tuple.field2 = value.max;
+  return tuple;
+}
+function unpackSensorsSpanReply(object: fb.SensorsSpanReplyT): SensorsSpanReply {
+  return { min: object.field1 as t.Speed, max: object.field2 as t.Speed };
+}
+
+const codecSpeed: PayloadCodec<t.Speed> = { type: "veh.common.Speed", encode: encodeSpeed, decode: decodeSpeed };
+const codecTemperature: PayloadCodec<t.Temperature> = { type: "veh.common.Temperature", encode: encodeTemperature, decode: decodeTemperature };
+const codecRPM: PayloadCodec<t.RPM> = { type: "veh.common.RPM", encode: encodeRPM, decode: decodeRPM };
+const codecRatio: PayloadCodec<t.Ratio> = { type: "veh.common.Ratio", encode: encodeRatio, decode: decodeRatio };
+const codecCounter: PayloadCodec<t.Counter> = { type: "veh.common.Counter", encode: encodeCounter, decode: decodeCounter };
+const codecGain: PayloadCodec<t.Gain> = { type: "veh.common.Gain", encode: encodeGain, decode: decodeGain };
+const codecGearPosition: PayloadCodec<t.GearPosition> = { type: "veh.common.GearPosition", encode: encodeGearPosition, decode: decodeGearPosition };
+const codecWarning: PayloadCodec<t.Warning> = { type: "veh.common.Warning", encode: encodeWarning, decode: decodeWarning };
+const codecWarningFlags: PayloadCodec<t.WarningFlags> = { type: "veh.common.WarningFlags", encode: encodeWarningFlags, decode: decodeWarningFlags };
+const codecSpeedLimitPayload: PayloadCodec<t.SpeedLimitPayload> = { type: "veh.common.SpeedLimitPayload", encode: encodeSpeedLimitPayload, decode: decodeSpeedLimitPayload };
+const codecDriverProfile: PayloadCodec<t.DriverProfile> = { type: "veh.common.DriverProfile", encode: encodeDriverProfile, decode: decodeDriverProfile };
+const codecSensorBounds: PayloadCodec<t.SensorBounds> = { type: "veh.common.SensorBounds", encode: encodeSensorBounds, decode: decodeSensorBounds };
+const codecSensorResult: PayloadCodec<t.SensorResult> = { type: "veh.common.SensorResult", encode: encodeSensorResult, decode: decodeSensorResult };
+const codecSensorReading: PayloadCodec<t.SensorReading> = { type: "veh.common.SensorReading", encode: encodeSensorReading, decode: decodeSensorReading };
+const codecSensorFault: PayloadCodec<t.SensorFault> = { type: "veh.common.SensorFault", encode: encodeSensorFault, decode: decodeSensorFault };
+const codecMode: PayloadCodec<t.Mode> = { type: "veh.common.Mode", encode: encodeMode, decode: decodeMode };
+const codecSetting: PayloadCodec<t.Setting> = { type: "veh.common.Setting", encode: encodeSetting, decode: decodeSetting };
+const codecOutcome: PayloadCodec<t.Outcome> = { type: "veh.common.Outcome", encode: encodeOutcome, decode: decodeOutcome };
+const codecSensorsSetLimitParams: PayloadCodec<SensorsSetLimitParams> = { type: "veh.common.SensorsSetLimitParams", encode: encodeSensorsSetLimitParams, decode: decodeSensorsSetLimitParams };
+const codecSensorsSpanParams: PayloadCodec<SensorsSpanParams> = { type: "veh.common.SensorsSpanParams", encode: encodeSensorsSpanParams, decode: decodeSensorsSpanParams };
+const codecSensorsSpanReply: PayloadCodec<SensorsSpanReply> = { type: "veh.common.SensorsSpanReply", encode: encodeSensorsSpanReply, decode: decodeSensorsSpanReply };
+const codecRidlStdName: PayloadCodec<ridl_std.Name> = { type: "ridl.std.Name", encode: ridl_std_codec.encodeName, decode: ridl_std_codec.decodeName };
+
+/** The members of interface `Sensors`, interface number `1`. */
+export const Sensors = {
+  iface: 1,
+  latest: { iface: 1, ord: 1, kind: "signal", payload: codecSensorReading },
+  result: { iface: 1, ord: 3, kind: "event", payload: codecSensorResult },
+  bounds: { iface: 1, ord: 4, kind: "event", payload: codecSensorBounds },
+  setLimit: { iface: 1, ord: 5, kind: "command", request: codecSensorsSetLimitParams },
+  profile: { iface: 1, ord: 6, kind: "query", request: codecRidlStdName, reply: codecDriverProfile },
+  span: { iface: 1, ord: 7, kind: "query", request: codecSensorsSpanParams, reply: codecSensorsSpanReply },
+  setting: { iface: 1, ord: 8, kind: "signal", payload: codecSetting },
+} as const;

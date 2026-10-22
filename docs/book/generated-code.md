@@ -391,9 +391,15 @@ flatc --ts --gen-object-api -o <out-dir> <out-dir>/<base>.fbs
 
 The codec file imports `flatc`'s output from `./<package path>.js` (for
 `veh.cabin`, `./veh/cabin.js`), so `flatc`'s `-o` is the directory of the
-TypeScript files. The first version converts named scalars, enums, enum sets
-and structs; a payload type that reaches another kind is refused with an
-error that names it.
+TypeScript files. The converters cover every typl kind: a union by its `kind`
+and `value`, a tuple by its named fields, an array, a map by its entries, an
+optional field (absent when the buffer leaves it out), and an induced tuple
+of an interaction, which the codec file exports as an `interface`. A named
+scalar or an enum set of another package converts by a type assertion, and a
+payload type of another package that is one goes through that package's own
+codec file; a payload type that reaches a struct, a union or an enum of
+another package is refused with an error that names both. An internal payload
+type has no `encode`/`decode`, because `<base>.ts` does not export its type.
 
 ## Documentation in the generated code
 

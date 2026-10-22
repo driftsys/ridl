@@ -3,17 +3,22 @@
 //! The module wraps the object API that `flatc --ts --gen-object-api` writes
 //! for the package's `.fbs` in plain-object functions: one
 //! `encode<Name>(value)` and one `decode<Name>(bytes)` per payload type, which
-//! is every FlatBuffers root of the package with a finite bound. A private
-//! converter pair `pack<Name>` and `unpack<Name>` is written for each struct
-//! a payload type reaches. The module also exports the catalog's name and
-//! hash, the qualified names of the payload types, the text of the rule codes
-//! of the wasm module, and one member table per declared interface.
+//! is every FlatBuffers root of the package with a finite bound, except an
+//! internal one, whose type `<base>.ts` does not export. A private converter
+//! pair `pack<Name>` and `unpack<Name>` is written for each struct, union and
+//! induced tuple a payload type reaches. An induced tuple of an interaction
+//! is exported as an `interface`. The module also exports the catalog's name
+//! and hash, the qualified names of the payload types, the text of the rule
+//! codes of the wasm module, and one member table per declared interface.
 //!
-//! The conversion covers named scalars, enums, enum sets and structs. A
-//! payload type that reaches any other kind is refused with a
-//! [`GenerateError`] that names it.
+//! A named scalar or an enum set of another package converts by a type
+//! assertion, and a payload type of another package that is one goes through
+//! that package's own codec module. A struct, a union or an enum of another
+//! package needs a converter of its own, which the module does not write yet:
+//! a payload type that reaches one is refused with a [`GenerateError`] that
+//! names both.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
 
 use ridl_ir::codegen::v1;
@@ -48,6 +53,45 @@ struct PayloadType<'a> {
     declaration: Option<&'a v1::Declaration>,
 }
 
+/// A declaration a type reference resolves to.
+enum Target<'a> {
+    /// A declaration of this package, with its index.
+    Local(usize, &'a v1::Declaration),
+    /// A declaration of the package named, from `Model.foreign`.
+    Foreign(&'a str, &'a v1::Declaration),
+}
+
+/// The pack and unpack expressions of one type position, with `{}` standing
+/// for the value read.
+struct Rule {
+    pack: String,
+    unpack: String,
+    /// The conversion is a type assertion or nothing: an array of such
+    /// elements is copied, not mapped.
+    plain: bool,
+    /// The `flatc` object API holds the value as `T | null`: a nested table.
+    nullable: bool,
+}
+
+/// One field of a struct or an induced tuple, with its conversion.
+struct RecordField {
+    /// The plain-object property.
+    declared: String,
+    /// The `flatc` member.
+    accessor: String,
+    rule: Rule,
+    optional: bool,
+    /// The slot is `= null` in the `.fbs` while the field is required: an
+    /// enum with no zero member.
+    null_default: bool,
+}
+
+/// A payload type of another package, encoded by that package's codec module.
+struct ForeignPayload {
+    package: String,
+    name: String,
+}
+
 struct Codec<'a> {
     model: &'a v1::Model,
     package: &'a str,
@@ -57,8 +101,17 @@ struct Codec<'a> {
     /// The induced tuples that are roots, by index, with whether each has a
     /// finite bound.
     tuple_bounded: HashMap<usize, bool>,
-    /// The structs a payload type reaches, by index.
+    /// The structs and unions a payload type reaches, by index.
     reached: HashSet<usize>,
+    /// The induced tuples a payload type reaches or is, by index.
+    reached_tuples: HashSet<usize>,
+    /// The payload types of other packages the interfaces name, by the
+    /// `codec<Name>` constant that carries each.
+    foreign_payloads: BTreeMap<String, ForeignPayload>,
+    /// The packages whose types the module names, for the type imports.
+    foreign_types: BTreeSet<String>,
+    /// Whether a converter reads a required field the buffer may leave out.
+    needs_absent: bool,
 }
 
 impl<'a> Codec<'a> {
@@ -109,6 +162,10 @@ impl<'a> Codec<'a> {
             declaration_bounded: HashMap::new(),
             tuple_bounded: HashMap::new(),
             reached: HashSet::new(),
+            reached_tuples: HashSet::new(),
+            foreign_payloads: BTreeMap::new(),
+            foreign_types: BTreeSet::new(),
+            needs_absent: false,
         };
         let roots = model
             .flatbuffers
@@ -127,20 +184,54 @@ impl<'a> Codec<'a> {
                 }
             }
         }
-        for payload in codec.payload_types() {
-            let qualified = codec.qualified(payload.name);
-            if payload
-                .declaration
-                .is_some_and(|declaration| declaration.visibility() == v1::Visibility::Internal)
-            {
-                return refuse(format!(
-                    "`{qualified}` is an internal payload type, which `<base>.ts` does not \
-                     export, so the codec module cannot name it"
-                ));
+        for root in roots {
+            if !matches!(root.bound, Some(v1::fb_root::Bound::MaxSize(_))) {
+                continue;
             }
-            match payload.declaration {
-                Some(declaration) => codec.reach(declaration, &qualified)?,
-                None => return refuse(not_converted(&qualified, "a tuple")),
+            match root.tuple {
+                Some(tuple) => {
+                    let index = tuple as usize;
+                    let Some(induced) = model.tuples.get(index) else {
+                        return refuse(format!(
+                            "malformed codegen model: a root names tuple {index}, which does not \
+                             exist"
+                        ));
+                    };
+                    let qualified = codec.qualified(tuple_name(induced));
+                    codec.reach_tuple(index, &qualified)?;
+                }
+                None => {
+                    let index = root.declaration as usize;
+                    let Some(declaration) = model.declarations.get(index) else {
+                        return refuse(format!(
+                            "malformed codegen model: a root names declaration {index}, which \
+                             does not exist"
+                        ));
+                    };
+                    // An internal root has no codec: `<base>.ts` does not
+                    // export its type, so no signature can name it.
+                    if declaration.visibility() == v1::Visibility::Internal {
+                        continue;
+                    }
+                    let qualified = codec.qualified(declared_name(declaration));
+                    codec.reach_declaration(index, declaration, &qualified)?;
+                }
+            }
+        }
+        for interface in &model.interfaces {
+            let Some(v1::interface::Identity::Declared(spelled)) = &interface.identity else {
+                continue;
+            };
+            for slot in &interface.slots {
+                let Some(v1::interaction_slot::Occupant::Interaction(interaction)) = &slot.occupant
+                else {
+                    continue;
+                };
+                let member = interaction
+                    .name
+                    .as_ref()
+                    .map_or("", |name| name.declared.as_str());
+                codec.roles(interaction, &spelled.declared, member)?;
             }
         }
         Ok(codec)
@@ -181,116 +272,437 @@ impl<'a> Codec<'a> {
         format!("{}.{name}", self.package)
     }
 
-    /// Records the structs `declaration` reaches, and refuses a kind the
-    /// module does not convert. `qualified` names the payload type.
-    fn reach(
+    /// The declaration `reference` names, local or foreign. `qualified`
+    /// names the payload type for the refusal.
+    fn resolve(
+        &self,
+        reference: &v1::TypeRef,
+        qualified: &str,
+    ) -> Result<Target<'a>, GenerateError> {
+        if !reference.resolved {
+            return refuse(format!(
+                "`{qualified}` reaches `{}`, which no package in scope declares",
+                reference.reference
+            ));
+        }
+        let index = reference.index as usize;
+        if reference.foreign {
+            return match self.model.foreign.get(index) {
+                Some(foreign) => match &foreign.declaration {
+                    Some(declaration) => Ok(Target::Foreign(&foreign.package, declaration)),
+                    None => refuse(format!(
+                        "malformed codegen model: foreign declaration {index} has no declaration"
+                    )),
+                },
+                None => refuse(format!(
+                    "malformed codegen model: `{}` names foreign declaration {index}, which does \
+                     not exist",
+                    reference.reference
+                )),
+            };
+        }
+        match self.model.declarations.get(index) {
+            Some(declaration) => Ok(Target::Local(index, declaration)),
+            None => refuse(format!(
+                "malformed codegen model: `{}` names declaration {index}, which does not exist",
+                reference.reference
+            )),
+        }
+    }
+
+    /// Records the converters the local `declaration` needs, and refuses a
+    /// kind the module does not convert. `qualified` names the payload type.
+    fn reach_declaration(
         &mut self,
+        index: usize,
         declaration: &'a v1::Declaration,
         qualified: &str,
     ) -> Result<(), GenerateError> {
         use v1::declaration::Kind;
         match &declaration.kind {
-            Some(Kind::Scalar(scalar)) => {
-                if scalar.class() == v1::ScalarClass::Bytes {
-                    return refuse(not_converted(qualified, "bytes"));
-                }
-                Ok(())
-            }
-            Some(Kind::Enum(_) | Kind::EnumSet(_)) => Ok(()),
-            Some(Kind::Union(_)) => refuse(not_converted(qualified, "a union")),
             Some(Kind::Struct(shape)) => {
-                for field in struct_fields(shape) {
-                    let Some(ty) = field.r#type.as_ref() else {
-                        continue;
-                    };
-                    if ty.optional {
-                        return refuse(not_converted(qualified, "an optional field"));
-                    }
-                    match &ty.kind {
-                        Some(v1::r#type::Kind::Named(reference)) => {
-                            let target = self.local(reference, qualified)?;
-                            if let Some(Kind::Struct(_)) = &target.kind {
-                                let index = reference.index as usize;
-                                if self.reached.insert(index) {
-                                    self.reach(target, qualified)?;
-                                }
-                            } else {
-                                self.reach(target, qualified)?;
-                            }
-                        }
-                        Some(v1::r#type::Kind::Primitive(primitive)) => {
-                            if *primitive == v1::PrimitiveType::Bytes as i32 {
-                                return refuse(not_converted(qualified, "bytes"));
-                            }
-                        }
-                        Some(v1::r#type::Kind::Inline(scalar)) => {
-                            if scalar.class() == v1::ScalarClass::Bytes {
-                                return refuse(not_converted(qualified, "bytes"));
-                            }
-                        }
-                        Some(v1::r#type::Kind::Tuple(_)) => {
-                            return refuse(not_converted(qualified, "a tuple"));
-                        }
-                        Some(v1::r#type::Kind::Array(_)) => {
-                            return refuse(not_converted(qualified, "an array"));
-                        }
-                        Some(v1::r#type::Kind::Map(_)) => {
-                            return refuse(not_converted(qualified, "a map"));
-                        }
-                        Some(v1::r#type::Kind::Stream(_)) | None => {
-                            return refuse(not_converted(qualified, "a stream"));
+                if self.reached.insert(index) {
+                    for field in struct_fields(shape) {
+                        if let Some(ty) = field.r#type.as_ref() {
+                            self.reach_type(ty, qualified)?;
                         }
                     }
                 }
-                self.reached.insert(index_of(self.model, declaration));
                 Ok(())
             }
-            Some(Kind::Constant(_)) | None => Ok(()),
+            Some(Kind::Union(union)) => {
+                if self.reached.insert(index) {
+                    for arm in &union.arms {
+                        if let Some(reference) = arm.r#type.as_ref() {
+                            self.reach_reference(reference, qualified)?;
+                        }
+                    }
+                }
+                Ok(())
+            }
+            Some(Kind::Scalar(_) | Kind::Enum(_) | Kind::EnumSet(_) | Kind::Constant(_)) | None => {
+                Ok(())
+            }
         }
     }
 
-    /// The local declaration `reference` names, or a refusal when it names
-    /// a declaration of another package.
-    fn local(
-        &self,
+    fn reach_reference(
+        &mut self,
         reference: &v1::TypeRef,
         qualified: &str,
-    ) -> Result<&'a v1::Declaration, GenerateError> {
-        if reference.foreign || !reference.resolved {
-            return refuse(not_converted(qualified, "a foreign reference"));
+    ) -> Result<(), GenerateError> {
+        match self.resolve(reference, qualified)? {
+            Target::Local(index, declaration) => {
+                self.reach_declaration(index, declaration, qualified)
+            }
+            Target::Foreign(package, declaration) => match foreign_kind(declaration) {
+                Some(word) => refuse(foreign_refusal(
+                    &format!("`{qualified}` reaches"),
+                    package,
+                    declared_name(declaration),
+                    word,
+                )),
+                None => Ok(()),
+            },
         }
-        match self.model.declarations.get(reference.index as usize) {
-            Some(declaration) => Ok(declaration),
+    }
+
+    fn reach_type(&mut self, ty: &v1::Type, qualified: &str) -> Result<(), GenerateError> {
+        use v1::r#type::Kind;
+        match &ty.kind {
+            Some(Kind::Named(reference)) => self.reach_reference(reference, qualified),
+            Some(Kind::Primitive(_) | Kind::Inline(_)) => Ok(()),
+            Some(Kind::Tuple(tuple)) => self.reach_tuple(tuple.index as usize, qualified),
+            Some(Kind::Array(array)) => match array.element.as_deref() {
+                Some(element) => self.reach_type(element, qualified),
+                None => refuse(format!(
+                    "malformed codegen model: an array of `{qualified}` has no element type"
+                )),
+            },
+            Some(Kind::Map(map)) => match (map.key.as_deref(), map.value.as_deref()) {
+                (Some(key), Some(value)) => {
+                    self.reach_type(key, qualified)?;
+                    self.reach_type(value, qualified)
+                }
+                _ => refuse(format!(
+                    "malformed codegen model: a map of `{qualified}` has no key or value type"
+                )),
+            },
+            Some(Kind::Stream(_)) | None => refuse(not_converted(qualified, "a stream")),
+        }
+    }
+
+    fn reach_tuple(&mut self, index: usize, qualified: &str) -> Result<(), GenerateError> {
+        if !self.reached_tuples.insert(index) {
+            return Ok(());
+        }
+        let Some(tuple) = self.model.tuples.get(index) else {
+            return refuse(format!(
+                "malformed codegen model: `{qualified}` names tuple {index}, which does not exist"
+            ));
+        };
+        for field in &tuple.fields {
+            if let Some(ty) = field.r#type.as_ref() {
+                self.reach_type(ty, qualified)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The `flatc` table of the induced tuple at `index`.
+    fn tuple_table(&self, index: usize) -> Result<&'a v1::FbTable, GenerateError> {
+        let tuple = &self.model.tuples[index];
+        let table = tuple
+            .flatbuffers_table
+            .and_then(|table| self.tables().get(table as usize));
+        match table {
+            Some(table) => Ok(table),
             None => refuse(format!(
-                "malformed codegen model: `{}` names declaration {}, which does not exist",
-                reference.reference, reference.index
+                "malformed codegen model: the induced tuple `{}` has no FlatBuffers table",
+                tuple_name(tuple)
             )),
         }
     }
 
-    fn emit(&self, artifact_base: &str) -> Result<GeneratedTs, GenerateError> {
-        let mut out = String::new();
-        let segments = self.package.replace('.', "/");
-        out.push_str("import * as flatbuffers from \"flatbuffers\";\n");
-        out.push_str("import type { MemberRef, PayloadCodec } from \"@driftsys/ridl-runtime\";\n");
-        let _ = writeln!(out, "import type * as t from \"./{artifact_base}.js\";");
-        out.push_str(
-            "// `flatc --ts --gen-object-api` writes this module when its `-o` is the directory\n\
-             // of this file.\n",
-        );
-        let _ = writeln!(out, "import * as fb from \"./{segments}.js\";");
-        out.push('\n');
+    fn tables(&self) -> &'a [v1::FbTable] {
+        self.model
+            .flatbuffers
+            .as_ref()
+            .map_or(&[][..], |projection| projection.tables.as_slice())
+    }
 
+    /// The table of the struct at `index`, when the projection has one.
+    fn struct_table(&self, index: usize) -> Option<&'a v1::FbTable> {
+        self.tables().iter().find(|table| {
+            matches!(table.source, Some(v1::fb_table::Source::StructDeclaration(i)) if i as usize == index)
+        })
+    }
+
+    /// The TypeScript type of a type position, with the `t.` prefix on a
+    /// named type of this package and the package alias on a foreign one.
+    fn ts_type(&mut self, ty: &v1::Type, qualified: &str) -> Result<String, GenerateError> {
+        use v1::r#type::Kind;
+        match &ty.kind {
+            Some(Kind::Named(reference)) => match self.resolve(reference, qualified)? {
+                Target::Local(_, declaration) => Ok(format!("t.{}", declared_name(declaration))),
+                Target::Foreign(package, declaration) => {
+                    self.foreign_types.insert(package.to_string());
+                    Ok(format!(
+                        "{}.{}",
+                        package_alias(package),
+                        declared_name(declaration)
+                    ))
+                }
+            },
+            Some(Kind::Primitive(primitive)) => Ok(primitive_ts(*primitive).to_string()),
+            Some(Kind::Inline(scalar)) => Ok(scalar_ts(scalar).to_string()),
+            Some(Kind::Tuple(tuple)) => {
+                let Some(induced) = self.model.tuples.get(tuple.index as usize) else {
+                    return refuse(format!(
+                        "malformed codegen model: `{qualified}` names tuple {}, which does not \
+                         exist",
+                        tuple.index
+                    ));
+                };
+                let mut fields = Vec::with_capacity(induced.fields.len());
+                for field in &induced.fields {
+                    let (optional, spelled) = match field.r#type.as_ref() {
+                        Some(ty) => (ty.optional, self.ts_type(ty, qualified)?),
+                        None => (false, "unknown".to_string()),
+                    };
+                    let marker = if optional { "?" } else { "" };
+                    fields.push(format!(
+                        "{}{marker}: {spelled}",
+                        field
+                            .name
+                            .as_ref()
+                            .map_or("", |name| name.declared.as_str())
+                    ));
+                }
+                if fields.is_empty() {
+                    Ok("{}".to_string())
+                } else {
+                    Ok(format!("{{ {} }}", fields.join("; ")))
+                }
+            }
+            Some(Kind::Array(array)) => {
+                let element = match array.element.as_deref() {
+                    Some(element) => self.nested_ts_type(element, qualified)?,
+                    None => "unknown".to_string(),
+                };
+                Ok(format!("readonly {}[]", parenthesized(element)))
+            }
+            Some(Kind::Map(map)) => {
+                let key = match map.key.as_deref() {
+                    Some(key) => self.nested_ts_type(key, qualified)?,
+                    None => "unknown".to_string(),
+                };
+                let value = match map.value.as_deref() {
+                    Some(value) => self.nested_ts_type(value, qualified)?,
+                    None => "unknown".to_string(),
+                };
+                Ok(format!("ReadonlyArray<readonly [{key}, {value}]>"))
+            }
+            Some(Kind::Stream(_)) | None => refuse(not_converted(qualified, "a stream")),
+        }
+    }
+
+    /// The type of an element, a key or a value: an optional one is
+    /// `| undefined`, as `<base>.ts` spells it.
+    fn nested_ts_type(&mut self, ty: &v1::Type, qualified: &str) -> Result<String, GenerateError> {
+        let inner = self.ts_type(ty, qualified)?;
+        if ty.optional {
+            Ok(format!("{inner} | undefined"))
+        } else {
+            Ok(inner)
+        }
+    }
+
+    /// The conversion of one type position.
+    fn rule(&mut self, ty: &v1::Type, qualified: &str) -> Result<Rule, GenerateError> {
+        use v1::declaration::Kind;
+        use v1::r#type::Kind as TypeKind;
+        match &ty.kind {
+            Some(TypeKind::Named(reference)) => {
+                let (spelled, declaration, nested) = match self.resolve(reference, qualified)? {
+                    Target::Local(_, declaration) => (
+                        format!("t.{}", declared_name(declaration)),
+                        declaration,
+                        true,
+                    ),
+                    Target::Foreign(package, declaration) => {
+                        // `reach_reference` refused a foreign struct, union
+                        // or enum before any converter is written.
+                        if foreign_kind(declaration).is_some() {
+                            return refuse(format!(
+                                "malformed codegen model: `{qualified}` reaches `{package}.{}`, \
+                                 which the reach pass did not refuse",
+                                declared_name(declaration)
+                            ));
+                        }
+                        self.foreign_types.insert(package.to_string());
+                        (
+                            format!("{}.{}", package_alias(package), declared_name(declaration)),
+                            declaration,
+                            false,
+                        )
+                    }
+                };
+                let name = declared_name(declaration);
+                Ok(match &declaration.kind {
+                    Some(Kind::Enum(_)) => Rule {
+                        pack: "BigInt({})".to_string(),
+                        unpack: format!("Number({{}}) as {spelled}"),
+                        plain: false,
+                        nullable: false,
+                    },
+                    Some(Kind::Struct(_) | Kind::Union(_)) if nested => Rule {
+                        pack: format!("pack{name}({{}})"),
+                        unpack: format!("unpack{name}({{}})"),
+                        plain: false,
+                        nullable: true,
+                    },
+                    Some(Kind::Scalar(scalar)) if scalar.class() == v1::ScalarClass::Bytes => {
+                        Rule {
+                            pack: "Array.from({})".to_string(),
+                            unpack: format!("Uint8Array.from({{}}) as {spelled}"),
+                            plain: false,
+                            nullable: false,
+                        }
+                    }
+                    Some(Kind::Scalar(_) | Kind::EnumSet(_)) => Rule {
+                        pack: "{}".to_string(),
+                        unpack: format!("{{}} as {spelled}"),
+                        plain: true,
+                        nullable: false,
+                    },
+                    _ => {
+                        return refuse(format!(
+                            "malformed codegen model: `{qualified}` reaches `{}`, which is not a \
+                             type",
+                            reference.reference
+                        ));
+                    }
+                })
+            }
+            Some(TypeKind::Primitive(primitive)) => {
+                Ok(match v1::PrimitiveType::try_from(*primitive) {
+                    Ok(v1::PrimitiveType::Bytes) => bytes_rule("Uint8Array"),
+                    Ok(v1::PrimitiveType::String) => string_rule(),
+                    _ => copy_rule(),
+                })
+            }
+            Some(TypeKind::Inline(scalar)) => Ok(match scalar.class() {
+                v1::ScalarClass::Bytes => bytes_rule("Uint8Array"),
+                v1::ScalarClass::String => string_rule(),
+                _ => copy_rule(),
+            }),
+            Some(TypeKind::Tuple(tuple)) => {
+                let Some(induced) = self.model.tuples.get(tuple.index as usize) else {
+                    return refuse(format!(
+                        "malformed codegen model: `{qualified}` names tuple {}, which does not \
+                         exist",
+                        tuple.index
+                    ));
+                };
+                let name = tuple_name(induced);
+                Ok(Rule {
+                    pack: format!("pack{name}({{}})"),
+                    unpack: format!("unpack{name}({{}})"),
+                    plain: false,
+                    nullable: true,
+                })
+            }
+            Some(TypeKind::Array(array)) => {
+                let Some(element) = array.element.as_deref() else {
+                    return refuse(format!(
+                        "malformed codegen model: an array of `{qualified}` has no element type"
+                    ));
+                };
+                let rule = self.rule(element, qualified)?;
+                // An element that converts by assertion or not at all is
+                // copied. TypeScript refuses an assertion of a whole array
+                // to a branded element type, so an unpack that asserts maps
+                // each element.
+                let spread = |template: &str| {
+                    if template == "{}" {
+                        "[...{}]".to_string()
+                    } else {
+                        format!(
+                            "{{}}.map((element) => {})",
+                            template.replace("{}", "element")
+                        )
+                    }
+                };
+                Ok(Rule {
+                    pack: if rule.plain {
+                        "[...{}]".to_string()
+                    } else {
+                        spread(&rule.pack)
+                    },
+                    unpack: spread(&rule.unpack),
+                    plain: false,
+                    nullable: false,
+                })
+            }
+            Some(TypeKind::Map(map)) => {
+                let (Some(key), Some(value)) = (map.key.as_deref(), map.value.as_deref()) else {
+                    return refuse(format!(
+                        "malformed codegen model: a map of `{qualified}` has no key or value type"
+                    ));
+                };
+                let entry = map
+                    .flatbuffers_entry_table
+                    .and_then(|table| self.tables().get(table as usize));
+                let Some(entry) = entry else {
+                    return refuse(format!(
+                        "malformed codegen model: a map of `{qualified}` has no entry table"
+                    ));
+                };
+                let key_rule = self.rule(key, qualified)?;
+                let value_rule = self.rule(value, qualified)?;
+                let unpack_key = self.guarded("entry.key", &key_rule, qualified, "key");
+                let unpack_value = self.guarded("entry.value", &value_rule, qualified, "value");
+                Ok(Rule {
+                    pack: format!(
+                        "{{}}.map(([key, value]) => {{ const entry = new fb.{}T(); entry.key = {}; \
+                         entry.value = {}; return entry; }})",
+                        entry.name,
+                        key_rule.pack.replace("{}", "key"),
+                        value_rule.pack.replace("{}", "value"),
+                    ),
+                    unpack: format!("{{}}.map((entry) => [{unpack_key}, {unpack_value}] as const)"),
+                    plain: false,
+                    nullable: false,
+                })
+            }
+            Some(TypeKind::Stream(_)) | None => refuse(not_converted(qualified, "a stream")),
+        }
+    }
+
+    /// The unpack of `rule` over the member `read`, guarded by `absent`
+    /// when the `flatc` member is nullable and the position is required.
+    fn guarded(&mut self, read: &str, rule: &Rule, qualified: &str, field: &str) -> String {
+        let unpack = rule.unpack.replace("{}", read);
+        if !rule.nullable {
+            return unpack;
+        }
+        self.needs_absent = true;
+        format!("{read} === null ? absent(\"{qualified}\", \"{field}\") : {unpack}")
+    }
+
+    fn emit(&mut self, artifact_base: &str) -> Result<GeneratedTs, GenerateError> {
+        let mut body = String::new();
         let catalog = self.model.catalog.as_ref();
         let name = catalog.map_or("", |catalog| catalog.package.as_str());
         let hash: Vec<String> = catalog
             .map(|catalog| catalog.hash.iter().map(u8::to_string).collect())
             .unwrap_or_default();
-        out.push_str("/** The name of the catalog unit this package belongs to. */\n");
-        let _ = writeln!(out, "export const CATALOG_NAME = \"{name}\";");
-        out.push_str("/** The hash of the catalog unit, which the wasm module carries. */\n");
+        body.push_str("/** The name of the catalog unit this package belongs to. */\n");
+        let _ = writeln!(body, "export const CATALOG_NAME = \"{name}\";");
+        body.push_str("/** The hash of the catalog unit, which the wasm module carries. */\n");
         let _ = writeln!(
-            out,
+            body,
             "export const CATALOG_HASH: Uint8Array = Uint8Array.from([{}]);",
             hash.join(", ")
         );
@@ -300,41 +712,85 @@ impl<'a> Codec<'a> {
             .map(|payload| self.qualified(payload.name))
             .collect();
         names.sort();
-        out.push_str(
+        body.push_str(
             "/** The qualified names of the payload types of this package, which name the wasm \
              type ids. */\n",
         );
-        out.push_str("export const PAYLOAD_TYPES = [\n");
+        body.push_str("export const PAYLOAD_TYPES = [\n");
         for name in &names {
-            let _ = writeln!(out, "  \"{name}\",");
+            let _ = writeln!(body, "  \"{name}\",");
         }
-        out.push_str("] as const;\n");
-        out.push_str(
+        body.push_str("] as const;\n");
+        body.push_str(
             "/** The text of each rule code the wasm module reports, rule code n at index n - 2. \
              */\n",
         );
         let rules: Vec<String> = RULES.iter().map(|rule| format!("\"{rule}\"")).collect();
-        let _ = writeln!(out, "export const RULES = [{}] as const;", rules.join(", "));
+        let _ = writeln!(
+            body,
+            "export const RULES = [{}] as const;",
+            rules.join(", ")
+        );
+
+        // The induced tuples of the interactions, as the plain-object types
+        // `<base>.ts` has none for.
+        for (index, tuple) in self.model.tuples.iter().enumerate() {
+            if !self.is_payload_tuple(index, tuple) {
+                continue;
+            }
+            self.emit_tuple_interface(&mut body, index, tuple)?;
+        }
 
         let payload_names: BTreeSet<&str> = payloads.iter().map(|payload| payload.name).collect();
         for (index, declaration) in self.model.declarations.iter().enumerate() {
             let name = declared_name(declaration);
-            if payload_names.contains(name) && self.declaration_bounded.get(&index) == Some(&true) {
-                self.emit_payload(&mut out, declaration)?;
+            if payload_names.contains(name)
+                && self.declaration_bounded.get(&index) == Some(&true)
+                && declaration.visibility() != v1::Visibility::Internal
+            {
+                self.emit_payload(&mut body, declaration)?;
             }
             if self.reached.contains(&index) {
-                self.emit_converters(&mut out, declaration)?;
+                self.emit_converters(&mut body, index, declaration)?;
+            }
+        }
+        for (index, tuple) in self.model.tuples.iter().enumerate() {
+            if self.is_payload_tuple(index, tuple) {
+                self.emit_tuple_payload(&mut body, index, tuple)?;
+            }
+            if self.reached_tuples.contains(&index) {
+                self.emit_tuple_converters(&mut body, index, tuple)?;
             }
         }
 
-        out.push('\n');
+        body.push('\n');
         for payload in &payloads {
+            if payload
+                .declaration
+                .is_some_and(|declaration| declaration.visibility() == v1::Visibility::Internal)
+            {
+                continue;
+            }
+            let spelled = match payload.declaration {
+                Some(_) => format!("t.{}", payload.name),
+                None => payload.name.to_string(),
+            };
             let _ = writeln!(
-                out,
-                "const codec{name}: PayloadCodec<t.{name}> = {{ type: \"{qualified}\", encode: \
+                body,
+                "const codec{name}: PayloadCodec<{spelled}> = {{ type: \"{qualified}\", encode: \
                  encode{name}, decode: decode{name} }};",
                 name = payload.name,
                 qualified = self.qualified(payload.name),
+            );
+        }
+        for (constant, foreign) in &self.foreign_payloads {
+            let alias = package_alias(&foreign.package);
+            let _ = writeln!(
+                body,
+                "const {constant}: PayloadCodec<{alias}.{name}> = {{ type: \"{package}.{name}\", \
+                 encode: {alias}_codec.encode{name}, decode: {alias}_codec.decode{name} }};",
+                name = foreign.name,
+                package = foreign.package,
             );
         }
 
@@ -342,9 +798,142 @@ impl<'a> Codec<'a> {
             let Some(v1::interface::Identity::Declared(spelled)) = &interface.identity else {
                 continue;
             };
-            self.emit_interface(&mut out, interface, &spelled.declared)?;
+            self.emit_interface(&mut body, interface, &spelled.declared)?;
         }
+
+        let mut out = String::new();
+        let segments = self.package.replace('.', "/");
+        out.push_str("import * as flatbuffers from \"flatbuffers\";\n");
+        out.push_str("import type { PayloadCodec } from \"@driftsys/ridl-runtime\";\n");
+        let _ = writeln!(out, "import type * as t from \"./{artifact_base}.js\";");
+        for package in &self.foreign_types {
+            let _ = writeln!(
+                out,
+                "import type * as {} from \"./{package}.js\";",
+                package_alias(package)
+            );
+        }
+        out.push_str(
+            "// `flatc --ts --gen-object-api` writes this module when its `-o` is the directory\n\
+             // of this file.\n",
+        );
+        let _ = writeln!(out, "import * as fb from \"./{segments}.js\";");
+        let foreign_codecs: BTreeSet<&str> = self
+            .foreign_payloads
+            .values()
+            .map(|foreign| foreign.package.as_str())
+            .collect();
+        for package in foreign_codecs {
+            let _ = writeln!(
+                out,
+                "import * as {}_codec from \"./{package}.codec.js\";",
+                package_alias(package)
+            );
+        }
+        out.push('\n');
+        if self.needs_absent {
+            out.push_str(
+                "/** Throws for a required field the buffer leaves out. */\n\
+                 function absent(type: string, field: string): never {\n  \
+                 throw new RangeError(`field ${field} of ${type} is absent`);\n}\n\n",
+            );
+        }
+        out.push_str(&body);
         Ok(GeneratedTs { source: out })
+    }
+
+    /// Whether the induced tuple at `index` is a payload type: a root with a
+    /// finite bound, induced by an interaction.
+    fn is_payload_tuple(&self, index: usize, tuple: &v1::InducedTuple) -> bool {
+        matches!(
+            tuple.origin,
+            Some(v1::induced_tuple::Origin::Interaction(_))
+        ) && self.tuple_bounded.get(&index) == Some(&true)
+    }
+
+    fn emit_tuple_interface(
+        &mut self,
+        out: &mut String,
+        index: usize,
+        tuple: &'a v1::InducedTuple,
+    ) -> Result<(), GenerateError> {
+        let name = tuple_name(tuple);
+        let qualified = self.qualified(name);
+        let origin = match &tuple.origin {
+            Some(v1::induced_tuple::Origin::Interaction(path)) => {
+                interaction_path(self.model, path)
+            }
+            _ => String::new(),
+        };
+        let _ = self.tuple_table(index)?;
+        out.push('\n');
+        let _ = writeln!(out, "/** The induced tuple of `{origin}`. */");
+        if tuple.fields.is_empty() {
+            let _ = writeln!(out, "export interface {name} {{}}");
+            return Ok(());
+        }
+        let _ = writeln!(out, "export interface {name} {{");
+        for field in &tuple.fields {
+            let declared = field
+                .name
+                .as_ref()
+                .map_or("", |name| name.declared.as_str());
+            let (optional, spelled) = match field.r#type.as_ref() {
+                Some(ty) => (ty.optional, self.ts_type(ty, &qualified)?),
+                None => (false, "unknown".to_string()),
+            };
+            let marker = if optional { "?" } else { "" };
+            let _ = writeln!(out, "  {declared}{marker}: {spelled};");
+        }
+        out.push_str("}\n");
+        Ok(())
+    }
+
+    fn emit_tuple_payload(
+        &mut self,
+        out: &mut String,
+        index: usize,
+        tuple: &'a v1::InducedTuple,
+    ) -> Result<(), GenerateError> {
+        let name = tuple_name(tuple);
+        let table = &self.tuple_table(index)?.name;
+        self.emit_encode_decode(out, name, name, table, &self.qualified(name));
+        Ok(())
+    }
+
+    /// The `encode`/`decode` pair of a payload type whose converters are
+    /// `pack<name>`/`unpack<name>` over the `flatc` table `table`.
+    fn emit_encode_decode(
+        &self,
+        out: &mut String,
+        name: &str,
+        spelled: &str,
+        table: &str,
+        qualified: &str,
+    ) {
+        out.push('\n');
+        let _ = writeln!(out, "/** Encodes a `{qualified}` payload. */");
+        let _ = writeln!(
+            out,
+            "export function encode{name}(value: {spelled}): Uint8Array {{"
+        );
+        out.push_str("  const builder = new flatbuffers.Builder();\n");
+        let _ = writeln!(out, "  builder.finish(pack{name}(value).pack(builder));");
+        out.push_str("  return builder.asUint8Array();\n}\n");
+        let _ = writeln!(
+            out,
+            "/** Decodes a `{qualified}` payload the codec has verified. */"
+        );
+        let _ = writeln!(
+            out,
+            "export function decode{name}(bytes: Uint8Array): {spelled} {{"
+        );
+        let _ = writeln!(
+            out,
+            "  return unpack{name}(fb.{table}.getRootAs{table}(new \
+             flatbuffers.ByteBuffer(bytes)).unpack());"
+        );
+        out.push_str("}\n");
     }
 
     fn emit_payload(
@@ -355,6 +944,26 @@ impl<'a> Codec<'a> {
         use v1::declaration::Kind;
         let name = declared_name(declaration);
         let qualified = self.qualified(name);
+        let boxed = match &declaration.kind {
+            Some(Kind::Struct(_) | Kind::Union(_)) => {
+                self.emit_encode_decode(out, name, &format!("t.{name}"), name, &qualified);
+                return Ok(());
+            }
+            Some(Kind::Enum(_)) => (format!("new fb.{name}BoxT(BigInt(value))"), Some(true)),
+            Some(Kind::Scalar(scalar)) if scalar.class() == v1::ScalarClass::Bytes => {
+                (format!("new fb.{name}BoxT(Array.from(value))"), None)
+            }
+            Some(Kind::Scalar(_) | Kind::EnumSet(_)) => {
+                (format!("new fb.{name}BoxT(value)"), Some(false))
+            }
+            _ => {
+                return refuse(format!(
+                    "malformed codegen model: the payload type `{qualified}` is not a scalar, \
+                     an enum, an enum set, a struct or a union"
+                ));
+            }
+        };
+        let (packed, is_enum) = boxed;
         out.push('\n');
         let _ = writeln!(out, "/** Encodes a `{qualified}` payload. */");
         let _ = writeln!(
@@ -362,19 +971,6 @@ impl<'a> Codec<'a> {
             "export function encode{name}(value: t.{name}): Uint8Array {{"
         );
         out.push_str("  const builder = new flatbuffers.Builder();\n");
-        let (packed, root) = match &declaration.kind {
-            Some(Kind::Struct(_)) => (format!("pack{name}(value)"), None),
-            Some(Kind::Enum(_)) => (format!("new fb.{name}BoxT(BigInt(value))"), Some(true)),
-            Some(Kind::Scalar(_) | Kind::EnumSet(_)) => {
-                (format!("new fb.{name}BoxT(value)"), Some(false))
-            }
-            _ => {
-                return refuse(format!(
-                    "malformed codegen model: the payload type `{qualified}` is not a scalar, \
-                     an enum, an enum set or a struct"
-                ));
-            }
-        };
         let _ = writeln!(out, "  builder.finish({packed}.pack(builder));");
         out.push_str("  return builder.asUint8Array();\n}\n");
         let _ = writeln!(
@@ -385,23 +981,18 @@ impl<'a> Codec<'a> {
             out,
             "export function decode{name}(bytes: Uint8Array): t.{name} {{"
         );
-        match root {
-            None => {
-                let _ = writeln!(
-                    out,
-                    "  return unpack{name}(fb.{name}.getRootAs{name}(new \
-                     flatbuffers.ByteBuffer(bytes)).unpack());"
-                );
+        let read = format!(
+            "fb.{name}Box.getRootAs{name}Box(new flatbuffers.ByteBuffer(bytes)).unpack().value"
+        );
+        match is_enum {
+            Some(true) => {
+                let _ = writeln!(out, "  return Number({read}) as t.{name};");
             }
-            Some(is_enum) => {
-                let read = format!(
-                    "fb.{name}Box.getRootAs{name}Box(new flatbuffers.ByteBuffer(bytes)).unpack().value"
-                );
-                if is_enum {
-                    let _ = writeln!(out, "  return Number({read}) as t.{name};");
-                } else {
-                    let _ = writeln!(out, "  return {read} as t.{name};");
-                }
+            Some(false) => {
+                let _ = writeln!(out, "  return {read} as t.{name};");
+            }
+            None => {
+                let _ = writeln!(out, "  return Uint8Array.from({read}) as t.{name};");
             }
         }
         out.push_str("}\n");
@@ -409,81 +1000,289 @@ impl<'a> Codec<'a> {
     }
 
     fn emit_converters(
-        &self,
+        &mut self,
         out: &mut String,
-        declaration: &v1::Declaration,
+        index: usize,
+        declaration: &'a v1::Declaration,
     ) -> Result<(), GenerateError> {
-        let Some(v1::declaration::Kind::Struct(shape)) = &declaration.kind else {
-            return Ok(());
-        };
+        use v1::declaration::Kind;
         let name = declared_name(declaration);
         let qualified = self.qualified(name);
-        let fields = struct_fields(shape);
+        match &declaration.kind {
+            Some(Kind::Struct(shape)) => {
+                let table = self.struct_table(index);
+                let mut fields = Vec::new();
+                for (slot_index, slot) in shape.slots.iter().enumerate() {
+                    let Some(v1::slot::Occupant::Field(field)) = &slot.occupant else {
+                        continue;
+                    };
+                    let Some(ty) = field.r#type.as_ref() else {
+                        continue;
+                    };
+                    let declared = field
+                        .name
+                        .as_ref()
+                        .map_or("", |name| name.declared.as_str());
+                    let null_default = table.is_some_and(|table| {
+                        table.slots.iter().any(|fb_slot| {
+                            matches!(fb_slot.source, Some(v1::fb_slot::Source::Field(i)) if i as usize == slot_index)
+                                && fb_slot.needs_null_default
+                        })
+                    });
+                    fields.push(RecordField {
+                        declared: declared.to_string(),
+                        accessor: accessor(declared),
+                        rule: self.rule(ty, &qualified)?,
+                        optional: ty.optional,
+                        null_default,
+                    });
+                }
+                self.emit_record(
+                    out,
+                    name,
+                    &format!("t.{name}"),
+                    name,
+                    "object",
+                    &fields,
+                    &qualified,
+                );
+                Ok(())
+            }
+            Some(Kind::Union(union)) => self.emit_union(out, name, union, &qualified),
+            _ => Ok(()),
+        }
+    }
+
+    fn emit_tuple_converters(
+        &mut self,
+        out: &mut String,
+        index: usize,
+        tuple: &'a v1::InducedTuple,
+    ) -> Result<(), GenerateError> {
+        let name = tuple_name(tuple);
+        let qualified = self.qualified(name);
+        let table = self.tuple_table(index)?;
+        let spelled = if self.is_payload_tuple(index, tuple) {
+            name.to_string()
+        } else {
+            self.ts_type(
+                &v1::Type {
+                    optional: false,
+                    kind: Some(v1::r#type::Kind::Tuple(v1::TupleRef {
+                        index: index as u32,
+                    })),
+                },
+                &qualified,
+            )?
+        };
+        let mut fields = Vec::new();
+        for (position, field) in tuple.fields.iter().enumerate() {
+            let Some(ty) = field.r#type.as_ref() else {
+                continue;
+            };
+            let declared = field
+                .name
+                .as_ref()
+                .map_or("", |name| name.declared.as_str());
+            let null_default = table.slots.iter().any(|fb_slot| {
+                matches!(fb_slot.source, Some(v1::fb_slot::Source::TuplePosition(p)) if p as usize == position + 1)
+                    && fb_slot.needs_null_default
+            });
+            fields.push(RecordField {
+                declared: declared.to_string(),
+                accessor: format!("field{}", position + 1),
+                rule: self.rule(ty, &qualified)?,
+                optional: ty.optional,
+                null_default,
+            });
+        }
+        self.emit_record(
+            out,
+            name,
+            &spelled,
+            &table.name,
+            "tuple",
+            &fields,
+            &qualified,
+        );
+        Ok(())
+    }
+
+    /// The converter pair of a struct or a tuple: `pack<name>` fills the
+    /// `flatc` object `table`T member by member, `unpack<name>` builds the
+    /// plain object `spelled`.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_record(
+        &mut self,
+        out: &mut String,
+        name: &str,
+        spelled: &str,
+        table: &str,
+        object: &str,
+        fields: &[RecordField],
+        qualified: &str,
+    ) {
         out.push('\n');
-        let _ = writeln!(out, "function pack{name}(value: t.{name}): fb.{name}T {{");
-        let _ = writeln!(out, "  const object = new fb.{name}T();");
-        let mut unpacked = Vec::new();
-        for field in &fields {
-            let spelled = field.name.as_ref();
-            let declared = spelled.map_or("", |name| name.declared.as_str());
-            let camel = accessor(declared);
-            let (pack, unpack) = self.field_rule(field, &qualified)?;
-            let _ = writeln!(
-                out,
-                "  object.{camel} = {};",
-                pack.replace("{}", &format!("value.{declared}"))
-            );
-            unpacked.push(format!(
-                "    {declared}: {},",
-                unpack.replace("{}", &format!("object.{camel}"))
+        let _ = writeln!(out, "function pack{name}(value: {spelled}): fb.{table}T {{");
+        let _ = writeln!(out, "  const {object} = new fb.{table}T();");
+        for field in fields {
+            let packed = field
+                .rule
+                .pack
+                .replace("{}", &format!("value.{}", field.declared));
+            if field.optional {
+                let _ = writeln!(
+                    out,
+                    "  {object}.{} = value.{} === undefined ? null : {packed};",
+                    field.accessor, field.declared
+                );
+            } else {
+                let _ = writeln!(out, "  {object}.{} = {packed};", field.accessor);
+            }
+        }
+        let _ = writeln!(out, "  return {object};\n}}");
+        let _ = writeln!(
+            out,
+            "function unpack{name}(object: fb.{table}T): {spelled} {{"
+        );
+        let mut required = Vec::new();
+        let mut optional = Vec::new();
+        for field in fields {
+            let read = format!("object.{}", field.accessor);
+            if field.optional {
+                let unpacked = field.rule.unpack.replace("{}", &read);
+                optional.push(format!(
+                    "  if ({read} !== null) result.{} = {unpacked};",
+                    field.declared
+                ));
+                continue;
+            }
+            let unpacked = if field.null_default {
+                self.needs_absent = true;
+                format!(
+                    "{read} === null ? absent(\"{qualified}\", \"{}\") : {}",
+                    field.declared,
+                    field.rule.unpack.replace("{}", &read)
+                )
+            } else {
+                self.guarded(&read, &field.rule, qualified, &field.declared)
+            };
+            required.push(format!("{}: {unpacked}", field.declared));
+        }
+        if optional.is_empty() {
+            if required.is_empty() {
+                out.push_str("  return {};\n");
+            } else if object == "tuple" {
+                let _ = writeln!(out, "  return {{ {} }};", required.join(", "));
+            } else {
+                out.push_str("  return {\n");
+                for line in &required {
+                    let _ = writeln!(out, "    {line},");
+                }
+                out.push_str("  };\n");
+            }
+        } else {
+            let _ = writeln!(out, "  const result: {spelled} = {{");
+            for line in &required {
+                let _ = writeln!(out, "    {line},");
+            }
+            out.push_str("  };\n");
+            for line in &optional {
+                out.push_str(line);
+                out.push('\n');
+            }
+            out.push_str("  return result;\n");
+        }
+        out.push_str("}\n");
+    }
+
+    fn emit_union(
+        &mut self,
+        out: &mut String,
+        name: &str,
+        union: &'a v1::Union,
+        qualified: &str,
+    ) -> Result<(), GenerateError> {
+        let mut packs = Vec::new();
+        let mut unpacks = Vec::new();
+        for arm in &union.arms {
+            let Some(reference) = arm.r#type.as_ref() else {
+                continue;
+            };
+            let declared = arm.name.as_ref().map_or("", |name| name.declared.as_str());
+            let snake = arm.name.as_ref().map_or("", |name| name.snake.as_str());
+            let ty = v1::Type {
+                optional: false,
+                kind: Some(v1::r#type::Kind::Named(reference.clone())),
+            };
+            let rule = self.rule(&ty, qualified)?;
+            let arm_box = arm
+                .flatbuffers_box
+                .and_then(|table| self.tables().get(table as usize))
+                .map(|table| table.name.as_str());
+            let (packed, read) = match arm_box {
+                Some(box_name) => (
+                    format!(
+                        "new fb.{box_name}T({})",
+                        rule.pack.replace("{}", "value.value")
+                    ),
+                    format!("(object.value as fb.{box_name}T).value"),
+                ),
+                None => {
+                    let arm_table = match self.resolve(reference, qualified)? {
+                        Target::Local(_, declaration) => declared_name(declaration),
+                        Target::Foreign(..) => {
+                            return refuse(format!(
+                                "malformed codegen model: the arm `{declared}` of `{qualified}` \
+                                 is a foreign table"
+                            ));
+                        }
+                    };
+                    (
+                        rule.pack.replace("{}", "value.value"),
+                        format!("object.value as fb.{arm_table}T"),
+                    )
+                }
+            };
+            packs.push(format!(
+                "    case \"{declared}\":\n      return new fb.{name}T(fb.{name}Union.{snake}, \
+                 {packed});"
+            ));
+            unpacks.push(format!(
+                "    case fb.{name}Union.{snake}:\n      return {{ kind: \"{declared}\", value: \
+                 {} }};",
+                rule.unpack.replace("{}", &read)
             ));
         }
-        out.push_str("  return object;\n}\n");
+        out.push('\n');
+        let _ = writeln!(out, "function pack{name}(value: t.{name}): fb.{name}T {{");
+        out.push_str("  switch (value.kind) {\n");
+        for case in &packs {
+            out.push_str(case);
+            out.push('\n');
+        }
+        out.push_str("  }\n}\n");
         let _ = writeln!(
             out,
             "function unpack{name}(object: fb.{name}T): t.{name} {{"
         );
-        out.push_str("  return {\n");
-        for line in unpacked {
-            out.push_str(&line);
+        out.push_str("  switch (object.valueType) {\n");
+        for case in &unpacks {
+            out.push_str(case);
             out.push('\n');
         }
-        out.push_str("  };\n}\n");
+        let _ = writeln!(
+            out,
+            "    default:\n      throw new RangeError(\"union {qualified} carries no arm\");"
+        );
+        out.push_str("  }\n}\n");
         Ok(())
     }
 
-    /// The pack and unpack expressions of `field`, with `{}` standing for
-    /// the value read.
-    fn field_rule(
-        &self,
-        field: &v1::Field,
-        qualified: &str,
-    ) -> Result<(String, String), GenerateError> {
-        use v1::declaration::Kind;
-        match field.r#type.as_ref().and_then(|ty| ty.kind.as_ref()) {
-            Some(v1::r#type::Kind::Named(reference)) => {
-                let target = self.local(reference, qualified)?;
-                let name = declared_name(target);
-                Ok(match &target.kind {
-                    Some(Kind::Enum(_)) => (
-                        "BigInt({})".to_string(),
-                        format!("Number({{}}) as t.{name}"),
-                    ),
-                    Some(Kind::Struct(_)) => {
-                        (format!("pack{name}({{}})"), format!("unpack{name}({{}})"))
-                    }
-                    Some(Kind::Union(_)) => return refuse(not_converted(qualified, "a union")),
-                    _ => ("{}".to_string(), format!("{{}} as t.{name}")),
-                })
-            }
-            _ => Ok(("{}".to_string(), "{}".to_string())),
-        }
-    }
-
     fn emit_interface(
-        &self,
+        &mut self,
         out: &mut String,
-        interface: &v1::Interface,
+        interface: &'a v1::Interface,
         name: &str,
     ) -> Result<(), GenerateError> {
         let number = interface.number;
@@ -507,18 +1306,17 @@ impl<'a> Codec<'a> {
             let mut missing = None;
             for (role, payload) in self.roles(interaction, name, member)? {
                 match payload {
-                    Ok(type_name) => roles.push(format!("{role}: codec{type_name}")),
-                    Err(type_name) => {
-                        missing = Some(type_name);
+                    Ok(constant) => roles.push(format!("{role}: {constant}")),
+                    Err(qualified) => {
+                        missing = Some(qualified);
                         break;
                     }
                 }
             }
-            if let Some(type_name) = missing {
+            if let Some(qualified) = missing {
                 let _ = writeln!(
                     out,
-                    "  // {member} has no entry: {} has no finite FlatBuffers bound",
-                    self.qualified(type_name)
+                    "  // {member} has no entry: {qualified} has no finite FlatBuffers bound"
                 );
                 continue;
             }
@@ -545,15 +1343,16 @@ impl<'a> Codec<'a> {
         Ok(())
     }
 
-    /// The roles of `interaction`, each with the name of its payload type:
-    /// `Ok` when the type has a codec, `Err` when it has no finite bound.
+    /// The roles of `interaction`, each with its payload type: `Ok` with the
+    /// `codec<Name>` constant when the type has a codec, `Err` with the
+    /// qualified name when it has no finite bound.
     #[allow(clippy::type_complexity)]
     fn roles(
-        &self,
+        &mut self,
         interaction: &'a v1::Interaction,
         interface: &str,
         member: &str,
-    ) -> Result<Vec<(&'static str, Result<&'a str, &'a str>)>, GenerateError> {
+    ) -> Result<Vec<(&'static str, Result<String, String>)>, GenerateError> {
         use v1::interaction::Shape;
         let path = format!("{interface}.{member}");
         Ok(match &interaction.shape {
@@ -610,19 +1409,61 @@ impl<'a> Codec<'a> {
     /// The payload type of one role: the named payload, or the induced
     /// tuple.
     fn payload(
-        &self,
+        &mut self,
         named: Option<&'a v1::Payload>,
         tuple: Option<&v1::TupleRef>,
         path: &str,
-    ) -> Result<Result<&'a str, &'a str>, GenerateError> {
-        if let Some(reference) = named.and_then(|payload| payload.r#type.as_ref()) {
-            let declaration = self.local(
-                reference,
-                &format!("{}.{}", reference.package, reference.reference),
-            )?;
-            let name = declared_name(declaration);
-            let bounded = self.declaration_bounded.get(&(reference.index as usize)) == Some(&true);
-            return Ok(if bounded { Ok(name) } else { Err(name) });
+    ) -> Result<Result<String, String>, GenerateError> {
+        if let Some(payload) = named
+            && let Some(reference) = payload.r#type.as_ref()
+        {
+            let qualified = format!("{}.{}", reference.package, reference.reference);
+            return match self.resolve(reference, &qualified)? {
+                Target::Local(index, declaration) => {
+                    let name = declared_name(declaration);
+                    if declaration.visibility() == v1::Visibility::Internal {
+                        return refuse(format!(
+                            "`{path}` has the payload type `{}`, which is internal; `<base>.ts` \
+                             does not export it, so the codec module cannot name it",
+                            self.qualified(name)
+                        ));
+                    }
+                    let bounded = self.declaration_bounded.get(&index) == Some(&true);
+                    Ok(if bounded {
+                        Ok(format!("codec{name}"))
+                    } else {
+                        Err(self.qualified(name))
+                    })
+                }
+                Target::Foreign(package, declaration) => {
+                    let name = declared_name(declaration);
+                    if let Some(word) = foreign_kind(declaration) {
+                        return refuse(foreign_refusal(
+                            &format!("`{path}` has the payload type"),
+                            package,
+                            name,
+                            word,
+                        ));
+                    }
+                    let qualified = format!("{package}.{name}");
+                    if payload.flatbuffers_max_size.is_none() {
+                        return Ok(Err(qualified));
+                    }
+                    self.foreign_types.insert(package.to_string());
+                    let constant = format!(
+                        "codec{}{name}",
+                        ridl_ir::name::pascal_case(&package.replace('.', "_"))
+                    );
+                    self.foreign_payloads.insert(
+                        constant.clone(),
+                        ForeignPayload {
+                            package: package.to_string(),
+                            name: name.to_string(),
+                        },
+                    );
+                    Ok(Ok(constant))
+                }
+            };
         }
         if let Some(tuple) = tuple {
             let Some(induced) = self.model.tuples.get(tuple.index as usize) else {
@@ -633,7 +1474,11 @@ impl<'a> Codec<'a> {
             };
             let name = tuple_name(induced);
             let bounded = self.tuple_bounded.get(&(tuple.index as usize)) == Some(&true);
-            return Ok(if bounded { Ok(name) } else { Err(name) });
+            return Ok(if bounded {
+                Ok(format!("codec{name}"))
+            } else {
+                Err(self.qualified(name))
+            });
         }
         refuse(format!(
             "`{path}` has a payload that is not a named type or an induced tuple, which the codec \
@@ -644,6 +1489,103 @@ impl<'a> Codec<'a> {
 
 fn not_converted(qualified: &str, kind: &str) -> String {
     format!("`{qualified}` reaches {kind}, which the codec module does not convert yet")
+}
+
+/// The word of a foreign declaration's kind when the module needs a
+/// converter for it; `None` for a named scalar or an enum set, which
+/// convert by assertion.
+fn foreign_kind(declaration: &v1::Declaration) -> Option<&'static str> {
+    use v1::declaration::Kind;
+    match &declaration.kind {
+        Some(Kind::Struct(_)) => Some("struct"),
+        Some(Kind::Union(_)) => Some("union"),
+        Some(Kind::Enum(_)) => Some("enum"),
+        _ => None,
+    }
+}
+
+fn foreign_refusal(site: &str, package: &str, name: &str, word: &str) -> String {
+    format!(
+        "{site} `{package}.{name}`, a {word} of another package, which the codec module does not \
+         convert yet"
+    )
+}
+
+/// The conversion of a position whose value is copied as it is.
+fn copy_rule() -> Rule {
+    Rule {
+        pack: "{}".to_string(),
+        unpack: "{}".to_string(),
+        plain: true,
+        nullable: false,
+    }
+}
+
+/// A string: `flatc` reads one as `string | Uint8Array | null`.
+fn string_rule() -> Rule {
+    Rule {
+        pack: "{}".to_string(),
+        unpack: "{} as string".to_string(),
+        plain: true,
+        nullable: false,
+    }
+}
+
+/// Bytes: `flatc` holds a `[ubyte]` as `number[]`.
+fn bytes_rule(spelled: &str) -> Rule {
+    Rule {
+        pack: "Array.from({})".to_string(),
+        unpack: format!("Uint8Array.from({{}}) as {spelled}"),
+        plain: false,
+        nullable: false,
+    }
+}
+
+/// The TypeScript import alias of a package, as `<base>.ts` spells it.
+fn package_alias(package: &str) -> String {
+    package.replace('.', "_")
+}
+
+/// The TypeScript type of a bare primitive, as `<base>.ts` spells it.
+fn primitive_ts(primitive: i32) -> &'static str {
+    match v1::PrimitiveType::try_from(primitive) {
+        Ok(v1::PrimitiveType::Boolean) => "boolean",
+        Ok(v1::PrimitiveType::Integer) => "bigint",
+        Ok(v1::PrimitiveType::Float) => "number",
+        Ok(v1::PrimitiveType::String) => "string",
+        Ok(v1::PrimitiveType::Bytes) => "Uint8Array",
+        _ => "unknown",
+    }
+}
+
+/// The TypeScript type of an inline scalar, as `<base>.ts` spells it: a
+/// 64-bit integer is a `bigint`.
+fn scalar_ts(scalar: &v1::Scalar) -> &'static str {
+    match scalar.class() {
+        v1::ScalarClass::Float => "number",
+        v1::ScalarClass::Integer => match scalar.width {
+            Some(v1::scalar::Width::IntWidth(width))
+                if width == v1::IntWidth::U64 as i32 || width == v1::IntWidth::I64 as i32 =>
+            {
+                "bigint"
+            }
+            _ => "number",
+        },
+        v1::ScalarClass::Boolean => "boolean",
+        v1::ScalarClass::String => "string",
+        v1::ScalarClass::Bytes => "Uint8Array",
+        v1::ScalarClass::Unspecified => "unknown",
+    }
+}
+
+/// An element type that is a union or an object type, parenthesized for
+/// the `[]` suffix.
+fn parenthesized(spelled: String) -> String {
+    if spelled.contains(' ') {
+        format!("({spelled})")
+    } else {
+        spelled
+    }
 }
 
 /// The name `flatc --ts` gives a field's member. The `.fbs` field is
@@ -676,14 +1618,6 @@ fn declared_name(declaration: &v1::Declaration) -> &str {
 
 fn tuple_name(tuple: &v1::InducedTuple) -> &str {
     tuple.name.as_ref().map_or("", |name| name.rust.as_str())
-}
-
-fn index_of(model: &v1::Model, declaration: &v1::Declaration) -> usize {
-    model
-        .declarations
-        .iter()
-        .position(|candidate| std::ptr::eq(candidate, declaration))
-        .unwrap_or(usize::MAX)
 }
 
 /// The live fields of a struct, in slot order.

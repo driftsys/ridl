@@ -2879,6 +2879,35 @@ _cabin-web-generate name:
     cargo clippy --manifest-path examples/cabin/Cargo.toml -p server --locked --all-targets --no-deps -- -D warnings
     cargo build --manifest-path examples/cabin/Cargo.toml -p server --locked
     "{{just_executable()}}" _cabin-wasm
+    "{{just_executable()}}" _codec-ts-check
+
+# The type check and the round trip of the codec module over the kinds cabin
+# does not exercise: the fixture crates/ridl-backend-ts/tests/fixtures/codec
+# (the veh-cluster corpus's `common` package plus an interface) is built with
+# `ridl build --emit typescript --emit flatbuffers` into a directory under the
+# target directory, `flatc` writes the object API of both schemas (the fixture
+# names `ridl.std.Name` as a payload, whose codec is `ridl.std.codec.ts`), the
+# fixture's deno.json and roundtrip_test.ts are copied beside the generated
+# files with the path of packages/ridl-runtime made absolute, then `deno
+# check` type-checks the codec module and `deno test` runs the round trips:
+# a union, a tuple, an array, a map, an optional field, an induced tuple and
+# an enum with no zero member, each `decode(encode(v))` deep-equal to `v`.
+# `_cabin-web-generate` runs it after the `flatc` and `deno` version checks.
+[private]
+_codec-ts-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="${CARGO_TARGET_DIR:-target}"
+    cargo build -p ridl-cli --locked
+    tmp="$target/codec-ts-check"
+    rm -rf "$tmp"
+    mkdir -p "$tmp"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec --emit typescript --emit flatbuffers --out-dir "$tmp"
+    flatc --ts --gen-object-api -I "$tmp" -o "$tmp" "$tmp/veh.common.fbs" "$tmp/ridl.std.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec/deno.json > "$tmp/deno.json"
+    cp crates/ridl-backend-ts/tests/fixtures/codec/roundtrip_test.ts "$tmp/roundtrip_test.ts"
+    deno check --config "$tmp/deno.json" "$tmp/veh.common.codec.ts"
+    deno test --config "$tmp/deno.json" "$tmp/roundtrip_test.ts"
 
 # The wasm codec of the cabin demos: the generated cabin crate, which
 # `_cabin-generate` writes with the `wasm` module because

@@ -2175,21 +2175,21 @@ fn the_codec_option_is_accepted_and_other_keys_are_refused() {
 
 /// With `codec = true` the backend writes `<base>.codec.ts` after
 /// `<base>.ts`, under the same generated marker; with `codec = false` it
-/// writes `<base>.ts` alone. The package is `examples/cabin`'s, compiled as
-/// one file.
+/// writes `<base>.ts` alone. The package is the Rust backend's
+/// `interaction_face.ridl` fixture, compiled as one file.
 #[test]
 fn the_codec_option_writes_a_second_file() {
     use ridl_ir::codegen::Backend as _;
 
-    let path =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin/cabin.ridl");
-    let text = std::fs::read_to_string(&path).expect("read examples/cabin/cabin.ridl");
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ridl-backend-rust/tests/fixtures/interaction_face.ridl");
+    let text = std::fs::read_to_string(&path).expect("read interaction_face.ridl");
     let package = ridlc::compile(&path.display().to_string(), &text).package;
     let generate = |value: &str| {
         let request = v1::CodegenRequest {
             model: Some(ridl_ir::codegen::lower(&package, &[])),
-            artifact_base: "veh.cabin".to_string(),
-            generated_marker: ridl_ir::codegen::generated_marker(Some("veh.cabin")),
+            artifact_base: "face.demo".to_string(),
+            generated_marker: ridl_ir::codegen::generated_marker(Some("face.demo")),
             options: vec![v1::BackendOption {
                 key: "codec".to_string(),
                 value: value.to_string(),
@@ -2213,14 +2213,14 @@ fn the_codec_option_writes_a_second_file() {
         .iter()
         .map(|file| file.path.as_str())
         .collect();
-    assert_eq!(names, ["veh.cabin.ts", "veh.cabin.codec.ts"]);
+    assert_eq!(names, ["face.demo.ts", "face.demo.codec.ts"]);
     let Some(v1::generated_file::Content::Text(codec)) = &response.files[1].content else {
         panic!("the codec file is text");
     };
     assert!(
         codec.starts_with(&format!(
             "// {}\n",
-            ridl_ir::codegen::generated_marker(Some("veh.cabin"))
+            ridl_ir::codegen::generated_marker(Some("face.demo"))
         )),
         "got:\n{codec}"
     );
@@ -2230,7 +2230,7 @@ fn the_codec_option_writes_a_second_file() {
         .into_iter()
         .map(|file| file.path)
         .collect();
-    assert_eq!(names, ["veh.cabin.ts"]);
+    assert_eq!(names, ["face.demo.ts"]);
 }
 
 /// A target whose name begins with the name of another declaration resolves

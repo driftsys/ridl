@@ -224,7 +224,10 @@ member; rsdl is the apex.
     just cabin-ws-demo   generate cabin's crate and its FlatBuffers schema with
                          ridl build, run flatc over the schema, check the
                          format and lint of examples/cabin/server and build it,
-                         build cabin's wasm codec (wasm32 cdylib), run the
+                         build cabin's wasm codec (wasm32 cdylib), type-check
+                         and round-trip the generated TypeScript codec module
+                         of crates/ridl-backend-ts/tests/fixtures/codec
+                         against flatc's output (_codec-ts-check), run the
                          unit tests of the check (check_test.ts),
                          then run the Deno program of examples/cabin/web
                          against it: the program decodes the server's

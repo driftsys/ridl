@@ -3,7 +3,7 @@ source: crates/ridl-backend-ts/tests/codec.rs
 expression: "generate_codec(&cabin_model(),\n\"veh.cabin\").expect(\"cabin's codec module generates\").source"
 ---
 import * as flatbuffers from "flatbuffers";
-import type { MemberRef, PayloadCodec } from "@driftsys/ridl-runtime";
+import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import type * as t from "./veh.cabin.js";
 // `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
 // of this file.
