@@ -247,7 +247,9 @@ tuple field names (`field_1`), uses `null` for absent values, and wraps scalar
 payloads in `XBox` tables. So `ridl-backend-ts` generates the `encodeX` and
 `decodeX` wrappers from the IR, which knows the tuple names and union arms that
 the `.fbs` loses. The wrappers convert enums between `bigint` and `number`; the
-`.fbs` enum width does not change (ruling, Sebastien, 2026-10-22).
+`.fbs` enum width does not change for now, because the wrappers are needed
+anyway (ruling, Sebastien, 2026-10-22). Enums should not be 64-bit on the wire;
+narrowing them is tracked as debt on driftsys/ridl#1020.
 
 The proto3 route is a later, separate design: a browser on proto3 sessions with
 `protobuf-es` code from `ridl-backend-proto`, and a generated per-package
