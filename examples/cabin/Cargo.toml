@@ -13,7 +13,7 @@
 # the separation is stated where a reader of the root manifest looks.
 [workspace]
 resolver = "2"
-members = ["consumer", "generated", "generated-corpus"]
+members = ["consumer", "generated", "generated-corpus", "server"]
 
 # The generated manifest requires `ridl-rt = "0.12"`, which is what a consumer
 # outside this repository would resolve from crates.io. The demo must exercise
