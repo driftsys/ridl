@@ -8,7 +8,13 @@
 //! serves every connection on its own thread with its own attachment to one
 //! shared runtime. A publisher thread publishes a new temperature at a fixed
 //! period, which steps through the whole range of the type, from -40 to 85, and
-//! then starts again at -40. The process exits with status 0 when its standard input reaches the end.
+//! then starts again at -40, where it stays for 50 ms so that a client always
+//! receives the lowest value. The process exits with status 0 when its standard
+//! input reaches the end.
+//!
+//! The Deno program of `examples/cabin/web` passes only if every value is
+//! inside [-40..85], a decrease lands on -40 at least once, and 85 is seen; it
+//! also fails on two decreases in a row or on an increase larger than 20.
 
 use std::io::{self, Write};
 use std::net::TcpListener;
@@ -34,6 +40,12 @@ const HIGHEST: i64 = 85;
 
 /// The time between two publications.
 const PERIOD: Duration = Duration::from_millis(10);
+
+/// The time the lowest value stays published. The transport sends the newest
+/// value once per tick of 20 ms and drops the ones before it, so a value
+/// published for one period can be skipped. The lowest value stays for more
+/// than two ticks, so a client always receives it after a restart.
+const LOWEST_DWELL: Duration = Duration::from_millis(50);
 
 fn main() {
     let rt = Arc::new(Mutex::new(Loopback::new(CATALOG)));
@@ -65,8 +77,12 @@ fn main() {
                     .temperature(temperature)
                     .expect("publish temperature");
                 publisher.commit();
+                thread::sleep(if value == LOWEST {
+                    LOWEST_DWELL
+                } else {
+                    PERIOD
+                });
                 value = if value == HIGHEST { LOWEST } else { value + 1 };
-                thread::sleep(PERIOD);
             }
         }));
         if publishing.is_err() {

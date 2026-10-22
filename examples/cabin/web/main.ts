@@ -9,11 +9,11 @@
 // `Cabin.temperature`. The server steps the value through the whole range of
 // `Temperature` and starts again at the lowest value. The transport may
 // coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
-// expect every step. It exits with status 0 when it has received both the
-// lowest and the highest value, every value is inside the range, and the
-// value has decreased at least once, which is the restart. A server that does
-// not restart, or that publishes an offset value, fails. Otherwise it exits with a
-// non-zero status and names the cause and the stage. One deadline, counted
+// expect every step. It exits with status 0 only if every value is inside
+// [-40..85], a decrease lands on -40 at least once (a restart), and 85 is
+// seen. It also fails on two decreases in a row, and on an increase larger
+// than MAX_INCREASE. Otherwise it exits with a non-zero status and names the
+// cause and the stage. One deadline, counted
 // from the start of the program, covers every stage including the exit of the
 // server. A server that exits or a connection that closes before the end of
 // the check fails the program at once. It prints how many samples it received.
@@ -25,6 +25,16 @@ import { TemperatureBox } from "./generated/veh/cabin.ts";
 /** The lowest and the highest value of `Temperature` in cabin.ridl. */
 const LOWEST = -40;
 const HIGHEST = 85;
+
+/**
+ * The largest increase between two received values that is not an error. The
+ * server publishes every 10 ms, and the transport sends the newest value of a
+ * signal once per tick, so samples published between two ticks are coalesced
+ * (docs/design/ridl-transport-ws.md). A step larger than one is therefore
+ * normal. 20 is generous: it is about 200 ms of publications, which is many
+ * ticks, and a server that jumps between the bounds exceeds it.
+ */
+const MAX_INCREASE = 20;
 
 /** The time from the start of the program to its end, in milliseconds. */
 const DEADLINE_MS = 20_000;
@@ -98,10 +108,13 @@ const hash = Uint8Array.from(hex.match(/../g)!.map((h) => parseInt(h, 16)));
 
 let received = 0;
 let previous: number | undefined;
-let sawLowest = false;
 let sawHighest = false;
+// True when the previous step was a decrease.
+let decreased = false;
 let restarts = 0;
 let failure: string | undefined;
+// The stage in which the value that caused `failure` arrived.
+let failureStage = "";
 let enough!: () => void;
 const done = new Promise<void>((resolve) => (enough = resolve));
 
@@ -115,27 +128,66 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
     if (!decode) return;
     const value = decode(sample.payload);
     received++;
-    if (value < LOWEST || value > HIGHEST) {
-      failure = `temperature ${value} is outside [${LOWEST}..${HIGHEST}]`;
+    const reject = (cause: string) => {
+      failure = cause;
+      failureStage = stage;
       enough();
+    };
+    if (value < LOWEST || value > HIGHEST) {
+      reject(`temperature ${value} is outside [${LOWEST}..${HIGHEST}]`);
       return;
     }
-    // A decrease is the restart after the highest value. Samples may be
-    // skipped, so a step larger than one is not an error.
-    if (previous !== undefined && value < previous) restarts++;
+    if (previous !== undefined) {
+      if (value < previous) {
+        // A decrease is valid only as the restart, at the lowest value, and
+        // never twice in a row.
+        if (value !== LOWEST) {
+          reject(
+            `temperature fell from ${previous} to ${value}, not to ${LOWEST}`,
+          );
+          return;
+        }
+        if (decreased) {
+          reject(`temperature fell twice in a row, to ${value}`);
+          return;
+        }
+        restarts++;
+        decreased = true;
+      } else {
+        decreased = false;
+        if (value - previous > MAX_INCREASE) {
+          reject(
+            `temperature rose from ${previous} to ${value}, ` +
+              `more than ${MAX_INCREASE}`,
+          );
+          return;
+        }
+      }
+    }
     previous = value;
-    if (value === LOWEST) sawLowest = true;
     if (value === HIGHEST) sawHighest = true;
-    if (sawLowest && sawHighest && restarts > 0) enough();
+    if (sawHighest && restarts > 0) enough();
   },
 });
-void session.closed.then((ended) => {
-  if (!stopping) fail(`the connection closed (code ${ended.code})`);
+void session.closed.then(async (ended) => {
+  if (stopping) return;
+  // A server that exited closes the connection too. Wait briefly for its exit
+  // status, so that a failure of the server is reported before the closure.
+  const exited = await Promise.race([
+    server.status,
+    new Promise<undefined>((resolve) =>
+      setTimeout(() => resolve(undefined), 500)
+    ),
+  ]);
+  if (exited && exited.code !== 0) {
+    fail(`the server exited with status ${exited.code}`);
+  }
+  fail(`the connection closed (code ${ended.code})`);
 });
 stage = "subscribing";
 await session.subscribe({ kind: Kind.Signal, iface: 1, ord: 1 });
 
-stage = "waiting for the lowest and the highest value";
+stage = "waiting for a restart and the highest value";
 await done;
 
 // Ends the server: it exits when its standard input reaches the end.
@@ -146,9 +198,12 @@ const status = await server.status;
 
 console.log(
   `cabin-web: received ${received} sample(s), ${restarts} restart(s), ` +
-    `lowest ${LOWEST} seen: ${sawLowest}, highest ${HIGHEST} seen: ${sawHighest}`,
+    `highest ${HIGHEST} seen: ${sawHighest}`,
 );
-if (failure) fail(failure);
+if (failure) {
+  stage = failureStage;
+  fail(failure);
+}
 if (status.code !== 0) fail(`the server exited with status ${status.code}`);
 console.log("cabin-web: ok");
 Deno.exit(0);

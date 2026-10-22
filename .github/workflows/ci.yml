@@ -44,6 +44,8 @@ env:
   # ADR-0009 decision 8 records that asymmetry and why it is not closed here.
   # The Deno pin is not here: it is in .deno-version, because `./bootstrap`
   # reads it too and installs that version when a contributor has no `deno`.
+  # The flatc pin is not here either: it is in .flatc-version, for the same
+  # reason.
   JUST_VERSION: 1.38.0
   MDBOOK_VERSION: 0.4.40
 
@@ -273,7 +275,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
-    # The job takes about 3 minutes; a hung server or program ends here.
+    # The job runs the TypeScript checks and the cabin demo; a hung server or
+    # program ends at this limit.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

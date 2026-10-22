@@ -711,7 +711,8 @@ provenance. Nothing here is normative — the current references live in
 - **2026-10-22-cabin-ws-server-plan.md** — the plan for the cabin WebSocket
   server and its Deno demo (step 2 of
   [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)).
-  Archived verbatim. The durable record is the example itself,
-  `examples/cabin/server` and `examples/cabin/web`, run by `just cabin-ws-demo`;
+  Archived with one edit, the link to the design note. The durable record is the
+  example itself, `examples/cabin/server` and `examples/cabin/web`, run by
+  `just cabin-ws-demo`;
   [the transport design record](../design/ridl-transport-ws.md) lists what
   remains (driftsys/ridl#989).
