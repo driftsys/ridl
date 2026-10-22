@@ -59,10 +59,17 @@ async function run(): Promise<Progress> {
       if (
         target.iface !== TEMPERATURE.iface || target.ord !== TEMPERATURE.ord
       ) return;
-      const rejected = verifyPayload(codec, sample.payload);
-      const outcome = rejected
-        ? { kind: "fail" as const, cause: rejected }
-        : check.accept(decodeTemperature(sample.payload));
+      let outcome;
+      try {
+        const rejected = verifyPayload(codec, sample.payload);
+        outcome = rejected
+          ? { kind: "fail" as const, cause: rejected }
+          : check.accept(decodeTemperature(sample.payload));
+      } catch (e) {
+        settled = true;
+        reject(new Error(`verifying the payload: ${(e as Error).message}`));
+        return;
+      }
       if (outcome.kind === "pass") {
         settled = true;
         resolve({ ...check.progress });

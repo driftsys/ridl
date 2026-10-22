@@ -154,7 +154,7 @@ export async function loadCodec(
   ) => number;
 
   // The hash is read through a buffer that the module allocates.
-  const hashPtr = alloc(HASH_LENGTH);
+  const hashPtr = alloc(HASH_LENGTH) >>> 0;
   if (hashPtr === 0) throw outOfMemory();
   let actual: Uint8Array;
   try {
@@ -177,7 +177,7 @@ export async function loadCodec(
           `typeId must be an integer in [0, 2^32), got ${String(typeId)}`,
         );
       }
-      const ptr = alloc(bytes.length);
+      const ptr = alloc(bytes.length) >>> 0;
       // A zero length may legitimately return 0; any other 0 is a failure.
       if (ptr === 0 && bytes.length > 0) throw outOfMemory();
       let code: number;

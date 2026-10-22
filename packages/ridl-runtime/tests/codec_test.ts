@@ -385,6 +385,16 @@ Deno.test("verify throws when the payload buffer cannot be allocated", async () 
   assertEquals(error.exportName, "ridl_alloc");
 });
 
+Deno.test("verify throws when a 1-byte payload buffer cannot be allocated", async () => {
+  const codec = await loadCodec(fixtureBytes({ allocFailsFor: 1 }), options);
+  const error = assertThrows(
+    () => codec.verify(0, new Uint8Array(1)),
+    CodecError,
+    "out of memory",
+  );
+  assertEquals(error.exportName, "ridl_alloc");
+});
+
 Deno.test("verify of an empty payload does not throw", async () => {
   const codec = await loadCodec(
     fixtureBytes({ allocNullForEmpty: true }),

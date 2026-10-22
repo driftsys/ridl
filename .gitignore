@@ -16,8 +16,9 @@
 # string, bytes, array, map or pattern.
 /examples/cabin/generated-corpus/
 
-# The schema and the TypeScript that `just cabin-ws-demo` writes for the
-# cabin web program: `ridl build --emit flatbuffers` and `flatc` output.
+# The schema, the TypeScript and the wasm codec that `just cabin-ws-demo`
+# writes for the cabin web program: `ridl build --emit flatbuffers` and
+# `flatc` output, and veh_cabin.wasm.
 /examples/cabin/web/generated/
 
 # Node (the VS Code extension's own dependencies)

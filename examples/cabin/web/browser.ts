@@ -7,9 +7,10 @@
 // (generated/veh_cabin.wasm, as `application/wasm` at /veh_cabin.wasm) from
 // 127.0.0.1, and opens the page in a headless Chromium-family browser. The
 // page runs the codec self-test, then verifies each payload of the server's
-// `Cabin.temperature` signal through the codec and runs the check of check.ts. The program then
-// stops the server and checks that it exited with status 0. It prints the
-// number of samples and wraps and exits 0, or names the cause and exits 1.
+// `Cabin.temperature` signal through the codec and runs the check of
+// check.ts. The program then stops the server and checks that it exited with
+// status 0. It prints the number of samples and wraps and exits 0, or names
+// the cause and exits 1.
 // Every process, listener and temporary directory it started is stopped or
 // removed before it exits.
 

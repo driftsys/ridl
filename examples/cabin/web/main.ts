@@ -73,6 +73,18 @@ setTimeout(
 const serverPath = Deno.args[0];
 if (!serverPath) fail("usage: main.ts <server-executable>");
 
+// The module is read before the server starts; it is loaded once the server
+// has announced the catalog hash.
+stage = "reading the codec";
+let wasm: Uint8Array;
+try {
+  wasm = await Deno.readFile(
+    new URL("./generated/veh_cabin.wasm", import.meta.url),
+  );
+} catch (e) {
+  fail(`loading the codec: ${(e as Error).message}`);
+}
+
 // The announcement of the server is read inside `startServer`.
 stage = "reading the announcement of the server";
 try {
@@ -89,10 +101,7 @@ const hash = hashFromHex(server.hash);
 stage = "loading the codec";
 let codec: Codec;
 try {
-  codec = await loadCodec(
-    await Deno.readFile(new URL("./generated/veh_cabin.wasm", import.meta.url)),
-    { catalogHash: hash },
-  );
+  codec = await loadCodec(wasm, { catalogHash: hash });
 } catch (e) {
   fail(`loading the codec: ${(e as Error).message}`);
 }
@@ -116,10 +125,15 @@ const session = await connect(`ws://127.0.0.1:${port}`, {
     if (
       target.iface !== TEMPERATURE.iface || target.ord !== TEMPERATURE.ord
     ) return;
-    const rejected = verifyPayload(codec, sample.payload);
-    const verdict = rejected
-      ? { kind: "fail" as const, cause: rejected }
-      : check.accept(decodeTemperature(sample.payload));
+    let verdict;
+    try {
+      const rejected = verifyPayload(codec, sample.payload);
+      verdict = rejected
+        ? { kind: "fail" as const, cause: rejected }
+        : check.accept(decodeTemperature(sample.payload));
+    } catch (e) {
+      fail(`verifying the payload: ${(e as Error).message}`);
+    }
     if (verdict.kind === "fail") {
       failure = verdict.cause;
       failureStage = stage;

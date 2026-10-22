@@ -2,8 +2,9 @@
 //! the generated crate: the cabin example, built with the option, compiled for
 //! `wasm32-unknown-unknown` and run in a Node host.
 //!
-//! The test copies `examples/cabin` into a temporary directory and turns the
-//! option on in the copy of its manifest. It then builds two things from one
+//! The test copies `examples/cabin` into a temporary directory. The example's
+//! manifest sets `wasm = true` itself; the tests of the option turned off
+//! remove that line from the copy. It then builds two things from one
 //! generated crate. A native program encodes `Temperature` payloads with the
 //! generated FlatBuffers codec and prints the bytes, the catalog hash of
 //! `Cabin` and the two lists of the module. A `cdylib` for wasm32 carries the
