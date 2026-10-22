@@ -1,6 +1,8 @@
 # The generated TypeScript codec table — design
 
-Status: approved 2026-10-22. Written 2026-10-22 as step 5 of the plan change in
+Status: as built, 2026-10-22 (branch `feat/ts-codec-table`); D-4, D-14 and the
+fixtures record what the implementation settled. Written 2026-10-22 as step 5 of
+the plan change in
 [the TypeScript wasm codec design](2026-10-21-ts-wasm-codec-design.md).
 Decisions marked **(ruling)** were taken by the author; Sebastien accepted the
 six recommendations at the end on 2026-10-22, and they are recorded there as
@@ -92,7 +94,13 @@ which is exactly the set with a `Payload<FlatBuffers>` impl and an entry in
 `WASM_PAYLOAD_TYPES` — the file exports `encode<Name>(value: Name): Uint8Array`
 and `decode<Name>(bytes: Uint8Array): Name`, where `Name` is the TypeScript type
 of `<base>.ts`. The `flatc` classes, builders and `XBox` tables never appear in
-a signature.
+a signature. An `internal` root is the one exception (controller ruling during
+execution, 2026-10-22): `<base>.ts` does not export its type, so the module
+writes no `encode`, `decode` or `codec<Name>` for it, but still lists its
+qualified name in `PAYLOAD_TYPES`, so that the list equals the package's part of
+`WASM_PAYLOAD_TYPES`; an interaction whose payload type is internal is refused
+with
+`` `<Interface>.<member>` has the payload type `<qualified>`, which is internal; `<base>.ts` does not export it, so the codec module cannot name it ``.
 
 **D-3. The wrappers go through the `flatc` object API, with one private
 converter pair per declaration (ruling).** `decode<Name>` reads the root with
@@ -109,21 +117,21 @@ tree walk over the model, which is the smaller program.
 **D-4. The conversion rules are fixed per typl kind (ruling).** The spike listed
 every difference; the table below is the rule for each one.
 
-| typl kind                       | `flatc` object API form                                          | Plain object form (`<base>.ts`)                 | Conversion                                                                                                             |
-| ------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| named scalar as a payload       | `<Name>Box` table, `value`                                       | the branded `number`, `bigint`, `string`, …     | unbox or box; a `bigint` width stays `bigint`                                                                          |
-| named scalar as a field         | the backing scalar                                               | the branded scalar                              | a type assertion, no runtime work                                                                                      |
-| enum                            | `bigint` field; string-valued `enum` (`.fbs` width is `long`)    | numeric `export enum`                           | `BigInt(value)` to pack, `Number(value)` to unpack; as a payload, through `<Name>Box`                                  |
-| enum set                        | integer field (`bigint` for a 64-bit width)                      | branded `number` or `bigint`                    | a type assertion; as a payload, through `<Name>Box`                                                                    |
-| struct                          | `<Name>T` class, fields in `.fbs` order                          | `interface` with named fields                   | field by field, by the field's `Spellings.camel`, which is the name `flatc` gives the accessor                         |
-| optional field                  | `null` when absent (`= null` default, or a missing table/vector) | the field is absent (`name?:`)                  | `null` becomes an absent property; an absent property becomes `null`                                                   |
-| union                           | wrapper `<Name>T { valueType, value }`; scalar arms boxed        | `{ kind: '<arm>'; value: T }`                   | `kind` is the arm's declared name; the `flatc` member is its `Spellings.snake`; a boxed arm is unboxed through `value` |
-| tuple                           | positional `field_1, field_2, …`                                 | an inline object with the declared field names  | position to name, from the tuple's `fields` in the model                                                               |
-| array                           | `T[]` (a vector)                                                 | `readonly T[]`                                  | element by element through the element's rule                                                                          |
-| map                             | `<path>EntryT[]` with `key` and `value`                          | `ReadonlyArray<readonly [K, V]>`                | entry to pair and pair to entry, in order                                                                              |
-| string, bytes, boolean, float   | `string`, `Uint8Array`, `boolean`, `number`                      | the same                                        | none                                                                                                                   |
-| integer field of U64 or I64     | `bigint`                                                         | `bigint`                                        | none                                                                                                                   |
-| induced tuple of an interaction | positional table named `InducedName.wire`                        | `export interface <InducedName.rust>` (see D-9) | as a tuple                                                                                                             |
+| typl kind                       | `flatc` object API form                                          | Plain object form (`<base>.ts`)                 | Conversion                                                                                                                                                                                                                                                               |
+| ------------------------------- | ---------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| named scalar as a payload       | `<Name>Box` table, `value`                                       | the branded `number`, `bigint`, `string`, …     | unbox or box; a `bigint` width stays `bigint`                                                                                                                                                                                                                            |
+| named scalar as a field         | the backing scalar                                               | the branded scalar                              | a type assertion, no runtime work                                                                                                                                                                                                                                        |
+| enum                            | `bigint` field; string-valued `enum` (`.fbs` width is `long`)    | numeric `export enum`                           | `BigInt(value)` to pack, `Number(value)` to unpack; as a payload, through `<Name>Box`                                                                                                                                                                                    |
+| enum set                        | integer field (`bigint` for a 64-bit width)                      | branded `number` or `bigint`                    | a type assertion; as a payload, through `<Name>Box`                                                                                                                                                                                                                      |
+| struct                          | `<Name>T` class, fields in `.fbs` order                          | `interface` with named fields                   | field by field; the `fb` member is the lower camel case of `snake_case(declared)`, the name `flatc` gives the accessor (not `Spellings.camel`: `flatc` drops each `_` and upper-cases the character after it, so an acronym in the declared name is spelled differently) |
+| optional field                  | `null` when absent (`= null` default, or a missing table/vector) | the field is absent (`name?:`)                  | `null` becomes an absent property; an absent property becomes `null`                                                                                                                                                                                                     |
+| union                           | wrapper `<Name>T { valueType, value }`; scalar arms boxed        | `{ kind: '<arm>'; value: T }`                   | `kind` is the arm's declared name; the `flatc` member is its `Spellings.snake`; a boxed arm is unboxed through `value`                                                                                                                                                   |
+| tuple                           | positional `field_1, field_2, …`                                 | an inline object with the declared field names  | position to name, from the tuple's `fields` in the model                                                                                                                                                                                                                 |
+| array                           | `T[]` (a vector)                                                 | `readonly T[]`                                  | element by element through the element's rule                                                                                                                                                                                                                            |
+| map                             | `<path>EntryT[]` with `key` and `value`                          | `ReadonlyArray<readonly [K, V]>`                | entry to pair and pair to entry, in order                                                                                                                                                                                                                                |
+| string, bytes, boolean, float   | `string`, `Uint8Array`, `boolean`, `number`                      | the same                                        | none                                                                                                                                                                                                                                                                     |
+| integer field of U64 or I64     | `bigint`                                                         | `bigint`                                        | none                                                                                                                                                                                                                                                                     |
+| induced tuple of an interaction | positional table named `InducedName.wire`                        | `export interface <InducedName.rust>` (see D-9) | as a tuple                                                                                                                                                                                                                                                               |
 
 The `.fbs` enum width stays `long` for now (ruling, Sebastien, 2026-10-22);
 narrowing it is driftsys/ridl#1020, and the wrapper absorbs the change when it
@@ -188,9 +196,10 @@ type, and a query whose reply is a tuple, name an induced tuple that is a
 FlatBuffers root and a payload type; `<base>.ts` emits no type for it today. The
 codec file exports `interface <InducedName.rust>` with the tuple's named fields,
 so `encode<InducedName.rust>` has a plain-object parameter type. Cabin has no
-such call (every call takes one named parameter), so the veh-cluster corpus is
-the fixture for it (see "Tests"). A query with a fallible `T | E` reply has no
-reply payload type, as in the Rust face, and its entry has no `reply`.
+such call (every call takes one named parameter), so the codec fixture's
+`setLimit` and `span` are the proof of it (see "Tests"). A query with a fallible
+`T | E` reply has no reply payload type, as in the Rust face, and its entry has
+no `reply`.
 
 **D-10. The file imports `flatc`'s output at a fixed relative path, and the user
 runs `flatc` (ruling).** `flatc --ts -o <dir> <package>.fbs` writes
@@ -249,25 +258,42 @@ sentence naming the payload type as a code span; the type's rules stay on the
 type in `<base>.ts`, where ADR-0028 decision 6 puts them, and are not repeated.
 The table constants carry one sentence each.
 
-**D-14. A foreign reference is refused in the first slice (ruling, see Q-2).** A
-payload type of the package that reaches a declaration of another package
-(`veh.common.Speed` in a cabin struct) needs that declaration's converter and
-`flatc`'s output for that package. Cabin reaches none. The first slice reports
-`GenerateError` naming the payload type and the foreign declaration, so the
-limit is loud. The path when a package needs it is self-contained converters:
-`model.foreign` carries the full declaration, so the converters can be emitted
-into the reaching package's file, with an import of `./<foreign segments>.js`
-for `flatc`'s output, and no exported converter API between codec files.
+**D-14. A foreign struct, union or enum is refused; a foreign named scalar or
+enum set is converted, and one used as a payload root goes through its own
+package's codec module (ruling, controller, 2026-10-22; amends Q-2).** A payload
+type of the package that reaches a struct, a union or an enum of another package
+needs that declaration's converter and `flatc`'s output for that package, and
+the module does not write either yet: it refuses with
+``<site> `<package>.<Name>`, a <struct|union|enum> of another package, which the codec module does not convert yet``,
+where `<site>` names the payload type and the field, arm or element that reaches
+it, or the interaction whose payload type it is. The path when a package needs
+it is self-contained converters: `model.foreign` carries the full declaration,
+so the converters can be emitted into the reaching package's file, with an
+import of `./<foreign segments>.js` for `flatc`'s output, and no exported
+converter API between codec files.
 
-The refusal covers a foreign declaration that needs a converter or `flatc`'s
-output for its package: a struct, a union and an enum. A foreign named scalar
-and a foreign enum set need neither: the `.fbs` inlines both at the field
-position, and the conversion is a type assertion that reads the width from
-`model.foreign`. `ridl.std` declares named scalars and regex constants only, so
-a package that uses `ridl.std.Label` or `ridl.std.Timestamp` in a payload is not
-refused. The veh-cluster corpus is refused as a whole, because its `cluster`
-package takes `veh.common.GearPosition` as a command's payload, so the fixture
-for the converters is the corpus's `common` package alone (see the plan).
+A foreign named scalar or enum set at a field, arm or element position needs
+neither: the `.fbs` inlines both there, and the conversion is a type assertion
+that reads the width from `model.foreign`; the module adds
+`import type * as <alias> from "./<package>.js";` for each such package.
+
+A foreign named scalar or enum set used as a payload root — `ridl.std.Name` as
+the request of `query profile(name: Name)` — is different: its box table
+`<Name>Box` lives only in the foreign package's `.fbs`, so the wrappers for it
+exist only in that package's codec module. The table entry therefore uses that
+module: the file imports
+`import * as <alias>_codec from "./<package>.codec.js";` and declares
+`const codec<PascalAlias><Name>: PayloadCodec<<alias>.<Name>> = { type: "<package>.<Name>", encode: <alias>_codec.encode<Name>, decode: <alias>_codec.decode<Name> };`
+(`codecRidlStdName` for `ridl.std.Name`). A build writes every package of the
+workspace, `ridl.std` included, so the foreign codec module exists beside this
+one, and the user runs `flatc` on that package's `.fbs` as well. A foreign root
+with no finite bound gets no entry, as a local one does.
+
+`ridl.std` declares named scalars and regex constants only, so a package that
+uses `ridl.std.Label` or `ridl.std.Timestamp` in a payload is not refused. The
+veh-cluster corpus is refused as a whole, because its `cluster` package takes
+`veh.common.GearPosition`, an enum, as a command's payload, so the fixture for
+the converters is the corpus's `common` package alone (see "Tests").
 
 **D-15. Every import of the codec file carries the `.js` suffix (ruling, see
 Q-3).** `flatc`'s barrels use `.js` (`export { X } from './cabin/x.js'`), and
@@ -337,7 +363,7 @@ converters of `Warning` and `Diagnostic` are left out):
 // @generated by ridl from package veh.cabin. Do not edit.
 /* eslint-disable */
 import * as flatbuffers from "flatbuffers";
-import type { MemberRef, PayloadCodec } from "@driftsys/ridl-runtime";
+import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import type * as t from "./veh.cabin.js";
 import * as fb from "./veh/cabin.js";
 
@@ -408,12 +434,17 @@ if (result.ok) use(Cabin.temperature.payload.decode(sample.payload));
 
 Names the file reserves: `CATALOG_NAME`, `CATALOG_HASH`, `PAYLOAD_TYPES`,
 `RULES`, `encode<Name>`, `decode<Name>`, the interface names, the induced tuple
-names of D-9, and the private converters. The imports are namespaced (`t`, `fb`,
-`flatbuffers`), so a declaration of the package never collides with an import. A
-declaration whose name collides with a reserved name — an induced tuple spelled
-as a declared type, which the model records as a `tuple_collisions` fact, or an
-interface named `RULES` — is refused with a `GenerateError` naming both, as the
-Rust backend refuses a claimed name.
+names of D-9, the private converters, the private `codec<Name>` constants and
+the private `absent` function (written only when a converter reads a required
+field the buffer may leave out). The imports are namespaced (`t`, `fb`,
+`flatbuffers`, one `<alias>` per foreign package whose types a converter names,
+one `<alias>_codec` per foreign payload root), so a declaration of the package
+never collides with an import. The file imports only `PayloadCodec` from the
+runtime package: the entries satisfy `MemberRef` structurally and do not name
+it. A declaration whose name collides with a reserved name — an induced tuple
+spelled as a declared type, which the model records as a `tuple_collisions`
+fact, or an interface named `RULES` — is refused with a `GenerateError` naming
+both, as the Rust backend refuses a claimed name.
 
 ## How interface declarations reach `ridl-backend-ts`
 
@@ -451,8 +482,11 @@ hash.
   `ridl build examples/cabin --emit typescript --emit flatbuffers --out-dir examples/cabin/web/generated`
   writes `veh.cabin.ts`, `veh.cabin.codec.ts` and `veh.cabin.fbs`, and
   `flatc … -o examples/cabin/web/generated` writes `veh/cabin.ts` and
-  `veh/cabin/*.ts` beside them. The current `generated/schema/` subdirectory
-  goes away.
+  `veh/cabin/*.ts` beside them, with `-I examples/cabin/web/generated` for the
+  includes. No `schema/` subdirectory is written. When a codec module imports
+  another package's codec module (D-14), `flatc` runs on that package's `.fbs`
+  too, as the recipe `_codec-ts-check` does for `veh.common.fbs` and
+  `ridl.std.fbs`.
 - **Import paths.** `./veh/cabin.js` for the `flatc` barrel, `./veh.cabin.js`
   for the types, `flatbuffers` and `@driftsys/ridl-runtime` as bare specifiers
   that the user's import map or `package.json` resolves (D-15).
@@ -470,9 +504,13 @@ Three layers hold it:
    `WASM_PAYLOAD_TYPES` and `WASM_RULES` from `__ridl_wasm.rs` and
    `PAYLOAD_TYPES` and `RULES` from `veh.cabin.codec.ts`, and asserts that the
    two type lists are equal (cabin is a one-package workspace, so the package's
-   list is the crate's) and the two rule lists are equal. A second case builds a
-   two-package fixture and asserts that each package's `PAYLOAD_TYPES` is a
-   sorted subsequence of the crate's list, which is what D-5 relies on.
+   list is the crate's) and the two rule lists are equal. A second case builds
+   `crates/ridlc/tests/fixtures/codec-two-packages`, one root package `pin`
+   whose files declare `pin.a` (`type Zed`) and `pin.b` (`type Alpha`) — one
+   manifest, two packages, not a workspace — and asserts that the crate list is
+   `["pin.a.Zed", "pin.b.Alpha"]`, that each package's `PAYLOAD_TYPES` is a
+   subsequence of it in order, and that their concatenation equals it, which is
+   what D-5 relies on.
 3. **The export, pinned.** The Node host of `crates/ridlc/tests/wasm_module.rs`
    calls `ridl_type_id` for every name of `WASM_PAYLOAD_TYPES` and asserts the
    index, and asserts -1 for `veh.cabin.Nothing`; the native program asserts the
@@ -584,12 +622,14 @@ codec = true
   (`crates/ridl-backend-ts/tests/fixtures/codec/`: the veh-cluster corpus's
   `common.typl`, copied verbatim and pinned equal by a test, plus an interface
   file in the same package) with `--emit typescript --emit flatbuffers` into a
-  temporary directory, runs `flatc` on it, runs `deno check` on its codec file
-  with an import map for `flatbuffers` and `@driftsys/ridl-runtime`, and runs a
-  wasm-free round-trip test, `decode(encode(v))` deep-equal to `v`, over a
-  union, a map, a tuple, an optional field and a two-parameter call. That is the
-  proof for the union, map, tuple and multi-parameter rules of D-4 and D-9
-  against the pinned `flatc`, which cabin does not exercise. A round trip
+  temporary directory, runs `flatc` on `veh.common.fbs` and `ridl.std.fbs` (the
+  fixture's `query profile(name: Name)` makes `ridl.std.Name` a foreign payload
+  root, so the module imports `ridl.std.codec.js`), runs `deno check` on its
+  codec file with an import map for `flatbuffers` and `@driftsys/ridl-runtime`,
+  and runs a wasm-free round-trip test, `decode(encode(v))` deep-equal to `v`,
+  over a union, a map, a tuple, an optional field and a two-parameter call. That
+  is the proof for the union, map, tuple and multi-parameter rules of D-4 and
+  D-9 against the pinned `flatc`, which cabin does not exercise. A round trip
   through a wasm module of the fixture is a follow-up once it has a wasm build.
 
 ## Alternatives considered
@@ -627,7 +667,10 @@ the self-contained converters come in the slice after the cabin demos run on the
 table.** Cabin reaches no other package. The refusal is loud, and the path is
 designed. The refusal's scope is the one D-14 states: a foreign struct, union or
 enum; a foreign named scalar or enum set, `ridl.std`'s included, is converted by
-a type assertion.
+a type assertion. Amended by the controller during execution (2026-10-22): a
+foreign named scalar or enum set used as a payload root is accepted and its
+table entry goes through that package's codec module, because its box table
+lives only in that package's schema (D-14).
 
 **Q-3. Accepted 2026-10-22: `.js` import suffixes in the codec file (D-15), and
 a follow-up issue, filed with the pull request, to move `<base>.ts` to `.js` as
