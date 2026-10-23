@@ -304,12 +304,65 @@ pub enum Rule {
     Unique,
 }
 
+/// Why a transcode failed.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TranscodeError {
+    /// The input bytes did not verify under the source encoding.
+    Verify(VerifyError),
+    /// The decoded value did not encode under the target encoding.
+    Encode(EncodeError),
+}
+
+impl From<VerifyError> for TranscodeError {
+    fn from(e: VerifyError) -> Self {
+        TranscodeError::Verify(e)
+    }
+}
+
+impl From<EncodeError> for TranscodeError {
+    fn from(e: EncodeError) -> Self {
+        TranscodeError::Encode(e)
+    }
+}
+
+/// Re-encodes the payload `bytes` from the encoding `S` into the encoding `D`.
+///
+/// This is the domain-mediated reference path: it verifies `bytes` under `S`,
+/// decodes the value, and encodes the value under `D`. A generated function
+/// that calls it may later replace its body with a faster one that gives the
+/// same result.
+///
+/// The encoded bytes are a subslice of `out` (a suffix of `out` for
+/// FlatBuffers). An `out` that is too small is [`EncodeError::Capacity`]. The
+/// input has already verified under `S` when the encode runs, so an
+/// [`EncodeError::Contract`] means that the two codecs disagree on a typl
+/// constraint; the function reports it.
+///
+/// `S` cannot be inferred, so a caller writes at least
+/// `transcode::<_, Proto3, _>`.
+pub fn transcode<'o, T, S, D>(
+    bytes: &[u8],
+    out: &'o mut [u8],
+) -> Result<Ref<'o, T, D>, TranscodeError>
+where
+    T: Payload<S> + Payload<D>,
+    S: Encoding,
+    D: Encoding,
+{
+    let value: T = Ref::<T, S>::verify(bytes)?.decode();
+    Ok(Ref::<T, D>::encode(&value, out)?)
+}
+
 #[cfg(test)]
 mod tests {
     use core::marker::PhantomData;
 
-    use super::{EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError};
-    use crate::encoding::ReprC;
+    use super::{
+        transcode, EncodeError, Encoded, Malformed, Payload, Ref, Rule, TranscodeError,
+        VerifyError, Violation,
+    };
+    use crate::encoding::{Proto3, ReprC};
 
     /// A payload for this test only: its view is the bytes.
     struct Raw;
@@ -378,5 +431,157 @@ mod tests {
             }
             assert_ne!(*a, Malformed::OutOfBounds);
         }
+    }
+
+    /// A speed for the transcode tests. Under `ReprC` it is two little-endian
+    /// bytes at the front of the buffer, and every value is legal. Under
+    /// `Proto3` it is a marker byte then two little-endian bytes at the end
+    /// of the buffer, and a value above 300 is refused.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct Speed(u16);
+
+    const SPEED_MAX: u16 = 300;
+
+    impl Payload<ReprC> for Speed {
+        const MAX_SIZE: usize = 2;
+        type Buffer = [u8; 2];
+        const BUFFER: [u8; 2] = [0; 2];
+        type View<'a> = &'a [u8];
+
+        fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
+            if out.len() < 2 {
+                return Err(EncodeError::Capacity {
+                    needed: 2,
+                    available: out.len(),
+                });
+            }
+            out[..2].copy_from_slice(&self.0.to_le_bytes());
+            let bytes: &'o [u8] = &out[..2];
+            Ok(Encoded { bytes, view: bytes })
+        }
+
+        fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
+            if buf.len() == 2 {
+                Ok(buf)
+            } else {
+                Err(VerifyError::Structure(Malformed::OutOfBounds))
+            }
+        }
+
+        fn decode(r: Ref<'_, Self, ReprC>) -> Self {
+            Speed(u16::from_le_bytes([r.bytes()[0], r.bytes()[1]]))
+        }
+    }
+
+    impl Payload<Proto3> for Speed {
+        const MAX_SIZE: usize = 3;
+        type Buffer = [u8; 3];
+        const BUFFER: [u8; 3] = [0; 3];
+        type View<'a> = &'a [u8];
+
+        fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
+            if self.0 > SPEED_MAX {
+                return Err(EncodeError::Contract(Violation {
+                    type_name: Some("Speed"),
+                    rule: Rule::Range,
+                }));
+            }
+            let len = out.len();
+            if len < 3 {
+                return Err(EncodeError::Capacity {
+                    needed: 3,
+                    available: len,
+                });
+            }
+            let le = self.0.to_le_bytes();
+            out[len - 3..].copy_from_slice(&[0x08, le[0], le[1]]);
+            let bytes: &'o [u8] = &out[len - 3..];
+            Ok(Encoded { bytes, view: bytes })
+        }
+
+        fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
+            if buf.len() != 3 || buf[0] != 0x08 {
+                return Err(VerifyError::Structure(Malformed::WireType));
+            }
+            if u16::from_le_bytes([buf[1], buf[2]]) > SPEED_MAX {
+                return Err(VerifyError::Contract(Violation {
+                    type_name: Some("Speed"),
+                    rule: Rule::Range,
+                }));
+            }
+            Ok(buf)
+        }
+
+        fn decode(r: Ref<'_, Self, Proto3>) -> Self {
+            Speed(u16::from_le_bytes([r.bytes()[1], r.bytes()[2]]))
+        }
+    }
+
+    #[test]
+    fn transcode_matches_direct_encode() {
+        let mut source = [0u8; 8];
+        let source = Ref::<Speed, ReprC>::encode(&Speed(120), &mut source).unwrap();
+
+        let mut out = [0u8; 8];
+        let moved = transcode::<Speed, ReprC, Proto3>(source.bytes(), &mut out).unwrap();
+
+        let mut direct = [0u8; 8];
+        let direct = Ref::<Speed, Proto3>::encode(&Speed(120), &mut direct).unwrap();
+        assert_eq!(moved.bytes(), direct.bytes());
+        assert_eq!(moved.decode(), Speed(120));
+    }
+
+    #[test]
+    fn transcode_reverse_direction() {
+        let mut source = [0u8; 8];
+        let source = Ref::<Speed, Proto3>::encode(&Speed(250), &mut source).unwrap();
+
+        let mut out = [0u8; 8];
+        let moved = transcode::<Speed, Proto3, ReprC>(source.bytes(), &mut out).unwrap();
+
+        let mut direct = [0u8; 8];
+        let direct = Ref::<Speed, ReprC>::encode(&Speed(250), &mut direct).unwrap();
+        assert_eq!(moved.bytes(), direct.bytes());
+        assert_eq!(moved.decode(), Speed(250));
+    }
+
+    #[test]
+    fn transcode_same_encoding_is_identity() {
+        let mut source = [0u8; 8];
+        let source = Ref::<Speed, Proto3>::encode(&Speed(77), &mut source).unwrap();
+
+        let mut out = [0u8; 8];
+        let moved = transcode::<Speed, Proto3, Proto3>(source.bytes(), &mut out).unwrap();
+        assert_eq!(moved.bytes(), source.bytes());
+    }
+
+    #[test]
+    fn transcode_refuses_bad_input() {
+        let mut out = [0u8; 8];
+        let result = transcode::<Speed, ReprC, Proto3>(&[1, 2, 3], &mut out).map(|r| r.bytes());
+        assert!(matches!(result, Err(TranscodeError::Verify(_))));
+    }
+
+    #[test]
+    fn transcode_reports_contract() {
+        // `ReprC` accepts 301; `Proto3` refuses it.
+        let mut out = [0u8; 8];
+        let result =
+            transcode::<Speed, ReprC, Proto3>(&301u16.to_le_bytes(), &mut out).map(|r| r.bytes());
+        assert!(matches!(
+            result,
+            Err(TranscodeError::Encode(EncodeError::Contract(_)))
+        ));
+    }
+
+    #[test]
+    fn transcode_reports_capacity() {
+        let mut out = [0u8; 1];
+        let result =
+            transcode::<Speed, ReprC, Proto3>(&120u16.to_le_bytes(), &mut out).map(|r| r.bytes());
+        assert!(matches!(
+            result,
+            Err(TranscodeError::Encode(EncodeError::Capacity { .. }))
+        ));
     }
 }

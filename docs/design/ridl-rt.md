@@ -31,7 +31,7 @@ adds:
 | Module        | Contents                                                                                                                                                                                                                                                                        |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `ReprC`                                                                                                                                                                                                                           |
-| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`                                                                                                                                                                      |
+| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`, `TranscodeError`, `transcode`                                                                                                                                       |
 | `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                                    |
 | `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `Sizes<E>`, `reservation`, `table_budget`                                           |
 | `port`        | `Attached`, `Encoded`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
@@ -451,6 +451,24 @@ trait `payload::View<'a>` is what a generated accessor view implements: its one
 method, `bytes`, hands back the verified buffer, and it is a trait method rather
 than an inherent one so that a field whose accessor is named `bytes` does not
 meet it (ADR-0021 decision 20, driftsys/ridl#587).
+
+### `transcode`
+
+```rust
+#[non_exhaustive] pub enum TranscodeError { Verify(VerifyError), Encode(EncodeError) }
+pub fn transcode<'o, T, S, D>(bytes: &[u8], out: &'o mut [u8]) -> Result<Ref<'o, T, D>, TranscodeError>
+where T: Payload<S> + Payload<D>, S: Encoding, D: Encoding;
+```
+
+`transcode` is the reference path from one payload encoding to another: it
+verifies `bytes` under `S`, decodes the value, and encodes it under `D`. It uses
+no heap allocation of its own. The result follows `Ref::encode`: the bytes are a
+subslice of `out`, and an `out` that is too small is `EncodeError::Capacity`.
+Because the input verified under `S`, an `EncodeError::Contract` from the encode
+under `D` means that the two codecs disagree on a typl constraint; the function
+reports it. `S` cannot be inferred, so a caller writes at least
+`transcode::<_, Proto3, _>`. A generated function may call it, and a later body
+may replace it with one that gives the same result.
 
 ## Features, `no_std`, `alloc` and `wasm32`
 
