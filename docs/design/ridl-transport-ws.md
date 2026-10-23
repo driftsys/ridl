@@ -9,10 +9,12 @@ chose. The server forwards payload bytes without decoding them, and it maps each
 client request's `seq` to the correlation its backend `Caller` returned.
 
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 6 names the crate and fixes `ridl-rt` as its only dependency (amended
-2026-10-19: the row said "`ridl-rt` and a WebSocket crate"). ADR-0020 decision 7
-and [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
-decision 7 place the transport;
+decision 6 names the crate and fixes `ridl-rt` as its only unconditional
+dependency, with `ridl-descriptor` under the `descriptor` feature (amended
+2026-10-19: the row said "`ridl-rt` and a WebSocket crate"; amended 2026-10-24:
+the `descriptor` feature). ADR-0020 decision 7 and
+[ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
+7 place the transport;
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) fixes the port
 contracts the server reads and calls. The wire rules are the frame specification
 §4 to §9 and §11.1 (binding version 1).
@@ -47,8 +49,9 @@ must be right.
 
 **What it does not do.** It serves no stand-in port (`SignalWriter`,
 `EventSink`, `Handler`; see "Adding the stand-in ports later"). It ships no
-public Rust client. It has no TLS and authenticates no one. It reads no catalog
-descriptor.
+public Rust client. It has no TLS and authenticates no one. It reads a catalog
+descriptor only under the `descriptor` feature, and does no I/O: the embedder
+reads or embeds the file.
 
 **What it must never do.** Bind a socket, spawn a thread or start a task on its
 own; pull a dependency into an embedder's build that is not justified in "The
@@ -66,6 +69,9 @@ written from the specification alone does not interoperate with this server.
 - Edition 2021 and `rust-version = "1.83"`, the same literals as `ridl-rt` and
   `ridl-loopback`, so the crate builds with the toolchain `ridl-rt` supports.
   `just compat-check` checks this (see "Gates").
+- The `descriptor` feature needs Rust 1.88, the minimum of planus 1.3.0, which
+  `ridl-descriptor` pins; `just compat-check` builds the feature at that
+  version.
 - The transport does not link `ridl-loopback`. The loopback is a dev-dependency
   only.
 
@@ -73,33 +79,41 @@ written from the specification alone does not interoperate with this server.
 
 **D-1. One crate, two layers.**
 
-| Module         | Needs                   | Feature           | Holds                                                         |
-| -------------- | ----------------------- | ----------------- | ------------------------------------------------------------- |
-| `frame`        | `core` only, no `alloc` | always            | the §11.1 header codec: `Frame`, `decode`, `encode`           |
-| `ws` (private) | `std`                   | `server`, default | the server side of RFC 6455: handshake, message framing, ping |
-| `server`       | `std`                   | `server`, default | the session core, the backend trait, `Config` and `serve`     |
+| Module                              | Needs                   | Feature           | Holds                                                         |
+| ----------------------------------- | ----------------------- | ----------------- | ------------------------------------------------------------- |
+| `frame`                             | `core` only, no `alloc` | always            | the §11.1 header codec: `Frame`, `decode`, `encode`           |
+| `ws` (private)                      | `std`                   | `server`, default | the server side of RFC 6455: handshake, message framing, ping |
+| `server`                            | `std`                   | `server`, default | the session core, the backend trait, `Config` and `serve`     |
+| `descriptor` (private, in `server`) | `std`                   | `descriptor`, off | `MemberTable::from_descriptor` over `ridl-descriptor`         |
 
 `cargo add ridl-transport-ws --no-default-features` gives the codec alone, with
 `ridl-rt` at its default features (`no_std`). The `server` feature turns on
 `std` for this crate and nothing else; it turns on no `ridl-rt` feature. The
-crate root re-exports `serve`, `Backend`, `Config`, `Connection`, `Ended`,
-`LimitTooSmall`, `Note`, `Polling` and `Scanning` under that feature
-(`crates/ridl-transport-ws/src/lib.rs`).
+crate root re-exports `serve`, `Backend`, `Config`, `Connection`, `Described`,
+`Ended`, `LimitTooSmall`, `MemberTable`, `Note`, `Polling`, `RetainedTooSmall`,
+`Scanning` and `TableMismatch` under that feature, and `DescriptorError` under
+`descriptor` (`crates/ridl-transport-ws/src/lib.rs`).
 
-**D-2. No dependency but `ridl-rt`.** The WebSocket layer is written in this
-crate, and only its server side: parse one HTTP/1.1 upgrade request, answer it
-with `Sec-WebSocket-Accept` (SHA-1 and base64, in `src/ws/sha1.rs` and
-`src/ws/base64.rs`, with their published test vectors), read masked client
-frames, reassemble fragmented messages, answer pings, write unmasked frames, and
-run the close handshake. That is the whole of what the binding needs. The server
-never writes a masked frame, so it needs no random numbers.
+**D-2. No unconditional dependency but `ridl-rt`.** The WebSocket layer is
+written in this crate, and only its server side: parse one HTTP/1.1 upgrade
+request, answer it with `Sec-WebSocket-Accept` (SHA-1 and base64, in
+`src/ws/sha1.rs` and `src/ws/base64.rs`, with their published test vectors),
+read masked client frames, reassemble fragmented messages, answer pings, write
+unmasked frames, and run the close handshake. That is the whole of what the
+binding needs. The server never writes a masked frame, so it needs no random
+numbers.
 
-| Dependency         | Kind   | Why                                                                                                                                |
-| ------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `ridl-rt`          | normal | the port traits and the vocabulary of frame specification §2; no feature turned on                                                 |
-| `ridl-loopback`    | dev    | the backend of every server test, and the in-process half of the done-when test                                                    |
-| `tungstenite` 0.29 | dev    | an independent WebSocket client, so the hand-written server side is tested against an implementation this repository did not write |
-| `ridl-ir`          | dev    | the `websocket` binding row, for the binding sizes check                                                                           |
+| Dependency         | Kind                   | Why                                                                                                                                                             |
+| ------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ridl-rt`          | normal                 | the port traits and the vocabulary of frame specification §2; no feature turned on                                                                              |
+| `ridl-descriptor`  | optional, `descriptor` | the catalog descriptor's verifier and accessors, default features off: planus and serde (`alloc`, `derive`) only, no `ridl-ir`, no `serde_json`, no `hashbrown` |
+| `ridl-loopback`    | dev                    | the backend of every server test, and the in-process half of the done-when test                                                                                 |
+| `tungstenite` 0.29 | dev                    | an independent WebSocket client, so the hand-written server side is tested against an implementation this repository did not write                              |
+| `ridl-ir`          | dev                    | the `websocket` binding row, for the binding sizes check                                                                                                        |
+
+The workspace entry for `ridl-descriptor` turns its default features off,
+because Cargo ignores `default-features = false` on an inherited entry; `ridl`
+and `ridlc` name `std` and `dedup` themselves.
 
 `tungstenite` keeps its default `handshake` feature, because the client must run
 the handshake the tests check. 0.29 is the newest release whose `rust-version`
@@ -258,7 +272,14 @@ table is found on the embedder's thread before `serve` runs.
 `MemberTable` holds the unit name, the catalog hash, and a map from
 `(InterfaceNo, Ordinal)` to `(Kind, Option<Duration>)`, the duration being the
 member's `max`. A retired interface and a reserved ordinal have no entry (§6.4).
-The embedder builds it by hand through `new` and `insert`.
+The embedder builds it through `new` and `insert`, or, with the `descriptor`
+feature, with `MemberTable::from_descriptor` from the bytes of a
+`<unit>.catalog.binfb` file. `from_descriptor` verifies the buffer with
+`ridl_descriptor::verify`, adds one entry for each member, with its `max_us` as
+the bound, and adds each hash of the descriptor's `compatible` list; it returns
+`DescriptorError` for a buffer that fails verification, a hash that is not 32
+bytes, an interface number or an ordinal of 0, and a `max_us` that is not a
+decimal `u64`.
 
 The ports are an associated type rather than supertraits so that an embedder, or
 a test crate, can serve a runtime type it does not own: the orphan rule forbids
@@ -711,17 +732,26 @@ The test targets `serve` and `scenario` require the `server` feature, so
   standard library, which is the proof of the `std` half of D-1's "`core` only".
   The `alloc` half is `tests/constraints.rs`, which asserts that `src/frame.rs`
   and `src/lib.rs` name no `alloc` crate outside comments.
-- `tests/constraints.rs` also asserts D-2 from the manifests: the only normal
-  dependency is `ridl-rt`, through a workspace entry that names no feature, and
-  the `server` feature is empty, so it turns on nothing in `ridl-rt`. The checks
-  are textual.
+- `tests/constraints.rs` also asserts D-2 from the manifests: the one
+  unconditional dependency is `ridl-rt`, through a workspace entry that names no
+  feature; the one optional dependency is `ridl-descriptor`, through a workspace
+  entry with its default features off; the `server` feature is empty, so it
+  turns on nothing in `ridl-rt`, and the `descriptor` feature turns on `server`
+  and `ridl-descriptor` only. The checks are textual.
 - `just compat-check` requires the manifest's `rust-version` and edition to
   equal `ridl-rt`'s, and builds the packaged crate with that minimum toolchain
-  with its default features and with none. The `tungstenite` dev-dependency
-  table is removed from the packaged manifest first, because the offline build
-  cannot resolve it; the recipe fails when the package has any other
-  dev-dependency table. The recipe also fails when the crate gains a workspace
-  dependency outside `ridl-rt`, `ridl-rt-conformance` and `ridl-loopback`.
+  with its default features and with none, and with the `descriptor` feature at
+  `ridl-descriptor`'s minimum, 1.88, against a lockfile resolved by the fallback
+  resolver and sources fetched by that version's cargo. The `tungstenite`
+  dev-dependency table is removed from the packaged manifest first, because the
+  offline build cannot resolve it; the recipe fails when the package has any
+  other dev-dependency table. The two builds at 1.83 also remove the optional
+  `ridl-descriptor` dependency and the `descriptor` feature, because cargo 1.83
+  loads the manifest of the packaged `ridl-descriptor` patched in by path, which
+  sets edition 2024; from a registry, cargo does not load the manifest of an
+  optional dependency whose feature is off. The recipe also fails when the crate
+  gains a workspace dependency outside `ridl-rt`, `ridl-rt-conformance`,
+  `ridl-loopback`, `ridl-descriptor` and `ridl-ir`.
 - The crate is published after `ridl-rt` by `crates-io-release.yml`.
 - The crate is in the `runtime-crates` and `msrv` freeze surfaces from 0.12.0,
   its first release, and opts into the `cargo-semver-checks` lint metadata
@@ -753,11 +783,6 @@ What the crate already does so that the addition is local:
 
 ## What is not built
 
-- Reading the catalog descriptor: compatible earlier hashes at `attach`
-  (conformance item 1 of §12), the member table built from the descriptor (the
-  embedder builds it by hand today, D-10, with the response bounds that the
-  duplicate retention reads) (driftsys/ridl#985). It adds `ridl-descriptor` to
-  the embedder's build, which the dependency constraint weighs against.
 - The stand-in ports (driftsys/ridl#988).
 - A public Rust client, and the generated face of `examples/cabin` across the
   transport (driftsys/ridl#989). `examples/cabin/server` already serves the
@@ -776,6 +801,6 @@ What the crate already does so that the addition is local:
 | waking on `Wakeable` instead of a polling tick                          | rejected | a waker cannot interrupt a blocking socket read without a second thread or a platform poller, both of which grow the crate; the tick bounds the latency to `poll_interval`                                                           |
 | `Invalid(Detected)` sent as `Live` with the last good value             | rejected | hides an invalidity from the client (D-13)                                                                                                                                                                                           |
 | forwarding the backend's `seq`                                          | rejected | a backend counter restarts with a replaced writer and interleaves across writers, so the consumer would discard later publications as stale (D-24)                                                                                   |
-| reading the catalog descriptor to check `kind` and bounds               | deferred | adds `ridl-descriptor` to the embedder's tree and a descriptor to its deployment (driftsys/ridl#985)                                                                                                                                 |
+| reading the catalog descriptor to check `kind` and bounds               | built    | under the `descriptor` feature, off by default, so an embedder that passes no table links no planus (driftsys/ridl#985)                                                                                                              |
 | a public Rust client                                                    | deferred | not needed by the first consumer, whose client is TypeScript; the test client covers the done-when (driftsys/ridl#989)                                                                                                               |
 | accepting the upgrade without a subprotocol and letting the client fail | rejected | a client that does not check would send `attach` on an unnegotiated connection (D-20)                                                                                                                                                |

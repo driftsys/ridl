@@ -26,12 +26,12 @@ choices, see [`../decisions/`](../decisions/).
   for the face its handles are passed to.
 - **ridl-transport-ws.md** — the WebSocket binding of the frame as built: the
   `no_std` codec of frame specification §11.1, the server side of RFC 6455
-  written in the crate with no dependency but `ridl-rt`, the sans-IO session
-  core that serves a backend's observe-and-call ports, the blocking `serve` over
-  a connection the embedder accepted, the session sequence numbers, the
-  correlation map and its duplicate retention, the tests, and the design's
-  decisions D-1 to D-25 with what is not built. The decisions behind its choices
-  are
+  written in the crate with no unconditional dependency but `ridl-rt`, the
+  sans-IO session core that serves a backend's observe-and-call ports, the
+  blocking `serve` over a connection the embedder accepted, the session sequence
+  numbers, the correlation map and its duplicate retention, the tests, and the
+  design's decisions D-1 to D-25 with what is not built. The decisions behind
+  its choices are
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decision 6 as amended 2026-10-19, and
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) for the port

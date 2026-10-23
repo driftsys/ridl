@@ -128,6 +128,10 @@ test:
         # same line is what builds the `task` module under the `std` feature
         # and runs crates/ridl-rt/tests/task.rs.
         cargo test -p ridl-rt --all-features --locked
+        # No workspace member turns on the `descriptor` feature of
+        # `ridl-transport-ws`, so its test target `descriptor`, which requires
+        # the feature, runs only from this line.
+        cargo test --locked -p ridl-transport-ws --features descriptor
     else
         echo "test: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
@@ -287,7 +291,12 @@ wasm-check:
 # ridl-transport-ws is held to the same terms: its manifest must set the same
 # rust-version as ridl-rt and edition 2021, and the packaged crate, with its
 # tungstenite dev-dependency table removed and the tables appended, must build
-# with the minimum toolchain with its default features and with none.
+# with the minimum toolchain with its default features and with none, and with
+# the `descriptor` feature at ridl-descriptor's minimum. The cells at the
+# minimum build the manifest without its optional ridl-descriptor dependency
+# (the recipe says why at the cell); the `descriptor` cell patches in the
+# packaged ridl-descriptor and ridl-ir, and its lockfile is resolved and its
+# sources fetched the way the ridl-descriptor cell does it.
 #
 # The crate emitted for the veh-cluster corpus is built with cargo, not with
 # rustc as the cabin crate is, with every cargo feature on and with default
@@ -310,13 +319,14 @@ wasm-check:
 # outside the package) and the doctests do not run at that version, and the
 # pin runs all of them in the workspace.
 #
-# The lockfiles of ridl-descriptor and of the veh-cluster crate are resolved
+# The lockfiles of ridl-descriptor, of ridl-transport-ws with its `descriptor`
+# feature and of the veh-cluster crate are resolved
 # with the pin's cargo and CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback,
 # so that a dependency release with a higher minimum is not selected, and the
 # recipe fails unless cargo reports that it resolved for the crate's minimum; the
 # sources are fetched with the cargo of the crate's minimum, and the build is
-# offline and locked. Each of these two cells uses its own empty CARGO_HOME
-# under target/compat-check, so that a warm cache (the CI cache of
+# offline and locked. The ridl-descriptor cells share one empty CARGO_HOME and
+# the veh-cluster cell has another, under target/compat-check, so that a warm cache (the CI cache of
 # ~/.cargo) cannot hide a fetch done with the wrong cargo. cargo 1.83 does not see the index and the sources that
 # the pin's cargo downloads (cargo 1.85 renamed their directories), so a fetch
 # by the pin left a build at 1.83 without its dependencies on a cold
@@ -325,8 +335,8 @@ wasm-check:
 # The recipe also fails on: a ridl-descriptor manifest without a rust-version
 # line, or one that names a version newer than the pin; a workspace
 # dependency, other than a dev-dependency, of ridl-rt, ridl-rt-conformance,
-# ridl-loopback or ridl-transport-ws outside those four, or of ridl-ir or
-# ridl-descriptor outside those two; a packaged ridl-descriptor that names
+# ridl-loopback, ridl-transport-ws, ridl-ir or ridl-descriptor outside those
+# six; a packaged ridl-descriptor that names
 # ridl-backend-rust; or a
 # packaged ridl-descriptor test list that differs from the one the recipe
 # expects.
@@ -429,8 +439,10 @@ compat-check: toolchain-check
     ensure_toolchain "$descriptor_minimum"
 
     # Prints each workspace dependency of the crates named in $1 (a
-    # space-separated list) that is not itself in $1, one per line. Each list
-    # below is the set of crates that are packaged and patched in together, so
+    # space-separated list) that is not itself in $1, one per line. The list
+    # below is the set of crates that are packaged and patched in together
+    # (ridl-transport-ws depends on ridl-descriptor, optionally, and
+    # `cargo metadata` lists an optional dependency as a normal one), so
     # a dependency outside it would be looked up on the registry, where this
     # version is not published yet. `cargo metadata` reads the dependency
     # tables in every form (`ridl-x.workspace = true`, `[dependencies.ridl-x]`,
@@ -451,7 +463,7 @@ compat-check: toolchain-check
                 | select(.name as $name | $crates | any(. == $name) | not)
                 | "\($from) -> \(.name)"'
     }
-    for set in "ridl-rt ridl-rt-conformance ridl-loopback ridl-transport-ws" "ridl-ir ridl-descriptor"; do
+    for set in "ridl-rt ridl-rt-conformance ridl-loopback ridl-transport-ws ridl-ir ridl-descriptor"; do
         extra="$(unpackaged_deps "$set")"
         if [ -n "$extra" ]; then
             echo "compat-check: one of $set now depends on another workspace crate;" >&2
@@ -670,7 +682,25 @@ compat-check: toolchain-check
     # still resolves it, and the offline build cannot: the recipe removes its
     # table first, and fails when the manifest has any other dev-dependency
     # table. Built with the default features and with none (the codec alone,
-    # with no `std`).
+    # with no `std`) at the minimum, and with the `descriptor` feature at
+    # ridl-descriptor's minimum.
+    #
+    # The two cells at the minimum build the manifest without the optional
+    # ridl-descriptor dependency table and without the `descriptor` feature.
+    # Cargo loads the manifest of every path source in the graph, an optional
+    # one whose feature is off included, and the packaged ridl-descriptor
+    # patched in by path sets edition 2024, which cargo before 1.85 cannot
+    # parse. A user of the published crate is not affected: from a registry,
+    # cargo 1.83 reads the index entry of an optional dependency whose feature
+    # is off and does not download or parse its manifest. The recipe fails
+    # when the manifest does not hold the table and the feature in the form it
+    # removes.
+    #
+    # The cell with the `descriptor` feature builds the whole packaged
+    # manifest, with the packaged ridl-descriptor and ridl-ir patched in. Its
+    # graph holds planus and serde, so it cannot build offline against the
+    # default CARGO_HOME: the lockfile is resolved and the sources are fetched
+    # as for ridl-descriptor, in ridl-descriptor's CARGO_HOME.
     if [ "$(grep -c '^\[dev-dependencies' "$pkg_transport/Cargo.toml")" != 1 ] \
         || ! grep -qxF '[dev-dependencies.tungstenite]' "$pkg_transport/Cargo.toml"; then
         echo "compat-check: the packaged ridl-transport-ws manifest no longer has" >&2
@@ -679,11 +709,42 @@ compat-check: toolchain-check
     fi
     sed -i.bak '/^\[dev-dependencies\.tungstenite\]$/,/^$/d' "$pkg_transport/Cargo.toml"
     rm -f "$pkg_transport/Cargo.toml.bak"
+    cp "$pkg_transport/Cargo.toml" "$pkg_transport/Cargo.toml.whole"
+    if [ "$(grep -cxF '[dependencies.ridl-descriptor]' "$pkg_transport/Cargo.toml")" != 1 ] \
+        || [ "$(grep -cxF 'descriptor = [' "$pkg_transport/Cargo.toml")" != 1 ]; then
+        echo "compat-check: the packaged ridl-transport-ws manifest no longer has one" >&2
+        echo "compat-check: [dependencies.ridl-descriptor] table and one multi-line" >&2
+        echo "compat-check: descriptor feature, which this recipe removes." >&2
+        exit 1
+    fi
+    awk '
+        $0 == "[dependencies.ridl-descriptor]" { skip_table = 1; next }
+        skip_table && /^$/ { skip_table = 0; next }
+        skip_table { next }
+        $0 == "descriptor = [" { skip_feature = 1; next }
+        skip_feature { if ($0 == "]") skip_feature = 0; next }
+        { print }
+    ' "$pkg_transport/Cargo.toml.whole" > "$pkg_transport/Cargo.toml"
+    if grep -q 'descriptor' "$pkg_transport/Cargo.toml"; then
+        echo "compat-check: could not remove ridl-descriptor from the packaged ridl-transport-ws manifest." >&2
+        exit 1
+    fi
     append_tables "$pkg_transport/Cargo.toml" "ridl-rt=$pkg"
     echo "compat-check: $minimum, edition 2021 (packaged ridl-transport-ws, default features)"
     cargo "+$minimum" build --offline --manifest-path "$pkg_transport/Cargo.toml"
     echo "compat-check: $minimum, edition 2021 (packaged ridl-transport-ws, no default features)"
     cargo "+$minimum" build --offline --no-default-features --manifest-path "$pkg_transport/Cargo.toml"
+    mv "$pkg_transport/Cargo.toml.whole" "$pkg_transport/Cargo.toml"
+    rm -f "$pkg_transport/Cargo.lock"
+    append_tables "$pkg_transport/Cargo.toml" "ridl-rt=$pkg" "ridl-descriptor=$pkg_descriptor" "ridl-ir=$pkg_ir"
+    # The fallback resolver resolves for the crate's own rust-version, the
+    # minimum, which the descriptor's minimum also builds; planus stays at the
+    # 1.3.0 that ridl-descriptor pins.
+    resolve_for "$descriptor_home" "$pkg_transport/Cargo.toml" "$minimum" ridl-transport-ws
+    CARGO_HOME="$descriptor_home" \
+        cargo "+$descriptor_minimum" fetch --locked --manifest-path "$pkg_transport/Cargo.toml"
+    echo "compat-check: $descriptor_minimum, edition 2021 (packaged ridl-transport-ws, descriptor feature)"
+    CARGO_HOME="$descriptor_home" cargo "+$descriptor_minimum" build --offline --locked --features descriptor --manifest-path "$pkg_transport/Cargo.toml"
 
     # The crate `ridl build` emits for the veh-cluster corpus, as edition 2021
     # at the minimum with every feature on, so the regex dependency of
@@ -1012,6 +1073,9 @@ lint:
         # As in `just test`: the workspace resolves `ridl-rt` with default
         # features, so its feature-gated modules are otherwise never linted.
         cargo clippy -p ridl-rt --all-features --all-targets -- -D warnings
+        # As in `just test`: no workspace member turns on the `descriptor`
+        # feature of `ridl-transport-ws`.
+        cargo clippy -p ridl-transport-ws --features descriptor --all-targets -- -D warnings
     else
         echo "lint: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi

@@ -89,7 +89,9 @@ pbjson-build = "0.9.0"
 # `ridl-descriptor` on the runtime, for the catalog descriptor's accessors;
 # `xtask` on `planus-translation` and `planus-codegen`, to generate those
 # accessors (`cargo xtask descriptor-codegen`); and `ridlc` and `ridl` may
-# depend on it through `ridl-descriptor`. `ridl-rt` and every package
+# depend on it through `ridl-descriptor`. Outside the toolchain,
+# `ridl-transport-ws` reaches it through `ridl-descriptor` under its optional
+# `descriptor` feature only (ADR-0020 decision 6, amended 2026-10-24). `ridl-rt` and every package
 # `ridl build` generates must not depend on any of the three, as any kind of
 # dependency (ADR-0020 decision 5, amended 2026-10-03).
 # `xtask/tests/oracle_boundary.rs` checks this for `ridl-rt`, with every
@@ -165,7 +167,10 @@ ridl-backend-ts = { path = "crates/ridl-backend-ts", version = "0.13.0" }
 # Cargo.toml for why it is not published as `ridl`.
 ridl-cli = { path = "crates/ridl", version = "0.13.0" }
 ridl-core = { path = "crates/ridl-core", version = "0.13.0" }
-ridl-descriptor = { path = "crates/ridl-descriptor", version = "0.13.0" }
+# Default features off here, because Cargo ignores `default-features = false`
+# on an inherited entry: `ridl-transport-ws` reads descriptors with the
+# `no_std` reader only, and `ridl` and `ridlc` name `std` and `dedup`.
+ridl-descriptor = { path = "crates/ridl-descriptor", version = "0.13.0", default-features = false }
 ridl-diff = { path = "crates/ridl-diff", version = "0.13.0" }
 ridl-fmt = { path = "crates/ridl-fmt", version = "0.13.0" }
 ridl-ir = { path = "crates/ridl-ir", version = "0.13.0" }

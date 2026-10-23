@@ -14,7 +14,8 @@ use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal};
 /// it is paired with. Each entry maps an interface number and an ordinal to
 /// the member's kind and its `max` bound. A retired interface and a reserved
 /// ordinal have no entry. The embedder builds the table with [`new`](Self::new)
-/// and [`insert`](Self::insert).
+/// and [`insert`](Self::insert), or, with the `descriptor` feature, with
+/// `from_descriptor` from the bytes of a catalog descriptor.
 #[derive(Clone, Debug)]
 pub struct MemberTable {
     name: String,

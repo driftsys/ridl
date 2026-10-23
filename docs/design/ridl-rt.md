@@ -486,7 +486,8 @@ decides no layout: it is handed a slot, an offset and a table size and writes
 the bytes they describe. It still takes no dependency: the FlatBuffers runtime
 crate ADR-0020 decision 5 permits under this feature is not used, and since that
 decision's 2026-10-03 amendment it cannot be planus: the toolchain may depend on
-planus, and `ridl-rt` and every generated package must not.
+planus, and so may `ridl-transport-ws` under its optional `descriptor` feature,
+and `ridl-rt` and every generated package must not.
 
 **Since 2026-10-20 `proto3` is no longer empty.** It gates the `proto3` module:
 the varint and zigzag encodings and their lengths, the forward `Writer`, which

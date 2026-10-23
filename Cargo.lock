@@ -2243,6 +2243,7 @@ dependencies = [
 name = "ridl-transport-ws"
 version = "0.13.0"
 dependencies = [
+ "ridl-descriptor",
  "ridl-ir",
  "ridl-loopback",
  "ridl-rt",

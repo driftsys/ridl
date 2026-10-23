@@ -5,6 +5,8 @@
 mod backend;
 mod calls;
 mod config;
+#[cfg(feature = "descriptor")]
+mod descriptor;
 mod members;
 mod session;
 
@@ -14,6 +16,8 @@ use std::time::{Duration, Instant};
 
 pub use backend::{Backend, Described, Polling, Scanning, TableMismatch};
 pub use config::{Config, LimitTooSmall, Note, RetainedTooSmall};
+#[cfg(feature = "descriptor")]
+pub use descriptor::DescriptorError;
 pub use members::MemberTable;
 
 use crate::ws::{self, CloseCode, Event, FrameWriter, Parser, Upgrade};
