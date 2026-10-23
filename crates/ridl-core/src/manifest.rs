@@ -1722,6 +1722,14 @@ version = \"1.0.0\"
         assert_eq!(codes(&diags), vec!["MANI-015"]);
     }
 
+    #[test]
+    fn backend_transcode_with_a_single_unknown_encoding_is_mani_015_and_mani_020() {
+        let text =
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"bogus\"]\ntranscode = true\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015", "MANI-020"]);
+    }
+
     const CODEC_MANIFEST: &str =
         "[backend.rust]\nencodings = [\"flatbuffers\"]\n[backend.typescript]\ncodec = true\n";
 
