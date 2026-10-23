@@ -78,7 +78,7 @@ function kill(child: Deno.ChildProcess | undefined): void {
  * temporary directory. Every step runs even when an earlier one fails, so that
  * nothing outlives the program; each step that fails is reported. A browser
  * that is still starting is closed once its start ends, which takes at most the
- * 10 s that launch() waits for it.
+ * 30 s that launch() waits for it.
  */
 async function cleanUp(): Promise<void> {
   kill(bundler);
