@@ -254,6 +254,8 @@ impl CloseCode {
     pub(crate) const PROTOCOL: Self = Self(1002);
     /// The peer sent a text message.
     pub(crate) const UNSUPPORTED: Self = Self(1003);
+    /// The session passed a resource limit the server states.
+    pub(crate) const POLICY: Self = Self(1008);
     /// The peer sent a message over the size limit.
     pub(crate) const TOO_BIG: Self = Self(1009);
 }

@@ -27,9 +27,9 @@ Version: 0.2.0
 > [the package's design record](../design/ridl-transport-ws-ts.md)). The crate
 > serves the observe and call ports of a provider runtime. With a member table
 > of its catalog, which the embedder supplies, it accepts an `attach` naming a
-> listed earlier hash (§6.1); without one it applies the exact-match rule. It
-> keeps the last 64 settled responses of a session for duplicate suppression
-> instead of keeping each until its response bound has passed (§7). The runtime
+> listed earlier hash (§6.1); without one it applies the exact-match rule. With
+> a member table it keeps each settled response until its bound has passed (§7);
+> without one, or for a member with no bound, it keeps the last 64. The runtime
 > here, `ridl-loopback`, runs in process: it carries bytes from a provider
 > handle to a consumer handle over one in-memory store, opens no socket, and has
 > no wire format ([its design record](../design/ridl-loopback.md)). Neither the
@@ -712,10 +712,13 @@ within the declared `max`, and reaching it is the Stratum 3 detection (§8).
 
 No shipped runtime retransmits. `ridl-loopback` delivers each call once because
 nothing in a process is lost. `ridl-transport-ws` suppresses a duplicate
-`request`: it keeps the last 64 settled responses of a session, and sends the
-kept response again for a `request` whose `seq` is among them. It does not know
-the response bound, because it holds no descriptor, so it fixes a count instead
-of retaining each response until the bound has passed.
+`request` and keeps each settled response until the request's bound has passed,
+measured from the request's `stamp` or from the provider's clock at receipt,
+whichever is earlier, when its member table gives the member a bound. For a
+member the table gives no bound, or when the embedder gives it no table, it
+keeps the last 64 settled responses of the session instead. That fallback is a
+deviation of this crate, stated here and in its design record, and not a rule of
+the binding (driftsys/ridl#986).
 
 ## 8. Timing
 
@@ -1003,7 +1006,9 @@ payload is absent does not occur on this binding. A message above the receiver's
 configured size limit, which admits at least 294 bytes, is closed with 1009.
 Either side ends the session on purpose with 1000, the provider with 1001 when
 it shuts down; after `attached(refused)` the provider closes with 1000, and the
-reason is in the frame. The binding defines no close code of its own.
+reason is in the frame. A provider may close with 1008 when a session passes a
+resource limit it states, such as a cap on the responses it keeps for §7. The
+binding defines no close code of its own.
 
 **5. The caller's identity** for §7 is the connection. It does not survive a
 reconnect: a reconnect is a new session, its counters start over, and the calls

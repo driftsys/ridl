@@ -87,6 +87,27 @@ impl fmt::Display for LimitTooSmall {
 
 impl std::error::Error for LimitTooSmall {}
 
+/// A `max_retained_bytes` below the message limit of the same [`Config`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RetainedTooSmall {
+    /// The cap asked for.
+    pub given: usize,
+    /// The message limit the cap may not go below.
+    pub message_limit: usize,
+}
+
+impl fmt::Display for RetainedTooSmall {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "a retained-bytes cap of {} bytes is below the message limit, {} bytes",
+            self.given, self.message_limit
+        )
+    }
+}
+
+impl std::error::Error for RetainedTooSmall {}
+
 /// The hook the server calls with each [`Note`].
 pub(crate) type Record = Arc<dyn Fn(&Note) + Send + Sync>;
 
@@ -117,14 +138,15 @@ pub struct Config {
     /// first poll after the request, so that call gets no `response`.
     pub call_abandon_after: Duration,
     max_message_bytes: usize,
+    max_retained_bytes: usize,
     record: Option<Record>,
     origin_check: Option<OriginCheck>,
 }
 
 impl Default for Config {
     /// 20 ms between polls, a ping every 5 s, a liveness timeout of 15 s, a
-    /// call abandoned after 60 s, a message limit of 1 MiB, nothing
-    /// recorded, and no origin check.
+    /// call abandoned after 60 s, a message limit of 1 MiB, a retained-bytes
+    /// cap of 16 MiB, nothing recorded, and no origin check.
     fn default() -> Self {
         Config {
             poll_interval: Duration::from_millis(20),
@@ -132,6 +154,7 @@ impl Default for Config {
             liveness_timeout: Duration::from_secs(15),
             call_abandon_after: Duration::from_secs(60),
             max_message_bytes: 1024 * 1024,
+            max_retained_bytes: 16 * 1024 * 1024,
             record: None,
             origin_check: None,
         }
@@ -146,11 +169,38 @@ impl Config {
 
     /// Sets the largest message the server reads or sends. A limit below
     /// [`MIN_MESSAGE_LIMIT`] is refused: no `attach` could be read under it.
+    /// A session never applies a retained-bytes cap below this limit (see
+    /// [`Config::with_max_retained_bytes`]).
     pub fn with_max_message_bytes(mut self, n: usize) -> Result<Self, LimitTooSmall> {
         if n < MIN_MESSAGE_LIMIT {
             return Err(LimitTooSmall { given: n });
         }
         self.max_message_bytes = n;
+        Ok(self)
+    }
+
+    /// The configured cap on the bytes of the responses a session keeps for a
+    /// repeated `request` (frame specification §7). A session closes with
+    /// 1008 when the kept bytes pass the larger of this value and
+    /// [`Config::max_message_bytes`] (see [`Config::with_max_retained_bytes`]).
+    pub fn max_retained_bytes(&self) -> usize {
+        self.max_retained_bytes
+    }
+
+    /// Sets the most bytes of the responses a session keeps for a repeated
+    /// `request`. When a response sent would make the kept bytes pass `n`,
+    /// the response is sent and the session is then closed with 1008. A cap
+    /// below [`Config::max_message_bytes`] is refused. A session applies the
+    /// larger of this cap and the message limit, so a message limit set
+    /// above the cap afterwards also raises the cap a session applies.
+    pub fn with_max_retained_bytes(mut self, n: usize) -> Result<Self, RetainedTooSmall> {
+        if n < self.max_message_bytes {
+            return Err(RetainedTooSmall {
+                given: n,
+                message_limit: self.max_message_bytes,
+            });
+        }
+        self.max_retained_bytes = n;
         Ok(self)
     }
 

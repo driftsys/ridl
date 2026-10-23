@@ -86,7 +86,7 @@ mod server;
 #[cfg(feature = "server")]
 pub use server::{
     serve, Backend, Config, Connection, Described, Ended, LimitTooSmall, MemberTable, Note,
-    Polling, Scanning, TableMismatch,
+    Polling, RetainedTooSmall, Scanning, TableMismatch,
 };
 
 #[cfg(feature = "server")]

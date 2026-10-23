@@ -1160,3 +1160,36 @@ fn the_answer_to_a_client_close_is_followed_by_the_end_of_the_stream() {
     release.send(()).unwrap();
     assert_eq!(handle.join().0, Ended::ClientClosed(Some(1000)));
 }
+
+/// Mutation: count frames instead of bytes (the close would then wait for
+/// 1045 responses, which the test never sends).
+#[test]
+fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
+    let (server, client) = pair();
+    let config = config()
+        .with_max_message_bytes(1024)
+        .unwrap()
+        .with_max_retained_bytes(29 * 36)
+        .unwrap();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    // Each `request` of a signal kind is answered at once with a 36-byte
+    // `response`; 29 of them are 1044 bytes, the cap, and the 30th passes it.
+    for seq in 1..=30u64 {
+        send(
+            &mut ws,
+            Frame::Request {
+                target: SIGNAL,
+                envelope: Envelope {
+                    stamp: Timestamp(0),
+                    seq,
+                },
+                payload: &[],
+            },
+        );
+        assert_eq!(recv(&mut ws).len(), 36, "response {seq}");
+    }
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Policy));
+    assert_eq!(handle.join().0, Ended::ServerClosed(1008));
+}
