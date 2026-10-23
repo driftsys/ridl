@@ -1161,8 +1161,8 @@ fn the_answer_to_a_client_close_is_followed_by_the_end_of_the_stream() {
     assert_eq!(handle.join().0, Ended::ClientClosed(Some(1000)));
 }
 
-/// Mutation: count frames instead of bytes (1044 frames never arrive within
-/// the test limit).
+/// Mutation: count frames instead of bytes (the close would then wait for
+/// 1045 responses, which the test never sends).
 #[test]
 fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
     let (server, client) = pair();

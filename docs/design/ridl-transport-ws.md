@@ -511,9 +511,12 @@ responses kept for duplicates are `server/calls.rs`.
   table, the server keeps the last 64 as before: a stated deviation from §11.1
   item 6 (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
   retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
-  by default); a settle that would pass it closes the session with 1008, which
-  `serve` returns as `Ended::ServerClosed(1008)`. Closing is observable, where
-  dropping the oldest response would silently break item 6.
+  by default), and a session never applies a cap below `max_message_bytes`; when
+  a response makes the kept bytes pass the cap, the response is sent, then the
+  session closes with 1008, which `serve` returns as
+  `Ended::ServerClosed(1008)`. Expired responses also go when a `request`
+  arrives, before its `seq` is placed. Closing is observable, where dropping the
+  oldest response would silently break item 6.
 
 **D-17. `fixed`.** A `read` of a `fixed` calls `Backend::read_fixed` and sends
 one `publish` with `kind` `Fixed`, state `Live` with the value, `seq` 0, and
@@ -554,10 +557,11 @@ ms), `ping_interval` (5 s), `liveness_timeout` (15 s) and `call_abandon_after`
 (60 s) — and four settings behind methods: `with_max_message_bytes` (1 MiB; a
 value below `MIN_MESSAGE_LIMIT` is refused with `LimitTooSmall`),
 `with_max_retained_bytes` (16 MiB; a value below `max_message_bytes` is refused
-with `RetainedTooSmall`), `with_record` and `with_origin_check`. A
-`ping_interval` at or above `liveness_timeout` ends an idle client's session
-before the first ping, because a client that is not pinged sends nothing; the
-rustdoc says so.
+with `RetainedTooSmall`, and a session applies the larger of the cap and the
+message limit, so a limit raised later also raises the cap), `with_record` and
+`with_origin_check`. A `ping_interval` at or above `liveness_timeout` ends an
+idle client's session before the first ping, because a client that is not pinged
+sends nothing; the rustdoc says so.
 
 ## The WebSocket layer (`ws`)
 

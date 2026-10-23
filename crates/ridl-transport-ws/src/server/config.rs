@@ -169,6 +169,8 @@ impl Config {
 
     /// Sets the largest message the server reads or sends. A limit below
     /// [`MIN_MESSAGE_LIMIT`] is refused: no `attach` could be read under it.
+    /// A session never applies a retained-bytes cap below this limit (see
+    /// [`Config::with_max_retained_bytes`]).
     pub fn with_max_message_bytes(mut self, n: usize) -> Result<Self, LimitTooSmall> {
         if n < MIN_MESSAGE_LIMIT {
             return Err(LimitTooSmall { given: n });
@@ -187,8 +189,9 @@ impl Config {
     /// Sets the most bytes of the responses a session keeps for a repeated
     /// `request`. When a response sent would make the kept bytes pass `n`,
     /// the response is sent and the session is then closed with 1008. A cap
-    /// below [`Config::max_message_bytes`] is refused: set the message limit
-    /// first.
+    /// below [`Config::max_message_bytes`] is refused. A session applies the
+    /// larger of this cap and the message limit, so a message limit set
+    /// above the cap afterwards also raises the cap a session applies.
     pub fn with_max_retained_bytes(mut self, n: usize) -> Result<Self, RetainedTooSmall> {
         if n < self.max_message_bytes {
             return Err(RetainedTooSmall {

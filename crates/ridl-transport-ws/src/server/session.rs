@@ -164,7 +164,9 @@ impl<B: Backend> Session<B> {
             occurrence_cap: limit - empty_occurrence.encoded_len(),
             reply_cap: limit - empty_reply.encoded_len(),
             message_limit: limit,
-            max_retained_bytes: config.max_retained_bytes(),
+            // The effective cap is never below the message limit, so that one
+            // response the limit admits never closes the session on its own.
+            max_retained_bytes: config.max_retained_bytes().max(limit),
             call_abandon_after: config.call_abandon_after,
             record: config.record(),
             attached: false,
@@ -747,6 +749,10 @@ impl<B: Backend> Session<B> {
     ) -> Step {
         let seq = envelope.seq;
         let stamp = envelope.stamp;
+        // Responses whose bound has passed are let go before the `seq` is
+        // placed, so that a repeat after the bound is not answered from them.
+        let receipt = self.backend.ports().now();
+        self.calls.expire(receipt);
         match self.calls.seen(seq) {
             Seen::New => self.calls.accept(seq),
             Seen::Settled(response) => {
@@ -758,7 +764,6 @@ impl<B: Backend> Session<B> {
                 return Step::Continue;
             }
         }
-        let receipt = self.backend.ports().now();
         if !self.known(target) {
             self.note(Note::UnknownInteraction { target });
             return self.respond(
@@ -1183,6 +1188,22 @@ mod tests {
         let rt = Loopback::new(CATALOG);
         let provider = rt.attach();
         (Session::new(Scanning(rt), &config(&notes)), provider, notes)
+    }
+
+    /// A session over a scanning loopback described by `t`, the provider's
+    /// aggregate on the same store, and the notes.
+    fn described_with(
+        t: MemberTable,
+        config: impl FnOnce(Config) -> Config,
+    ) -> (Session<Described<Scanning<Loopback>>>, Loopback, Notes) {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let provider = rt.attach();
+        let backend = Described::new(Scanning(rt), Arc::new(t)).unwrap();
+        let config = config(Config::default());
+        let n = Arc::clone(&notes);
+        let config = config.with_record(move |x| n.lock().unwrap().push(*x));
+        (Session::new(backend, &config), provider, notes)
     }
 
     /// The same over a polling loopback.
@@ -3798,6 +3819,85 @@ mod tests {
         let (step, out) = send(&mut s, &request(SIGNAL, 10, &[]));
         // The tenth response is still sent, then the session closes.
         assert_eq!((step, out.len()), (Step::Close(1008), 1));
+    }
+
+    /// Mutation: remove the expiry at the top of `request`.
+    #[test]
+    fn a_repeat_after_the_bound_with_no_tick_between_is_dropped() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        let out = settled(&mut s, &mut p, COMMAND, 1, Ok(&[]));
+        assert_eq!(out.len(), 1);
+        p.advance(Duration(1_000_001)); // max + 1, and no tick
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+
+    /// Mutation: use the raw cap instead of the cap raised to the message
+    /// limit.
+    #[test]
+    fn a_response_above_the_default_cap_within_a_larger_limit_does_not_close() {
+        let (mut s, mut p, _n) = described_with((*table()).clone(), |c| {
+            c.with_max_message_bytes(32 * 1024 * 1024).unwrap()
+        });
+        open(&mut s);
+        let big = vec![1u8; 17 * 1024 * 1024];
+        let (_, out) = send(&mut s, &request(QUERY, 1, &[]));
+        assert!(out.is_empty());
+        let c = claim(&mut p, QUERY);
+        p.settle(c.id, Ok(&big)).unwrap();
+        let (step, out) = tick(&mut s);
+        assert_eq!((step, out.len()), (Step::Continue, 1));
+        assert!(out[0].len() > 16 * 1024 * 1024);
+    }
+
+    /// Mutation: keep while `now < until` (a zero bound then expires at once).
+    #[test]
+    fn a_bound_of_zero_keeps_the_response_until_the_clock_passes_the_receipt() {
+        let mut t = (*table()).clone();
+        t.insert(
+            IFACE,
+            COMMAND.ord,
+            Kind::Command,
+            Some(std::time::Duration::ZERO),
+        );
+        let (mut s, mut p, notes) = described_with(t, |c| c);
+        open(&mut s);
+        let out = settled(&mut s, &mut p, COMMAND, 1, Ok(&[]));
+        assert_eq!(out.len(), 1);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[]));
+        assert_eq!(again, out);
+        p.advance(Duration(1));
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+
+    /// Mutation: a plain `+` instead of `saturating_add` (it overflows).
+    #[test]
+    fn a_stamp_and_a_clock_near_the_end_of_time_saturate_the_bound() {
+        let (mut s, mut p, _n) = described_scanning();
+        open(&mut s);
+        let late = i64::MAX - 10;
+        p.advance(Duration(late));
+        let (_, out) = send(&mut s, &request_at(COMMAND, 1, late, &[]));
+        assert!(out.is_empty());
+        let c = claim(&mut p, COMMAND);
+        p.settle(c.id, Ok(&[])).unwrap();
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        p.advance(Duration(10)); // the clock is at i64::MAX, the saturated bound
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, late, &[]));
+        assert_eq!(again, out);
     }
 
     #[test]
