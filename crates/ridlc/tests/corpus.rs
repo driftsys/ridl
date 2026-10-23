@@ -2104,10 +2104,37 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
         .expect("the discovered tsc must be runnable");
 
     let succeeded = status.success();
+
+    // A second run treats the modules as ESM under node16 resolution, which
+    // rejects a relative import without a `.js` suffix (TS2835). The commonjs
+    // run above accepts a bare specifier, so it cannot catch a missing suffix.
+    std::fs::write(dir.join("package.json"), "{\"type\":\"module\"}")
+        .expect("the package manifest is written");
+    let esm_status = std::process::Command::new(&tsc.0)
+        .args(&tsc.1)
+        .args([
+            "--noEmit",
+            "--strict",
+            "--target",
+            "es2020",
+            "--module",
+            "node16",
+            "--moduleResolution",
+            "node16",
+        ])
+        .args(&module_paths)
+        .status()
+        .expect("the discovered tsc must be runnable");
+    let esm_succeeded = esm_status.success();
     std::fs::remove_dir_all(&dir).ok();
     assert!(
         succeeded,
         "the generated TypeScript for {label} must type-check under `tsc --strict`, source:\n{all}"
+    );
+    assert!(
+        esm_succeeded,
+        "the generated TypeScript for {label} must type-check as ESM under node16 resolution, \
+         source:\n{all}"
     );
 }
 

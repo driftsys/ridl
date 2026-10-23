@@ -247,5 +247,3 @@ key. The TypeScript emit and `@driftsys/ridl-runtime` are not frozen surfaces.
   `flatc` output.
 - The interop fixture is round-tripped without a wasm module; a round trip of
   the fixture through its own wasm build is not written.
-- `<base>.ts` imports its siblings without the `.js` suffix that the codec file
-  uses.
