@@ -1437,6 +1437,14 @@ diag_codes! {
         MANI_019 = "MANI-019", Error,
             "a backend table sets `codec = true` without a Rust wasm codec to run on";
 
+        /// A `[backend.<name>]` table sets `transcode = true` and lists fewer
+        /// than two encodings, so there is no pair of encodings to convert
+        /// between. Reported on the `transcode` value. A table whose
+        /// `encodings` hold an unknown or repeated name is MANI-015 too, and
+        /// only the valid, distinct names count.
+        MANI_020 = "MANI-020", Error,
+            "a backend table sets `transcode = true` with fewer than two encodings";
+
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
         MANI_101 = "MANI-101", Error,

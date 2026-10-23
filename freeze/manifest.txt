@@ -1,6 +1,7 @@
 backend table<table>
 backend.*.codec boolean (implies backend.rust.wasm)
 backend.*.encodings array<string>
+backend.*.transcode boolean (needs two encodings)
 backend.*.wasm boolean
 codegen table
 codegen.header-file string
