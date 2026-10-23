@@ -3781,21 +3781,22 @@ mod tests {
         let notes = Notes::default();
         let rt = Loopback::new(CATALOG);
         // A `response` under `contract(UnknownInteraction)` is 36 bytes. The cap
-        // cannot go below the message limit, and the limit cannot go below 294:
-        // eight responses are 288 bytes, the ninth passes 294.
+        // cannot go below the message limit, and the limit cannot go below 294,
+        // so the cap is nine responses, 324 bytes: the ninth reaches the cap
+        // exactly, and the tenth passes it.
         let config = config(&notes)
             .with_max_message_bytes(crate::frame::MIN_MESSAGE_LIMIT)
             .unwrap()
-            .with_max_retained_bytes(crate::frame::MIN_MESSAGE_LIMIT)
+            .with_max_retained_bytes(9 * 36)
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
-        for seq in 1..=8 {
+        for seq in 1..=9 {
             let (step, out) = send(&mut s, &request(SIGNAL, seq, &[]));
             assert_eq!((step, out[0].len()), (Step::Continue, 36), "response {seq}");
         }
-        let (step, out) = send(&mut s, &request(SIGNAL, 9, &[]));
-        // The ninth response is still sent, then the session closes.
+        let (step, out) = send(&mut s, &request(SIGNAL, 10, &[]));
+        // The tenth response is still sent, then the session closes.
         assert_eq!((step, out.len()), (Step::Close(1008), 1));
     }
 
