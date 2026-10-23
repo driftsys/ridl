@@ -20,7 +20,7 @@ reference function.
 and edition 2021 compatibility), `quote`, `cargo semver-checks` via
 `cargo xtask freeze`.
 
-**Spec:** `docs/wip/2026-10-23-transcode-design.md`
+**Spec:** `docs/archive/2026-10-23-transcode-design.md`
 
 ## Global Constraints
 

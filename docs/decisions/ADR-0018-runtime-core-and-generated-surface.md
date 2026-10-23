@@ -444,6 +444,24 @@ be generated, and in what order", which is what this record answers.
     bytes of each generated function with the bytes of a direct encoding, and a
     streaming transcoder must pass it unchanged.
 
+    The shape was chosen among these options. A `From` or `Into` conversion
+    between the encoded forms cannot be written: a generic impl in `ridl-rt`
+    conflicts with `impl<T> From<T> for T`, an impl in a generated crate breaks
+    the orphan rule, and `From::from` has no output buffer. A `Transcode<S, D>`
+    trait with a blanket impl in `ridl-rt` forbids a per-type override, so a
+    faster body could not replace it; a trait with generated impls allows the
+    override, but adds a trait to the frozen `runtime-crates` surface for
+    callers that are generic over the payload type, and none is known. The free
+    function alone would make every call site change when a faster body arrives,
+    so the backend generates inherent functions that keep the call sites fixed.
+    The request is a manifest key, not command-line flags, because the encodings
+    are already listed in the manifest (ADR-0010). The key is opt-in, not
+    automatic, because most crates that list two encodings never transcode and
+    the code size matters on targets with no standard library. `transcode` takes
+    bytes and reports both `VerifyError` and `EncodeError` as `TranscodeError`,
+    not a verified `Ref` with `EncodeError`, so that a streaming body with the
+    same signature can be compared with it directly.
+
 14. **A runtime update is admissible when it is compatible and fits the reserved
     span.** Ordinals are append-only, so a compatible change appends and never
     moves an existing offset; reserving a generous virtual span and committing
