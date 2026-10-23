@@ -58,6 +58,14 @@ pub enum Note {
         /// The interaction answered.
         target: Target,
     },
+    /// A `subscribe`, `read`, `request` or `unsubscribe` named an interaction
+    /// the member table does not hold, or holds under another kind (frame
+    /// specification §6.4). An `unsubscribe` is dropped; the other three are
+    /// answered `contract(UnknownInteraction)`.
+    UnknownInteraction {
+        /// The interaction named.
+        target: Target,
+    },
 }
 
 /// A `max_message_bytes` below [`MIN_MESSAGE_LIMIT`].

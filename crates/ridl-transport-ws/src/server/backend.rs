@@ -1,11 +1,16 @@
 //! The backend of one session: the ports the server reads and calls.
 
-use ridl_rt::contract::{InterfaceNo, Ordinal};
+use std::fmt;
+use std::sync::Arc;
+
+use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::Contract;
 use ridl_rt::port::{
     Attached, Caller, Clock, Encoded, EventSource, FixedReader, ReadError, ScannableSignals,
     SignalReader,
 };
+
+use super::members::MemberTable;
 
 /// The ports one session is served from.
 ///
@@ -47,6 +52,13 @@ pub trait Backend {
     ) -> Result<usize, ReadError> {
         let _ = (iface, ord, out);
         Err(ReadError::Contract(Contract::UnknownInteraction))
+    }
+
+    /// The member table of the catalog the ports serve, when the embedder
+    /// supplied one. The default is `None`: the server then checks only that
+    /// the form admits a frame's kind.
+    fn members(&self) -> Option<&MemberTable> {
+        None
     }
 }
 
@@ -99,3 +111,89 @@ where
         self.0.read_fixed(iface, ord, out)
     }
 }
+
+/// A backend paired with the member table of the catalog its ports serve.
+///
+/// It forwards the ports, the scannable view and `read_fixed` of the backend
+/// it wraps, and returns the table from [`Backend::members`], so the server
+/// refuses an interaction the catalog does not hold.
+pub struct Described<B: Backend> {
+    inner: B,
+    table: Arc<MemberTable>,
+}
+
+impl<B: Backend> Described<B> {
+    /// Pairs `backend` with `table`. Fails when the table's name or hash
+    /// differs from the catalog `backend.ports()` serves.
+    pub fn new(mut backend: B, table: Arc<MemberTable>) -> Result<Self, TableMismatch> {
+        let catalog = *backend.ports().catalog();
+        if table.name() == catalog.name && *table.hash() == catalog.hash {
+            Ok(Self {
+                inner: backend,
+                table,
+            })
+        } else {
+            Err(TableMismatch {
+                ports: catalog,
+                name: table.name().to_owned(),
+                hash: *table.hash(),
+            })
+        }
+    }
+}
+
+impl<B: Backend> Backend for Described<B> {
+    type Ports = B::Ports;
+
+    fn ports(&mut self) -> &mut B::Ports {
+        self.inner.ports()
+    }
+
+    fn scannable(&self) -> Option<&dyn ScannableSignals> {
+        self.inner.scannable()
+    }
+
+    fn read_fixed(
+        &self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        out: &mut [u8],
+    ) -> Result<usize, ReadError> {
+        self.inner.read_fixed(iface, ord, out)
+    }
+
+    fn members(&self) -> Option<&MemberTable> {
+        Some(&self.table)
+    }
+}
+
+/// A member table whose name or hash differs from the catalog the ports
+/// serve.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TableMismatch {
+    /// The catalog the ports serve.
+    pub ports: CatalogRef,
+    /// The table's unit name.
+    pub name: String,
+    /// The table's catalog hash.
+    pub hash: CatalogHash,
+}
+
+fn hex(hash: &CatalogHash) -> String {
+    hash.0.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+impl fmt::Display for TableMismatch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "the member table describes `{}` with hash {}, and the ports serve `{}` with hash {}",
+            self.name,
+            hex(&self.hash),
+            self.ports.name,
+            hex(&self.ports.hash)
+        )
+    }
+}
+
+impl std::error::Error for TableMismatch {}
