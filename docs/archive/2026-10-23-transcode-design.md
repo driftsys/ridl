@@ -197,8 +197,8 @@ The frozen generated crates under `freeze/generated/` do not set
 - **The free function only, with no generated functions.** Every call site would
   change when faster generated conversions arrive.
 - **Command-line flags (`--transcode-from`, `--transcode-to`).** The encodings
-  are already listed in the manifest, and ADR-0010 keeps build configuration
-  there.
+  are already listed in the manifest (decision 4's 2026-10-10 amendment and
+  ADR-0020's `encodings` option amendment).
 - **Generate automatically whenever two encodings are listed.** Adds code to
   every crate that lists two encodings, most of which do not transcode.
 - **`transcode` takes a verified `Ref<T, S>` and returns `EncodeError`.** No new

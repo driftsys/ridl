@@ -7532,6 +7532,13 @@ mod transcode {
             source.contains("[`::ridl_rt::payload::transcode`]"),
             "the doc comment links the reference transcode"
         );
+        // One `#[doc]` attribute per line: no doc string holds a newline.
+        for line in source.lines().filter(|line| line.contains("#[doc")) {
+            assert!(
+                line.trim_end().ends_with("\"]") && !line.contains("\\n"),
+                "a doc attribute with an embedded newline: {line}"
+            );
+        }
         assert!(source.contains("Re-encodes a flatbuffers payload as a proto3 payload."));
         assert!(source.contains("Re-encodes a proto3 payload as a flatbuffers payload."));
     }
@@ -7568,6 +7575,55 @@ mod transcode {
         );
         assert!(
             blocks(&source, "Speed").contains("transcode_"),
+            "got:\n{source}"
+        );
+    }
+
+    /// An induced argument struct that only the FlatBuffers codec roots gets
+    /// no transcode function. A declaration cannot be built that way at unit
+    /// level, but the proto3 root of an induced tuple follows the call's
+    /// request size, so removing that size leaves the tuple FlatBuffers-only.
+    #[test]
+    fn transcode_skips_an_induced_tuple_with_one_encoding() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/transcode.ridl");
+        let text = std::fs::read_to_string(&path).expect("read the fixture");
+        let output = ridlc::compile(&path.display().to_string(), &text);
+        let mut model = ridl_ir::codegen::lower(&output.package, &[]);
+        let with_both = source(&model, &BOTH, true);
+        assert!(
+            blocks(&with_both, "GaugeSetParams").contains("transcode_"),
+            "the induced tuple has both roots first, got:\n{with_both}"
+        );
+        let mut cleared = false;
+        for interface in &mut model.interfaces {
+            for slot in &mut interface.slots {
+                if let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                    slot.occupant.as_mut()
+                    && let Some(v1::interaction::Shape::Command(command)) =
+                        interaction.shape.as_mut()
+                {
+                    command
+                        .request_sizes
+                        .as_mut()
+                        .expect("sizes are written")
+                        .proto3 = None;
+                    cleared = true;
+                }
+            }
+        }
+        assert!(cleared, "the Gauge command was found");
+        let source = source(&model, &BOTH, true);
+        assert!(
+            source.contains("Payload<::ridl_rt::encoding::FlatBuffers> for GaugeSetParams"),
+            "got:\n{source}"
+        );
+        assert!(
+            !source.contains("Payload<::ridl_rt::encoding::Proto3> for GaugeSetParams"),
+            "got:\n{source}"
+        );
+        assert!(
+            !blocks(&source, "GaugeSetParams").contains("transcode_"),
             "got:\n{source}"
         );
     }
