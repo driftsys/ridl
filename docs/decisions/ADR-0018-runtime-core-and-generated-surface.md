@@ -94,6 +94,12 @@ the codec is described in
 [the proto3 codec design record](../design/proto3-codec.md). The record stays
 Proposed.
 
+**Amended 2026-10-23 — decision 13, generated transcode functions.** With
+`transcode = true` in `[backend.rust]`, the Rust backend generates a
+`transcode_<s>_to_<d>` function on each type that implements `Payload` under two
+listed encodings. Decision 13 carries the amendment in place. The record stays
+Proposed.
+
 ## Context
 
 The Rust backend has shipped an interaction layer since E2 — consumer and
@@ -455,12 +461,13 @@ be generated, and in what order", which is what this record answers.
     function alone would make every call site change when a faster body arrives,
     so the backend generates inherent functions that keep the call sites fixed.
     The request is a manifest key, not command-line flags, because the encodings
-    are already listed in the manifest (ADR-0010). The key is opt-in, not
-    automatic, because most crates that list two encodings never transcode and
-    the code size matters on targets with no standard library. `transcode` takes
-    bytes and reports both `VerifyError` and `EncodeError` as `TranscodeError`,
-    not a verified `Ref` with `EncodeError`, so that a streaming body with the
-    same signature can be compared with it directly.
+    are already listed in the manifest (decision 4's 2026-10-10 amendment and
+    ADR-0020's `encodings` option amendment). The key is opt-in, not automatic,
+    because most crates that list two encodings never transcode and the code
+    size matters on targets with no standard library. `transcode` takes bytes
+    and reports both `VerifyError` and `EncodeError` as `TranscodeError`, not a
+    verified `Ref` with `EncodeError`, so that a streaming body with the same
+    signature can be compared with it directly.
 
 14. **A runtime update is admissible when it is compatible and fits the reserved
     span.** Ordinals are append-only, so a compatible change appends and never

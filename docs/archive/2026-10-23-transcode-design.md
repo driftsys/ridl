@@ -1,6 +1,6 @@
 # Transcode between payload encodings — design
 
-Status: draft, 2026-10-23. Not yet approved.
+Status: approved on 2026-10-23, and implemented.
 
 ## Intent
 
