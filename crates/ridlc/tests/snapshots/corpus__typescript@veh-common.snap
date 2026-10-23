@@ -4,7 +4,7 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
 ---
 // ===== package veh.common =====
-import * as ridl_std from './ridl.std';
+import * as ridl_std from './ridl.std.js';
 
 /**
  * Vehicle speed over ground

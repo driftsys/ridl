@@ -4,7 +4,7 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
 ---
 // ===== package veh.common =====
-import * as ridl_std from './ridl.std';
+import * as ridl_std from './ridl.std.js';
 
 /**
  * Vehicle speed over ground
@@ -284,8 +284,8 @@ interface RawWheelFrame {
 
 
 // ===== package veh.cluster =====
-import * as ridl_std from './ridl.std';
-import * as veh_common from './veh.common';
+import * as ridl_std from './ridl.std.js';
+import * as veh_common from './veh.common.js';
 
 export interface DoorPayload {
   /**
