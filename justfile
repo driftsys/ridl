@@ -128,6 +128,10 @@ test:
         # same line is what builds the `task` module under the `std` feature
         # and runs crates/ridl-rt/tests/task.rs.
         cargo test -p ridl-rt --all-features --locked
+        # No workspace member turns on the `descriptor` feature of
+        # `ridl-transport-ws`, so its test target `descriptor`, which requires
+        # the feature, runs only from this line.
+        cargo test --locked -p ridl-transport-ws --features descriptor
     else
         echo "test: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
@@ -1069,6 +1073,9 @@ lint:
         # As in `just test`: the workspace resolves `ridl-rt` with default
         # features, so its feature-gated modules are otherwise never linted.
         cargo clippy -p ridl-rt --all-features --all-targets -- -D warnings
+        # As in `just test`: no workspace member turns on the `descriptor`
+        # feature of `ridl-transport-ws`.
+        cargo clippy -p ridl-transport-ws --features descriptor --all-targets -- -D warnings
     else
         echo "lint: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
