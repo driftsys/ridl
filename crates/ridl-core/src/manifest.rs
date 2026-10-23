@@ -1713,6 +1713,15 @@ version = \"1.0.0\"
         assert_eq!(codes(&diags), vec!["MANI-015"]);
     }
 
+    #[test]
+    fn backend_transcode_with_an_unknown_encoding_is_mani_015_only() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\", \"bogus\"]\ntranscode = true\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+    }
+
     const CODEC_MANIFEST: &str =
         "[backend.rust]\nencodings = [\"flatbuffers\"]\n[backend.typescript]\ncodec = true\n";
 

@@ -1440,8 +1440,8 @@ diag_codes! {
         /// A `[backend.<name>]` table sets `transcode = true` and lists fewer
         /// than two encodings, so there is no pair of encodings to convert
         /// between. Reported on the `transcode` value. A table whose
-        /// `encodings` hold an unknown or repeated name is MANI-015 too, and
-        /// only the valid, distinct names count.
+        /// `encodings` hold an unknown or repeated name is MANI-015 only,
+        /// because every written element counts, valid or not.
         MANI_020 = "MANI-020", Error,
             "a backend table sets `transcode = true` with fewer than two encodings";
 
