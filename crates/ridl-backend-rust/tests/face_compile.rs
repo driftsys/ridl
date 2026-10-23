@@ -241,7 +241,7 @@ fn an_internal_interface_gets_no_face_module() {
 #[test]
 fn an_internal_interface_gets_no_face_through_the_pipeline() {
     let output = ridlc::compile("hidden_pipeline.ridl", INTERNAL_BESIDE_PUBLIC);
-    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate_pipeline");
     let source = generated.rust_source;
     assert!(source.contains("pub mod summary {"), "{source}");
@@ -272,7 +272,7 @@ interface Wide {
 }
 "#;
     let output = ridlc::compile("shape.ridl", source);
-    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate_pipeline");
     let text = generated.rust_source;
     assert!(
@@ -309,7 +309,7 @@ interface Wide {
 }
 "#;
     let output = ridlc::compile("query_shape.ridl", source);
-    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate_pipeline");
     let text = generated.rust_source;
     assert!(
@@ -341,7 +341,7 @@ interface Wide {
 }
 "#;
     let output = ridlc::compile("query_reply.ridl", source);
-    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate_pipeline");
     let text = generated.rust_source;
     assert!(
@@ -379,7 +379,7 @@ internal interface Guarded {
 }
 "#;
     let output = ridlc::compile("internal_clause.ridl", source);
-    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate_pipeline");
     let text = generated.rust_source;
     let note = text
@@ -426,7 +426,7 @@ internal interface Cabin {
 }
 "#;
     let output = ridlc::compile("internal_claims.ridl", source);
-    let err = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    let err = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect_err("the descriptor name collides with a declaration");
     for part in [
         "`CabinTemperature`",
@@ -456,7 +456,7 @@ internal interface HornActive {
 }
 "#;
     let output = ridlc::compile("internal_iface_claim.ridl", source);
-    let err = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    let err = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect_err("the interface descriptor collides with a member descriptor");
     for part in [
         "`HornActive`",
@@ -485,7 +485,7 @@ internal interface HTTPServer {
 }
 "#;
     let output = ridlc::compile("claims.ridl", source);
-    generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("the internal interface claims no face module");
     generate_face_with(&output.package, &[WireEncoding::FlatBuffers]).expect("generate_face_with");
 }
@@ -1343,7 +1343,7 @@ fn making_an_interface_internal_changes_only_the_catalog_hash() {
             "the {visibility:?} source is a valid package: {:?}",
             output.diagnostics
         );
-        generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+        generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
             .expect("generate_pipeline")
             .rust_source
     };

@@ -41,10 +41,11 @@ mod descriptors;
 mod docs;
 mod face;
 mod scalar_step;
+mod transcode;
 mod wasm;
 
 pub use codec_proto3::{Label as Proto3Label, MessageLayout as Proto3MessageLayout};
-pub use contract::{Backend, ENCODINGS_OPTION, WASM_OPTION};
+pub use contract::{Backend, ENCODINGS_OPTION, TRANSCODE_OPTION, WASM_OPTION};
 pub use wasm::{PAYLOAD_TYPES_CONST, RULES_CONST, generate_wasm_module};
 
 /// The generated artifact for one package: Rust source.
@@ -88,7 +89,7 @@ pub struct GenerateError {
 pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
     let ctx = Ctx::new(package, &model);
-    render(package_items(&ctx, &[], &[])?)
+    render(package_items(&ctx, &[], &[], false)?)
 }
 
 /// Generates the Rust source for `package`: the domain types [`generate`]
@@ -129,7 +130,7 @@ pub fn generate_face_with(
     let model = ridl_ir::codegen::lower(package, &[]);
     let mut ctx = Ctx::new(package, &model);
     if !emits_face(encodings) {
-        return render(package_items(&ctx, &[], encodings)?);
+        return render(package_items(&ctx, &[], encodings, false)?);
     }
     ctx.encodings = encodings.to_vec();
     // This entry point refuses rather than skips, so every named interface's
@@ -147,7 +148,7 @@ pub fn generate_face_with(
             })
             .map(|(index, _)| index),
     );
-    let mut items = package_items(&ctx, &interfaces, encodings)?;
+    let mut items = package_items(&ctx, &interfaces, encodings, false)?;
     items.extend(descriptors::interface_items(&ctx)?);
     items.extend(face::interface_items(&ctx, &model, &ctx.links())?);
     render(items)
@@ -171,7 +172,7 @@ pub fn generate_with(
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, others);
     let ctx = Ctx::with_others(package, others, &model);
-    render(package_items(&ctx, &[], &[])?)
+    render(package_items(&ctx, &[], &[], false)?)
 }
 
 /// The pipeline's entry point: everything [`generate_face_with`] emits, over
@@ -209,10 +210,11 @@ pub fn generate_with(
 pub fn generate_pipeline(
     package: &v2::Package,
     encodings: &[WireEncoding],
+    transcode: bool,
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, others);
-    generate_pipeline_over(&model, encodings)
+    generate_pipeline_over(&model, encodings, transcode)
 }
 
 /// [`generate_pipeline`] over a model the caller already has.
@@ -224,13 +226,14 @@ pub fn generate_pipeline(
 pub(crate) fn generate_pipeline_over(
     model: &v1::Model,
     encodings: &[WireEncoding],
+    transcode: bool,
 ) -> Result<Generated, GenerateError> {
     let mut ctx = Ctx::over(model);
     if !emits_face(encodings) {
         // Types only: the list is empty, so no codec, no descriptor and no
         // face is emitted, the catalog hash is not read and no interface is
         // walked, so nothing below applies and nothing is refused.
-        return render(package_items(&ctx, &[], encodings)?);
+        return render(package_items(&ctx, &[], encodings, transcode)?);
     }
     ctx.encodings = encodings.to_vec();
     // A malformed catalog hash refuses the whole model here; inside the
@@ -281,7 +284,7 @@ pub(crate) fn generate_pipeline_over(
             }
         }
     }
-    let mut items = package_items(&ctx, &faced, encodings)?;
+    let mut items = package_items(&ctx, &faced, encodings, transcode)?;
     items.extend(interface_items);
     render(items)
 }
@@ -495,6 +498,7 @@ fn package_items(
     ctx: &Ctx,
     interfaces: &[&v1::Interface],
     encodings: &[WireEncoding],
+    transcode: bool,
 ) -> Result<Vec<TokenStream>, GenerateError> {
     claims::check(ctx, interfaces)?;
     let mut items = domain_items(ctx)?;
@@ -506,6 +510,9 @@ fn package_items(
     }
     if encodings.contains(&WireEncoding::Proto3) {
         items.extend(codec_proto3::package_items(ctx)?);
+    }
+    if transcode {
+        items.extend(transcode::package_items(ctx, encodings)?);
     }
     Ok(items)
 }

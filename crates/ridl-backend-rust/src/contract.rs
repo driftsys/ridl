@@ -32,6 +32,12 @@ pub const ENCODINGS_OPTION: &str = "encodings";
 /// [`generate_wasm_module`]: crate::generate_wasm_module
 pub const WASM_OPTION: &str = "wasm";
 
+/// The option that asks for the `transcode_<s>_to_<d>` functions, as the
+/// manifest's `[backend.rust] transcode = true` sets it, with the value `true`
+/// (`false` is the same as absent). The functions are emitted for each type
+/// that has a `Payload` implementation under two listed encodings.
+pub const TRANSCODE_OPTION: &str = "transcode";
+
 /// The Rust backend as a [`codegen::Backend`]: one file,
 /// `<artifact_base>.rs`, from
 /// [`generate_pipeline`](crate::generate_pipeline) over the request's model.
@@ -45,6 +51,7 @@ impl codegen::Backend for Backend {
     fn generate(&self, request: &v1::CodegenRequest) -> v1::CodegenResponse {
         let mut encodings: Vec<WireEncoding> = Vec::new();
         let mut wasm = false;
+        let mut transcode = false;
         let mut implied = false;
         for option in &request.options {
             if option.key == WASM_OPTION {
@@ -60,10 +67,22 @@ impl codegen::Backend for Backend {
                 }
                 continue;
             }
+            if option.key == TRANSCODE_OPTION {
+                match option.value.as_str() {
+                    "true" => transcode = true,
+                    "false" => transcode = false,
+                    other => {
+                        return refusal(format!(
+                            "`{TRANSCODE_OPTION}` is `{other}`; the value is `true` or `false`"
+                        ));
+                    }
+                }
+                continue;
+            }
             if option.key != ENCODINGS_OPTION {
                 return refusal(format!(
-                    "the Rust backend takes the options `{ENCODINGS_OPTION}` and \
-                     `{WASM_OPTION}`; `{}` is not one it knows",
+                    "the Rust backend takes the options `{ENCODINGS_OPTION}`, \
+                     `{WASM_OPTION}` and `{TRANSCODE_OPTION}`; `{}` is not one it knows",
                     option.key
                 ));
             }
@@ -97,7 +116,7 @@ impl codegen::Backend for Backend {
             return refusal("the request carries no model".to_string());
         };
         let preamble = codegen::comment_preamble(&request.generated_marker, &request.header, "//");
-        match generate_pipeline_over(model, &encodings) {
+        match generate_pipeline_over(model, &encodings, transcode) {
             Ok(generated) => v1::CodegenResponse {
                 files: vec![codegen::text_file(
                     format!("{}.rs", request.artifact_base),

@@ -19,6 +19,7 @@ fn enum_field_default_uses_the_declared_member_value() {
     let generated = ridl_backend_rust::generate_pipeline(
         &output.package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .unwrap();
@@ -63,6 +64,7 @@ fn bytes_defaults_preserve_utf8_init_values() {
     let generated = ridl_backend_rust::generate_pipeline(
         &output.package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .unwrap();

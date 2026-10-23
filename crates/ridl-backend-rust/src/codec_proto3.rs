@@ -121,7 +121,15 @@ use crate::{
 
 /// Emits the proto3 codec for the package `ctx` was built over.
 pub(crate) fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
-    Codec::new(ctx)?.items()
+    Ok(Codec::new(ctx)?.items()?.0)
+}
+
+/// The types [`package_items`] emits a `Payload<Proto3>` implementation for:
+/// the same walk, so the transcode functions follow the codec's own rule.
+pub(crate) fn payload_owners(
+    ctx: &Ctx,
+) -> Result<Vec<crate::transcode::PayloadOwner>, GenerateError> {
+    Ok(Codec::new(ctx)?.items()?.1)
 }
 
 /// The layout the codec emits from, per emitted message, for the test that
@@ -1098,8 +1106,11 @@ impl<'a> Codec<'a> {
         found
     }
 
-    fn items(&self) -> Result<Vec<TokenStream>, GenerateError> {
+    fn items(
+        &self,
+    ) -> Result<(Vec<TokenStream>, Vec<crate::transcode::PayloadOwner>), GenerateError> {
         let mut items: Vec<TokenStream> = Vec::new();
+        let mut owners: Vec<crate::transcode::PayloadOwner> = Vec::new();
         for message in self.messages()? {
             // `None`: a tuple encoded only inside its owner, which crosses
             // the wire on its own in no encoding and gets no implementation.
@@ -1124,6 +1135,10 @@ impl<'a> Codec<'a> {
             ];
             if let Some(bound) = bound {
                 functions.push(self.payload_impl(owner, &ty, bound));
+                owners.push(crate::transcode::PayloadOwner {
+                    name: owner.to_string(),
+                    visibility: message.visibility,
+                });
             }
             items.extend(
                 functions
@@ -1131,7 +1146,7 @@ impl<'a> Codec<'a> {
                     .map(|item| allow_dead_code_if_internal(message.visibility, item)),
             );
         }
-        Ok(items)
+        Ok((items, owners))
     }
 
     /// The proto3 bound of the declaration's root message, or the refusal

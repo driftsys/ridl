@@ -964,7 +964,8 @@ fn an_unknown_key_is_refused() {
         value: "flatbuffers".to_string(),
     }]);
     assert!(
-        message.contains("takes the options `encodings` and `wasm`") && message.contains("`codec`"),
+        message.contains("takes the options `encodings`, `wasm` and `transcode`")
+            && message.contains("`codec`"),
         "got: {message}"
     );
 }
@@ -1367,9 +1368,10 @@ fn a_model_without_a_catalog_refuses_the_model() {
 #[test]
 fn an_induced_argument_struct_has_a_payload_impl() {
     let package = ir::compile_fixture("induced_params.ridl");
-    let source = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::FlatBuffers], &[])
-        .expect("generate_pipeline")
-        .rust_source;
+    let source =
+        ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::FlatBuffers], false, &[])
+            .expect("generate_pipeline")
+            .rust_source;
     let d = dense(&source);
     for induced in [
         "PumpBothParams",

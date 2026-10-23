@@ -699,6 +699,7 @@ fn the_corpus_generates_with_proto3() {
                 let result = ridl_backend_rust::generate_pipeline(
                     package,
                     &[ridl_backend_rust::WireEncoding::Proto3],
+                    false,
                     &others,
                 )
                 .map(|generated| generated.rust_source)
@@ -772,15 +773,18 @@ fn the_ros2_corpus_is_refused_under_proto3() {
             .map(|(_, other)| other)
             .collect();
         others.push(&std_ir);
-        ridl_backend_rust::generate_pipeline(package, &[], &others).unwrap_or_else(|error| {
-            panic!(
-                "evals/corpus/ros2: `{}` generates with no encoding: {}",
-                package.name, error.message
-            )
-        });
+        ridl_backend_rust::generate_pipeline(package, &[], false, &others).unwrap_or_else(
+            |error| {
+                panic!(
+                    "evals/corpus/ros2: `{}` generates with no encoding: {}",
+                    package.name, error.message
+                )
+            },
+        );
         match ridl_backend_rust::generate_pipeline(
             package,
             &[ridl_backend_rust::WireEncoding::Proto3],
+            false,
             &others,
         ) {
             Ok(_) => generated.push(package.name.clone()),

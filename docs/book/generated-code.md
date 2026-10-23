@@ -230,6 +230,45 @@ With no timeout, a blocking call returns only with its outcome, blocking
 `next_event` only with an event or a read failure, and blocking `serve` only
 with a failure. At the timeout, blocking `next_event` returns `Ok(None)`.
 
+## Converting a payload between encodings
+
+With `[backend.rust] transcode = true` in the manifest, the generated crate
+carries one function for each ordered pair of distinct encodings that
+`[backend.rust] encodings` lists, on each payload type that has a `Payload`
+implementation under both. The manifest must list at least two encodings.
+
+```toml
+[backend.rust]
+encodings = ["flatbuffers", "proto3"]
+transcode = true
+```
+
+The function is named `transcode_<s>_to_<d>`, where `<s>` is the source
+encoding and `<d>` the target, spelled as in the manifest with `-` replaced by
+`_`. For a type `Speed` the crate holds:
+
+```rust
+impl Speed {
+    pub fn transcode_flatbuffers_to_proto3<'o>(
+        bytes: &[u8],
+        out: &'o mut [u8],
+    ) -> Result<
+        ridl_rt::payload::Ref<'o, Self, ridl_rt::encoding::Proto3>,
+        ridl_rt::payload::TranscodeError,
+    >;
+    pub fn transcode_proto3_to_flatbuffers<'o>(/* the same parameters */)
+        -> Result</* a Ref in the FlatBuffers encoding */, /* the same error */>;
+}
+```
+
+The function verifies `bytes` under the source encoding, decodes the value, and
+encodes it under the target encoding into `out`. It calls
+`ridl_rt::payload::transcode`, which allocates nothing. An `out` that is too
+small is `TranscodeError::Encode` with `EncodeError::Capacity`, and bytes that
+do not verify are `TranscodeError::Verify`. A type that has a `Payload`
+implementation under only one of the two encodings gets no function for that
+pair; proto3, for example, has no root for a type that FlatBuffers roots.
+
 ## Cargo features
 
 The generated `Cargo.toml` declares two features, both on by default:

@@ -417,7 +417,7 @@ fn rust_with_codec(decls: Vec<v2::Decl>) -> String {
 
 /// [`generate`] with the FlatBuffers codec: the pipeline over one package.
 fn generate_codec(package: &v2::Package) -> Result<Generated, super::GenerateError> {
-    generate_pipeline(package, &[WireEncoding::FlatBuffers], &[])
+    generate_pipeline(package, &[WireEncoding::FlatBuffers], false, &[])
 }
 
 fn rust_for(decls: Vec<v2::Decl>) -> String {
@@ -468,7 +468,7 @@ fn the_proto3_codec_refuses_a_field_number_the_proto_backend_refuses() {
     };
     let generate = |decl: v2::Decl| {
         let package = package("veh.common", vec![speed_decl(), decl]);
-        super::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+        super::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
             .map(|generated| generated.rust_source)
             .map_err(|error| error.message)
     };
@@ -583,14 +583,14 @@ fn the_proto3_codec_refuses_an_optional_array_or_map_field() {
         ),
     ] {
         let package = holder_over(vec![(field, ty)]);
-        let error = super::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+        let error = super::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
             .expect_err(expected)
             .message;
         assert!(
             error.starts_with(expected) && error.contains("ADR-0013 decision 7"),
             "the refusal names the field and the rule, got: {error}"
         );
-        super::generate_pipeline(&package, &[], &[]).expect("the types alone generate");
+        super::generate_pipeline(&package, &[], false, &[]).expect("the types alone generate");
     }
 }
 
@@ -1973,10 +1973,10 @@ fn an_empty_pascal_spelling_is_derived_from_snake() {
             }
         }
     }
-    let current = super::generate_pipeline_over(&model, &[super::WireEncoding::FlatBuffers])
+    let current = super::generate_pipeline_over(&model, &[super::WireEncoding::FlatBuffers], false)
         .expect("generation succeeds")
         .rust_source;
-    let derived = super::generate_pipeline_over(&older, &[super::WireEncoding::FlatBuffers])
+    let derived = super::generate_pipeline_over(&older, &[super::WireEncoding::FlatBuffers], false)
         .expect("generation succeeds")
         .rust_source;
     assert!(current.contains("CheckEngine"), "{current}");
@@ -6601,7 +6601,7 @@ fn the_pipeline_resolves_a_reference_into_another_package() {
         "without the other package the type is withheld a codec, got:\n{alone}"
     );
 
-    let with_others = generate_pipeline(&local, &[WireEncoding::FlatBuffers], &[&foreign])
+    let with_others = generate_pipeline(&local, &[WireEncoding::FlatBuffers], false, &[&foreign])
         .expect("the package generates against the build")
         .rust_source;
     assert!(
@@ -7442,6 +7442,212 @@ fn the_generation_time_tag_length_is_the_runtime_one() {
             super::codec_proto3::tag_len(number),
             ridl_rt::proto3::tag_len(number),
             "field number {number}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The transcode functions.
+// ---------------------------------------------------------------------------
+
+mod transcode {
+    use super::*;
+    use ridl_ir::codegen::v1;
+
+    const BOTH: [WireEncoding; 2] = [WireEncoding::FlatBuffers, WireEncoding::Proto3];
+
+    /// A package with `Speed`, a named scalar both codecs root, and `Holder`,
+    /// a struct over it.
+    fn model() -> v1::Model {
+        let holder = public_decl(
+            "Holder",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(named_field(
+                    "speed",
+                    1,
+                    "Speed",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            }),
+        );
+        ridl_ir::codegen::lower(&package("veh.common", vec![speed_decl(), holder]), &[])
+    }
+
+    fn source(model: &v1::Model, encodings: &[WireEncoding], transcode: bool) -> String {
+        super::super::generate_pipeline_over(model, encodings, transcode)
+            .expect("generation succeeds")
+            .rust_source
+    }
+
+    /// The text of each `impl <name> {` block, joined.
+    fn blocks(source: &str, name: &str) -> String {
+        let marker = format!("impl {name} {{");
+        source
+            .split(&marker)
+            .skip(1)
+            .map(|rest| rest.split("\nimpl ").next().expect("a block"))
+            .collect()
+    }
+
+    /// The source with every run of whitespace collapsed to one space.
+    fn squeezed(source: &str) -> String {
+        source.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    #[test]
+    fn transcode_emits_both_directions() {
+        let source = source(&model(), &BOTH, true);
+        for name in ["Speed", "Holder"] {
+            let block = blocks(&source, name);
+            assert!(
+                block.contains("fn transcode_flatbuffers_to_proto3<'o>"),
+                "{name}"
+            );
+            assert!(
+                block.contains("fn transcode_proto3_to_flatbuffers<'o>"),
+                "{name}"
+            );
+        }
+        let squeezed = squeezed(&source);
+        assert!(
+            squeezed.contains(
+                "::ridl_rt::payload::transcode::< Self, ::ridl_rt::encoding::FlatBuffers, \
+                 ::ridl_rt::encoding::Proto3, >(bytes, out)"
+            ) || squeezed.contains(
+                "::ridl_rt::payload::transcode::<Self, ::ridl_rt::encoding::FlatBuffers, \
+                 ::ridl_rt::encoding::Proto3>(bytes, out)"
+            ),
+            "the body calls the reference transcode, got:\n{source}"
+        );
+        assert!(
+            squeezed.contains(
+                "-> ::core::result::Result< ::ridl_rt::payload::Ref<'o, Self, \
+                 ::ridl_rt::encoding::Proto3>, ::ridl_rt::payload::TranscodeError, >"
+            ),
+            "the result type is a Ref in the target encoding, got:\n{source}"
+        );
+        assert!(
+            source.contains("[`::ridl_rt::payload::transcode`]"),
+            "the doc comment links the reference transcode"
+        );
+        assert!(source.contains("Re-encodes a flatbuffers payload as a proto3 payload."));
+        assert!(source.contains("Re-encodes a proto3 payload as a flatbuffers payload."));
+    }
+
+    #[test]
+    fn transcode_skips_a_type_with_one_encoding() {
+        // `Holder` is left without a FlatBuffers root, so only the proto3 codec
+        // writes a `Payload` implementation for it.
+        let mut model = model();
+        let holder = model
+            .declarations
+            .iter()
+            .position(|decl| {
+                decl.name
+                    .as_ref()
+                    .is_some_and(|name| name.declared == "Holder")
+            })
+            .expect("Holder is declared") as u32;
+        model
+            .flatbuffers
+            .as_mut()
+            .expect("a lowered model carries the projection")
+            .roots
+            .retain(|root| root.tuple.is_some() || root.declaration != holder);
+        let source = source(&model, &BOTH, true);
+        assert!(
+            !source.contains("Payload<::ridl_rt::encoding::FlatBuffers> for Holder"),
+            "Holder has no FlatBuffers implementation, got:\n{source}"
+        );
+        assert!(source.contains("Payload<::ridl_rt::encoding::Proto3> for Holder"));
+        assert!(
+            !blocks(&source, "Holder").contains("transcode_"),
+            "got:\n{source}"
+        );
+        assert!(
+            blocks(&source, "Speed").contains("transcode_"),
+            "got:\n{source}"
+        );
+    }
+
+    #[test]
+    fn transcode_off_emits_nothing() {
+        let source = source(&model(), &BOTH, false);
+        assert!(!source.contains("transcode_"), "got:\n{source}");
+    }
+
+    #[test]
+    fn transcode_with_one_encoding_emits_nothing() {
+        for encodings in [
+            &[WireEncoding::FlatBuffers][..],
+            &[WireEncoding::Proto3][..],
+            &[][..],
+        ] {
+            let source = source(&model(), encodings, true);
+            assert!(!source.contains("transcode_"), "{encodings:?}:\n{source}");
+        }
+    }
+
+    #[test]
+    fn the_contract_reads_the_transcode_option() {
+        let respond = |value: &str| {
+            let request = v1::CodegenRequest {
+                model: Some(model()),
+                options: vec![
+                    v1::BackendOption {
+                        key: super::super::ENCODINGS_OPTION.to_string(),
+                        value: "flatbuffers,proto3".to_string(),
+                    },
+                    v1::BackendOption {
+                        key: super::super::TRANSCODE_OPTION.to_string(),
+                        value: value.to_string(),
+                    },
+                ],
+                artifact_base: "veh.common".to_string(),
+                ..Default::default()
+            };
+            ridl_ir::codegen::Backend::generate(&crate::Backend, &request)
+        };
+        let text = |response: &v1::CodegenResponse| {
+            response
+                .files
+                .iter()
+                .find_map(|file| match &file.content {
+                    Some(v1::generated_file::Content::Text(text)) => Some(text.clone()),
+                    _ => None,
+                })
+                .expect("one text file")
+        };
+        let on = respond("true");
+        assert!(on.diagnostics.is_empty(), "{:?}", on.diagnostics);
+        assert!(text(&on).contains("fn transcode_proto3_to_flatbuffers"));
+        let off = respond("false");
+        assert!(off.diagnostics.is_empty(), "{:?}", off.diagnostics);
+        assert!(!text(&off).contains("transcode_"));
+    }
+
+    #[test]
+    fn transcode_option_value_not_boolean_is_refused() {
+        let request = v1::CodegenRequest {
+            model: Some(model()),
+            options: vec![v1::BackendOption {
+                key: super::super::TRANSCODE_OPTION.to_string(),
+                value: "yes".to_string(),
+            }],
+            artifact_base: "veh.common".to_string(),
+            ..Default::default()
+        };
+        let response = ridl_ir::codegen::Backend::generate(&crate::Backend, &request);
+        assert!(response.files.is_empty());
+        assert_eq!(response.diagnostics.len(), 1);
+        assert!(
+            response.diagnostics[0]
+                .message
+                .contains("`transcode` is `yes`; the value is `true` or `false`"),
+            "got: {}",
+            response.diagnostics[0].message
         );
     }
 }

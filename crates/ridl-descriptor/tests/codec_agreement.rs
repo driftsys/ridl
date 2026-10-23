@@ -62,6 +62,7 @@ fn every_generated_max_size_is_the_descriptors_flatbuffers_bound() {
     let generated = ridl_backend_rust::generate_pipeline(
         &package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .expect("the corpus generates");

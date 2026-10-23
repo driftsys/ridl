@@ -28,6 +28,7 @@ fn program(main: &str) -> String {
     let generated = ridl_backend_rust::generate_pipeline(
         &package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .expect("the fixture generates")
