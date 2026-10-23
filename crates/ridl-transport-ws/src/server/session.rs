@@ -3686,6 +3686,36 @@ mod tests {
         );
     }
 
+    /// Mutation: `known` ignores the kind.
+    #[test]
+    fn a_read_of_the_fixed_ordinal_under_kind_signal_is_unknown() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Signal, 5);
+        let (_, out) = send(&mut s, &msg(Frame::Read(t)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(t));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+    }
+
+    /// Mutation: `known` ignores the kind (the form admits `Signal`, so the
+    /// frame would be dropped silently with no note).
+    #[test]
+    fn an_unsubscribe_of_a_known_ordinal_under_the_wrong_kind_is_dropped_and_recorded() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Signal, 2);
+        let (step, out) = send(&mut s, &msg(Frame::Unsubscribe(t)));
+        assert_eq!((step, out.is_empty()), (Step::Continue, true));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+    }
+
     /// Review Focus item 1: the table lists the command, no handler serves it.
     #[test]
     fn a_listed_command_no_handler_serves_stays_in_flight() {

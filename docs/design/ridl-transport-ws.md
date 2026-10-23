@@ -301,7 +301,9 @@ the table: absent, or present under another `kind`, a `subscribe` or a `read` is
 answered `answer` with `contract(UnknownInteraction)`, a `request` a `response`
 carrying it and the request's `seq` as `correlation`, and an `unsubscribe` is
 dropped and recorded as `Note::UnknownInteraction` (§6.4). Nothing reaches the
-backend and no session state is created. The form check follows in both cases:
+backend and no signal or event state is created; a refused `request` is retained
+like any settled response, for duplicate handling. The form check follows in
+both cases:
 
 | Form          | `kind` admitted   | Any other `kind`                               |
 | ------------- | ----------------- | ---------------------------------------------- |
