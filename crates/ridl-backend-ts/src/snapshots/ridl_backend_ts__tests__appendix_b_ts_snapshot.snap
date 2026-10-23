@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: generated.source
 ---
-import * as ridl_std from './ridl.std';
+import * as ridl_std from './ridl.std.js';
 
 /**
  * Vehicle speed over ground

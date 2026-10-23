@@ -1756,7 +1756,7 @@ fn tsdoc_link_to_a_foreign_declaration_uses_the_import_alias() {
         .expect("generation succeeds")
         .source;
     assert!(
-        source.contains("import * as other_pkg from './other.pkg';"),
+        source.contains("import * as other_pkg from './other.pkg.js';"),
         "got:\n{source}"
     );
     assert!(
@@ -1935,7 +1935,7 @@ fn tsdoc_link_to_a_foreign_declaration_of_a_package_not_imported_is_a_code_span(
     let source = super::generate_with(&local, &model)
         .expect("generation succeeds")
         .source;
-    assert!(!source.contains("from './third.pkg'"), "got:\n{source}");
+    assert!(!source.contains("from './third.pkg"), "got:\n{source}");
     assert!(
         source.contains("Holds {@link other_pkg.Thing}, which holds `third.pkg.Deep`."),
         "got:\n{source}"

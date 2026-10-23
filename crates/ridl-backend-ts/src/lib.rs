@@ -37,7 +37,7 @@
 //!   `@see`, `@since` and `@deprecated` (typl §14). `internal` declarations
 //!   stay module-local — no `export` (ADR-0002 §8).
 //! - **Cross-package reference** `pkg.Name` — a namespace import
-//!   `import * as pkg_name from './pkg.name';`, one module per package.
+//!   `import * as pkg_name from './pkg.name.js';`, one module per package.
 //!
 //! Init derivation mirrors the Rust backend's `Default` derivation
 //! (`crates/ridl-backend-rust/src/defaults.rs`): one `export function init<Name>()` per
@@ -114,7 +114,7 @@ pub(crate) fn generate_with(
     let imports = ctx.imports.borrow();
     for import in imports.iter() {
         source.push_str(&format!(
-            "import * as {} from './{}';\n",
+            "import * as {} from './{}.js';\n",
             package_alias(import),
             import
         ));
