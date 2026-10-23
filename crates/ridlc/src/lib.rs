@@ -1859,12 +1859,12 @@ fn refuse_overwrite(
 /// exported symbol, and the size settings come from the caller's environment.
 /// Without it the manifest is the one written before the option existed.
 ///
-/// The `ridl-rt = "0.12"` requirement is a literal, not read from
+/// The `ridl-rt = "0.13"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
 /// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.
 fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String], wasm: bool) -> String {
-    const RIDL_RT_REQUIREMENT: &str = "0.12";
+    const RIDL_RT_REQUIREMENT: &str = "0.13";
     let ridl_rt = if encodings.is_empty() {
         format!(r#"ridl-rt = {{ version = "{RIDL_RT_REQUIREMENT}" }}"#)
     } else {
