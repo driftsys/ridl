@@ -189,10 +189,27 @@ fn each_kind_maps_to_the_same_named_kind() {
 /// The error names what is wrong in plain text.
 #[test]
 fn each_error_displays_its_cause() {
-    let bytes = descriptor_with(|c| c.hash = vec![7; 31]);
-    let e = MemberTable::from_descriptor(&bytes).unwrap_err();
+    let display = |f: fn(&mut Catalog)| {
+        MemberTable::from_descriptor(&descriptor_with(f))
+            .unwrap_err()
+            .to_string()
+    };
     assert_eq!(
-        e.to_string(),
+        display(|c| c.hash = vec![7; 31]),
         "a catalog hash of 31 bytes; a catalog hash is 32 bytes"
+    );
+    assert_eq!(
+        display(|c| c.interfaces[0].number = 0),
+        "interface `I` has the number 0"
+    );
+    assert_eq!(
+        display(|c| c.interfaces[0].members[0].ordinal = 0),
+        "member `I.m1` has the ordinal 0"
+    );
+    assert_eq!(
+        display(|c| {
+            c.interfaces[0].members[2].timing.as_mut().unwrap().max_us = Some("1s".to_owned());
+        }),
+        "member 1.3 has the max_us \"1s\", which is not a decimal u64"
     );
 }

@@ -276,7 +276,10 @@ other entry below is Accepted.
   2026-10-10 on decisions 5 and 9: `contract` loses `EncodedSizes` and `Unsized`
   and gains `Sizes<E>`, `Payload<E>` gains `Buffer`, `port` gains `Encoded`, a
   generated package enables one `ridl-rt` feature per named encoding, and the
-  request carries the `encodings` option.
+  request carries the `encodings` option. Amended 2026-10-24 on decision 6:
+  `ridl-transport-ws` gains the optional `descriptor` feature, off by default,
+  which adds `ridl-descriptor` with its default features off and needs Rust 1.88
+  (driftsys/ridl#985).
 
 - **ADR-0021 — The `ridl-rt` 0.1 API: identity, the proof type, the port
   dispositions, and the release policy.** Fixes what the earlier records left
