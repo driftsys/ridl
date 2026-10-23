@@ -7,11 +7,12 @@ computed, and its golden test; and, as amended 2026-10-09, the compatible
 catalogs),
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 5 as amended 2026-10-03 (the toolchain may depend on planus; `ridl-rt`
-and every generated package must not),
-[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 8 (the
-generated face checks the port's catalog and panics on a mismatch),
-[ADR-0010](../decisions/ADR-0010-cli-conventions.md) (the `ridl describe` row of
-the exit-code table) and
+and every generated package must not) and decision 6 as amended 2026-10-24
+(`ridl-transport-ws` depends on this crate under its optional `descriptor`
+feature), [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md)
+decision 8 (the generated face checks the port's catalog and panics on a
+mismatch), [ADR-0010](../decisions/ADR-0010-cli-conventions.md) (the
+`ridl describe` row of the exit-code table) and
 [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 7 and its
 notes (the catalog hash in each region of the lowered system). The projections
 the size states are computed through are
@@ -102,12 +103,14 @@ fails when a planus release changes that behaviour, which is when `finish` can
 call planus directly.
 
 **planus stays in the toolchain.** `ridl-descriptor` depends on the `planus`
-runtime, and `ridlc` and `ridl` depend on `ridl-descriptor`. `ridl-rt` and every
-generated package must not depend on any planus crate, through any dependency
-kind (ADR-0020 decision 5, as amended). `xtask/tests/oracle_boundary.rs` checks
-both: `the_runtime_reaches_no_planus_crate` resolves `ridl-rt` with every
-feature on, and `the_generated_crate_reaches_no_planus_crate` reads the resolved
-graph of the crate `ridl build` generates for `examples/cabin`, which runs under
+runtime, and `ridlc` and `ridl` depend on `ridl-descriptor`, as does
+`ridl-transport-ws` under its optional `descriptor` feature, with the default
+features of `ridl-descriptor` off. `ridl-rt` and every generated package must
+not depend on any planus crate, through any dependency kind (ADR-0020 decision
+5, as amended). `xtask/tests/oracle_boundary.rs` checks both:
+`the_runtime_reaches_no_planus_crate` resolves `ridl-rt` with every feature on,
+and `the_generated_crate_reaches_no_planus_crate` reads the resolved graph of
+the crate `ridl build` generates for `examples/cabin`, which runs under
 `just demo`.
 
 `ridl-descriptor` is published to crates.io, after `ridl-ir` and before `ridlc`

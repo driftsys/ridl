@@ -89,7 +89,9 @@ pbjson-build = "0.9.0"
 # `ridl-descriptor` on the runtime, for the catalog descriptor's accessors;
 # `xtask` on `planus-translation` and `planus-codegen`, to generate those
 # accessors (`cargo xtask descriptor-codegen`); and `ridlc` and `ridl` may
-# depend on it through `ridl-descriptor`. `ridl-rt` and every package
+# depend on it through `ridl-descriptor`. Outside the toolchain,
+# `ridl-transport-ws` reaches it through `ridl-descriptor` under its optional
+# `descriptor` feature only (ADR-0020 decision 6, amended 2026-10-24). `ridl-rt` and every package
 # `ridl build` generates must not depend on any of the three, as any kind of
 # dependency (ADR-0020 decision 5, amended 2026-10-03).
 # `xtask/tests/oracle_boundary.rs` checks this for `ridl-rt`, with every

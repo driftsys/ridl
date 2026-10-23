@@ -29,7 +29,12 @@ The crate gains the optional feature `descriptor`, off by default, which adds
 embedder can build the member table it gives the server from a
 `<unit>.catalog.binfb` file (driftsys/ridl#985). With the feature on the crate
 needs Rust 1.88, the minimum of planus 1.3.0; with it off the minimum stays 1.83
-(ADR-0029). The row is changed in place; `ridl-loopback` is unchanged.
+(ADR-0029). The row is changed in place; `ridl-loopback` is unchanged. With the
+feature on, the crate reaches planus through `ridl-descriptor`. Decision 5's
+amendment of 2026-10-03 names the toolchain as the side that may depend on
+planus and forbids it to `ridl-rt` and every generated package; those two rules
+are unchanged, and `ridl-transport-ws` under its `descriptor` feature is the one
+runtime crate that reaches planus.
 
 **Amended 2026-10-21 — decision 6 and open item 2, the TypeScript runtime
 package is named and both TypeScript packages publish to npm.** The runtime
@@ -358,7 +363,9 @@ as its public contract.
    [lane E16 driver](../archive/2026-10-03-lane-e16-catalog-descriptor-driver.md),
    section 4, answer 8) is: the toolchain may depend on planus —
    `ridl-descriptor`, and through it `ridlc` and `ridl` — and `ridl-rt` and
-   every generated package must not.
+   every generated package must not. Since 2026-10-24 `ridl-transport-ws` also
+   reaches planus through `ridl-descriptor`, under its optional `descriptor`
+   feature only (decision 6).
 
    This record reads that answer as follows. "Must not" covers every kind of
    dependency on every planus crate: a normal, a build or a dev dependency on
@@ -396,7 +403,9 @@ as its public contract.
 
 6. **The runtimes live outside `ridl-rt`.** The note's RA-03 fixes the
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
-   each runtime is its own crate or package.
+   each runtime is its own crate or package. The one exception is optional:
+   `ridl-transport-ws` adds `ridl-descriptor` under its `descriptor` feature,
+   off by default (amended 2026-10-24).
 
    | Crate or package                 | Holds                                                                                                                                                       | Depends on                                                                                                                                                                                                                              |
    | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
