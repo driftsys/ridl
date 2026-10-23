@@ -432,6 +432,18 @@ be generated, and in what order", which is what this record answers.
     materialised object. An equivalence test asserts identical bytes against the
     reference, from the same corpus.
 
+    **Amendment (2026-10-23) — the domain-mediated path ships.** The reference
+    path is `ridl_rt::payload::transcode`: it verifies the source bytes, decodes
+    to the domain type and encodes under the target encoding. With
+    `transcode = true` in `[backend.rust]`, the backend generates a
+    `transcode_<s>_to_<d>` function on each type that implements `Payload` under
+    both encodings; the body of each function calls
+    `ridl_rt::payload::transcode`. A streaming transcoder replaces those bodies
+    later. The equivalence test is
+    `crates/ridl-backend-rust/tests/transcode_equivalence.rs`: it compares the
+    bytes of each generated function with the bytes of a direct encoding, and a
+    streaming transcoder must pass it unchanged.
+
 14. **A runtime update is admissible when it is compatible and fits the reserved
     span.** Ordinals are append-only, so a compatible change appends and never
     moves an existing offset; reserving a generous virtual span and committing
