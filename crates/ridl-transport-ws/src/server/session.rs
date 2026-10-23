@@ -521,7 +521,26 @@ impl<B: Backend> Session<B> {
         push(out, &Frame::Answer { target, outcome });
     }
 
+    /// Whether the frame's identity is in the member table under its kind.
+    /// With no table, every identity is known and only the form check applies.
+    fn known(&self, target: Target) -> bool {
+        self.backend.members().is_none_or(|table| {
+            table
+                .member(target.iface, target.ord)
+                .is_some_and(|(kind, _)| kind == target.kind)
+        })
+    }
+
     fn subscribe(&mut self, target: Target, out: &mut Vec<Vec<u8>>) -> Step {
+        if !self.known(target) {
+            self.note(Note::UnknownInteraction { target });
+            self.answer(
+                target,
+                AnswerOutcome::Contract(Contract::UnknownInteraction),
+                out,
+            );
+            return Step::Continue;
+        }
         match target.kind {
             Kind::Signal => self.subscribe_signal(target, out),
             Kind::Event => self.subscribe_event(target, out),
@@ -598,6 +617,10 @@ impl<B: Backend> Session<B> {
     }
 
     fn unsubscribe(&mut self, target: Target) -> Step {
+        if !self.known(target) {
+            self.note(Note::UnknownInteraction { target });
+            return Step::Continue;
+        }
         match target.kind {
             Kind::Signal => {
                 let key = (target.iface, target.ord);
@@ -622,6 +645,15 @@ impl<B: Backend> Session<B> {
     }
 
     fn read(&mut self, target: Target, out: &mut Vec<Vec<u8>>) -> Step {
+        if !self.known(target) {
+            self.note(Note::UnknownInteraction { target });
+            self.answer(
+                target,
+                AnswerOutcome::Contract(Contract::UnknownInteraction),
+                out,
+            );
+            return Step::Continue;
+        }
         match target.kind {
             Kind::Signal => match self.fetch_signal((target.iface, target.ord)) {
                 Fetch::Sample(sample) => self.publish_signal(target, sample, false, out),
@@ -700,6 +732,16 @@ impl<B: Backend> Session<B> {
                 self.note(Note::DuplicateDropped { seq });
                 return Step::Continue;
             }
+        }
+        if !self.known(target) {
+            self.note(Note::UnknownInteraction { target });
+            self.respond(
+                target,
+                seq,
+                ResponseOutcome::Contract(Contract::UnknownInteraction),
+                out,
+            );
+            return Step::Continue;
         }
         let ports = self.backend.ports();
         let sent = match target.kind {
@@ -1022,7 +1064,9 @@ mod tests {
         decode, AnswerOutcome, Attach, AttachOutcome, Frame, PublishState, Reason, ResponseOutcome,
         Target,
     };
-    use crate::server::{Backend, Config, Note, Polling, Scanning};
+    use crate::server::{
+        Backend, Config, Described, MemberTable, Note, Polling, Scanning, TableMismatch,
+    };
 
     const CATALOG: CatalogRef = CatalogRef {
         name: "ws.test",
@@ -3514,5 +3558,323 @@ mod tests {
             decode(&out[0]).unwrap(),
             response(COMMAND, 0, 1, 1, ResponseOutcome::Corrupt)
         );
+    }
+
+    // -- The member table (frame specification §6.4) -------------------------
+
+    /// The member table of the test catalog: signal 1, event 2, command 3,
+    /// query 4, fixed 5; ordinal 6 is reserved and has no entry.
+    fn table() -> Arc<MemberTable> {
+        let mut t = MemberTable::new("ws.test", CatalogHash([7; 32]));
+        let bound = Some(std::time::Duration::from_secs(1));
+        t.insert(IFACE, Ordinal(1), Kind::Signal, None);
+        t.insert(IFACE, Ordinal(2), Kind::Event, None);
+        t.insert(IFACE, Ordinal(3), Kind::Command, bound);
+        t.insert(IFACE, Ordinal(4), Kind::Query, bound);
+        t.insert(IFACE, Ordinal(5), Kind::Fixed, None);
+        Arc::new(t)
+    }
+
+    fn described_scanning() -> (Session<Described<Scanning<Loopback>>>, Loopback, Notes) {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let provider = rt.attach();
+        let backend = Described::new(Scanning(rt), table()).unwrap();
+        (Session::new(backend, &config(&notes)), provider, notes)
+    }
+
+    #[test]
+    fn described_new_refuses_a_table_whose_name_or_hash_differs_from_the_ports() {
+        let rt = Loopback::new(CATALOG);
+        let other_name = Arc::new(MemberTable::new("other", CATALOG.hash));
+        let err = Described::new(Scanning(rt.attach()), other_name)
+            .err()
+            .expect("refused");
+        assert_eq!(
+            err,
+            TableMismatch {
+                ports: CATALOG,
+                name: "other".to_owned(),
+                hash: CATALOG.hash
+            }
+        );
+        let other_hash = Arc::new(MemberTable::new("ws.test", CatalogHash([8; 32])));
+        let err = Described::new(Scanning(rt.attach()), other_hash)
+            .err()
+            .expect("refused");
+        assert_eq!(err.hash, CatalogHash([8; 32]));
+        assert!(Described::new(Scanning(rt.attach()), table()).is_ok());
+    }
+
+    /// Mutation: skip the lookup (the loopback answers `Init` for any key).
+    #[test]
+    fn a_subscribe_of_an_ordinal_the_table_lacks_is_unknown_and_a_later_commit_sends_nothing() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Signal, 9);
+        let (step, out) = send(&mut s, &msg(Frame::Subscribe(t)));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(t));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+        p.set(IFACE, Ordinal(9), &[1]).unwrap();
+        p.commit();
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+    }
+
+    /// Mutation: look the ordinal up without the kind.
+    #[test]
+    fn a_subscribe_of_the_event_ordinal_under_kind_signal_is_unknown() {
+        let (mut s, _p, _n) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Signal, 2);
+        let (_, out) = send(&mut s, &msg(Frame::Subscribe(t)));
+        assert_eq!(decode(&out[0]).unwrap(), unknown(t));
+        // The same ordinal under its own kind is accepted.
+        let (_, out) = send(&mut s, &msg(Frame::Subscribe(target(Kind::Event, 2))));
+        assert_eq!(decode(&out[0]).unwrap(), accepted(target(Kind::Event, 2)));
+    }
+
+    /// Mutation: route by form first (the reserved ordinal would reach the
+    /// backend as a signal read; the signal under `Command` would be refused
+    /// by the form check with the same frame, so the second half checks the
+    /// note too).
+    #[test]
+    fn a_read_of_the_reserved_ordinal_and_a_request_of_the_signal_as_a_command_are_refused_with_the_identity_echoed(
+    ) {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let reserved = target(Kind::Signal, 6);
+        let (_, out) = send(&mut s, &msg(Frame::Read(reserved)));
+        assert_eq!(decode(&out[0]).unwrap(), unknown(reserved));
+        let as_command = target(Kind::Command, 1);
+        let (_, out) = send(&mut s, &request(as_command, 1, &[]));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(
+                as_command,
+                0,
+                1,
+                1,
+                ResponseOutcome::Contract(Contract::UnknownInteraction)
+            )
+        );
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![
+                Note::UnknownInteraction { target: reserved },
+                Note::UnknownInteraction { target: as_command }
+            ]
+        );
+    }
+
+    /// Mutation: drop without recording.
+    #[test]
+    fn an_unsubscribe_of_an_unknown_key_sends_nothing_and_is_recorded() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Event, 9);
+        let (step, out) = send(&mut s, &msg(Frame::Unsubscribe(t)));
+        assert_eq!((step, out.is_empty()), (Step::Continue, true));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+    }
+
+    /// Mutation: `known` ignores the kind.
+    #[test]
+    fn a_read_of_the_fixed_ordinal_under_kind_signal_is_unknown() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Signal, 5);
+        let (_, out) = send(&mut s, &msg(Frame::Read(t)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(t));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+    }
+
+    /// Mutation: `known` ignores the kind (the form admits `Signal`, so the
+    /// frame would be dropped silently with no note).
+    #[test]
+    fn an_unsubscribe_of_a_known_ordinal_under_the_wrong_kind_is_dropped_and_recorded() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Signal, 2);
+        let (step, out) = send(&mut s, &msg(Frame::Unsubscribe(t)));
+        assert_eq!((step, out.is_empty()), (Step::Continue, true));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+    }
+
+    /// Review Focus item 1: the table lists the command, no handler serves it.
+    #[test]
+    fn a_listed_command_no_handler_serves_stays_in_flight() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let (_, out) = send(&mut s, &request(COMMAND, 1, &[]));
+        assert!(out.is_empty());
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    /// A loopback whose signal reads are counted. It presents every port the
+    /// two adapters need.
+    struct CountingPorts {
+        inner: Loopback,
+        reads: Rc<Cell<usize>>,
+    }
+
+    impl Attached for CountingPorts {
+        fn catalog(&self) -> &CatalogRef {
+            self.inner.catalog()
+        }
+    }
+
+    impl Encoded for CountingPorts {
+        type Encoding = <Loopback as Encoded>::Encoding;
+    }
+
+    impl Clock for CountingPorts {
+        fn now(&self) -> Timestamp {
+            self.inner.now()
+        }
+    }
+
+    impl SignalReader for CountingPorts {
+        fn read(
+            &self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            out: &mut [u8],
+        ) -> Result<RawSample, ReadError> {
+            self.reads.set(self.reads.get() + 1);
+            self.inner.read(iface, ord, out)
+        }
+    }
+
+    impl ScannableSignals for CountingPorts {
+        fn generation(&self, iface: InterfaceNo) -> u64 {
+            self.inner.generation(iface)
+        }
+
+        fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize {
+            self.inner.scan(marks, out)
+        }
+    }
+
+    impl FixedReader for CountingPorts {
+        fn read_fixed(
+            &self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            out: &mut [u8],
+        ) -> Result<usize, ReadError> {
+            self.inner.read_fixed(iface, ord, out)
+        }
+    }
+
+    impl EventSource for CountingPorts {
+        fn subscribe(
+            &mut self,
+            iface: InterfaceNo,
+            ords: &[Ordinal],
+        ) -> Result<(), SubscribeError> {
+            self.inner.subscribe(iface, ords)
+        }
+        fn unsubscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) {
+            self.inner.unsubscribe(iface, ords);
+        }
+        fn next(&mut self, out: &mut [u8]) -> Result<Option<RawOccurrence>, ReadError> {
+            self.inner.next(out)
+        }
+    }
+
+    impl Caller for CountingPorts {
+        fn command(
+            &mut self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            args: &[u8],
+            trace: Option<TraceContext>,
+        ) -> Result<Correlation, SendError> {
+            self.inner.command(iface, ord, args, trace)
+        }
+        fn query(
+            &mut self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            args: &[u8],
+            trace: Option<TraceContext>,
+        ) -> Result<Correlation, SendError> {
+            self.inner.query(iface, ord, args, trace)
+        }
+        fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
+            self.inner.ack(c)
+        }
+        fn reply(
+            &mut self,
+            c: Correlation,
+            out: &mut [u8],
+        ) -> Result<Option<Result<usize, CallError>>, ReadError> {
+            self.inner.reply(c, out)
+        }
+        fn forget(&mut self, c: Correlation) {
+            self.inner.forget(c);
+        }
+    }
+
+    /// Subscribes 1000 keys the table lacks, commits a value under each, and
+    /// checks that a tick publishes nothing and reads nothing.
+    fn assert_unknown_subscribes_leave_no_state<B: Backend>(
+        mut s: Session<B>,
+        mut p: Loopback,
+        reads: &Cell<usize>,
+        mode: &str,
+    ) {
+        open(&mut s);
+        for ord in 100..1100u32 {
+            let (_, out) = send(&mut s, &msg(Frame::Subscribe(target(Kind::Signal, ord))));
+            assert_eq!(decode(&out[0]).unwrap(), unknown(target(Kind::Signal, ord)));
+            p.set(IFACE, Ordinal(ord), &[1]).unwrap();
+        }
+        p.commit();
+        reads.set(0);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty(), "{mode}");
+        assert_eq!(reads.get(), 0, "{mode}: a tick read a signal");
+    }
+
+    /// Mutation: insert the signal state before the lookup.
+    #[test]
+    fn a_thousand_unknown_subscribes_leave_no_signal_state_in_either_mode() {
+        for scanning in [false, true] {
+            let rt = Loopback::new(CATALOG);
+            let provider = rt.attach();
+            let reads = Rc::new(Cell::new(0));
+            let ports = CountingPorts {
+                inner: rt,
+                reads: Rc::clone(&reads),
+            };
+            if scanning {
+                let b = Described::new(Scanning(ports), table()).unwrap();
+                let s = Session::new(b, &Config::default());
+                assert_unknown_subscribes_leave_no_state(s, provider, &reads, "scanning");
+            } else {
+                let b = Described::new(Polling(ports), table()).unwrap();
+                let s = Session::new(b, &Config::default());
+                assert_unknown_subscribes_leave_no_state(s, provider, &reads, "polling");
+            }
+        }
     }
 }

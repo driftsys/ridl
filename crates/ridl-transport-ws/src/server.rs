@@ -5,14 +5,16 @@
 mod backend;
 mod calls;
 mod config;
+mod members;
 mod session;
 
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::time::{Duration, Instant};
 
-pub use backend::{Backend, Polling, Scanning};
+pub use backend::{Backend, Described, Polling, Scanning, TableMismatch};
 pub use config::{Config, LimitTooSmall, Note};
+pub use members::MemberTable;
 
 use crate::ws::{self, CloseCode, Event, FrameWriter, Parser, Upgrade};
 use session::{Session, Step};
@@ -189,6 +191,13 @@ const LINGER: Duration = Duration::from_millis(100);
 /// distinct signals the client names. The embedder's access policy decides
 /// which clients may open a session; it must trust each one for that
 /// growth. A `read` of a signal that was never published keeps no state.
+///
+/// With a member table ([`Backend::members`] returns `Some`, as [`Described`]
+/// does), a `subscribe`, a `read` or a `request` naming an interaction the
+/// table does not hold is refused with `contract(UnknownInteraction)` before
+/// it reaches the backend, so the signal and event state of a session holds
+/// at most one entry per signal or event member of the catalog. Without a
+/// table, nothing bounds it, and the paragraph above applies.
 ///
 /// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and

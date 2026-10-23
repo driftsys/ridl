@@ -71,8 +71,10 @@
 //!   server a browser reaches should set [`Config::with_origin_check`] to
 //!   accept only its own origins.
 //! - It reads no catalog descriptor. An `attach` is accepted on an exact match
-//!   of the unit name and the catalog hash, and the server checks a frame's
-//!   `kind` against the form, not against the catalog.
+//!   of the unit name and the catalog hash. Without a [`MemberTable`] the
+//!   server checks a frame's `kind` against the form, not against the catalog;
+//!   with one ([`Described`]) it refuses an interaction the catalog does not
+//!   hold.
 
 #![cfg_attr(not(feature = "server"), no_std)]
 
@@ -82,7 +84,8 @@ pub mod frame;
 mod server;
 #[cfg(feature = "server")]
 pub use server::{
-    serve, Backend, Config, Connection, Ended, LimitTooSmall, Note, Polling, Scanning,
+    serve, Backend, Config, Connection, Described, Ended, LimitTooSmall, MemberTable, Note,
+    Polling, Scanning, TableMismatch,
 };
 
 #[cfg(feature = "server")]
