@@ -321,12 +321,13 @@ crate the workspace holds — see `AGENTS.md` for that.
   feature, a blocking server: `serve` takes a connection the embedder accepted
   and a `Backend` made of `ridl-rt` ports, and runs one session on it. The
   server side of RFC 6455 is written in the crate, so `ridl-rt` is its only
-  dependency; the embedder binds the socket and chooses the thread. It serves
-  the observe and call ports, applies the exact-match rule at `attach` unless
-  the embedder gives it a member table with the compatible hashes, and keeps
-  each settled response until its bound when that table gives one, the last 64
-  otherwise. Its tests run it against `tungstenite` as the client and over
-  `ridl-loopback`. See frame specification §11.1 and
+  dependency outside the optional `descriptor` feature, which adds
+  `ridl-descriptor`; the embedder binds the socket and chooses the thread. It
+  serves the observe and call ports, applies the exact-match rule at `attach`
+  unless the embedder gives it a member table with the compatible hashes, and
+  keeps each settled response until its bound when that table gives one, the
+  last 64 otherwise. Its tests run it against `tungstenite` as the client and
+  over `ridl-loopback`. See frame specification §11.1 and
   [its design record](../design/ridl-transport-ws.md).
 
 - **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and

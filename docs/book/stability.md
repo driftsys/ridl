@@ -33,7 +33,8 @@ promise covers them from the first release that contains them.
   names.
 - **The minimum Rust version.** Rust 1.83 and edition 2021 for `ridl-rt`,
   `ridl-rt-conformance`, `ridl-loopback` and `ridl-transport-ws`, and Rust 1.88
-  and edition 2024 for `ridl-descriptor`. The generated crate compiles as
+  and edition 2024 for `ridl-descriptor`, and Rust 1.88 for `ridl-transport-ws`
+  with its `descriptor` feature on. The generated crate compiles as
   edition 2021 with Rust 1.83 with every cargo feature on, and `ridl build`
   writes `edition = "2021"` in its manifest, so cargo 1.83 reads that manifest
   as written. From release 0.11, the generated crate also builds on Rust 1.83
