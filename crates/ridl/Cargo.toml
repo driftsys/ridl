@@ -28,7 +28,7 @@ num-rational.workspace = true
 proptest = { workspace = true, features = ["std"] }
 ridl-core.workspace = true
 # `ridl describe` verifies a catalog descriptor and renders it as JSON.
-ridl-descriptor.workspace = true
+ridl-descriptor = { workspace = true, features = ["std", "dedup"] }
 ridl-diff.workspace = true
 ridl-fmt.workspace = true
 ridl-ir.workspace = true

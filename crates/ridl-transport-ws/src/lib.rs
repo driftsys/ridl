@@ -70,7 +70,11 @@
 //!   peer address for that page as for a trusted one. An embedder whose
 //!   server a browser reaches should set [`Config::with_origin_check`] to
 //!   accept only its own origins.
-//! - It reads no catalog descriptor. An `attach` is accepted on a match
+//! - It reads a catalog descriptor only with the `descriptor` feature
+//!   (`MemberTable::from_descriptor`), and does no I/O: the embedder reads
+//!   `<unit>.catalog.binfb`, written by `ridl build --emit catalog`, or embeds
+//!   it with `include_bytes!`. The feature needs Rust 1.88. An `attach` is
+//!   accepted on a match
 //!   of the unit name and of the catalog hash, or of a compatible earlier hash
 //!   the [`MemberTable`] lists; without a table, on an exact match. Without a
 //!   table the server checks a frame's `kind` against the form, not against the
@@ -83,6 +87,8 @@ pub mod frame;
 
 #[cfg(feature = "server")]
 mod server;
+#[cfg(feature = "descriptor")]
+pub use server::DescriptorError;
 #[cfg(feature = "server")]
 pub use server::{
     serve, Backend, Config, Connection, Described, Ended, LimitTooSmall, MemberTable, Note,

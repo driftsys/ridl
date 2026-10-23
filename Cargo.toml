@@ -165,7 +165,10 @@ ridl-backend-ts = { path = "crates/ridl-backend-ts", version = "0.13.0" }
 # Cargo.toml for why it is not published as `ridl`.
 ridl-cli = { path = "crates/ridl", version = "0.13.0" }
 ridl-core = { path = "crates/ridl-core", version = "0.13.0" }
-ridl-descriptor = { path = "crates/ridl-descriptor", version = "0.13.0" }
+# Default features off here, because Cargo ignores `default-features = false`
+# on an inherited entry: `ridl-transport-ws` reads descriptors with the
+# `no_std` reader only, and `ridl` and `ridlc` name `std` and `dedup`.
+ridl-descriptor = { path = "crates/ridl-descriptor", version = "0.13.0", default-features = false }
 ridl-diff = { path = "crates/ridl-diff", version = "0.13.0" }
 ridl-fmt = { path = "crates/ridl-fmt", version = "0.13.0" }
 ridl-ir = { path = "crates/ridl-ir", version = "0.13.0" }

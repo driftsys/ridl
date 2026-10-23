@@ -1,7 +1,9 @@
 //! The constraints of the crate's design that a build does not check on its
 //! own, read from the sources and the manifests: the codec needs `core`
-//! only, with no `alloc`; and the crate's one normal dependency is `ridl-rt`
-//! with no feature, which the `server` feature does not change. The checks
+//! only, with no `alloc`; the crate's one unconditional dependency is
+//! `ridl-rt` with no feature, which the `server` feature does not change; and
+//! the `descriptor` feature adds `ridl-descriptor` with its default features
+//! off. The checks
 //! are textual, so a dependency or an `alloc` use written in a form they do
 //! not read is a change to make here too.
 
@@ -46,32 +48,51 @@ fn the_codec_names_no_alloc_crate() {
     }
 }
 
-/// The only normal dependency is `ridl-rt`, through the workspace entry,
-/// which names no feature; no dependency table of another form exists.
+/// The one unconditional dependency is `ridl-rt`, through a workspace entry
+/// that names no feature; the one optional dependency is `ridl-descriptor`,
+/// through a workspace entry with its default features off, under the
+/// `descriptor` feature. No dependency table of another form exists.
 #[test]
-fn the_only_normal_dependency_is_ridl_rt_with_no_feature() {
+fn the_dependencies_are_ridl_rt_and_an_optional_ridl_descriptor() {
     let manifest = crate_file("Cargo.toml");
     assert_eq!(
         table(&manifest, "dependencies"),
-        ["ridl-rt.workspace = true"]
+        [
+            "ridl-rt.workspace = true",
+            "ridl-descriptor = { workspace = true, optional = true }"
+        ]
     );
     for form in ["[dependencies.", "[target.", "[build-dependencies"] {
         assert!(!manifest.contains(form), "a {form} table in the manifest");
     }
     let workspace = crate_file("../../Cargo.toml");
-    let entry = table(&workspace, "workspace.dependencies")
-        .into_iter()
+    let entries = table(&workspace, "workspace.dependencies");
+    let rt = entries
+        .iter()
         .find(|line| line.starts_with("ridl-rt "))
         .expect("the workspace manifest names ridl-rt");
-    assert!(!entry.contains("features"), "the workspace entry: {entry}");
+    assert!(!rt.contains("features"), "the workspace entry: {rt}");
+    let descriptor = entries
+        .iter()
+        .find(|line| line.starts_with("ridl-descriptor "))
+        .expect("the workspace manifest names ridl-descriptor");
+    assert!(
+        descriptor.contains("default-features = false"),
+        "the workspace entry: {descriptor}"
+    );
 }
 
-/// The `server` feature turns on nothing in `ridl-rt`, and nothing else.
+/// The `server` feature turns on nothing in `ridl-rt`, and nothing else; the
+/// `descriptor` feature turns on `server` and the optional `ridl-descriptor`.
 #[test]
-fn the_server_feature_turns_on_no_ridl_rt_feature() {
+fn the_features_are_server_and_descriptor() {
     let manifest = crate_file("Cargo.toml");
     assert_eq!(
         table(&manifest, "features"),
-        ["default = [\"server\"]", "server = []"]
+        [
+            "default = [\"server\"]",
+            "server = []",
+            "descriptor = [\"server\", \"dep:ridl-descriptor\"]"
+        ]
     );
 }
