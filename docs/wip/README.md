@@ -157,6 +157,14 @@ The TypeScript codec table design and plan
 [the codec table design record](../design/ts-codec-table.md) is their durable
 record.
 
+The transcode design and plan (`2026-10-23-transcode-{design,plan}.md`) were
+archived on 2026-10-23, once `ridl_rt::payload::transcode` and the generated
+`transcode_<s>_to_<d>` functions landed; the 2026-10-23 amendment of
+[ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
+(decision 13), [the `ridl-rt` design record](../design/ridl-rt.md) and
+[the generated code chapter](../book/generated-code.md) are their durable
+records.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)

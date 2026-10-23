@@ -134,8 +134,10 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-backend-rust/src/tests.rs",
-        lines: 1,
-        why: "a test asserting how many named interfaces one fixture lowers to",
+        lines: 2,
+        why: "a test asserting how many named interfaces one fixture lowers to, \
+              and a transcode test that clears one command's proto3 request \
+              size on a fixture's lowered model",
     },
     Allowed {
         path: "crates/ridl-backend-rust/src/codec_proto3.rs",

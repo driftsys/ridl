@@ -739,3 +739,13 @@ provenance. Nothing here is normative — the current references live in
   `ridl_type_id` export. Archived with two edits, the links to that design note.
   The durable record is
   [the codec table design record](../design/ts-codec-table.md).
+
+- **2026-10-23-transcode-design.md** and **2026-10-23-transcode-plan.md** — the
+  design and the plan for converting a payload between encodings:
+  `ridl_rt::payload::transcode`, the `[backend.rust] transcode` manifest key and
+  MANI-020, and the generated `transcode_<s>_to_<d>` functions. Archived with
+  one edit, the plan's path to the design. The durable records are the
+  2026-10-23 amendment of
+  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
+  decision 13, [the `ridl-rt` design record](../design/ridl-rt.md) and
+  [the generated code chapter](../book/generated-code.md).

@@ -909,10 +909,20 @@ no `wasm` key. A written `wasm = false`, and a manifest with no
 `[backend.rust]` table, are MANI-019. `[backend.rust] encodings` must still name
 `flatbuffers`, and the Rust backend refuses an implied `wasm` module otherwise.
 
+`[backend.rust] transcode = true` asks the Rust backend for the transcoding
+functions between the encodings of the same table. The table must write at least
+two `encodings` elements; every written element counts, valid or not. Fewer than
+two written elements, or an absent `encodings` key, is MANI-020, reported on the
+`transcode` value. A written element that is unknown or repeated is also
+MANI-015. An `encodings` value that is not an array is MANI-015 only. The
+`ridlc` request carries a `transcode` option with the value `true` for that
+table, and no `transcode` option otherwise.
+
 MANI-015 is an error when the `encodings` value is not an array of the known
-names or repeats a name, or when `wasm` or `codec` is not a boolean, and MANI-016 is an
-error when the manifest of a workspace member holds a `backend` key or `[backend.<name>]` table: only the workspace root,
-or a standalone package, sets it. Any other key under `[backend.<name>]` is
+names or repeats a name, or when `wasm`, `codec` or `transcode` is not a
+boolean, and MANI-016 is an error when the manifest of a workspace member holds
+a `backend` key or `[backend.<name>]` table: only the workspace root, or a
+standalone package, sets it. Any other key under `[backend.<name>]` is
 MANI-005. The table is not the `backend.` attribute namespace of an rsdl
 declaration. The lint RSDL-807 `link-encoding-not-emitted` warns when a link of
 the selected deployment carries an encoding that the emitted backend's list

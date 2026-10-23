@@ -1584,6 +1584,15 @@ expression: log
               }
             },
             {
+              "id": "MANI-020",
+              "shortDescription": {
+                "text": "a backend table sets `transcode = true` with fewer than two encodings"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1749,7 +1758,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 170,
+          "ruleIndex": 171,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

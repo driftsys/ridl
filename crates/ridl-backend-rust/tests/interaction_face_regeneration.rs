@@ -63,7 +63,7 @@ fn generated_interaction_face_matches_the_emitter() {
 #[test]
 fn the_pipeline_emits_the_items_of_the_checked_in_face() {
     let package = ir::compile_fixture("interaction_face.ridl");
-    let pipeline = ridl_backend_rust::generate_pipeline(&package, ENCODINGS, &[])
+    let pipeline = ridl_backend_rust::generate_pipeline(&package, ENCODINGS, false, &[])
         .expect("generate_pipeline")
         .rust_source;
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

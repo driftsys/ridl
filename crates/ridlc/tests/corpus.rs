@@ -1545,7 +1545,12 @@ fn veh_common_generated_rust_compiles_with_rustc() {
 fn generate_rust(
     ir: &ridl_ir::v2::Package,
 ) -> Result<ridl_backend_rust::Generated, ridl_backend_rust::GenerateError> {
-    ridl_backend_rust::generate_pipeline(ir, &[ridl_backend_rust::WireEncoding::FlatBuffers], &[])
+    ridl_backend_rust::generate_pipeline(
+        ir,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
+        &[],
+    )
 }
 
 /// The generated Rust of every package in the entry rooted at `entry`, as

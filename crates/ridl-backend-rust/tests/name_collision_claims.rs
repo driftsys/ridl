@@ -49,7 +49,7 @@ fn refusal(name: &str, source: &str) -> String {
         "{name}.ridl must check clean, so the refusal is the backend's, got: {errors:?}"
     );
     let output = ridlc::compile(&path, source);
-    match generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[]) {
+    match generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[]) {
         Ok(generated) => panic!(
             "{name}.ridl must be refused by the claim table, but the pipeline emitted:\n{}",
             generated.rust_source
@@ -212,7 +212,7 @@ interface Cabin {
 }
 ";
     let output = ridlc::compile("x08b.ridl", source);
-    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("a skipped face claims nothing, so the package builds");
     assert!(
         generated.rust_source.contains("__RIDL_NO_FACE_Cabin"),
@@ -495,7 +495,7 @@ fn builds(name: &str, source: &str) -> String {
         "{name}.ridl must check clean, got: {errors:?}"
     );
     let output = ridlc::compile(&path, source);
-    generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .unwrap_or_else(|err| panic!("{name}.ridl must build, got: {}", err.message))
         .rust_source
 }

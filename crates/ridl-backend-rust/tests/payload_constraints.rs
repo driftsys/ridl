@@ -38,6 +38,7 @@ fn program(main: &str) -> String {
     let source = ridl_backend_rust::generate_pipeline(
         &package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .unwrap()
@@ -617,6 +618,7 @@ fn overflowing_step_retains_nonzero_lattice_points_and_wire_parity() {
     let source = ridl_backend_rust::generate_pipeline(
         &output.package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .unwrap()
@@ -656,6 +658,7 @@ fn generated_step_checks_compile_without_std() {
     let source = ridl_backend_rust::generate_pipeline(
         &output.package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .unwrap()
@@ -710,6 +713,7 @@ fn compensated_reconstruction_does_not_overflow_before_decimal_residual() {
     let source = ridl_backend_rust::generate_pipeline(
         &output.package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .unwrap()

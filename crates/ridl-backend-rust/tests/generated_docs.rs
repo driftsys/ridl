@@ -192,7 +192,7 @@ fn generate_pipeline_over_every_fixture_cites_no_issue() {
             (WireEncoding::FlatBuffers, "", &FLATBUFFERS_REFUSED[..]),
             (WireEncoding::Proto3, ", proto3", &PROTO3_REFUSED[..]),
         ] {
-            let generated = ridl_backend_rust::generate_pipeline(&package, &[encoding], &[]);
+            let generated = ridl_backend_rust::generate_pipeline(&package, &[encoding], false, &[]);
             if let Some((_, cause)) = refused
                 .iter()
                 .find(|(refused, _)| *refused == name.as_str())
@@ -236,7 +236,7 @@ fn generate_over_the_conformance_workspace_cites_no_issue() {
             .map(|(_, other)| other)
             .collect();
         for encoding in [WireEncoding::FlatBuffers, WireEncoding::Proto3] {
-            let source = ridl_backend_rust::generate_pipeline(package, &[encoding], &others)
+            let source = ridl_backend_rust::generate_pipeline(package, &[encoding], false, &others)
                 .unwrap_or_else(|error| {
                     panic!(
                         "generate_pipeline {} with {encoding:?}: {error:?}",
@@ -290,6 +290,7 @@ interface Wide {
         let source = ridl_backend_rust::generate_pipeline(
             &output.package,
             &[ridl_backend_rust::WireEncoding::FlatBuffers],
+            false,
             &[],
         )
         .expect("generate_pipeline skips rather than refuses")
@@ -312,6 +313,7 @@ fn links_rustdoc_cannot_resolve_render_as_code_spans() {
     let source = ridl_backend_rust::generate_pipeline(
         &package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .expect("the fixture generates")
@@ -343,6 +345,7 @@ fn links_into_a_keyword_package_render_as_code_spans() {
     let source = ridl_backend_rust::generate_pipeline(
         &package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .expect("the fixture generates")
@@ -360,6 +363,7 @@ fn pipeline_source(label: &str, text: &str) -> String {
     ridl_backend_rust::generate_pipeline(
         &output.package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .expect("generate_pipeline skips rather than refuses")
@@ -471,6 +475,7 @@ fn short_links_require_the_rust_name_in_the_docs_module() {
     let source = ridl_backend_rust::generate_pipeline(
         &package,
         &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
         &[],
     )
     .expect("the fixture generates")

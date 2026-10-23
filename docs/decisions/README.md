@@ -228,7 +228,9 @@ other entry below is Accepted.
   type parameter. Amended 2026-10-20 on decision 4 and open item 3: the proto3
   codec's byte-level conformance is checked against `prost` generated through
   `protox`, not `protoc`, and the generated Rust codec skips and drops unknown
-  fields.
+  fields. Amended 2026-10-23 on decision 13: the domain-mediated path ships as
+  `ridl_rt::payload::transcode`, and `[backend.rust] transcode = true` makes the
+  backend generate `transcode_<s>_to_<d>` functions (MANI-020).
 
 - **ADR-0019 — The FlatBuffers projection.** Seven rules the second wire backend
   needed: a union isolated in a wrapper table, a non-table union arm boxed,

@@ -1126,6 +1126,13 @@ fn run_build_inner<E: From<std::io::Error>>(
         .filter(|(_, table)| table.codec)
         .map(|(language, _)| language.clone())
         .collect();
+    // The backends whose table sets `transcode = true`; only the Rust backend
+    // acts on it, and a backend that takes no such option refuses it.
+    let transcode_backends: BTreeSet<String> = backends
+        .iter()
+        .filter(|(_, table)| table.transcode)
+        .map(|(language, _)| language.clone())
+        .collect();
     // `codec = true` turns the `wasm` module on when the `rust` table writes no
     // `wasm` key; a written `wasm = false` or a missing `rust` table is
     // MANI-019 from the manifest parser.
@@ -1503,6 +1510,7 @@ fn run_build_inner<E: From<std::io::Error>>(
                 &wasm_backends,
                 implied_wasm,
                 &codec_backends,
+                &transcode_backends,
                 &mut diagnostics,
             )?;
         }
@@ -1544,6 +1552,7 @@ fn run_build_inner<E: From<std::io::Error>>(
                 &wasm_backends,
                 implied_wasm,
                 &std_codec_backends,
+                &transcode_backends,
                 &mut diagnostics,
             )?;
         }
@@ -2849,6 +2858,7 @@ fn write_emits(
     wasm_backends: &BTreeSet<String>,
     implied_wasm: bool,
     codec_backends: &BTreeSet<String>,
+    transcode_backends: &BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
     // One request per package, built only when something reads it: an IR
@@ -2874,6 +2884,7 @@ fn write_emits(
                 wasm_backends,
                 implied_wasm,
                 codec_backends,
+                transcode_backends,
                 language,
             ),
             ..request.clone()
@@ -3005,13 +3016,15 @@ fn write_emits(
 /// when `codec_backends` holds `language`, an `encodings` option whose value
 /// joins the names with `,` in manifest order when the table names an
 /// encoding, a `wasm` option with the value `implied` for `rust` when
-/// `implied_wasm`, or `true` when `wasm_backends` holds `language`, and no
-/// other option.
+/// `implied_wasm`, or `true` when `wasm_backends` holds `language`, and a
+/// `transcode` option with the value `true` when `transcode_backends` holds
+/// `language`, and no other option.
 fn backend_options(
     backends: &BTreeMap<String, Vec<String>>,
     wasm_backends: &BTreeSet<String>,
     implied_wasm: bool,
     codec_backends: &BTreeSet<String>,
+    transcode_backends: &BTreeSet<String>,
     language: &str,
 ) -> Vec<v1::BackendOption> {
     let mut options = Vec::new();
@@ -3037,6 +3050,12 @@ fn backend_options(
     if codec_backends.contains(language) {
         options.push(v1::BackendOption {
             key: ridl_core::manifest::CODEC_KEY.to_string(),
+            value: "true".to_string(),
+        });
+    }
+    if transcode_backends.contains(language) {
+        options.push(v1::BackendOption {
+            key: ridl_core::manifest::TRANSCODE_KEY.to_string(),
             value: "true".to_string(),
         });
     }
@@ -3369,6 +3388,7 @@ mod backend_options_tests {
             &BTreeSet::new(),
             false,
             &BTreeSet::new(),
+            &BTreeSet::new(),
             language,
         )
         .into_iter()
@@ -3386,7 +3406,7 @@ mod backend_options_tests {
                        codec: &BTreeSet<String>,
                        language: &str|
          -> Vec<(String, String)> {
-            backend_options(&tables(), wasm, implied, codec, language)
+            backend_options(&tables(), wasm, implied, codec, &BTreeSet::new(), language)
                 .into_iter()
                 .map(|option| (option.key, option.value))
                 .collect()
@@ -3448,10 +3468,17 @@ mod backend_options_tests {
     fn a_wasm_table_adds_the_wasm_option() {
         let wasm = BTreeSet::from(["rust".to_string(), "proto".to_string()]);
         let options = |language: &str| -> Vec<(String, String)> {
-            backend_options(&tables(), &wasm, false, &BTreeSet::new(), language)
-                .into_iter()
-                .map(|option| (option.key, option.value))
-                .collect()
+            backend_options(
+                &tables(),
+                &wasm,
+                false,
+                &BTreeSet::new(),
+                &BTreeSet::new(),
+                language,
+            )
+            .into_iter()
+            .map(|option| (option.key, option.value))
+            .collect()
         };
         let wasm_option = (
             ridl_core::manifest::WASM_KEY.to_string(),
@@ -3469,5 +3496,45 @@ mod backend_options_tests {
         );
         assert_eq!(options("proto"), vec![wasm_option]);
         assert_eq!(options("kotlin").len(), 1);
+    }
+
+    /// `transcode = true` adds a `transcode` option to that table's request
+    /// only, and no table sends one otherwise.
+    #[test]
+    fn a_transcode_table_adds_the_transcode_option() {
+        let transcode = BTreeSet::from(["rust".to_string()]);
+        let options = |transcode: &BTreeSet<String>, language: &str| -> Vec<(String, String)> {
+            backend_options(
+                &tables(),
+                &BTreeSet::new(),
+                false,
+                &BTreeSet::new(),
+                transcode,
+                language,
+            )
+            .into_iter()
+            .map(|option| (option.key, option.value))
+            .collect()
+        };
+        let option = (
+            ridl_core::manifest::TRANSCODE_KEY.to_string(),
+            "true".to_string(),
+        );
+        assert_eq!(
+            options(&transcode, "rust"),
+            vec![
+                (
+                    ridl_core::manifest::ENCODINGS_KEY.to_string(),
+                    "flatbuffers,proto3".to_string()
+                ),
+                option,
+            ]
+        );
+        assert_eq!(options(&transcode, "kotlin").len(), 1);
+        assert!(
+            !options(&BTreeSet::new(), "rust")
+                .iter()
+                .any(|(key, _)| key == "transcode")
+        );
     }
 }

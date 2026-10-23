@@ -102,6 +102,12 @@ pub const WASM_KEY: &str = "wasm";
 /// `rust` table when that table writes no `wasm` key.
 pub const CODEC_KEY: &str = "codec";
 
+/// The key of a `[backend.<name>]` table that asks the Rust backend for the
+/// transcoding functions between the encodings the table lists, and the key of
+/// the backend request option that carries it. `transcode = true` needs at
+/// least two encodings in the same table, which is MANI-020.
+pub const TRANSCODE_KEY: &str = "transcode";
+
 /// One `[backend.<name>]` table (ADR-0002 §4). The table is the same for every
 /// backend name; whether a backend honours it is the backend's concern.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -118,6 +124,10 @@ pub struct BackendTable {
     /// on the Rust `wasm` module. `false` for an absent key and for a value
     /// that is not a boolean, which is MANI-015.
     pub codec: bool,
+    /// The `transcode` value: `true` asks the Rust backend for the transcoding
+    /// functions between the encodings of this table. `false` for an absent
+    /// key and for a value that is not a boolean, which is MANI-015.
+    pub transcode: bool,
 }
 
 /// The raw `[defaults]` timing strings of one manifest, or the merge of
@@ -403,6 +413,7 @@ struct RawBackend {
     encodings: Option<Spanned<Shape<Vec<Spanned<toml::Value>>>>>,
     wasm: Option<Spanned<toml::Value>>,
     codec: Option<Spanned<toml::Value>>,
+    transcode: Option<Spanned<toml::Value>>,
 }
 
 /// A value that is either the table or array shape a reader expects (`Right`)
@@ -523,6 +534,8 @@ shape_visitor!(
                 table.wasm = Some(map.next_value()?);
             } else if key == CODEC_KEY {
                 table.codec = Some(map.next_value()?);
+            } else if key == TRANSCODE_KEY {
+                table.transcode = Some(map.next_value()?);
             } else {
                 map.next_value::<serde::de::IgnoredAny>()?;
             }
@@ -587,6 +600,9 @@ fn collect_backends(
     // The span of each `codec = true` value, checked against the `rust` table
     // once every table is read.
     let mut codec_spans = Vec::new();
+    // The span of each `transcode = true` value, checked against the table's
+    // own encodings once the table is read.
+    let mut transcode_spans = Vec::new();
     for (name, table) in tables {
         let table_span = table.span();
         let Shape::Right(table) = table.into_inner() else {
@@ -599,6 +615,10 @@ fn collect_backends(
             continue;
         };
         let mut entry = BackendTable::default();
+        let mut transcode_span = None;
+        // The count of written `encodings` elements, valid or not: a table
+        // whose list is malformed is MANI-015 already.
+        let mut written_encodings = 0;
         if let Some(wasm) = table.wasm {
             match wasm.get_ref() {
                 toml::Value::Boolean(value) => entry.wasm = Some(*value),
@@ -626,21 +646,41 @@ fn collect_backends(
                 )),
             }
         }
+        if let Some(transcode) = table.transcode {
+            match transcode.get_ref() {
+                toml::Value::Boolean(value) => {
+                    entry.transcode = *value;
+                    if *value {
+                        transcode_span = Some(transcode.span());
+                    }
+                }
+                other => diags.push(error(
+                    DiagCode::MANI_015,
+                    file_id,
+                    transcode.span(),
+                    format!("`[backend.{name}] transcode` holds `{other}`, which is not a boolean"),
+                )),
+            }
+        }
         match table.encodings {
             None => {}
             Some(encodings) => {
                 let encodings_span = encodings.span();
                 match encodings.into_inner() {
-                    Shape::Wrong => diags.push(error(
-                        DiagCode::MANI_015,
-                        file_id,
-                        encodings_span,
-                        format!(
-                            "`[backend.{name}] encodings` must be an array of encoding names; {}",
-                            known_encodings()
-                        ),
-                    )),
+                    Shape::Wrong => {
+                        written_encodings = usize::MAX;
+                        diags.push(error(
+                            DiagCode::MANI_015,
+                            file_id,
+                            encodings_span,
+                            format!(
+                                "`[backend.{name}] encodings` must be an array of encoding names; {}",
+                                known_encodings()
+                            ),
+                        ));
+                    }
                     Shape::Right(elements) => {
+                        written_encodings = elements.len();
                         for element in elements {
                             let range = element.span();
                             let message = match element.get_ref().as_str() {
@@ -674,7 +714,26 @@ fn collect_backends(
                 }
             }
         }
+        if let Some(range) = transcode_span {
+            transcode_spans.push((name.clone(), range, written_encodings));
+        }
         backends.insert(name, entry);
+    }
+    // `transcode = true` converts between encodings, so the table needs at
+    // least two written names. A table with a repeated, unknown or malformed
+    // name is MANI-015 already, and that count includes the rejected names so
+    // the table gets one diagnostic.
+    for (name, range, count) in transcode_spans {
+        if count < 2 {
+            diags.push(error(
+                DiagCode::MANI_020,
+                file_id,
+                range,
+                format!(
+                    "`[backend.{name}] transcode = true` needs at least two encodings, and the table lists {count}"
+                ),
+            ));
+        }
     }
     // `codec = true` needs the Rust `wasm` module: a `rust` table with no
     // `wasm` key gets it implied, and a written `wasm = false` or a missing
@@ -818,6 +877,7 @@ pub const KNOWN_KEYS: &[(&str, &[KnownKey])] = &[
             (ENCODINGS_KEY, "array<string>", ""),
             (WASM_KEY, "boolean", ""),
             (CODEC_KEY, "boolean", "implies backend.rust.wasm"),
+            (TRANSCODE_KEY, "boolean", "needs two encodings"),
         ],
     ),
 ];
@@ -1582,6 +1642,101 @@ version = \"1.0.0\"
             manifest.expect("the manifest parses").backends["rust"].wasm,
             None
         );
+    }
+
+    #[test]
+    fn backend_transcode_parses_as_a_boolean() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\", \"proto3\"]\ntranscode = true\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        assert!(manifest.expect("the manifest parses").backends["rust"].transcode);
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\ntranscode = false\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        assert!(!manifest.expect("the manifest parses").backends["rust"].transcode);
+    }
+
+    #[test]
+    fn backend_transcode_not_a_boolean_is_mani_015() {
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\ntranscode = \"yes\"\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        assert_eq!(
+            diags[0].message,
+            "`[backend.rust] transcode` holds `\"yes\"`, which is not a boolean"
+        );
+        assert_eq!(span_text(&text, &diags[0]), "\"yes\"");
+        assert!(!manifest.expect("the manifest parses").backends["rust"].transcode);
+    }
+
+    #[test]
+    fn backend_transcode_with_no_encodings_is_mani_020() {
+        for body in ["transcode = true\n", "encodings = []\ntranscode = true\n"] {
+            let text = format!("{PACKAGE_HEAD}[backend.rust]\n{body}");
+            let (_, diags) = parse(&text);
+            assert_eq!(codes(&diags), vec!["MANI-020"], "{body}");
+            assert_eq!(
+                diags[0].message,
+                "`[backend.rust] transcode = true` needs at least two encodings, and the table lists 0"
+            );
+            assert_eq!(span_text(&text, &diags[0]), "true");
+        }
+    }
+
+    #[test]
+    fn backend_transcode_with_one_encoding_is_mani_020() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\"]\ntranscode = true\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-020"]);
+        assert_eq!(span_text(&text, &diags[0]), "true");
+    }
+
+    #[test]
+    fn backend_transcode_with_two_encodings_has_no_diagnostic() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\ntranscode = true\nencodings = [\"flatbuffers\", \"repr-c\"]\n"
+        );
+        let (_, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn backend_transcode_with_a_repeated_encoding_is_mani_015() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\", \"flatbuffers\"]\ntranscode = true\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+    }
+
+    #[test]
+    fn backend_transcode_with_an_unknown_encoding_is_mani_015_only() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\", \"bogus\"]\ntranscode = true\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+    }
+
+    #[test]
+    fn backend_transcode_with_a_single_unknown_encoding_is_mani_015_and_mani_020() {
+        let text =
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"bogus\"]\ntranscode = true\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015", "MANI-020"]);
+    }
+
+    #[test]
+    fn backend_transcode_with_a_non_array_encodings_is_mani_015_only() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = \"flatbuffers\"\ntranscode = true\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
     }
 
     const CODEC_MANIFEST: &str =

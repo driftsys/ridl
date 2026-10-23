@@ -1754,8 +1754,9 @@ fn main() {{
 /// The generated proto3 codec's source for a fixture, with `main` appended.
 fn fixture_program(fixture: &str, main: &str) -> String {
     let package = ir::compile_fixture(fixture);
-    let generated = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
-        .expect("the fixture generates")
-        .rust_source;
+    let generated =
+        ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
+            .expect("the fixture generates")
+            .rust_source;
     format!("#![allow(dead_code)]\n{generated}\n{main}")
 }

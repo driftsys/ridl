@@ -90,7 +90,15 @@ const BUFFER_ALIGN: usize = 8;
 /// discovery order; a tuple's generated struct is a table like any other and
 /// needs its own three functions.
 pub(crate) fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
-    Codec { ctx }.items()
+    Ok(Codec { ctx }.items()?.0)
+}
+
+/// The types [`package_items`] emits a `Payload<FlatBuffers>` implementation
+/// for: the same walk, so the transcode functions follow the codec's own rule.
+pub(crate) fn payload_owners(
+    ctx: &Ctx,
+) -> Result<Vec<crate::transcode::PayloadOwner>, GenerateError> {
+    Ok(Codec { ctx }.items()?.1)
 }
 
 /// The owners of the views [`package_items`] emits, which the claim table
@@ -823,7 +831,10 @@ impl<'a> Codec<'a> {
             .map(|table| table.vtable_slots)
     }
 
-    fn items(&self) -> Result<Vec<TokenStream>, GenerateError> {
+    fn items(
+        &self,
+    ) -> Result<(Vec<TokenStream>, Vec<crate::transcode::PayloadOwner>), GenerateError> {
+        let mut owners: Vec<crate::transcode::PayloadOwner> = Vec::new();
         let mut roots: Vec<&v1::FbRoot> = Vec::new();
         let mut tuple_roots: Vec<&v1::FbRoot> = Vec::new();
         let mut withheld: Vec<&v1::FbRoot> = Vec::new();
@@ -868,7 +879,7 @@ impl<'a> Codec<'a> {
         for root in &roots {
             let visibility = self.declaration_of(root)?.visibility;
             items.extend(
-                self.decl_items(root)?
+                self.decl_items(root, &mut owners)?
                     .into_iter()
                     .map(|item| allow_dead_code_if_internal(visibility, item)),
             );
@@ -893,13 +904,17 @@ impl<'a> Codec<'a> {
             // descriptor's reservation row names its `MAX_SIZE`
             // (driftsys/ridl#713).
             if let Some(root) = tuple_roots.iter().find(|root| root.tuple == Some(index)) {
+                owners.push(crate::transcode::PayloadOwner {
+                    name: tuple_name(induced).to_string(),
+                    visibility: induced.visibility,
+                });
                 items.push(allow_dead_code_if_internal(
                     induced.visibility,
                     self.payload_impl(root, tuple_name(induced))?,
                 ));
             }
         }
-        Ok(items)
+        Ok((items, owners))
     }
 
     /// The note left in the generated source where a codec is withheld.
@@ -1079,7 +1094,11 @@ impl<'a> Codec<'a> {
         found
     }
 
-    fn decl_items(&self, root: &v1::FbRoot) -> Result<Vec<TokenStream>, GenerateError> {
+    fn decl_items(
+        &self,
+        root: &v1::FbRoot,
+        owners: &mut Vec<crate::transcode::PayloadOwner>,
+    ) -> Result<Vec<TokenStream>, GenerateError> {
         let decl = self.declaration_of(root)?;
         let owner = declared(decl.name.as_ref());
         match decl.kind.as_ref() {
@@ -1087,11 +1106,19 @@ impl<'a> Codec<'a> {
                 let table = self.struct_table(root.declaration, owner, def)?;
                 let mut items = self.table_items(owner, decl.visibility, &table)?;
                 items.push(self.payload_impl(root, owner)?);
+                owners.push(crate::transcode::PayloadOwner {
+                    name: owner.to_string(),
+                    visibility: decl.visibility,
+                });
                 Ok(items)
             }
             Some(v1::declaration::Kind::Union(def)) => {
                 let mut items = self.union_items(decl, def)?;
                 items.push(self.payload_impl(root, owner)?);
+                owners.push(crate::transcode::PayloadOwner {
+                    name: owner.to_string(),
+                    visibility: decl.visibility,
+                });
                 Ok(items)
             }
             // A named scalar, an enum and an enum set are rooted in a box
@@ -1103,6 +1130,10 @@ impl<'a> Codec<'a> {
             ) => {
                 let mut items = self.root_box_items(decl, root.declaration)?;
                 items.push(self.payload_impl(root, owner)?);
+                owners.push(crate::transcode::PayloadOwner {
+                    name: owner.to_string(),
+                    visibility: decl.visibility,
+                });
                 Ok(items)
             }
             // `root_table` admits nothing else.
