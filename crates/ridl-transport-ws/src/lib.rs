@@ -70,8 +70,9 @@
 //!   peer address for that page as for a trusted one. An embedder whose
 //!   server a browser reaches should set [`Config::with_origin_check`] to
 //!   accept only its own origins.
-//! - It reads no catalog descriptor. An `attach` is accepted on an exact match
-//!   of the unit name and the catalog hash. Without a [`MemberTable`] the
+//! - It reads no catalog descriptor. An `attach` is accepted on a match
+//!   of the unit name and of the catalog hash, or of a compatible earlier hash
+//!   the [`MemberTable`] lists; without a table, on an exact match. Without a [`MemberTable`] the
 //!   server checks a frame's `kind` against the form, not against the catalog;
 //!   with one ([`Described`]) it refuses an interaction the catalog does not
 //!   hold.

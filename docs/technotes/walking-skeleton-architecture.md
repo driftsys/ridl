@@ -322,10 +322,11 @@ crate the workspace holds — see `AGENTS.md` for that.
   and a `Backend` made of `ridl-rt` ports, and runs one session on it. The
   server side of RFC 6455 is written in the crate, so `ridl-rt` is its only
   dependency; the embedder binds the socket and chooses the thread. It serves
-  the observe and call ports, applies the exact-match rule at `attach`, and
-  keeps the last 64 settled responses of a session. Its tests run it against
-  `tungstenite` as the client and over `ridl-loopback`. See frame specification
-  §11.1 and [its design record](../design/ridl-transport-ws.md).
+  the observe and call ports, applies the exact-match rule at `attach` unless
+  the embedder gives it a member table with the compatible hashes, and keeps the
+  last 64 settled responses of a session. Its tests run it against `tungstenite`
+  as the client and over `ridl-loopback`. See frame specification §11.1 and
+  [its design record](../design/ridl-transport-ws.md).
 
 - **`crates/ridlc-gen-model`** — the reference codegen plugin, test-only and
   unpublished: `--emit codegen-model` as a process, over the backend contract
