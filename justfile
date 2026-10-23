@@ -3228,6 +3228,7 @@ vscode-verify:
     cd editors/vscode
     npm ci
     npm test
+    bash scripts/publish-vsix.test.sh
     scratch="$(mktemp -d)"
     # A placeholder bin/ridl is staged only when none is present, so a real
     # binary that `just package-vscode` put there is neither overwritten nor
