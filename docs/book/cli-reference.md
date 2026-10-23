@@ -909,10 +909,11 @@ no `wasm` key. A written `wasm = false`, and a manifest with no
 `[backend.rust]` table, are MANI-019. `[backend.rust] encodings` must still name
 `flatbuffers`, and the Rust backend refuses an implied `wasm` module otherwise.
 
-`[backend.<name>] transcode = true` asks the Rust backend for the transcoding
-functions between the encodings of the same table. The table must list at least
-two encodings in `encodings`; one encoding, none, or an absent key is MANI-020,
-reported on the `transcode` value. The `ridlc` request carries a `transcode`
+`[backend.rust] transcode = true` asks the Rust backend for the transcoding
+functions between the encodings of the same table. The table must write at least
+two `encodings` elements; every written element counts, valid or not. Fewer than
+two written elements, or an absent key, is MANI-020, reported on the `transcode`
+value. A written element that is unknown or repeated is also MANI-015. The `ridlc` request carries a `transcode`
 option with the value `true` for that table, and no `transcode` option otherwise.
 
 MANI-015 is an error when the `encodings` value is not an array of the known

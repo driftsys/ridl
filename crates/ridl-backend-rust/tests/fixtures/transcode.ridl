@@ -12,7 +12,7 @@ package tx.demo
 /// A count with a lower bound of 0 and an upper bound of 200.
 type Count : integer [0..200]
 
-/// A level whose range excludes 0.
+/// A level whose range is negative to positive and includes 0.
 type Level : integer [-5..10]
 
 /// A label.

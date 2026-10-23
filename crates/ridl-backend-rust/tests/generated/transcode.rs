@@ -63,7 +63,7 @@ impl ::core::default::Default for Count {
         Count::new_unchecked(0)
     }
 }
-/// A level whose range excludes 0.
+/// A level whose range is negative to positive and includes 0.
 ///
 /// # Rules
 ///
