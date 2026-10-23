@@ -877,27 +877,9 @@ impl<'a> Codec<'a> {
             items.push(self.withheld_note(root)?);
         }
         for root in &roots {
-            let declaration = self.declaration_of(root)?;
-            let visibility = declaration.visibility;
-            // `decl_items` ends in a `Payload` implementation for each kind
-            // of declaration a root names.
-            if matches!(
-                declaration.kind,
-                Some(
-                    v1::declaration::Kind::Struct(_)
-                        | v1::declaration::Kind::Union(_)
-                        | v1::declaration::Kind::Scalar(_)
-                        | v1::declaration::Kind::Enum(_)
-                        | v1::declaration::Kind::EnumSet(_)
-                )
-            ) {
-                owners.push(crate::transcode::PayloadOwner {
-                    name: declared(declaration.name.as_ref()).to_string(),
-                    visibility,
-                });
-            }
+            let visibility = self.declaration_of(root)?.visibility;
             items.extend(
-                self.decl_items(root)?
+                self.decl_items(root, &mut owners)?
                     .into_iter()
                     .map(|item| allow_dead_code_if_internal(visibility, item)),
             );
@@ -1112,7 +1094,11 @@ impl<'a> Codec<'a> {
         found
     }
 
-    fn decl_items(&self, root: &v1::FbRoot) -> Result<Vec<TokenStream>, GenerateError> {
+    fn decl_items(
+        &self,
+        root: &v1::FbRoot,
+        owners: &mut Vec<crate::transcode::PayloadOwner>,
+    ) -> Result<Vec<TokenStream>, GenerateError> {
         let decl = self.declaration_of(root)?;
         let owner = declared(decl.name.as_ref());
         match decl.kind.as_ref() {
@@ -1120,11 +1106,19 @@ impl<'a> Codec<'a> {
                 let table = self.struct_table(root.declaration, owner, def)?;
                 let mut items = self.table_items(owner, decl.visibility, &table)?;
                 items.push(self.payload_impl(root, owner)?);
+                owners.push(crate::transcode::PayloadOwner {
+                    name: owner.to_string(),
+                    visibility: decl.visibility,
+                });
                 Ok(items)
             }
             Some(v1::declaration::Kind::Union(def)) => {
                 let mut items = self.union_items(decl, def)?;
                 items.push(self.payload_impl(root, owner)?);
+                owners.push(crate::transcode::PayloadOwner {
+                    name: owner.to_string(),
+                    visibility: decl.visibility,
+                });
                 Ok(items)
             }
             // A named scalar, an enum and an enum set are rooted in a box
@@ -1136,6 +1130,10 @@ impl<'a> Codec<'a> {
             ) => {
                 let mut items = self.root_box_items(decl, root.declaration)?;
                 items.push(self.payload_impl(root, owner)?);
+                owners.push(crate::transcode::PayloadOwner {
+                    name: owner.to_string(),
+                    visibility: decl.visibility,
+                });
                 Ok(items)
             }
             // `root_table` admits nothing else.

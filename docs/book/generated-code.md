@@ -247,7 +247,7 @@ The function is named `transcode_<s>_to_<d>`, where `<s>` is the source
 encoding and `<d>` the target, spelled as in the manifest with `-` replaced by
 `_`. For a type `Speed` the crate holds:
 
-```rust
+```rust,ignore
 impl Speed {
     pub fn transcode_flatbuffers_to_proto3<'o>(
         bytes: &[u8],
@@ -263,11 +263,11 @@ impl Speed {
 
 The function verifies `bytes` under the source encoding, decodes the value, and
 encodes it under the target encoding into `out`. It calls
-`ridl_rt::payload::transcode`, which allocates nothing. An `out` that is too
+`ridl_rt::payload::transcode`, which allocates no buffer of its own; the
+type's `decode` may allocate, as for a `string` field. An `out` that is too
 small is `TranscodeError::Encode` with `EncodeError::Capacity`, and bytes that
-do not verify are `TranscodeError::Verify`. A type that has a `Payload`
-implementation under only one of the two encodings gets no function for that
-pair; proto3, for example, has no root for a type that FlatBuffers roots.
+do not verify are `TranscodeError::Verify`. A function exists only where
+the type has a `Payload` implementation under both encodings of the pair.
 
 ## Cargo features
 
