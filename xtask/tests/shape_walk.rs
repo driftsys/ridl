@@ -226,6 +226,19 @@ const ALLOWED: &[Allowed] = &[
               field, not a read of `Package::interfaces`",
     },
     Allowed {
+        path: "crates/ridl-transport-ws/src/server/descriptor.rs",
+        lines: 1,
+        why: "`MemberTable::from_descriptor` walking the catalog descriptor's own \
+              `Catalog.interfaces` field in a verified buffer, not a read of \
+              `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl-transport-ws/tests/descriptor.rs",
+        lines: 7,
+        why: "a test fixture building and editing the owned descriptor \
+              `Catalog.interfaces` field, not a read of `Package::interfaces`",
+    },
+    Allowed {
         path: "crates/ridl/tests/describe_cli.rs",
         lines: 1,
         why: "a test reading the catalog descriptor's own `Catalog.interfaces` \
