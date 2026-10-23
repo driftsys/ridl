@@ -70,6 +70,7 @@ async function devToolsPort(
   profile: string,
   status: () => Deno.CommandStatus | undefined,
   stderr: () => string,
+  stderrDone: Promise<void>,
 ): Promise<number> {
   const file = `${profile}/DevToolsActivePort`;
   const output = () => {
@@ -79,6 +80,9 @@ async function devToolsPort(
   for (let i = 0; i < 300; i++) {
     const exited = status();
     if (exited) {
+      // The last chunks of the standard error can arrive after the exit
+      // status; they are waited for, for up to 500 ms.
+      await Promise.race([stderrDone, delay(500)]);
       throw new Error(
         `the browser exited with code ${exited.code} before it wrote a port ` +
           `to ${file}${output()}`,
@@ -250,17 +254,23 @@ export async function launch(): Promise<Browser> {
     throw e;
   }
   // The standard error is read for as long as the browser runs, so that the
-  // pipe never fills; only the last 4 KiB are kept, for a launch error.
+  // pipe never fills; only the last 4 KiB are kept, for a launch error. A
+  // helper process can keep the pipe open after the browser has exited, so
+  // close() aborts the read instead of waiting for the end of the stream.
   let stderr = "";
+  const stopReading = new AbortController();
   const stderrDone = (async () => {
-    for await (
-      const chunk of child.stderr.pipeThrough(new TextDecoderStream())
-    ) {
+    const text = child.stderr.pipeThrough(new TextDecoderStream(), {
+      signal: stopReading.signal,
+    });
+    for await (const chunk of text) {
       stderr = (stderr + chunk).slice(-4096);
     }
-  })();
+  })().catch(() => {
+    // The read was aborted, or the pipe failed; the text kept so far stays.
+  });
   let exited: Deno.CommandStatus | undefined;
-  child.status.then((s) => exited = s);
+  child.status.then((s) => exited = s, () => {});
   const close = async () => {
     try {
       child.kill();
@@ -268,12 +278,18 @@ export async function launch(): Promise<Browser> {
       // The browser has already exited.
     }
     await child.status;
+    stopReading.abort();
     await stderrDone;
     await removeProfile(profile);
   };
   let port: number;
   try {
-    port = await devToolsPort(profile, () => exited, () => stderr);
+    port = await devToolsPort(
+      profile,
+      () => exited,
+      () => stderr,
+      stderrDone,
+    );
   } catch (e) {
     await close();
     throw e;
