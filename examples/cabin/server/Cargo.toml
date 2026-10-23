@@ -24,4 +24,4 @@ ridl-transport-ws = { path = "../../../crates/ridl-transport-ws", features = [
 ] }
 # Named directly for `CatalogRef`. The `[patch.crates-io]` block in
 # `examples/cabin/Cargo.toml` resolves this to `crates/ridl-rt`.
-ridl-rt = { version = "0.12", features = ["std"] }
+ridl-rt = { version = "0.13", features = ["std"] }

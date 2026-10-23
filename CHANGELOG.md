@@ -1,5 +1,79 @@
 # Changelog
 
+## [0.13.0] (2026-10-23)
+
+### Features
+
+- **ridl-backend-ts:** generate a plain-object codec table for the wasm codec
+  ([#1027]) ([671d639])
+- **repo:** verify the cabin temperature through the wasm codec in both demos
+  ([#1025]) ([98d2761])
+- **repo:** run the cabin temperature check in a headless browser ([#1023])
+  ([fc338eb])
+- **repo:** serve cabin's temperature over WebSocket and decode it in Deno with
+  flatc code ([#1021]) ([ef31abd])
+- **ridlc:** warn on bounds and payloads above the transfer limits ([#1013])
+  ([c55cd60])
+- **ridlc:** export a wasm codec from the generated crate ([#1018]) ([3c9cce0])
+- **ts-runtime:** load the wasm codec and verify payloads ([#1017]) ([d3e7f1b])
+- **xtask:** freeze ridl-transport-ws as a runtime crate ([#1004]) ([aac0d2e]),
+  closes [#987]
+
+### Bug Fixes
+
+- **repo:** drop the cabin server's hold at -40 and make the demo's check
+  independent of timing ([#1022]) ([85bd01b])
+- **xtask:** close the runtime-crates freeze gaps ([#1011]) ([c079e7b])
+- **xtask:** freeze union mappings in the wire dump ([#1006]) ([e5e59bd]),
+  closes [#917]
+
+### Documentation
+
+- **roadmap:** record the FlatBuffers-first plan for the web session ([#1019])
+  ([6f38ef6])
+- **roadmap:** design the TypeScript wasm codec and the runtime package
+  ([#1016]) ([4955239])
+- **adr:** name the TypeScript runtime package in ADR-0020 ([#1014]) ([4c604f3])
+- **adr:** propose ADR-0030, transfer and bound limits ([#1012]) ([bfeefa7])
+
+### BREAKING CHANGES
+
+- @driftsys/ridl-runtime loadCodec requires the ridl_type_id export, so a wasm module built by ridl 0.12 or earlier must be rebuilt, and the Codec interface gains a required typeId member.
+
+[0.13.0]: https://github.com/driftsys/ridl/compare/v0.12.0...v0.13.0
+[671d639]: https://github.com/driftsys/ridl/commit/671d639
+[#1027]: https://github.com/driftsys/ridl/issues/1027
+[98d2761]: https://github.com/driftsys/ridl/commit/98d2761
+[#1025]: https://github.com/driftsys/ridl/issues/1025
+[fc338eb]: https://github.com/driftsys/ridl/commit/fc338eb
+[#1023]: https://github.com/driftsys/ridl/issues/1023
+[ef31abd]: https://github.com/driftsys/ridl/commit/ef31abd
+[#1021]: https://github.com/driftsys/ridl/issues/1021
+[c55cd60]: https://github.com/driftsys/ridl/commit/c55cd60
+[#1013]: https://github.com/driftsys/ridl/issues/1013
+[3c9cce0]: https://github.com/driftsys/ridl/commit/3c9cce0
+[#1018]: https://github.com/driftsys/ridl/issues/1018
+[d3e7f1b]: https://github.com/driftsys/ridl/commit/d3e7f1b
+[#1017]: https://github.com/driftsys/ridl/issues/1017
+[aac0d2e]: https://github.com/driftsys/ridl/commit/aac0d2e
+[#1004]: https://github.com/driftsys/ridl/issues/1004
+[#987]: https://github.com/driftsys/ridl/issues/987
+[85bd01b]: https://github.com/driftsys/ridl/commit/85bd01b
+[#1022]: https://github.com/driftsys/ridl/issues/1022
+[c079e7b]: https://github.com/driftsys/ridl/commit/c079e7b
+[#1011]: https://github.com/driftsys/ridl/issues/1011
+[e5e59bd]: https://github.com/driftsys/ridl/commit/e5e59bd
+[#1006]: https://github.com/driftsys/ridl/issues/1006
+[#917]: https://github.com/driftsys/ridl/issues/917
+[6f38ef6]: https://github.com/driftsys/ridl/commit/6f38ef6
+[#1019]: https://github.com/driftsys/ridl/issues/1019
+[4955239]: https://github.com/driftsys/ridl/commit/4955239
+[#1016]: https://github.com/driftsys/ridl/issues/1016
+[4c604f3]: https://github.com/driftsys/ridl/commit/4c604f3
+[#1014]: https://github.com/driftsys/ridl/issues/1014
+[bfeefa7]: https://github.com/driftsys/ridl/commit/bfeefa7
+[#1012]: https://github.com/driftsys/ridl/issues/1012
+
 ## [0.12.0] (2026-10-20)
 
 ### Features
