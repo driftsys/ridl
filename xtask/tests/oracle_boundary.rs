@@ -404,9 +404,17 @@ fn the_runtime_reaches_no_prost_crate() {
     }
 }
 
-/// No planus crate is in the resolved graph of `examples/cabin`, the
-/// workspace that holds the crate `ridl build` generates for `cabin.ridl` and
-/// the program that links it (lane E16 driver, section 4, answer 8).
+/// The member of `examples/cabin` that the planus check leaves out: `server`
+/// opts into the `descriptor` feature of `ridl-transport-ws`, which reads the
+/// catalog descriptor with planus. An embedder that opts into that feature may
+/// reach planus; a generated crate may not.
+const PLANUS_EXEMPT_MEMBER: &str = "server";
+
+/// No planus crate is in the dependency closure of any workspace member of
+/// `examples/cabin` except [`PLANUS_EXEMPT_MEMBER`]: the generated crates
+/// (`veh_cabin` and the veh-cluster corpus crate) and their consumer (lane E16
+/// driver, section 4, answer 8). Every member is checked by default, so a new
+/// member is covered without a change here.
 ///
 /// `examples/cabin/generated/` and `examples/cabin/generated-corpus/` are
 /// written by `just demo` and are not in git, so `cargo metadata` cannot
@@ -429,16 +437,38 @@ fn the_generated_crate_reaches_no_planus_crate() {
          did `ridl build` write `examples/cabin/generated/` and \
          `examples/cabin/generated-corpus/`?"
     );
-    for forbidden in PLANUS_CRATES {
-        assert!(
-            !names.values().any(|name| name == forbidden),
-            "\n\
-             `{forbidden}` is in the resolved graph of `examples/cabin`, the \
-             workspace of the crate `ridl build` generates. A generated \
-             package must not depend on planus in any way (lane E16 driver, \
-             section 4, answer 8): look for the edge in the generated \
-             manifest, in `ridl-rt`, or in `ridl-loopback`.\n",
-        );
+    let members: Vec<&str> = metadata["workspace_members"]
+        .as_array()
+        .expect("cargo metadata carries `workspace_members`")
+        .iter()
+        .map(|id| names[id.as_str().expect("a member id is a string")])
+        .filter(|&name| name != PLANUS_EXEMPT_MEMBER)
+        .collect();
+    assert!(
+        members.contains(&"veh_cabin") && members.contains(&"ridl_generated"),
+        "the members of `examples/cabin` are checked, and they include the \
+         generated crates: {members:?}"
+    );
+    for package in members {
+        let reached = runtime_closure(&metadata, package);
+        for forbidden in PLANUS_CRATES {
+            let path = path_to(&names, &reached, forbidden);
+            assert!(
+                path.is_none(),
+                "\n\
+                 `{forbidden}` is in `{package}`'s dependency closure in \
+                 `examples/cabin`, the workspace of the crate `ridl build` \
+                 generates: {path}\n\
+                 \n\
+                 A generated package must not depend on planus in any way \
+                 (lane E16 driver, section 4, answer 8): look for the edge in \
+                 the generated manifest, in `ridl-rt`, or in `ridl-loopback`. \
+                 `examples/cabin/server` is not checked: it reads the catalog \
+                 descriptor through `ridl-transport-ws`'s `descriptor` \
+                 feature, which reads it with planus.\n",
+                path = path.unwrap_or_default(),
+            );
+        }
     }
 }
 

@@ -706,7 +706,8 @@ All under `crates/ridl-transport-ws/`.
   argument. It runs twice: in process over `ridl-loopback` with no socket; and
   across processes, where the test re-runs its own executable with the
   environment variable `RIDL_TRANSPORT_WS_PROVIDER=1`, the child serves a
-  loopback on a port of `127.0.0.1` it prints, and the parent runs the scenario
+  loopback, wrapped in `Described` with the hand-built member table of the test
+  catalog, on a port of `127.0.0.1` it prints, and the parent runs the scenario
   over a test-only client in `tests/support/client.rs` — the consuming runtime
   of §5 written once for the test over `tungstenite` and this crate's codec. It
   is not published.
@@ -718,9 +719,10 @@ All under `crates/ridl-transport-ws/`.
   generated face, because a generated face over a WebSocket client needs a
   public Rust client, which the crate does not ship (driftsys/ridl#989).
 - **The loopback server** (`examples/loopback_server.rs`). Serves the scenario's
-  test catalog and provider on `127.0.0.1:0`, one thread and one attachment per
-  connection, prints `port <n>`, and exits when its standard input ends. It
-  serves the TypeScript package's end-to-end tests. The package leaves it out.
+  test catalog and provider, with its member table, on `127.0.0.1:0`, one thread
+  and one attachment per connection, prints `port <n>`, and exits when its
+  standard input ends. It serves the TypeScript package's end-to-end tests. The
+  package leaves it out.
 
 The test targets `serve` and `scenario` require the `server` feature, so
 `--no-default-features` still runs the codec's tests.
@@ -786,7 +788,8 @@ What the crate already does so that the addition is local:
 - The stand-in ports (driftsys/ridl#988).
 - A public Rust client, and the generated face of `examples/cabin` across the
   transport (driftsys/ridl#989). `examples/cabin/server` already serves the
-  `temperature` signal to a TypeScript client.
+  `temperature` signal to a TypeScript client, with the member table read from
+  the descriptor `ridl build --emit catalog` writes.
 
 ## Alternatives considered
 
