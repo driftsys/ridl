@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use ridl_transport_ws::{serve, Config, Scanning};
+use ridl_transport_ws::{serve, Config, Described, Scanning};
 
 fn main() {
     let rt = Arc::new(Mutex::new(provider::provider()));
@@ -41,9 +41,14 @@ fn main() {
         thread::sleep(Duration::from_millis(5));
     });
 
+    let table = Arc::new(provider::member_table());
     for conn in listener.incoming() {
         let Ok(conn) = conn else { continue };
-        let backend = Scanning(rt.lock().expect("an unpoisoned provider").attach());
+        let backend = Described::new(
+            Scanning(rt.lock().expect("an unpoisoned provider").attach()),
+            Arc::clone(&table),
+        )
+        .expect("the table matches the provider's catalog");
         thread::spawn(move || serve(conn, backend, &Config::default()));
     }
 }

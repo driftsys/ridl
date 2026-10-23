@@ -1,8 +1,11 @@
 //! The test catalog and its provider: one interface with a signal, an event,
 //! a command, a query and a `fixed`, served by a `ridl-loopback` runtime.
 
+use std::time::Duration;
+
 use ridl_loopback::Loopback;
-use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
+use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal};
+use ridl_transport_ws::MemberTable;
 use ridl_rt::error::{CallError, Contract};
 use ridl_rt::port::{EventSink, Handler, SignalWriter};
 
@@ -25,6 +28,19 @@ pub const QUERY: Ordinal = Ordinal(4);
 pub const FIXED: Ordinal = Ordinal(5);
 /// The value the provider provisions for [`FIXED`].
 pub const FIXED_VALUE: &[u8] = &[0xf0, 0x0d];
+
+/// The member table of [`CATALOG`]: the five members, the command and the query
+/// with a bound of 1 s. Ordinal 6 is reserved and has no entry.
+pub fn member_table() -> MemberTable {
+    let mut table = MemberTable::new(CATALOG.name, CATALOG.hash);
+    let bound = Some(Duration::from_secs(1));
+    table.insert(IFACE, SIGNAL, Kind::Signal, None);
+    table.insert(IFACE, EVENT, Kind::Event, None);
+    table.insert(IFACE, COMMAND, Kind::Command, bound);
+    table.insert(IFACE, QUERY, Kind::Query, bound);
+    table.insert(IFACE, FIXED, Kind::Fixed, None);
+    table
+}
 
 /// The provider's runtime: a loopback on [`CATALOG`] that serves the command
 /// and the query, with [`FIXED`] provisioned to [`FIXED_VALUE`].

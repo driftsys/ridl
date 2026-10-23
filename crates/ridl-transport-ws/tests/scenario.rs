@@ -13,15 +13,15 @@ mod support;
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
 use std::net::{SocketAddr, TcpListener};
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use ridl_loopback::Loopback;
-use ridl_transport_ws::{serve, Config, Scanning};
+use ridl_transport_ws::{serve, Config, Described, Scanning};
 
 use support::client::WsClient;
-use support::provider::{provider, provider_step, CATALOG};
+use support::provider::{member_table, provider, provider_step, CATALOG};
 use support::scenario::{run, Rig};
 
 /// The environment variable that makes `provider_process` serve.
@@ -159,7 +159,8 @@ fn provider_process() {
         std::process::exit(0);
     });
     let mut rt = provider();
-    let backend = Scanning(rt.attach());
+    let backend = Described::new(Scanning(rt.attach()), Arc::new(member_table()))
+        .expect("the table matches the provider's catalog");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bound");
     let port = listener.local_addr().expect("an address").port();
     println!("port {port}");
