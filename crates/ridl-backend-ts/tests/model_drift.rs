@@ -15,7 +15,7 @@
 //! with `?` exactly when the model states the position is optional; a
 //! `bigint` brand exactly where the model states a 64-bit integer width; an
 //! `init<Name>` function exactly when the model states the init is derivable;
-//! and each `import * as x from './p'` against a package the model lists as
+//! and each `import * as x from './p.js'` against a package the model lists as
 //! foreign, under `DottedName.underscored`.
 //!
 //! It is the form of drift test that the model's own tests cannot write. When this backend stops
@@ -43,7 +43,7 @@ struct Module {
     items: BTreeMap<String, Declared>,
     /// Every `init<Name>` function, by the name it inits.
     inits: BTreeSet<String>,
-    /// Every `import * as <alias> from './<package>';`, alias to package.
+    /// Every `import * as <alias> from './<package>.js';`, alias to package.
     imports: BTreeMap<String, String>,
 }
 
@@ -84,9 +84,12 @@ fn read_back(source: &str) -> Module {
             let (alias, rest) = rest
                 .split_once(" from ")
                 .expect("an import names its module");
-            let package = rest
+            let specifier = rest
                 .trim_matches(|c| c == '\'' || c == ';')
-                .trim_start_matches("./")
+                .trim_start_matches("./");
+            let package = specifier
+                .strip_suffix(".js")
+                .expect("an import specifier ends in .js")
                 .to_string();
             module.imports.insert(alias.trim().to_string(), package);
             continue;

@@ -1986,7 +1986,7 @@ fn checked_ir(entry: &Path, package: &str) -> ridl_ir::v2::Package {
 /// standard package's own generated TypeScript first — the TypeScript
 /// counterpart of [`generated_packages`]. One file per package, because the
 /// emitted cross-package imports are module specifiers
-/// (`import * as fleet_contracts from './fleet.contracts'`) that only resolve
+/// (`import * as fleet_contracts from './fleet.contracts.js'`) that only resolve
 /// against a file of that name.
 fn generated_typescript_packages(entry: &Path) -> Vec<(String, String)> {
     let mut db = RidlDatabase::default();
