@@ -497,16 +497,23 @@ responses kept for duplicates are `server/calls.rs`.
   first poll after the request.
 - **Duplicates.** §11.1 item 5 says the binding never retransmits, so a
   duplicate `request` is a peer defect. The server still follows §7: a `request`
-  whose `seq` is in flight is not sent to the backend again; one whose `seq` is
-  among the last 64 settled responses of the session gets that response again;
-  any other `seq` not greater than the highest seen is recorded
-  (`DuplicateDropped`) and dropped. The 64 kept responses include the responses
-  sent at once, such as a `busy` or a `contract`. §11.1 item 6 asks a provider
-  to keep a settled response until the request's bound has passed; with no
-  descriptor the server does not know the bound, so it keeps a fixed number
-  instead. This deviation is stated in the frame specification's as-built note
-  and in its §7, and is tracked by driftsys/ridl#985 (reading the descriptor)
-  and driftsys/ridl#986 (whether §11.1 states a fallback retention).
+  whose `seq` is in flight is not sent to the backend again; one whose `seq`
+  names a settled response still kept gets that response again; any other `seq`
+  not greater than the highest seen is recorded (`DuplicateDropped`) and
+  dropped. A response is kept, with the responses sent at once (`busy`, a
+  `contract`), until `min(request.stamp, receipt) + max` by the backend's clock,
+  where `receipt` is `Clock::now()` when the request arrived and `max` the
+  member's bound from the member table (D-10); the `min` keeps §7's "measured
+  from the request's `stamp`" when the client's clock is behind, and caps the
+  retention when a client stamps ahead, so stamping requests in the future holds
+  no response. Expired responses go on each tick. For a member the table gives
+  no bound (a catalog built before the default response bound), or with no
+  table, the server keeps the last 64 as before: a stated deviation from §11.1
+  item 6 (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
+  retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
+  by default); a settle that would pass it closes the session with 1008, which
+  `serve` returns as `Ended::ServerClosed(1008)`. Closing is observable, where
+  dropping the oldest response would silently break item 6.
 
 **D-17. `fixed`.** A `read` of a `fixed` calls `Backend::read_fixed` and sends
 one `publish` with `kind` `Fixed`, state `Live` with the value, `seq` 0, and
@@ -544,11 +551,13 @@ interaction the member table does not hold; dropped or answered as D-12 says).
 
 `Config` (`server/config.rs`) has four public durations — `poll_interval` (20
 ms), `ping_interval` (5 s), `liveness_timeout` (15 s) and `call_abandon_after`
-(60 s) — and three settings behind methods: `with_max_message_bytes` (1 MiB; a
-value below `MIN_MESSAGE_LIMIT` is refused with `LimitTooSmall`), `with_record`
-and `with_origin_check`. A `ping_interval` at or above `liveness_timeout` ends
-an idle client's session before the first ping, because a client that is not
-pinged sends nothing; the rustdoc says so.
+(60 s) — and four settings behind methods: `with_max_message_bytes` (1 MiB; a
+value below `MIN_MESSAGE_LIMIT` is refused with `LimitTooSmall`),
+`with_max_retained_bytes` (16 MiB; a value below `max_message_bytes` is refused
+with `RetainedTooSmall`), `with_record` and `with_origin_check`. A
+`ping_interval` at or above `liveness_timeout` ends an idle client's session
+before the first ping, because a client that is not pinged sends nothing; the
+rustdoc says so.
 
 ## The WebSocket layer (`ws`)
 
@@ -609,14 +618,15 @@ at a cost of one small frame per 5 s.
 
 **D-23. Close codes.** Exactly §11.1 item 4's: 1000 on purpose and after
 `attached(refused)`, 1001 when the backend detaches, 1002 on a protocol
-violation, 1003 on a text message, 1009 on an oversized message. The server
-answers a client's close frame with a close frame that carries the same code.
-After every close frame it sends, the answer to the client's included, and after
-a handshake `400` or `403`, the server shuts down its write side and lingers for
-up to 100 ms, reading and discarding what the client still sends, so that the
-close frame or the answer reaches the client instead of being lost to a reset of
-the connection. It waits no longer than that for the client to close the
-connection (RFC 6455 §7.1.1 has the client wait for the server to close it).
+violation, 1003 on a text message, 1009 on an oversized message, and 1008 when
+the retained responses pass `max_retained_bytes` (D-16). The server answers a
+client's close frame with a close frame that carries the same code. After every
+close frame it sends, the answer to the client's included, and after a handshake
+`400` or `403`, the server shuts down its write side and lingers for up to 100
+ms, reading and discarding what the client still sends, so that the close frame
+or the answer reaches the client instead of being lost to a reset of the
+connection. It waits no longer than that for the client to close the connection
+(RFC 6455 §7.1.1 has the client wait for the server to close it).
 
 ## Tests
 
@@ -741,11 +751,9 @@ What the crate already does so that the addition is local:
 
 - Reading the catalog descriptor: compatible earlier hashes at `attach`
   (conformance item 1 of §12), the member table built from the descriptor (the
-  embedder builds it by hand today, D-10), and the response bound for duplicate
-  retention (driftsys/ridl#985). It adds `ridl-descriptor` to the embedder's
-  build, which the dependency constraint weighs against.
-- The retention of a settled response for a provider without bounds, a question
-  for the frame specification (driftsys/ridl#986).
+  embedder builds it by hand today, D-10, with the response bounds that the
+  duplicate retention reads) (driftsys/ridl#985). It adds `ridl-descriptor` to
+  the embedder's build, which the dependency constraint weighs against.
 - The stand-in ports (driftsys/ridl#988).
 - A public Rust client, and the generated face of `examples/cabin` across the
   transport (driftsys/ridl#989). `examples/cabin/server` already serves the
