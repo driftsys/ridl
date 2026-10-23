@@ -102,6 +102,9 @@ pub(crate) struct Session<B: Backend> {
     /// The message limit, which also bounds the occurrence bytes one tick
     /// sends.
     message_limit: usize,
+    /// The most bytes the kept responses may hold before the session closes
+    /// with 1008.
+    max_retained_bytes: usize,
     call_abandon_after: Duration,
     record: Option<Record>,
     /// Whether an `attach` has been accepted.
@@ -161,6 +164,7 @@ impl<B: Backend> Session<B> {
             occurrence_cap: limit - empty_occurrence.encoded_len(),
             reply_cap: limit - empty_reply.encoded_len(),
             message_limit: limit,
+            max_retained_bytes: config.max_retained_bytes(),
             call_abandon_after: config.call_abandon_after,
             record: config.record(),
             attached: false,
@@ -410,8 +414,11 @@ impl<B: Backend> Session<B> {
     /// specification §9.6); either way the call is then forgotten. A call
     /// still unknown `call_abandon_after` after its request arrived is
     /// forgotten and recorded, so that it does not hold a backend slot until
-    /// the client disconnects.
+    /// the client disconnects. The kept responses whose bound has passed by
+    /// the backend's clock are let go first.
     fn poll_calls(&mut self, now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
+        let clock = self.backend.ports().now();
+        self.calls.expire(clock);
         'calls: for call in self.calls.in_flight() {
             let outcome = match call.target.kind {
                 Kind::Command => self
@@ -460,10 +467,21 @@ impl<B: Backend> Session<B> {
                 Outcome::Corrupt => Some(ResponseOutcome::Corrupt),
                 Outcome::Busy => Some(ResponseOutcome::Busy),
             };
-            if let Some(response) = response {
-                self.respond(call.target, call.seq, response, out);
-            }
+            let step = match response {
+                Some(response) => self.respond(
+                    call.target,
+                    call.seq,
+                    response,
+                    call.stamp,
+                    call.receipt,
+                    out,
+                ),
+                None => Step::Continue,
+            };
             self.forget(call.correlation);
+            if step != Step::Continue {
+                return step;
+            }
         }
         Step::Continue
     }
@@ -728,6 +746,7 @@ impl<B: Backend> Session<B> {
         out: &mut Vec<Vec<u8>>,
     ) -> Step {
         let seq = envelope.seq;
+        let stamp = envelope.stamp;
         match self.calls.seen(seq) {
             Seen::New => self.calls.accept(seq),
             Seen::Settled(response) => {
@@ -739,28 +758,31 @@ impl<B: Backend> Session<B> {
                 return Step::Continue;
             }
         }
+        let receipt = self.backend.ports().now();
         if !self.known(target) {
             self.note(Note::UnknownInteraction { target });
-            self.respond(
+            return self.respond(
                 target,
                 seq,
                 ResponseOutcome::Contract(Contract::UnknownInteraction),
+                stamp,
+                receipt,
                 out,
             );
-            return Step::Continue;
         }
         let ports = self.backend.ports();
         let sent = match target.kind {
             Kind::Command => ports.command(target.iface, target.ord, payload, None),
             Kind::Query => ports.query(target.iface, target.ord, payload, None),
             _ => {
-                self.respond(
+                return self.respond(
                     target,
                     seq,
                     ResponseOutcome::Contract(Contract::UnknownInteraction),
+                    stamp,
+                    receipt,
                     out,
                 );
-                return Step::Continue;
             }
         };
         let outcome = match sent {
@@ -770,6 +792,8 @@ impl<B: Backend> Session<B> {
                     target,
                     seq,
                     sent: now,
+                    stamp,
+                    receipt,
                 });
                 return Step::Continue;
             }
@@ -780,21 +804,27 @@ impl<B: Backend> Session<B> {
             Err(SendError::TooLarge { .. }) => ResponseOutcome::Corrupt,
             Err(_) => return Step::Close(CloseCode::GOING_AWAY.0),
         };
-        self.respond(target, seq, outcome, out);
-        Step::Continue
+        self.respond(target, seq, outcome, stamp, receipt, out)
     }
 
     /// Sends one `response`, under the next response `seq` of the session
     /// and the backend's clock as the stamp, and keeps it for a repeat of
-    /// the request. A `contract(InvalidValue)` whose rule the frame cannot
-    /// carry is sent as `corrupt` and recorded.
+    /// the request: until the request's bound has passed, measured from the
+    /// earlier of the request's `stamp` and `receipt`, when the member table
+    /// gives one (frame specification §7), and as one of the last 64
+    /// otherwise. A `contract(InvalidValue)` whose rule the frame cannot
+    /// carry is sent as `corrupt` and recorded. Returns a close with 1008
+    /// when the kept responses then pass [`Config::max_retained_bytes`]; the
+    /// response is still sent.
     fn respond(
         &mut self,
         target: Target,
         correlation: u64,
         outcome: ResponseOutcome<'_>,
+        stamp: Timestamp,
+        receipt: Timestamp,
         out: &mut Vec<Vec<u8>>,
-    ) {
+    ) -> Step {
         let outcome = match outcome {
             ResponseOutcome::Contract(c) if !carried(c) => {
                 self.note(Note::RuleNotCarried { target });
@@ -803,21 +833,40 @@ impl<B: Backend> Session<B> {
             outcome => outcome,
         };
         self.response_seq += 1;
-        let stamp = self.backend.ports().now();
+        let now = self.backend.ports().now();
         push(
             out,
             &Frame::Response {
                 target,
                 envelope: Envelope {
-                    stamp,
+                    stamp: now,
                     seq: self.response_seq,
                 },
                 correlation,
                 outcome,
             },
         );
+        let until = self.retention(target, stamp, receipt);
         let response = out.last().expect("the response was just pushed");
-        self.calls.settle(correlation, response);
+        self.calls.settle(correlation, response, until);
+        if self.calls.retained_bytes() > self.max_retained_bytes {
+            return Step::Close(CloseCode::POLICY.0);
+        }
+        Step::Continue
+    }
+
+    /// The last instant of the backend's clock at which the response to a
+    /// request is kept: `min(stamp, receipt) + max`, with `max` the member's
+    /// bound from the member table. `None` when the backend gives no table or
+    /// the table gives the member no bound.
+    fn retention(&self, target: Target, stamp: Timestamp, receipt: Timestamp) -> Option<Timestamp> {
+        let max = self
+            .backend
+            .members()?
+            .member(target.iface, target.ord)?
+            .1?;
+        let max_micros = i64::try_from(max.as_micros()).unwrap_or(i64::MAX);
+        Some(Timestamp(stamp.0.min(receipt.0).saturating_add(max_micros)))
     }
 
     /// Reads a signal into the session's buffer, growing it on `Short` up to
@@ -1071,7 +1120,8 @@ mod tests {
         Target,
     };
     use crate::server::{
-        Backend, Config, Described, MemberTable, Note, Polling, Scanning, TableMismatch,
+        Backend, Config, Described, MemberTable, Note, Polling, RetainedTooSmall, Scanning,
+        TableMismatch,
     };
 
     const CATALOG: CatalogRef = CatalogRef {
@@ -2609,10 +2659,15 @@ mod tests {
     };
 
     fn request(target: Target, seq: u64, payload: &[u8]) -> Vec<u8> {
+        request_at(target, seq, 0, payload)
+    }
+
+    /// The same, with the request stamped at `stamp`.
+    fn request_at(target: Target, seq: u64, stamp: i64, payload: &[u8]) -> Vec<u8> {
         msg(Frame::Request {
             target,
             envelope: Envelope {
-                stamp: Timestamp(0),
+                stamp: Timestamp(stamp),
                 seq,
             },
             payload,
@@ -2648,8 +2703,8 @@ mod tests {
 
     /// Sends a request, settles it on the provider, and returns the frames
     /// of the next tick.
-    fn settled(
-        s: &mut Session<Scanning<Loopback>>,
+    fn settled<B: Backend>(
+        s: &mut Session<B>,
         p: &mut Loopback,
         target: Target,
         seq: u64,
@@ -3569,7 +3624,8 @@ mod tests {
     // -- The member table (frame specification §6.4) -------------------------
 
     /// The member table of the test catalog: signal 1, event 2, command 3,
-    /// query 4, fixed 5; ordinal 6 is reserved and has no entry.
+    /// query 4, fixed 5, and command 7 with no bound; ordinal 6 is reserved
+    /// and has no entry.
     fn table() -> Arc<MemberTable> {
         let mut t = MemberTable::new("ws.test", CatalogHash([7; 32]));
         let bound = Some(std::time::Duration::from_secs(1));
@@ -3578,8 +3634,16 @@ mod tests {
         t.insert(IFACE, Ordinal(3), Kind::Command, bound);
         t.insert(IFACE, Ordinal(4), Kind::Query, bound);
         t.insert(IFACE, Ordinal(5), Kind::Fixed, None);
+        t.insert(IFACE, COMMAND_UNBOUNDED.ord, Kind::Command, None);
         Arc::new(t)
     }
+
+    /// A command the member table gives no bound.
+    const COMMAND_UNBOUNDED: Target = Target {
+        kind: Kind::Command,
+        iface: IFACE,
+        ord: Ordinal(7),
+    };
 
     fn described_scanning() -> (Session<Described<Scanning<Loopback>>>, Loopback, Notes) {
         let notes = Notes::default();
@@ -3612,6 +3676,151 @@ mod tests {
             &attach_msg(1, 1, [5u8; 32], "ws.test"),
             Reason::CatalogMismatch,
         );
+    }
+
+    // -- Retention by bound, and the retained-bytes cap (frame specification §7)
+
+    /// Mutations: never expire; expire at once.
+    #[test]
+    fn a_repeat_within_the_bound_gets_the_response_and_one_after_it_is_dropped() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        // COMMAND's max is 1 s = 1_000_000 us; the request is stamped at the clock, 0.
+        let out = settled(&mut s, &mut p, COMMAND, 1, Ok(&[]));
+        assert_eq!(out.len(), 1);
+        p.advance(Duration(500_000));
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[7]));
+        assert_eq!(again, out);
+        p.advance(Duration(500_001)); // the clock is at max + 1
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[7]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+
+    /// Mutation: keep `RETAINED` for a bounded member.
+    #[test]
+    fn sixty_five_bounded_responses_are_all_kept_within_their_bound() {
+        let (mut s, mut p, _n) = described_scanning();
+        open(&mut s);
+        let first = settled(&mut s, &mut p, COMMAND, 1, Ok(&[]));
+        for seq in 2..=65 {
+            settled(&mut s, &mut p, COMMAND, seq, Ok(&[]));
+        }
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[]));
+        assert_eq!(again, first);
+    }
+
+    /// Mutation: measure from the stamp only.
+    #[test]
+    fn a_request_stamped_an_hour_ahead_expires_at_receipt_plus_max() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        let ahead = 3_600_000_000; // one hour, in microseconds, while the clock is at 0
+        let (_, out) = send(&mut s, &request_at(COMMAND, 1, ahead, &[]));
+        assert!(out.is_empty());
+        let c = claim(&mut p, COMMAND);
+        p.settle(c.id, Ok(&[])).unwrap();
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        p.advance(Duration(1_000_001)); // receipt (0) + max + 1
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, ahead, &[]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+
+    /// Mutation: measure from the receipt only.
+    #[test]
+    fn a_request_stamped_far_behind_the_clock_keeps_its_response_until_stamp_plus_max() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        p.advance(Duration(3_600_000_000)); // the clock is at one hour
+        let out = settled(&mut s, &mut p, COMMAND, 1, Ok(&[])); // stamped 0 by `request`
+        assert_eq!(out.len(), 1);
+        tick(&mut s); // 0 + max is long past: the next tick expires it
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+
+    /// Mutation: drop a response with no bound at once.
+    #[test]
+    fn a_member_with_no_bound_falls_back_to_the_last_64() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        let mut responses = Vec::new();
+        for seq in 1..=65 {
+            responses.push(settled(&mut s, &mut p, COMMAND_UNBOUNDED, seq, Ok(&[])));
+        }
+        p.advance(Duration(3_600_000_000));
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND_UNBOUNDED, 1, 0, &[]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+        let (_, again) = send(&mut s, &request_at(COMMAND_UNBOUNDED, 2, 0, &[]));
+        assert_eq!(again, responses[1]);
+    }
+
+    /// Mutation: close at `>=`.
+    #[test]
+    fn retained_bytes_equal_to_the_cap_do_not_close_and_one_more_byte_closes_1008() {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        // A `response` under `contract(UnknownInteraction)` is 36 bytes. The cap
+        // cannot go below the message limit, and the limit cannot go below 294:
+        // eight responses are 288 bytes, the ninth passes 294.
+        let config = config(&notes)
+            .with_max_message_bytes(crate::frame::MIN_MESSAGE_LIMIT)
+            .unwrap()
+            .with_max_retained_bytes(crate::frame::MIN_MESSAGE_LIMIT)
+            .unwrap();
+        let mut s = Session::new(Scanning(rt), &config);
+        open(&mut s);
+        for seq in 1..=8 {
+            let (step, out) = send(&mut s, &request(SIGNAL, seq, &[]));
+            assert_eq!((step, out[0].len()), (Step::Continue, 36), "response {seq}");
+        }
+        let (step, out) = send(&mut s, &request(SIGNAL, 9, &[]));
+        // The ninth response is still sent, then the session closes.
+        assert_eq!((step, out.len()), (Step::Close(1008), 1));
+    }
+
+    #[test]
+    fn a_retained_cap_below_the_message_limit_is_refused() {
+        let config = Config::default().with_max_message_bytes(2048).unwrap();
+        assert_eq!(
+            config.clone().with_max_retained_bytes(2047).err(),
+            Some(RetainedTooSmall {
+                given: 2047,
+                message_limit: 2048
+            })
+        );
+        assert_eq!(
+            config
+                .with_max_retained_bytes(2048)
+                .unwrap()
+                .max_retained_bytes(),
+            2048
+        );
+    }
+
+    #[test]
+    fn the_default_retained_cap_is_sixteen_mebibytes() {
+        assert_eq!(Config::default().max_retained_bytes(), 16 * 1024 * 1024);
     }
 
     #[test]
