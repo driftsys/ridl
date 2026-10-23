@@ -46,8 +46,8 @@ impl MemberTable {
         self.members.insert((iface, ord), (kind, max))
     }
 
-    /// Adds an earlier catalog hash this catalog is compatible with (§6.1). The own hash and a
-    /// hash already listed are not added.
+    /// Adds an earlier catalog hash this catalog is compatible with (§6.1).
+    /// The own hash and a hash already listed are not added.
     pub fn add_compatible(&mut self, hash: CatalogHash) {
         if hash != self.hash && !self.compatible.contains(&hash) {
             self.compatible.push(hash);

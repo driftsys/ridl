@@ -115,9 +115,10 @@ leaves the hash unchanged makes none.
 The one transport in this workspace is the WebSocket binding. The Rust crate
 `ridl-transport-ws` serves it, and the TypeScript package
 `@driftsys/ridl-transport-ws` (`packages/ridl-transport-ws/`) is its consuming
-side, for Deno and the browser. The crate reads no descriptor and accepts an
-`attach` on an exact match of the hash only, so it refuses an
-earlier hash from the list, which the last column shows as accepted. The last
+side, for Deno and the browser. The crate reads no descriptor file itself.
+Its embedder may supply a member table that lists the compatible hashes: with
+one, the crate accepts an `attach` naming a listed earlier hash, as the last
+column shows; without one, it accepts an exact match of the hash only. The last
 column states what the frame specification
 ([section 6.1](reference/frame.md#61-attach-and-attached)) specifies for an
 older consumer, built against the version before the change.
