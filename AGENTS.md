@@ -182,8 +182,11 @@ member; rsdl is the apex.
                          and as edition 2024 with the rust-toolchain.toml pin,
                          check both crates' LICENSE files, build the packaged
                          ridl-loopback and ridl-transport-ws (with its default
-                         features on and off) at that rust-version, build the packaged
-                         ridl-ir and ridl-descriptor at the rust-version in
+                         features on and off, from a manifest copy without the
+                         optional ridl-descriptor dependency and the descriptor
+                         feature) at that rust-version, build the packaged
+                         ridl-ir and ridl-descriptor, and ridl-transport-ws with
+                         its descriptor feature, at the rust-version in
                          crates/ridl-descriptor/Cargo.toml, and check the crate
                          ridl build emits for examples/cabin (built with
                          rustc, with only the std feature on) and for the
