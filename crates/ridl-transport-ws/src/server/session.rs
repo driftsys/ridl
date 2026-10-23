@@ -487,7 +487,13 @@ impl<B: Backend> Session<B> {
             Some(Reason::FrameVersionUnsupported)
         } else if attach.name() != self.catalog.name {
             Some(Reason::UnknownCatalog)
-        } else if *attach.hash() != self.catalog.hash {
+        } else if !self
+            .backend
+            .members()
+            .map_or(*attach.hash() == self.catalog.hash, |t| {
+                t.accepts(attach.hash())
+            })
+        {
             Some(Reason::CatalogMismatch)
         } else if Some(attach.encoding()) != self.encoding {
             Some(Reason::EncodingUnsupported)
@@ -3581,6 +3587,31 @@ mod tests {
         let provider = rt.attach();
         let backend = Described::new(Scanning(rt), table()).unwrap();
         (Session::new(backend, &config(&notes)), provider, notes)
+    }
+
+    #[test]
+    fn an_attach_naming_a_listed_earlier_hash_is_accepted_and_an_unlisted_one_is_catalog_mismatch()
+    {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let mut t = MemberTable::new("ws.test", CatalogHash([7; 32]));
+        t.add_compatible(CatalogHash([6; 32]));
+        let backend = Described::new(Scanning(rt.attach()), Arc::new(t)).unwrap();
+        let mut s = Session::new(backend, &config(&notes));
+        let (step, out) = send(&mut s, &attach_msg(1, 1, [6u8; 32], "ws.test"));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            Frame::Attached(AttachOutcome::Accepted)
+        );
+
+        let backend = Described::new(Scanning(rt.attach()), table()).unwrap();
+        let mut s = Session::new(backend, &config(&notes));
+        refused(
+            &mut s,
+            &attach_msg(1, 1, [5u8; 32], "ws.test"),
+            Reason::CatalogMismatch,
+        );
     }
 
     #[test]

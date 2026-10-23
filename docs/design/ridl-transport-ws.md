@@ -283,8 +283,10 @@ answers:
 - `frame_version` not 1: `refused(frame_version_unsupported)`;
 - the unit name differs from `Attached::catalog().name`:
   `refused(unknown_catalog)`;
-- the name matches and the hash differs: `refused(catalog_mismatch)`. This is
-  the exact-match rule of §6.1, because the server holds no descriptor;
+- the name matches and the hash is neither the catalog's own nor, with a member
+  table (D-10), one of the table's compatible hashes:
+  `refused(catalog_mismatch)`. Without a table this is the exact-match rule of
+  §6.1;
 - the encoding tag is not the tag of the backend's encoding name (§3's table):
   `refused(encoding_unsupported)`. A backend whose encoding is not in that table
   refuses every `attach` with this reason;

@@ -20,6 +20,7 @@ pub struct MemberTable {
     name: String,
     hash: CatalogHash,
     members: BTreeMap<(InterfaceNo, Ordinal), (Kind, Option<Duration>)>,
+    compatible: Vec<CatalogHash>,
 }
 
 impl MemberTable {
@@ -29,6 +30,7 @@ impl MemberTable {
             name: name.into(),
             hash,
             members: BTreeMap::new(),
+            compatible: Vec::new(),
         }
     }
 
@@ -42,6 +44,24 @@ impl MemberTable {
         max: Option<Duration>,
     ) -> Option<(Kind, Option<Duration>)> {
         self.members.insert((iface, ord), (kind, max))
+    }
+
+    /// Adds an earlier catalog hash this catalog is compatible with (§6.1).
+    /// The own hash and a hash already listed are not added.
+    pub fn add_compatible(&mut self, hash: CatalogHash) {
+        if hash != self.hash && !self.compatible.contains(&hash) {
+            self.compatible.push(hash);
+        }
+    }
+
+    /// The compatible hashes, in insertion order.
+    pub fn compatible(&self) -> &[CatalogHash] {
+        &self.compatible
+    }
+
+    /// Whether an `attach` naming `hash` is accepted: the own hash or a compatible one.
+    pub fn accepts(&self, hash: &CatalogHash) -> bool {
+        *hash == self.hash || self.compatible.contains(hash)
     }
 
     /// The unit name.
@@ -106,5 +126,18 @@ mod tests {
             Some((Kind::Event, Some(Duration::from_secs(1))))
         );
         assert_eq!(t.len(), 1);
+    }
+
+    #[test]
+    fn accepts_the_own_hash_and_each_compatible_one_and_lists_each_once() {
+        let mut t = MemberTable::new("ws.test", CatalogHash([7; 32]));
+        assert!(t.accepts(&CatalogHash([7; 32])));
+        assert!(!t.accepts(&CatalogHash([6; 32])));
+        t.add_compatible(CatalogHash([6; 32]));
+        t.add_compatible(CatalogHash([6; 32]));
+        t.add_compatible(CatalogHash([7; 32]));
+        assert_eq!(t.compatible(), &[CatalogHash([6; 32])]);
+        assert!(t.accepts(&CatalogHash([6; 32])));
+        assert!(!t.accepts(&CatalogHash([5; 32])));
     }
 }
