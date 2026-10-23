@@ -39,3 +39,10 @@ union Outcome {
   mode   : Mode
   reading : Reading
 }
+
+/// An interface whose multi-parameter call induces a payload type, so the
+/// induced struct gets transcode functions too.
+interface Gauge {
+  /// Two parameters: the request type is an induced struct.
+  command set(count: Count, level: Level) @[..50ms]
+}

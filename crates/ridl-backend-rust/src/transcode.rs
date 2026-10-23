@@ -72,7 +72,10 @@ pub(crate) fn package_items(
         let ty = ident(name);
         items.push(allow_dead_code_if_internal(
             visibility,
-            quote! { impl #ty { #(#functions)* } },
+            quote! {
+                #[allow(deprecated)]
+                impl #ty { #(#functions)* }
+            },
         ));
     }
     Ok(items)
@@ -86,17 +89,22 @@ fn function(source: WireEncoding, target: WireEncoding) -> TokenStream {
     ));
     let source_path = encoding_path(source);
     let target_path = encoding_path(target);
-    let doc = format!(
-        " Re-encodes a {} payload as a {} payload.\n\n \
-         The bytes are verified as {}, decoded, and encoded as {} into `out`. \
-         The body is [`::ridl_rt::payload::transcode`].",
-        source.name(),
-        target.name(),
-        source.name(),
-        target.name(),
-    );
+    let doc_lines = [
+        format!(
+            " Re-encodes a {} payload as a {} payload.",
+            source.name(),
+            target.name()
+        ),
+        String::new(),
+        format!(
+            " The bytes are verified as {}, decoded, and encoded as {} into `out`.",
+            source.name(),
+            target.name()
+        ),
+        " The body is [`::ridl_rt::payload::transcode`].".to_string(),
+    ];
     quote! {
-        #[doc = #doc]
+        #( #[doc = #doc_lines] )*
         pub fn #name<'o>(
             bytes: &[::core::primitive::u8],
             out: &'o mut [::core::primitive::u8],

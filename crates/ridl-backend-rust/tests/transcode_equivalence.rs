@@ -9,7 +9,7 @@
 //! functions must pass the same comparisons.
 
 use ridl_rt::encoding::{FlatBuffers, Proto3};
-use ridl_rt::payload::Ref;
+use ridl_rt::payload::{EncodeError, Ref, TranscodeError};
 
 /// The checked-in output of `generate_pipeline` over `tests/fixtures/transcode.ridl`
 /// with both encodings and `transcode = true`. It is `include!`d, never
@@ -18,6 +18,10 @@ use ridl_rt::payload::Ref;
 #[allow(
     dead_code,
     reason = "not every generated item is named from this file's own tests"
+)]
+#[allow(
+    unused_imports,
+    reason = "the generated face re-exports names this file's tests do not use"
 )]
 #[allow(
     clippy::derivable_impls,
@@ -31,7 +35,7 @@ mod generated {
     include!("generated/transcode.rs");
 }
 
-use generated::{Count, Label, Level, Mode, Outcome, Reading};
+use generated::{Count, GaugeSetParams, Label, Level, Mode, Outcome, Reading};
 
 const BUFFER: usize = 4096;
 
@@ -142,4 +146,56 @@ fn a_union_survives_transcoding_for_each_arm_and_bound() {
         Outcome::Reading(reading(5, -5, "x", Mode::Active, -1.0, true))
     );
     assert_equivalent!(Outcome, Outcome::Reading(Reading::default()));
+}
+
+#[test]
+fn an_induced_call_struct_survives_transcoding() {
+    assert_equivalent!(GaugeSetParams, GaugeSetParams::default());
+    assert_equivalent!(
+        GaugeSetParams,
+        GaugeSetParams {
+            count: count(200),
+            level: level(-5),
+        }
+    );
+    assert_equivalent!(
+        GaugeSetParams,
+        GaugeSetParams {
+            count: count(7),
+            level: level(10),
+        }
+    );
+}
+
+#[test]
+fn bytes_that_do_not_verify_fail_with_a_verify_error() {
+    let garbage = [0xffu8; 8];
+    let mut out = [0u8; BUFFER];
+    assert!(matches!(
+        Reading::transcode_flatbuffers_to_proto3(&garbage, &mut out),
+        Err(TranscodeError::Verify(_))
+    ));
+    assert!(matches!(
+        Reading::transcode_proto3_to_flatbuffers(&garbage, &mut out),
+        Err(TranscodeError::Verify(_))
+    ));
+}
+
+#[test]
+fn an_output_buffer_that_is_too_small_fails_with_a_capacity_error() {
+    let value = reading(200, 10, "sixteen chars...", Mode::Fault, 1.0, true);
+    let mut a = [0u8; BUFFER];
+    let mut c = [0u8; BUFFER];
+    let proto3 = Ref::<Reading, Proto3>::encode(&value, &mut a).expect("encode proto3");
+    let flatbuffers =
+        Ref::<Reading, FlatBuffers>::encode(&value, &mut c).expect("encode flatbuffers");
+    let mut small = [0u8; 1];
+    assert!(matches!(
+        Reading::transcode_proto3_to_flatbuffers(proto3.bytes(), &mut small),
+        Err(TranscodeError::Encode(EncodeError::Capacity { .. }))
+    ));
+    assert!(matches!(
+        Reading::transcode_flatbuffers_to_proto3(flatbuffers.bytes(), &mut small),
+        Err(TranscodeError::Encode(EncodeError::Capacity { .. }))
+    ));
 }

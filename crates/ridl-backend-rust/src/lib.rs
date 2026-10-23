@@ -180,6 +180,11 @@ pub fn generate_with(
 /// than refused (interaction-face design rules 1, 2 and 4). An empty
 /// `encodings` is the domain types only, as it is for [`generate_face_with`].
 ///
+/// `transcode` adds, for each generated type that implements `Payload` under
+/// at least two of the listed `encodings`, one `transcode_<s>_to_<d>`
+/// function per ordered pair of those encodings (ADR-0018 decision 13). It
+/// has no effect when fewer than two encodings are listed.
+///
 /// **Why the pipeline calls this and not [`generate`]** (design rule 1): a
 /// consumer of `ridl build --emit rust` needs the face as much as the domain
 /// types, and the face compiles over the codec in the same unit, so the
@@ -223,6 +228,7 @@ pub fn generate_pipeline(
 /// handed a `CodegenRequest` carrying the model and no IR, so the entry point
 /// it reaches cannot be one that takes a `v2::Package`. `generate_pipeline`
 /// is this function after one `lower`, which is why the two cannot disagree.
+/// `encodings` and `transcode` mean what they mean for [`generate_pipeline`].
 pub(crate) fn generate_pipeline_over(
     model: &v1::Model,
     encodings: &[WireEncoding],

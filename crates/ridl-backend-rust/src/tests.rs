@@ -7573,6 +7573,34 @@ mod transcode {
     }
 
     #[test]
+    fn transcode_of_a_deprecated_type_allows_deprecated() {
+        // The impl block names the deprecated type, so without the allow the
+        // consumer's build draws the `deprecated` lint on generated code.
+        let deprecated = ridl_ir::codegen::lower(
+            &package(
+                "veh.common",
+                vec![v2::Decl {
+                    deprecated: Some("use Velocity".to_string()),
+                    ..speed_decl()
+                }],
+            ),
+            &[],
+        );
+        let source = source(&deprecated, &BOTH, true);
+        // The impl block that holds the transcode functions, not the codec's
+        // own inherent impl of the same type.
+        let squeezed = squeezed(&source);
+        let function = squeezed
+            .find("fn transcode_")
+            .expect("a transcode function is emitted");
+        let head = &squeezed[..squeezed[..function].rfind("impl Speed {").expect("an impl")];
+        assert!(
+            head.trim_end().ends_with("#[allow(deprecated)]"),
+            "the transcode impl allows the lint, got:\n{source}"
+        );
+    }
+
+    #[test]
     fn transcode_off_emits_nothing() {
         let source = source(&model(), &BOTH, false);
         assert!(!source.contains("transcode_"), "got:\n{source}");
