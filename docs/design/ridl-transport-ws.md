@@ -243,11 +243,22 @@ decided to close, it produces nothing more, whatever it is given.
 
 **D-10. The backend trait.** `Backend` (`server/backend.rs`) has an associated
 type `Ports: Attached + Encoded + Clock + SignalReader + EventSource + Caller`,
-a method `ports(&mut self)`, and two provided methods: `scannable()`, which
-returns `None`, and `read_fixed(iface, ord, out)`, which answers
-`ReadError::Contract(UnknownInteraction)`. Two adapters cover the common cases
-with no code: `Polling<P>` over the six bounds, with no scan and no `fixed`; and
-`Scanning<P>` over the six bounds plus `ScannableSignals` and `FixedReader`.
+a method `ports(&mut self)`, and three provided methods: `scannable()`, which
+returns `None`; `read_fixed(iface, ord, out)`, which answers
+`ReadError::Contract(UnknownInteraction)`; and `members()`, which returns
+`None`: the member table of the catalog, when the embedder supplied one
+(`server/members.rs`). Two adapters cover the common cases with no code:
+`Polling<P>` over the six bounds, with no scan and no `fixed`; and `Scanning<P>`
+over the six bounds plus `ScannableSignals` and `FixedReader`. A third,
+`Described<B>`, wraps any backend with an `Arc<MemberTable>` and forwards the
+other three methods; `Described::new` compares the table's name and hash with
+`ports().catalog()` and returns `TableMismatch` on a difference, so a wrong
+table is found on the embedder's thread before `serve` runs.
+
+`MemberTable` holds the unit name, the catalog hash, and a map from
+`(InterfaceNo, Ordinal)` to `(Kind, Option<Duration>)`, the duration being the
+member's `max`. A retired interface and a reserved ordinal have no entry (§6.4).
+The embedder builds it by hand through `new` and `insert`.
 
 The ports are an associated type rather than supertraits so that an embedder, or
 a test crate, can serve a runtime type it does not own: the orphan rule forbids
@@ -282,10 +293,15 @@ answers:
 After a refusal the server closes with 1000. The checks run in the order above,
 so one reason is given. A second `attach` on an open session closes with 1002.
 
-**D-12. The server routes on the frame's `kind`.** It holds no catalog
-descriptor, so it cannot check a `kind` against the catalog (§4 "Why `kind` is
-on the frame"); that check is the backend's when it has a member table. What it
-does check is that the form admits the kind:
+**D-12. The server routes on the frame's `kind`.** Without a member table it
+cannot check a `kind` against the catalog (§4 "Why `kind` is on the frame") and
+checks only that the form admits the kind. With one, every `subscribe`, `read`,
+`request` and `unsubscribe` first looks the frame's `(interface, ordinal)` up in
+the table: absent, or present under another `kind`, a `subscribe` or a `read` is
+answered `answer` with `contract(UnknownInteraction)`, a `request` a `response`
+carrying it and the request's `seq` as `correlation`, and an `unsubscribe` is
+dropped and recorded as `Note::UnknownInteraction` (§6.4). Nothing reaches the
+backend and no session state is created. The form check follows in both cases:
 
 | Form          | `kind` admitted   | Any other `kind`                               |
 | ------------- | ----------------- | ---------------------------------------------- |
@@ -355,8 +371,9 @@ lasts as long as the session, with no bound in the crate, because a channel's
 session `seq` never restarts (§7). Per-session memory, and in polling mode the
 work of each tick, grows with the distinct signals the client names. `serve`'s
 rustdoc says so: the embedder's access policy must trust each client for that
-growth. A bound needs a decision, because the frame has no refusal outcome for
-it (driftsys/ridl#984).
+growth. With a member table (D-12) the lookup bounds it: a session holds at most
+one signal channel and one event channel per member of the catalog. Without one
+the growth above stands, and `serve`'s rustdoc says so.
 
 **D-14. Detecting a changed signal.**
 
@@ -515,8 +532,9 @@ no hook nothing is recorded and recording costs nothing. A `Note` is one of:
 `Violation` (closes 1002), `MessageBeforeAttach` (closes 1002), `SecondAttach`
 (closes 1002), `UnexpectedDirection` (closes 1002), `KindNotAdmitted` (an
 `unsubscribe` of a kind the form does not admit; dropped), `ValueTooLarge`,
-`DuplicateDropped`, `CallAbandoned` and `RuleNotCarried` (a violation's rule the
-frame has no code for; the outcome is replaced).
+`DuplicateDropped`, `CallAbandoned`, `RuleNotCarried` (a violation's rule the
+frame has no code for; the outcome is replaced) and `UnknownInteraction` (an
+interaction the member table does not hold; dropped or answered as D-12 says).
 
 ### `Config`
 
@@ -717,12 +735,11 @@ What the crate already does so that the addition is local:
 
 ## What is not built
 
-- A bound on the per-session signal state (driftsys/ridl#984).
 - Reading the catalog descriptor: compatible earlier hashes at `attach`
-  (conformance item 1 of §12), the `kind` check against the catalog, and the
-  response bound for duplicate retention (driftsys/ridl#985). It adds
-  `ridl-descriptor` to the embedder's build, which the dependency constraint
-  weighs against.
+  (conformance item 1 of §12), the member table built from the descriptor (the
+  embedder builds it by hand today, D-10), and the response bound for duplicate
+  retention (driftsys/ridl#985). It adds `ridl-descriptor` to the embedder's
+  build, which the dependency constraint weighs against.
 - The retention of a settled response for a provider without bounds, a question
   for the frame specification (driftsys/ridl#986).
 - The stand-in ports (driftsys/ridl#988).

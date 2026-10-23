@@ -663,9 +663,11 @@ same way, and that answer is the designed one, not a defect: the consuming
 runtime reports it as the contract error of ridl §10.2. A frame the consumer
 cannot place is the provider's defect on either kind of session. Whether a
 runtime can tell an unknown ordinal from one it has no value for yet depends on
-its holding the member table. `ridl-loopback` holds none: giving the loopback
-the catalog descriptor is not yet assigned to an issue. Until it holds one, it
-cannot report `UnknownInteraction` at all.
+its holding the member table. `ridl-transport-ws` reports `UnknownInteraction`
+when its embedder gives it one (its design record, D-12), and not otherwise.
+`ridl-loopback` holds none: giving the loopback the catalog descriptor is not
+yet assigned to an issue. Until it holds one, it cannot report
+`UnknownInteraction` at all.
 
 ## 7. Sequence Numbers, Loss and Duplicates
 
