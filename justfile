@@ -3025,9 +3025,9 @@ _cabin-wasm:
 # code that `flatc` generated from the `ridl build` output. The server is
 # examples/cabin/server, which publishes cabin's `temperature` signal over
 # `ridl-transport-ws` with the member table read from the catalog descriptor
-# that `_cabin-generate` writes. The program is examples/cabin/web/main.ts, which takes
-# the catalog name and hash, the interface number and ordinal of the signal,
-# and the decode function from the generated codec module
+# that `_cabin-generate` writes. The program is examples/cabin/web/main.ts,
+# which takes the catalog name and hash, the interface number and ordinal of
+# the signal, and the decode function from the generated codec module
 # examples/cabin/web/generated/veh.cabin.codec.ts. It fails when the catalog
 # hash the server announces is not the generated one, attaches with the
 # encoding `flatbuffers`, subscribes, verifies each payload through cabin's
