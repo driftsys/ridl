@@ -103,7 +103,7 @@ pub(crate) struct Session<B: Backend> {
     /// sends.
     message_limit: usize,
     /// The most bytes the kept responses may hold before the session closes
-    /// with 1008.
+    /// with 1008: the larger of the configured cap and the message limit.
     max_retained_bytes: usize,
     call_abandon_after: Duration,
     record: Option<Record>,
@@ -819,7 +819,8 @@ impl<B: Backend> Session<B> {
     /// gives one (frame specification §7), and as one of the last 64
     /// otherwise. A `contract(InvalidValue)` whose rule the frame cannot
     /// carry is sent as `corrupt` and recorded. Returns a close with 1008
-    /// when the kept responses then pass [`Config::max_retained_bytes`]; the
+    /// when the kept responses then pass the larger of
+    /// [`Config::max_retained_bytes`] and [`Config::max_message_bytes`]; the
     /// response is still sent.
     fn respond(
         &mut self,

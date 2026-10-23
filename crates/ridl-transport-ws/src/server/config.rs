@@ -179,9 +179,10 @@ impl Config {
         Ok(self)
     }
 
-    /// The most bytes, in the responses a session keeps for a repeated
-    /// `request` (frame specification §7), before the session is closed with
-    /// 1008.
+    /// The configured cap on the bytes of the responses a session keeps for a
+    /// repeated `request` (frame specification §7). A session closes with
+    /// 1008 when the kept bytes pass the larger of this value and
+    /// [`Config::max_message_bytes`] (see [`Config::with_max_retained_bytes`]).
     pub fn max_retained_bytes(&self) -> usize {
         self.max_retained_bytes
     }
