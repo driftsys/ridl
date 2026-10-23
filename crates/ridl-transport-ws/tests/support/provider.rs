@@ -5,9 +5,9 @@ use std::time::Duration;
 
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal};
-use ridl_transport_ws::MemberTable;
 use ridl_rt::error::{CallError, Contract};
 use ridl_rt::port::{EventSink, Handler, SignalWriter};
+use ridl_transport_ws::MemberTable;
 
 /// The test catalog: the unit `test.ws` with a hash of thirty-two 7s.
 pub const CATALOG: CatalogRef = CatalogRef {

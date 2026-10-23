@@ -17,6 +17,11 @@
 //! the 126 values (85 is followed by -40; a repeated value is ignored), 85 is
 //! reached by such a step, and -40 is seen after 85 (the first sample counts
 //! for neither bound).
+//!
+//! The server gives the transport the member table read from the catalog
+//! descriptor that `ridl build --emit catalog` writes, so an `attach` that
+//! names a compatible earlier hash is accepted and an unknown interaction is
+//! refused.
 
 use std::io::{self, Write};
 use std::net::TcpListener;
@@ -29,12 +34,20 @@ use api::cabin;
 use api::cabin::prelude::*;
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogRef, Interface};
-use ridl_transport_ws::{Config, Scanning, serve};
+use ridl_transport_ws::{Config, Described, MemberTable, Scanning, serve};
 use veh_cabin::veh::cabin as api;
 
 /// The catalog the runtime is attached to: the one the face was generated
 /// from.
 const CATALOG: CatalogRef = *<api::Cabin as Interface>::CATALOG;
+
+/// The catalog descriptor that `ridl build --emit catalog` wrote beside the
+/// generated crate. It is embedded so that the programs which start this server
+/// need no path argument.
+const DESCRIPTOR: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../generated/veh.cabin.catalog.binfb"
+));
 
 /// The lowest and the highest value of `Temperature`.
 const LOWEST: i64 = -40;
@@ -50,6 +63,8 @@ const PERIOD: Duration = Duration::from_millis(7);
 
 fn main() {
     let rt = Arc::new(Mutex::new(Loopback::new(CATALOG)));
+    let table =
+        Arc::new(MemberTable::from_descriptor(DESCRIPTOR).expect("the descriptor verifies"));
     let listener = TcpListener::bind("127.0.0.1:0").expect("bound");
     let port = listener.local_addr().expect("an address").port();
     let hash: String = CATALOG.hash.0.iter().map(|b| format!("{b:02x}")).collect();
@@ -89,7 +104,11 @@ fn main() {
 
     for conn in listener.incoming() {
         let Ok(conn) = conn else { continue };
-        let backend = Scanning(rt.lock().expect("an unpoisoned runtime").attach());
+        let backend = Described::new(
+            Scanning(rt.lock().expect("an unpoisoned runtime").attach()),
+            Arc::clone(&table),
+        )
+        .expect("the descriptor is the runtime's catalog");
         thread::spawn(move || serve(conn, backend, &Config::default()));
     }
 }

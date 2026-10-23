@@ -338,12 +338,14 @@ rule on a request stamp.
 `crates/ridl-transport-ws/examples/loopback_server.rs` serves the crate's test
 catalog (`test.ws`, the provider of `tests/support/provider.rs`, included by
 path so the catalog is defined once) on `127.0.0.1:0`, prints `port <n>`, serves
-each connection on its own thread with its own `Scanning(loopback.attach())`
-backend, steps the provider every 5 ms on its own thread, and exits with status
-0 when its standard input ends. It declares `required-features = ["server"]`,
-and the crate's `exclude` leaves out `examples/`, as it leaves out `tests/`,
-because the example includes a file from `tests/` and uses the dev-dependency
-`ridl-loopback`. The server's code is unchanged. The crate's record lists the
+each connection on its own thread with its own
+`Described::new(Scanning(loopback.attach()), table)` backend, where `table` is
+the hand-built member table of the test catalog, steps the provider every 5 ms
+on its own thread, and exits with status 0 when its standard input ends. It
+declares `required-features = ["server"]`, and the crate's `exclude` leaves out
+`examples/`, as it leaves out `tests/`, because the example includes a file from
+`tests/` and uses the dev-dependency `ridl-loopback`. `serve` is unchanged; the
+example only wraps its backend in a member table. The crate's record lists the
 example under its tests.
 
 **D-14. How the proof runs.** "A Deno program and a browser page each receive a

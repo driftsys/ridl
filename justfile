@@ -839,7 +839,8 @@ _cabin-generate:
     # everything else, so a file the emitter stops writing would survive here
     # and keep this green while a fresh clone failed.
     rm -rf examples/cabin/generated examples/cabin/generated-corpus
-    "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
+    "$target/debug/ridl" build examples/cabin --emit rust --emit catalog \
+        --out-dir examples/cabin/generated
     # For the `no_std` check and the clippy run in `demo`: cabin's schema has no
     # string, bytes, array, map or pattern, and this workspace has each of them.
     "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
@@ -3023,7 +3024,8 @@ _cabin-wasm:
 # Prove a Deno program can read a value from a Rust server and decode it with
 # code that `flatc` generated from the `ridl build` output. The server is
 # examples/cabin/server, which publishes cabin's `temperature` signal over
-# `ridl-transport-ws`. The program is examples/cabin/web/main.ts, which takes
+# `ridl-transport-ws` with the member table read from the catalog descriptor
+# that `_cabin-generate` writes. The program is examples/cabin/web/main.ts, which takes
 # the catalog name and hash, the interface number and ordinal of the signal,
 # and the decode function from the generated codec module
 # examples/cabin/web/generated/veh.cabin.codec.ts. It fails when the catalog

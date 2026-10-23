@@ -21,6 +21,7 @@ ridl-loopback = { path = "../../../crates/ridl-loopback" }
 # The WebSocket binding of the frame, with its server.
 ridl-transport-ws = { path = "../../../crates/ridl-transport-ws", features = [
   "server",
+  "descriptor",
 ] }
 # Named directly for `CatalogRef`. The `[patch.crates-io]` block in
 # `examples/cabin/Cargo.toml` resolves this to `crates/ridl-rt`.
