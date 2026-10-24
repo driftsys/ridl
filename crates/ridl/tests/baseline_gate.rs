@@ -833,6 +833,153 @@ fn baseline_publishes_a_moved_existing_tombstone() {
     );
 }
 
+/// Two interfaces behind a named-form service listing both. A named-form
+/// service carries no number of its own and its list is a set (ridl §14.5).
+const NAMED_SERVICE_TWO: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface Doors {
+  event doorOpened: DoorState @[100ms..1s]
+}
+interface Lights {
+  event lightOn: DoorState @[100ms..1s]
+}
+service veh.cluster.dash : Doors, Lights
+";
+
+/// `NAMED_SERVICE_TWO` with `Lights` dropped from the service's list. The
+/// interface itself stays declared.
+const NAMED_SERVICE_ONE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface Doors {
+  event doorOpened: DoorState @[100ms..1s]
+}
+interface Lights {
+  event lightOn: DoorState @[100ms..1s]
+}
+service veh.cluster.dash : Doors
+";
+
+/// `NAMED_SERVICE_TWO` with the service deleted and both interfaces kept.
+const NAMED_SERVICE_NONE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface Doors {
+  event doorOpened: DoorState @[100ms..1s]
+}
+interface Lights {
+  event lightOn: DoorState @[100ms..1s]
+}
+";
+
+/// Asserts that republishing `fresh` over a baseline published from `base`
+/// is not refused by the gate: exit 0, no RIDL-408, and the snapshot changed.
+fn assert_republish_is_not_refused(label: &str, base: &str, fresh: &str) {
+    let dir = TempDir::new(label);
+    let root = package_workspace(&dir, base);
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write("cluster.ridl", fresh);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "the republication is admitted:\n{stderr}");
+    assert!(
+        !stderr.contains("RIDL-408"),
+        "the gate reads no refused change:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the republished snapshot is readable");
+    assert_ne!(before, after, "the new snapshot is published");
+}
+
+/// A named-form service removed whole is not refused (ridl §17.14): the
+/// service carries no identity of its own, and the interfaces it listed are
+/// kept. A rule widening the refusal to every `DeclRemoved` would refuse it.
+#[test]
+fn baseline_publishes_a_named_form_service_removed_whole() {
+    assert_republish_is_not_refused(
+        "gate-service-removed",
+        NAMED_SERVICE_TWO,
+        NAMED_SERVICE_NONE,
+    );
+}
+
+/// An interface leaving a named-form service's list is not refused (ridl
+/// §17.14): the list is a set the gate does not read.
+#[test]
+fn baseline_publishes_a_shape_dropped_from_a_named_service_list() {
+    assert_republish_is_not_refused(
+        "gate-service-list-shrinks",
+        NAMED_SERVICE_TWO,
+        NAMED_SERVICE_ONE,
+    );
+}
+
+/// A live interaction inserted ahead of an existing one moves the ordinals
+/// after it. `ridl diff` and RIDL-407 report that, and the gate does not
+/// refuse it: no ordinal record is lost, so what is published is a deliberate
+/// change to the wire, which the gate leaves to `ridl diff`. A refusal widened
+/// to `InteractionInserted` would stop this republication.
+#[test]
+fn baseline_publishes_an_interaction_inserted_mid_body() {
+    assert_republish_is_not_refused("gate-mid-insert", THREE, INSERTED_MID_BODY);
+}
+
+/// `THREE` with `doorAjar` inserted between `doorOpened` and `doorClosed`.
+const INSERTED_MID_BODY: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorAjar: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// An inline-form service `doors`, numbered `service:doors 1`.
+const SERVICE_INLINE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+service veh.cluster.doors {
+  event doorOpened: DoorState @[100ms..1s]
+}
+";
+
+/// `SERVICE_INLINE` switched to the named form: the same body moves into an
+/// interface `doors`, and the service lists it.
+const SERVICE_NAMED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface doors {
+  event doorOpened: DoorState @[100ms..1s]
+}
+service veh.cluster.doors : doors
+";
+
+/// A service switched from the inline to the named form is not refused by the
+/// tombstone gate (ridl §17.14): `ridl-diff` reports `ServiceChanged`, which
+/// the gate does not read. The shape's number moves with a recorded rename
+/// (`ridl lock --rename`), which is the sanctioned refactor, so the lock's
+/// gate has nothing to refuse either.
+#[test]
+fn baseline_publishes_a_service_switched_from_inline_to_named_form() {
+    let dir = TempDir::new("gate-form-switch");
+    let root = package_workspace(&dir, SERVICE_INLINE);
+    publish(&root);
+
+    dir.write("cluster.ridl", SERVICE_NAMED);
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        root.as_os_str(),
+        "--rename".as_ref(),
+        "service:veh.cluster.doors=doors".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the rename is recorded: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "the form switch is admitted:\n{stderr}");
+    assert!(
+        !stderr.contains("RIDL-408"),
+        "the gate reads no refused change:\n{stderr}",
+    );
+}
+
 /// The gate compares against the directory publication is about to replace,
 /// which is `--out` when given — never the default `.ridl/baseline/`. A gate
 /// reading the default directory would compare against nothing for every
@@ -960,6 +1107,59 @@ fn baseline_refuses_to_republish_over_a_corrupt_snapshot() {
         "an exit-2 refusal removes the staging directory the compile wrote, exactly as an \
          exit-1 refusal does: {}",
         staging.display(),
+    );
+}
+
+/// The remedy of [`baseline_refuses_to_republish_over_a_corrupt_snapshot`] is
+/// advice for the published baseline only. `ridl check --baseline` is handed a
+/// path by its caller, so "remove the file" or "restore it from version
+/// control" would be wrong advice there: the command exits 2 with the bare
+/// parse error.
+#[test]
+fn check_baseline_names_no_remedy_for_a_corrupt_snapshot() {
+    let dir = TempDir::new("check-corrupt-snapshot");
+    let root = package_workspace(&dir, THREE);
+    publish(&root);
+    let path = snapshot(&root);
+    std::fs::write(&path, "<<<<<<< HEAD\n").expect("overwrite the snapshot with garbage");
+
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        path.as_os_str(),
+    ]);
+
+    assert_eq!(code, 2, "a corrupt snapshot is an input error:\n{stderr}");
+    assert!(
+        stderr.contains("veh.cluster.ir.json"),
+        "the message names the file that cannot be read:\n{stderr}",
+    );
+    assert_no_published_remedy(&stderr);
+}
+
+/// The same scope for `ridl diff`: a corrupt `.ir.json` is exit 2 with no
+/// advice that belongs to the publication gate.
+#[test]
+fn diff_names_no_remedy_for_a_corrupt_snapshot() {
+    let dir = TempDir::new("diff-corrupt-snapshot");
+    let root = package_workspace(&dir, THREE);
+    publish(&root);
+    let path = snapshot(&root);
+    std::fs::write(&path, "<<<<<<< HEAD\n").expect("overwrite the snapshot with garbage");
+
+    let (code, _, stderr) = ridl(&["diff".as_ref(), path.as_os_str(), root.as_os_str()]);
+
+    assert_eq!(code, 2, "a corrupt snapshot is an input error:\n{stderr}");
+    assert_no_published_remedy(&stderr);
+}
+
+/// The two phrases the publication gate's remedy carries and no other
+/// command may.
+fn assert_no_published_remedy(stderr: &str) {
+    assert!(
+        !stderr.contains("restore it from version control") && !stderr.contains("remove the file"),
+        "the publication gate's remedy is not advice for this command:\n{stderr}",
     );
 }
 
