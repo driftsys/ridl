@@ -46,6 +46,10 @@ must be right.
   plus `FixedReader` for a `read` of a `fixed`, over WebSocket.
 - Detects changed signals with `ScannableSignals` when the backend has it, and
   by reading each subscribed signal when it does not.
+- Builds the member table, which checks `kind` and gives the response bounds,
+  from the catalog descriptor that `ridl build --emit catalog` writes, under the
+  `descriptor` feature, off by default, so an embedder that passes no table
+  links no planus (driftsys/ridl#985).
 
 **What it does not do.** It serves no stand-in port (`SignalWriter`,
 `EventSink`, `Handler`; see "Adding the stand-in ports later"). It ships no
@@ -524,17 +528,28 @@ responses kept for duplicates are `server/calls.rs`.
   member's bound from the member table (D-10); the `min` keeps §7's "measured
   from the request's `stamp`" when the client's clock is behind, and caps the
   retention when a client stamps ahead, so stamping requests in the future holds
-  no response. Expired responses go on each tick. For a member the table gives
-  no bound (a catalog built before the default response bound), or with no
-  table, the server keeps the last 64 as before: a stated deviation from §11.1
-  item 6 (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
+  no response. The bound is taken only when the table holds the request's
+  identity as a command or query under the request's `kind`: a request the table
+  refuses (D-12) takes no bound from a member of another kind and is kept as one
+  of the last 64. Expired responses go on each tick. The kept responses are
+  indexed by `seq` and, for those with a bound, by the bound, so a repeat and an
+  expiry pass cost no scan of the kept set (up to the cap, a session may keep
+  hundreds of thousands of small responses). For a member the table gives no
+  bound (a catalog built before the default response bound), or with no table,
+  the server keeps the last 64 as before: a stated deviation from §11.1 item 6
+  (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
   retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
   by default), and a session never applies a cap below `max_message_bytes`; when
   a response makes the kept bytes pass the cap, the response is sent, then the
   session closes with 1008, which `serve` returns as
-  `Ended::ServerClosed(1008)`. Expired responses also go when a `request`
-  arrives, before its `seq` is placed. Closing is observable, where dropping the
-  oldest response would silently break item 6.
+  `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
+  server with no table, or one whose members have no bound, closes with 1008
+  when its replies are large enough to pass the cap before the ring holds 64 (at
+  the default 1 MiB message limit, 64 replies would be 64 MiB against the 16 MiB
+  default cap); an embedder with such replies sets `max_retained_bytes` to 64
+  times its message limit, which bounds the ring on its own. Expired responses
+  also go when a `request` arrives, before its `seq` is placed. Closing is
+  observable, where dropping the oldest response would silently break item 6.
 
 **D-17. `fixed`.** A `read` of a `fixed` calls `Backend::read_fixed` and sends
 one `publish` with `kind` `Fixed`, state `Live` with the value, `seq` 0, and
@@ -797,6 +812,5 @@ What the crate already does so that the addition is local:
 | waking on `Wakeable` instead of a polling tick                          | rejected | a waker cannot interrupt a blocking socket read without a second thread or a platform poller, both of which grow the crate; the tick bounds the latency to `poll_interval`                                                           |
 | `Invalid(Detected)` sent as `Live` with the last good value             | rejected | hides an invalidity from the client (D-13)                                                                                                                                                                                           |
 | forwarding the backend's `seq`                                          | rejected | a backend counter restarts with a replaced writer and interleaves across writers, so the consumer would discard later publications as stale (D-24)                                                                                   |
-| reading the catalog descriptor to check `kind` and bounds               | built    | under the `descriptor` feature, off by default, so an embedder that passes no table links no planus (driftsys/ridl#985)                                                                                                              |
 | a public Rust client                                                    | deferred | not needed by the first consumer, whose client is TypeScript; the test client covers the done-when (driftsys/ridl#989)                                                                                                               |
 | accepting the upgrade without a subprotocol and letting the client fail | rejected | a client that does not check would send `attach` on an unnegotiated connection (D-20)                                                                                                                                                |

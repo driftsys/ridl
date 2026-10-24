@@ -2,7 +2,7 @@
 //! settled responses kept for a repeated `request`, each until its bound has
 //! passed when the member table gives one, and the last 64 otherwise.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::time::Instant;
 
 use ridl_rt::port::Correlation;
@@ -48,22 +48,26 @@ pub(super) enum Seen {
 
 /// One kept response.
 struct Kept {
-    /// The client's `seq` the response answers.
-    seq: u64,
     /// The encoded `response`.
     bytes: Vec<u8>,
     /// The last instant of the backend's clock at which the response is
-    /// kept, or `None` when its bound is not known.
+    /// kept, or `None` when its bound is not known. The same value indexes
+    /// the entry in `Calls::by_until` or `Calls::ring`.
     until: Option<Timestamp>,
 }
 
 #[derive(Default)]
 pub(super) struct Calls {
     in_flight: Vec<InFlight>,
-    /// The responses kept, oldest first.
-    settled: VecDeque<Kept>,
-    /// The number of entries of `settled` whose `until` is `None`.
-    unbounded: usize,
+    /// The responses kept, by the request `seq` each answers. A `seq` is
+    /// settled at most once: the caller sends a request to the backend only
+    /// when [`seen`](Self::seen) returned [`Seen::New`].
+    settled: BTreeMap<u64, Kept>,
+    /// The `seq` of every entry of `settled` with a bound, in the order the
+    /// bounds pass: a later request may have an earlier bound.
+    by_until: BTreeSet<(Timestamp, u64)>,
+    /// The `seq` of every entry of `settled` with no bound, oldest first.
+    ring: VecDeque<u64>,
     /// The sum of the lengths of the responses in `settled`.
     bytes: usize,
     /// The highest request `seq` taken as new.
@@ -78,7 +82,7 @@ impl Calls {
         if self.in_flight.iter().any(|call| call.seq == seq) {
             return Seen::InFlight;
         }
-        match self.settled.iter().find(|kept| kept.seq == seq) {
+        match self.settled.get(&seq) {
             Some(kept) => Seen::Settled(kept.bytes.clone()),
             None => Seen::Older,
         }
@@ -114,20 +118,27 @@ impl Calls {
     /// last [`RETAINED`] such responses.
     pub(super) fn settle(&mut self, seq: u64, response: &[u8], until: Option<Timestamp>) {
         self.bytes += response.len();
-        self.settled.push_back(Kept {
+        let replaced = self.settled.insert(
             seq,
-            bytes: response.to_vec(),
-            until,
-        });
-        if until.is_some() {
-            return;
+            Kept {
+                bytes: response.to_vec(),
+                until,
+            },
+        );
+        debug_assert!(replaced.is_none(), "seq {seq} settled twice");
+        if let Some(old) = replaced {
+            self.unkeep(seq, old);
         }
-        self.unbounded += 1;
-        if self.unbounded > RETAINED {
-            if let Some(oldest) = self.settled.iter().position(|kept| kept.until.is_none()) {
-                if let Some(kept) = self.settled.remove(oldest) {
-                    self.bytes -= kept.bytes.len();
-                    self.unbounded -= 1;
+        match until {
+            Some(until) => {
+                self.by_until.insert((until, seq));
+            }
+            None => {
+                self.ring.push_back(seq);
+                if self.ring.len() > RETAINED {
+                    if let Some(oldest) = self.ring.pop_front() {
+                        self.forget(oldest);
+                    }
                 }
             }
         }
@@ -135,18 +146,132 @@ impl Calls {
 
     /// Lets go every response kept until an instant before `now`.
     pub(super) fn expire(&mut self, now: Timestamp) {
-        let bytes = &mut self.bytes;
-        self.settled.retain(|kept| match kept.until {
-            Some(until) if now > until => {
-                *bytes -= kept.bytes.len();
-                false
+        while let Some(&(until, seq)) = self.by_until.first() {
+            if now <= until {
+                break;
             }
-            _ => true,
-        });
+            self.by_until.pop_first();
+            self.forget(seq);
+        }
+    }
+
+    /// Takes the bytes and the index entry of `old`, the response kept under
+    /// `seq` that a second settle has replaced, out of the count and out of
+    /// `by_until` or `ring`. The caller settles a `seq` once, so this runs
+    /// only when that contract is broken in a release build; the count and
+    /// the indexes then follow the response kept.
+    fn unkeep(&mut self, seq: u64, old: Kept) {
+        self.bytes -= old.bytes.len();
+        match old.until {
+            Some(until) => {
+                self.by_until.remove(&(until, seq));
+            }
+            None => self.ring.retain(|s| *s != seq),
+        }
+    }
+
+    /// Removes the kept response of `seq` and its bytes from the count. The
+    /// caller has removed `seq` from its index.
+    fn forget(&mut self, seq: u64) {
+        if let Some(kept) = self.settled.remove(&seq) {
+            self.bytes -= kept.bytes.len();
+        }
     }
 
     /// The bytes of every response kept.
     pub(super) fn retained_bytes(&self) -> usize {
         self.bytes
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn settled(calls: &Calls, seq: u64) -> Option<Vec<u8>> {
+        match calls.seen(seq) {
+            Seen::Settled(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
+
+    fn settle(calls: &mut Calls, seq: u64, len: usize, until: Option<i64>) {
+        calls.accept(seq);
+        calls.settle(seq, &vec![seq as u8; len], until.map(Timestamp));
+    }
+
+    /// A later request may have an earlier bound (a shorter `max`, or a
+    /// stamp behind the clock), so expiry is by `until`, not by `seq`; two
+    /// responses may share a bound, and one pass lets go every response due.
+    ///
+    /// Mutations: expire from the front by `seq`; expire one response per
+    /// pass.
+    #[test]
+    fn expiry_follows_the_bound_not_the_seq_and_the_bytes_stay_exact() {
+        let mut calls = Calls::default();
+        settle(&mut calls, 1, 10, Some(100));
+        settle(&mut calls, 2, 20, Some(50));
+        settle(&mut calls, 3, 30, None);
+        settle(&mut calls, 4, 40, Some(100));
+        assert_eq!(calls.retained_bytes(), 100);
+        calls.expire(Timestamp(50)); // not after 50: nothing goes
+        assert_eq!(calls.retained_bytes(), 100);
+        calls.expire(Timestamp(51));
+        assert_eq!(calls.retained_bytes(), 80);
+        assert_eq!(settled(&calls, 1), Some(vec![1; 10]));
+        assert!(matches!(calls.seen(2), Seen::Older));
+        assert_eq!(settled(&calls, 3), Some(vec![3; 30]));
+        assert_eq!(settled(&calls, 4), Some(vec![4; 40]));
+        calls.expire(Timestamp(101)); // 1 and 4 are due in the same pass
+        assert_eq!(calls.retained_bytes(), 30);
+        assert!(matches!(calls.seen(1), Seen::Older));
+        assert!(matches!(calls.seen(4), Seen::Older));
+        assert_eq!(settled(&calls, 3), Some(vec![3; 30]));
+    }
+
+    /// The caller settles a `seq` once; a second settle is a defect of the
+    /// caller, which a debug build reports.
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "seq 1 settled twice")]
+    fn a_seq_settled_twice_is_a_defect_of_the_caller() {
+        let mut calls = Calls::default();
+        settle(&mut calls, 1, 5, None);
+        calls.settle(1, &[9; 5], Some(Timestamp(10)));
+    }
+
+    /// Mutations: leave the replaced bytes in the count; leave the ring or
+    /// the by-bound entry in place; swap the two arms.
+    #[test]
+    fn unkeep_takes_a_replaced_response_out_of_the_count_and_its_index() {
+        let mut calls = Calls::default();
+        settle(&mut calls, 1, 5, None);
+        settle(&mut calls, 2, 7, Some(100));
+        let old = calls.settled.remove(&1).expect("kept");
+        calls.unkeep(1, old);
+        assert_eq!(calls.retained_bytes(), 7);
+        assert!(calls.ring.is_empty());
+        assert_eq!(calls.by_until.len(), 1);
+        let old = calls.settled.remove(&2).expect("kept");
+        calls.unkeep(2, old);
+        assert_eq!(calls.retained_bytes(), 0);
+        assert!(calls.by_until.is_empty());
+    }
+
+    /// Mutation: count a bounded response against the ring.
+    #[test]
+    fn the_ring_evicts_only_responses_with_no_bound_and_counts_their_bytes_out() {
+        let mut calls = Calls::default();
+        settle(&mut calls, 1, 5, None);
+        settle(&mut calls, 2, 7, Some(1_000));
+        for seq in 3..=(RETAINED as u64 + 1) {
+            settle(&mut calls, seq, 1, None);
+        }
+        assert_eq!(calls.retained_bytes(), 5 + 7 + (RETAINED - 1));
+        // The 65th unbounded response pushes seq 1 out; the bounded one stays.
+        settle(&mut calls, RETAINED as u64 + 2, 1, None);
+        assert!(matches!(calls.seen(1), Seen::Older));
+        assert_eq!(settled(&calls, 2), Some(vec![2; 7]));
+        assert_eq!(calls.retained_bytes(), 7 + RETAINED);
     }
 }

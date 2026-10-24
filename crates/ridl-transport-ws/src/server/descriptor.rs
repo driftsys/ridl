@@ -11,6 +11,7 @@ use super::members::MemberTable;
 
 /// Why [`MemberTable::from_descriptor`] refused a buffer.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum DescriptorError {
     /// `ridl_descriptor::verify` refused the buffer.
     Verify(VerifyError),

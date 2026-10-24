@@ -350,6 +350,23 @@ fn a_client_close_returns_client_closed_with_its_code() {
     assert_eq!(handle.join().0, Ended::ClientClosed(Some(4000)));
 }
 
+/// 1008 is the code the server itself sends when the retained bytes pass the
+/// cap; a client that closes with it first is answered as any other close.
+#[test]
+fn a_client_close_with_1008_is_answered_with_1008() {
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    ws.close(Some(CloseFrame {
+        code: CloseCode::Policy,
+        reason: "".into(),
+    }))
+    .unwrap();
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Policy));
+    assert_eq!(handle.join().0, Ended::ClientClosed(Some(1008)));
+}
+
 #[test]
 fn the_server_pings_every_ping_interval() {
     let interval = Duration::from_millis(50);
