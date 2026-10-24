@@ -903,9 +903,7 @@ fn diff_interaction(
 
     // The declared payload limit is compared once for any pair of the same
     // kind; a kind change is reported alone as `KindChanged`.
-    if old.limit != new.limit
-        && kind_discriminant(&old.kind) == kind_discriminant(&new.kind)
-    {
+    if old.limit != new.limit && kind_discriminant(&old.kind) == kind_discriminant(&new.kind) {
         emit(
             changes,
             path.to_string(),
