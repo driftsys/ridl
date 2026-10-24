@@ -3940,14 +3940,17 @@ mod tests {
 
     /// The frame admits a `request` under a kind that is not a call; the
     /// table holds the identity under that kind, so the form check refuses
-    /// it, and the member's bound is still not a call bound.
+    /// it, and the member's bound is still not a call bound. `Kind` has three
+    /// such kinds, and each is walked.
     ///
     /// Mutations: drop the Command-or-Query condition and keep the kind
-    /// comparison; refuse the bound for `Signal` only.
+    /// comparison; refuse the bound for `Signal` only, or for `Signal` and
+    /// `Event` only.
     #[test]
-    fn a_refused_request_to_a_bounded_signal_or_event_under_its_own_kind_falls_into_the_last_64() {
-        assert_refused_requests_fall_into_the_last_64(Kind::Signal, target(Kind::Signal, 8));
-        assert_refused_requests_fall_into_the_last_64(Kind::Event, target(Kind::Event, 8));
+    fn a_refused_request_to_a_bounded_non_call_member_under_its_own_kind_falls_into_the_last_64() {
+        for kind in [Kind::Signal, Kind::Event, Kind::Fixed] {
+            assert_refused_requests_fall_into_the_last_64(kind, target(kind, 8));
+        }
     }
 
     /// Mutation: keep the bound for `Kind::Command` only.

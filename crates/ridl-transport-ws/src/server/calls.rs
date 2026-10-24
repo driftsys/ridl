@@ -126,16 +126,8 @@ impl Calls {
             },
         );
         debug_assert!(replaced.is_none(), "seq {seq} settled twice");
-        // The caller settles a `seq` once; should it not, the count and the
-        // indexes stay consistent in a release build.
         if let Some(old) = replaced {
-            self.bytes -= old.bytes.len();
-            match old.until {
-                Some(until) => {
-                    self.by_until.remove(&(until, seq));
-                }
-                None => self.ring.retain(|s| *s != seq),
-            }
+            self.unkeep(seq, old);
         }
         match until {
             Some(until) => {
@@ -160,6 +152,21 @@ impl Calls {
             }
             self.by_until.pop_first();
             self.forget(seq);
+        }
+    }
+
+    /// Takes the bytes and the index entry of `old`, the response kept under
+    /// `seq` that a second settle has replaced, out of the count and out of
+    /// `by_until` or `ring`. The caller settles a `seq` once, so this runs
+    /// only when that contract is broken in a release build; the count and
+    /// the indexes then follow the response kept.
+    fn unkeep(&mut self, seq: u64, old: Kept) {
+        self.bytes -= old.bytes.len();
+        match old.until {
+            Some(until) => {
+                self.by_until.remove(&(until, seq));
+            }
+            None => self.ring.retain(|s| *s != seq),
         }
     }
 
@@ -224,12 +231,31 @@ mod tests {
 
     /// The caller settles a `seq` once; a second settle is a defect of the
     /// caller, which a debug build reports.
+    #[cfg(debug_assertions)]
     #[test]
     #[should_panic(expected = "seq 1 settled twice")]
     fn a_seq_settled_twice_is_a_defect_of_the_caller() {
         let mut calls = Calls::default();
         settle(&mut calls, 1, 5, None);
         calls.settle(1, &[9; 5], Some(Timestamp(10)));
+    }
+
+    /// Mutations: leave the replaced bytes in the count; leave the ring or
+    /// the by-bound entry in place; swap the two arms.
+    #[test]
+    fn unkeep_takes_a_replaced_response_out_of_the_count_and_its_index() {
+        let mut calls = Calls::default();
+        settle(&mut calls, 1, 5, None);
+        settle(&mut calls, 2, 7, Some(100));
+        let old = calls.settled.remove(&1).expect("kept");
+        calls.unkeep(1, old);
+        assert_eq!(calls.retained_bytes(), 7);
+        assert!(calls.ring.is_empty());
+        assert_eq!(calls.by_until.len(), 1);
+        let old = calls.settled.remove(&2).expect("kept");
+        calls.unkeep(2, old);
+        assert_eq!(calls.retained_bytes(), 0);
+        assert!(calls.by_until.is_empty());
     }
 
     /// Mutation: count a bounded response against the ring.
