@@ -753,6 +753,28 @@ fn runtime_check_fails_when_the_locked_fetch_fails() {
 }
 
 #[test]
+fn runtime_check_fails_when_a_runtime_crate_is_not_a_package() {
+    let repo = repo_with_runtime_baseline("runtime-renamed", &api_fixture("src/lib.rs"));
+    repo.write(
+        "crates/ridl-transport-ws/Cargo.toml",
+        "[package]\nname = \"ridl-transport-ws-renamed\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    let status = Command::new("cargo")
+        .args(["generate-lockfile", "--offline", "--manifest-path"])
+        .arg(repo.dir.join("Cargo.toml"))
+        .status()
+        .unwrap();
+    assert!(status.success(), "cargo generate-lockfile failed");
+    let output = check_api_semver(&repo, "runtime-crates");
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("ridl-transport-ws which is not a package of the workspace"),
+        "{err}"
+    );
+}
+
+#[test]
 fn generated_check_fails_when_the_locked_fetch_fails() {
     let repo = repo_with_api_baseline(
         "generated-fetch",
