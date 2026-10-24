@@ -316,6 +316,34 @@ fn assert_unknown_ref_hint(err: &str, surface: &str) {
     );
 }
 
+#[test]
+fn check_fails_when_the_baseline_is_not_an_ancestor_of_head() {
+    let repo = Repo::new("not-ancestor");
+    repo.write("freeze/surfaces.toml", "");
+    repo.commit();
+    // The tag `base` names a commit on a side branch that HEAD does not
+    // contain, as a commit of an unmerged branch does after a squash merge.
+    repo.git(&["switch", "-q", "-c", "side"]);
+    repo.write("freeze/fixture.txt", "a\n");
+    repo.commit();
+    repo.git(&["tag", "base"]);
+    repo.git(&["switch", "-q", "-"]);
+    repo.write("freeze/surfaces.toml", ROW);
+    repo.write("freeze/fixture.txt", "a\n");
+    repo.commit();
+    let fixture = repo.dir.join("fixture-lines.txt");
+    std::fs::write(&fixture, "a\n").unwrap();
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("surface `fixture`")
+            && err.contains("(row: name = \"fixture\", baseline = \"base\")")
+            && err.contains("not an ancestor of HEAD"),
+        "{err}"
+    );
+}
+
 const ROW: &str =
     "required = [\"fixture\"]\n\n[[surface]]\nname = \"fixture\"\nbaseline = \"base\"\n";
 

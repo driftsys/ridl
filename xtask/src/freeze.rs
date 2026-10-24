@@ -436,7 +436,7 @@ fn verify_baseline(root: &Path, row: &Row) -> Result<(), String> {
         .output()
         .map_err(|e| format!("cannot run git: {e}"))?;
     if output.status.success() {
-        return Ok(());
+        return verify_ancestor(root, row);
     }
     Err(format!(
         "surface `{}`: the baseline `{}` names no commit of this clone (row: name = \"{}\", \
@@ -444,6 +444,33 @@ baseline = \"{}\"). Fetch it with `git fetch origin {}`, or with `git fetch --ta
 tag. A shallow clone has no history: in CI, check out with `fetch-depth: 0`.",
         row.surface, row.baseline, row.surface, row.baseline, row.baseline
     ))
+}
+
+/// Fails when the row's baseline is a commit that HEAD does not contain. A
+/// commit of an unmerged branch is such a commit once a squash merge replaces
+/// the branch.
+fn verify_ancestor(root: &Path, row: &Row) -> Result<(), String> {
+    let output = bin::git(root)
+        .args(["merge-base", "--is-ancestor", "--end-of-options"])
+        .arg(format!("{}^{{commit}}", row.baseline))
+        .arg("HEAD")
+        .output()
+        .map_err(|e| format!("cannot run git: {e}"))?;
+    match output.status.code() {
+        Some(0) => Ok(()),
+        Some(1) => Err(format!(
+            "surface `{}`: the baseline `{}` is not an ancestor of HEAD (row: name = \"{}\", \
+baseline = \"{}\"). A commit of a branch that was not merged, or that a squash merge replaced, \
+is not a valid baseline: point the row at a commit or tag on the history of HEAD.",
+            row.surface, row.baseline, row.surface, row.baseline
+        )),
+        _ => Err(format!(
+            "surface `{}`: cannot check that the baseline `{}` is an ancestor of HEAD: {}",
+            row.surface,
+            row.baseline,
+            String::from_utf8_lossy(&output.stderr).trim()
+        )),
+    }
 }
 
 /// `git show <baseline>:freeze/<surface>.txt` in `root`.
