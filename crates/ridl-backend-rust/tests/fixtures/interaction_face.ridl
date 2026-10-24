@@ -150,10 +150,7 @@ interface Zone {
 // maximum provisions three sixteen-character keys. The signal, the command
 // and the two queries reach the three sites that encode a payload: the
 // publisher's setter, a client's send, and `dispatch`'s reply. Named to sort
-// after `Zone`, for the reason `Siren` gives. `Log.samples` holds `Window`
-// rather than `Level` because a vector of a one-byte element makes the codec
-// emit `__c.len() * 1usize`, which `clippy::identity_op` refuses in this
-// crate's own test build.
+// after `Zone`, for the reason `Siren` gives.
 
 /// A tag on a log entry.
 type Tag : string [1..16]

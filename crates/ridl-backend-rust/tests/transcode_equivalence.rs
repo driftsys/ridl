@@ -31,10 +31,6 @@ use ridl_rt::payload::{EncodeError, Ref, Rule, TranscodeError, VerifyError};
     clippy::collapsible_if,
     reason = "the emitted code targets edition 2021, where an `if` and an `if let` cannot be joined"
 )]
-#[allow(
-    clippy::identity_op,
-    reason = "the emitted array codec multiplies a length by an element size of 1"
-)]
 mod generated {
     include!("generated/transcode.rs");
 }
@@ -340,6 +336,49 @@ fn a_value_outside_a_declared_range_fails_with_a_contract_violation() {
     );
     Level::transcode_proto3_to_flatbuffers(&[0x08, 0x09], &mut out)
         .expect("-5 is inside the range");
+    // The upper bound is 10: zigzag 20 is 0x14 and 22 is 0x16.
+    assert_range_violation(
+        Level::transcode_proto3_to_flatbuffers(&[0x08, 0x16], &mut out),
+        "Level",
+    );
+    Level::transcode_proto3_to_flatbuffers(&[0x08, 0x14], &mut out)
+        .expect("10 is inside the range");
+}
+
+#[test]
+fn a_range_violation_inside_a_composite_fails_in_both_directions() {
+    let mut a = [0u8; BUFFER];
+    let mut out = [0u8; BUFFER];
+    let value = reading(200, 0, "x", Mode::Idle, 0.0, false);
+
+    // Proto3: field 1 of `Reading` is the count, a varint. 200 is `c8 01`
+    // and 201 is `c9 01`.
+    let mut proto3 = Ref::<Reading, Proto3>::encode(&value, &mut a)
+        .expect("encode proto3")
+        .bytes()
+        .to_vec();
+    assert_eq!(proto3[..3], [0x08, 0xc8, 0x01]);
+    Reading::transcode_proto3_to_flatbuffers(&proto3, &mut out).expect("200 is inside the range");
+    proto3[1] = 0xc9;
+    assert_range_violation(
+        Reading::transcode_proto3_to_flatbuffers(&proto3, &mut out),
+        "Count",
+    );
+
+    // FlatBuffers: change the one stored byte that holds the count.
+    let mut flatbuffers = Ref::<Reading, FlatBuffers>::encode(&value, &mut a)
+        .expect("encode flatbuffers")
+        .bytes()
+        .to_vec();
+    Reading::transcode_flatbuffers_to_proto3(&flatbuffers, &mut out)
+        .expect("200 is inside the range");
+    let at = flatbuffers.iter().position(|&b| b == 200).expect("a 200");
+    assert_eq!(flatbuffers.iter().filter(|&&b| b == 200).count(), 1);
+    flatbuffers[at] = 201;
+    assert_range_violation(
+        Reading::transcode_flatbuffers_to_proto3(&flatbuffers, &mut out),
+        "Count",
+    );
 }
 
 #[test]
@@ -370,6 +409,19 @@ fn a_flatbuffers_value_outside_a_declared_range_fails_with_a_contract_violation(
     let at = level_bytes.iter().position(|&b| b == 0xfb).expect("a -5");
     assert_eq!(level_bytes.iter().filter(|&&b| b == 0xfb).count(), 1);
     level_bytes[at] = 0xfa;
+    assert_range_violation(
+        Level::transcode_flatbuffers_to_proto3(&level_bytes, &mut out),
+        "Level",
+    );
+    // The upper bound is 10 (0x0a); 11 is 0x0b.
+    let mut level_bytes = Ref::<Level, FlatBuffers>::encode(&level(10), &mut a)
+        .expect("encode flatbuffers")
+        .bytes()
+        .to_vec();
+    Level::transcode_flatbuffers_to_proto3(&level_bytes, &mut out).expect("10 is inside the range");
+    let at = level_bytes.iter().position(|&b| b == 0x0a).expect("a 10");
+    assert_eq!(level_bytes.iter().filter(|&&b| b == 0x0a).count(), 1);
+    level_bytes[at] = 0x0b;
     assert_range_violation(
         Level::transcode_flatbuffers_to_proto3(&level_bytes, &mut out),
         "Level",

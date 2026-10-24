@@ -1873,7 +1873,8 @@ impl<'a> Codec<'a> {
                 quote! { #call(#reference, builder)? }
             }
             Wire::Vector { element, min, max } => {
-                let stride = Literal::usize_suffixed(element.inline_width());
+                let width = element.inline_width();
+                let stride = Literal::usize_suffixed(width);
                 // An exact count makes the Rust type `[T; N]`, whose length is
                 // `N` for every value, so there is nothing for the sender to
                 // get wrong and no check to emit.
@@ -1896,12 +1897,19 @@ impl<'a> Codec<'a> {
                             Prim::Bool => quote! { #raw as ::core::primitive::u8 },
                             _ => raw,
                         };
+                        // A one-byte element needs no multiplication, and
+                        // `clippy::identity_op` rejects `* 1usize`.
+                        let capacity = if width == 1 {
+                            quote! { __c.len() }
+                        } else {
+                            quote! { __c.len() * #stride }
+                        };
                         quote! {
                             {
                                 let __c = #reference;
                                 #count
                                 let mut __bytes: ::std::vec::Vec<::core::primitive::u8> =
-                                    ::std::vec::Vec::with_capacity(__c.len() * #stride);
+                                    ::std::vec::Vec::with_capacity(#capacity);
                                 for __e in __c.iter() {
                                     let __s = *__e;
                                     let __r = #raw;
