@@ -32,6 +32,10 @@ name = "mcp"
 baseline = "v0.10.0"
 
 [[surface]]
+name = "msrv"
+baseline = "016167c90fe1418df512a60330e70b35a55c4a7b"
+
+[[surface]]
 name = "wire"
 baseline = "e5e59bd1"
 
