@@ -374,6 +374,7 @@ impl ServerState {
             root_package: _,
             codegen_header: _,
             backends: _,
+            unit_limits: _,
             imports: _,
             remote_units,
         } = load_workspace_with_remotes(

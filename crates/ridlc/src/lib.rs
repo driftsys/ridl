@@ -178,6 +178,8 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             // No manifest: no header file.
             codegen_header: None,
             backends: BTreeMap::new(),
+            // No manifest: no `[limits]` table.
+            unit_limits: BTreeMap::new(),
             report_scope: None,
             // A source text has no directory, so no unit is recorded.
             units: BTreeMap::new(),
@@ -2273,6 +2275,9 @@ struct Compiled {
     codegen_header: Option<String>,
     /// The `[backend.<name>]` tables ([`LoadedWorkspace::backends`]).
     backends: BTreeMap<String, ridl_core::BackendTable>,
+    /// Each unit's `[limits]` table ([`LoadedWorkspace::unit_limits`]).
+    #[allow(dead_code)] // read by the payload-limit check
+    limits: BTreeMap<String, ridl_core::UnitLimits>,
     /// The member directory the entry lies in
     /// ([`LoadedWorkspace::report_scope`]).
     report_scope: Option<PathBuf>,
@@ -2314,6 +2319,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         lints,
         codegen_header,
         backends,
+        unit_limits,
         report_scope,
         units: _,
         root_package,
@@ -2447,6 +2453,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         lints,
         codegen_header,
         backends,
+        limits: unit_limits,
         report_scope,
         root_package,
         remote_units,
