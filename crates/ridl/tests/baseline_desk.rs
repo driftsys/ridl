@@ -1463,15 +1463,24 @@ fn check_tells_a_misplaced_tombstone_and_a_last_member_from_a_retirement() {
 
 /// An enum value added or removed is `ridl diff`'s alone: RIDL-407 is about
 /// ordinals, and an enum value's identity is its explicit number (typl §8),
-/// so the desk check stays silent whatever the gate says about it.
+/// so the desk check stays silent whatever the gate says about it. The append
+/// is compatible and so is filtered out before the desk reads the container;
+/// `check_is_silent_for_an_enum_value_inserted_below_the_highest_number`
+/// covers the addition that the gate refuses.
 #[test]
 fn check_is_silent_for_an_enum_value_added_or_removed() {
-    for (label, edit, change) in [
-        ("value-removed", "", "decl_removed veh.cluster/Gear/DRIVE"),
+    for (label, edit, change, gate) in [
+        (
+            "value-removed",
+            "",
+            "decl_removed veh.cluster/Gear/DRIVE",
+            1,
+        ),
         (
             "value-added",
             "  DRIVE = 1\n  REVERSE = 2\n",
             "decl_added veh.cluster/Gear/REVERSE",
+            0,
         ),
     ] {
         let dir = TempDir::new(label);
@@ -1480,10 +1489,14 @@ fn check_is_silent_for_an_enum_value_added_or_removed() {
         assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
 
         dir.write("cluster.ridl", &COMPOSITES.replace("  DRIVE = 1\n", edit));
-        let (_, diff) = diff_against_baseline(&root);
+        let (diff_code, diff) = diff_against_baseline(&root);
         assert!(
             diff.contains(change),
             "{label}: the diff reports the enum value change:\n{diff}"
+        );
+        assert_eq!(
+            diff_code, gate,
+            "{label}: the gate refuses a removal and passes an append:\n{diff}"
         );
 
         let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
@@ -3220,4 +3233,163 @@ struct Report {
         !block.contains(" and and "),
         "one conjunction, not two:\n{block}",
     );
+}
+
+/// (driftsys/ridl#590) The append, misplaced-tombstone and last-member
+/// messages are written for a struct field and read the same for a union arm:
+/// the member kind is only the word in the shape's name. These cases ran on
+/// `struct Report` alone, so a union that fell out of the shared reading would
+/// have passed.
+#[test]
+fn check_explains_the_same_drifts_for_a_union_arm() {
+    for (label, body, member, opening, detail, declaration, location) in [
+        (
+            "swap-and-append",
+            "union Reading {\n  latch: LatchState\n  door: DoorState\n  hinge: DoorState\n}",
+            "hinge",
+            "`hinge` is declared in `Reading` after every ordinal the published baseline \
+             assigns or retires",
+            "because `latch` and `door` changed ordinal in the same edit",
+            "hinge: DoorState",
+            "cluster.ridl:11:3",
+        ),
+        (
+            "misplaced-tombstone",
+            "union Reading {\n  latch: LatchState\n  reserved door\n}",
+            "door",
+            "`door` is gone in `Reading` but the published baseline declares it at ordinal 1, \
+             and the `reserved door` entry sits at ordinal 2, not there",
+            "`latch` slid into a wire identity that is not its own",
+            "reserved door",
+            "cluster.ridl:10:3",
+        ),
+        (
+            "last-member",
+            "union Reading {\n  door: DoorState\n}",
+            "latch",
+            "`latch` is gone in `Reading` but the published baseline declares it at ordinal 2.",
+            "which a later member could take",
+            "Reading",
+            "cluster.ridl:8:7",
+        ),
+    ] {
+        let dir = TempDir::new(label);
+        let root = package_workspace(&dir, COMPOSITES);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write(
+            "cluster.ridl",
+            &COMPOSITES.replace(
+                "union Reading {\n  door: DoorState\n  latch: LatchState\n}",
+                body,
+            ),
+        );
+        let (code, diff) = diff_against_baseline(&root);
+        assert_eq!(code, 1, "{label}: `ridl diff` gates on the edit:\n{diff}");
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert_eq!(
+            stderr.matches("warning[RIDL-407]").count(),
+            1,
+            "{label}: one warning, for the added or removed arm:\n{stderr}",
+        );
+        let block = ridl_407_block(&stderr, member);
+        assert!(
+            block.starts_with(&format!("warning[RIDL-407]: {opening}")) && block.contains(detail),
+            "{label}: the message names the shape and the cause:\n{stderr}",
+        );
+        assert_underlines(block, declaration, location, &stderr);
+        assert_eq!(
+            code, 0,
+            "{label}: the warning leaves the exit code alone:\n{stderr}",
+        );
+    }
+}
+
+/// (driftsys/ridl#590) `member_drift` reads `before.result || after.result`
+/// for an appended arm. The other test of a result union covers the union
+/// that becomes one. This covers the union that stops being one: the error
+/// arm's type loses its `error` keyword in the same edit that appends an arm,
+/// so the baseline is a result union and the current body is not. Reading
+/// `after.result` alone drops the warning, and the gate still reports the arm.
+#[test]
+fn check_repeats_the_gate_on_an_arm_added_to_a_union_that_stops_being_a_result_union() {
+    let fixture = format!(
+        "{COMPOSITES}error struct Fault {{\n  code: DoorState\n}}\nunion Outcome {{\n  ok: \
+         Reading\n  err: Fault\n}}\n"
+    );
+    let dir = TempDir::new("result-demoted");
+    let root = package_workspace(&dir, &fixture);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    let edited = fixture
+        .replace("error struct Fault", "struct Fault")
+        .replace("  err: Fault\n", "  err: Fault\n  extra: DoorState\n");
+    dir.write("cluster.ridl", &edited);
+    let (code, diff) = diff_against_baseline(&root);
+    assert_eq!(code, 1, "`ridl diff` gates on the edit:\n{diff}");
+    assert!(
+        diff.contains("[breaking] decl_added veh.cluster/Outcome/extra"),
+        "the diff reports the added arm as breaking:\n{diff}",
+    );
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    let block = ridl_407_block(&stderr, "extra");
+    assert!(
+        block.contains("a result union's arms are its transport identity")
+            && block.contains("This warning repeats the gate"),
+        "the message says the gate reports the arm because of the baseline's result union:\n\
+         {stderr}",
+    );
+    assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
+}
+
+/// (driftsys/ridl#590) An enum value or enum-set bit added below the
+/// baseline's highest number is an insertion, and `ridl diff` reports it as
+/// breaking. The desk stays silent all the same: the value takes its identity
+/// from its explicit number, not from an ordinal. This is the case that
+/// reaches the desk's struct-or-union guard, which the compatible addition in
+/// `check_is_silent_for_an_enum_value_added_or_removed` does not.
+#[test]
+fn check_is_silent_for_an_enum_value_inserted_below_the_highest_number() {
+    let baseline = COMPOSITES
+        .replace("  DRIVE = 1\n", "  DRIVE = 2\n")
+        .replace("  DOOR_OPEN = 1\n", "  DOOR_OPEN = 2\n");
+    for (label, edit, change) in [
+        (
+            "enum",
+            baseline.replace("  DRIVE = 2\n", "  NEUTRAL = 1\n  DRIVE = 2\n"),
+            "decl_added veh.cluster/Gear/NEUTRAL",
+        ),
+        (
+            "enumset",
+            baseline.replace("  DOOR_OPEN = 2\n", "  BRAKE = 1\n  DOOR_OPEN = 2\n"),
+            "decl_added veh.cluster/Warnings/BRAKE",
+        ),
+    ] {
+        let dir = TempDir::new(label);
+        let root = package_workspace(&dir, &baseline);
+        let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+        assert_eq!(code, 0, "{label}: the baseline is written: {stderr}");
+
+        dir.write("cluster.ridl", &edit);
+        let (code, diff) = diff_against_baseline(&root);
+        assert_eq!(
+            code, 1,
+            "{label}: `ridl diff` gates on the insertion:\n{diff}"
+        );
+        assert!(
+            diff.contains(&format!("[breaking] {change}")),
+            "{label}: the diff reports the insertion as breaking:\n{diff}",
+        );
+
+        let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+        assert!(
+            !stderr.contains("RIDL-407"),
+            "{label}: an enum value inserted draws no desk warning:\n{stderr}",
+        );
+        assert_eq!(code, 0, "{label}: the check passes:\n{stderr}");
+    }
 }
