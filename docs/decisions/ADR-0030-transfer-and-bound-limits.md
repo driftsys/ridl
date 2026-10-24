@@ -19,6 +19,14 @@ The two lints (decisions 6 to 9) land first. The codec cap, `PAYLOAD_CEILING`,
 Written from driftsys/ridl#996 and the owner's decisions of 2026-10-21, which
 replace the payload ceiling of 4 MiB + 64 KiB that the owner set on 2026-10-20.
 
+Amended 2026-10-24 from driftsys/ridl#1045 and the owner's decisions of that
+day: decision 10 is changed in place, and decisions 12 to 15 are added. The
+limits now have one source, the compiled workspace, and neither an embedder nor
+a client can raise them. The amendment lands as a decision first; the code
+follows in separate issues, and the change to `with_max_message_bytes` is a
+breaking change of the published `ridl-transport-ws` API, released in a version
+marked breaking.
+
 When accepted, these records gain a dated note or are changed in place:
 
 - ADR-0021: decision 17 and the note of 2026-10-20 say a payload with no finite
@@ -171,13 +179,66 @@ When accepted, these records gain a dated note or are changed in place:
 
 10. **The WebSocket default limit becomes 16,384 bytes.** `ridl-transport-ws`
     changes its `max_message_bytes` default from 1 MiB to one transfer, which is
-    at least 36 + `PAYLOAD_CEILING`. `with_max_message_bytes` still allows a
-    larger value for a deployment that needs one.
+    at least 36 + `PAYLOAD_CEILING`. Amended 2026-10-24: the message limit is
+    not a free `Config` value. It is the transport's data-plane header plus the
+    largest interaction limit of the catalogs the server carries (decision 14),
+    and never more than one transfer. `with_max_message_bytes` may only lower
+    it; a value above the derived limit is refused at configuration, as
+    `with_max_retained_bytes` refuses a value below its minimum today. The
+    earlier text, which let a deployment set a larger value, is withdrawn,
+    because the limit sizes the platform memory and every peer must read it from
+    the same source.
 
 11. **Data larger than one transfer is a stream.** A firmware image, a file or
     an image larger than 16 KiB is modelled as a stream of bounded elements
     (ridl reference §12). Until streams are built (driftsys/ridl#336) the
     platform carries no single value larger than one transfer.
+
+12. **Each interaction has its own payload limit** (added 2026-10-24). Each
+    interaction may allocate and carry its payload in a different way, so each
+    has its own limit, in bytes of encoded payload. The limit of an interaction
+    is, first found:
+    - the assignment attribute `max_bytes = N` on the interaction, a new row of
+      the attribute registry (`ridl_core::attributes::ATTRIBUTES`), legal on
+      every interaction kind, whose machine consumers are the checker of
+      decision 13 and the member table of decision 14;
+    - the catalog-wide default, set in the workspace manifest and recorded in
+      the catalog descriptor, so a peer reads the same value the checker used;
+    - the payload ceiling of decision 2.
+
+    No limit may be above the ceiling: a `max_bytes` or a catalog default above
+    16,256 is an error at check time. The ceiling stays the upper bound for
+    every interaction and is changed only by amending this record.
+
+13. **A payload above a declared limit is an error** (added 2026-10-24). When an
+    interaction has a limit from `max_bytes` or from a catalog default, and the
+    computed bound of its payload, in an encoding the workspace enables (the
+    same set as RIDL-150), is larger than that limit or has no finite bound, the
+    checker reports a new error, RIDL-151 `payload-above-limit`, on the
+    interaction. It is an error, not a lint, because the author declared the
+    limit and the payload breaks it. Where no limit is declared, the
+    interaction's limit is the ceiling and RIDL-150 stays at `warn` (decisions 7
+    and 9): no source that compiled before this amendment stops compiling, and
+    the ros2 corpus is unchanged. A call checks its arguments and its reply
+    against the same limit; an event and a signal check their value.
+
+14. **The transport derives its limits from the catalog** (added 2026-10-24).
+    The member table of the catalog descriptor (driftsys/ridl#1042), which
+    already holds each member's response bound, also holds each member's limit.
+    A server refuses a frame whose payload is above the limit of its own
+    interaction, with the refusal the frame specification §11.1 gives for a
+    message above the limit. The WebSocket message limit of decision 10 is the
+    header plus the largest limit in the table. Because every peer reads the
+    limits from the same compiled catalog, a peer never receives a message
+    larger than its own limit allows, which answers how limits are published to
+    peers.
+
+15. **The retained-bytes cap derives from the same source** (added 2026-10-24).
+    With a fixed message limit, the clamp of ruling R-C1
+    (`max(cap, message limit)`) is removed. The smallest valid cap is the
+    message limit of decision 14, and `RetainedTooSmall` states that value.
+    `with_max_retained_bytes` keeps its role of sizing the memory an embedder
+    grants a session, above that minimum.
 
 ## Where the rules are stated
 
@@ -210,6 +271,19 @@ When accepted, these records gain a dated note or are changed in place:
 - **Refusing a type with no finite bound, as today.** Rejected: imported schemas
   such as ROS 2 use unbounded strings, and the ceiling already gives a receiver
   a limit it can check.
+- **A transport limit an embedder may raise** (the text of decision 10 before
+  2026-10-24). Rejected: the limit sizes the platform memory, and a peer with a
+  lower limit would close the session of a peer that uses a higher one (frame
+  specification §11.1).
+- **Raise RIDL-150 to `error`.** Rejected on 2026-10-24: every unbounded string
+  of an imported schema would stop compiling, and the ros2 corpus would need a
+  bound on each. The error applies only where an author declared a limit
+  (decision 13).
+- **Declare the per-interaction limit in `ridl.toml` only.** Rejected: the limit
+  belongs to the interaction, so an attribute keeps it next to the declaration
+  and visible to `ridl diff`; the manifest keeps the catalog-wide default.
+- **One limit for every interaction.** Rejected on 2026-10-24: interactions
+  allocate and carry payloads in different ways.
 - **One lint on single bounds only.** Rejected: a struct of two strings at the
   advised bound, or a large array, passes it and fails only at run time.
 
@@ -240,10 +314,20 @@ When accepted, these records gain a dated note or are changed in place:
 - The diagnostics surface gains TYPL-116 and RIDL-150. `ridl-rt` gains
   `PAYLOAD_CEILING` and the `EncodeError::TooLarge` variant; `EncodeError` is
   `#[non_exhaustive]`, so the variant is an addition.
+- From the amendment of 2026-10-24: the attribute registry gains `max_bytes`,
+  the diagnostics surface gains RIDL-151, the manifest gains the catalog-wide
+  default, and the catalog descriptor's member table gains a limit column.
+  `with_max_message_bytes` can no longer raise the limit and the R-C1 clamp is
+  removed; both change the published `ridl-transport-ws` API and are released in
+  a version marked breaking. The ridl reference (the attribute and the RIDL-151
+  row), the general form §4.3 (the registry list),
+  `docs/design/catalog-descriptor.md`, `docs/design/ridl-transport-ws.md` and
+  the frame specification §11.1 are updated when the code lands.
 
 ## References
 
-- driftsys/ridl#996, driftsys/ridl#336, driftsys/ridl#264
+- driftsys/ridl#996, driftsys/ridl#336, driftsys/ridl#264, driftsys/ridl#1045,
+  driftsys/ridl#1042
 - [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md),
   [ADR-0024](ADR-0024-lint-registry-and-levels.md),
   [ADR-0027](ADR-0027-design-lints-calibrated-on-a-corpus.md),
