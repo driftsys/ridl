@@ -980,7 +980,9 @@ too. Both are errors, so they have no name and no level in `[lints]`. A payload
 above the ceiling under a declared limit draws RIDL-150 as well; where no entry
 gives a limit, only RIDL-150 applies. A package with an error that stops
 `ridl build` writing artifacts, or that depends on one, is not checked, and a
-unit with such a package reports no RIDL-152.
+unit with such a package reports no RIDL-152. An error in a manifest stops
+RIDL-150 in every package of the workspace, and RIDL-151 and RIDL-152 only in
+the packages beneath that manifest.
 
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages

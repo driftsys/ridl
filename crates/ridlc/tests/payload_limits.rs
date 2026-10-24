@@ -421,7 +421,7 @@ fn a_manifest_error_of_one_member_does_not_stop_the_checks_of_another() {
         Member {
             name: "a",
             source: &source_a,
-            manifest: "[limits.kind]\nstream = 1\n",
+            manifest: "[limits]\ndefault = 64\n[limits.kind]\nstream = 1\n",
         },
         Member {
             name: "b",
@@ -431,6 +431,8 @@ fn a_manifest_error_of_one_member_does_not_stop_the_checks_of_another() {
     ];
     let result = run(&members, PROTO3);
     assert_eq!(with("MANI-021", &result.diagnostics).len(), 1);
+    // Member `a` has a usable limit too, but its manifest error stops its own
+    // checks: only `b` is reported.
     let found = with("RIDL-151", &result.diagnostics);
     assert_eq!(found.len(), 1, "{:?}", result.diagnostics);
     let path = result.sources.path(found[0].primary.file).unwrap();
@@ -499,4 +501,102 @@ fn a_fallible_reply_names_the_type_that_breaks_the_limit() {
     let found = with("RIDL-151", &check(source, "[limits]\ndefault = 100\n"));
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].message.contains("for `Failure`"), "{found:?}");
+}
+
+#[test]
+fn a_skipped_package_of_a_unit_draws_no_unmatched_name() {
+    // `Low` is declared in `demo.sub`, which has an error, so it is not
+    // examined and its interfaces are unknown: the entry is not unmatched.
+    let main = signal();
+    let sub = "package demo.sub\nstruct Broken { x: Missing }\n\
+               interface Low {\n  signal sig: Broken @[10ms..100ms]\n}\n";
+    let member = Member {
+        name: "demo",
+        source: &main,
+        manifest: "[limits.interaction]\n\"Low.sig\" = 10\n",
+    };
+    let result = run_with(&[member], PROTO3, &[("sub/s.ridl", sub)]);
+    assert!(
+        with("RIDL-152", &result.diagnostics).is_empty(),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn a_short_name_shared_by_two_packages_of_a_unit_is_ambiguous() {
+    let main = "package demo\ntype Payload: bytes [0..1000]\n\
+                interface Same {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let sub = "package demo.sub\ntype Payload: bytes [0..1000]\n\
+               interface Same {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let member = Member {
+        name: "demo",
+        source: main,
+        manifest: "[limits.interaction]\n\"Same.sig\" = 10\n",
+    };
+    let result = run_with(&[member], PROTO3, &[("sub/s.ridl", sub)]);
+    let found = with("RIDL-152", &result.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", result.diagnostics);
+    assert!(
+        found[0]
+            .message
+            .contains("ambiguous: more than one interface or inline service of the unit"),
+        "{found:?}"
+    );
+    assert!(
+        with("RIDL-151", &result.diagnostics).is_empty(),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn a_tombstone_is_not_an_interaction_of_the_unit() {
+    let source = "package demo\ntype Payload: bytes [0..1000]\n\
+                  interface Iface {\n  signal sig: Payload @[10ms..100ms]\n  reserved old\n}\n";
+    let diagnostics = check(source, "[limits.interaction]\n\"Iface.\" = 10\n");
+    assert_eq!(with("RIDL-152", &diagnostics).len(), 1, "{diagnostics:?}");
+}
+
+#[test]
+fn the_unmatched_name_message_names_the_unit() {
+    let diagnostics = check(&signal(), "[limits.interaction]\n\"Nope.sig\" = 10\n");
+    let found = with("RIDL-152", &diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert!(
+        found[0]
+            .message
+            .contains("names no interaction of its unit"),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn a_manifest_error_still_stops_the_ceiling_check_in_every_package() {
+    // Member `a` has a manifest error; member `b` has a payload above the
+    // ceiling and no limits. RIDL-150 skips every package; RIDL-151 and
+    // RIDL-152 skip only the packages beneath the manifest.
+    let big = "package b\ntype Text: string [0..4032]\n\
+               struct Payload { a: Text, b: Text }\n\
+               interface Iface {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let small = signal().replace("package demo", "package a");
+    let members = [
+        Member {
+            name: "a",
+            source: &small,
+            manifest: "[limits.kind]\nstream = 1\n",
+        },
+        Member {
+            name: "b",
+            source: big,
+            manifest: "",
+        },
+    ];
+    let result = run(&members, PROTO3);
+    assert_eq!(with("MANI-021", &result.diagnostics).len(), 1);
+    assert!(
+        with("RIDL-150", &result.diagnostics).is_empty(),
+        "{:?}",
+        result.diagnostics
+    );
 }

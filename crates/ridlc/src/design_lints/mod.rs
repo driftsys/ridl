@@ -84,7 +84,7 @@ pub(crate) fn check_payload_ceiling(
 /// RIDL-151 and RIDL-152 over one source set: the payload limits of each
 /// unit's `[limits]` table (ADR-0030 decisions 12 and 14). The inputs are
 /// those of [`check_payload_ceiling`], with `limits` the table of each unit
-/// by package name. Both codes are errors, so lint levels do not apply.
+/// by unit name. Both codes are errors, so lint levels do not apply.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn check_payload_limits(
     db: &RidlDatabase,

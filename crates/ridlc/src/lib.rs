@@ -2471,8 +2471,10 @@ fn enabled_encodings(backends: &BTreeMap<String, ridl_core::BackendTable>) -> Ve
 
 /// RIDL-151 and RIDL-152 over the `[limits]` tables that the load carried in
 /// `compiled.limits` (ADR-0030 decisions 12 and 14). Both are errors, so they
-/// are added after the remote units' non-errors are dropped. The check skips
-/// the packages that RIDL-150 skips.
+/// are added after the remote units' non-errors are dropped. A package with an
+/// error, and a package that depends on one, is skipped as for RIDL-150. An
+/// error in a manifest stops the checks of the packages beneath that manifest
+/// only, where it stops RIDL-150 in every package.
 fn check_unit_limits(db: &RidlDatabase, packages: &[Package], compiled: &mut Compiled) {
     if compiled.limits.is_empty() {
         return;

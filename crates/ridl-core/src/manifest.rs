@@ -1757,6 +1757,14 @@ version = \"1.0.0\"
     }
 
     #[test]
+    fn a_wrong_limit_value_that_is_not_a_table_gets_no_quoting_hint() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = \"4k\"\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        assert!(!diags[0].message.contains("quoted"), "{diags:?}");
+    }
+
+    #[test]
     fn an_unquoted_dotted_interaction_key_says_to_quote_it() {
         let text = format!("{PACKAGE_HEAD}[limits.interaction]\nClimate.temperature = 64\n");
         let (manifest, diags) = parse(&text);
