@@ -382,6 +382,14 @@ const ALLOWED: &[Allowed] = &[
               interface at the same position and an inline shape is covered",
     },
     Allowed {
+        path: "crates/ridlc/src/design_lints/limits.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
+              `Package::interfaces`: the model's list is lowered from \
+              `Package::shapes()`, so the check pairs each shape with the model \
+              interface at the same position and an inline shape is covered",
+    },
+    Allowed {
         path: "crates/ridlc/tests/cabin_example.rs",
         lines: 1,
         why: "the read is of the deployment region's interface list \
