@@ -185,6 +185,15 @@ ceiling is 16,256 bytes and that the codecs do not yet enforce it
 `deny`. The limits are stated in
 [ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md).
 
+`[limits]` in a unit's `ridl.toml` sets a payload limit below the ceiling for an
+interaction. RIDL-151 (a payload above its declared limit or with no finite
+bound) and RIDL-152 (a `[limits]` entry that names no interaction of its unit)
+are errors, so they have no lint name and no level in `[lints]`. RIDL-151 runs
+only where an entry gives the limit; where none does, `payload-above-ceiling`
+alone applies. The table and the codes are described in the
+[CLI reference](cli-reference.md) and in
+[ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md).
+
 `payload-above-ceiling` is raised by `ridl check` and `ridl build`. The language
 server does not run it, so it does not appear in the editor. It skips a package
 that has an error that stops `ridl build` writing artifacts, or that references

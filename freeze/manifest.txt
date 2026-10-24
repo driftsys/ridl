@@ -10,6 +10,10 @@ defaults.command_timing string
 defaults.query_timing string
 defaults.timing string
 imports table<string>
+limits table
+limits.default integer
+limits.interaction table<integer>
+limits.kind table<integer>
 lints table<string>
 package table
 package.name string

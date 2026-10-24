@@ -22,7 +22,7 @@ use super::Ctx;
 /// What one payload's size state says, ordered from the least to the most
 /// serious so that the worst of several is their maximum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Size {
+pub(super) enum Size {
     /// No size is stated: the payload has no encoding in this codec, which is
     /// not a size problem.
     Other,
@@ -58,12 +58,11 @@ fn from_sizer(state: size::SizeState) -> Size {
     }
 }
 
-/// Why one payload is reported under one encoding, or `None` when it is not.
-fn problem(size: Size) -> Option<String> {
+/// Why one payload breaks `limit` bytes under one encoding, or `None` when it
+/// does not: its bound is above `limit`, or it has no finite bound.
+fn problem_above(size: Size, limit: u64) -> Option<String> {
     match size {
-        Size::Bytes(bytes) if bytes > u64::from(PAYLOAD_CEILING) => {
-            Some(format!("up to {bytes} bytes"))
-        }
+        Size::Bytes(bytes) if bytes > limit => Some(format!("up to {bytes} bytes")),
         Size::Bytes(_) | Size::Other => None,
         Size::NoBound => Some("no finite bound".to_string()),
         Size::Overflow => Some(
@@ -76,15 +75,15 @@ fn problem(size: Size) -> Option<String> {
 /// The size of one payload under each checked encoding, with the type that
 /// has it when the payload is a fallible reply.
 #[derive(Clone)]
-struct Side {
-    size: Size,
-    ty: Option<String>,
+pub(super) struct Side {
+    pub(super) size: Size,
+    pub(super) ty: Option<String>,
 }
 
-struct Entry {
-    role: &'static str,
-    flatbuffers: Side,
-    proto3: Side,
+pub(super) struct Entry {
+    pub(super) role: &'static str,
+    pub(super) flatbuffers: Side,
+    pub(super) proto3: Side,
 }
 
 fn entry(role: &'static str, sizes: &v1::PayloadSizes) -> Entry {
@@ -127,9 +126,35 @@ fn fallible_entry(
     }
 }
 
+/// The value of a fixed, sized under each encoding. RIDL-150 never sizes a
+/// fixed, because it is provisioned and never in flight; the payload limits
+/// of a unit apply to it all the same (ADR-0030 decision 14).
+pub(super) fn fixed_entry(
+    package: &v2::Package,
+    others: &[&v2::Package],
+    fixed: &v2::FixedDef,
+) -> Option<Entry> {
+    let ty = fixed.payload.as_ref()?;
+    let sizes = SizeCtx::new(package, others);
+    let side = |encoding: size::Encoding| Side {
+        size: from_sizer(size::size_state(
+            package,
+            &PayloadShape::Field(ty),
+            &sizes,
+            encoding,
+        )),
+        ty: None,
+    };
+    Some(Entry {
+        role: "value",
+        flatbuffers: side(size::Encoding::FlatBuffers),
+        proto3: side(size::Encoding::Proto3),
+    })
+}
+
 /// The payloads one interaction carries on the wire, with the role of each.
 /// A fixed is provisioned and never in flight, so it carries none.
-fn payloads(
+pub(super) fn payloads(
     interaction: &v1::Interaction,
     decl: &v2::Decl,
     package: &v2::Package,
@@ -189,7 +214,7 @@ fn payloads(
 
 /// The encodings to check: the names in `encodings` that have a size state,
 /// or FlatBuffers when `encodings` names none.
-fn checked_encodings(encodings: &[String]) -> (bool, bool) {
+pub(super) fn checked_encodings(encodings: &[String]) -> (bool, bool) {
     if encodings.is_empty() {
         return (true, false);
     }
@@ -200,7 +225,12 @@ fn checked_encodings(encodings: &[String]) -> (bool, bool) {
 }
 
 fn describe(side: &Side, encoding: &str) -> Option<String> {
-    let why = problem(side.size)?;
+    describe_above(side, encoding, u64::from(PAYLOAD_CEILING))
+}
+
+/// [`describe`] for a payload limit of `limit` bytes.
+pub(super) fn describe_above(side: &Side, encoding: &str, limit: u64) -> Option<String> {
+    let why = problem_above(side.size, limit)?;
     Some(match &side.ty {
         Some(ty) => format!("{why} in {encoding} for `{ty}`"),
         None => format!("{why} in {encoding}"),
@@ -280,12 +310,51 @@ pub(crate) fn check(ctx: &Ctx<'_>, std_ir: &v2::Package, encodings: &[String]) -
 mod tests {
     use super::*;
 
+    /// Why a payload is reported against the payload ceiling.
+    fn problem(size: Size) -> Option<String> {
+        problem_above(size, u64::from(PAYLOAD_CEILING))
+    }
+
     #[test]
     fn a_bound_is_a_problem_only_above_the_ceiling() {
         assert_eq!(problem(Size::Bytes(u64::from(PAYLOAD_CEILING))), None);
         assert_eq!(
             problem(Size::Bytes(u64::from(PAYLOAD_CEILING) + 1)).as_deref(),
             Some("up to 16257 bytes")
+        );
+    }
+
+    #[test]
+    fn a_limit_moves_the_boundary_and_keeps_the_unbounded_states() {
+        assert_eq!(problem_above(Size::Bytes(10), 10), None);
+        assert_eq!(
+            problem_above(Size::Bytes(11), 10).as_deref(),
+            Some("up to 11 bytes")
+        );
+        // The language reaches no payload with the `NoBound` state today: an
+        // unbounded `string`, `bytes` or `integer` takes the default bound or
+        // is a different error. The state stays in the match for the sizers.
+        assert_eq!(
+            problem_above(Size::NoBound, 10).as_deref(),
+            Some("no finite bound")
+        );
+        assert!(
+            problem_above(Size::Overflow, 10)
+                .unwrap()
+                .contains("64 levels")
+        );
+        assert_eq!(problem_above(Size::Other, 10), None);
+    }
+
+    #[test]
+    fn a_fallible_reply_type_is_named_in_the_description() {
+        let side = Side {
+            size: Size::Bytes(20),
+            ty: Some("Err".to_string()),
+        };
+        assert_eq!(
+            describe_above(&side, "proto3", 10).as_deref(),
+            Some("up to 20 bytes in proto3 for `Err`")
         );
     }
 

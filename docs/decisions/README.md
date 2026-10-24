@@ -528,12 +528,13 @@ other entry below is Accepted.
   payload above the ceiling, both at `warn` under an amendment of ADR-0029
   decision 2; the `[0..256]` default stays; larger data is a stream
   (driftsys/ridl#996). Amended 2026-10-24 (driftsys/ridl#1045), now fifteen
-  decisions, not yet built: each interaction will have its own payload limit,
-  set in a `[limits]` table of `ridl.toml` by name, by kind or as a default,
-  never above the ceiling, and covered by the catalog hash; RIDL-151 will be an
-  error for a payload above a declared limit; the WebSocket message limit will
-  be at most 16,292 bytes, which an embedder can lower but not raise, and a
-  request above its member's limit will be answered `corrupt`.
+  decisions: each interaction has its own payload limit, set in a `[limits]`
+  table of `ridl.toml` by name, by kind or as a default, never above the ceiling
+  (built, with RIDL-151 for a payload above a declared limit and RIDL-152 for an
+  entry that names no interaction); the limit will be covered by the catalog
+  hash, not yet built; the WebSocket message limit will be at most 16,292 bytes,
+  which an embedder can lower but not raise, and a request above its member's
+  limit will be answered `corrupt`.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
