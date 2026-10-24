@@ -31,6 +31,10 @@ use ridl_rt::payload::{EncodeError, Ref, Rule, TranscodeError, VerifyError};
     clippy::collapsible_if,
     reason = "the emitted code targets edition 2021, where an `if` and an `if let` cannot be joined"
 )]
+#[allow(
+    clippy::identity_op,
+    reason = "the emitted array codec multiplies a length by an element size of 1"
+)]
 mod generated {
     include!("generated/transcode.rs");
 }

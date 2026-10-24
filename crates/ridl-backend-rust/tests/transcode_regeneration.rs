@@ -63,10 +63,33 @@ fn a_repeated_encoding_emits_each_transcode_function_once() {
     assert_eq!(twice, once);
 }
 
+/// The same as above with proto3 listed first: the repeat of the first
+/// listed encoding does not change the order either.
+#[test]
+fn a_repeated_encoding_in_proto3_first_order_emits_each_transcode_function_once() {
+    let package = ir::compile_fixture("transcode.ridl");
+    let once = [
+        ridl_backend_rust::WireEncoding::Proto3,
+        ridl_backend_rust::WireEncoding::FlatBuffers,
+    ];
+    let repeated = [
+        ridl_backend_rust::WireEncoding::Proto3,
+        ridl_backend_rust::WireEncoding::FlatBuffers,
+        ridl_backend_rust::WireEncoding::Proto3,
+    ];
+    let once = ridl_backend_rust::generate_pipeline(&package, &once, true, &[])
+        .expect("generate_pipeline")
+        .rust_source;
+    let twice = ridl_backend_rust::generate_pipeline(&package, &repeated, true, &[])
+        .expect("generate_pipeline")
+        .rust_source;
+    assert_eq!(twice, once);
+}
+
 /// The transcode functions follow the order the encodings are listed in,
 /// not the order the codecs are emitted in: listing proto3 first puts each
 /// type's proto3-to-FlatBuffers function before its FlatBuffers-to-proto3
-/// function.
+/// function, in every `impl` block that has both.
 #[test]
 fn the_transcode_functions_follow_the_listed_encoding_order() {
     let package = ir::compile_fixture("transcode.ridl");
@@ -77,12 +100,20 @@ fn the_transcode_functions_follow_the_listed_encoding_order() {
     let source = ridl_backend_rust::generate_pipeline(&package, &reversed, true, &[])
         .expect("generate_pipeline")
         .rust_source;
-    let first = |name: &str| {
-        source
-            .find(name)
-            .unwrap_or_else(|| panic!("{name} is not emitted"))
-    };
-    assert!(
-        first("fn transcode_proto3_to_flatbuffers") < first("fn transcode_flatbuffers_to_proto3")
-    );
+    let mut checked = 0;
+    for block in source.split("\nimpl ").skip(1) {
+        let (Some(proto3), Some(flatbuffers)) = (
+            block.find("fn transcode_proto3_to_flatbuffers"),
+            block.find("fn transcode_flatbuffers_to_proto3"),
+        ) else {
+            continue;
+        };
+        assert!(
+            proto3 < flatbuffers,
+            "proto3-to-FlatBuffers comes first in the block starting {:?}",
+            &block[..block.len().min(40)]
+        );
+        checked += 1;
+    }
+    assert!(checked > 1, "several blocks have both functions");
 }

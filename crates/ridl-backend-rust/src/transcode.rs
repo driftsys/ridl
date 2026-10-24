@@ -111,3 +111,82 @@ fn encoding_path(encoding: WireEncoding) -> TokenStream {
         WireEncoding::Proto3 => quote! { ::ridl_rt::encoding::Proto3 },
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn owners(names: &[&str]) -> Vec<PayloadOwner> {
+        names
+            .iter()
+            .map(|name| PayloadOwner {
+                name: (*name).to_string(),
+                visibility: 0,
+            })
+            .collect()
+    }
+
+    /// The type names of the emitted `impl` blocks, in output order.
+    fn impl_order(items: &[TokenStream]) -> Vec<String> {
+        items
+            .iter()
+            .map(|item| {
+                let text = item.to_string();
+                let rest = text.split("impl ").nth(1).expect("an impl block");
+                rest.split_whitespace().next().expect("a type").to_string()
+            })
+            .collect()
+    }
+
+    /// The names of the transcode functions of one item, in output order.
+    fn function_order(item: &TokenStream) -> Vec<String> {
+        item.to_string()
+            .split("fn ")
+            .skip(1)
+            .map(|rest| rest.split_whitespace().next().expect("a name").to_string())
+            .map(|name| name.split('<').next().expect("a name").to_string())
+            .collect()
+    }
+
+    #[test]
+    fn the_output_follows_the_order_of_the_first_listed_encoding() {
+        let flatbuffers = (
+            WireEncoding::FlatBuffers,
+            owners(&["Alpha", "Beta", "Gamma"]),
+        );
+        let proto3 = (WireEncoding::Proto3, owners(&["Gamma", "Beta", "Alpha"]));
+
+        let items = package_items(&[flatbuffers, proto3]);
+        assert_eq!(impl_order(&items), ["Alpha", "Beta", "Gamma"]);
+        assert_eq!(
+            function_order(&items[0]),
+            [
+                "transcode_flatbuffers_to_proto3",
+                "transcode_proto3_to_flatbuffers"
+            ]
+        );
+
+        let flatbuffers = (
+            WireEncoding::FlatBuffers,
+            owners(&["Alpha", "Beta", "Gamma"]),
+        );
+        let proto3 = (WireEncoding::Proto3, owners(&["Gamma", "Beta", "Alpha"]));
+        let items = package_items(&[proto3, flatbuffers]);
+        assert_eq!(impl_order(&items), ["Gamma", "Beta", "Alpha"]);
+        assert_eq!(
+            function_order(&items[0]),
+            [
+                "transcode_proto3_to_flatbuffers",
+                "transcode_flatbuffers_to_proto3"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_type_owned_by_one_encoding_gets_no_transcode_function() {
+        let flatbuffers = (WireEncoding::FlatBuffers, owners(&["Alpha", "Beta"]));
+        let proto3 = (WireEncoding::Proto3, owners(&["Beta", "Gamma"]));
+        let items = package_items(&[flatbuffers, proto3]);
+        assert_eq!(impl_order(&items), ["Beta"]);
+    }
+}
