@@ -446,6 +446,17 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
         Some("1.88"),
         "the generated manifest declares the family's minimum Rust version (ADR-0029 decision 5)"
     );
+    let ridl_rt: toml::Table = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ridl-rt/Cargo.toml"),
+    )
+    .expect("ridl-rt's manifest is readable")
+    .parse()
+    .expect("ridl-rt's manifest parses");
+    assert_eq!(
+        manifest.package.rust_version.as_deref(),
+        ridl_rt["package"]["rust-version"].as_str(),
+        "the generated manifest declares the rust-version of the ridl-rt it depends on"
+    );
     assert_eq!(
         manifest.lib.path, "lib.rs",
         "the crate root is the generated lib.rs, not src/lib.rs"

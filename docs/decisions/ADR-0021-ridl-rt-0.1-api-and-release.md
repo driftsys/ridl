@@ -202,6 +202,12 @@ item 3). Each decision carries the amendment in place; the as-built records are
 [the `ridl-rt` design record](../design/ridl-rt.md) and
 [the proto3 codec design record](../design/proto3-codec.md).
 
+**Amendment (2026-10-24) — decision 10: the minimum Rust version is 1.88.**
+`ridl-rt` and the code the Rust codegen emits now require Rust 1.88 instead of
+1.83 (driftsys/ridl#1047). The editions do not change. Decision 10 carries the
+amendment in place; the approval of the break is recorded in
+[ADR-0029](ADR-0029-stability-policy.md).
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
