@@ -111,9 +111,9 @@ pub(crate) fn classify_in(
         Category::InterfaceFrozen => Verdict::Compatible,
         Category::InterfaceNumberChanged => Verdict::Breaking,
 
-        // A payload limit is part of the catalog hash and a receiver enforces
-        // it, so raising, lowering, adding and removing one are all breaking
-        // (ADR-0030 decision 13).
+        // A payload limit is part of the catalog hash, so peers with different
+        // limits do not attach. Raising, lowering, adding and removing one are
+        // all breaking (ADR-0030 decision 13).
         Category::LimitChanged => Verdict::Breaking,
 
         // An enum value or enum-set bit takes its identity from its explicit

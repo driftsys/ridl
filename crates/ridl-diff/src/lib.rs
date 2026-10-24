@@ -218,7 +218,8 @@ declare_categories! {
         RpcBoundChanged,
         /// The payload limit declared for an interaction changed, was added or
         /// was removed (ADR-0030 decision 13). Any change is breaking: the
-        /// limit is part of the catalog hash and a receiver enforces it.
+        /// limit is part of the catalog hash, so peers with different limits
+        /// do not attach.
         LimitChanged,
         /// A command/query require/ensure clause set changed.
         ContractChanged,

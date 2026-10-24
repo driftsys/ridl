@@ -129,6 +129,9 @@ pub(crate) fn annotate_payload_limits(
     checked: &mut [CheckedPackage],
     limits: &std::collections::BTreeMap<String, ridl_core::UnitLimits>,
 ) {
+    if limits.is_empty() {
+        return;
+    }
     let units: Vec<String> = packages
         .iter()
         .map(|package| package.unit(db).clone())
