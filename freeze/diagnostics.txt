@@ -31,6 +31,8 @@ MANI-017 error
 MANI-018 warning lint=vendor-source-not-loaded default=warn
 MANI-019 error
 MANI-020 error
+MANI-021 error
+MANI-022 error
 MANI-101 error
 MANI-102 error
 MANI-103 error
@@ -60,6 +62,8 @@ RIDL-144 error
 RIDL-145 error
 RIDL-149 error
 RIDL-150 warning lint=payload-above-ceiling default=warn
+RIDL-151 error
+RIDL-152 error
 RIDL-201 error
 RIDL-202 error
 RIDL-301 error

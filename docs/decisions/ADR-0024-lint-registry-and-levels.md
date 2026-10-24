@@ -43,6 +43,13 @@ TYPL-116 is raised by the typl checker. RIDL-150 is raised by `ridlc` after
 lowering, in `ridl check` and `ridl build`, and the language server does not run
 it. Both take their level from `[lints]` like any other lint.
 
+Amended 2026-10-24 by [ADR-0030](ADR-0030-transfer-and-bound-limits.md)
+decisions 12 and 14: RIDL-151 and RIDL-152 are error codes with no lint name and
+no level (decision 1), so `[lints]` cannot name them. RIDL-151 reports a payload
+above a limit that a `[limits]` entry of its unit declares, and RIDL-152 reports
+a `[limits.interaction]` key that names no interaction of the unit. RIDL-150
+stays a lint at `warn` where no entry applies.
+
 It amends two records in place, in the same change:
 [ADR-0002](ADR-0002-module-system.md) §4 (the `[lints]` table and its resolution
 order) and [ADR-0010](ADR-0010-cli-conventions.md) decision 1 (a lint at `deny`

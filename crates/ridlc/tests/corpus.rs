@@ -525,6 +525,26 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      and the other tests in `crates/ridlc/tests/payload_ceiling.rs`",
         },
     ),
+    (
+        "RIDL-151",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/payload_limits.rs",
+            reason: "the payload limits come from the `[limits]` table of a unit's manifest and \
+                     are checked after lowering, and the corpus runner assembles its own passes, \
+                     so the showcase compile never reaches them. Provoked by \
+                     `the_declared_limit_boundary_is_exact` and the other tests in \
+                     `crates/ridlc/tests/payload_limits.rs`",
+        },
+    ),
+    (
+        "RIDL-152",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/payload_limits.rs",
+            reason: "the `[limits]` table is read from a unit's manifest, which the corpus \
+                     runner does not load. Provoked by `an_unmatched_name_is_ridl_152` in \
+                     `crates/ridlc/tests/payload_limits.rs`",
+        },
+    ),
     ("RIDL-201", Showcase),
     ("RIDL-202", Showcase),
     ("RIDL-301", Showcase),

@@ -178,6 +178,8 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             // No manifest: no header file.
             codegen_header: None,
             backends: BTreeMap::new(),
+            // No manifest: no `[limits]` table.
+            unit_limits: BTreeMap::new(),
             report_scope: None,
             // A source text has no directory, so no unit is recorded.
             units: BTreeMap::new(),
@@ -2273,6 +2275,8 @@ struct Compiled {
     codegen_header: Option<String>,
     /// The `[backend.<name>]` tables ([`LoadedWorkspace::backends`]).
     backends: BTreeMap<String, ridl_core::BackendTable>,
+    /// Each unit's `[limits]` table ([`LoadedWorkspace::unit_limits`]).
+    limits: BTreeMap<String, ridl_core::UnitLimits>,
     /// The member directory the entry lies in
     /// ([`LoadedWorkspace::report_scope`]).
     report_scope: Option<PathBuf>,
@@ -2314,6 +2318,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         lints,
         codegen_header,
         backends,
+        unit_limits,
         report_scope,
         units: _,
         root_package,
@@ -2414,13 +2419,9 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
     // FlatBuffers is checked. A workspace with no interface has nothing to
     // report, so `ridl.std` is not checked for it either.
     if checked.iter().any(|pkg| pkg.ir.shapes().next().is_some()) {
-        let blocked = payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources);
-        let mut encodings: Vec<String> = backends
-            .values()
-            .flat_map(|table| table.encodings.iter().map(|(name, _)| name.clone()))
-            .collect();
-        encodings.sort();
-        encodings.dedup();
+        let blocked =
+            payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
+        let encodings = enabled_encodings(&backends);
         let std_ir = check_package(db, workspace, std, std).ir;
         diagnostics.extend(design_lints::check_payload_ceiling(
             db,
@@ -2435,7 +2436,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
     }
     drop_remote_non_errors(&mut diagnostics, &sources, &remote_units);
 
-    Compiled {
+    let mut compiled = Compiled {
         workspace,
         std,
         checked,
@@ -2447,22 +2448,75 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         lints,
         codegen_header,
         backends,
+        limits: unit_limits,
         report_scope,
         root_package,
         remote_units,
-    }
+    };
+    check_unit_limits(db, &packages, &mut compiled);
+    compiled
 }
 
-/// Per entry of `packages`, whether RIDL-150 skips it: the package has an
-/// error that blocks every artifact, or depends on a package that does. An
-/// error that no package's source file carries, such as a manifest error, blocks
-/// every package.
+/// The encoding names that every `[backend.<name>]` table enables, as one
+/// sorted set.
+fn enabled_encodings(backends: &BTreeMap<String, ridl_core::BackendTable>) -> Vec<String> {
+    let mut encodings: Vec<String> = backends
+        .values()
+        .flat_map(|table| table.encodings.iter().map(|(name, _)| name.clone()))
+        .collect();
+    encodings.sort();
+    encodings.dedup();
+    encodings
+}
+
+/// RIDL-151 and RIDL-152 over the `[limits]` tables that the load carried in
+/// `compiled.limits` (ADR-0030 decisions 12 and 14). Both are errors, so they
+/// are added after the remote units' non-errors are dropped. A package with an
+/// error, and a package that depends on one, is skipped as for RIDL-150. An
+/// error in a manifest stops the checks of the packages beneath that manifest
+/// only, where it stops RIDL-150 in every package.
+fn check_unit_limits(db: &RidlDatabase, packages: &[Package], compiled: &mut Compiled) {
+    if compiled.limits.is_empty() {
+        return;
+    }
+    let blocked = payload_ceiling_blocked(
+        db,
+        packages,
+        &compiled.checked,
+        &compiled.diagnostics,
+        &compiled.sources,
+        true,
+    );
+    let encodings = enabled_encodings(&compiled.backends);
+    let std_ir = check_package(db, compiled.workspace, compiled.std, compiled.std).ir;
+    let found = design_lints::check_payload_limits(
+        db,
+        packages,
+        &compiled.checked,
+        &compiled.resolutions,
+        &blocked,
+        &std_ir,
+        &encodings,
+        &compiled.limits,
+        &mut compiled.sources,
+    );
+    compiled.diagnostics.extend(found);
+}
+
+/// Per entry of `packages`, whether the payload checks skip it (RIDL-150,
+/// RIDL-151 and RIDL-152): the package has an error that blocks every
+/// artifact, or depends on a package that does. An error that no package's
+/// source file carries blocks every package, except that with `by_manifest` an
+/// error in a file whose directory holds the files of some packages blocks only
+/// those packages: a manifest error of one unit does not stop the checks of
+/// another unit.
 fn payload_ceiling_blocked(
     db: &RidlDatabase,
     packages: &[Package],
     checked: &[CheckedPackage],
     diagnostics: &[Diagnostic],
     sources: &SourceMap,
+    by_manifest: bool,
 ) -> Vec<bool> {
     let paths: Vec<BTreeSet<String>> = packages
         .iter()
@@ -2482,7 +2536,31 @@ fn payload_ceiling_blocked(
             .and_then(|path| paths.iter().position(|set| set.contains(path)));
         match owner {
             Some(index) => blocked[index] = true,
-            None => everywhere = true,
+            None => {
+                let beneath: Vec<usize> = if by_manifest {
+                    sources
+                        .path(diagnostic.primary.file)
+                        .and_then(|path| Path::new(path).parent())
+                        .map(|dir| {
+                            (0..paths.len())
+                                .filter(|index| {
+                                    paths[*index]
+                                        .iter()
+                                        .any(|file| Path::new(file).starts_with(dir))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                if beneath.is_empty() {
+                    everywhere = true;
+                }
+                for index in beneath {
+                    blocked[index] = true;
+                }
+            }
         }
     }
     if everywhere {

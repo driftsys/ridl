@@ -50,8 +50,19 @@ use crate::interface_lock;
 use crate::lint::{LintLevels, LintScopes};
 #[cfg(feature = "fetch")]
 use crate::lock::{read_lockfile, write_lockfile};
-use crate::manifest::{BackendTable, Manifest, ManifestKind, TimingDefaults, parse_manifest};
+use crate::manifest::{
+    BackendTable, Limits, Manifest, ManifestKind, TimingDefaults, parse_manifest,
+};
 use crate::package::{Package, PackageLock, PackageOrigin, Workspace, package_declarations};
+
+/// One unit's `[limits]` table and the manifest it was read from. A unit with
+/// no `[limits]` table has no [`UnitLimits`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnitLimits {
+    /// The unit's `ridl.toml`, which the byte ranges in `limits` point into.
+    pub manifest: FileId,
+    pub limits: Limits,
+}
 
 /// The result of [`load_workspace`]: the salsa [`Workspace`] input, the
 /// diagnostics the load accumulated, the interned path+text table the
@@ -75,6 +86,11 @@ pub struct LoadedWorkspace {
     /// empty when the root names none and in single-file mode. A workspace
     /// member's manifest cannot carry one (MANI-016).
     pub backends: BTreeMap<String, BackendTable>,
+    /// Each unit's `[limits]` table, keyed by the `[package]` name of the
+    /// unit's manifest. A table applies to its own unit only: a workspace
+    /// root's `[limits]` is not carried to its members, and a unit with no
+    /// table has no entry. Empty in single-file mode.
+    pub unit_limits: BTreeMap<String, UnitLimits>,
     /// The member directory the entry lies in, when the entry is inside a
     /// member of the loaded workspace ([`find_root`] walked from the member to
     /// its workspace, or the entry named a path below a member); `None` for
@@ -429,6 +445,7 @@ fn load_inner(
         lints: loader.lints,
         codegen_header: loader.codegen_header,
         backends: loader.backends,
+        unit_limits: loader.unit_limits,
         report_scope,
         units: loader.units,
         root_package: loader.root_package,
@@ -445,6 +462,13 @@ fn walk_enters(entry: &fs::DirEntry) -> io::Result<bool> {
     // `DirEntry::file_type` does not follow a link, so a symbolic link to a
     // directory is not `is_dir` here.
     Ok(entry.file_type()?.is_dir() && !entry.file_name().to_string_lossy().starts_with('.'))
+}
+
+/// Whether a directory entry name is one that macOS adds to a tar: an
+/// AppleDouble file (`._x.typl`) or the `__MACOSX` directory. The tree walk
+/// of a remote unit skips such an entry; a local tree is walked as it is.
+fn is_appledouble(name: &str) -> bool {
+    name.starts_with("._") || name == "__MACOSX"
 }
 
 /// The manifest that MANI-013 reports for the directory `subdirectory` of a
@@ -722,6 +746,8 @@ struct Loader {
     codegen_header: Option<String>,
     /// The workspace root's (or standalone package's) `[backend.<name>]` tables.
     backends: BTreeMap<String, BackendTable>,
+    /// Unit name to its `[limits]` table, for [`LoadedWorkspace::unit_limits`].
+    unit_limits: BTreeMap<String, UnitLimits>,
     /// Every member directory of a loaded workspace, in the path form of the
     /// files recorded under it. Empty outside workspace mode.
     member_dirs: Vec<PathBuf>,
@@ -760,6 +786,7 @@ impl Loader {
             imports,
             defaults,
             lints,
+            limits,
             codegen_header_file,
             backends,
             backend_span: _,
@@ -811,6 +838,15 @@ impl Loader {
                 // stay empty.
                 self.root_package = Some(name.clone());
                 self.units.insert(name.clone(), root.to_path_buf());
+                if !limits.is_empty() {
+                    self.unit_limits.insert(
+                        name.clone(),
+                        UnitLimits {
+                            manifest: file_id,
+                            limits,
+                        },
+                    );
+                }
                 self.unit_name_spans.insert(
                     name.clone(),
                     (file_id, byte_range(name_span.start, name_span.end)),
@@ -906,6 +942,7 @@ impl Loader {
             imports,
             defaults,
             lints,
+            limits,
             codegen_header_file,
             backends: _,
             backend_span,
@@ -987,6 +1024,15 @@ impl Loader {
                     return Ok(());
                 }
                 self.units.insert(name.clone(), member_dir.clone());
+                if !limits.is_empty() {
+                    self.unit_limits.insert(
+                        name.clone(),
+                        UnitLimits {
+                            manifest: file_id,
+                            limits,
+                        },
+                    );
+                }
                 self.unit_name_spans
                     .insert(name.clone(), (file_id, name_range));
                 let lock = self.read_lock(&member_dir)?;
@@ -1049,6 +1095,11 @@ impl Loader {
         for entry in fs::read_dir(dir).map_err(named)? {
             let entry = entry.map_err(named)?;
             let path = entry.path();
+            if matches!(origin, PackageOrigin::Remote { .. })
+                && is_appledouble(&entry.file_name().to_string_lossy())
+            {
+                continue;
+            }
             if path.is_dir() {
                 if walk_enters(&entry).map_err(named)? {
                     subdirs.push(path);
@@ -3036,6 +3087,23 @@ mod tests {
         assert_eq!(packages[0].name(&db).as_str(), "veh.common");
     }
 
+    /// Control for the remote-unit skip: a local package keeps reading an
+    /// AppleDouble-named file, so `._x.typl` with invalid UTF-8 is reported.
+    #[test]
+    fn a_local_appledouble_named_file_is_still_read() {
+        let dir = TempDir::new("local-appledouble");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.typl", "package veh.common\ntype A: m\n");
+        fs::write(dir.path().join("._x.typl"), [0xFF, 0xFE, 0x00, 0x9F])
+            .expect("write the non-UTF8 fixture");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the load continues");
+        assert_eq!(loaded.diagnostics.len(), 1, "{:?}", loaded.diagnostics);
+        assert!(loaded.diagnostics[0].message.contains("not valid UTF-8"));
+        assert!(loaded.diagnostics[0].message.contains("._x.typl"));
+    }
+
     /// A `.typl` file that is not valid UTF-8 becomes a diagnostic and is
     /// skipped; the rest of the package still loads (ADR-0004 §5 — never a
     /// hard error for content problems).
@@ -3809,6 +3877,74 @@ service:veh.common.climate 2
             .map(|(name, _)| name.as_str())
             .collect();
         assert_eq!(names, ["flatbuffers", "proto3"]);
+    }
+
+    #[test]
+    fn a_package_limits_table_is_loaded() {
+        let dir = TempDir::new("limits-package");
+        dir.write(
+            "ridl.toml",
+            &format!("{PACKAGE_A}\n[limits]\ndefault = 1024\n"),
+        );
+        dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+        let unit = &loaded.unit_limits["a"];
+        assert_eq!(
+            unit.limits.default.as_ref().map(|d| *d.as_ref()),
+            Some(1024)
+        );
+        assert_eq!(
+            loaded.sources.path(unit.manifest),
+            Some(path_string(&dir.path().join("ridl.toml")).as_str())
+        );
+    }
+
+    #[test]
+    fn a_member_limits_table_belongs_to_the_member_only() {
+        let dir = TempDir::new("limits-member");
+        dir.write(
+            "ridl.toml",
+            "[workspace]\nmembers = [\"m-one\", \"m-two\"]\n\n[limits]\ndefault = 100\n",
+        );
+        dir.write(
+            "m-one/ridl.toml",
+            "[package]\nname = \"one\"\nversion = \"1.0.0\"\n\n[limits]\ndefault = 200\n",
+        );
+        dir.write("m-one/one.typl", "package one\ntype A: integer [0..1]\n");
+        dir.write(
+            "m-two/ridl.toml",
+            "[package]\nname = \"two\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("m-two/two.typl", "package two\ntype B: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+        let names: Vec<&str> = loaded.unit_limits.keys().map(String::as_str).collect();
+        assert_eq!(names, ["one"], "the root's table reaches no member");
+        assert_eq!(
+            loaded.unit_limits["one"]
+                .limits
+                .default
+                .as_ref()
+                .map(|d| *d.as_ref()),
+            Some(200)
+        );
+        assert_eq!(
+            loaded.sources.path(loaded.unit_limits["one"].manifest),
+            Some(path_string(&dir.path().join("m-one/ridl.toml")).as_str())
+        );
+    }
+
+    #[test]
+    fn no_limits_table_no_entry() {
+        let dir = TempDir::new("limits-none");
+        dir.write("ridl.toml", PACKAGE_A);
+        dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert!(loaded.unit_limits.is_empty());
     }
 
     #[test]
@@ -4914,6 +5050,47 @@ service:veh.common.climate 2
                 &mut loaded.sources,
                 &vendored.join("vendor/other.dep/d.typl")
             ));
+        }
+
+        /// A tar made on macOS holds AppleDouble entries (`._x.typl`, whose
+        /// bytes are not UTF-8) and a `__MACOSX/` directory. A remote unit
+        /// skips them without a diagnostic and loads the rest.
+        #[test]
+        fn a_remote_unit_skips_appledouble_entries() {
+            let fixture = TempDir::new("remote-appledouble");
+            let root = consumer(&fixture);
+            let mut builder = tar::Builder::new(Vec::new());
+            let entries: [(&str, &[u8]); 5] = [
+                ("ridl.toml", COMMON_MANIFEST.as_bytes()),
+                ("common.typl", b"package veh.common\ntype Speed : km/h\n"),
+                ("._common.typl", &[0x00, 0x05, 0x16, 0x07, 0xff, 0xfe]),
+                ("parts/._p.typl", &[0xff, 0xfe, 0x00]),
+                ("__MACOSX/parts/._p.typl", &[0xff, 0xfe, 0x00]),
+            ];
+            for (name, contents) in entries {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(contents.len() as u64);
+                header.set_mode(0o644);
+                header.set_cksum();
+                builder
+                    .append_data(&mut header, name, contents)
+                    .expect("append the entry to the tar");
+            }
+            let bytes = builder.into_inner().expect("finish the tar");
+            let cache = cache(&fixture);
+            let (sha256, dir) = cache.store(URL, &bytes).expect("store the unit");
+            let mut lock = Lockfile::default();
+            lock.entries.insert(
+                URL.to_string(),
+                LockEntry {
+                    sha256,
+                    tree: Some(tree_hash(&dir).expect("hash the unpacked tree")),
+                },
+            );
+            write_lockfile(&root.join("ridl.lock"), &lock).expect("write ridl.lock");
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+            assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
         }
 
         /// A remote unit that declares a consumer's source package is

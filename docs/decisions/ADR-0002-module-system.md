@@ -44,6 +44,14 @@ Amended 2026-10-22 by the TypeScript wasm codec design (slice 1): §4's
 `[backend.<name>]` tables gain the boolean key `wasm`, and MANI-015 covers a
 `wasm` that is not a boolean.
 
+Amended 2026-10-24 by [ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision
+12: §4 gains the `[limits]` table, which both manifest kinds accept. Its keys
+are `default`, the `[limits.kind]` table (`signal`, `fixed`, `event`, `command`,
+`query`) and the `[limits.interaction]` table, whose keys are
+`Interface.member`; each value is a limit in bytes of encoded payload, from 0 to
+16,256. A table applies to its own unit only. An unknown kind is MANI-021, a
+limit above 16,256 is MANI-022, and a value of the wrong type is MANI-015.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts

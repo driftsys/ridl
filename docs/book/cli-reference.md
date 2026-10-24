@@ -919,8 +919,9 @@ MANI-015. An `encodings` value that is not an array is MANI-015 only. The
 table, and no `transcode` option otherwise.
 
 MANI-015 is an error when the `encodings` value is not an array of the known
-names or repeats a name, or when `wasm`, `codec` or `transcode` is not a
-boolean, and MANI-016 is an error when the manifest of a workspace member holds
+names or repeats a name, when `wasm`, `codec` or `transcode` is not a boolean,
+when a `[limits]` value is not an integer of 0 or more, or when `[limits]`,
+`[limits.kind]` or `[limits.interaction]` is not a table, and MANI-016 is an error when the manifest of a workspace member holds
 a `backend` key or `[backend.<name>]` table: only the workspace root, or a
 standalone package, sets it. Any other key under `[backend.<name>]` is
 MANI-005. The table is not the `backend.` attribute namespace of an rsdl
@@ -940,6 +941,48 @@ table at all is compared, so a build that declared no encodings is still
 reported. An empty list is how a
 schema-only plugin silences the lint for its own backend, where the `[lints]`
 level silences it for every backend at once.
+
+`[limits]` gives the interactions of a unit their payload limits, in bytes of
+encoded payload ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md)
+decision 12). A unit sets it in its own `ridl.toml`; the table of a workspace
+root does not apply to its members, and a package of a unit's subdirectory
+takes the unit's table.
+
+```toml
+[limits]
+default = 4096                  # every kind with no entry below
+
+[limits.kind]
+signal = 256                    # signal, fixed, event, command or query
+event = 2048
+
+[limits.interaction]
+"Climate.temperature" = 64      # Interface.member, quoted because of the dot
+```
+
+The limit of an interaction is the first that is found of: its entry in
+`[limits.interaction]`, the entry of its kind in `[limits.kind]`, `default`,
+and the payload ceiling of 16,256 bytes. No limit is above the ceiling. A key
+of `[limits.interaction]` is the short name of the interface, or of the inline
+`service` (the last segment of its dotted name), then `.`, then the member;
+neither the package nor a dotted service name is part of it. When two
+interfaces or inline services of one unit share a short name, a key that uses
+the name is ambiguous.
+
+An unknown kind in `[limits.kind]` is MANI-021, and a value above 16,256 is
+MANI-022. A key that names no interaction of the unit, or that is ambiguous, is
+RIDL-152, reported on the key. RIDL-151 is reported on an interaction whose
+payload has a largest encoded size, in an encoding that a `[backend.<name>]`
+table enables (FlatBuffers when no table names one), above the limit that an
+entry of `[limits]` gives it, or no finite bound. A `command` or `query`
+checks its request and its reply against its one limit, and a `fixed` is sized
+too. Both are errors, so they have no name and no level in `[lints]`. A payload
+above the ceiling under a declared limit draws RIDL-150 as well; where no entry
+gives a limit, only RIDL-150 applies. A package with an error that stops
+`ridl build` writing artifacts, or that depends on one, is not checked, and a
+unit with such a package reports no RIDL-152. An error in a manifest stops
+RIDL-150 in every package of the workspace, and RIDL-151 and RIDL-152 only in
+the packages beneath that manifest.
 
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages

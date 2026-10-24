@@ -827,6 +827,24 @@ expression: log
               }
             },
             {
+              "id": "RIDL-151",
+              "shortDescription": {
+                "text": "payload above its declared limit or with no finite bound"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-152",
+              "shortDescription": {
+                "text": "a `[limits]` entry names no interaction of its unit"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "RIDL-201",
               "shortDescription": {
                 "text": "stream `<T>` on a `signal` or `event` payload"
@@ -1540,7 +1558,7 @@ expression: log
             {
               "id": "MANI-015",
               "shortDescription": {
-                "text": "a `[backend.<name>]` value has the wrong shape: `encodings` is not an array of known, distinct encoding names, or `wasm` is not a boolean"
+                "text": "a `[backend.<name>]` value has the wrong shape: `encodings` is not an array of known, distinct encoding names, `wasm`, `codec` or `transcode` is not a boolean, or a `[limits]` value is not a non-negative integer or a table"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1587,6 +1605,24 @@ expression: log
               "id": "MANI-020",
               "shortDescription": {
                 "text": "a backend table sets `transcode = true` with fewer than two encodings"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-021",
+              "shortDescription": {
+                "text": "unknown kind in `[limits.kind]`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-022",
+              "shortDescription": {
+                "text": "payload limit above the payload ceiling of 16,256 bytes"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1758,7 +1794,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 171,
+          "ruleIndex": 175,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

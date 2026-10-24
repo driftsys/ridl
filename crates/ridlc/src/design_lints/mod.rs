@@ -7,6 +7,7 @@ use ridl_sem::{CheckedPackage, Resolution};
 
 mod ceiling;
 mod cohesion;
+mod limits;
 mod shapes;
 mod sites;
 mod units;
@@ -80,6 +81,46 @@ pub(crate) fn check_payload_ceiling(
     )
 }
 
+/// RIDL-151 and RIDL-152 over one source set: the payload limits of each
+/// unit's `[limits]` table (ADR-0030 decisions 12 and 14). The inputs are
+/// those of [`check_payload_ceiling`], with `limits` the table of each unit
+/// by unit name. Both codes are errors, so lint levels do not apply.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_payload_limits(
+    db: &RidlDatabase,
+    packages: &[Package],
+    checked: &[CheckedPackage],
+    resolutions: &[Resolution],
+    blocked: &[bool],
+    std_ir: &ridl_ir::v2::Package,
+    encodings: &[String],
+    limits: &std::collections::BTreeMap<String, ridl_core::UnitLimits>,
+    sources: &mut SourceMap,
+) -> Vec<Diagnostic> {
+    let sites = SiteIndex::new(db, packages, resolutions, sources);
+    let subject = packages
+        .iter()
+        .zip(blocked)
+        .map(|(package, blocked)| {
+            !blocked && !matches!(package.origin(db), PackageOrigin::Remote { .. })
+        })
+        .collect();
+    limits::check(
+        &Ctx {
+            checked,
+            subject,
+            sites,
+        },
+        std_ir,
+        encodings,
+        limits,
+        &packages
+            .iter()
+            .map(|package| package.unit(db).clone())
+            .collect::<Vec<_>>(),
+    )
+}
+
 // The design checks consume the checked packages and the indexed sites.
 pub(crate) struct Ctx<'a> {
     pub checked: &'a [CheckedPackage],
@@ -90,6 +131,11 @@ pub(crate) struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
+    /// Whether the checks examine the declarations of `checked[index]`.
+    pub(crate) fn is_subject(&self, index: usize) -> bool {
+        self.subject[index] && self.checked[index].ir.name != "ridl.std"
+    }
+
     /// The packages whose declarations the checks examine: the consumer's,
     /// without `ridl.std` and without the packages of the remote units,
     /// which stay in `checked` as targets.

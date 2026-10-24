@@ -6,7 +6,8 @@ which release each surface is frozen against (ADR-0029).
 - `<surface>.txt` is the sorted, deduplicated dump of one surface, one line per
   fact. A dump is generated, never edited by hand.
 - `surfaces.toml` has one `[[surface]]` table per frozen surface, with a `name`
-  and a `baseline` (a git ref). The check fails when a line of the dump at the
+  and a `baseline` (a git ref that names an ancestor commit of HEAD; the check
+  fails on any other commit). The check fails when a line of the dump at the
   baseline is missing from the dump at HEAD. An added line passes. The optional
   top-level `required` key lists the surfaces that must have a row; it stays
   above the first table. The check fails when a row's name is not in `required`,

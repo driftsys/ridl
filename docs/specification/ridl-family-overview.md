@@ -335,38 +335,40 @@ Lexical errors are `0xx`, parse errors `1xx`, and the attribute-block rules
 The manifest codes are `0xx`; the distribution codes — lockfile, cache, fetch —
 are `1xx`.
 
-| Code     | Rule                                                                                                                      | Severity |
-| -------- | ------------------------------------------------------------------------------------------------------------------------- | -------- |
-| MANI-001 | invalid manifest TOML                                                                                                     | error    |
-| MANI-002 | manifest declares both `[package]` and `[workspace]`                                                                      | error    |
-| MANI-003 | manifest declares neither `[package]` nor `[workspace]`                                                                   | error    |
-| MANI-004 | nested workspace — a member manifest declares `[workspace]`                                                               | error    |
-| MANI-005 | unknown manifest key                                                                                                      | warning  |
-| MANI-006 | invalid package name — not lowercase dot-separated segments                                                               | error    |
-| MANI-007 | invalid import URL                                                                                                        | error    |
-| MANI-008 | workspace member directory is missing or has no `ridl.toml`                                                               | error    |
-| MANI-009 | invalid `[defaults]` timing value (ridl §9.1)                                                                             | error    |
-| MANI-010 | `[lints]` entry names no lint, or its value is not a level                                                                | warning  |
-| MANI-011 | `[codegen] header-file` cannot be read or holds a control character                                                       | error    |
-| MANI-012 | `[codegen] header-file` is set in a workspace member                                                                      | error    |
-| MANI-013 | nested manifest — a `ridl.toml` inside a unit's directory tree                                                            | error    |
-| MANI-014 | a source package is declared by two units                                                                                 | error    |
-| MANI-015 | `[backend.<name>] encodings` is not an array of known, distinct names, or `wasm`, `codec` or `transcode` is not a boolean | error    |
-| MANI-016 | `[backend.<name>]` is set in a workspace member                                                                           | error    |
-| MANI-017 | a workspace member is `vendor` or a path under it                                                                         | error    |
-| MANI-018 | in standalone mode, a source file under the root's `vendor/` is not loaded                                                | warning  |
-| MANI-019 | a backend table sets `codec = true` without a Rust wasm codec to run on                                                   | error    |
-| MANI-020 | a backend table sets `transcode = true` with fewer than two encodings                                                     | error    |
-| MANI-101 | remote import fetch failed                                                                                                | error    |
-| MANI-102 | fetched content hash does not match the lockfile                                                                          | error    |
-| MANI-103 | `--frozen` or `ridl vendor --check`: no lockfile entry for a remote import                                                | error    |
-| MANI-104 | `--frozen`: a lockfile-pinned import is not cached                                                                        | error    |
-| MANI-105 | a remote unit has no top-level `[package]` manifest, or its name is not the `[imports]` key                               | error    |
-| MANI-106 | a remote unit imports a key the consumer's `[imports]` does not name                                                      | error    |
-| MANI-107 | a remote unit's tree does not match the `tree` hash in `ridl.lock`                                                        | error    |
-| MANI-108 | `--frozen` or `ridl vendor --check`: a `ridl.lock` entry has no `tree` hash                                               | error    |
-| MANI-109 | an imported unit has no directory in `vendor/`                                                                            | error    |
-| MANI-110 | `vendor/` holds a directory that no `[imports]` key names                                                                 | error    |
+| Code     | Rule                                                                                                                                                                                   | Severity |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| MANI-001 | invalid manifest TOML                                                                                                                                                                  | error    |
+| MANI-002 | manifest declares both `[package]` and `[workspace]`                                                                                                                                   | error    |
+| MANI-003 | manifest declares neither `[package]` nor `[workspace]`                                                                                                                                | error    |
+| MANI-004 | nested workspace — a member manifest declares `[workspace]`                                                                                                                            | error    |
+| MANI-005 | unknown manifest key                                                                                                                                                                   | warning  |
+| MANI-006 | invalid package name — not lowercase dot-separated segments                                                                                                                            | error    |
+| MANI-007 | invalid import URL                                                                                                                                                                     | error    |
+| MANI-008 | workspace member directory is missing or has no `ridl.toml`                                                                                                                            | error    |
+| MANI-009 | invalid `[defaults]` timing value (ridl §9.1)                                                                                                                                          | error    |
+| MANI-010 | `[lints]` entry names no lint, or its value is not a level                                                                                                                             | warning  |
+| MANI-011 | `[codegen] header-file` cannot be read or holds a control character                                                                                                                    | error    |
+| MANI-012 | `[codegen] header-file` is set in a workspace member                                                                                                                                   | error    |
+| MANI-013 | nested manifest — a `ridl.toml` inside a unit's directory tree                                                                                                                         | error    |
+| MANI-014 | a source package is declared by two units                                                                                                                                              | error    |
+| MANI-015 | `[backend.<name>] encodings` is not an array of known, distinct names, `wasm`, `codec` or `transcode` is not a boolean, or a `[limits]` value is not a non-negative integer or a table | error    |
+| MANI-016 | `[backend.<name>]` is set in a workspace member                                                                                                                                        | error    |
+| MANI-017 | a workspace member is `vendor` or a path under it                                                                                                                                      | error    |
+| MANI-018 | in standalone mode, a source file under the root's `vendor/` is not loaded                                                                                                             | warning  |
+| MANI-019 | a backend table sets `codec = true` without a Rust wasm codec to run on                                                                                                                | error    |
+| MANI-020 | a backend table sets `transcode = true` with fewer than two encodings                                                                                                                  | error    |
+| MANI-021 | unknown kind in `[limits.kind]`                                                                                                                                                        | error    |
+| MANI-022 | payload limit above the payload ceiling of 16,256 bytes                                                                                                                                | error    |
+| MANI-101 | remote import fetch failed                                                                                                                                                             | error    |
+| MANI-102 | fetched content hash does not match the lockfile                                                                                                                                       | error    |
+| MANI-103 | `--frozen` or `ridl vendor --check`: no lockfile entry for a remote import                                                                                                             | error    |
+| MANI-104 | `--frozen`: a lockfile-pinned import is not cached                                                                                                                                     | error    |
+| MANI-105 | a remote unit has no top-level `[package]` manifest, or its name is not the `[imports]` key                                                                                            | error    |
+| MANI-106 | a remote unit imports a key the consumer's `[imports]` does not name                                                                                                                   | error    |
+| MANI-107 | a remote unit's tree does not match the `tree` hash in `ridl.lock`                                                                                                                     | error    |
+| MANI-108 | `--frozen` or `ridl vendor --check`: a `ridl.lock` entry has no `tree` hash                                                                                                            | error    |
+| MANI-109 | an imported unit has no directory in `vendor/`                                                                                                                                         | error    |
+| MANI-110 | `vendor/` holds a directory that no `[imports]` key names                                                                                                                              | error    |
 
 MANI-009 is the one manifest code the manifest layer does not raise: `ridl-core`
 cannot depend on `ridl-sem`, so the manifest parser stores the `[defaults]`
