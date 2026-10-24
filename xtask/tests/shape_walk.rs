@@ -383,11 +383,14 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridlc/src/design_lints/limits.rs",
-        lines: 1,
-        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
+        lines: 2,
+        why: "one read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
               `Package::interfaces`: the model's list is lowered from \
               `Package::shapes()`, so the check pairs each shape with the model \
-              interface at the same position and an inline shape is covered",
+              interface at the same position and an inline shape is covered. \
+              The other is the mutable walk of `annotate_limits`, which chains \
+              `Package::interfaces` with the inline shapes of the services, \
+              because `Package::shapes()` has no mutable form",
     },
     Allowed {
         path: "crates/ridlc/tests/cabin_example.rs",
