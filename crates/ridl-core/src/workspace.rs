@@ -447,6 +447,13 @@ fn walk_enters(entry: &fs::DirEntry) -> io::Result<bool> {
     Ok(entry.file_type()?.is_dir() && !entry.file_name().to_string_lossy().starts_with('.'))
 }
 
+/// Whether a directory entry name is one that macOS adds to a tar: an
+/// AppleDouble file (`._x.typl`) or the `__MACOSX` directory. The tree walk
+/// of a remote unit skips such an entry; a local tree is walked as it is.
+fn is_appledouble(name: &str) -> bool {
+    name.starts_with("._") || name == "__MACOSX"
+}
+
 /// The manifest that MANI-013 reports for the directory `subdirectory` of a
 /// unit's tree: `subdirectory/ridl.toml`, when that is a file. The loader's
 /// tree walk and [`find_nested_manifest`] both decide with this function.
@@ -1049,6 +1056,11 @@ impl Loader {
         for entry in fs::read_dir(dir).map_err(named)? {
             let entry = entry.map_err(named)?;
             let path = entry.path();
+            if matches!(origin, PackageOrigin::Remote { .. })
+                && is_appledouble(&entry.file_name().to_string_lossy())
+            {
+                continue;
+            }
             if path.is_dir() {
                 if walk_enters(&entry).map_err(named)? {
                     subdirs.push(path);
@@ -4914,6 +4926,47 @@ service:veh.common.climate 2
                 &mut loaded.sources,
                 &vendored.join("vendor/other.dep/d.typl")
             ));
+        }
+
+        /// A tar made on macOS holds AppleDouble entries (`._x.typl`, whose
+        /// bytes are not UTF-8) and a `__MACOSX/` directory. A remote unit
+        /// skips them without a diagnostic and loads the rest.
+        #[test]
+        fn a_remote_unit_skips_appledouble_entries() {
+            let fixture = TempDir::new("remote-appledouble");
+            let root = consumer(&fixture);
+            let mut builder = tar::Builder::new(Vec::new());
+            let entries: [(&str, &[u8]); 5] = [
+                ("ridl.toml", COMMON_MANIFEST.as_bytes()),
+                ("common.typl", b"package veh.common\ntype Speed : km/h\n"),
+                ("._common.typl", &[0x00, 0x05, 0x16, 0x07, 0xff, 0xfe]),
+                ("parts/._p.typl", &[0xff, 0xfe, 0x00]),
+                ("__MACOSX/parts/._p.typl", &[0xff, 0xfe, 0x00]),
+            ];
+            for (name, contents) in entries {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(contents.len() as u64);
+                header.set_mode(0o644);
+                header.set_cksum();
+                builder
+                    .append_data(&mut header, name, contents)
+                    .expect("append the entry to the tar");
+            }
+            let bytes = builder.into_inner().expect("finish the tar");
+            let cache = cache(&fixture);
+            let (sha256, dir) = cache.store(URL, &bytes).expect("store the unit");
+            let mut lock = Lockfile::default();
+            lock.entries.insert(
+                URL.to_string(),
+                LockEntry {
+                    sha256,
+                    tree: Some(tree_hash(&dir).expect("hash the unpacked tree")),
+                },
+            );
+            write_lockfile(&root.join("ridl.lock"), &lock).expect("write ridl.lock");
+            let (db, loaded) = load_frozen(&fixture, &root);
+            assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+            assert_eq!(package_names(&db, &loaded), ["app", "veh.common"]);
         }
 
         /// A remote unit that declares a consumer's source package is
