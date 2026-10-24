@@ -904,7 +904,7 @@ fn diff_interaction(
     // The declared payload limit is compared once for any pair of the same
     // kind; a kind change is reported alone as `KindChanged`.
     if old.limit != new.limit
-        && std::mem::discriminant(&old.kind) == std::mem::discriminant(&new.kind)
+        && kind_discriminant(&old.kind) == kind_discriminant(&new.kind)
     {
         emit(
             changes,

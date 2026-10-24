@@ -117,6 +117,27 @@ fn a_limit_only_change_reports_exactly_one_breaking_change() {
     assert_eq!(change.after.as_deref(), Some("64"));
 }
 
+#[test]
+fn a_kind_change_that_also_changes_the_limit_reports_only_the_kind_change() {
+    let mut old_signal = signal("a", 1, "T");
+    old_signal.limit = Some(64);
+    let mut new_event = event("a", 1, "T");
+    new_event.limit = Some(128);
+    let old = pkg("veh.cluster", interface("I", vec![old_signal]));
+    let new = pkg("veh.cluster", interface("I", vec![new_event]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.changes.len(), 1, "{:?}", report.changes);
+    assert_eq!(report.changes[0].category, Category::KindChanged);
+    assert!(
+        report
+            .changes
+            .iter()
+            .all(|change| change.category != Category::LimitChanged),
+        "{:?}",
+        report.changes
+    );
+}
+
 // --------------------------------------------------------------------------
 // Required task-16 cases.
 // --------------------------------------------------------------------------
