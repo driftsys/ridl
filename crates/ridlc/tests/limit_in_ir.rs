@@ -232,3 +232,25 @@ fn a_limits_table_stays_inside_its_unit() {
     assert_eq!(limits_in("a"), vec![Some(300)]);
     assert_eq!(limits_in("b"), vec![None]);
 }
+
+#[test]
+fn an_interface_tombstone_keeps_its_limit_unset() {
+    let source = "package demo\ntype Payload: bytes [0..100]\n\
+                  interface Iface {\n  signal sig: Payload @[10ms..100ms]\n  reserved old\n}\n";
+    let output = compile(source, "[limits]\ndefault = 300\n");
+    assert_eq!(errors(&output), Vec::<String>::new());
+    let ir = &output
+        .checked
+        .iter()
+        .find(|package| package.ir.name == "demo")
+        .expect("the package is checked")
+        .ir;
+    let tombstones: Vec<&v2::Decl> = ir
+        .shapes()
+        .flat_map(|shape| shape.interface.interactions.iter())
+        .filter(|decl| matches!(decl.kind, Some(v2::decl::Kind::ReservedSlot(_))))
+        .collect();
+    assert_eq!(tombstones.len(), 1, "the interface holds one tombstone");
+    assert_eq!(tombstones[0].limit, None);
+    assert_eq!(limit(&output, "Iface.sig"), Some(300));
+}
