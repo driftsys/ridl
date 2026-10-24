@@ -1249,6 +1249,69 @@ fn an_rpc_bound_change_on_a_kind_that_carries_no_rpc_bound_is_breaking() {
 }
 
 // ==========================================================================
+// Payload limits (ADR-0030 decision 13).
+// ==========================================================================
+
+fn limited(limit: Option<u32>) -> v2::Package {
+    let mut interaction = signal("a", 1, "T");
+    interaction.limit = limit;
+    pkg(vec![interaction])
+}
+
+#[test]
+fn a_raised_limit_is_breaking() {
+    assert_row(
+        &limited(Some(64)),
+        &limited(Some(128)),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn a_lowered_limit_is_breaking() {
+    assert_row(
+        &limited(Some(128)),
+        &limited(Some(64)),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn a_limit_added_is_breaking() {
+    assert_row(
+        &limited(None),
+        &limited(Some(64)),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn a_limit_removed_is_breaking() {
+    assert_row(
+        &limited(Some(64)),
+        &limited(None),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn an_unchanged_limit_reports_nothing() {
+    let report = diff_packages(&limited(Some(64)), &limited(Some(64)));
+    assert!(
+        report
+            .changes
+            .iter()
+            .all(|change| change.category != Category::LimitChanged),
+        "{:?}",
+        report.changes
+    );
+}
+
+// ==========================================================================
 // Fallible returns and the inline `T | E` transport identity.
 // ==========================================================================
 

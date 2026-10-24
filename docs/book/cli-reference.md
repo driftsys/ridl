@@ -1803,6 +1803,7 @@ the categories `ridl diff` reports are:
   params_changed
   timing_changed
   rpc_bound_changed
+  limit_changed
   contract_changed
   interaction_class_changed
   width_changed

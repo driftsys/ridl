@@ -111,6 +111,11 @@ pub(crate) fn classify_in(
         Category::InterfaceFrozen => Verdict::Compatible,
         Category::InterfaceNumberChanged => Verdict::Breaking,
 
+        // A payload limit is part of the catalog hash and a receiver enforces
+        // it, so raising, lowering, adding and removing one are all breaking
+        // (ADR-0030 decision 13).
+        Category::LimitChanged => Verdict::Breaking,
+
         // An enum value or enum-set bit takes its identity from its explicit
         // number (typl §8, §9), so a body that differs only in order moves
         // nothing on the wire. The catalog hash covers that order when an
@@ -1362,6 +1367,11 @@ pub fn explain(category: Category) -> &'static str {
             "              an RPC bound may come from a default, and diff compares\n",
             "              resolved bounds, so editing a default surfaces here on\n",
             "              every defaulted command or query (ridl 9.1)"
+        ),
+        Category::LimitChanged => concat!(
+            "The payload limit of the interaction changed; every change of a limit is\n",
+            "breaking, ADR-0030 decision 13.\n",
+            "  breaking    a limit raised, lowered, added where none was, or removed"
         ),
         Category::ContractChanged => concat!(
             "A command or query require/ensure clause set changed (ridl 13).\n",

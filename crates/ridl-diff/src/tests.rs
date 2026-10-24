@@ -100,6 +100,23 @@ fn pkg(name: &str, iface: v2::Interface) -> v2::Package {
     }
 }
 
+#[test]
+fn a_limit_only_change_reports_exactly_one_breaking_change() {
+    let mut old_signal = signal("a", 1, "T");
+    old_signal.limit = None;
+    let mut new_signal = signal("a", 1, "T");
+    new_signal.limit = Some(64);
+    let old = pkg("veh.cluster", interface("I", vec![old_signal]));
+    let new = pkg("veh.cluster", interface("I", vec![new_signal]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.changes.len(), 1, "{:?}", report.changes);
+    let change = &report.changes[0];
+    assert_eq!(change.category, Category::LimitChanged);
+    assert_eq!(change.verdict, Verdict::Breaking);
+    assert_eq!(change.before.as_deref(), Some("none"));
+    assert_eq!(change.after.as_deref(), Some("64"));
+}
+
 // --------------------------------------------------------------------------
 // Required task-16 cases.
 // --------------------------------------------------------------------------
