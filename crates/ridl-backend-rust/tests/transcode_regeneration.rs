@@ -42,3 +42,47 @@ fn generated_transcode_matches_the_emitter() {
          RIDL_UPDATE_GENERATED=1 cargo test -p ridl-backend-rust --test transcode_regeneration"
     );
 }
+
+/// A repeated encoding takes its owner list once, so the output is the one
+/// the list without the repeat gives, and no transcode function is emitted
+/// twice.
+#[test]
+fn a_repeated_encoding_emits_each_transcode_function_once() {
+    let package = ir::compile_fixture("transcode.ridl");
+    let repeated = [
+        ridl_backend_rust::WireEncoding::FlatBuffers,
+        ridl_backend_rust::WireEncoding::Proto3,
+        ridl_backend_rust::WireEncoding::FlatBuffers,
+    ];
+    let once = ridl_backend_rust::generate_pipeline(&package, ENCODINGS, true, &[])
+        .expect("generate_pipeline")
+        .rust_source;
+    let twice = ridl_backend_rust::generate_pipeline(&package, &repeated, true, &[])
+        .expect("generate_pipeline")
+        .rust_source;
+    assert_eq!(twice, once);
+}
+
+/// The transcode functions follow the order the encodings are listed in,
+/// not the order the codecs are emitted in: listing proto3 first puts each
+/// type's proto3-to-FlatBuffers function before its FlatBuffers-to-proto3
+/// function.
+#[test]
+fn the_transcode_functions_follow_the_listed_encoding_order() {
+    let package = ir::compile_fixture("transcode.ridl");
+    let reversed = [
+        ridl_backend_rust::WireEncoding::Proto3,
+        ridl_backend_rust::WireEncoding::FlatBuffers,
+    ];
+    let source = ridl_backend_rust::generate_pipeline(&package, &reversed, true, &[])
+        .expect("generate_pipeline")
+        .rust_source;
+    let first = |name: &str| {
+        source
+            .find(name)
+            .unwrap_or_else(|| panic!("{name} is not emitted"))
+    };
+    assert!(
+        first("fn transcode_proto3_to_flatbuffers") < first("fn transcode_flatbuffers_to_proto3")
+    );
+}

@@ -511,14 +511,27 @@ fn package_items(
     for encoding in encodings {
         encoding.check_emitted();
     }
+    let mut recorded: Vec<(WireEncoding, Vec<transcode::PayloadOwner>)> = Vec::new();
     if encodings.contains(&WireEncoding::FlatBuffers) {
-        items.extend(codec::package_items(ctx)?);
+        let (codec_items, owners) = codec::package_items(ctx)?;
+        items.extend(codec_items);
+        recorded.push((WireEncoding::FlatBuffers, owners));
     }
     if encodings.contains(&WireEncoding::Proto3) {
-        items.extend(codec_proto3::package_items(ctx)?);
+        let (codec_items, owners) = codec_proto3::package_items(ctx)?;
+        items.extend(codec_items);
+        recorded.push((WireEncoding::Proto3, owners));
     }
     if transcode {
-        items.extend(transcode::package_items(ctx, encodings)?);
+        // The owner lists in the order the encodings are listed; a repeated
+        // encoding takes its list once.
+        let mut owners = Vec::new();
+        for encoding in encodings {
+            if let Some(index) = recorded.iter().position(|(e, _)| e == encoding) {
+                owners.push(recorded.swap_remove(index));
+            }
+        }
+        items.extend(transcode::package_items(&owners));
     }
     Ok(items)
 }

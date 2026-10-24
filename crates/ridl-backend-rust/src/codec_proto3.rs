@@ -120,16 +120,14 @@ use crate::{
 };
 
 /// Emits the proto3 codec for the package `ctx` was built over.
-pub(crate) fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
-    Ok(Codec::new(ctx)?.items()?.0)
-}
-
-/// The types [`package_items`] emits a `Payload<Proto3>` implementation for:
-/// the same walk, so the transcode functions follow the codec's own rule.
-pub(crate) fn payload_owners(
+///
+/// Also returns the types it emits a `Payload<Proto3>` implementation for,
+/// recorded during the same walk, so the transcode functions follow the
+/// codec's own rule.
+pub(crate) fn package_items(
     ctx: &Ctx,
-) -> Result<Vec<crate::transcode::PayloadOwner>, GenerateError> {
-    Ok(Codec::new(ctx)?.items()?.1)
+) -> Result<(Vec<TokenStream>, Vec<crate::transcode::PayloadOwner>), GenerateError> {
+    Codec::new(ctx)?.items()
 }
 
 /// The layout the codec emits from, per emitted message, for the test that
