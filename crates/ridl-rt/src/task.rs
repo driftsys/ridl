@@ -63,8 +63,13 @@ impl Wake for Unpark {
 }
 
 /// A waker whose wake does nothing.
+///
+/// `Waker::noop()` exists at this crate's minimum, but the documented
+/// behaviour of [`noop_waker`] is one allocation per call, which the frozen API
+/// keeps.
 struct Noop;
 
+#[allow(clippy::manual_noop_waker)]
 impl Wake for Noop {
     fn wake(self: Arc<Self>) {}
 
