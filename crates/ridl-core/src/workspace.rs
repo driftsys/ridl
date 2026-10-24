@@ -3048,6 +3048,23 @@ mod tests {
         assert_eq!(packages[0].name(&db).as_str(), "veh.common");
     }
 
+    /// Control for the remote-unit skip: a local package keeps reading an
+    /// AppleDouble-named file, so `._x.typl` with invalid UTF-8 is reported.
+    #[test]
+    fn a_local_appledouble_named_file_is_still_read() {
+        let dir = TempDir::new("local-appledouble");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.typl", "package veh.common\ntype A: m\n");
+        fs::write(dir.path().join("._x.typl"), [0xFF, 0xFE, 0x00, 0x9F])
+            .expect("write the non-UTF8 fixture");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the load continues");
+        assert_eq!(loaded.diagnostics.len(), 1, "{:?}", loaded.diagnostics);
+        assert!(loaded.diagnostics[0].message.contains("not valid UTF-8"));
+        assert!(loaded.diagnostics[0].message.contains("._x.typl"));
+    }
+
     /// A `.typl` file that is not valid UTF-8 becomes a diagnostic and is
     /// skipped; the rest of the package still loads (ADR-0004 §5 — never a
     /// hard error for content problems).
