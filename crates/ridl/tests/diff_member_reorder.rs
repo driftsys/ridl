@@ -1009,3 +1009,107 @@ fn an_enum_set_reorder_with_an_added_bit_reports_the_addition_alone() {
         "the addition is the only change reported:\n{out}",
     );
 }
+
+/// `door` is removed, so `latch` moves from ordinal 2 to ordinal 1. The names
+/// differ, so the walk reports the removal and stops before it compares
+/// ordinals.
+const LATCH_ONLY: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  latch: DoorState
+}
+";
+
+/// A field is appended after a swap of the first two fields.
+const SWAPPED_AND_APPENDED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  latch: DoorState
+  door: DoorState
+  count: Count
+}
+";
+
+/// Three fields, in the order `door`, `latch`, `count`.
+const DOOR_LATCH_COUNT: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  door: DoorState
+  latch: DoorState
+  count: Count
+}
+";
+
+/// `door` is removed, and `count` and `latch` swap places.
+const REMOVED_AND_SWAPPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  count: Count
+  latch: DoorState
+}
+";
+
+/// The diff report's change lines, in order, without the verdict line.
+fn change_lines(stdout: &str) -> Vec<&str> {
+    stdout.lines().skip(1).filter(|l| !l.is_empty()).collect()
+}
+
+/// A removal that shifts a surviving field's ordinal reports the removal and
+/// nothing else, so no `member_reordered` row and no `constraint_changed` row:
+/// the ordinal comparison runs only when the name sets are equal.
+#[test]
+fn a_removal_that_shifts_a_survivor_reports_no_member_reordered() {
+    let dir = TempDir::new("remove-shift");
+    let old = workspace(&dir, "old", FIELDS);
+    let new = workspace(&dir, "new", LATCH_ONLY);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a removal is breaking:\n{out}");
+    assert_eq!(
+        change_lines(&stdout),
+        vec!["  [breaking] decl_removed veh.cluster/Report/door: door -> (removed)",],
+        "the removal is the only row:\n{out}",
+    );
+}
+
+/// An appended field beside a swap reports the addition and nothing else, so
+/// no `member_reordered` row.
+#[test]
+fn an_append_beside_a_swap_reports_no_member_reordered() {
+    let dir = TempDir::new("append-swap");
+    let old = workspace(&dir, "old", FIELDS);
+    let new = workspace(&dir, "new", SWAPPED_AND_APPENDED);
+
+    let (_, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(
+        change_lines(&stdout),
+        vec!["  [breaking] decl_added veh.cluster/Report/count: (absent) -> count",],
+        "the addition is the only row:\n{out}",
+    );
+}
+
+/// A removal beside a swap of two survivors reports the removal and nothing
+/// else, so no `member_reordered` row.
+#[test]
+fn a_removal_beside_a_swap_reports_no_member_reordered() {
+    let dir = TempDir::new("remove-swap");
+    let old = workspace(&dir, "old", DOOR_LATCH_COUNT);
+    let new = workspace(&dir, "new", REMOVED_AND_SWAPPED);
+
+    let (_, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(
+        change_lines(&stdout),
+        vec!["  [breaking] decl_removed veh.cluster/Report/door: door -> (removed)",],
+        "the removal is the only row:\n{out}",
+    );
+}
