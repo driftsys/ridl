@@ -224,12 +224,12 @@ When accepted, these records gain a dated note or are changed in place:
     `command` or `query`) in `[limits.kind]`, `default`, and the payload ceiling
     of decision 2. With no `[limits]` table, every interaction's limit is the
     ceiling. The table names only the unit's own interactions, by the
-    interface's name as the catalog records it, then `.`, then the member. An
-    unknown kind and a value above 16,256 are manifest errors with a `MANI-`
-    code (ADR-0002); a name that matches no interaction is a checker error with
-    a `RIDL-` code. The codes are assigned when the checks are built. The
-    ceiling stays the upper bound for every interaction and is changed only by
-    amending this record.
+    interface's or inline service's name without its package, then `.`, then the
+    member. An unknown kind and a value above 16,256 are manifest errors with a
+    `MANI-` code (ADR-0002); a name that matches no interaction is a checker
+    error with a `RIDL-` code. The codes are assigned when the checks are built.
+    The ceiling stays the upper bound for every interaction and is changed only
+    by amending this record.
 
     The limits are in the manifest, not in an attribute, because a signal, an
     event and a fixed take no attribute block (`family-general-form.md` §4.3),

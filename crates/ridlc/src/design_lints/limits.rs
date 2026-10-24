@@ -8,9 +8,12 @@
 //! applies, only RIDL-150 runs. RIDL-152 reports a `[limits.interaction]` key
 //! that names no interaction of its unit.
 //!
-//! An interaction is named `Interface.member`: the interface name, or for an
-//! inline `service` shape its dotted global name, as the IR records it, with
-//! no package prefix of its own, then `.`, then the member name.
+//! An interaction is named `Interface.member`: the short name of its shape,
+//! then `.`, then the member name. The short name is the interface name, or for
+//! an inline `service` shape the last segment of its dotted global name, so
+//! neither carries a package. When two shapes of one unit share a short name,
+//! no key can name either of them, and a key that uses the name is reported as
+//! ambiguous.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -27,15 +30,24 @@ use super::ceiling::{self, Entry, Side, Size};
 /// The limit that a `[limits]` table gives an interaction: its entry in
 /// `[limits.interaction]`, else the entry of its kind, else `default`, or
 /// `None` when no entry applies.
-fn resolve(limits: &Limits, kind: LimitKind, owner: &str, member: &str) -> Option<u32> {
-    let name = format!("{owner}.{member}");
+///
+/// `owner` is the short name of the shape, or `None` when another shape of the
+/// unit has the same short name, so that no `[limits.interaction]` entry can
+/// apply.
+fn resolve(limits: &Limits, kind: LimitKind, owner: Option<&str>, member: &str) -> Option<u32> {
+    let name = owner.map(|owner| format!("{owner}.{member}"));
     limits
         .interactions
         .iter()
-        .find(|entry| entry.name == name)
+        .find(|entry| Some(&entry.name) == name.as_ref())
         .map(|entry| entry.value)
         .or_else(|| limits.kinds.get(&kind).map(|entry| *entry.get_ref()))
         .or_else(|| limits.default.as_ref().map(|entry| *entry.get_ref()))
+}
+
+/// The last segment of the name of a shape.
+fn short_name(name: &str) -> &str {
+    name.rsplit('.').next().unwrap_or(name)
 }
 
 fn kind_of(decl: &v2::Decl) -> Option<LimitKind> {
@@ -85,6 +97,13 @@ pub(crate) fn check(
             .chain(std::iter::once(std_ir))
             .collect();
         let mut known = BTreeSet::new();
+        let mut seen = BTreeSet::new();
+        let mut ambiguous = BTreeSet::new();
+        for shape in package.shapes() {
+            if !seen.insert(short_name(shape.name)) {
+                ambiguous.insert(short_name(shape.name));
+            }
+        }
         // A package with no interface has nothing to lower; its entries are
         // all unmatched.
         let interfaces = if package.shapes().next().is_some() {
@@ -93,8 +112,12 @@ pub(crate) fn check(
             Vec::new()
         };
         for (shape, interface) in package.shapes().zip(&interfaces) {
+            let short = short_name(shape.name);
+            let owner = (!ambiguous.contains(short)).then_some(short);
             for (decl, slot) in shape.interface.interactions.iter().zip(&interface.slots) {
-                known.insert(format!("{}.{}", shape.name, decl.name));
+                if owner.is_some() {
+                    known.insert(format!("{short}.{}", decl.name));
+                }
                 let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
                     slot.occupant.as_ref()
                 else {
@@ -103,7 +126,7 @@ pub(crate) fn check(
                 let Some(kind) = kind_of(decl) else {
                     continue;
                 };
-                let Some(limit) = resolve(&unit.limits, kind, shape.name, &decl.name) else {
+                let Some(limit) = resolve(&unit.limits, kind, owner, &decl.name) else {
                     continue;
                 };
                 let Some(span) = ctx.sites.member(&package.name, shape.name, &decl.name) else {
@@ -134,7 +157,7 @@ pub(crate) fn check(
                         message: format!(
                             "the {} of `{}.{}` has {}; its limit is {limit} bytes",
                             payload.role,
-                            shape.name,
+                            short,
                             decl.name,
                             found.join(" and "),
                         ),
@@ -153,14 +176,22 @@ pub(crate) fn check(
                 TextSize::from(u32::try_from(entry.key.start).unwrap_or(u32::MAX)),
                 TextSize::from(u32::try_from(entry.key.end).unwrap_or(u32::MAX)),
             );
+            let message = match entry.name.split_once('.') {
+                Some((name, _)) if ambiguous.contains(name) => format!(
+                    "`{}` is ambiguous: more than one interface or inline service of package \
+                     `{}` is named `{name}`",
+                    entry.name, package.name
+                ),
+                _ => format!(
+                    "`{}` names no interaction of package `{}`; write `Interface.member`, \
+                     with the interface or inline service name without its package",
+                    entry.name, package.name
+                ),
+            };
             diagnostics.push(Diagnostic {
                 code: DiagCode::RIDL_152,
                 severity: Severity::Error,
-                message: format!(
-                    "`{}` names no interaction of package `{}`; write `Interface.member`, \
-                     with the interface or inline service name and no package prefix",
-                    entry.name, package.name
-                ),
+                message,
                 primary: Span {
                     file: unit.manifest,
                     range,
@@ -190,12 +221,22 @@ mod tests {
 
     #[test]
     fn no_entry_resolves_to_none() {
-        assert_eq!(resolve(&limits(), LimitKind::Signal, "I", "other"), None);
+        assert_eq!(
+            resolve(&limits(), LimitKind::Signal, Some("I"), "other"),
+            None
+        );
     }
 
     #[test]
     fn a_name_entry_applies_to_its_interaction_only() {
-        assert_eq!(resolve(&limits(), LimitKind::Signal, "I", "named"), Some(1));
-        assert_eq!(resolve(&limits(), LimitKind::Signal, "J", "named"), None);
+        assert_eq!(
+            resolve(&limits(), LimitKind::Signal, Some("I"), "named"),
+            Some(1)
+        );
+        assert_eq!(
+            resolve(&limits(), LimitKind::Signal, Some("J"), "named"),
+            None
+        );
+        assert_eq!(resolve(&limits(), LimitKind::Signal, None, "named"), None);
     }
 }

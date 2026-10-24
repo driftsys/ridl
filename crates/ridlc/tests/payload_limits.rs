@@ -206,12 +206,34 @@ fn a_fixed_is_checked_though_the_ceiling_check_skips_it() {
 }
 
 #[test]
-fn an_inline_service_is_keyed_by_its_dotted_name() {
+fn an_inline_service_is_keyed_by_its_short_name() {
     let source = "package demo\ntype Payload: bytes [0..1000]\n\
                   service demo.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
-    let diagnostics = check(source, "[limits.interaction]\n\"demo.svc.sig\" = 10\n");
-    assert_eq!(with("RIDL-151", &diagnostics).len(), 1, "{diagnostics:?}");
+    let diagnostics = check(source, "[limits.interaction]\n\"svc.sig\" = 10\n");
+    let found = with("RIDL-151", &diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert!(found[0].message.contains("`svc.sig`"), "{found:?}");
     assert!(with("RIDL-152", &diagnostics).is_empty(), "{diagnostics:?}");
+    // The dotted form is not a key.
+    let diagnostics = check(source, "[limits.interaction]\n\"demo.svc.sig\" = 10\n");
+    assert!(with("RIDL-151", &diagnostics).is_empty(), "{diagnostics:?}");
+    assert_eq!(with("RIDL-152", &diagnostics).len(), 1, "{diagnostics:?}");
+}
+
+#[test]
+fn a_short_name_shared_by_two_shapes_is_ambiguous() {
+    let source = "package demo\ntype Payload: bytes [0..1000]\n\
+                  service demo.a.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n\
+                  service demo.b.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let diagnostics = check(source, "[limits.interaction]\n\"svc.sig\" = 10\n");
+    let found = with("RIDL-152", &diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert!(found[0].message.contains("ambiguous"), "{found:?}");
+    // The entry applies to neither shape.
+    assert!(with("RIDL-151", &diagnostics).is_empty(), "{diagnostics:?}");
+    // A kind entry still applies to both.
+    let diagnostics = check(source, "[limits.kind]\nsignal = 10\n");
+    assert_eq!(with("RIDL-151", &diagnostics).len(), 2, "{diagnostics:?}");
 }
 
 #[test]
