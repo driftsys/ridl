@@ -863,14 +863,17 @@ impl<B: Backend> Session<B> {
 
     /// The last instant of the backend's clock at which the response to a
     /// request is kept: `min(stamp, receipt) + max`, with `max` the member's
-    /// bound from the member table. `None` when the backend gives no table or
-    /// the table gives the member no bound.
+    /// bound from the member table. `None` when the backend gives no table,
+    /// the table gives the member no bound, or the table does not hold the
+    /// identity as a command or query under the request's kind: a refused
+    /// request takes no bound from a member of another kind (a signal's
+    /// `max_us` is not a call bound).
     fn retention(&self, target: Target, stamp: Timestamp, receipt: Timestamp) -> Option<Timestamp> {
-        let max = self
-            .backend
-            .members()?
-            .member(target.iface, target.ord)?
-            .1?;
+        let (kind, max) = self.backend.members()?.member(target.iface, target.ord)?;
+        if kind != target.kind || !matches!(kind, Kind::Command | Kind::Query) {
+            return None;
+        }
+        let max = max?;
         let max_micros = i64::try_from(max.as_micros()).unwrap_or(i64::MAX);
         Some(Timestamp(stamp.0.min(receipt.0).saturating_add(max_micros)))
     }
@@ -3795,6 +3798,91 @@ mod tests {
         );
         let (_, again) = send(&mut s, &request_at(COMMAND_UNBOUNDED, 2, 0, &[]));
         assert_eq!(again, responses[1]);
+    }
+
+    /// Sends 65 requests of `target`, each refused `UnknownInteraction`,
+    /// over a table that holds ordinal 8 as a signal with a bound of one hour,
+    /// and checks that the first response is out of the ring after the 65th:
+    /// the refused response took no bound from the member.
+    fn assert_refused_requests_fall_into_the_last_64(target: Target) {
+        let mut t = (*table()).clone();
+        t.insert(
+            IFACE,
+            Ordinal(8),
+            Kind::Signal,
+            Some(std::time::Duration::from_secs(3600)),
+        );
+        let (mut s, _p, notes) = described_with(t, |c| c);
+        open(&mut s);
+        let mut responses = Vec::new();
+        for seq in 1..=65 {
+            let (step, out) = send(&mut s, &request(target, seq, &[]));
+            assert_eq!(
+                (step, out.len()),
+                (Step::Continue, 1),
+                "{target:?} request {seq}"
+            );
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                response(
+                    target,
+                    0,
+                    seq,
+                    seq,
+                    ResponseOutcome::Contract(Contract::UnknownInteraction)
+                )
+            );
+            responses.push(out);
+        }
+        notes.lock().unwrap().clear();
+        // The 65th refused response pushed the first out of the ring, within
+        // the bound the member would have given.
+        let (_, again) = send(&mut s, &request(target, 1, &[]));
+        assert!(again.is_empty(), "{target:?}");
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+        let (_, again) = send(&mut s, &request(target, 2, &[]));
+        assert_eq!(again, responses[1]);
+    }
+
+    /// A `request` naming an ordinal the table holds under another kind is
+    /// refused, and its response takes no bound from that member: a signal's
+    /// `max_us` is not a call bound. The refused response is one of the last
+    /// 64.
+    ///
+    /// Mutation: look the bound up by `(interface, ordinal)` without the kind
+    /// (the second case, whose member is a bounded query, catches it alone).
+    #[test]
+    fn a_refused_request_to_a_bounded_ordinal_of_another_kind_falls_into_the_last_64() {
+        assert_refused_requests_fall_into_the_last_64(target(Kind::Command, 8));
+        assert_refused_requests_fall_into_the_last_64(target(Kind::Command, QUERY.ord.0));
+        assert_refused_requests_fall_into_the_last_64(target(Kind::Query, COMMAND.ord.0));
+    }
+
+    /// The frame admits a `request` under a kind that is not a call; the
+    /// table holds the identity under that kind, so the form check refuses
+    /// it, and the member's bound is still not a call bound.
+    ///
+    /// Mutation: drop the Command-or-Query condition and keep the kind
+    /// comparison.
+    #[test]
+    fn a_refused_request_to_a_bounded_signal_under_kind_signal_falls_into_the_last_64() {
+        assert_refused_requests_fall_into_the_last_64(target(Kind::Signal, 8));
+    }
+
+    /// Mutation: keep the bound for `Kind::Command` only.
+    #[test]
+    fn sixty_five_bounded_query_responses_are_all_kept_within_their_bound() {
+        let (mut s, mut p, _n) = described_scanning();
+        open(&mut s);
+        let first = settled(&mut s, &mut p, QUERY, 1, Ok(&[1]));
+        for seq in 2..=65 {
+            settled(&mut s, &mut p, QUERY, seq, Ok(&[1]));
+        }
+        let (_, again) = send(&mut s, &request_at(QUERY, 1, 0, &[]));
+        assert_eq!(again, first);
     }
 
     /// Mutation: close at `>=`.

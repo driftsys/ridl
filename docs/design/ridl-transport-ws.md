@@ -521,13 +521,16 @@ responses kept for duplicates are `server/calls.rs`.
   dropped. A response is kept, with the responses sent at once (`busy`, a
   `contract`), until `min(request.stamp, receipt) + max` by the backend's clock,
   where `receipt` is `Clock::now()` when the request arrived and `max` the
-  member's bound from the member table (D-10); the `min` keeps §7's "measured
-  from the request's `stamp`" when the client's clock is behind, and caps the
-  retention when a client stamps ahead, so stamping requests in the future holds
-  no response. Expired responses go on each tick. For a member the table gives
-  no bound (a catalog built before the default response bound), or with no
-  table, the server keeps the last 64 as before: a stated deviation from §11.1
-  item 6 (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
+  member's bound from the member table (D-10), taken only when the table holds
+  the request's identity as a command or query under the request's `kind`: a
+  request the table refuses (D-12) takes no bound from a member of another kind
+  and is kept as one of the last 64; the `min` keeps §7's "measured from the
+  request's `stamp`" when the client's clock is behind, and caps the retention
+  when a client stamps ahead, so stamping requests in the future holds no
+  response. Expired responses go on each tick. For a member the table gives no
+  bound (a catalog built before the default response bound), or with no table,
+  the server keeps the last 64 as before: a stated deviation from §11.1 item 6
+  (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
   retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
   by default), and a session never applies a cap below `max_message_bytes`; when
   a response makes the kept bytes pass the cap, the response is sent, then the
