@@ -80,8 +80,8 @@ const BREAK_FOUND: i32 = 100;
 /// Compares the runtime crates with the same crates at the row's baseline,
 /// in one `cargo semver-checks` run.
 pub fn runtime_compare(root: &Path, row: &Row) -> Result<Vec<String>, String> {
-    verify_runtime_packages(root)?;
     fetch_dependencies(root)?;
+    verify_runtime_packages(root)?;
     if baseline_lock_differs(root, row)? {
         let tree = scratch_dir(root, "baseline-tree")?;
         fetch_baseline_dependencies(root, row, &tree)?;
