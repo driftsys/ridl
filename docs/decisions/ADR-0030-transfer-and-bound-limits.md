@@ -237,16 +237,17 @@ When accepted, these records gain a dated note or are changed in place:
     and the catalog-wide and per-kind defaults have no declaration to sit on.
     The general form and the attribute registry do not change.
 
-13. **The resolved limits are part of the catalog** (added 2026-10-24). The
-    checker resolves each interaction's limit, and lowering records it in the IR
-    on the interaction, so the catalog hash covers it. An interaction whose
-    limit is the ceiling because no entry applies records no limit, so a unit
-    with no `[limits]` table keeps its catalog hash. `ridl diff` reports every
-    change of a limit, a raise or a lowering, as breaking, so a catalog whose
-    limits changed is not on the `compatible` chain of the earlier one. Two
-    peers whose limits differ therefore have different hashes, neither accepts
-    the other, and the attach is refused (frame specification §6.1). The catalog
-    descriptor's member table gains a column with each member's limit.
+13. **The resolved limits are part of the catalog** (added 2026-10-24). A pass
+    of `ridlc` that runs after the checks resolves each interaction's limit and
+    records it in the IR on the interaction, so the catalog hash covers it. The
+    checker and lowering of `ridl-sem` leave the limit unset. An interaction
+    whose limit is the ceiling because no entry applies records no limit, so a
+    unit with no `[limits]` table keeps its catalog hash. `ridl diff` reports
+    every change of a limit, a raise or a lowering, as breaking, so a catalog
+    whose limits changed is not on the `compatible` chain of the earlier one.
+    Two peers whose limits differ therefore have different hashes, neither
+    accepts the other, and the attach is refused (frame specification §6.1). The
+    catalog descriptor's member table gains a column with each member's limit.
 
 14. **A payload above a declared limit is an error** (added 2026-10-24). When a
     `[limits]` entry gives an interaction its limit, and the computed bound of

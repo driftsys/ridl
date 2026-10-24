@@ -984,6 +984,11 @@ unit with such a package reports no RIDL-152. An error in a manifest stops
 RIDL-150 in every package of the workspace, and RIDL-151 and RIDL-152 only in
 the packages beneath that manifest.
 
+A `[limits]` entry that applies to an interaction is recorded in the IR, so
+adding, removing or editing one changes the catalog hash of the interaction's
+unit. An interaction that no entry reaches records no limit, and a unit with no
+`[limits]` table keeps its hash.
+
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages
 and enums, with named-scalar constraints carried as comments — plus the

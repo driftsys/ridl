@@ -73,6 +73,13 @@ freeze check compares them as items of `ridl-descriptor`
 ([ADR-0029](ADR-0029-stability-policy.md)). The hash is unchanged. Decisions 1
 to 14 are unchanged.
 
+**Amended 2026-10-25 — decision 15, the payload limit.** The IR's interaction
+`Decl` carries an optional payload limit, `limit`, which a pass of `ridlc` sets
+after the checks when a `[limits]` entry of the manifest applies
+([ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision 13). The reduced
+unit holds it, so the catalog hash covers it. A unit with no applicable entry
+hashes as before. Decisions 1 to 14 are unchanged.
+
 The reasoning trail is
 [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
@@ -552,6 +559,12 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       IR's other value strings — declared and resolved inits, range bounds and
       steps, timing bounds — hold resolved values, so a change to a constant
       they were written with already changes them;
+    - the interaction's payload limit (`Decl.limit`, an optional `uint32` in
+      bytes), set only when an entry of the manifest's `[limits]` table applies
+      to the interaction (ADR-0030 decisions 12 and 13). A unit with no
+      `[limits]` table hashes as it did before the field existed, and a change
+      of an applicable `[limits]` entry changes the unit's hash. The catalog
+      descriptor does not carry the limit yet;
     - every doc string blank, the doc tags `@labels` and `@deprecated` (the
       `labels` and `deprecated` fields) blank, and `services` and `retired`
       empty.
@@ -737,10 +750,10 @@ trigger rather than this cost, with the measurement recorded there.**
    omitted entirely, and `null` never appears in the output.**
    `skip_default_fields(false)` forces emission only of non-optional fields
    holding their default — `"isError": false`, `"doc": ""`, `"labels": []`,
-   `"ordinal": 0`. Unset `optional` fields (`deprecated`, `lenMin`, `pattern`),
-   unset message fields, and unset oneofs produce no key at all. Established by
-   a probe against `prost-reflect` 0.16.5 over the real schema, not from its
-   documentation. Decision 2 is scoped accordingly.
+   `"ordinal": 0`. Unset `optional` fields (`deprecated`, `lenMin`, `pattern`,
+   `limit`), unset message fields, and unset oneofs produce no key at all.
+   Established by a probe against `prost-reflect` 0.16.5 over the real schema,
+   not from its documentation. Decision 2 is scoped accordingly.
 2. **Answered during E9.1 (2026-08-04): the `.boxed()` oneof member
    (`FieldType.kind.inline_scalar`) needs no special handling on the reflection
    path.** `transcode_from` goes through the wire encoding, so the Rust-side
