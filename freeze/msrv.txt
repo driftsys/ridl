@@ -1,10 +1,10 @@
 ridl-descriptor edition=2024
 ridl-descriptor rust-version=1.88
 ridl-loopback edition=2021
-ridl-loopback rust-version=1.83
+ridl-loopback rust-version=1.88
 ridl-rt edition=2021
-ridl-rt rust-version=1.83
+ridl-rt rust-version=1.88
 ridl-rt-conformance edition=2021
-ridl-rt-conformance rust-version=1.83
+ridl-rt-conformance rust-version=1.88
 ridl-transport-ws edition=2021
-ridl-transport-ws rust-version=1.83
+ridl-transport-ws rust-version=1.88

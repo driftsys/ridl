@@ -2280,7 +2280,8 @@ impl<'a> Codec<'a> {
                 // refused before any element is read. `chunks` and its last
                 // chunk rather than `chunks_exact` and its remainder, and no
                 // `%`: clippy proposes `as_chunks` and `is_multiple_of` for
-                // those, which Rust 1.83 does not have.
+                // those, which Rust before 1.88 does not have (the form was
+                // chosen when the minimum was 1.83).
                 quote! {
                     if __run
                         .chunks(#width)

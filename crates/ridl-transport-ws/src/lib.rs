@@ -73,7 +73,7 @@
 //! - It reads a catalog descriptor only with the `descriptor` feature
 //!   (`MemberTable::from_descriptor`), and does no I/O: the embedder reads
 //!   `<unit>.catalog.binfb`, written by `ridl build --emit catalog`, or embeds
-//!   it with `include_bytes!`. The feature needs Rust 1.88. An `attach` is
+//!   it with `include_bytes!`. An `attach` is
 //!   accepted on a match
 //!   of the unit name and of the catalog hash, or of a compatible earlier hash
 //!   the [`MemberTable`] lists; without a table, on an exact match. Without a
