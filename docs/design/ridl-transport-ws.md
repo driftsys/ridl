@@ -538,9 +538,14 @@ responses kept for duplicates are `server/calls.rs`.
   by default), and a session never applies a cap below `max_message_bytes`; when
   a response makes the kept bytes pass the cap, the response is sent, then the
   session closes with 1008, which `serve` returns as
-  `Ended::ServerClosed(1008)`. Expired responses also go when a `request`
-  arrives, before its `seq` is placed. Closing is observable, where dropping the
-  oldest response would silently break item 6.
+  `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
+  server with no table, or one whose members have no bound, closes with 1008
+  when its replies are large enough to pass the cap before the ring holds 64 (at
+  the default 1 MiB message limit, 64 replies would be 64 MiB against the 16 MiB
+  default cap); an embedder with such replies sets `max_retained_bytes` to 64
+  times its message limit, which bounds the ring on its own. Expired responses
+  also go when a `request` arrives, before its `seq` is placed. Closing is
+  observable, where dropping the oldest response would silently break item 6.
 
 **D-17. `fixed`.** A `read` of a `fixed` calls `Backend::read_fixed` and sends
 one `publish` with `kind` `Fixed`, state `Live` with the value, `seq` 0, and
