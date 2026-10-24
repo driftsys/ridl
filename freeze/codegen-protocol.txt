@@ -624,6 +624,7 @@ ridl.ir.v2.Decl.event_def = 17 singular ridl.ir.v2.EventDef oneof=kind
 ridl.ir.v2.Decl.fixed_def = 20 singular ridl.ir.v2.FixedDef oneof=kind
 ridl.ir.v2.Decl.is_error = 3 singular bool
 ridl.ir.v2.Decl.labels = 5 repeated string
+ridl.ir.v2.Decl.limit = 31 optional uint32
 ridl.ir.v2.Decl.links = 8 repeated ridl.ir.v2.DocLink
 ridl.ir.v2.Decl.name = 1 singular string
 ridl.ir.v2.Decl.ordinal = 7 singular uint32

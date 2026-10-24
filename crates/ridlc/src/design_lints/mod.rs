@@ -121,6 +121,21 @@ pub(crate) fn check_payload_limits(
     )
 }
 
+/// Records each unit's `[limits]` resolution on the interactions of its
+/// checked packages (ADR-0030 decision 13); see `limits::annotate_limits`.
+pub(crate) fn annotate_payload_limits(
+    db: &RidlDatabase,
+    packages: &[Package],
+    checked: &mut [CheckedPackage],
+    limits: &std::collections::BTreeMap<String, ridl_core::UnitLimits>,
+) {
+    let units: Vec<String> = packages
+        .iter()
+        .map(|package| package.unit(db).clone())
+        .collect();
+    limits::annotate_limits(checked, &units, limits);
+}
+
 // The design checks consume the checked packages and the indexed sites.
 pub(crate) struct Ctx<'a> {
     pub checked: &'a [CheckedPackage],

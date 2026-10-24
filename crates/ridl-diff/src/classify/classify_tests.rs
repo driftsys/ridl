@@ -15,6 +15,7 @@ use crate::{Category, Change, DiffReport, Verdict, diff_packages};
 
 fn decl(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: name.to_string(),
         visibility: v2::Visibility::Public as i32,
         is_error: false,
@@ -57,6 +58,7 @@ fn event(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
 
 fn reserved(name: &str, ordinal: u32) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: String::new(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,
@@ -2811,6 +2813,7 @@ fn a_visibility_change_is_not_reported_as_doc_only() {
 /// taking it classified as a clean append.
 fn nameless_reserved(ordinal: u32) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: String::new(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,

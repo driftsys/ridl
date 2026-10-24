@@ -1254,6 +1254,7 @@ impl Checker<'_> {
         self.deprecated_without_reason(&doc_info, &name, name_range(definition));
 
         Some(v2::Decl {
+            limit: None,
             name,
             visibility: visibility as i32,
             is_error: definition.is_error(),
@@ -4042,6 +4043,7 @@ impl Checker<'_> {
             member_name_range(member.name(), member.syntax()),
         );
         v2::Decl {
+            limit: None,
             // A tombstone's `Decl` name stays empty — the retired name lives
             // in `Reserved.name` (typl §7.4).
             name: match member {

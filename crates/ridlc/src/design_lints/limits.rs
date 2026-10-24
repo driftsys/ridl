@@ -22,6 +22,7 @@ use ridl_core::diag::{DiagCode, Diagnostic, Severity, Span};
 use ridl_core::manifest::{LimitKind, Limits};
 use ridl_ir::codegen::{self, v1};
 use ridl_ir::v2;
+use ridl_sem::CheckedPackage;
 use rowan::{TextRange, TextSize};
 
 use super::Ctx;
@@ -58,6 +59,74 @@ fn kind_of(decl: &v2::Decl) -> Option<LimitKind> {
         v2::decl::Kind::CommandDef(_) => Some(LimitKind::Command),
         v2::decl::Kind::QueryDef(_) => Some(LimitKind::Query),
         _ => None,
+    }
+}
+
+/// The short names that more than one of `shape_names` has. No key can name a
+/// shape with such a short name.
+fn ambiguous_short_names<'a>(shape_names: impl Iterator<Item = &'a str>) -> BTreeSet<&'a str> {
+    let mut seen = BTreeSet::new();
+    let mut ambiguous = BTreeSet::new();
+    for name in shape_names {
+        if !seen.insert(short_name(name)) {
+            ambiguous.insert(short_name(name));
+        }
+    }
+    ambiguous
+}
+
+/// Records on each interaction the limit that its unit's `[limits]` table gives
+/// it (ADR-0030 decision 13), so that the IR, and the catalog hash over it,
+/// carries the limit. `units` holds the unit of each entry of `checked`;
+/// `limits` holds the table of each unit by unit name. An interaction that no
+/// entry reaches keeps `limit` unset, and a unit with no table is not touched.
+/// The resolution is the one RIDL-151 applies, so a short name that two shapes
+/// of the unit share gives no name entry to either.
+pub(crate) fn annotate_limits(
+    checked: &mut [CheckedPackage],
+    units: &[String],
+    limits: &BTreeMap<String, UnitLimits>,
+) {
+    for (unit, table) in limits {
+        let members: Vec<usize> = (0..checked.len())
+            .filter(|index| units.get(*index) == Some(unit))
+            .collect();
+        let ambiguous: BTreeSet<String> = ambiguous_short_names(
+            members
+                .iter()
+                .flat_map(|index| checked[*index].ir.shapes().map(|shape| shape.name)),
+        )
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        let table = &table.limits;
+        for index in members {
+            let package = &mut checked[index].ir;
+            let inline = package.services.iter_mut().flat_map(|service| {
+                let name = service.name.clone();
+                service
+                    .shapes
+                    .iter_mut()
+                    .filter_map(move |slot| match slot.kind.as_mut()? {
+                        v2::service_shape::Kind::Inline(interface) => {
+                            Some((name.clone(), interface))
+                        }
+                        v2::service_shape::Kind::InterfaceRef(_) => None,
+                    })
+            });
+            let named = package
+                .interfaces
+                .iter_mut()
+                .map(|interface| (interface.name.clone(), interface));
+            for (name, interface) in named.chain(inline) {
+                let short = short_name(&name);
+                let owner = (!ambiguous.contains(short)).then_some(short);
+                for decl in &mut interface.interactions {
+                    decl.limit =
+                        kind_of(decl).and_then(|kind| resolve(table, kind, owner, &decl.name));
+                }
+            }
+        }
     }
 }
 
@@ -106,15 +175,11 @@ pub(crate) fn check(
             .collect();
         let complete = examined.len() == unit.packages.len();
         let mut known = BTreeSet::new();
-        let mut seen = BTreeSet::new();
-        let mut ambiguous = BTreeSet::new();
-        for index in &examined {
-            for shape in ctx.checked[*index].ir.shapes() {
-                if !seen.insert(short_name(shape.name)) {
-                    ambiguous.insert(short_name(shape.name));
-                }
-            }
-        }
+        let ambiguous = ambiguous_short_names(
+            examined
+                .iter()
+                .flat_map(|index| ctx.checked[*index].ir.shapes().map(|shape| shape.name)),
+        );
         for index in examined {
             let package = &ctx.checked[index].ir;
             let others: Vec<&v2::Package> = ctx

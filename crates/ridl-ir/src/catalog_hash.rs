@@ -2291,4 +2291,41 @@ mod tests {
             .collect();
         assert_eq!(retired, [("Old".to_owned(), 3), ("a.Gone".to_owned(), 5)]);
     }
+
+    /// A unit with one interface and one signal, `limit` set on the signal.
+    fn limit_fixture(limit: Option<u32>) -> Package {
+        let mut sig = signal("sig", "Payload");
+        sig.limit = limit;
+        unit_package(
+            "u",
+            "u",
+            vec![struct_decl("Payload", &[])],
+            ("Iface", 1, vec![sig]),
+        )
+    }
+
+    fn hex(bytes: [u8; 32]) -> String {
+        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+    }
+
+    /// The limit is part of the interaction, so it is part of the hash: a
+    /// change of the limit, in either direction, changes the hash.
+    #[test]
+    fn a_limit_changes_the_catalog_hash() {
+        let none = catalog_hash("u", &[&limit_fixture(None)]);
+        let sixty_four = catalog_hash("u", &[&limit_fixture(Some(64))]);
+        let one_twenty_eight = catalog_hash("u", &[&limit_fixture(Some(128))]);
+        assert_ne!(none, sixty_four);
+        assert_ne!(sixty_four, one_twenty_eight);
+    }
+
+    /// An unset limit adds no byte to the encoded interaction, so the hash of
+    /// a unit with no limit is the one it had before the field existed.
+    #[test]
+    fn an_unset_limit_leaves_the_hash_unchanged() {
+        assert_eq!(
+            hex(catalog_hash("u", &[&limit_fixture(None)])),
+            "ad0663a0210793e7a415b391b15eb2a8e03b394e542deeefcee8ea64bedaaa8d"
+        );
+    }
 }

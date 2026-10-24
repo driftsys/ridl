@@ -11,6 +11,7 @@ use crate::{Category, Change, Verdict, diff_packages, diff_sets, render_json};
 
 fn interaction(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: name.to_string(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,
@@ -53,6 +54,7 @@ fn event(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
 
 fn reserved(name: &str, ordinal: u32) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: String::new(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,

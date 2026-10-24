@@ -918,6 +918,7 @@ mod tests {
     #[test]
     fn a_fixed_interaction_emits_a_fixed_descriptor() {
         let payload = v2::Decl {
+            limit: None,
             name: "Provisioned".to_string(),
             visibility: v2::Visibility::Public as i32,
             is_error: false,
@@ -945,6 +946,7 @@ mod tests {
         };
 
         let fixed = v2::Decl {
+            limit: None,
             name: "brightness".to_string(),
             visibility: v2::Visibility::Public as i32,
             is_error: false,

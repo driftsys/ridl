@@ -2454,6 +2454,9 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         remote_units,
     };
     check_unit_limits(db, &packages, &mut compiled);
+    // After the checks, which read the IR without a limit, the limit is
+    // recorded on the interactions for every consumer of the checked IR.
+    design_lints::annotate_payload_limits(db, &packages, &mut compiled.checked, &compiled.limits);
     compiled
 }
 
