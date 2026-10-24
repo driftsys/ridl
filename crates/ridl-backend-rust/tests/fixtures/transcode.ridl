@@ -1,12 +1,14 @@
 // The transcode equivalence fixture.
 //
-// One struct, one enum and one union, each of which both the FlatBuffers and
-// the proto3 codec carry as a payload root, and `interface Gauge`, whose
+// Structs, an enum and a union, each of which both the FlatBuffers and the
+// proto3 codec carry as a payload root, and `interface Gauge`, whose
 // two-parameter call induces `GaugeSetParams`, which both codecs root as well.
-// The generated `transcode_flatbuffers_to_proto3` and
-// `transcode_proto3_to_flatbuffers` functions exist for each. Kept self-contained, with no cross-package import,
-// because the compile path this fixture is read through (`ridlc::compile`)
-// wraps one file as a single-file synthetic package.
+// `Reading` holds scalars, a string, an enum and a float; `Panel` holds an
+// optional field, an array, a map and a nested struct. The generated
+// `transcode_flatbuffers_to_proto3` and `transcode_proto3_to_flatbuffers`
+// functions exist for each. Kept self-contained, with no cross-package
+// import, because the compile path this fixture is read through
+// (`ridlc::compile`) wraps one file as a single-file synthetic package.
 
 package tx.demo
 
@@ -32,6 +34,23 @@ struct Reading {
   mode  : Mode
   ratio : float [-1.0..1.0]
   flag  : boolean
+}
+
+/// A key of the map field.
+type Key : string [1..8]
+
+/// A struct that nests inside `Panel`.
+struct Inner {
+  count : Count
+  label : Label
+}
+
+/// An optional field, an array, a map and a nested struct.
+struct Panel {
+  note   : Label?
+  levels : [Level; 0..4]
+  byKey  : [Key : Count; 0..3]
+  inner  : Inner
 }
 
 union Outcome {

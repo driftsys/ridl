@@ -257,6 +257,115 @@ impl ::core::default::Default for Reading {
         }
     }
 }
+/// A key of the map field.
+///
+/// # Rules
+///
+/// - length 1 ..= 8
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(transparent)]
+pub struct Key(::std::string::String);
+impl Key {
+    /// Constructs the value, or returns an error when the value breaks a
+    /// constraint that the generated code checks.
+    pub fn new(
+        value: ::std::string::String,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        Self::check(&value)?;
+        ::core::result::Result::Ok(Self::new_unchecked(value))
+    }
+    pub(crate) fn check(
+        value: &::core::primitive::str,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+        if (value.chars().count() as ::core::primitive::u64) < 1 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some("Key"),
+                rule: ::ridl_rt::payload::Rule::Length,
+            });
+        }
+        if (value.chars().count() as ::core::primitive::u64) > 8 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some("Key"),
+                rule: ::ridl_rt::payload::Rule::Length,
+            });
+        }
+        ::core::result::Result::Ok(())
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: ::std::string::String) -> Self {
+        Self(value)
+    }
+    pub fn get(&self) -> &::core::primitive::str {
+        &self.0
+    }
+    pub fn into_inner(self) -> ::std::string::String {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<::std::string::String> for Key {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(
+        value: ::std::string::String,
+    ) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Key> for ::std::string::String {
+    fn from(value: Key) -> Self {
+        value.0
+    }
+}
+/// A struct that nests inside `Panel`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Inner {
+    /// # Rules
+    ///
+    /// - range 0 ..= 200
+    pub count: Count,
+    /// # Rules
+    ///
+    /// - length 0 ..= 16
+    pub label: Label,
+}
+impl ::core::default::Default for Inner {
+    fn default() -> Self {
+        Inner {
+            count: <Count as ::core::default::Default>::default(),
+            label: <Label as ::core::default::Default>::default(),
+        }
+    }
+}
+/// An optional field, an array, a map and a nested struct.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Panel {
+    /// # Rules
+    ///
+    /// - length 0 ..= 16
+    pub note: ::core::option::Option<Label>,
+    /// # Rules
+    ///
+    /// - count 0 ..= 4
+    pub levels: ::std::vec::Vec<Level>,
+    /// # Rules
+    ///
+    /// - count 0 ..= 3
+    pub by_key: ::std::vec::Vec<(Key, Count)>,
+    pub inner: Inner,
+}
+impl ::core::default::Default for Panel {
+    fn default() -> Self {
+        Panel {
+            note: ::core::option::Option::None,
+            levels: ::std::vec::Vec::new(),
+            by_key: ::std::vec::Vec::new(),
+            inner: <Inner as ::core::default::Default>::default(),
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq)]
 pub enum Outcome {
     Number(Count),
@@ -1159,6 +1268,866 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Reading {
     ) -> Self {
         let __view = r.view();
         __ridl_fb_decode_Reading(__view.buf, __view.table)
+    }
+}
+/// A `Key` value in FlatBuffers bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct KeyFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for KeyFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> KeyFbView<'a> {
+    /// The value the bytes hold. `Key` owns its bytes, so this allocates — unlike a struct field of the same type, which a view borrows in place.
+    pub fn value(&self) -> Key {
+        __ridl_fb_decode_Key(self.buf, self.table)
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Key(
+    value: &Key,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    ::core::result::Result::Ok({
+        let __box = [
+            ::ridl_rt::flatbuffers::TableField {
+                slot: 0u16,
+                offset: 4u16,
+                value: ::ridl_rt::flatbuffers::Field::Offset(
+                    builder.push_string(value.get())?,
+                ),
+            },
+        ];
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
+    })
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Key(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __s = ::ridl_rt::flatbuffers::string(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            Key::check(__s).map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Key(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Key {
+    {
+        let __p = ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        Key::new_unchecked(
+            ::std::string::String::from(
+                ::ridl_rt::flatbuffers::string(buf, __p).unwrap_or(""),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Key {
+    /// The largest FlatBuffers buffer any legal `Key` encodes to: 90 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 90usize;
+    type Buffer = [::core::primitive::u8; 90usize];
+    const BUFFER: Self::Buffer = [0u8; 90usize];
+    type View<'a> = KeyFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, KeyFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Key(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: KeyFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<KeyFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Key(buf, table)?;
+        ::core::result::Result::Ok(KeyFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Key(__view.buf, __view.table)
+    }
+}
+/// A `Inner` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct InnerFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for InnerFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> InnerFbView<'a> {
+    /// Reads `Inner`'s `count` field in place.
+    pub fn count(&self) -> Count {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 1usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Count::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u8(self.buf, __p).unwrap_or(0u8),
+                    ),
+                )
+            }
+            _ => Count::new_unchecked(0i64),
+        }
+    }
+    /// Reads `Inner`'s `label` field in place.
+    pub fn label(&self) -> &'a ::core::primitive::str {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        ::ridl_rt::flatbuffers::string(self.buf, __p).unwrap_or("")
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Inner(
+    value: &Inner,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 2usize];
+    let mut __n = 0usize;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: {
+            let __s = value.count;
+            ::ridl_rt::flatbuffers::Field::U8(__s.get() as ::core::primitive::u8)
+        },
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 1u16,
+        offset: 8u16,
+        value: ::ridl_rt::flatbuffers::Field::Offset(
+            builder.push_string(value.label.get())?,
+        ),
+    };
+    __n += 1;
+    builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Inner(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            1usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Count::check(&(::core::primitive::i64::from(__raw)))
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+    match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __s = ::ridl_rt::flatbuffers::string(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            Label::check(__s).map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Inner(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Inner {
+    Inner {
+        count: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 1usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                Count::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                    ),
+                )
+            }
+            _ => Count::new_unchecked(0i64),
+        },
+        label: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            Label::new_unchecked(
+                ::std::string::String::from(
+                    ::ridl_rt::flatbuffers::string(buf, __p).unwrap_or(""),
+                ),
+            )
+        },
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Inner {
+    /// The largest FlatBuffers buffer any legal `Inner` encodes to: 132 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 132usize;
+    type Buffer = [::core::primitive::u8; 132usize];
+    const BUFFER: Self::Buffer = [0u8; 132usize];
+    type View<'a> = InnerFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, InnerFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Inner(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: InnerFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<InnerFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Inner(buf, table)?;
+        ::core::result::Result::Ok(InnerFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Inner(__view.buf, __view.table)
+    }
+}
+/// A `Panel` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct PanelFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for PanelFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> PanelFbView<'a> {
+    /// Reads `Panel`'s `note` field in place.
+    pub fn note(&self) -> ::core::option::Option<&'a ::core::primitive::str> {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 0u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                ::core::option::Option::Some(
+                    ::ridl_rt::flatbuffers::string(self.buf, __p).unwrap_or(""),
+                )
+            }
+            _ => ::core::option::Option::None,
+        }
+    }
+    /// Reads `Panel`'s `levels` field in place.
+    pub fn levels(&self) -> ::std::vec::Vec<Level> {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        {
+            let __v = ::ridl_rt::flatbuffers::vector(self.buf, __p, 1usize)
+                .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                    len: 0,
+                    first: 0,
+                });
+            let mut __out = ::std::vec::Vec::with_capacity(__v.len);
+            for __i in 0..__v.len {
+                let __at = __v.element(__i, 1usize);
+                __out
+                    .push(
+                        Level::new_unchecked(
+                            ::core::primitive::i64::from(
+                                ::ridl_rt::flatbuffers::read_i8(self.buf, __at)
+                                    .unwrap_or(0i8),
+                            ),
+                        ),
+                    );
+            }
+            __out
+        }
+    }
+    /// Reads `Panel`'s `by_key` field in place.
+    pub fn by_key(&self) -> ::std::vec::Vec<(Key, Count)> {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 2u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        {
+            let __v = ::ridl_rt::flatbuffers::vector(self.buf, __p, 4usize)
+                .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                    len: 0,
+                    first: 0,
+                });
+            let mut __out = ::std::vec::Vec::with_capacity(__v.len);
+            for __i in 0..__v.len {
+                let __t = ::ridl_rt::flatbuffers::follow(
+                        self.buf,
+                        __v.element(__i, 4usize),
+                    )
+                    .unwrap_or(0usize);
+                __out
+                    .push((
+                        {
+                            let __p = ::ridl_rt::flatbuffers::field(
+                                    self.buf,
+                                    __t,
+                                    0u16,
+                                    4usize,
+                                )
+                                .unwrap_or(::core::option::Option::None)
+                                .unwrap_or(0usize);
+                            Key::new_unchecked(
+                                ::std::string::String::from(
+                                    ::ridl_rt::flatbuffers::string(self.buf, __p).unwrap_or(""),
+                                ),
+                            )
+                        },
+                        match ::ridl_rt::flatbuffers::field(
+                            self.buf,
+                            __t,
+                            1u16,
+                            1usize,
+                        ) {
+                            ::core::result::Result::Ok(
+                                ::core::option::Option::Some(__p),
+                            ) => {
+                                Count::new_unchecked(
+                                    ::core::primitive::i64::from(
+                                        ::ridl_rt::flatbuffers::read_u8(self.buf, __p)
+                                            .unwrap_or(0u8),
+                                    ),
+                                )
+                            }
+                            _ => Count::new_unchecked(0i64),
+                        },
+                    ));
+            }
+            __out
+        }
+    }
+    /// Reads `Panel`'s `inner` field in place.
+    pub fn inner(&self) -> InnerFbView<'a> {
+        let __p = ::ridl_rt::flatbuffers::field(self.buf, self.table, 3u16, 4usize)
+            .unwrap_or(::core::option::Option::None)
+            .unwrap_or(0usize);
+        InnerFbView {
+            buf: self.buf,
+            table: ::ridl_rt::flatbuffers::follow(self.buf, __p).unwrap_or(0usize),
+        }
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_Panel(
+    value: &Panel,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    let mut __fields = [::ridl_rt::flatbuffers::TableField {
+        slot: 0u16,
+        offset: 4u16,
+        value: ::ridl_rt::flatbuffers::Field::Bool(false),
+    }; 4usize];
+    let mut __n = 0usize;
+    if let ::core::option::Option::Some(__v) = &value.note {
+        __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+            slot: 0u16,
+            offset: 4u16,
+            value: ::ridl_rt::flatbuffers::Field::Offset(builder.push_string(__v.get())?),
+        };
+        __n += 1;
+    }
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 1u16,
+        offset: 8u16,
+        value: ::ridl_rt::flatbuffers::Field::Offset({
+            let __c = &value.levels;
+            if __c.len() > 4usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Panel"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            let mut __bytes: ::std::vec::Vec<::core::primitive::u8> = ::std::vec::Vec::with_capacity(
+                __c.len() * 1usize,
+            );
+            for __e in __c.iter() {
+                let __s = *__e;
+                let __r = __s.get() as ::core::primitive::i8;
+                __bytes.extend_from_slice(&__r.to_le_bytes());
+            }
+            builder.push_vector(&__bytes, 1usize)?
+        }),
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 2u16,
+        offset: 12u16,
+        value: ::ridl_rt::flatbuffers::Field::Offset({
+            let __c = &value.by_key;
+            if __c.len() > 3usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Panel"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            let mut __offsets: ::std::vec::Vec<::ridl_rt::flatbuffers::Pos> = ::std::vec::Vec::with_capacity(
+                __c.len(),
+            );
+            for __e in __c.iter() {
+                __offsets
+                    .push(
+                        {
+                            let mut __fields = [::ridl_rt::flatbuffers::TableField {
+                                slot: 0u16,
+                                offset: 4u16,
+                                value: ::ridl_rt::flatbuffers::Field::Bool(false),
+                            }; 2usize];
+                            let mut __n = 0usize;
+                            __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+                                slot: 0u16,
+                                offset: 4u16,
+                                value: ::ridl_rt::flatbuffers::Field::Offset(
+                                    builder.push_string(__e.0.get())?,
+                                ),
+                            };
+                            __n += 1;
+                            __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+                                slot: 1u16,
+                                offset: 8u16,
+                                value: {
+                                    let __s = __e.1;
+                                    ::ridl_rt::flatbuffers::Field::U8(
+                                        __s.get() as ::core::primitive::u8,
+                                    )
+                                },
+                            };
+                            __n += 1;
+                            builder.push_table(9usize, 4usize, 2u16, &__fields[..__n])
+                        }?,
+                    );
+            }
+            builder.push_offset_vector(&__offsets)?
+        }),
+    };
+    __n += 1;
+    __fields[__n] = ::ridl_rt::flatbuffers::TableField {
+        slot: 3u16,
+        offset: 16u16,
+        value: ::ridl_rt::flatbuffers::Field::Offset(
+            __ridl_fb_encode_Inner(&value.inner, builder)?,
+        ),
+    };
+    __n += 1;
+    builder.push_table(20usize, 4usize, 4u16, &__fields[..__n])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_Panel(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+            buf,
+            table,
+            0u16,
+            4usize,
+        )
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        let __s = ::ridl_rt::flatbuffers::string(buf, __p)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        Label::check(__s).map_err(::ridl_rt::payload::VerifyError::Contract)?;
+    }
+    match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            if __v.len > 4usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Panel"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            for __i in 0..__v.len {
+                let __at = __v.element(__i, 1usize);
+                let __raw = ::ridl_rt::flatbuffers::read_i8(buf, __at)
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                Level::check(&(::core::primitive::i64::from(__raw)))
+                    .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+            }
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    match ::ridl_rt::flatbuffers::field(buf, table, 2u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 4usize)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            if __v.len > 3usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Panel"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            for __i in 0..__v.len {
+                let table = ::ridl_rt::flatbuffers::follow(buf, __v.element(__i, 4usize))
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                {
+                    ::core::option::Option::Some(__p) => {
+                        let __s = ::ridl_rt::flatbuffers::string(buf, __p)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        Key::check(__s)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    ::core::option::Option::None => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::MissingRequired,
+                            ),
+                        );
+                    }
+                }
+                if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
+                        buf,
+                        table,
+                        1u16,
+                        1usize,
+                    )
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                {
+                    let __raw = ::ridl_rt::flatbuffers::read_u8(buf, __p)
+                        .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                    Count::check(&(::core::primitive::i64::from(__raw)))
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                let __key = ::ridl_rt::flatbuffers::string(
+                        buf,
+                        ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                            .unwrap_or(0usize),
+                    )
+                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                for __previous in 0..__i {
+                    let __previous_key = {
+                        let table = ::ridl_rt::flatbuffers::follow(
+                                buf,
+                                __v.element(__previous, 4usize),
+                            )
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        ::ridl_rt::flatbuffers::string(
+                                buf,
+                                ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize)
+                                    .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                                    .unwrap_or(0usize),
+                            )
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?
+                    };
+                    if __previous_key == __key {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                                type_name: ::core::option::Option::Some("Panel"),
+                                rule: ::ridl_rt::payload::Rule::Unique,
+                            }),
+                        );
+                    }
+                }
+            }
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    match ::ridl_rt::flatbuffers::field(buf, table, 3u16, 4usize)
+        .map_err(::ridl_rt::payload::VerifyError::Structure)?
+    {
+        ::core::option::Option::Some(__p) => {
+            let __t = ::ridl_rt::flatbuffers::follow(buf, __p)
+                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+            __ridl_fb_verify_Inner(buf, __t)?;
+        }
+        ::core::option::Option::None => {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::MissingRequired,
+                ),
+            );
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_Panel(
+    buf: &[::core::primitive::u8],
+    table: ::core::primitive::usize,
+) -> Panel {
+    Panel {
+        note: match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
+            ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
+                ::core::option::Option::Some(
+                    Label::new_unchecked(
+                        ::std::string::String::from(
+                            ::ridl_rt::flatbuffers::string(buf, __p).unwrap_or(""),
+                        ),
+                    ),
+                )
+            }
+            _ => ::core::option::Option::None,
+        },
+        levels: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            {
+                let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 1usize)
+                    .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                        len: 0,
+                        first: 0,
+                    });
+                let mut __out = ::std::vec::Vec::with_capacity(__v.len);
+                for __i in 0..__v.len {
+                    let __at = __v.element(__i, 1usize);
+                    __out
+                        .push(
+                            Level::new_unchecked(
+                                ::core::primitive::i64::from(
+                                    ::ridl_rt::flatbuffers::read_i8(buf, __at).unwrap_or(0i8),
+                                ),
+                            ),
+                        );
+                }
+                __out
+            }
+        },
+        by_key: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 2u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            {
+                let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 4usize)
+                    .unwrap_or(::ridl_rt::flatbuffers::Vector {
+                        len: 0,
+                        first: 0,
+                    });
+                let mut __out = ::std::vec::Vec::with_capacity(__v.len);
+                for __i in 0..__v.len {
+                    let __t = ::ridl_rt::flatbuffers::follow(
+                            buf,
+                            __v.element(__i, 4usize),
+                        )
+                        .unwrap_or(0usize);
+                    __out
+                        .push((
+                            {
+                                let __p = ::ridl_rt::flatbuffers::field(
+                                        buf,
+                                        __t,
+                                        0u16,
+                                        4usize,
+                                    )
+                                    .unwrap_or(::core::option::Option::None)
+                                    .unwrap_or(0usize);
+                                Key::new_unchecked(
+                                    ::std::string::String::from(
+                                        ::ridl_rt::flatbuffers::string(buf, __p).unwrap_or(""),
+                                    ),
+                                )
+                            },
+                            match ::ridl_rt::flatbuffers::field(buf, __t, 1u16, 1usize) {
+                                ::core::result::Result::Ok(
+                                    ::core::option::Option::Some(__p),
+                                ) => {
+                                    Count::new_unchecked(
+                                        ::core::primitive::i64::from(
+                                            ::ridl_rt::flatbuffers::read_u8(buf, __p).unwrap_or(0u8),
+                                        ),
+                                    )
+                                }
+                                _ => Count::new_unchecked(0i64),
+                            },
+                        ));
+                }
+                __out
+            }
+        },
+        inner: {
+            let __p = ::ridl_rt::flatbuffers::field(buf, table, 3u16, 4usize)
+                .unwrap_or(::core::option::Option::None)
+                .unwrap_or(0usize);
+            __ridl_fb_decode_Inner(
+                buf,
+                ::ridl_rt::flatbuffers::follow(buf, __p).unwrap_or(0usize),
+            )
+        },
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Panel {
+    /// The largest FlatBuffers buffer any legal `Panel` encodes to: 587 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 587usize;
+    type Buffer = [::core::primitive::u8; 587usize];
+    const BUFFER: Self::Buffer = [0u8; 587usize];
+    type View<'a> = PanelFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, PanelFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_Panel(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: PanelFbView { buf: bytes, table },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<PanelFbView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::FlatBuffers,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_Panel(buf, table)?;
+        ::core::result::Result::Ok(PanelFbView { buf, table })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_Panel(__view.buf, __view.table)
     }
 }
 /// A `Outcome` value in FlatBuffers bytes, read in place without copying it.
@@ -2605,6 +3574,922 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Reading {
     }
 }
 #[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_Key(value: &Key) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = value.get();
+        __n = __n
+            .saturating_add(1usize)
+            .saturating_add(
+                ::ridl_rt::proto3::varint_len(__s.len() as ::core::primitive::u64),
+            )
+            .saturating_add(__s.len());
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_Key(
+    value: &Key,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = value.get();
+        writer.tag(1u32, ::ridl_rt::proto3::WireType::Len);
+        writer.varint(__s.len() as ::core::primitive::u64);
+        writer.bytes(__s.as_bytes());
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_Key(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::Len(__b) => {
+                    let __s = ::ridl_rt::proto3::utf8(__b)
+                        .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                    Key::check(__s).map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    if !__seen[0usize] {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Structure(
+                ::ridl_rt::payload::Malformed::MissingRequired,
+            ),
+        );
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_Key(buf: &[::core::primitive::u8]) -> Key {
+    let mut __f0 = Key::new_unchecked(::std::string::String::new());
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                __f0 = Key::new_unchecked(
+                    ::std::string::String::from(
+                        ::ridl_rt::proto3::utf8(__b).unwrap_or(""),
+                    ),
+                );
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Key {
+    /// The largest proto3 message any legal `Key` encodes to: 34 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 34usize;
+    type Buffer = [::core::primitive::u8; 34usize];
+    const BUFFER: Self::Buffer = [0u8; 34usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_Key(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_Key(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_Key(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_Key(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_Inner(value: &Inner) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = value.count;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+        }
+    }
+    {
+        let __s = value.label.get();
+        if !__s.is_empty() {
+            __n = __n
+                .saturating_add(1usize)
+                .saturating_add(
+                    ::ridl_rt::proto3::varint_len(__s.len() as ::core::primitive::u64),
+                )
+                .saturating_add(__s.len());
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_Inner(
+    value: &Inner,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = value.count;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint);
+            writer.varint(__r);
+        }
+    }
+    {
+        let __s = value.label.get();
+        if !__s.is_empty() {
+            writer.tag(2u32, ::ridl_rt::proto3::WireType::Len);
+            writer.varint(__s.len() as ::core::primitive::u64);
+            writer.bytes(__s.as_bytes());
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_Inner(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 2usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __seen[0usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[0usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Varint(__raw) => {
+                        let __v = ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::narrow_u32(__raw)
+                                .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                        );
+                        Count::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                if __seen[1usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[1usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        let __s = ::ridl_rt::proto3::utf8(__b)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        Label::check(__s)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_Inner(buf: &[::core::primitive::u8]) -> Inner {
+    let mut __f0 = Count::new_unchecked(0i64);
+    let mut __f1 = Label::new_unchecked(::std::string::String::new());
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::Varint(__raw) = __field.value {
+                    __f0 = Count::new_unchecked(
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::narrow_u32(__raw).unwrap_or(0u32),
+                        ),
+                    );
+                }
+            }
+            2u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __f1 = Label::new_unchecked(
+                        ::std::string::String::from(
+                            ::ridl_rt::proto3::utf8(__b).unwrap_or(""),
+                        ),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    Inner { count: __f0, label: __f1 }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Inner {
+    /// The largest proto3 message any legal `Inner` encodes to: 72 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 72usize;
+    type Buffer = [::core::primitive::u8; 72usize];
+    const BUFFER: Self::Buffer = [0u8; 72usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_Inner(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_Inner(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_Inner(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_Inner(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_Panel(value: &Panel) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    if let ::core::option::Option::Some(__v) = &value.note {
+        {
+            let __s = __v.get();
+            __n = __n
+                .saturating_add(1usize)
+                .saturating_add(
+                    ::ridl_rt::proto3::varint_len(__s.len() as ::core::primitive::u64),
+                )
+                .saturating_add(__s.len());
+        }
+    }
+    {
+        let __c = &value.levels;
+        if !__c.is_empty() {
+            let mut __l = 0usize;
+            for __e in __c.iter() {
+                let __s = *__e;
+                let __r = ::core::primitive::u64::from(
+                    ::ridl_rt::proto3::zigzag32(__s.get() as ::core::primitive::i32),
+                );
+                __l = __l.saturating_add(::ridl_rt::proto3::varint_len(__r));
+            }
+            __n = __n
+                .saturating_add(1usize)
+                .saturating_add(
+                    ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64),
+                )
+                .saturating_add(__l);
+        }
+    }
+    {
+        let __c = &value.by_key;
+        for __e in __c.iter() {
+            let __l = {
+                let mut __n = 0usize;
+                {
+                    let __s = __e.0.get();
+                    if !__s.is_empty() {
+                        __n = __n
+                            .saturating_add(1usize)
+                            .saturating_add(
+                                ::ridl_rt::proto3::varint_len(
+                                    __s.len() as ::core::primitive::u64,
+                                ),
+                            )
+                            .saturating_add(__s.len());
+                    }
+                }
+                {
+                    let __s = __e.1;
+                    let __r = __s.get() as ::core::primitive::u64;
+                    if __r != 0 {
+                        __n = __n
+                            .saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+                    }
+                }
+                __n
+            };
+            __n = __n
+                .saturating_add(1usize)
+                .saturating_add(
+                    ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64),
+                )
+                .saturating_add(__l);
+        }
+    }
+    {
+        let __l = __ridl_pb_len_Inner(&value.inner);
+        __n = __n
+            .saturating_add(1usize)
+            .saturating_add(::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64))
+            .saturating_add(__l);
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_Panel(
+    value: &Panel,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    if let ::core::option::Option::Some(__v) = &value.note {
+        {
+            let __s = __v.get();
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Len);
+            writer.varint(__s.len() as ::core::primitive::u64);
+            writer.bytes(__s.as_bytes());
+        }
+    }
+    {
+        let __c = &value.levels;
+        if __c.len() > 4usize {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                    type_name: ::core::option::Option::Some("Panel"),
+                    rule: ::ridl_rt::payload::Rule::Length,
+                }),
+            );
+        }
+        if !__c.is_empty() {
+            let mut __l = 0usize;
+            for __e in __c.iter() {
+                let __s = *__e;
+                let __r = ::core::primitive::u64::from(
+                    ::ridl_rt::proto3::zigzag32(__s.get() as ::core::primitive::i32),
+                );
+                __l = __l.saturating_add(::ridl_rt::proto3::varint_len(__r));
+            }
+            writer.tag(2u32, ::ridl_rt::proto3::WireType::Len);
+            writer.varint(__l as ::core::primitive::u64);
+            for __e in __c.iter() {
+                let __s = *__e;
+                let __r = ::core::primitive::u64::from(
+                    ::ridl_rt::proto3::zigzag32(__s.get() as ::core::primitive::i32),
+                );
+                writer.varint(__r);
+            }
+        }
+    }
+    {
+        let __c = &value.by_key;
+        if __c.len() > 3usize {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                    type_name: ::core::option::Option::Some("Panel"),
+                    rule: ::ridl_rt::payload::Rule::Length,
+                }),
+            );
+        }
+        for (__i, __e) in __c.iter().enumerate() {
+            for __p in __c[..__i].iter() {
+                if __p.0 == __e.0 {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                            type_name: ::core::option::Option::Some("Panel"),
+                            rule: ::ridl_rt::payload::Rule::Unique,
+                        }),
+                    );
+                }
+            }
+        }
+        for __e in __c.iter() {
+            let __l = {
+                let mut __n = 0usize;
+                {
+                    let __s = __e.0.get();
+                    if !__s.is_empty() {
+                        __n = __n
+                            .saturating_add(1usize)
+                            .saturating_add(
+                                ::ridl_rt::proto3::varint_len(
+                                    __s.len() as ::core::primitive::u64,
+                                ),
+                            )
+                            .saturating_add(__s.len());
+                    }
+                }
+                {
+                    let __s = __e.1;
+                    let __r = __s.get() as ::core::primitive::u64;
+                    if __r != 0 {
+                        __n = __n
+                            .saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+                    }
+                }
+                __n
+            };
+            writer.tag(3u32, ::ridl_rt::proto3::WireType::Len);
+            writer.varint(__l as ::core::primitive::u64);
+            {
+                let __s = __e.0.get();
+                if !__s.is_empty() {
+                    writer.tag(1u32, ::ridl_rt::proto3::WireType::Len);
+                    writer.varint(__s.len() as ::core::primitive::u64);
+                    writer.bytes(__s.as_bytes());
+                }
+            }
+            {
+                let __s = __e.1;
+                let __r = __s.get() as ::core::primitive::u64;
+                if __r != 0 {
+                    writer.tag(2u32, ::ridl_rt::proto3::WireType::Varint);
+                    writer.varint(__r);
+                }
+            }
+        }
+    }
+    {
+        let __l = __ridl_pb_len_Inner(&value.inner);
+        writer.tag(4u32, ::ridl_rt::proto3::WireType::Len);
+        writer.varint(__l as ::core::primitive::u64);
+        __ridl_pb_encode_Inner(&value.inner, writer)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_Panel(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 4usize];
+    let mut __c1 = 0usize;
+    let mut __c2 = 0usize;
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __seen[0usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[0usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        let __s = ::ridl_rt::proto3::utf8(__b)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        Label::check(__s)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                __seen[1usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__run) => {
+                        let mut __at = 0usize;
+                        while __at < __run.len() {
+                            let __raw = ::ridl_rt::proto3::read_varint(__run, &mut __at)
+                                .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                            let __v = ::core::primitive::i64::from(
+                                ::ridl_rt::proto3::unzigzag32_checked(__raw)
+                                    .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                            );
+                            Level::check(&__v)
+                                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                            __c1 += 1usize;
+                        }
+                    }
+                    ::ridl_rt::proto3::Value::Varint(__raw) => {
+                        let __v = ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::unzigzag32_checked(__raw)
+                                .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                        );
+                        Level::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                        __c1 += 1usize;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            3u32 => {
+                __seen[2usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        {
+                            let mut __seen = [false; 2usize];
+                            let mut __reader = ::ridl_rt::proto3::Reader::new(__b);
+                            while let ::core::option::Option::Some(__field) = __reader
+                                .next()
+                            {
+                                let __field = __field
+                                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                                match __field.number {
+                                    1u32 => {
+                                        if __seen[0usize] {
+                                            return ::core::result::Result::Err(
+                                                ::ridl_rt::payload::VerifyError::Structure(
+                                                    ::ridl_rt::payload::Malformed::Duplicate,
+                                                ),
+                                            );
+                                        }
+                                        __seen[0usize] = true;
+                                        match __field.value {
+                                            ::ridl_rt::proto3::Value::Len(__b) => {
+                                                let __s = ::ridl_rt::proto3::utf8(__b)
+                                                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                                                Key::check(__s)
+                                                    .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                                            }
+                                            _ => {
+                                                return ::core::result::Result::Err(
+                                                    ::ridl_rt::payload::VerifyError::Structure(
+                                                        ::ridl_rt::payload::Malformed::WireType,
+                                                    ),
+                                                );
+                                            }
+                                        }
+                                    }
+                                    2u32 => {
+                                        if __seen[1usize] {
+                                            return ::core::result::Result::Err(
+                                                ::ridl_rt::payload::VerifyError::Structure(
+                                                    ::ridl_rt::payload::Malformed::Duplicate,
+                                                ),
+                                            );
+                                        }
+                                        __seen[1usize] = true;
+                                        match __field.value {
+                                            ::ridl_rt::proto3::Value::Varint(__raw) => {
+                                                let __v = ::core::primitive::i64::from(
+                                                    ::ridl_rt::proto3::narrow_u32(__raw)
+                                                        .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                                                );
+                                                Count::check(&__v)
+                                                    .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                                            }
+                                            _ => {
+                                                return ::core::result::Result::Err(
+                                                    ::ridl_rt::payload::VerifyError::Structure(
+                                                        ::ridl_rt::payload::Malformed::WireType,
+                                                    ),
+                                                );
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if !__seen[0usize] {
+                                return ::core::result::Result::Err(
+                                    ::ridl_rt::payload::VerifyError::Structure(
+                                        ::ridl_rt::payload::Malformed::MissingRequired,
+                                    ),
+                                );
+                            }
+                        }
+                        if __c2 >= 3usize {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                                    type_name: ::core::option::Option::Some("Panel"),
+                                    rule: ::ridl_rt::payload::Rule::Length,
+                                }),
+                            );
+                        }
+                        let __k = {
+                            let mut __k = &[] as &[::core::primitive::u8];
+                            let mut __reader = ::ridl_rt::proto3::Reader::new(__b);
+                            while let ::core::option::Option::Some(
+                                ::core::result::Result::Ok(__field),
+                            ) = __reader.next()
+                            {
+                                if __field.number == 1u32 {
+                                    if let ::ridl_rt::proto3::Value::Len(__kb) = __field.value {
+                                        __k = __kb;
+                                    }
+                                }
+                            }
+                            __k
+                        };
+                        let mut __left = __c2;
+                        let mut __prev = ::ridl_rt::proto3::Reader::new(buf);
+                        while __left > 0usize {
+                            match __prev.next() {
+                                ::core::option::Option::Some(
+                                    ::core::result::Result::Ok(__p),
+                                ) => {
+                                    if __p.number == 3u32 {
+                                        __left -= 1usize;
+                                        if let ::ridl_rt::proto3::Value::Len(__pb) = __p.value {
+                                            let __pk = {
+                                                let mut __k = &[] as &[::core::primitive::u8];
+                                                let mut __reader = ::ridl_rt::proto3::Reader::new(__pb);
+                                                while let ::core::option::Option::Some(
+                                                    ::core::result::Result::Ok(__field),
+                                                ) = __reader.next()
+                                                {
+                                                    if __field.number == 1u32 {
+                                                        if let ::ridl_rt::proto3::Value::Len(__kb) = __field.value {
+                                                            __k = __kb;
+                                                        }
+                                                    }
+                                                }
+                                                __k
+                                            };
+                                            if __pk == __k {
+                                                return ::core::result::Result::Err(
+                                                    ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                                                        type_name: ::core::option::Option::Some("Panel"),
+                                                        rule: ::ridl_rt::payload::Rule::Unique,
+                                                    }),
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => break,
+                            }
+                        }
+                        __c2 += 1usize;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            4u32 => {
+                if __seen[3usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[3usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        __ridl_pb_verify_Inner(__b)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if __c1 > 4usize {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some("Panel"),
+                rule: ::ridl_rt::payload::Rule::Length,
+            }),
+        );
+    }
+    if __c2 > 3usize {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some("Panel"),
+                rule: ::ridl_rt::payload::Rule::Length,
+            }),
+        );
+    }
+    if !__seen[3usize] {
+        __ridl_pb_verify_Inner(&[])?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_Panel(buf: &[::core::primitive::u8]) -> Panel {
+    let mut __f0 = ::core::option::Option::None;
+    let mut __f1 = ::std::vec::Vec::new();
+    let mut __f2 = ::std::vec::Vec::new();
+    let mut __f3 = __ridl_pb_decode_Inner(&[]);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __f0 = ::core::option::Option::Some(
+                        Label::new_unchecked(
+                            ::std::string::String::from(
+                                ::ridl_rt::proto3::utf8(__b).unwrap_or(""),
+                            ),
+                        ),
+                    );
+                }
+            }
+            2u32 => {
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__run) => {
+                        let mut __at = 0usize;
+                        while __at < __run.len() {
+                            match ::ridl_rt::proto3::read_varint(__run, &mut __at) {
+                                ::core::result::Result::Ok(__raw) => {
+                                    __f1.push(
+                                        Level::new_unchecked(
+                                            ::core::primitive::i64::from(
+                                                ::ridl_rt::proto3::unzigzag32_checked(__raw).unwrap_or(0i32),
+                                            ),
+                                        ),
+                                    );
+                                }
+                                ::core::result::Result::Err(_) => break,
+                            }
+                        }
+                    }
+                    ::ridl_rt::proto3::Value::Varint(__raw) => {
+                        __f1.push(
+                            Level::new_unchecked(
+                                ::core::primitive::i64::from(
+                                    ::ridl_rt::proto3::unzigzag32_checked(__raw).unwrap_or(0i32),
+                                ),
+                            ),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            3u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    let mut __k = Key::new_unchecked(::std::string::String::new());
+                    let mut __v = Count::new_unchecked(0i64);
+                    let mut __reader = ::ridl_rt::proto3::Reader::new(__b);
+                    while let ::core::option::Option::Some(
+                        ::core::result::Result::Ok(__field),
+                    ) = __reader.next()
+                    {
+                        match __field.number {
+                            1u32 => {
+                                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                                    __k = Key::new_unchecked(
+                                        ::std::string::String::from(
+                                            ::ridl_rt::proto3::utf8(__b).unwrap_or(""),
+                                        ),
+                                    );
+                                }
+                            }
+                            2u32 => {
+                                if let ::ridl_rt::proto3::Value::Varint(__raw) = __field
+                                    .value
+                                {
+                                    __v = Count::new_unchecked(
+                                        ::core::primitive::i64::from(
+                                            ::ridl_rt::proto3::narrow_u32(__raw).unwrap_or(0u32),
+                                        ),
+                                    );
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    __f2.push((__k, __v));
+                }
+            }
+            4u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __f3 = __ridl_pb_decode_Inner(__b);
+                }
+            }
+            _ => {}
+        }
+    }
+    Panel {
+        note: __f0,
+        levels: __f1,
+        by_key: __f2,
+        inner: __f3,
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Panel {
+    /// The largest proto3 message any legal `Panel` encodes to: 288 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 288usize;
+    type Buffer = [::core::primitive::u8; 288usize];
+    const BUFFER: Self::Buffer = [0u8; 288usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_Panel(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_Panel(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_Panel(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_Panel(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_pb_len_Outcome(value: &Outcome) -> ::core::primitive::usize {
     let mut __n = 0usize;
     match value {
@@ -3231,6 +5116,117 @@ impl Mode {
 }
 #[allow(deprecated)]
 impl Reading {
+    /// Re-encodes a flatbuffers payload as a proto3 payload.
+    ///
+    /// The bytes are verified as flatbuffers, decoded, and encoded as proto3 into `out`.
+    /// The body is [`::ridl_rt::payload::transcode`].
+    pub fn transcode_flatbuffers_to_proto3<'o>(
+        bytes: &[::core::primitive::u8],
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Ref<'o, Self, ::ridl_rt::encoding::Proto3>,
+        ::ridl_rt::payload::TranscodeError,
+    > {
+        ::ridl_rt::payload::transcode::<
+            Self,
+            ::ridl_rt::encoding::FlatBuffers,
+            ::ridl_rt::encoding::Proto3,
+        >(bytes, out)
+    }
+    /// Re-encodes a proto3 payload as a flatbuffers payload.
+    ///
+    /// The bytes are verified as proto3, decoded, and encoded as flatbuffers into `out`.
+    /// The body is [`::ridl_rt::payload::transcode`].
+    pub fn transcode_proto3_to_flatbuffers<'o>(
+        bytes: &[::core::primitive::u8],
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Ref<'o, Self, ::ridl_rt::encoding::FlatBuffers>,
+        ::ridl_rt::payload::TranscodeError,
+    > {
+        ::ridl_rt::payload::transcode::<
+            Self,
+            ::ridl_rt::encoding::Proto3,
+            ::ridl_rt::encoding::FlatBuffers,
+        >(bytes, out)
+    }
+}
+#[allow(deprecated)]
+impl Key {
+    /// Re-encodes a flatbuffers payload as a proto3 payload.
+    ///
+    /// The bytes are verified as flatbuffers, decoded, and encoded as proto3 into `out`.
+    /// The body is [`::ridl_rt::payload::transcode`].
+    pub fn transcode_flatbuffers_to_proto3<'o>(
+        bytes: &[::core::primitive::u8],
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Ref<'o, Self, ::ridl_rt::encoding::Proto3>,
+        ::ridl_rt::payload::TranscodeError,
+    > {
+        ::ridl_rt::payload::transcode::<
+            Self,
+            ::ridl_rt::encoding::FlatBuffers,
+            ::ridl_rt::encoding::Proto3,
+        >(bytes, out)
+    }
+    /// Re-encodes a proto3 payload as a flatbuffers payload.
+    ///
+    /// The bytes are verified as proto3, decoded, and encoded as flatbuffers into `out`.
+    /// The body is [`::ridl_rt::payload::transcode`].
+    pub fn transcode_proto3_to_flatbuffers<'o>(
+        bytes: &[::core::primitive::u8],
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Ref<'o, Self, ::ridl_rt::encoding::FlatBuffers>,
+        ::ridl_rt::payload::TranscodeError,
+    > {
+        ::ridl_rt::payload::transcode::<
+            Self,
+            ::ridl_rt::encoding::Proto3,
+            ::ridl_rt::encoding::FlatBuffers,
+        >(bytes, out)
+    }
+}
+#[allow(deprecated)]
+impl Inner {
+    /// Re-encodes a flatbuffers payload as a proto3 payload.
+    ///
+    /// The bytes are verified as flatbuffers, decoded, and encoded as proto3 into `out`.
+    /// The body is [`::ridl_rt::payload::transcode`].
+    pub fn transcode_flatbuffers_to_proto3<'o>(
+        bytes: &[::core::primitive::u8],
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Ref<'o, Self, ::ridl_rt::encoding::Proto3>,
+        ::ridl_rt::payload::TranscodeError,
+    > {
+        ::ridl_rt::payload::transcode::<
+            Self,
+            ::ridl_rt::encoding::FlatBuffers,
+            ::ridl_rt::encoding::Proto3,
+        >(bytes, out)
+    }
+    /// Re-encodes a proto3 payload as a flatbuffers payload.
+    ///
+    /// The bytes are verified as proto3, decoded, and encoded as flatbuffers into `out`.
+    /// The body is [`::ridl_rt::payload::transcode`].
+    pub fn transcode_proto3_to_flatbuffers<'o>(
+        bytes: &[::core::primitive::u8],
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Ref<'o, Self, ::ridl_rt::encoding::FlatBuffers>,
+        ::ridl_rt::payload::TranscodeError,
+    > {
+        ::ridl_rt::payload::transcode::<
+            Self,
+            ::ridl_rt::encoding::Proto3,
+            ::ridl_rt::encoding::FlatBuffers,
+        >(bytes, out)
+    }
+}
+#[allow(deprecated)]
+impl Panel {
     /// Re-encodes a flatbuffers payload as a proto3 payload.
     ///
     /// The bytes are verified as flatbuffers, decoded, and encoded as proto3 into `out`.
