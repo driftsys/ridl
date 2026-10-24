@@ -158,3 +158,7 @@ Each ruling: what was decided — why — what it costs if wrong.
   ADR-0030 decision 13 (who records the limit) and two book pages were edited in
   this stage. — Issue #1058 and ADR-0030 "Where the rules are stated" require
   the records to state the limit; two sentences became false. — None.
+- **R-23** — PR #1065 keeps `Closes #1058` although the descriptor column of
+  #1058 moved to LIM3 (R-16); the pass 2 review raised it. — The stage brief
+  fixed the closing keyword. #1059 is commented to own the column. — #1058
+  closes with the column undone if #1059 is not followed.

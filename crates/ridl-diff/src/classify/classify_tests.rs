@@ -3022,7 +3022,10 @@ fn every_category_has_a_rule_row_naming_its_verdicts() {
 #[test]
 fn the_limit_changed_rule_row_says_breaking_and_never_compatible() {
     let text = super::explain(Category::LimitChanged);
-    assert!(text.contains("breaking"), "{text}");
+    assert!(
+        text.contains("  breaking    a limit raised, lowered, added where none was, or removed"),
+        "{text}"
+    );
     assert!(!text.contains("compatible"), "{text}");
 }
 
