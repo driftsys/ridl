@@ -614,14 +614,15 @@ fn check_fails_when_the_semver_tool_fails() {
 }
 
 /// The crates of the `runtime-crates` surface.
-const RUNTIME_CRATES: [&str; 4] = [
+const RUNTIME_CRATES: [&str; 5] = [
     "ridl-rt",
     "ridl-rt-conformance",
     "ridl-loopback",
     "ridl-descriptor",
+    "ridl-transport-ws",
 ];
 
-/// A repository that holds a workspace of four crates with the names of the
+/// A repository that holds a workspace of five crates with the names of the
 /// runtime crates, each with the fixture crate's source and no dependency.
 /// Its tag `base` holds the crates as they are; HEAD holds the row for
 /// `runtime-crates`, and the working tree holds `ridl-rt` with `lib_rs` as its
@@ -777,6 +778,28 @@ fn runtime_check_fails_when_the_locked_fetch_fails() {
     assert!(!output.status.success());
     let err = stderr(&output);
     assert!(err.contains("`cargo fetch --locked` failed"), "{err}");
+}
+
+#[test]
+fn runtime_check_fails_when_a_runtime_crate_is_not_a_package() {
+    let repo = repo_with_runtime_baseline("runtime-renamed", &api_fixture("src/lib.rs"));
+    repo.write(
+        "crates/ridl-transport-ws/Cargo.toml",
+        "[package]\nname = \"ridl-transport-ws-renamed\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    let status = Command::new("cargo")
+        .args(["generate-lockfile", "--offline", "--manifest-path"])
+        .arg(repo.dir.join("Cargo.toml"))
+        .status()
+        .unwrap();
+    assert!(status.success(), "cargo generate-lockfile failed");
+    let output = check_api_semver(&repo, "runtime-crates");
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("ridl-transport-ws which is not a package of the workspace"),
+        "{err}"
+    );
 }
 
 #[test]
