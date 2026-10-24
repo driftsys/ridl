@@ -46,7 +46,8 @@ ridl-loopback = { path = "../ridl-loopback" }
 # An independent WebSocket client, so that the hand-written server side of
 # RFC 6455 is tested against an implementation this repository did not write.
 # A dev-dependency does not reach the build of a crate that depends on this
-# one. 0.29 is the newest release whose rust-version is not above this crate's.
+# one. 0.29 was the newest release whose rust-version was not above this
+# crate's minimum of 1.83 when it was chosen.
 tungstenite = "0.29.0"
 
 # The two test targets that run `serve` need the `server` feature. With it off,

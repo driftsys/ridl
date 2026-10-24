@@ -22,8 +22,9 @@
 //!
 //! All three are written without `unsafe`, which this crate forbids, over
 //! `std::task::Wake` on an `Arc`. That is why the module is under `std`:
-//! `Waker::noop()` needs Rust 1.85, above this crate's minimum, and building a
-//! `Waker` from a raw vtable needs `unsafe`. The module takes no dependency:
+//! `Waker::noop()` needed Rust 1.85, above this crate's minimum of 1.83 when
+//! the module was added, and building a `Waker` from a raw vtable needs
+//! `unsafe`. The module takes no dependency:
 //! the wait is `std::thread::park_timeout`, whose unpark token cannot be lost
 //! between a poll and the park that follows it.
 //!

@@ -316,9 +316,8 @@ wasm-check:
 # outside the package) and the doctests do not run at the minimum, and the
 # pin runs all of them in the workspace.
 #
-# The lockfiles of ridl-descriptor, of ridl-transport-ws with its `descriptor`
-# feature and of the veh-cluster crate are resolved
-# with the pin's cargo and CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback,
+# The lockfiles of ridl-descriptor, of ridl-transport-ws and of the veh-cluster
+# crate are resolved with the pin's cargo and CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback,
 # so that a dependency release with a higher minimum is not selected, and the
 # recipe fails unless cargo reports that it resolved for the crate's minimum; the
 # sources are fetched with the cargo of the crate's minimum, and the build is

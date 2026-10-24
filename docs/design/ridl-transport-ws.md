@@ -113,9 +113,9 @@ because Cargo ignores `default-features = false` on an inherited entry; `ridl`
 and `ridlc` name `std` and `dedup` themselves.
 
 `tungstenite` keeps its default `handshake` feature, because the client must run
-the handshake the tests check. 0.29 is the newest release whose `rust-version`
-is not above this crate's; 0.30 needs Rust 1.85. A dev-dependency does not reach
-an embedder's build tree.
+the handshake the tests check. 0.29 was the newest release whose `rust-version`
+was not above this crate's minimum of 1.83 when it was chosen. A dev-dependency
+does not reach an embedder's build tree.
 
 The package leaves out `tests/` (`exclude` in `Cargo.toml`): `tests/vectors.rs`
 reads the frame specification from the repository, and the path dev-dependencies
