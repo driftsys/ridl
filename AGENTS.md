@@ -181,19 +181,15 @@ member; rsdl is the apex.
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
                          and as edition 2024 with the rust-toolchain.toml pin,
                          check both crates' LICENSE files, build the packaged
-                         ridl-loopback and ridl-transport-ws (with its default
-                         features on and off, from a manifest copy without the
-                         optional ridl-descriptor dependency and the descriptor
-                         feature) at that rust-version, build the packaged
-                         ridl-ir and ridl-descriptor, and ridl-transport-ws with
-                         its descriptor feature, at the rust-version in
-                         crates/ridl-descriptor/Cargo.toml, and check the crate
-                         ridl build emits for examples/cabin (built with
-                         rustc, with only the std feature on) and for the
-                         veh-cluster corpus (built with cargo, every feature
-                         on and default features off) as edition 2021 with the
-                         ridl-rt rust-version, the first cell of the codegen
-                         build matrix (ADR-0021 decision 10)
+                         ridl-loopback, ridl-transport-ws (with its default
+                         features on, off, and with its descriptor feature),
+                         ridl-ir and ridl-descriptor at that rust-version, and
+                         check the crate ridl build emits for examples/cabin
+                         (built with rustc, with only the std feature on) and
+                         for the veh-cluster corpus (built with cargo, every
+                         feature on and default features off) as edition 2021
+                         with the same rust-version, the first cell of the
+                         codegen build matrix (ADR-0021 decision 10)
     just demo            generate examples/cabin's crate with ridl build and run
                          the program that links it — each round trip's value
                          is matched, and a missing one or a non-zero exit

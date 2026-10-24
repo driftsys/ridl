@@ -31,25 +31,26 @@ promise covers them from the first release that contains them.
 - **The wire format.** The frame envelope, the `attach` handshake, the inputs of
   the catalog hash, the emitted `.proto` and `.fbs` mapping and the encoding
   names.
-- **The minimum Rust version.** Rust 1.83 and edition 2021 for `ridl-rt`,
-  `ridl-rt-conformance`, `ridl-loopback` and `ridl-transport-ws`, and Rust 1.88
-  and edition 2024 for `ridl-descriptor`, and Rust 1.88 for `ridl-transport-ws`
-  with its `descriptor` feature on. The generated crate compiles as
-  edition 2021 with Rust 1.83 with every cargo feature on, and `ridl build`
-  writes `edition = "2021"` in its manifest, so cargo 1.83 reads that manifest
-  as written. From release 0.11, the generated crate also builds on Rust 1.83
-  with default features off. A 0.10.x release does not raise a minimum.
+- **The minimum Rust version.** Rust 1.88 for `ridl-rt`,
+  `ridl-rt-conformance`, `ridl-loopback`, `ridl-transport-ws` (with every cargo
+  feature) and `ridl-descriptor`, with edition 2021 for the first four and
+  edition 2024 for `ridl-descriptor`. The generated crate compiles as edition
+  2021 with Rust 1.88 with every cargo feature on and with default features
+  off, and `ridl build` writes `edition = "2021"` and `rust-version = "1.88"`
+  in its manifest. A 0.10.x release does not raise a minimum. Releases before
+  the one that raised it to 1.88 had a minimum of Rust 1.83.
 
 The minimum covers the crates RIDL publishes and emits, not later releases of
 their dependencies. A dependency, such as `regex`, can publish a release that
-requires a later Rust, and cargo 1.83 selects the newest release without reading
-its `rust-version`. To build with Rust 1.83, resolve dependencies with a
-resolver that reads `rust-version`: set `rust-version = "1.83"` in your own
-package, and resolve with cargo 1.84 or later with
-`CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback` set, or build from a
-lockfile resolved that way. `just compat-check` resolves the lockfile of the
-crate it emits for its test corpus this way before it builds that crate with
-Rust 1.83.
+requires a later Rust. Edition 2021 selects resolver 2, which by default
+selects the newest release without reading its `rust-version`. To build with
+Rust 1.88, resolve dependencies with a resolver that reads `rust-version`: set
+`rust-version = "1.88"` in your own package (the emitted manifest of the
+generated crate sets it), and resolve with
+`CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback` set or with resolver 3, or
+build from a lockfile resolved that way. `just compat-check` resolves the
+lockfile of the crate it emits for its test corpus this way before it builds
+that crate with Rust 1.88.
 
 ## What may change in 0.10.x
 

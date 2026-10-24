@@ -429,7 +429,7 @@ impl<'a> Builder<'a> {
     pub fn push_vector(&mut self, elements: &[u8], stride: usize) -> Result<Pos, EncodeError> {
         debug_assert!(stride > 0, "an element occupies at least one byte");
         debug_assert!(
-            elements.len() % stride == 0,
+            elements.len().is_multiple_of(stride),
             "the element bytes are a whole number of elements"
         );
         let count = elements.len() / stride;

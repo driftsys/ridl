@@ -66,12 +66,9 @@ written from the specification alone does not interoperate with this server.
 - No TLS and no authentication in the crate. The embedder chooses the bind
   address and the access policy; the crate binds nothing, by default or
   otherwise.
-- Edition 2021 and `rust-version = "1.83"`, the same literals as `ridl-rt` and
-  `ridl-loopback`, so the crate builds with the toolchain `ridl-rt` supports.
-  `just compat-check` checks this (see "Gates").
-- The `descriptor` feature needs Rust 1.88, the minimum of planus 1.3.0, which
-  `ridl-descriptor` pins; `just compat-check` builds the feature at that
-  version.
+- Edition 2021 and `rust-version = "1.88"`, the same literals as `ridl-rt` and
+  `ridl-loopback`, so the crate builds with the toolchain `ridl-rt` supports,
+  with every cargo feature. `just compat-check` checks this (see "Gates").
 - The transport does not link `ridl-loopback`. The loopback is a dev-dependency
   only.
 
@@ -116,9 +113,9 @@ because Cargo ignores `default-features = false` on an inherited entry; `ridl`
 and `ridlc` name `std` and `dedup` themselves.
 
 `tungstenite` keeps its default `handshake` feature, because the client must run
-the handshake the tests check. 0.29 is the newest release whose `rust-version`
-is not above this crate's; 0.30 needs Rust 1.85. A dev-dependency does not reach
-an embedder's build tree.
+the handshake the tests check. 0.29 was the newest release whose `rust-version`
+was not above this crate's minimum of 1.83 when it was chosen. A dev-dependency
+does not reach an embedder's build tree.
 
 The package leaves out `tests/` (`exclude` in `Cargo.toml`): `tests/vectors.rs`
 reads the frame specification from the repository, and the path dev-dependencies
@@ -742,18 +739,14 @@ The test targets `serve` and `scenario` require the `server` feature, so
   and `ridl-descriptor` only. The checks are textual.
 - `just compat-check` requires the manifest's `rust-version` and edition to
   equal `ridl-rt`'s, and builds the packaged crate with that minimum toolchain
-  with its default features and with none, and with the `descriptor` feature at
-  `ridl-descriptor`'s minimum, 1.88, against a lockfile resolved by the fallback
-  resolver and sources fetched by that version's cargo. The `tungstenite`
-  dev-dependency table is removed from the packaged manifest first, because the
-  offline build cannot resolve it; the recipe fails when the package has any
-  other dev-dependency table. The two builds at 1.83 also remove the optional
-  `ridl-descriptor` dependency and the `descriptor` feature, because cargo 1.83
-  loads the manifest of the packaged `ridl-descriptor` patched in by path, which
-  sets edition 2024; from a registry, cargo does not load the manifest of an
-  optional dependency whose feature is off. The recipe also fails when the crate
-  gains a workspace dependency outside `ridl-rt`, `ridl-rt-conformance`,
-  `ridl-loopback`, `ridl-descriptor` and `ridl-ir`.
+  with its default features, with none, and with the `descriptor` feature,
+  against the packaged `ridl-descriptor` and `ridl-ir` patched in by path, a
+  lockfile resolved by the fallback resolver and sources fetched by the
+  minimum's cargo. The `tungstenite` dev-dependency table is removed from the
+  packaged manifest first, because the offline build cannot resolve it; the
+  recipe fails when the package has any other dev-dependency table. The recipe
+  also fails when the crate gains a workspace dependency outside `ridl-rt`,
+  `ridl-rt-conformance`, `ridl-loopback`, `ridl-descriptor` and `ridl-ir`.
 - The crate is published after `ridl-rt` by `crates-io-release.yml`.
 - The crate is in the `runtime-crates` and `msrv` freeze surfaces from 0.12.0,
   its first release, and opts into the `cargo-semver-checks` lint metadata

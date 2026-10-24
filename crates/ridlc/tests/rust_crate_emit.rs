@@ -439,12 +439,12 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
     );
     assert_eq!(
         manifest.package.edition, "2021",
-        "the generated crate is edition 2021, so cargo 1.83 reads its manifest (ADR-0029 \
-         decision 5)"
+        "the generated crate is edition 2021 (ADR-0029 decision 5)"
     );
     assert_eq!(
-        manifest.package.rust_version, None,
-        "the generated manifest declares no rust-version"
+        manifest.package.rust_version.as_deref(),
+        Some("1.88"),
+        "the generated manifest declares the family's minimum Rust version (ADR-0029 decision 5)"
     );
     assert_eq!(
         manifest.lib.path, "lib.rs",

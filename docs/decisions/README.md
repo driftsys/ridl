@@ -278,8 +278,9 @@ other entry below is Accepted.
   generated package enables one `ridl-rt` feature per named encoding, and the
   request carries the `encodings` option. Amended 2026-10-24 on decision 6:
   `ridl-transport-ws` gains the optional `descriptor` feature, off by default,
-  which adds `ridl-descriptor` with its default features off and needs Rust 1.88
-  (driftsys/ridl#985).
+  which adds `ridl-descriptor` with its default features off
+  (driftsys/ridl#985); amended again the same day: the feature has no minimum
+  Rust version of its own (driftsys/ridl#1047).
 
 - **ADR-0021 — The `ridl-rt` 0.1 API: identity, the proof type, the port
   dispositions, and the release policy.** Fixes what the earlier records left

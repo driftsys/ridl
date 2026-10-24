@@ -20,9 +20,9 @@ pub(super) fn digest(data: &[u8]) -> [u8; 20] {
     }
     padded.extend_from_slice(&bit_len.to_be_bytes());
 
-    for block in padded.chunks_exact(64) {
+    for block in padded.as_chunks::<64>().0 {
         let mut w = [0u32; 80];
-        for (i, word) in block.chunks_exact(4).enumerate() {
+        for (i, word) in block.as_chunks::<4>().0.iter().enumerate() {
             w[i] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
         }
         for i in 16..80 {
@@ -55,7 +55,7 @@ pub(super) fn digest(data: &[u8]) -> [u8; 20] {
     }
 
     let mut out = [0u8; 20];
-    for (chunk, word) in out.chunks_exact_mut(4).zip(h) {
+    for (chunk, word) in out.as_chunks_mut::<4>().0.iter_mut().zip(h) {
         chunk.copy_from_slice(&word.to_be_bytes());
     }
     out
