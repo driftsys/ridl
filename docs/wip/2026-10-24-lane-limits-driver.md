@@ -90,3 +90,19 @@ Each ruling: what was decided — why — what it costs if wrong.
 - **R-7** — The single check of the plan is split into `check_payload_limits`
   (in `design_lints/mod.rs`) and `limits::check`. — Matches the RIDL-150 layout.
   — None.
+- **R-8** — Owner ruling 2026-10-24: a `[limits.interaction]` key is the shape's
+  short name (the last segment, no package), then `.`, then the member, for
+  declared interfaces and inline services. An inline service `demo.svc` is keyed
+  `svc.member`; `demo.svc.member` and `pkg.Iface.member` are RIDL-152. Two
+  shapes of one unit with the same short name make a key naming it ambiguous,
+  reported as RIDL-152 with a message saying so (same code). — The owner chose
+  it over keeping the dotted global name. — A separate code for the ambiguous
+  case if the owner wants one.
+- **R-9** — The RIDL-151 message names the key as written in the manifest
+  (`Iface.sig`), not the package-qualified form of RIDL-150. — The reader copies
+  the name into `ridl.toml`. — None.
+- **R-10** — A `fixed` names its role as "value" in RIDL-151. — A `fixed` has
+  one value and no request or reply. — None.
+- **R-11** — A unit with a `[limits]` table and no interaction is still checked,
+  so each of its `[limits.interaction]` entries is RIDL-152. — The entries name
+  no interaction. — None.
