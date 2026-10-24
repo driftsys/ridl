@@ -45,13 +45,16 @@ The plan is `docs/wip/2026-10-24-lane-limits-lim1-plan.md`. One pull request,
 - Record a limit on an interaction only when a `[limits]` entry applies, so a
   unit with no table keeps its catalog hash; pin that with a test over an
   existing corpus unit.
-- Add the descriptor column as an addition under ADR-0029; update the freeze
-  dumps with `cargo xtask freeze update`.
+- The plan is `docs/wip/2026-10-24-lane-limits-lim2-plan.md`. The descriptor
+  column moves to LIM3 (R-16).
 - `ridl diff`: a changed, added or removed limit is breaking.
 - One pull request, `Closes #1058`.
 
 ### LIM3 — the transport (#1059)
 
+- Add the limit column to the descriptor's member table (`catalog.fbs` `Member`,
+  `lower.rs` `member_of`, `describe.rs`), moved here from LIM2 by R-16, and read
+  it in the transport's member table.
 - Follow the issue body and the owner comment on #1059.
 - One pull request, `Closes #1059`, with a `BREAKING CHANGE:` footer.
 
@@ -106,3 +109,56 @@ Each ruling: what was decided — why — what it costs if wrong.
 - **R-11** — A unit with a `[limits]` table and no interaction is still checked,
   so each of its `[limits.interaction]` entries is RIDL-152. — The entries name
   no interaction. — None.
+- **R-12** — The limits check finds a unit's table by unit name; a key may name
+  an interface of any package of the unit, and short-name ambiguity is computed
+  across the whole unit. — The table belongs to the unit (decision 12), and a
+  subdirectory package was otherwise never checked. — A key may match an
+  interface in a package the author did not expect.
+- **R-13** — For RIDL-151 and RIDL-152, a manifest error in a file no package
+  owns blocks only the packages beneath that file's directory; RIDL-150 keeps
+  blocking everywhere. — One member's bad `ridl.toml` stopped the checks of
+  every other member. — RIDL-151 runs beside an unrelated manifest error.
+- **R-14** — RIDL-152 is reported only when every package of the unit was
+  examined. — A skipped package's interfaces are unknown, so a key could be a
+  false positive. — An unmatched key goes unreported while the unit has an
+  error.
+- **R-15** — A payload above the ceiling under a declared limit draws both
+  RIDL-150 and RIDL-151. — Each states a different rule. — Two diagnostics on
+  one member.
+- **R-16** — The descriptor's limit column moves from LIM2 to LIM3. — A new
+  field on the generated `Member` struct of `ridl-descriptor` is a break that
+  the `runtime-crates` semver check reports, and LIM2 ships in the non-breaking
+  release; the transport, the column's only reader, lands in LIM3. — Between the
+  two releases a descriptor carries no limits, which nothing reads yet.
+- **R-17** — A payload that draws RIDL-151 still has its limit recorded in the
+  checked IR; a test states it. — The limit is declared, and the build stops on
+  the error anyway. — None.
+- **R-18** — `annotate_limits` records limits for every package of a unit that
+  has a `[limits]` table, computes short-name ambiguity over all packages of the
+  unit, and does not skip blocked packages. RIDL-151 computes ambiguity over the
+  examined packages only. — The IR holds the unit-wide rule of R-8; the two
+  differ only in a build that already has errors. — A limit checked and a limit
+  recorded can differ in such a build.
+- **R-19** — `freeze/codegen-protocol.txt` gained one line for the new proto
+  field `Decl.limit = 31`. The plan said no dump changes, but the freeze check
+  fails without the line and the line is additive. — The dump lists the IR
+  proto. — None; no approved break is involved.
+- **R-20** — `ridl diff` compares the limit only for a pair of the same kind; a
+  kind change is reported as `KindChanged` alone. — The kind change is already
+  breaking and the old limit has no meaning for another kind. — A limit change
+  that comes with a kind change is not shown.
+- **R-21** — The remote units' `[limits]` tables stay unloaded (R-6), so a
+  consumer that generates a remote unit's code hashes it with no limit, and its
+  catalog hash differs from the owner's when the owner declares a limit. Not
+  fixed in LIM2; the owner decides. — Loading a remote unit's table is a change
+  to the manifest loader that LIM1 ruled out of scope. — Peers may refuse to
+  attach over a hash that differs only by this; nothing reads limits at run time
+  until LIM3, which must settle it before shipping.
+- **R-22** — ADR-0014 decision 15, the catalog-descriptor design record,
+  ADR-0030 decision 13 (who records the limit) and two book pages were edited in
+  this stage. — Issue #1058 and ADR-0030 "Where the rules are stated" require
+  the records to state the limit; two sentences became false. — None.
+- **R-23** — PR #1065 keeps `Closes #1058` although the descriptor column of
+  #1058 moved to LIM3 (R-16); the pass 2 review raised it. — The stage brief
+  fixed the closing keyword. #1059 is commented to own the column. — #1058
+  closes with the column undone if #1059 is not followed.

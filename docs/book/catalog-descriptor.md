@@ -196,7 +196,10 @@ source package of the unit, their numbers, and every declaration they reach, in
 the unit or in another one. Doc comments, labels and `deprecated` do not change
 it; any other change to an interface or to a type it uses does, so a change in
 any source package of the unit that an interface reaches changes the one hash.
-The design record's [hash section][hash] has the exact input.
+A `[limits]` entry in the unit's `ridl.toml` that gives an interaction its
+payload limit changes the hash too, so adding, removing or editing such an
+entry changes the hash of the interaction's unit. The design record's
+[hash section][hash] has the exact input.
 
 The generated Rust face carries the same unit name and hash as its `CATALOG`.
 When a face binds to a port, it compares its `CATALOG` with the catalog of

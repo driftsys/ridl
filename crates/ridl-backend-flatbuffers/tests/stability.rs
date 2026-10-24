@@ -184,6 +184,7 @@ struct BaseShape {
 
 fn decl(name: &str, visibility: v2::Visibility, kind: v2::decl::Kind) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: name.to_string(),
         visibility: visibility as i32,
         is_error: false,
@@ -236,6 +237,7 @@ fn live_member(field: v2::Field) -> v2::StructMember {
 
 fn interaction(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: name.to_string(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,
@@ -255,6 +257,7 @@ fn interaction(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
 /// the checker writes (ridl §11).
 fn interaction_tombstone(name: &str, ordinal: u32) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: String::new(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,

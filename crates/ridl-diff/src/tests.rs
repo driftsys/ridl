@@ -11,6 +11,7 @@ use crate::{Category, Change, Verdict, diff_packages, diff_sets, render_json};
 
 fn interaction(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: name.to_string(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,
@@ -53,6 +54,7 @@ fn event(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
 
 fn reserved(name: &str, ordinal: u32) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: String::new(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,
@@ -96,6 +98,37 @@ fn pkg(name: &str, iface: v2::Interface) -> v2::Package {
         retired: Vec::new(),
         unit: String::new(),
     }
+}
+
+#[test]
+fn a_limit_only_change_reports_exactly_one_breaking_change() {
+    let mut old_signal = signal("a", 1, "T");
+    old_signal.limit = None;
+    let mut new_signal = signal("a", 1, "T");
+    new_signal.limit = Some(64);
+    let old = pkg("veh.cluster", interface("I", vec![old_signal]));
+    let new = pkg("veh.cluster", interface("I", vec![new_signal]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.changes.len(), 1, "{:?}", report.changes);
+    let change = &report.changes[0];
+    assert_eq!(change.category, Category::LimitChanged);
+    assert_eq!(change.verdict, Verdict::Breaking);
+    assert_eq!(change.before.as_deref(), Some("none"));
+    assert_eq!(change.after.as_deref(), Some("64"));
+    assert_eq!(crate::heading(Category::LimitChanged), None);
+}
+
+#[test]
+fn a_kind_change_that_also_changes_the_limit_reports_only_the_kind_change() {
+    let mut old_signal = signal("a", 1, "T");
+    old_signal.limit = Some(64);
+    let mut new_event = event("a", 1, "T");
+    new_event.limit = Some(128);
+    let old = pkg("veh.cluster", interface("I", vec![old_signal]));
+    let new = pkg("veh.cluster", interface("I", vec![new_event]));
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.changes.len(), 1, "{:?}", report.changes);
+    assert_eq!(report.changes[0].category, Category::KindChanged);
 }
 
 // --------------------------------------------------------------------------

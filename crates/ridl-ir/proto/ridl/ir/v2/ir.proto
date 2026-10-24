@@ -140,6 +140,11 @@ message Decl {
   // @since versions, in source order (ADR-0026). Numbered after the oneof:
   // 8 and 9 hold `links` and `see`, and 22–29 stay open for the oneof.
   repeated string since = 30;
+  // The payload limit in bytes that a `[limits]` entry gives this
+  // interaction (ADR-0030 decision 13). Set only when an entry applies;
+  // unset on every other declaration and on an interaction that no entry
+  // reaches.
+  optional uint32 limit = 31;
 }
 
 // One resolved doc link (ADR-0026): a `[Name]` or `[Name.member]` link in a

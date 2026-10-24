@@ -15,6 +15,7 @@ use crate::{Category, Change, DiffReport, Verdict, diff_packages};
 
 fn decl(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: name.to_string(),
         visibility: v2::Visibility::Public as i32,
         is_error: false,
@@ -57,6 +58,7 @@ fn event(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
 
 fn reserved(name: &str, ordinal: u32) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: String::new(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,
@@ -1243,6 +1245,69 @@ fn an_rpc_bound_change_on_a_kind_that_carries_no_rpc_bound_is_breaking() {
     assert_eq!(
         super::classify(&change, &package, &package),
         Verdict::Breaking
+    );
+}
+
+// ==========================================================================
+// Payload limits (ADR-0030 decision 13).
+// ==========================================================================
+
+fn limited(limit: Option<u32>) -> v2::Package {
+    let mut interaction = signal("a", 1, "T");
+    interaction.limit = limit;
+    pkg(vec![interaction])
+}
+
+#[test]
+fn a_raised_limit_is_breaking() {
+    assert_row(
+        &limited(Some(64)),
+        &limited(Some(128)),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn a_lowered_limit_is_breaking() {
+    assert_row(
+        &limited(Some(128)),
+        &limited(Some(64)),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn a_limit_added_is_breaking() {
+    assert_row(
+        &limited(None),
+        &limited(Some(64)),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn a_limit_removed_is_breaking() {
+    assert_row(
+        &limited(Some(64)),
+        &limited(None),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn an_unchanged_limit_reports_nothing() {
+    let report = diff_packages(&limited(Some(64)), &limited(Some(64)));
+    assert!(
+        report
+            .changes
+            .iter()
+            .all(|change| change.category != Category::LimitChanged),
+        "{:?}",
+        report.changes
     );
 }
 
@@ -2811,6 +2876,7 @@ fn a_visibility_change_is_not_reported_as_doc_only() {
 /// taking it classified as a clean append.
 fn nameless_reserved(ordinal: u32) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: String::new(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,
@@ -2951,6 +3017,16 @@ fn every_category_has_a_rule_row_naming_its_verdicts() {
             "{word} must round-trip through category_from_word"
         );
     }
+}
+
+#[test]
+fn the_limit_changed_rule_row_says_breaking_and_never_compatible() {
+    let text = super::explain(Category::LimitChanged);
+    assert!(
+        text.contains("  breaking    a limit raised, lowered, added where none was, or removed"),
+        "{text}"
+    );
+    assert!(!text.contains("compatible"), "{text}");
 }
 
 #[test]

@@ -156,7 +156,8 @@ common cases:
   `interaction_reordered`); a payload, a parameter list or a return shape
   changed (`payload_changed`, `params_changed`, `return_changed`); a scalar
   constraint narrowed or a width changed (`constraint_changed`,
-  `width_changed`); a signal bound loosened or removed; a struct field, a union
+  `width_changed`); a declared payload limit raised, lowered, added or removed
+  (`limit_changed`); a signal bound loosened or removed; a struct field, a union
   arm or an enum value removed, an enum value renumbered, or an interface
   number changed (`decl_removed`, `member_reordered`,
   `interface_number_changed`).

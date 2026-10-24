@@ -901,6 +901,18 @@ fn diff_interaction(
     }
     emit_visibility(changes, path.to_string(), old.visibility, new.visibility);
 
+    // The declared payload limit is compared once for any pair of the same
+    // kind; a kind change is reported alone as `KindChanged`.
+    if old.limit != new.limit && kind_discriminant(&old.kind) == kind_discriminant(&new.kind) {
+        emit(
+            changes,
+            path.to_string(),
+            Category::LimitChanged,
+            Some(limit_str(old.limit)),
+            Some(limit_str(new.limit)),
+        );
+    }
+
     use v2::decl::Kind;
     // A parameter's doc fields are compared above, so `params` below is
     // compared without them: a parameter doc edit is not `ParamsChanged`.
@@ -1596,6 +1608,11 @@ fn visibility_name(visibility: i32) -> &'static str {
 
 fn decl_kind_name(decl: &v2::Decl) -> &'static str {
     kind_name_opt(&decl.kind)
+}
+
+/// The rendered form of a declared payload limit: the number, or `none`.
+fn limit_str(limit: Option<u32>) -> String {
+    limit.map_or_else(|| "none".to_string(), |bytes| bytes.to_string())
 }
 
 fn kind_name_opt(kind: &Option<v2::decl::Kind>) -> &'static str {

@@ -14,6 +14,7 @@ use ridl_ir::v2;
 
 fn public_decl(name: &str, kind: v2::decl::Kind) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: name.to_string(),
         visibility: v2::Visibility::Public as i32,
         is_error: false,

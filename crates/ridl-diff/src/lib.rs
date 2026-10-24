@@ -216,6 +216,11 @@ declare_categories! {
         /// `min` inverts: on an RPC it constrains the caller, not the
         /// provider, so the signal/event rule must not be inherited silently.
         RpcBoundChanged,
+        /// The payload limit declared for an interaction changed, was added or
+        /// was removed (ADR-0030 decision 13). Any change is breaking: the
+        /// limit is part of the catalog hash, so peers with different limits
+        /// do not attach.
+        LimitChanged,
         /// A command/query require/ensure clause set changed.
         ContractChanged,
         /// A name-paired interaction's family or operation shape changed
@@ -554,6 +559,7 @@ pub fn category_word(category: Category) -> &'static str {
         Category::ParamsChanged => "params_changed",
         Category::TimingChanged => "timing_changed",
         Category::RpcBoundChanged => "rpc_bound_changed",
+        Category::LimitChanged => "limit_changed",
         Category::ContractChanged => "contract_changed",
         Category::InteractionClassChanged => "interaction_class_changed",
         Category::WidthChanged => "width_changed",
@@ -612,6 +618,7 @@ pub fn heading(category: Category) -> Option<&'static str> {
         | Category::ParamsChanged
         | Category::TimingChanged
         | Category::RpcBoundChanged
+        | Category::LimitChanged
         | Category::ContractChanged
         | Category::InteractionClassChanged
         | Category::WidthChanged
