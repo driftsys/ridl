@@ -20,8 +20,9 @@
 //! `ridl baseline` and `ridl check --baseline` are the desk-time half of that
 //! engine (general form §6.3): `baseline` publishes one `.ir.json`
 //! snapshot per package, and `check` compares the workspace against those
-//! snapshots and warns (RIDL-407) when the ordinal of an interaction, a struct
-//! field or a union arm moved. Both live here rather than in
+//! snapshots and warns (RIDL-407) when an interaction's ordinal moved, and
+//! when a struct field or union arm was inserted, removed, moved or appended
+//! in a way `ridl diff` gates on. Both live here rather than in
 //! `ridlc` because reading a workspace-local baseline is not part of the
 //! source→IR function the tool qualification argument covers (ADR-0008
 //! decision 9).
@@ -1865,7 +1866,9 @@ fn composite_body(
 /// change is, or `None` when the path is not `<package>/<container>/<member>`
 /// with a struct or union at `<container>` on both sides. The one exception
 /// is a removal whose container is no longer a struct or union in the
-/// workspace: it is reported as a bare removal. `std` is the built-in
+/// workspace: it is reported as a bare removal. `ridl diff` does not produce
+/// that input: a container that changes kind is one `kind_changed` change and
+/// a removed container is a two-segment path, so the branch is defensive. `std` is the built-in
 /// `ridl.std`, which a field type may name ([`ridl_diff::absence_refused`]).
 fn member_drift(
     change: &ridl_diff::Change,
@@ -2199,8 +2202,8 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
 /// report. It names the member and the shape it is declared in — the words
 /// in the source — rather than the slash-separated diff path, states the one
 /// consequence that makes the warning worth reading (declaration order is the
-/// wire identity, ridl §11), and names the edit that keeps the baseline intact. It used to
-/// read `interaction ordinal changed against the baseline:
+/// wire identity, ridl §11), and names the edit that keeps the baseline
+/// intact. It used to read `interaction ordinal changed against the baseline:
 /// fx.audit/Motion/reset (interaction_reordered)`: "ordinal" is an IR word, the
 /// path is a diff-report word, `interaction_reordered` is the enum variant's
 /// own spelling, and between them they stated neither consequence nor remedy.
@@ -2869,6 +2872,11 @@ fn detached_span() -> Span {
 /// past the declaration reads as if the next one were implicated too. Shared
 /// by every member kind the index spans — an interaction, a struct field, and
 /// a union arm alike.
+///
+/// For a struct field, a union arm and a `reserved` entry the parser's range
+/// already ends at the last token, so the trim changes nothing there. A
+/// declaration followed by spaces, tabs, a comment, a blank line or a CRLF
+/// line ending underlines the same bytes with and without it.
 fn declaration_range(range: TextRange, text: &str) -> TextRange {
     let start = usize::from(range.start());
     let end = usize::from(range.end()).min(text.len());
