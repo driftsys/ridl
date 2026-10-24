@@ -46,6 +46,10 @@ must be right.
   plus `FixedReader` for a `read` of a `fixed`, over WebSocket.
 - Detects changed signals with `ScannableSignals` when the backend has it, and
   by reading each subscribed signal when it does not.
+- Reads the catalog descriptor `ridl build --emit catalog` writes into the
+  member table that checks `kind` and gives the response bounds, under the
+  `descriptor` feature, off by default, so an embedder that passes no table
+  links no planus (driftsys/ridl#985).
 
 **What it does not do.** It serves no stand-in port (`SignalWriter`,
 `EventSink`, `Handler`; see "Adding the stand-in ports later"). It ships no
@@ -808,6 +812,5 @@ What the crate already does so that the addition is local:
 | waking on `Wakeable` instead of a polling tick                          | rejected | a waker cannot interrupt a blocking socket read without a second thread or a platform poller, both of which grow the crate; the tick bounds the latency to `poll_interval`                                                           |
 | `Invalid(Detected)` sent as `Live` with the last good value             | rejected | hides an invalidity from the client (D-13)                                                                                                                                                                                           |
 | forwarding the backend's `seq`                                          | rejected | a backend counter restarts with a replaced writer and interleaves across writers, so the consumer would discard later publications as stale (D-24)                                                                                   |
-| reading the catalog descriptor to check `kind` and bounds               | built    | under the `descriptor` feature, off by default, so an embedder that passes no table links no planus (driftsys/ridl#985)                                                                                                              |
 | a public Rust client                                                    | deferred | not needed by the first consumer, whose client is TypeScript; the test client covers the done-when (driftsys/ridl#989)                                                                                                               |
 | accepting the upgrade without a subprotocol and letting the client fail | rejected | a client that does not check would send `attach` on an unnegotiated connection (D-20)                                                                                                                                                |
