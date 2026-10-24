@@ -3703,6 +3703,77 @@ mod tests {
         );
     }
 
+    /// A session attached under a compatible earlier hash (§6.4) is served
+    /// from the current table: a request for an ordinal that table no longer
+    /// holds is refused, and a member it holds is sent to the backend. The
+    /// session keeps no record of the hash the `attach` named, so the test
+    /// guards against a later lookup conditioned on that hash.
+    #[test]
+    fn a_request_for_a_retired_ordinal_under_a_compatible_earlier_hash_is_refused() {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let mut p = rt.attach();
+        let mut t = (*table()).clone();
+        t.add_compatible(CatalogHash([6; 32]));
+        let backend = Described::new(Scanning(rt), Arc::new(t)).unwrap();
+        let mut s = Session::new(backend, &config(&notes));
+        let (_, out) = send(&mut s, &attach_msg(1, 1, [6u8; 32], "ws.test"));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            Frame::Attached(AttachOutcome::Accepted)
+        );
+        let retired = target(Kind::Command, 9);
+        let (step, out) = send(&mut s, &request(retired, 1, &[]));
+        assert_eq!((step, out.len()), (Step::Continue, 1));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(
+                retired,
+                0,
+                1,
+                1,
+                ResponseOutcome::Contract(Contract::UnknownInteraction)
+            )
+        );
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: retired }]
+        );
+        let (step, out) = send(&mut s, &request(COMMAND, 2, &[]));
+        assert_eq!((step, out.is_empty()), (Step::Continue, true));
+        assert_eq!(claim(&mut p, COMMAND).ord, COMMAND.ord);
+    }
+
+    /// With a table, a refused `request` is kept like any settled response
+    /// (D-12), so a repeat of its `seq` gets the same bytes and is neither
+    /// refused again nor dropped.
+    ///
+    /// Mutation: send a refused response without keeping it.
+    #[test]
+    fn a_refused_request_is_kept_and_its_repeat_gets_the_same_bytes() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Command, 9);
+        let (_, out) = send(&mut s, &request(t, 1, &[]));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(
+                t,
+                0,
+                1,
+                1,
+                ResponseOutcome::Contract(Contract::UnknownInteraction)
+            )
+        );
+        let (step, again) = send(&mut s, &request(t, 1, &[]));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(again, out);
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+    }
+
     // -- Retention by bound, and the retained-bytes cap (frame specification §7)
 
     /// Mutations: never expire; expire at once.
@@ -3883,6 +3954,43 @@ mod tests {
         }
         let (_, again) = send(&mut s, &request_at(QUERY, 1, 0, &[]));
         assert_eq!(again, first);
+    }
+
+    /// The cap applies to the last-64 ring as well: a server with no table
+    /// whose replies are large closes with 1008 before the ring holds 64.
+    ///
+    /// Mutation: leave a response with no bound out of the byte count.
+    #[test]
+    fn a_server_with_no_table_closes_1008_when_large_replies_pass_the_cap() {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let mut p = rt.attach();
+        let limit = 4096;
+        let config = config(&notes)
+            .with_max_message_bytes(limit)
+            .unwrap()
+            .with_max_retained_bytes(4 * limit)
+            .unwrap();
+        let mut s = Session::new(Scanning(rt), &config);
+        open(&mut s);
+        let big = vec![1u8; 4000];
+        // Four replies of 4000 bytes and their headers fit under 16384; the
+        // fifth passes it, long before the ring holds 64.
+        for seq in 1..=5 {
+            let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
+            assert!(out.is_empty());
+            let c = claim(&mut p, QUERY);
+            p.settle(c.id, Ok(&big)).unwrap();
+            let (step, out) = tick(&mut s);
+            assert_eq!(out.len(), 1, "reply {seq}");
+            assert!(out[0].len() > 4000, "reply {seq}");
+            let expected = if seq < 5 {
+                Step::Continue
+            } else {
+                Step::Close(1008)
+            };
+            assert_eq!(step, expected, "reply {seq}");
+        }
     }
 
     /// Mutation: close at `>=`.
