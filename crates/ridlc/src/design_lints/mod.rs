@@ -114,6 +114,10 @@ pub(crate) fn check_payload_limits(
         std_ir,
         encodings,
         limits,
+        &packages
+            .iter()
+            .map(|package| package.unit(db).clone())
+            .collect::<Vec<_>>(),
     )
 }
 
@@ -127,6 +131,11 @@ pub(crate) struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
+    /// Whether the checks examine the declarations of `checked[index]`.
+    pub(crate) fn is_subject(&self, index: usize) -> bool {
+        self.subject[index] && self.checked[index].ir.name != "ridl.std"
+    }
+
     /// The packages whose declarations the checks examine: the consumer's,
     /// without `ridl.std` and without the packages of the remote units,
     /// which stay in `checked` as targets.

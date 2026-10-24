@@ -58,12 +58,11 @@ fn from_sizer(state: size::SizeState) -> Size {
     }
 }
 
-/// Why one payload is reported under one encoding, or `None` when it is not.
-fn problem(size: Size) -> Option<String> {
+/// Why one payload breaks `limit` bytes under one encoding, or `None` when it
+/// does not: its bound is above `limit`, or it has no finite bound.
+fn problem_above(size: Size, limit: u64) -> Option<String> {
     match size {
-        Size::Bytes(bytes) if bytes > u64::from(PAYLOAD_CEILING) => {
-            Some(format!("up to {bytes} bytes"))
-        }
+        Size::Bytes(bytes) if bytes > limit => Some(format!("up to {bytes} bytes")),
         Size::Bytes(_) | Size::Other => None,
         Size::NoBound => Some("no finite bound".to_string()),
         Size::Overflow => Some(
@@ -226,7 +225,12 @@ pub(super) fn checked_encodings(encodings: &[String]) -> (bool, bool) {
 }
 
 fn describe(side: &Side, encoding: &str) -> Option<String> {
-    let why = problem(side.size)?;
+    describe_above(side, encoding, u64::from(PAYLOAD_CEILING))
+}
+
+/// [`describe`] for a payload limit of `limit` bytes.
+pub(super) fn describe_above(side: &Side, encoding: &str, limit: u64) -> Option<String> {
+    let why = problem_above(side.size, limit)?;
     Some(match &side.ty {
         Some(ty) => format!("{why} in {encoding} for `{ty}`"),
         None => format!("{why} in {encoding}"),
@@ -306,12 +310,51 @@ pub(crate) fn check(ctx: &Ctx<'_>, std_ir: &v2::Package, encodings: &[String]) -
 mod tests {
     use super::*;
 
+    /// Why a payload is reported against the payload ceiling.
+    fn problem(size: Size) -> Option<String> {
+        problem_above(size, u64::from(PAYLOAD_CEILING))
+    }
+
     #[test]
     fn a_bound_is_a_problem_only_above_the_ceiling() {
         assert_eq!(problem(Size::Bytes(u64::from(PAYLOAD_CEILING))), None);
         assert_eq!(
             problem(Size::Bytes(u64::from(PAYLOAD_CEILING) + 1)).as_deref(),
             Some("up to 16257 bytes")
+        );
+    }
+
+    #[test]
+    fn a_limit_moves_the_boundary_and_keeps_the_unbounded_states() {
+        assert_eq!(problem_above(Size::Bytes(10), 10), None);
+        assert_eq!(
+            problem_above(Size::Bytes(11), 10).as_deref(),
+            Some("up to 11 bytes")
+        );
+        // The language reaches no payload with the `NoBound` state today: an
+        // unbounded `string`, `bytes` or `integer` takes the default bound or
+        // is a different error. The state stays in the match for the sizers.
+        assert_eq!(
+            problem_above(Size::NoBound, 10).as_deref(),
+            Some("no finite bound")
+        );
+        assert!(
+            problem_above(Size::Overflow, 10)
+                .unwrap()
+                .contains("64 levels")
+        );
+        assert_eq!(problem_above(Size::Other, 10), None);
+    }
+
+    #[test]
+    fn a_fallible_reply_type_is_named_in_the_description() {
+        let side = Side {
+            size: Size::Bytes(20),
+            ty: Some("Err".to_string()),
+        };
+        assert_eq!(
+            describe_above(&side, "proto3", 10).as_deref(),
+            Some("up to 20 bytes in proto3 for `Err`")
         );
     }
 

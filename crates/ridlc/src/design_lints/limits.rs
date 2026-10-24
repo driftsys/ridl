@@ -25,7 +25,7 @@ use ridl_ir::v2;
 use rowan::{TextRange, TextSize};
 
 use super::Ctx;
-use super::ceiling::{self, Entry, Side, Size};
+use super::ceiling::{self, Entry};
 
 /// The limit that a `[limits]` table gives an interaction: its entry in
 /// `[limits.interaction]`, else the entry of its kind, else `default`, or
@@ -61,114 +61,145 @@ fn kind_of(decl: &v2::Decl) -> Option<LimitKind> {
     }
 }
 
-/// Why one payload breaks `limit` under one encoding, or `None` when it does
-/// not.
-fn exceeds(side: &Side, limit: u32, encoding: &str) -> Option<String> {
-    let why = match side.size {
-        Size::Bytes(bytes) if bytes > u64::from(limit) => format!("up to {bytes} bytes"),
-        Size::Bytes(_) | Size::Other => return None,
-        Size::NoBound => "no finite bound".to_string(),
-        Size::Overflow => "a bound too large to represent".to_string(),
-    };
-    Some(match &side.ty {
-        Some(ty) => format!("{why} in {encoding} for `{ty}`"),
-        None => format!("{why} in {encoding}"),
-    })
+/// The packages of one unit, as indices of `Ctx::checked`.
+struct Unit<'a> {
+    table: &'a UnitLimits,
+    packages: Vec<usize>,
 }
 
+/// RIDL-151 and RIDL-152. `units` holds the unit of each entry of
+/// `ctx.checked`; `limits` holds the `[limits]` table of each unit by unit
+/// name. A table applies to every package of its unit, so an entry may name an
+/// interface of any of them.
 pub(crate) fn check(
     ctx: &Ctx<'_>,
     std_ir: &v2::Package,
     encodings: &[String],
     limits: &BTreeMap<String, UnitLimits>,
+    units: &[String],
 ) -> Vec<Diagnostic> {
     let (flatbuffers, proto3) = ceiling::checked_encodings(encodings);
+    let mut by_unit: BTreeMap<&str, Unit<'_>> = BTreeMap::new();
+    for (index, unit) in units.iter().enumerate() {
+        if let Some(table) = limits.get(unit) {
+            by_unit
+                .entry(unit.as_str())
+                .or_insert_with(|| Unit {
+                    table,
+                    packages: Vec::new(),
+                })
+                .packages
+                .push(index);
+        }
+    }
     let mut diagnostics = Vec::new();
-    for checked in ctx.subjects() {
-        let package = &checked.ir;
-        let Some(unit) = limits.get(&package.name) else {
-            continue;
-        };
-        let others: Vec<&v2::Package> = ctx
-            .checked
+    for unit in by_unit.values() {
+        let table = &unit.table.limits;
+        // The packages that the checks examine. When one package of the unit is
+        // skipped, its interfaces are unknown, so an entry cannot be called
+        // unmatched.
+        let examined: Vec<usize> = unit
+            .packages
             .iter()
-            .filter(|other| other.ir.name != package.name)
-            .map(|other| &other.ir)
-            .chain(std::iter::once(std_ir))
+            .copied()
+            .filter(|index| ctx.is_subject(*index))
             .collect();
+        let complete = examined.len() == unit.packages.len();
         let mut known = BTreeSet::new();
         let mut seen = BTreeSet::new();
         let mut ambiguous = BTreeSet::new();
-        for shape in package.shapes() {
-            if !seen.insert(short_name(shape.name)) {
-                ambiguous.insert(short_name(shape.name));
+        for index in &examined {
+            for shape in ctx.checked[*index].ir.shapes() {
+                if !seen.insert(short_name(shape.name)) {
+                    ambiguous.insert(short_name(shape.name));
+                }
             }
         }
-        // A package with no interface has nothing to lower; its entries are
-        // all unmatched.
-        let interfaces = if package.shapes().next().is_some() {
-            codegen::lower(package, &others).interfaces
-        } else {
-            Vec::new()
-        };
-        for (shape, interface) in package.shapes().zip(&interfaces) {
-            let short = short_name(shape.name);
-            let owner = (!ambiguous.contains(short)).then_some(short);
-            for (decl, slot) in shape.interface.interactions.iter().zip(&interface.slots) {
-                if owner.is_some() {
-                    known.insert(format!("{short}.{}", decl.name));
-                }
-                let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
-                    slot.occupant.as_ref()
-                else {
-                    continue;
-                };
-                let Some(kind) = kind_of(decl) else {
-                    continue;
-                };
-                let Some(limit) = resolve(&unit.limits, kind, owner, &decl.name) else {
-                    continue;
-                };
-                let Some(span) = ctx.sites.member(&package.name, shape.name, &decl.name) else {
-                    continue;
-                };
-                let entries: Vec<Entry> = match decl.kind.as_ref() {
-                    Some(v2::decl::Kind::FixedDef(fixed)) => {
-                        ceiling::fixed_entry(package, &others, fixed)
-                            .into_iter()
-                            .collect()
-                    }
-                    _ => ceiling::payloads(interaction, decl, package, &others),
-                };
-                for payload in entries {
-                    let mut found = Vec::new();
-                    if flatbuffers {
-                        found.extend(exceeds(&payload.flatbuffers, limit, "flatbuffers"));
-                    }
-                    if proto3 {
-                        found.extend(exceeds(&payload.proto3, limit, "proto3"));
-                    }
-                    if found.is_empty() {
+        for index in examined {
+            let package = &ctx.checked[index].ir;
+            let others: Vec<&v2::Package> = ctx
+                .checked
+                .iter()
+                .filter(|other| other.ir.name != package.name)
+                .map(|other| &other.ir)
+                .chain(std::iter::once(std_ir))
+                .collect();
+            // A package with no interface has nothing to lower.
+            let interfaces = if package.shapes().next().is_some() {
+                codegen::lower(package, &others).interfaces
+            } else {
+                Vec::new()
+            };
+            for (shape, interface) in package.shapes().zip(&interfaces) {
+                let short = short_name(shape.name);
+                let owner = (!ambiguous.contains(short)).then_some(short);
+                for (decl, slot) in shape.interface.interactions.iter().zip(&interface.slots) {
+                    let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                        slot.occupant.as_ref()
+                    else {
                         continue;
+                    };
+                    if owner.is_some() {
+                        known.insert(format!("{short}.{}", decl.name));
                     }
-                    diagnostics.push(Diagnostic {
-                        code: DiagCode::RIDL_151,
-                        severity: Severity::Error,
-                        message: format!(
-                            "the {} of `{}.{}` has {}; its limit is {limit} bytes",
-                            payload.role,
-                            short,
-                            decl.name,
-                            found.join(" and "),
-                        ),
-                        primary: span,
-                        labels: Vec::new(),
-                        fixits: Vec::new(),
-                    });
+                    let Some(kind) = kind_of(decl) else {
+                        continue;
+                    };
+                    let Some(limit) = resolve(table, kind, owner, &decl.name) else {
+                        continue;
+                    };
+                    let Some(span) = ctx.sites.member(&package.name, shape.name, &decl.name) else {
+                        continue;
+                    };
+                    let entries: Vec<Entry> = match decl.kind.as_ref() {
+                        Some(v2::decl::Kind::FixedDef(fixed)) => {
+                            ceiling::fixed_entry(package, &others, fixed)
+                                .into_iter()
+                                .collect()
+                        }
+                        _ => ceiling::payloads(interaction, decl, package, &others),
+                    };
+                    for payload in entries {
+                        let mut found = Vec::new();
+                        let limit_bytes = u64::from(limit);
+                        if flatbuffers {
+                            found.extend(ceiling::describe_above(
+                                &payload.flatbuffers,
+                                "flatbuffers",
+                                limit_bytes,
+                            ));
+                        }
+                        if proto3 {
+                            found.extend(ceiling::describe_above(
+                                &payload.proto3,
+                                "proto3",
+                                limit_bytes,
+                            ));
+                        }
+                        if found.is_empty() {
+                            continue;
+                        }
+                        diagnostics.push(Diagnostic {
+                            code: DiagCode::RIDL_151,
+                            severity: Severity::Error,
+                            message: format!(
+                                "the {} of `{short}.{}` has {}; its limit is {limit} bytes",
+                                payload.role,
+                                decl.name,
+                                found.join(" and "),
+                            ),
+                            primary: span,
+                            labels: Vec::new(),
+                            fixits: Vec::new(),
+                        });
+                    }
                 }
             }
         }
-        for entry in &unit.limits.interactions {
+        if !complete {
+            continue;
+        }
+        for entry in &table.interactions {
             if known.contains(&entry.name) {
                 continue;
             }
@@ -178,14 +209,14 @@ pub(crate) fn check(
             );
             let message = match entry.name.split_once('.') {
                 Some((name, _)) if ambiguous.contains(name) => format!(
-                    "`{}` is ambiguous: more than one interface or inline service of package \
-                     `{}` is named `{name}`",
-                    entry.name, package.name
+                    "`{}` is ambiguous: more than one interface or inline service of the \
+                     unit is named `{name}`",
+                    entry.name
                 ),
                 _ => format!(
-                    "`{}` names no interaction of package `{}`; write `Interface.member`, \
+                    "`{}` names no interaction of its unit; write `Interface.member`, \
                      with the interface or inline service name without its package",
-                    entry.name, package.name
+                    entry.name
                 ),
             };
             diagnostics.push(Diagnostic {
@@ -193,7 +224,7 @@ pub(crate) fn check(
                 severity: Severity::Error,
                 message,
                 primary: Span {
-                    file: unit.manifest,
+                    file: unit.table.manifest,
                     range,
                 },
                 labels: Vec::new(),

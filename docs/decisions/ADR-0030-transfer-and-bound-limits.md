@@ -227,9 +227,10 @@ When accepted, these records gain a dated note or are changed in place:
     interface's or inline service's name without its package, then `.`, then the
     member. An unknown kind and a value above 16,256 are manifest errors with a
     `MANI-` code (ADR-0002); a name that matches no interaction is a checker
-    error with a `RIDL-` code. The codes are assigned when the checks are built.
-    The ceiling stays the upper bound for every interaction and is changed only
-    by amending this record.
+    error with a `RIDL-` code. The codes are MANI-021 for an unknown kind,
+    MANI-022 for a value above the ceiling, and RIDL-152 for a name that matches
+    no interaction. The ceiling stays the upper bound for every interaction and
+    is changed only by amending this record.
 
     The limits are in the manifest, not in an attribute, because a signal, an
     event and a fixed take no attribute block (`family-general-form.md` §4.3),
@@ -370,13 +371,13 @@ When accepted, these records gain a dated note or are changed in place:
 - From the amendment of 2026-10-24: the manifest gains the `[limits]` table, the
   IR gains a limit per interaction (covered by the catalog hash), the
   descriptor's member table gains a limit column, `ridl diff` gains a limit
-  change, and the diagnostics surface gains RIDL-151 and the manifest errors of
-  decision 12. `with_max_message_bytes` can no longer raise the limit and the
-  retained-cap clamp is removed; both change the published `ridl-transport-ws`
-  API and are released in a version marked breaking. The new IR field and the
-  new descriptor column are additions to the frozen `ir` surface and the
-  descriptor schema under ADR-0029; the freeze dumps are updated when the code
-  lands.
+  change, and the diagnostics surface gains RIDL-151, RIDL-152 and the manifest
+  errors MANI-021 and MANI-022 of decision 12. `with_max_message_bytes` can no
+  longer raise the limit and the retained-cap clamp is removed; both change the
+  published `ridl-transport-ws` API and are released in a version marked
+  breaking. The new IR field and the new descriptor column are additions to the
+  frozen `ir` surface and the descriptor schema under ADR-0029; the freeze dumps
+  are updated when the code lands.
 
 ## References
 

@@ -17,6 +17,12 @@ struct Member<'a> {
 /// The result of `ridl check` from the root of a workspace whose root manifest
 /// ends with `root_extra`.
 fn run(members: &[Member<'_>], root_extra: &str) -> ridlc::CliRun {
+    run_with(members, root_extra, &[])
+}
+
+/// [`run`], with more files in the directory of the first member, given by
+/// path relative to that directory.
+fn run_with(members: &[Member<'_>], root_extra: &str, more: &[(&str, &str)]) -> ridlc::CliRun {
     let root = tempfile::tempdir().expect("a temp dir");
     let list = members
         .iter()
@@ -40,6 +46,11 @@ fn run(members: &[Member<'_>], root_extra: &str) -> ridlc::CliRun {
         )
         .unwrap();
         std::fs::write(dir.join("m.ridl"), member.source).unwrap();
+    }
+    for (path, text) in more {
+        let file = root.path().join(members[0].name).join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, text).unwrap();
     }
     ridlc::run_check(root.path(), Frozen::No).unwrap()
 }
@@ -366,4 +377,126 @@ fn a_package_with_an_error_is_not_examined() {
     let source = format!("{}\nstruct Broken {{ x: Missing }}\n", signal());
     let diagnostics = check(&source, "[limits]\ndefault = 1\n");
     assert!(with("RIDL-151", &diagnostics).is_empty(), "{diagnostics:?}");
+}
+
+#[test]
+fn a_package_in_a_subdirectory_of_the_unit_is_checked() {
+    // The unit `demo` holds the packages `demo` and `demo.sub`; its one table
+    // applies to both, and an entry may name an interface of either.
+    let main = "package demo\ntype Payload: bytes [0..1000]\n\
+                interface Top {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let sub = "package demo.sub\ntype Payload: bytes [0..1000]\n\
+               interface Low {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let member = |manifest| Member {
+        name: "demo",
+        source: main,
+        manifest,
+    };
+    let result = run_with(
+        &[member("[limits]\ndefault = 64\n")],
+        PROTO3,
+        &[("sub/s.ridl", sub)],
+    );
+    let found = with("RIDL-151", &result.diagnostics);
+    assert_eq!(found.len(), 2, "{:?}", result.diagnostics);
+    assert!(
+        found.iter().any(|d| d.message.contains("`Low.sig`")),
+        "{found:?}"
+    );
+    let table = "[limits.interaction]\n\"Low.sig\" = 5000\n\"Top.sig\" = 5000\n";
+    let result = run_with(&[member(table)], PROTO3, &[("sub/s.ridl", sub)]);
+    assert!(
+        with("RIDL-151", &result.diagnostics).is_empty()
+            && with("RIDL-152", &result.diagnostics).is_empty(),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn a_manifest_error_of_one_member_does_not_stop_the_checks_of_another() {
+    let source_a = signal().replace("package demo", "package a");
+    let source_b = signal().replace("package demo", "package b");
+    let members = [
+        Member {
+            name: "a",
+            source: &source_a,
+            manifest: "[limits.kind]\nstream = 1\n",
+        },
+        Member {
+            name: "b",
+            source: &source_b,
+            manifest: "[limits]\ndefault = 64\n",
+        },
+    ];
+    let result = run(&members, PROTO3);
+    assert_eq!(with("MANI-021", &result.diagnostics).len(), 1);
+    let found = with("RIDL-151", &result.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", result.diagnostics);
+    let path = result.sources.path(found[0].primary.file).unwrap();
+    assert!(path.ends_with("b/m.ridl"), "{path}");
+}
+
+#[test]
+fn the_event_kind_has_its_own_limit() {
+    let source = "package demo\ntype Payload: bytes [0..1000]\n\
+                  interface Iface {\n  signal sig: Payload @[10ms..100ms]\n  \
+                  event ev: Payload @[10ms..100ms]\n}\n";
+    let limits = format!("[limits.kind]\nevent = {}\n", N - 1);
+    let found = with("RIDL-151", &check(source, &limits));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].message.contains("`Iface.ev`"), "{found:?}");
+}
+
+#[test]
+fn a_unit_with_limits_and_no_interface_reports_each_entry() {
+    let source = "package demo\ntype Payload: bytes [0..1000]\n";
+    let limits = "[limits.interaction]\n\"Iface.a\" = 10\n\"Iface.b\" = 10\n";
+    let diagnostics = check(source, limits);
+    assert_eq!(with("RIDL-152", &diagnostics).len(), 2, "{diagnostics:?}");
+}
+
+#[test]
+fn a_payload_above_the_ceiling_under_a_declared_limit_draws_both_codes() {
+    let source = "package demo\ntype Text: string [0..4032]\n\
+                  struct Payload { a: Text, b: Text }\n\
+                  interface Iface {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let diagnostics = check(source, "[limits]\ndefault = 16256\n");
+    assert_eq!(with("RIDL-150", &diagnostics).len(), 1, "{diagnostics:?}");
+    assert_eq!(with("RIDL-151", &diagnostics).len(), 1, "{diagnostics:?}");
+}
+
+#[test]
+fn a_fixed_is_sized_in_the_enabled_encoding() {
+    // The proto3 bound is 503 bytes and the FlatBuffers bound is 457: a limit
+    // of 480 is broken in proto3 alone.
+    let source = "package demo\ntype Wide: integer [-1000000000..1000000000]\n\
+                  struct Payload { rows: [Wide; 0..100] }\n\
+                  interface Iface {\n  fixed table: Payload\n}\n";
+    let member = || Member {
+        name: "demo",
+        source,
+        manifest: "[limits]\ndefault = 480\n",
+    };
+    let flatbuffers = run(
+        &[member()],
+        "[backend.rust]\nencodings = [\"flatbuffers\"]\n",
+    );
+    assert!(with("RIDL-151", &flatbuffers.diagnostics).is_empty());
+    let found = with("RIDL-151", &run(&[member()], PROTO3).diagnostics);
+    assert_eq!(found.len(), 1);
+    assert!(
+        found[0].message.contains("503 bytes in proto3"),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn a_fallible_reply_names_the_type_that_breaks_the_limit() {
+    let source = "package demo\ntype Text: string [0..4032]\n\
+                  error struct Failure { a: Text }\nstruct Small { n: boolean }\n\
+                  interface Iface {\n  query get(): Small | Failure @[..1s]\n}\n";
+    let found = with("RIDL-151", &check(source, "[limits]\ndefault = 100\n"));
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(found[0].message.contains("for `Failure`"), "{found:?}");
 }

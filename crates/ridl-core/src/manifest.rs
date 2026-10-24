@@ -528,11 +528,18 @@ fn limit_value(
     diags: &mut Vec<Diagnostic>,
 ) -> Option<u32> {
     let Some(number) = value.get_ref().as_integer().filter(|n| *n >= 0) else {
+        // An unquoted `Interface.member` key is a dotted key, which TOML reads
+        // as a nested table.
+        let hint = if value.get_ref().is_table() {
+            "; a key that contains a `.` must be quoted, as in `\"Interface.member\" = 64`"
+        } else {
+            ""
+        };
         diags.push(error(
             DiagCode::MANI_015,
             file_id,
             value.span(),
-            format!("{what} must be an integer number of bytes, 0 or more"),
+            format!("{what} must be an integer number of bytes, 0 or more{hint}"),
         ));
         return None;
     };
@@ -1735,6 +1742,27 @@ version = \"1.0.0\"
         assert_eq!(spanned_text(&text, &diags[0]), "stream");
         let limits = manifest.expect("parses").limits;
         assert_eq!(limits.kinds.len(), 1);
+        assert_eq!(
+            limits.kinds.get(&LimitKind::Signal).map(|v| *v.get_ref()),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn a_limit_above_u32_is_an_error_not_zero() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 4294967296\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-022"]);
+        assert!(manifest.expect("parses").limits.default.is_none());
+    }
+
+    #[test]
+    fn an_unquoted_dotted_interaction_key_says_to_quote_it() {
+        let text = format!("{PACKAGE_HEAD}[limits.interaction]\nClimate.temperature = 64\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        assert!(diags[0].message.contains("must be quoted"), "{diags:?}");
+        assert!(manifest.expect("parses").limits.interactions.is_empty());
     }
 
     #[test]
