@@ -2844,7 +2844,7 @@ fn bool_vector_field() {
     // `clippy::identity_op` rejects a multiplication by 1, which the encoder
     // would emit for a one-byte element if it did not skip it.
     assert!(
-        !source.contains("* 1usize"),
+        !source.contains("* 1usize") && !source.contains("1usize *"),
         "a one-byte element must not be multiplied by its stride"
     );
     insta::assert_snapshot!(source);
