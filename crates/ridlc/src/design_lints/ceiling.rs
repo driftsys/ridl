@@ -22,7 +22,7 @@ use super::Ctx;
 /// What one payload's size state says, ordered from the least to the most
 /// serious so that the worst of several is their maximum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Size {
+pub(super) enum Size {
     /// No size is stated: the payload has no encoding in this codec, which is
     /// not a size problem.
     Other,
@@ -76,15 +76,15 @@ fn problem(size: Size) -> Option<String> {
 /// The size of one payload under each checked encoding, with the type that
 /// has it when the payload is a fallible reply.
 #[derive(Clone)]
-struct Side {
-    size: Size,
-    ty: Option<String>,
+pub(super) struct Side {
+    pub(super) size: Size,
+    pub(super) ty: Option<String>,
 }
 
-struct Entry {
-    role: &'static str,
-    flatbuffers: Side,
-    proto3: Side,
+pub(super) struct Entry {
+    pub(super) role: &'static str,
+    pub(super) flatbuffers: Side,
+    pub(super) proto3: Side,
 }
 
 fn entry(role: &'static str, sizes: &v1::PayloadSizes) -> Entry {
@@ -127,9 +127,35 @@ fn fallible_entry(
     }
 }
 
+/// The value of a fixed, sized under each encoding. RIDL-150 never sizes a
+/// fixed, because it is provisioned and never in flight; the payload limits
+/// of a unit apply to it all the same (ADR-0030 decision 14).
+pub(super) fn fixed_entry(
+    package: &v2::Package,
+    others: &[&v2::Package],
+    fixed: &v2::FixedDef,
+) -> Option<Entry> {
+    let ty = fixed.payload.as_ref()?;
+    let sizes = SizeCtx::new(package, others);
+    let side = |encoding: size::Encoding| Side {
+        size: from_sizer(size::size_state(
+            package,
+            &PayloadShape::Field(ty),
+            &sizes,
+            encoding,
+        )),
+        ty: None,
+    };
+    Some(Entry {
+        role: "value",
+        flatbuffers: side(size::Encoding::FlatBuffers),
+        proto3: side(size::Encoding::Proto3),
+    })
+}
+
 /// The payloads one interaction carries on the wire, with the role of each.
 /// A fixed is provisioned and never in flight, so it carries none.
-fn payloads(
+pub(super) fn payloads(
     interaction: &v1::Interaction,
     decl: &v2::Decl,
     package: &v2::Package,
@@ -189,7 +215,7 @@ fn payloads(
 
 /// The encodings to check: the names in `encodings` that have a size state,
 /// or FlatBuffers when `encodings` names none.
-fn checked_encodings(encodings: &[String]) -> (bool, bool) {
+pub(super) fn checked_encodings(encodings: &[String]) -> (bool, bool) {
     if encodings.is_empty() {
         return (true, false);
     }

@@ -7,6 +7,7 @@ use ridl_sem::{CheckedPackage, Resolution};
 
 mod ceiling;
 mod cohesion;
+mod limits;
 mod shapes;
 mod sites;
 mod units;
@@ -77,6 +78,42 @@ pub(crate) fn check_payload_ceiling(
         },
         std_ir,
         encodings,
+    )
+}
+
+/// RIDL-151 and RIDL-152 over one source set: the payload limits of each
+/// unit's `[limits]` table (ADR-0030 decisions 12 and 14). The inputs are
+/// those of [`check_payload_ceiling`], with `limits` the table of each unit
+/// by package name. Both codes are errors, so lint levels do not apply.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_payload_limits(
+    db: &RidlDatabase,
+    packages: &[Package],
+    checked: &[CheckedPackage],
+    resolutions: &[Resolution],
+    blocked: &[bool],
+    std_ir: &ridl_ir::v2::Package,
+    encodings: &[String],
+    limits: &std::collections::BTreeMap<String, ridl_core::UnitLimits>,
+    sources: &mut SourceMap,
+) -> Vec<Diagnostic> {
+    let sites = SiteIndex::new(db, packages, resolutions, sources);
+    let subject = packages
+        .iter()
+        .zip(blocked)
+        .map(|(package, blocked)| {
+            !blocked && !matches!(package.origin(db), PackageOrigin::Remote { .. })
+        })
+        .collect();
+    limits::check(
+        &Ctx {
+            checked,
+            subject,
+            sites,
+        },
+        std_ir,
+        encodings,
+        limits,
     )
 }
 

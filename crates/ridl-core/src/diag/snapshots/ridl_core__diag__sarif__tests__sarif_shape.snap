@@ -827,6 +827,24 @@ expression: log
               }
             },
             {
+              "id": "RIDL-151",
+              "shortDescription": {
+                "text": "payload above its declared limit or with no finite bound"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-152",
+              "shortDescription": {
+                "text": "a `[limits]` entry names no interaction of its unit"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "RIDL-201",
               "shortDescription": {
                 "text": "stream `<T>` on a `signal` or `event` payload"
@@ -1776,7 +1794,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 173,
+          "ruleIndex": 175,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

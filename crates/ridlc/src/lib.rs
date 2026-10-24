@@ -2276,7 +2276,6 @@ struct Compiled {
     /// The `[backend.<name>]` tables ([`LoadedWorkspace::backends`]).
     backends: BTreeMap<String, ridl_core::BackendTable>,
     /// Each unit's `[limits]` table ([`LoadedWorkspace::unit_limits`]).
-    #[allow(dead_code)] // read by the payload-limit check
     limits: BTreeMap<String, ridl_core::UnitLimits>,
     /// The member directory the entry lies in
     /// ([`LoadedWorkspace::report_scope`]).
@@ -2421,12 +2420,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
     // report, so `ridl.std` is not checked for it either.
     if checked.iter().any(|pkg| pkg.ir.shapes().next().is_some()) {
         let blocked = payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources);
-        let mut encodings: Vec<String> = backends
-            .values()
-            .flat_map(|table| table.encodings.iter().map(|(name, _)| name.clone()))
-            .collect();
-        encodings.sort();
-        encodings.dedup();
+        let encodings = enabled_encodings(&backends);
         let std_ir = check_package(db, workspace, std, std).ir;
         diagnostics.extend(design_lints::check_payload_ceiling(
             db,
@@ -2441,7 +2435,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
     }
     drop_remote_non_errors(&mut diagnostics, &sources, &remote_units);
 
-    Compiled {
+    let mut compiled = Compiled {
         workspace,
         std,
         checked,
@@ -2457,7 +2451,52 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         report_scope,
         root_package,
         remote_units,
+    };
+    check_unit_limits(db, &packages, &mut compiled);
+    compiled
+}
+
+/// The encoding names that every `[backend.<name>]` table enables, as one
+/// sorted set.
+fn enabled_encodings(backends: &BTreeMap<String, ridl_core::BackendTable>) -> Vec<String> {
+    let mut encodings: Vec<String> = backends
+        .values()
+        .flat_map(|table| table.encodings.iter().map(|(name, _)| name.clone()))
+        .collect();
+    encodings.sort();
+    encodings.dedup();
+    encodings
+}
+
+/// RIDL-151 and RIDL-152 over the `[limits]` tables that the load carried in
+/// `compiled.limits` (ADR-0030 decisions 12 and 14). Both are errors, so they
+/// are added after the remote units' non-errors are dropped. The check skips
+/// the packages that RIDL-150 skips.
+fn check_unit_limits(db: &RidlDatabase, packages: &[Package], compiled: &mut Compiled) {
+    if compiled.limits.is_empty() {
+        return;
     }
+    let blocked = payload_ceiling_blocked(
+        db,
+        packages,
+        &compiled.checked,
+        &compiled.diagnostics,
+        &compiled.sources,
+    );
+    let encodings = enabled_encodings(&compiled.backends);
+    let std_ir = check_package(db, compiled.workspace, compiled.std, compiled.std).ir;
+    let found = design_lints::check_payload_limits(
+        db,
+        packages,
+        &compiled.checked,
+        &compiled.resolutions,
+        &blocked,
+        &std_ir,
+        &encodings,
+        &compiled.limits,
+        &mut compiled.sources,
+    );
+    compiled.diagnostics.extend(found);
 }
 
 /// Per entry of `packages`, whether RIDL-150 skips it: the package has an

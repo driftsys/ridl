@@ -821,6 +821,21 @@ diag_codes! {
         RIDL_150 = "RIDL-150", Warning,
             "payload above the payload ceiling or with no finite bound", lint = "payload-above-ceiling";
 
+        /// A payload whose largest encoded size, in an encoding that the
+        /// workspace manifest enables, is above the limit that a `[limits]`
+        /// entry of its unit gives the interaction, or has no finite bound
+        /// (ADR-0030 decisions 12 and 14). Error; as an error code it has no
+        /// name and no level (ADR-0024 decision 1). Emitted by `ridlc` after
+        /// lowering, for `ridl check` and `ridl build`.
+        RIDL_151 = "RIDL-151", Error,
+            "payload above its declared limit or with no finite bound";
+
+        /// A `[limits.interaction]` key that names no interaction of its unit
+        /// (ADR-0030 decision 12). Error. Emitted by `ridlc` after lowering,
+        /// on the key in the unit's `ridl.toml`.
+        RIDL_152 = "RIDL-152", Error,
+            "a `[limits]` entry names no interaction of its unit";
+
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker.
         RIDL_201 = "RIDL-201", Error,

@@ -62,6 +62,8 @@ RIDL-144 error
 RIDL-145 error
 RIDL-149 error
 RIDL-150 warning lint=payload-above-ceiling default=warn
+RIDL-151 error
+RIDL-152 error
 RIDL-201 error
 RIDL-202 error
 RIDL-301 error
