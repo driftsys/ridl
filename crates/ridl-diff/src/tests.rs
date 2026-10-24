@@ -115,6 +115,7 @@ fn a_limit_only_change_reports_exactly_one_breaking_change() {
     assert_eq!(change.verdict, Verdict::Breaking);
     assert_eq!(change.before.as_deref(), Some("none"));
     assert_eq!(change.after.as_deref(), Some("64"));
+    assert_eq!(crate::heading(Category::LimitChanged), None);
 }
 
 #[test]
@@ -128,14 +129,6 @@ fn a_kind_change_that_also_changes_the_limit_reports_only_the_kind_change() {
     let report = diff_packages(&old, &new);
     assert_eq!(report.changes.len(), 1, "{:?}", report.changes);
     assert_eq!(report.changes[0].category, Category::KindChanged);
-    assert!(
-        report
-            .changes
-            .iter()
-            .all(|change| change.category != Category::LimitChanged),
-        "{:?}",
-        report.changes
-    );
 }
 
 // --------------------------------------------------------------------------

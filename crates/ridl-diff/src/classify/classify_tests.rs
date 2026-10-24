@@ -3020,6 +3020,13 @@ fn every_category_has_a_rule_row_naming_its_verdicts() {
 }
 
 #[test]
+fn the_limit_changed_rule_row_says_breaking_and_never_compatible() {
+    let text = super::explain(Category::LimitChanged);
+    assert!(text.contains("breaking"), "{text}");
+    assert!(!text.contains("compatible"), "{text}");
+}
+
+#[test]
 fn an_unknown_category_word_has_no_rule_row() {
     assert_eq!(super::category_from_word("no_such_category"), None);
 }
