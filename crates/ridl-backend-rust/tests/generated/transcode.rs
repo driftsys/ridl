@@ -1749,7 +1749,7 @@ pub(crate) fn __ridl_fb_encode_Panel(
                 );
             }
             let mut __bytes: ::std::vec::Vec<::core::primitive::u8> = ::std::vec::Vec::with_capacity(
-                __c.len() * 1usize,
+                __c.len(),
             );
             for __e in __c.iter() {
                 let __s = *__e;
