@@ -586,14 +586,15 @@ fn check_fails_when_the_semver_tool_fails() {
 }
 
 /// The crates of the `runtime-crates` surface.
-const RUNTIME_CRATES: [&str; 4] = [
+const RUNTIME_CRATES: [&str; 5] = [
     "ridl-rt",
     "ridl-rt-conformance",
     "ridl-loopback",
     "ridl-descriptor",
+    "ridl-transport-ws",
 ];
 
-/// A repository that holds a workspace of four crates with the names of the
+/// A repository that holds a workspace of five crates with the names of the
 /// runtime crates, each with the fixture crate's source and no dependency.
 /// Its tag `base` holds the crates as they are; HEAD holds the row for
 /// `runtime-crates`, and the working tree holds `ridl-rt` with `lib_rs` as its

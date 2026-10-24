@@ -81,6 +81,7 @@ const BREAK_FOUND: i32 = 100;
 /// in one `cargo semver-checks` run.
 pub fn runtime_compare(root: &Path, row: &Row) -> Result<Vec<String>, String> {
     fetch_dependencies(root)?;
+    verify_runtime_packages(root)?;
     if baseline_lock_differs(root, row)? {
         let tree = scratch_dir(root, "baseline-tree")?;
         fetch_baseline_dependencies(root, row, &tree)?;
@@ -170,6 +171,54 @@ baseline `{}`",
         )))
     } else {
         Ok(None)
+    }
+}
+
+/// The names of `crates` that are not a package in the `cargo metadata
+/// --no-deps` output `metadata`. `cargo semver-checks` skips a `--package`
+/// that names no package, so a renamed crate would be compared with nothing.
+fn missing_packages(crates: &[&str], metadata: &str) -> Result<Vec<String>, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(metadata).map_err(|e| format!("cannot parse cargo metadata: {e}"))?;
+    let packages = value["packages"]
+        .as_array()
+        .ok_or("cargo metadata has no `packages` array")?;
+    Ok(crates
+        .iter()
+        .filter(|name| !packages.iter().any(|p| p["name"].as_str() == Some(**name)))
+        .map(|name| name.to_string())
+        .collect())
+}
+
+/// Fails when a name of [`RUNTIME_CRATES`] is not a package of the workspace.
+fn verify_runtime_packages(root: &Path) -> Result<(), String> {
+    let mut command = Command::new("cargo");
+    command
+        .current_dir(root)
+        .args(["metadata", "--no-deps", "--format-version", "1"])
+        .arg("--manifest-path")
+        .arg(root.join("Cargo.toml"))
+        .stdin(Stdio::null());
+    bin::without_git_env(&mut command);
+    let output = command
+        .output()
+        .map_err(|e| format!("cannot run cargo metadata: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "`cargo metadata` failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    let missing = missing_packages(&RUNTIME_CRATES, &String::from_utf8_lossy(&output.stdout))?;
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "RUNTIME_CRATES names {} which is not a package of the workspace, so cargo \
+semver-checks would compare nothing for it: update RUNTIME_CRATES in \
+xtask/src/freeze/rust_api.rs to the package name",
+            missing.join(", ")
+        ))
     }
 }
 
@@ -668,6 +717,23 @@ ridl-rt = { version = \"0.8\", features = [\"flatbuffers\"] }\nregex = \"1\"\n";
         for lint in DENIED_LINTS {
             assert_eq!(lints[lint].as_str(), Some("deny"), "{lint}");
         }
+    }
+
+    #[test]
+    fn missing_packages_names_each_crate_that_is_not_a_package() {
+        let metadata = r#"{"packages":[{"name":"ridl-rt"},{"name":"xtask"}]}"#;
+        assert_eq!(
+            missing_packages(&["ridl-rt", "ridl-rt-old", "gone"], metadata).unwrap(),
+            ["ridl-rt-old", "gone"]
+        );
+        assert!(missing_packages(&["ridl-rt"], metadata).unwrap().is_empty());
+        assert!(missing_packages(&["ridl-rt"], "{}").is_err());
+    }
+
+    #[test]
+    fn every_runtime_crate_is_a_package_of_this_workspace() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        verify_runtime_packages(root).unwrap();
     }
 
     #[test]
