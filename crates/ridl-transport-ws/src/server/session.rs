@@ -3872,15 +3872,15 @@ mod tests {
     }
 
     /// Sends 65 requests of `target`, each refused `UnknownInteraction`,
-    /// over a table that holds ordinal 8 as a signal with a bound of one hour,
-    /// and checks that the first response is out of the ring after the 65th:
-    /// the refused response took no bound from the member.
-    fn assert_refused_requests_fall_into_the_last_64(target: Target) {
+    /// over a table that holds ordinal 8 under `eighth` with a bound of one
+    /// hour, and checks that the first response is out of the ring after the
+    /// 65th: the refused response took no bound from the member.
+    fn assert_refused_requests_fall_into_the_last_64(eighth: Kind, target: Target) {
         let mut t = (*table()).clone();
         t.insert(
             IFACE,
             Ordinal(8),
-            Kind::Signal,
+            eighth,
             Some(std::time::Duration::from_secs(3600)),
         );
         let (mut s, _p, notes) = described_with(t, |c| c);
@@ -3927,20 +3927,27 @@ mod tests {
     /// (the second case, whose member is a bounded query, catches it alone).
     #[test]
     fn a_refused_request_to_a_bounded_ordinal_of_another_kind_falls_into_the_last_64() {
-        assert_refused_requests_fall_into_the_last_64(target(Kind::Command, 8));
-        assert_refused_requests_fall_into_the_last_64(target(Kind::Command, QUERY.ord.0));
-        assert_refused_requests_fall_into_the_last_64(target(Kind::Query, COMMAND.ord.0));
+        assert_refused_requests_fall_into_the_last_64(Kind::Signal, target(Kind::Command, 8));
+        assert_refused_requests_fall_into_the_last_64(
+            Kind::Signal,
+            target(Kind::Command, QUERY.ord.0),
+        );
+        assert_refused_requests_fall_into_the_last_64(
+            Kind::Signal,
+            target(Kind::Query, COMMAND.ord.0),
+        );
     }
 
     /// The frame admits a `request` under a kind that is not a call; the
     /// table holds the identity under that kind, so the form check refuses
     /// it, and the member's bound is still not a call bound.
     ///
-    /// Mutation: drop the Command-or-Query condition and keep the kind
-    /// comparison.
+    /// Mutations: drop the Command-or-Query condition and keep the kind
+    /// comparison; refuse the bound for `Signal` only.
     #[test]
-    fn a_refused_request_to_a_bounded_signal_under_kind_signal_falls_into_the_last_64() {
-        assert_refused_requests_fall_into_the_last_64(target(Kind::Signal, 8));
+    fn a_refused_request_to_a_bounded_signal_or_event_under_its_own_kind_falls_into_the_last_64() {
+        assert_refused_requests_fall_into_the_last_64(Kind::Signal, target(Kind::Signal, 8));
+        assert_refused_requests_fall_into_the_last_64(Kind::Event, target(Kind::Event, 8));
     }
 
     /// Mutation: keep the bound for `Kind::Command` only.

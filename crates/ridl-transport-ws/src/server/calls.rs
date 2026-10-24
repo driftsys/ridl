@@ -46,10 +46,14 @@ pub(super) enum Seen {
     Older,
 }
 
-/// One kept response. Its bound, when it has one, is in `Calls::by_until`.
+/// One kept response.
 struct Kept {
     /// The encoded `response`.
     bytes: Vec<u8>,
+    /// The last instant of the backend's clock at which the response is
+    /// kept, or `None` when its bound is not known. The same value indexes
+    /// the entry in `Calls::by_until` or `Calls::ring`.
+    until: Option<Timestamp>,
 }
 
 #[derive(Default)]
@@ -118,9 +122,21 @@ impl Calls {
             seq,
             Kept {
                 bytes: response.to_vec(),
+                until,
             },
         );
         debug_assert!(replaced.is_none(), "seq {seq} settled twice");
+        // The caller settles a `seq` once; should it not, the count and the
+        // indexes stay consistent in a release build.
+        if let Some(old) = replaced {
+            self.bytes -= old.bytes.len();
+            match old.until {
+                Some(until) => {
+                    self.by_until.remove(&(until, seq));
+                }
+                None => self.ring.retain(|s| *s != seq),
+            }
+        }
         match until {
             Some(until) => {
                 self.by_until.insert((until, seq));
@@ -204,6 +220,16 @@ mod tests {
         assert!(matches!(calls.seen(1), Seen::Older));
         assert!(matches!(calls.seen(4), Seen::Older));
         assert_eq!(settled(&calls, 3), Some(vec![3; 30]));
+    }
+
+    /// The caller settles a `seq` once; a second settle is a defect of the
+    /// caller, which a debug build reports.
+    #[test]
+    #[should_panic(expected = "seq 1 settled twice")]
+    fn a_seq_settled_twice_is_a_defect_of_the_caller() {
+        let mut calls = Calls::default();
+        settle(&mut calls, 1, 5, None);
+        calls.settle(1, &[9; 5], Some(Timestamp(10)));
     }
 
     /// Mutation: count a bounded response against the ring.
