@@ -1851,11 +1851,12 @@ fn refuse_overwrite(
 /// the `regex` version the workspace's `Cargo.lock` resolves, which is the
 /// version the checker links.
 ///
-/// The manifest declares edition 2021 and no `rust-version`. Edition 2021 is
-/// the edition ADR-0029 decision 5 promises the generated crate compiles as
-/// with Rust 1.83, and cargo before 1.85 cannot read a manifest that declares
-/// edition 2024. The compatibility gate builds with every feature on and
-/// with default features off. The backend's compile proofs build the emitted
+/// The manifest declares edition 2021 and `rust-version = "1.88"`, the
+/// edition and the minimum Rust version ADR-0029 decision 5 promises the
+/// generated crate compiles with. The `rust-version` lets a resolver that
+/// reads it select dependency releases that Rust 1.88 builds. The
+/// compatibility gate builds with every feature on and with default features
+/// off. The backend's compile proofs build the emitted
 /// source as edition 2024 as well.
 ///
 /// With `wasm`, which `[backend.rust] wasm = true` sets, or `codec = true`
@@ -1898,6 +1899,7 @@ fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String], was
 name = "{crate_name}"
 version = "0.0.0"
 edition = "2021"
+rust-version = "1.88"
 
 [features]
 default = ["validate-pattern", "std"]
