@@ -140,6 +140,10 @@ struct Unit<'a> {
 /// `ctx.checked`; `limits` holds the `[limits]` table of each unit by unit
 /// name. A table applies to every package of its unit, so an entry may name an
 /// interface of any of them.
+///
+/// This function computes short-name ambiguity over the examined packages
+/// only, while `annotate_limits` computes it over all packages of the unit.
+/// The difference matters only for a build that already has errors.
 pub(crate) fn check(
     ctx: &Ctx<'_>,
     std_ir: &v2::Package,

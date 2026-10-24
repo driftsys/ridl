@@ -2321,6 +2321,10 @@ mod tests {
 
     /// An unset limit adds no byte to the encoded interaction, so the hash of
     /// a unit with no limit is the one it had before the field existed.
+    ///
+    /// The pinned value below is also the value from before the field
+    /// existed. The golden hash test of `ridl-descriptor` over the corpus is
+    /// the independent evidence for that.
     #[test]
     fn an_unset_limit_leaves_the_hash_unchanged() {
         assert_eq!(

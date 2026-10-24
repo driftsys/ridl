@@ -190,3 +190,45 @@ fn a_payload_above_its_limit_still_has_the_limit_recorded() {
     );
     assert_eq!(limit(&output, "Iface.sig"), Some(10));
 }
+
+#[test]
+fn a_limits_table_stays_inside_its_unit() {
+    // Two units in one workspace: `a` has a `[limits]` table and `b` has none.
+    // The table of `a` must not reach the interactions of `b`.
+    let source = |name: &str| {
+        format!(
+            "package {name}\ntype Payload: bytes [0..100]\n\
+             interface Iface {{\n  signal sig: Payload @[10ms..100ms]\n}}\n"
+        )
+    };
+    let dir = tempfile::tempdir().expect("a temp dir");
+    std::fs::write(
+        dir.path().join("ridl.toml"),
+        "[workspace]\nmembers = [\"a\", \"b\"]\n",
+    )
+    .unwrap();
+    for (name, manifest) in [("a", "[limits]\ndefault = 300\n"), ("b", "")] {
+        let member = dir.path().join(name);
+        std::fs::create_dir(&member).unwrap();
+        std::fs::write(
+            member.join("ridl.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n{manifest}"),
+        )
+        .unwrap();
+        std::fs::write(member.join("m.ridl"), source(name)).unwrap();
+    }
+    let mut db = RidlDatabase::default();
+    let output = compile_workspace(&mut db, dir.path()).expect("the workspace loads");
+    assert_eq!(errors(&output), Vec::<String>::new());
+    let limits_in = |name: &str| -> Vec<Option<u32>> {
+        output
+            .checked
+            .iter()
+            .filter(|package| package.ir.name == name)
+            .flat_map(|package| package.ir.shapes())
+            .flat_map(|shape| shape.interface.interactions.iter().map(|decl| decl.limit))
+            .collect()
+    };
+    assert_eq!(limits_in("a"), vec![Some(300)]);
+    assert_eq!(limits_in("b"), vec![None]);
+}
