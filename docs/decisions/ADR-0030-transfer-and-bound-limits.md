@@ -44,7 +44,9 @@ When accepted, these records gain a dated note or are changed in place:
 - From the amendment of 2026-10-24: ADR-0002 (the `[limits]` table of the
   manifest), ADR-0014 (the limit in the IR), ADR-0024 (RIDL-151), the ridl
   reference's diagnostics table, `docs/design/catalog-descriptor.md`,
-  `docs/design/ridl-transport-ws.md` and the frame specification §11.1.
+  `docs/design/ridl-transport-ws.md`, the frame specification §11.1, and the
+  records of the `ridl diff` categories (`docs/book/cli-reference.md`,
+  `docs/book/evolving-an-interface.md`).
 
 ## Context
 
@@ -182,15 +184,15 @@ When accepted, these records gain a dated note or are changed in place:
    compiling.
 
 10. **The WebSocket limit is at most one transfer.** `ridl-transport-ws` changes
-    its `max_message_bytes` default from 1 MiB to a value derived from the
-    catalog. Amended 2026-10-24: the message limit is not a free `Config` value.
-    It is derived as decision 15 states, so it is at most 36 + 16,256 = 16,292
-    bytes, within one transfer. `with_max_message_bytes` may only lower it.
-    `Config` holds no catalog, so the server checks the configured value against
-    the derived limit when it is built with its catalogs, and refuses a larger
-    value there. The earlier text, which let a deployment set a larger value, is
-    withdrawn, because the limit sizes the platform memory and every peer must
-    read it from the same source.
+    its `max_message_bytes` default from 1 MiB to 36 + 16,256 = 16,292 bytes,
+    the largest data-plane message, within one transfer. Amended 2026-10-24:
+    `with_max_message_bytes` may only lower the limit; a value above 16,292 is
+    refused, as `with_max_retained_bytes` refuses a value outside its range
+    today. The earlier text, which let a deployment set a larger value, is
+    withdrawn, because the limit sizes the platform memory. A deployment that
+    lowers the limit below what its catalog's limits allow (decision 15) closes
+    the session of a peer that stays within them, so a lower value is for a
+    deployment that knows its peers.
 
 11. **Data larger than one transfer is a stream.** A firmware image, a file or
     an image larger than 16 KiB is modelled as a stream of bounded elements
@@ -200,8 +202,9 @@ When accepted, these records gain a dated note or are changed in place:
 12. **Each interaction has its own payload limit, set in the manifest** (added
     2026-10-24). Each kind of interaction may allocate and carry its payload in
     a different way, so each interaction has its own limit, in bytes of encoded
-    payload. A package declares its limits in a `[limits]` table of its
-    `ridl.toml`:
+    payload. A unit declares its limits in a `[limits]` table of its own
+    `ridl.toml` (ADR-0002); a workspace root's table does not apply to its
+    members:
 
     ```toml
     [limits]
@@ -213,30 +216,36 @@ When accepted, these records gain a dated note or are changed in place:
     query = 16256
 
     [limits.interaction]
-    "Climate.temperature" = 64      # Interface.member, in this package
+    "Climate.temperature" = 64      # Interface.member, in this unit
     ```
 
     The limit of an interaction is, first found: its entry in
     `[limits.interaction]`, the entry of its kind (`signal`, `fixed`, `event`,
     `command` or `query`) in `[limits.kind]`, `default`, and the payload ceiling
     of decision 2. With no `[limits]` table, every interaction's limit is the
-    ceiling. The table names only the package's own interactions. A name that
-    matches no interaction, an unknown kind, and a value above 16,256 are each
-    an error at check time. The ceiling stays the upper bound for every
-    interaction and is changed only by amending this record.
+    ceiling. The table names only the unit's own interactions, by the
+    interface's name as the catalog records it, then `.`, then the member. An
+    unknown kind and a value above 16,256 are manifest errors with a `MANI-`
+    code (ADR-0002); a name that matches no interaction is a checker error with
+    a `RIDL-` code. The codes are assigned when the checks are built. The
+    ceiling stays the upper bound for every interaction and is changed only by
+    amending this record.
 
     The limits are in the manifest, not in an attribute, because a signal, an
-    event and a fixed take no attribute block (ADR-0008 decisions 2 and 3,
-    RIDL-106), and the catalog-wide and per-kind defaults have no declaration to
-    sit on. The general form and the attribute registry do not change.
+    event and a fixed take no attribute block (`family-general-form.md` §4.3),
+    and the catalog-wide and per-kind defaults have no declaration to sit on.
+    The general form and the attribute registry do not change.
 
 13. **The resolved limits are part of the catalog** (added 2026-10-24). The
     checker resolves each interaction's limit, and lowering records it in the IR
-    on the interaction, so the catalog hash covers it. Two peers whose limits
-    differ have different hashes, and the attach of one to the other is refused
-    (frame specification §6.1). The catalog descriptor's member table gains a
-    column with each member's limit. `ridl diff` reports a changed limit: a
-    lower limit is breaking, a higher one is compatible.
+    on the interaction, so the catalog hash covers it. An interaction whose
+    limit is the ceiling because no entry applies records no limit, so a unit
+    with no `[limits]` table keeps its catalog hash. `ridl diff` reports every
+    change of a limit, a raise or a lowering, as breaking, so a catalog whose
+    limits changed is not on the `compatible` chain of the earlier one. Two
+    peers whose limits differ therefore have different hashes, neither accepts
+    the other, and the attach is refused (frame specification §6.1). The catalog
+    descriptor's member table gains a column with each member's limit.
 
 14. **A payload above a declared limit is an error** (added 2026-10-24). When a
     `[limits]` entry gives an interaction its limit, and the computed bound of
@@ -249,19 +258,23 @@ When accepted, these records gain a dated note or are changed in place:
     `warn` (decisions 7 and 9): no source that compiled before this amendment
     stops compiling, and the ros2 corpus is unchanged. A call checks its
     arguments and its reply against its one limit; a signal, a fixed and an
-    event check their value.
+    event check their value. RIDL-150 does not size a `fixed` today, so RIDL-151
+    adds that sizing.
 
-15. **The transport derives its limits from the catalog** (added 2026-10-24).
-    The transport reads each member's limit from the descriptor's member table.
-    The WebSocket message limit of decision 10 is the data-plane header plus the
-    largest limit of the catalogs the server carries, and never less than the
-    294-byte floor of the frame specification §11.1 (`MIN_MESSAGE_LIMIT`). A
-    message above that limit still closes the session with 1009 (§11.1). A
-    message within it whose payload is above its own interaction's limit is
-    refused as a payload that does not verify (§9.3): a request is answered with
-    the outcome `corrupt`, and a publish is discarded. The retained-bytes cap
-    has the message limit as its smallest valid value; the clamp that raises a
-    smaller cap to the message limit
+15. **The transport derives its limits from the catalog** (added 2026-10-24). A
+    server whose backend has a member table reads each member's limit from it.
+    The message limit stays the `Config` value of decision 10, never less than
+    the 294-byte floor of the frame specification §11.1 (`MIN_MESSAGE_LIMIT`),
+    and a message above it still closes the session with 1009 (§11.1). A
+    `request` within that limit whose arguments are longer than its member's
+    limit is answered with the outcome `corrupt`, as for arguments that do not
+    verify (§9.3). This is a check of length against the catalog, not a
+    verification of the payload, and it amends §11.1 item 4 for a `request`
+    only. A publish is not checked: the Rust server receives none, and a client
+    receives only what its server sent. A backend with no member table, or a
+    descriptor without the limit column, applies the message limit alone. The
+    retained-bytes cap has the largest message limit, 16,292, as its smallest
+    valid value; the clamp that raises a smaller cap to the message limit
     (`crates/ridl-transport-ws/src/server/session.rs`) is removed, and
     `RetainedTooSmall` states that minimum. `with_max_retained_bytes` keeps its
     role of sizing the memory an embedder grants a session, above that minimum.
@@ -278,11 +291,13 @@ When accepted, these records gain a dated note or are changed in place:
 - `docs/design/interaction-face.md`: the mapping of `TooLarge` (decision 4).
 - `docs/design/ridl-transport-ws.md`: the new default (decision 10).
 - `docs/book/lints.md`: the two lint rows.
-- The manifest chapter of the book and ADR-0002 (the manifest): the `[limits]`
-  table (decision 12). ridl reference: the RIDL-151 row (decision 14).
+- ADR-0002 (the manifest): the `[limits]` table (decision 12). ridl reference:
+  the RIDL-151 row (decision 14).
 - ADR-0014 and `docs/design/catalog-descriptor.md`: the limit in the IR and in
-  the member table (decision 13). `docs/design/ridl-transport-ws.md` and the
-  frame specification §11.1: the derived limits (decisions 10 and 15).
+  the member table (decision 13). `docs/book/cli-reference.md` and
+  `docs/book/evolving-an-interface.md`: the `ridl diff` limit change (decision
+  13). `docs/design/ridl-transport-ws.md` and the frame specification §11.1: the
+  message limit and the request check (decisions 10 and 15).
 
 ## Alternatives considered
 
@@ -309,7 +324,7 @@ When accepted, these records gain a dated note or are changed in place:
 - **Raise RIDL-150 to `error`.** Rejected on 2026-10-24: every unbounded string
   of an imported schema would stop compiling, and the ros2 corpus would need a
   bound on each. The error applies only where an author declared a limit
-  (decision 13).
+  (decision 14).
 - **A `max_bytes` attribute on each interaction.** Rejected on 2026-10-24: a
   signal, an event and a fixed take no attribute block, so the attribute would
   reverse ADR-0008 decisions 2 and 3 and change the language surface, and the
@@ -358,7 +373,10 @@ When accepted, these records gain a dated note or are changed in place:
   change, and the diagnostics surface gains RIDL-151 and the manifest errors of
   decision 12. `with_max_message_bytes` can no longer raise the limit and the
   retained-cap clamp is removed; both change the published `ridl-transport-ws`
-  API and are released in a version marked breaking.
+  API and are released in a version marked breaking. The new IR field and the
+  new descriptor column are additions to the frozen `ir` surface and the
+  descriptor schema under ADR-0029; the freeze dumps are updated when the code
+  lands.
 
 ## References
 
