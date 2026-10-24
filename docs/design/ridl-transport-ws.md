@@ -527,9 +527,12 @@ responses kept for duplicates are `server/calls.rs`.
   and is kept as one of the last 64; the `min` keeps §7's "measured from the
   request's `stamp`" when the client's clock is behind, and caps the retention
   when a client stamps ahead, so stamping requests in the future holds no
-  response. Expired responses go on each tick. For a member the table gives no
-  bound (a catalog built before the default response bound), or with no table,
-  the server keeps the last 64 as before: a stated deviation from §11.1 item 6
+  response. Expired responses go on each tick. The kept responses are indexed by
+  `seq` and, for those with a bound, by the bound, so a repeat and an expiry
+  pass cost no scan of the kept set (up to the cap, a session may keep hundreds
+  of thousands of small responses). For a member the table gives no bound (a
+  catalog built before the default response bound), or with no table, the server
+  keeps the last 64 as before: a stated deviation from §11.1 item 6
   (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
   retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
   by default), and a session never applies a cap below `max_message_bytes`; when
