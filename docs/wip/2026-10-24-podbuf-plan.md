@@ -143,6 +143,12 @@ before it.
 Each question names the default this plan takes until it is answered; the task
 that depends on the answer is marked.
 
+**Answered by Sebastien on 2026-10-24:** every default below is accepted.
+Question 1: the `--encoding podbuf` flag is approved. Question 2: one break
+window for the four frozen surfaces and the catalog descriptor value is
+approved, shipped in a minor release of `ridl-rt`. podbuf stays in this
+repository.
+
 1. **How does `ridl diff` know a package carries podbuf?** `ridl diff` reads IR
    snapshots only, and the IR carries no `[backend.<name>] encodings`. An
    inline-nested append and a tombstoned removal are compatible for proto3 and
