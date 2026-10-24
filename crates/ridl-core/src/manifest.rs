@@ -12,7 +12,10 @@
 //! `MANI-001` invalid TOML, `MANI-002` both sections, `MANI-003` neither
 //! section, `MANI-005` unknown key (warning), `MANI-006` invalid package name,
 //! `MANI-007` invalid import URL, `MANI-010` a `[lints]` entry that names no
-//! lint or whose value is not a level (warning, ADR-0024 decision 11).
+//! lint or whose value is not a level (warning, ADR-0024 decision 11),
+//! `MANI-015` also a `[limits]` value of the wrong type, `MANI-021` an unknown
+//! kind in `[limits.kind]` and `MANI-022` a limit above the payload ceiling
+//! (ADR-0030 decision 12).
 //! `MANI-004` (nested workspace) is defined in
 //! the catalogue but emitted by the package loader, not here: a
 //! manifest read in isolation cannot know it is a workspace member, so a valid
@@ -46,6 +49,7 @@ use serde::Deserialize;
 use toml::Spanned;
 
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
+use crate::limits::PAYLOAD_CEILING;
 use crate::lint::{LintLevel, LintTable, lint_by_name};
 
 /// A parsed `ridl.toml` manifest: its mode-specific [`ManifestKind`], its
@@ -79,9 +83,68 @@ pub struct Manifest {
     pub imports: BTreeMap<String, String>,
     pub defaults: TimingDefaults,
     pub lints: LintTable,
+    pub limits: Limits,
     pub codegen_header_file: Option<(String, Range<usize>)>,
     pub backends: BTreeMap<String, BackendTable>,
     pub backend_span: Option<Range<usize>>,
+}
+
+/// The kinds of interaction a `[limits.kind]` entry can name, spelled in the
+/// manifest as `signal`, `fixed`, `event`, `command` and `query`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LimitKind {
+    Signal,
+    Fixed,
+    Event,
+    Command,
+    Query,
+}
+
+impl LimitKind {
+    /// The kind a manifest spells `name` as, or `None` for any other name.
+    pub fn parse(name: &str) -> Option<LimitKind> {
+        match name {
+            "signal" => Some(LimitKind::Signal),
+            "fixed" => Some(LimitKind::Fixed),
+            "event" => Some(LimitKind::Event),
+            "command" => Some(LimitKind::Command),
+            "query" => Some(LimitKind::Query),
+            _ => None,
+        }
+    }
+}
+
+/// One `[limits.interaction]` entry: the key as written, the byte range of the
+/// key in the manifest text, and the limit in bytes. Whether the key names an
+/// interaction of the unit is checked where the interactions are known.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LimitEntry {
+    pub name: String,
+    pub key: Range<usize>,
+    pub value: u32,
+}
+
+/// The `[limits]` table of one manifest (ADR-0030 decision 12): per-interaction
+/// payload limits in bytes of encoded payload. Every value passed validation
+/// (an integer from 0 to [`PAYLOAD_CEILING`]); an invalid entry is a
+/// diagnostic and is dropped. Each value carries its byte range in the
+/// manifest text. The table is empty when the manifest has no `[limits]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Limits {
+    /// The `default` key: the limit of every kind with no `[limits.kind]`
+    /// entry.
+    pub default: Option<Spanned<u32>>,
+    /// The `[limits.kind]` entries.
+    pub kinds: BTreeMap<LimitKind, Spanned<u32>>,
+    /// The `[limits.interaction]` entries in key order.
+    pub interactions: Vec<LimitEntry>,
+}
+
+impl Limits {
+    /// True when the manifest declares no limit at all.
+    pub fn is_empty(&self) -> bool {
+        self.default.is_none() && self.kinds.is_empty() && self.interactions.is_empty()
+    }
 }
 
 /// The encoding names the toolchain knows, spelled as the encoding enum of
@@ -244,6 +307,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
         })
         .unwrap_or_default();
     let lints = collect_lints(file_id, text, &mut diags);
+    let limits = collect_limits(file_id, text, &mut diags);
     let (backends, backend_span) = collect_backends(file_id, text, &mut diags);
     let codegen_header_file = raw
         .codegen
@@ -287,6 +351,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
             imports,
             defaults,
             lints,
+            limits,
             codegen_header_file,
             backends,
             backend_span,
@@ -395,6 +460,175 @@ fn collect_lints(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> Li
         lints.insert(registered, level);
     }
     lints
+}
+
+/// Deserializes as `Some(value)` when the value has the shape `T` and as `None`
+/// otherwise, so that one wrong shape does not fail the typed parse of the
+/// whole table.
+struct Lenient<T>(Option<T>);
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Lenient<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Lenient(T::deserialize(deserializer).ok()))
+    }
+}
+
+impl<T> Default for Lenient<T> {
+    fn default() -> Self {
+        Lenient(None)
+    }
+}
+
+/// A table of spanned keys and spanned untyped values.
+type SpannedTable = BTreeMap<Spanned<String>, Spanned<toml::Value>>;
+
+/// The `[limits]` table alone, read in a parse of its own so that each key and
+/// value carries its span and a wrong shape is MANI-015 with the rest of the
+/// manifest intact (as for [`RawLints`]). `limits` is not a field of
+/// [`RawManifest`] for the same reason.
+#[derive(Deserialize)]
+struct RawLimits {
+    #[serde(default)]
+    limits: Lenient<RawLimitsTable>,
+}
+
+#[derive(Deserialize)]
+struct RawLimitsTable {
+    #[serde(default)]
+    default: Option<Spanned<toml::Value>>,
+    #[serde(default)]
+    kind: Lenient<SpannedTable>,
+    #[serde(default)]
+    interaction: Lenient<SpannedTable>,
+}
+
+/// The spans of the `kind` and `interaction` values of `[limits]`, whatever
+/// their shape. Used only to place MANI-015 for a wrong shape.
+#[derive(Deserialize)]
+struct RawLimitsSpans {
+    #[serde(default)]
+    limits: Option<RawLimitsInner>,
+}
+
+#[derive(Deserialize)]
+struct RawLimitsInner {
+    #[serde(default)]
+    kind: Option<Spanned<toml::Value>>,
+    #[serde(default)]
+    interaction: Option<Spanned<toml::Value>>,
+}
+
+/// Reads a limit value: an integer from 0 to [`PAYLOAD_CEILING`]. A value that
+/// is not an integer or is negative is MANI-015, and one above the ceiling is
+/// MANI-022; both are on the value and give `None`.
+fn limit_value(
+    file_id: FileId,
+    what: &str,
+    value: &Spanned<toml::Value>,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<u32> {
+    let Some(number) = value.get_ref().as_integer().filter(|n| *n >= 0) else {
+        diags.push(error(
+            DiagCode::MANI_015,
+            file_id,
+            value.span(),
+            format!("{what} must be an integer number of bytes, 0 or more"),
+        ));
+        return None;
+    };
+    match u32::try_from(number) {
+        Ok(limit) if limit <= PAYLOAD_CEILING => Some(limit),
+        _ => {
+            diags.push(error(
+                DiagCode::MANI_022,
+                file_id,
+                value.span(),
+                format!("{what} is {number}, above the payload ceiling of {PAYLOAD_CEILING} bytes"),
+            ));
+            None
+        }
+    }
+}
+
+/// Collects the `[limits]` table into [`Limits`] (ADR-0030 decision 12). A
+/// `limits`, `limits.kind` or `limits.interaction` value that is not a table
+/// is one MANI-015 on that value. An invalid entry is a diagnostic on its key
+/// or value and is dropped; the other entries are kept.
+fn collect_limits(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> Limits {
+    let mut limits = Limits::default();
+    let raw: RawLimits = toml::from_str(text).unwrap_or(RawLimits {
+        limits: Lenient(None),
+    });
+    let wrong_shape = |range: Range<usize>, what: &str, diags: &mut Vec<Diagnostic>| {
+        diags.push(error(
+            DiagCode::MANI_015,
+            file_id,
+            range,
+            format!("`{what}` must be a table"),
+        ));
+    };
+    let Some(table) = raw.limits.0 else {
+        // Either there is no `limits` key or its value is not a table.
+        let doc: BTreeMap<String, Spanned<toml::Value>> = toml::from_str(text).unwrap_or_default();
+        if let Some(value) = doc.get("limits") {
+            wrong_shape(value.span(), "[limits]", diags);
+        }
+        return limits;
+    };
+    if let Some(default) = &table.default {
+        limits.default = limit_value(file_id, "`[limits].default`", default, diags)
+            .map(|v| Spanned::new(default.span(), v));
+    }
+    let inner = toml::from_str::<RawLimitsSpans>(text)
+        .ok()
+        .and_then(|s| s.limits);
+    match table.kind.0 {
+        Some(kinds) => {
+            for (key, value) in kinds {
+                let Some(kind) = LimitKind::parse(key.get_ref()) else {
+                    diags.push(error(
+                        DiagCode::MANI_021,
+                        file_id,
+                        key.span(),
+                        format!(
+                            "unknown kind `{}` in `[limits.kind]`; expected `signal`, `fixed`, `event`, `command` or `query`",
+                            key.get_ref()
+                        ),
+                    ));
+                    continue;
+                };
+                let what = format!("`[limits.kind].{}`", key.get_ref());
+                if let Some(v) = limit_value(file_id, &what, &value, diags) {
+                    limits.kinds.insert(kind, Spanned::new(value.span(), v));
+                }
+            }
+        }
+        None => {
+            if let Some(value) = inner.as_ref().and_then(|i| i.kind.as_ref()) {
+                wrong_shape(value.span(), "[limits.kind]", diags);
+            }
+        }
+    }
+    match table.interaction.0 {
+        Some(entries) => {
+            for (key, value) in entries {
+                let what = format!("`[limits.interaction].\"{}\"`", key.get_ref());
+                if let Some(v) = limit_value(file_id, &what, &value, diags) {
+                    limits.interactions.push(LimitEntry {
+                        name: key.get_ref().clone(),
+                        key: key.span(),
+                        value: v,
+                    });
+                }
+            }
+        }
+        None => {
+            if let Some(value) = inner.as_ref().and_then(|i| i.interaction.as_ref()) {
+                wrong_shape(value.span(), "[limits.interaction]", diags);
+            }
+        }
+    }
+    limits
 }
 
 /// The `[backend]` table alone, read in a parse of its own so that each value
@@ -855,6 +1089,7 @@ pub const KNOWN_KEYS: &[(&str, &[KnownKey])] = &[
             ("backend", "table<table>", ""),
             ("imports", "table<string>", ""),
             ("lints", "table<string>", ""),
+            ("limits", "table", ""),
         ],
     ),
     (
@@ -1448,6 +1683,110 @@ version = \"1.0.0\"
             assert_eq!(manifest.lints.get("missing-timing"), Some(&LintLevel::Deny));
             assert_eq!(manifest.lints.len(), 1);
         }
+    }
+
+    #[test]
+    fn limits_table_is_read() {
+        let text = format!(
+            "{PACKAGE_HEAD}[limits]\ndefault = 4096\n\n[limits.kind]\nsignal = 256\n\n\
+             [limits.interaction]\n\"Climate.temperature\" = 64\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "a valid `[limits]` table, got {diags:?}");
+        let limits = manifest.expect("the manifest parses").limits;
+        assert_eq!(limits.default.as_ref().map(|v| *v.get_ref()), Some(4096));
+        assert_eq!(
+            limits.kinds.get(&LimitKind::Signal).map(|v| *v.get_ref()),
+            Some(256)
+        );
+        assert_eq!(limits.kinds.len(), 1);
+        assert_eq!(limits.interactions.len(), 1);
+        let entry = &limits.interactions[0];
+        assert_eq!(entry.name, "Climate.temperature");
+        assert_eq!(entry.value, 64);
+        assert_eq!(&text[entry.key.clone()], "\"Climate.temperature\"");
+    }
+
+    #[test]
+    fn absent_limits_table_is_empty() {
+        let (manifest, diags) = parse(STANDALONE);
+        assert!(diags.is_empty());
+        assert!(manifest.expect("parses").limits.is_empty());
+        let text = format!("{PACKAGE_HEAD}[limits]\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "no MANI-005 for `limits`, got {diags:?}");
+        assert!(manifest.expect("parses").limits.is_empty());
+    }
+
+    #[test]
+    fn unknown_limit_kind_is_an_error() {
+        let text = format!("{PACKAGE_HEAD}[limits.kind]\nstream = 1\nsignal = 2\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-021"]);
+        assert_eq!(spanned_text(&text, &diags[0]), "stream");
+        let limits = manifest.expect("parses").limits;
+        assert_eq!(limits.kinds.len(), 1);
+    }
+
+    #[test]
+    fn limit_above_the_ceiling_is_an_error() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 16257\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-022"]);
+        assert_eq!(spanned_text(&text, &diags[0]), "16257");
+        assert!(manifest.expect("parses").limits.default.is_none());
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 16256\n");
+        let (manifest, diags) = parse(&text);
+        assert!(
+            diags.is_empty(),
+            "the ceiling itself is valid, got {diags:?}"
+        );
+        assert_eq!(
+            manifest
+                .expect("parses")
+                .limits
+                .default
+                .map(|v| *v.get_ref()),
+            Some(16256)
+        );
+    }
+
+    #[test]
+    fn malformed_limit_value_is_an_error_and_the_manifest_parses() {
+        let text = format!(
+            "{PACKAGE_HEAD}[limits]\ndefault = \"4k\"\n\n[limits.kind]\nsignal = -1\n\n\
+             [limits.interaction]\n\"A.b\" = 1.5\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015", "MANI-015", "MANI-015"]);
+        let spans: Vec<&str> = diags.iter().map(|d| spanned_text(&text, d)).collect();
+        assert_eq!(spans, vec!["\"4k\"", "-1", "1.5"]);
+        let manifest = manifest.expect("the manifest parses");
+        assert!(manifest.limits.is_empty());
+    }
+
+    #[test]
+    fn a_limits_table_of_the_wrong_shape_is_an_error() {
+        for text in [
+            format!("limits = 1\n{PACKAGE_HEAD}"),
+            format!("{PACKAGE_HEAD}[limits]\nkind = 1\n"),
+            format!("{PACKAGE_HEAD}[limits]\ninteraction = [1]\n"),
+        ] {
+            let (manifest, diags) = parse(&text);
+            assert_eq!(codes(&diags), vec!["MANI-015"], "{text}");
+            assert!(manifest.expect("parses").limits.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_malformed_limits_table_keeps_the_rest_of_the_manifest() {
+        let text = format!(
+            "{PACKAGE_HEAD}[limits]\ndefault = \"4k\"\n\n[lints]\nmissing-timing = \"deny\"\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        let manifest = manifest.expect("parses");
+        assert_eq!(manifest.lints.get("missing-timing"), Some(&LintLevel::Deny));
     }
 
     #[test]

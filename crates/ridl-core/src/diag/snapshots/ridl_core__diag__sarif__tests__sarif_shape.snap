@@ -1593,6 +1593,24 @@ expression: log
               }
             },
             {
+              "id": "MANI-021",
+              "shortDescription": {
+                "text": "unknown kind in `[limits.kind]`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-022",
+              "shortDescription": {
+                "text": "payload limit above the payload ceiling of 16,256 bytes"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1758,7 +1776,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 171,
+          "ruleIndex": 173,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

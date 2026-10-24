@@ -1403,7 +1403,9 @@ diag_codes! {
         /// strings, an element is not one of `flatbuffers`, `proto3` and
         /// `repr-c`, or an element repeats. The message names the offending
         /// value and lists the known names. A `wasm` that is not a boolean is
-        /// MANI-015 too, and its message names the value.
+        /// MANI-015 too, and its message names the value. So is a `[limits]`
+        /// value that is not a table where a table is expected, or not an
+        /// integer of 0 or more where a limit is expected.
         MANI_015 = "MANI-015", Error,
             "a `[backend.<name>]` value has the wrong shape: `encodings` is not an array of known, distinct encoding names, or `wasm` is not a boolean";
 
@@ -1445,6 +1447,17 @@ diag_codes! {
         /// MANI-020 as well.
         MANI_020 = "MANI-020", Error,
             "a backend table sets `transcode = true` with fewer than two encodings";
+
+        /// A `[limits.kind]` key is not one of `signal`, `fixed`, `event`,
+        /// `command` and `query`. Reported on the key; the entry is dropped.
+        MANI_021 = "MANI-021", Error,
+            "unknown kind in `[limits.kind]`";
+
+        /// A `[limits]` value is above the payload ceiling of 16,256 bytes.
+        /// Reported on the value; the entry is dropped. A value that is not an
+        /// integer from 0 up is MANI-015.
+        MANI_022 = "MANI-022", Error,
+            "payload limit above the payload ceiling of 16,256 bytes";
 
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).

@@ -31,6 +31,8 @@ MANI-017 error
 MANI-018 warning lint=vendor-source-not-loaded default=warn
 MANI-019 error
 MANI-020 error
+MANI-021 error
+MANI-022 error
 MANI-101 error
 MANI-102 error
 MANI-103 error
