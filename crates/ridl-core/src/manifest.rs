@@ -1859,6 +1859,13 @@ version = \"1.0.0\"
     }
 
     #[test]
+    fn limits_with_only_kinds_are_not_empty() {
+        let text = format!("{PACKAGE_HEAD}[limits.kind]\nevent = 1\n");
+        let (manifest, _) = parse(&text);
+        assert!(!manifest.expect("parses").limits.is_empty());
+    }
+
+    #[test]
     fn lints_key_is_known() {
         let text = format!("{PACKAGE_HEAD}[lints]\n");
         let (manifest, diags) = parse(&text);

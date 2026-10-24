@@ -198,6 +198,7 @@ fn a_fixed_is_checked_though_the_ceiling_check_skips_it() {
     let found = with("RIDL-151", &diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
     assert!(found[0].message.contains("`Iface.big`"), "{found:?}");
+    assert!(found[0].message.starts_with("the value of "), "{found:?}");
     assert!(with("RIDL-150", &diagnostics).is_empty(), "{diagnostics:?}");
     // A kind entry reaches it too.
     let diagnostics = check(source, "[limits.kind]\nfixed = 5\n");
@@ -327,6 +328,37 @@ fn only_enabled_encodings_are_checked() {
     assert_eq!(found.len(), 1, "{:?}", flatbuffers.diagnostics);
     assert!(found[0].message.contains("flatbuffers"), "{found:?}");
     assert!(!found[0].message.contains("proto3"), "{found:?}");
+}
+
+#[test]
+fn a_payload_over_the_limit_in_a_disabled_encoding_is_not_reported() {
+    // A list of 100 wide integers: the proto3 bound is 503
+    // bytes and the FlatBuffers bound is 457, so a limit of 480 is broken in
+    // proto3 alone.
+    let source = "package demo\ntype Wide: integer [-1000000000..1000000000]\n\
+                  struct Payload { rows: [Wide; 0..100] }\n\
+                  interface Iface {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let member = || Member {
+        name: "demo",
+        source,
+        manifest: "[limits]\ndefault = 480\n",
+    };
+    let flatbuffers = run(
+        &[member()],
+        "[backend.rust]\nencodings = [\"flatbuffers\"]\n",
+    );
+    assert!(
+        with("RIDL-151", &flatbuffers.diagnostics).is_empty(),
+        "{:?}",
+        flatbuffers.diagnostics
+    );
+    let proto3 = run(&[member()], PROTO3);
+    let found = with("RIDL-151", &proto3.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", proto3.diagnostics);
+    assert!(
+        found[0].message.contains("503 bytes in proto3"),
+        "{found:?}"
+    );
 }
 
 #[test]
