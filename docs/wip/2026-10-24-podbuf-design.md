@@ -35,8 +35,8 @@ measured, than FlatBuffers. Floating-point cost is out of scope for this goal.
 - Total over typl: every typl construct has a rule, and a construct the encoding
   cannot carry is a diagnostic that names it (ADR-0016 decision 6, ADR-0017
   decision 4).
-- Compatible evolution within one type: appended fields, new enum values,
-  deprecated fields.
+- Compatible evolution within one type: appended fields, new values of an open
+  enum or enum set, deprecated fields.
 
 ### 1.2 Non-goals
 
@@ -50,6 +50,7 @@ measured, than FlatBuffers. Floating-point cost is out of scope for this goal.
 - The AUTOSAR RTE adapter and the ARXML export. They come from an ARXML or
   Franca IDL codegen plugin, not from podbuf (Sebastien). An ARXML importer is a
   separate, later project (Sebastien).
+- Specifying the `open` keyword. It is a separate typl change (§8.5).
 - Tracking type versions. A new type version is a convention, not a ridl concept
   (Sebastien).
 - Cache-line alignment and sizing of message buffers. That belongs to the gate
@@ -170,7 +171,10 @@ preamble, so the buffer states its own head size and is self-describing:
 
     preamble = { head_size: u32, reserved: u32 }
 
-- Both fields are little-endian. `reserved` must be zero.
+- Both fields are little-endian. The encoder writes `reserved` as zero and a
+  reader ignores its value (author's call). A later preamble use of the word
+  then needs no change to older readers, which is the same forward-compatibility
+  reason that `verify` does not check pad bytes (§7).
 - `head_size` is the size in bytes of the head the producer wrote. It is a
   multiple of 8.
 - The head starts at offset 8. A descriptor's `off` stays relative to the start
@@ -189,8 +193,8 @@ that the ARXML or Franca IDL plugin generates (§10) covers the difference.
 | integer                        | the wire width typl infers from the range (typl §4.2)                                                 | Sebastien     |
 | float                          | `f32` or `f64` as typl infers (typl §4.3)                                                             | author's call |
 | boolean                        | `u8`, 0 or 1                                                                                          | author's call |
-| enum                           | the narrowest integer that holds the declared values                                                  | author's call |
-| enum set                       | the integer width typl infers (typl §9.3); undeclared bits are zero                                   | author's call |
+| enum                           | the narrowest integer that holds the declared values; strict unless declared `open` (§8.5)            | Sebastien     |
+| enum set                       | the integer width typl infers (typl §9.3); strict unless declared `open` (§8.5)                       | Sebastien     |
 | optional field `?`             | one bit in a flags integer placed by the first-fit law; an absent field's bytes are zero              | author's call |
 | tuple                          | an inline struct, same law                                                                            | author's call |
 | exact-length array `[T; N]`    | inline `T[N]`, no length                                                                              | Sebastien     |
@@ -214,44 +218,47 @@ that the ARXML or Franca IDL plugin generates (§10) covers the difference.
 data present (Sebastien for the scope, author's call for the exact list):
 
 1. The buffer start is 8-aligned and the buffer length is at least 8. In the
-   preamble, `reserved` is zero, `head_size` is a multiple of 8, `8 + head_size`
-   is at most the buffer length, and `head_size` covers every field of the
-   reader's type that is neither optional nor has a declared default (author's
-   call; such fields are in the first release, so every producer's head holds
-   them).
-2. Every pad byte of the reader's head is zero, when `head_size` equals the
-   reader's own head size. When `head_size` is larger, the producer's head may
-   place an appended field in a byte that the reader's head holds as pad, so
-   `verify` does not check pad bytes (author's call).
-3. Each boolean is 0 or 1; each enum value is declared; each enum set has no
-   undeclared bit; each flags integer is checked only at the bits of the
-   optional fields the reader knows, and the other bits are ignored; an absent
-   optional's bytes are zero. A field of the reader's type whose offset plus
-   size exceeds `head_size` is absent: it is not checked, and the accessor
-   returns absent or the declared default.
-4. The typl constraints of each value: integer ranges, string and bytes length
+   preamble, `head_size` is a multiple of 8, `8 + head_size` is at most the
+   buffer length, and `head_size` covers every field of the reader's type that
+   is neither optional nor has a declared default (author's call; such fields
+   are in the first release, so every producer's head holds them). The
+   `reserved` word is not checked (§5.4).
+2. Each boolean is 0 or 1; each value of a strict enum is declared; each strict
+   enum set has no undeclared bit; an open enum accepts any value that fits its
+   integer width, and an open enum set accepts and keeps every bit (§8.5); each
+   flags integer is checked only at the bits of the optional fields the reader
+   knows, and the other bits are ignored; an absent optional's bytes are zero. A
+   field of the reader's type whose offset plus size exceeds `head_size` is
+   absent: it is not checked, and the accessor returns absent or the declared
+   default.
+3. The typl constraints of each value: integer ranges, string and bytes length
    bounds (`min` to `max`, counted as typl counts them), and the other generated
    typl checks, the same code the other encodings call.
-5. For each descriptor: `off` is aligned for its data, `off` is at least
+4. For each descriptor: `off` is aligned for its data, `off` is at least
    `8 + head_size`, `off + len·size` (plus 1 for a string's NUL) is within the
    buffer with no overflow (checked arithmetic), and `min ≤ len ≤ max`.
-6. For each string: the byte after the data is NUL, there is no NUL inside the
+5. For each string: the byte after the data is NUL, there is no NUL inside the
    data, and the data is valid UTF-8.
-7. For each union: the tag names a declared arm, and `len` equals that arm's
+6. For each union: the tag names a declared arm, and `len` equals that arm's
    head size; then the arm is verified.
-8. For each map: keys are strictly increasing in the order of §6.
-9. Each array element, union arm and map entry is verified with the same rules.
+7. For each map: keys are strictly increasing in the order of §6.
+8. Each array element, union arm and map entry is verified with the same rules.
 
-**Not checked (Sebastien), by design:** tail bytes that no descriptor covers,
-and overlap between descriptors. The buffer is read-only after the gate's copy,
-so two descriptors over the same bytes cannot corrupt each other. The trade-off
-is that a producer can leave unreferenced bytes in the tail; no consumer API
-reads them.
+**Not checked, by design:** pad bytes anywhere, in the head or in a nested head
+(author's call). First-fit backfill can place a field appended in a later
+release in the pad bytes of an older layout without changing `head_size`, so an
+older reader that checked pads would reject a valid newer buffer. Also not
+checked (Sebastien): tail bytes that no descriptor covers, and overlap between
+descriptors. The buffer is read-only after the gate's copy, so two descriptors
+over the same bytes cannot corrupt each other. The trade-off is that a producer
+can leave unreferenced bytes in the tail and non-zero bytes in the pads; no
+consumer API reads either.
 
-**Encoder duty (Sebastien):** the encoder writes every pad byte and every byte
-of an absent optional as zero, and writes no unreferenced bytes into the tail.
-`verify` checks pads and absent optionals, so it costs nothing to check unused
-tail capacity.
+**Encoder duty (Sebastien):** the encoder writes every pad byte, the preamble
+`reserved` word and every byte of an absent optional as zero, and writes no
+unreferenced bytes into the tail. Zeroed pads close the leak of stale memory to
+the consumer. `verify` checks absent optionals but neither pads nor unused tail
+capacity, so its cost does not grow with capacity.
 
 ## 8. Evolution
 
@@ -275,13 +282,10 @@ existing one.
   fields it knows and ignores every other bit (Sebastien). This is the single
   rule for flags in `verify` (§7); a flags integer is never rejected for a bit
   that belongs to a later field.
-- Adding an enum value that declares a fallback to an existing value. A producer
-  writes the fallback to a consumer that predates the value (author's call;
-  agreed with the group of mechanical rules). The producer must know the
-  consumer's version for this. The gate or the transport provides that with an
-  attach-time version or layout-hash check, as the WebSocket transport's
-  compatible-hash check at attach does (driftsys/ridl#1037). Where the fallback
-  is declared is open (§15.2).
+- Adding a value to an `open` enum, or a flag to an `open` enum set (Sebastien;
+  §8.5). An older reader sees the new value as unknown. With the preamble, the
+  buffer is fully self-describing, so no compatible change requires the producer
+  to know the consumer's version.
 - Retiring a field with typl's existing `@deprecated` doc tag. The field and its
   type stay in the source and in the bytes; the encoder writes zero or the
   default (Sebastien).
@@ -291,7 +295,9 @@ existing one.
 Removing a field with a `reserved` tombstone (the type is gone from the source,
 so its bytes cannot be kept), reordering, widening an integer across a width
 boundary, changing a bound, growing a nested struct or an element type, and
-removing an arm or an enum value (Sebastien).
+removing an arm or an enum value, and adding a value to a strict enum or a flag
+to a strict enum set (Sebastien). Changing a strict enum to an open one, or the
+reverse, also breaks: it changes which values the type contains.
 
 ### 8.3 Type versions are a convention
 
@@ -309,6 +315,31 @@ a consumer is the producer's and the gate's logic, not ridl's (Sebastien).
   a different order would save, for example on `FaultEvent`. It applies only
   before a type's first release, because order is frozen afterwards; how the
   lint knows a type is unreleased is left to the builder (§12).
+
+### 8.5 Strict and open enums
+
+(Sebastien, decision of 2026-10-24.)
+
+- An enum is **strict** by default. `verify` rejects any value that the
+  declaration does not name. Adding a value is a break, so it is a new type
+  version by the convention of §8.3.
+- An enum declared with the contextual keyword `open`
+  (`open enum DtcStatus
+  { ... }`) is **open**. `verify` accepts any value that
+  fits the integer width. The read-in-place accessor and the decode return a
+  known value or `unknown(raw)`. Every consumer must handle `unknown`. Adding a
+  value is compatible; an older reader sees it as unknown. The generated Rust
+  for an open enum carries an unknown variant, with its exact shape left to the
+  builder (§16), and `#[non_exhaustive]`.
+- The same rule applies to `enumset`. A strict enum set rejects undeclared bits.
+  An `open enumset` accepts and keeps them, so adding a flag is compatible.
+- `open` is a contextual keyword. It is recognised only before `enum` or
+  `enumset` and is not reserved.
+- `open` is a typl language change, recorded separately (typl §8, §9, the
+  backends and `ridl diff`). This design depends on it and does not specify it.
+  Before that change lands, it must check how today's backends and `ridl diff`
+  treat a new enum value, so that defaulting every enum to strict breaks nothing
+  silently.
 
 ## 9. Floats
 
@@ -354,6 +385,10 @@ interface description without computing the first-fit law a second time.
 | 8-aligned descriptors                                                                                                | rejected       | a special case in the law with no packing gain                                                                                                           |
 | Inline C union sized for the largest arm                                                                             | rejected       | every message pays for the largest arm                                                                                                                   |
 | Unsorted map entries                                                                                                 | rejected       | duplicate detection becomes O(n²); sorting gives one pass and reproducible bytes                                                                         |
+| Doc tag `@non_exhaustive` for an open enum                                                                           | rejected       | the deletion test (`family-general-form.md` §4.1) forbids a doc tag whose removal changes tool output                                                    |
+| Attribute `[open]` for an open enum                                                                                  | rejected       | strict or open changes which values the type contains, which is part of its shape, not an annotation                                                     |
+| Enum value fallback to an existing value                                                                             | rejected       | the producer must know the consumer's version; open enums need no such knowledge                                                                         |
+| Pad-byte check in `verify`                                                                                           | rejected       | an older reader would reject a valid newer buffer whose appended field sits in the older layout's pad bytes                                              |
 | Zeroed-tail check in `verify`                                                                                        | rejected       | made verify cost grow with capacity; moved to the encoder                                                                                                |
 | Names `reprbuf`, `ridlbuf`, `hptbuf`, `typlbuf`, `wirebuf`, `membuf`, `cbuf`, `rxbuf`, `rpbuf`, `tailbuf`, `spanbuf` | rejected       | Rust-only, toolchain-bound, unexplained, misleading (wire, receive buffer, RPMsg), or taken on crates.io                                                 |
 
@@ -403,6 +438,8 @@ accessors.
   decision 6 and ADR-0017 decision 4 (totality); ADR-0029 (the generated surface
   that the new backend adds to); typl reference §4.2–§4.6, §7.1–§7.4, §8–§12,
   §14.2 (`@deprecated`).
+- Depends on: the typl `open` keyword for `enum` and `enumset` (§8.5), a
+  separate typl change that is not yet written.
 
 ## 14. Settled after the builder check (author's calls)
 
@@ -437,14 +474,16 @@ accessors.
 1. **How does a reader learn the producer's head size?** Decided (Sebastien,
    2026-10-24): every buffer carries a preamble with its head size (§5.4). The
    gate does not pass the producer's layout to `verify`.
-2. **Where is an enum value's fallback declared?** §8.1 requires a new enum
-   value to name a fallback, but typl has no syntax for it. A doc tag (like
-   `@deprecated`), a new attribute (a language change), or a rule in the
-   producer with no declaration — each produces different generated code.
+2. **How does an enum accept new values?** Decided (Sebastien, 2026-10-24): an
+   enum is strict by default and an `open` enum accepts unknown values (§8.5).
+   No fallback value is declared. A doc tag is rejected because removing it
+   would change tool output, and an attribute is rejected because strict or open
+   is part of the type's shape (§11).
 
 ## 16. Left to the builder
 
-- The Rust and C names of generated items, and the accessor API shape.
+- The Rust and C names of generated items, and the accessor API shape, including
+  the shape of the unknown variant of an open enum.
 - The diagnostic codes for a typl construct podbuf cannot carry, and for each
   break `ridl diff` reports.
 - How the padding lint decides that a type has not been released yet.
