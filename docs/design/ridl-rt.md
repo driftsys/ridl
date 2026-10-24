@@ -511,16 +511,16 @@ harmless, `None` once the deadline has passed — and `noop_waker() -> Waker`,
 built as `Waker::from(Arc<Noop>)` and meant to be created once per loop and
 cloned. The module is for a blocking client written as `block_on` over an async
 one, and for a frame loop that polls a future once per frame. It exists because
-`Waker::noop()` needs Rust 1.85, above the crate's minimum of 1.83, and a raw
-waker needs `unsafe`, which the crate forbids. It takes no dependency and
-contains no `unsafe`; the `trace` module also links the standard library under
-the feature, for the propagation hook of ADR-0021 decision 22; every other
-module stays `no_std` with the feature on; and the feature compiles for
-`wasm32-unknown-unknown`, which `just wasm-check`'s `--all-features` line
-requires, but `block_on` is not usable on that target: `Instant::now()` panics
-there and a park does not block the thread, so a frame loop on wasm polls with
-`noop_waker` and never calls `block_on`. ADR-0021 decision 8 carries the dated
-note.
+`Waker::noop()` needed Rust 1.85, above the crate's minimum of 1.83 when the
+module was added, and a raw waker needs `unsafe`, which the crate forbids. It
+takes no dependency and contains no `unsafe`; the `trace` module also links the
+standard library under the feature, for the propagation hook of ADR-0021
+decision 22; every other module stays `no_std` with the feature on; and the
+feature compiles for `wasm32-unknown-unknown`, which `just wasm-check`'s
+`--all-features` line requires, but `block_on` is not usable on that target:
+`Instant::now()` panics there and a park does not block the thread, so a frame
+loop on wasm polls with `noop_waker` and never calls `block_on`. ADR-0021
+decision 8 carries the dated note.
 
 **Since 2026-09-28 (driftsys/ridl#568) the `task` module has a third function,**
 `flag_waker() -> (Waker, WakeFlag)`. The waker is `Waker::from(Arc<Flag>)` over
@@ -555,8 +555,8 @@ the worst case any order can reach.
 Because the workspace resolves this crate with default features, `just test`,
 `just lint` and `just wasm-check` each carry a second invocation with
 `--all-features` for `-p ridl-rt`; without them the feature-gated modules are
-compiled only by `just compat-check`, at rust-version 1.83 and against the
-packaged crate.
+compiled only by `just compat-check`, at the minimum rust-version and against
+the packaged crate.
 
 ## The ports
 
@@ -937,7 +937,7 @@ registers and then `take`s the waker back when the change is already visible.
 `take_all` is for a runtime with one unkeyed "something changed" source; it
 clears every kind when it is called, whether or not the iterator is consumed,
 and the iterator does not borrow the registry (`+ use<>`, precise capturing,
-stable since Rust 1.82 and so within the crate's 1.83 floor), so a runtime can
+stable since Rust 1.82 and so within the crate's 1.88 floor), so a runtime can
 register again while it still holds the iterator. `Waiters` implements `Default`
 beside `new`, as `EventSeqTracker` does, because Clippy's `new_without_default`
 lint fails the gate on a public `new` with no argument and no `Default`.

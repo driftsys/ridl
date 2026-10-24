@@ -322,7 +322,7 @@ the blocking client can ask whether the call was sent (F-10). The call futures
 and `NextEvent` are `Unpin` by their fields — `&'a mut P`, the phase and the
 deadline — and declare nothing; `Serve` declares it, because it holds the
 handler by value. Nothing emitted uses `async` or `impl Trait` in return
-position, so the emitted source compiles as edition 2021 at Rust 1.83, the first
+position, so the emitted source compiles as edition 2021 at Rust 1.88, the first
 cell of the codegen build matrix
 ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10),
 which `just compat-check` builds for the emitted cabin crate with the `std` cfg

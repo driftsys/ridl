@@ -665,24 +665,22 @@ trusted with no `unsafe` and no second verification pass.
     A platform-wide payload ceiling for both codecs, which would cap such a
     bound instead of refusing it, is driftsys/ridl#996.
 
-    `ridl-rt` supports Rust 1.83 or newer: `rust-version = "1.83"` in
-    `crates/ridl-rt/Cargo.toml`. The crate's manifest compiles as edition 2021,
-    because its 1.83 minimum predates edition 2024 — Rust cannot build that
-    edition before 1.85 — and the crate is tested as both editions it supports:
-    edition 2021 with the 1.83 toolchain and with the `rust-toolchain.toml` pin,
-    and edition 2024 with the pin — edition 2024 did not exist before Rust 1.85,
-    so the 1.83 minimum cannot build it. `just test` covers edition 2021 with
-    the pin; `just compat-check` covers edition 2021 with 1.83 and edition 2024
-    with the pin, against the crate `cargo package -p ridl-rt` produces, not a
-    hand copy. The root `Cargo.toml` sets `resolver = "2"`, because
-    `cargo package` writes the workspace's resolver into the packaged manifest,
-    cargo 1.83 cannot read resolver 3 ("feature `edition2024` is required"), and
-    resolver 3's MSRV-aware fallback would resolve every workspace dependency
-    for `ridl-rt`'s minimum rather than only its own; decided by Sebastien on
-    2026-09-14 in driftsys/ridl#352. The pin follows the latest stable release:
-    a maintainer bumps it by hand under
-    [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 3 when a new
-    stable release appears (driftsys/ridl#353). Raising `rust-version` is a
+    `ridl-rt` supports Rust 1.88 or newer: `rust-version = "1.88"` in
+    `crates/ridl-rt/Cargo.toml` (1.83 until the 2026-10-24 amendment below). The
+    crate's manifest compiles as edition 2021, which is part of the frozen
+    minimum, and the crate is tested as both editions it supports: edition 2021
+    with the 1.88 toolchain and with the `rust-toolchain.toml` pin, and edition
+    2024 with the pin. `just test` covers edition 2021 with the pin;
+    `just compat-check` covers edition 2021 with 1.88 and edition 2024 with the
+    pin, against the crate `cargo package -p ridl-rt` produces, not a hand copy.
+    The root `Cargo.toml` sets `resolver = "2"`, because resolver 3's MSRV-aware
+    fallback would resolve every workspace dependency for `ridl-rt`'s minimum
+    rather than only its own; decided by Sebastien on 2026-09-14 in
+    driftsys/ridl#352. On that date a second reason held: cargo 1.83 could not
+    read resolver 3, which `cargo package` writes into the packaged manifest.
+    The pin follows the latest stable release: a maintainer bumps it by hand
+    under [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 3 when a
+    new stable release appears (driftsys/ridl#353). Raising `rust-version` is a
     breaking change under this decision's rule, shipped in a 0.x minor release;
     a toolchain pin bump does not by itself change `rust-version`. This replaces
     R-12's `rust-version` item — not the rest of R-12 — in
@@ -692,15 +690,23 @@ trusted with no `unsafe` and no second verification pass.
     the pin would rise with every toolchain bump.
 
     `ridl-rt` compiles as edition 2021 and is tested as editions 2021 and 2024,
-    with Rust 1.83 and with the pin, in the matrix above. The Rust codegen
+    with Rust 1.88 and with the pin, in the matrix above. The Rust codegen
     (roadmap epic E11) emits code that compiles under the same matrix — edition
-    2021 with 1.83, edition 2021 with the pin, and edition 2024 with the pin —
+    2021 with 1.88, edition 2021 with the pin, and edition 2024 with the pin —
     and the codegen stories test that; decided by Sebastien on 2026-09-14 during
     the review of driftsys/ridl#352, because Cargo compiles each crate under its
     own edition — an edition-2024 dependency builds under an edition-2021
     consumer once the toolchain is 1.85 or newer — but source ridl emits, copied
     or generated directly into a consuming crate, compiles as that crate's own
     edition, and a consumer may be edition 2021 or 2024.
+
+    **Amended (2026-10-24, driftsys/ridl#1047).** The minimum is raised from
+    Rust 1.83 to Rust 1.88 for `ridl-rt` and for the code the Rust codegen
+    emits, by the owner's decision of that date: `ridl-descriptor` already
+    needed 1.88, and the qualified Rust toolchains that the 1.83 minimum served
+    now ship Rust 1.88 or later. The editions do not change. The two paragraphs
+    above are changed in place; the stability policy and the approval of the
+    break are in [ADR-0029](ADR-0029-stability-policy.md).
 
 11. **Amendment (2026-09-20) — every port trait is implemented for `&mut P`, and
     every port trait whose methods all take `&self` also for `&P`.** For each

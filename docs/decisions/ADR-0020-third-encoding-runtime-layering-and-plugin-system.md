@@ -22,6 +22,13 @@ placed behind a browser playground. The in-place amendments this record causes
 are listed in **Documents amended**; each is written into the record it belongs
 to, not here.
 
+**Amended 2026-10-24 (driftsys/ridl#1047) — decision 6, the `descriptor` feature
+has no minimum of its own.** The minimum Rust version of every runtime crate is
+now 1.88 ([ADR-0029](ADR-0029-stability-policy.md)), so `ridl-transport-ws`
+needs no later Rust with its `descriptor` feature on. The feature stays optional
+and off by default, because of the weight of its dependencies. The
+`ridl-transport-ws` row is changed in place.
+
 **Amended 2026-10-24 — decision 6, `ridl-transport-ws` reads the catalog
 descriptor under a feature.** The `ridl-transport-ws` row said `ridl-rt` alone.
 The crate gains the optional feature `descriptor`, off by default, which adds
@@ -412,7 +419,7 @@ as its public contract.
    | `ridl-rt`                        | the library of decision 5                                                                                                                                   | the FlatBuffers runtime, only under its feature — permitted, and not taken: since 2026-09-20 (story E11.7, stage K3) the `flatbuffers` feature gates the crate's own helpers and `ridl-rt` has no dependency in any feature combination |
    | `ridl-loopback`                  | the in-process reference runtime — every port over a queue and a map, and no IO                                                                             | `ridl-rt`                                                                                                                                                                                                                               |
    | `ridl-rt-conformance`            | the port contract tests, generic over a runtime factory, which a runtime runs from its own tests; published (2026-10-08)                                    | `ridl-rt`                                                                                                                                                                                                                               |
-   | `ridl-transport-ws`              | the ports over a WebSocket, carrying the encoding the session names, proto3 by default (frame specification §11.1); the default of the getting-started path | `ridl-rt`; `ridl-descriptor` with its default features off, under the `descriptor` feature (off by default, Rust 1.88 with it)                                                                                                          |
+   | `ridl-transport-ws`              | the ports over a WebSocket, carrying the encoding the session names, proto3 by default (frame specification §11.1); the default of the getting-started path | `ridl-rt`; `ridl-descriptor` with its default features off, under the `descriptor` feature (off by default)                                                                                                                             |
    | `@driftsys/ridl-runtime` (npm)   | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec                                                          | nothing outside itself                                                                                                                                                                                                                  |
    | the TypeScript WebSocket package | the same binding for Deno and the browser                                                                                                                   | nothing until the runtime package exists; built as `@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`, which carries payload bytes without decoding them                                                                    |
 
