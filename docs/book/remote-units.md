@@ -53,6 +53,9 @@ A remote package, called a remote unit in the diagnostics, follows these rules:
   it. `ridl build` generates code for it beside your own packages, and
   `ridl fmt` never changes it. No catalog, baseline snapshot or `ridl lock`
   entry includes it; its owner publishes those.
+- The compiler skips the entries that macOS adds to an archive when it reads a
+  remote unit: any file or directory whose name starts with `._`, and the
+  `__MACOSX/` directory. Your own packages are read as they are.
 
 ## Where the compiler reads a remote unit from
 
