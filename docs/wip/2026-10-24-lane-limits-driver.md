@@ -68,4 +68,25 @@ until its pull request merges or a real blocker stops it.
 
 Each ruling: what was decided — why — what it costs if wrong.
 
-(none yet)
+- **R-1** — A wrong value type in `[limits]` (a string, a negative number, a
+  table) reuses MANI-015; the plan named no code. — MANI-015 is the existing
+  hard error for a wrong shape. — A new code and a catalogue row if the owner
+  wants a distinct one.
+- **R-2** — An unknown key directly inside `[limits]` warns MANI-005 (a `limits`
+  row in `KNOWN_KEYS`). — A misspelled `default` would otherwise leave a safety
+  limit silently unapplied. — One more warning on manifests that carry such a
+  key.
+- **R-3** — A limit of 0 is accepted. — ADR-0030 decision 12 gives the range 0
+  to 16,256. — A manifest meant to forbid an interaction would pass.
+- **R-4** — The `[limits]` table of a workspace root is parsed and then dropped;
+  only package manifests (standalone or member) store limits. — The plan says a
+  root table does not apply to members. — None.
+- **R-5** — Unit limits are a public field `LoadedWorkspace.unit_limits`, not an
+  accessor method. — It matches the sibling field `backends`. — A later rename
+  to a method.
+- **R-6** — Remote (materialized) units get no limits entry. — A unit's table
+  applies to that unit only and the plan does not cover remote units. — A remote
+  unit with a `[limits]` table is not checked.
+- **R-7** — The single check of the plan is split into `check_payload_limits`
+  (in `design_lints/mod.rs`) and `limits::check`. — Matches the RIDL-150 layout.
+  — None.
