@@ -511,14 +511,30 @@ fn package_items(
     for encoding in encodings {
         encoding.check_emitted();
     }
+    let mut flatbuffers_owners = None;
+    let mut proto3_owners = None;
     if encodings.contains(&WireEncoding::FlatBuffers) {
-        items.extend(codec::package_items(ctx)?);
+        let (codec_items, owners) = codec::package_items(ctx)?;
+        items.extend(codec_items);
+        flatbuffers_owners = Some(owners);
     }
     if encodings.contains(&WireEncoding::Proto3) {
-        items.extend(codec_proto3::package_items(ctx)?);
+        let (codec_items, owners) = codec_proto3::package_items(ctx)?;
+        items.extend(codec_items);
+        proto3_owners = Some(owners);
     }
     if transcode {
-        items.extend(transcode::package_items(ctx, encodings)?);
+        let owners: Vec<_> = encodings
+            .iter()
+            .map(|&encoding| {
+                let list = match encoding {
+                    WireEncoding::FlatBuffers => flatbuffers_owners.take(),
+                    WireEncoding::Proto3 => proto3_owners.take(),
+                };
+                (encoding, list.unwrap_or_default())
+            })
+            .collect();
+        items.extend(transcode::package_items(&owners));
     }
     Ok(items)
 }

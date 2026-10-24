@@ -4,15 +4,13 @@
 //!
 //! The rule for "implements `Payload` under an encoding" is the codec
 //! emitters' own: each codec reports the types it writes an implementation
-//! for (`codec::payload_owners`, `codec_proto3::payload_owners`), and this
+//! for (`codec::package_items`, `codec_proto3::package_items`), and this
 //! module reads that list instead of restating the rule.
 
 use proc_macro2::TokenStream;
 use quote::quote;
 
-use crate::{
-    Ctx, GenerateError, WireEncoding, allow_dead_code_if_internal, codec, codec_proto3, ident,
-};
+use crate::{WireEncoding, allow_dead_code_if_internal, ident};
 
 /// A generated type that carries a `Payload` implementation for one encoding.
 pub(crate) struct PayloadOwner {
@@ -24,27 +22,17 @@ pub(crate) struct PayloadOwner {
 
 /// The transcode functions of the package, one `impl` block per type that has
 /// at least one pair. Empty when fewer than two encodings are listed.
-pub(crate) fn package_items(
-    ctx: &Ctx,
-    encodings: &[WireEncoding],
-) -> Result<Vec<TokenStream>, GenerateError> {
-    if encodings.len() < 2 {
-        return Ok(Vec::new());
-    }
-    let mut owners: Vec<(WireEncoding, Vec<PayloadOwner>)> = Vec::new();
-    for &encoding in encodings {
-        owners.push((
-            encoding,
-            match encoding {
-                WireEncoding::FlatBuffers => codec::payload_owners(ctx)?,
-                WireEncoding::Proto3 => codec_proto3::payload_owners(ctx)?,
-            },
-        ));
+///
+/// `owners` holds one list per listed encoding, in the order the encodings are
+/// listed.
+pub(crate) fn package_items(owners: &[(WireEncoding, Vec<PayloadOwner>)]) -> Vec<TokenStream> {
+    if owners.len() < 2 {
+        return Vec::new();
     }
     // Types in the order of the first encoding's list, then those only a later
     // encoding has, so the output order does not depend on a map.
     let mut names: Vec<(&str, i32)> = Vec::new();
-    for (_, list) in &owners {
+    for (_, list) in owners {
         for owner in list {
             if !names.iter().any(|(name, _)| *name == owner.name) {
                 names.push((&owner.name, owner.visibility));
@@ -59,8 +47,8 @@ pub(crate) fn package_items(
     let mut items = Vec::new();
     for (name, visibility) in names {
         let mut functions = Vec::new();
-        for &source in encodings {
-            for &target in encodings {
+        for &(source, _) in owners {
+            for &(target, _) in owners {
                 if source != target && has(source, name) && has(target, name) {
                     functions.push(function(source, target));
                 }
@@ -78,7 +66,7 @@ pub(crate) fn package_items(
             },
         ));
     }
-    Ok(items)
+    items
 }
 
 fn function(source: WireEncoding, target: WireEncoding) -> TokenStream {
