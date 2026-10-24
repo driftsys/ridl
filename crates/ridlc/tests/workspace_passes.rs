@@ -61,3 +61,33 @@ fn a_lock_in_an_earlier_package_does_not_move_the_workspace_diagnostics() {
         ],
     );
 }
+
+/// `ridlc::std_ir` checks `ridl.std` in an empty workspace, and
+/// `compile_workspace` checks it in the loaded workspace. The two promise the
+/// same IR, so a consumer that holds only snapshots (`ridl diff`) resolves
+/// `ridl.std` as a consumer of a compiled workspace does.
+#[test]
+fn std_ir_equals_the_std_ir_of_a_compiled_workspace() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    std::fs::write(
+        dir.path().join("ridl.toml"),
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("write the manifest");
+    std::fs::write(
+        dir.path().join("a.ridl"),
+        "package a\ntype Level: integer [0..3]\nstruct S {\n  at: Timestamp\n  level: Level\n}\n",
+    )
+    .expect("write the source");
+
+    let mut db = ridl_core::RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, dir.path()).expect("the workspace loads");
+
+    let standalone = ridlc::std_ir();
+    assert_eq!(standalone.name, "ridl.std");
+    assert!(
+        !standalone.decls.is_empty(),
+        "ridl.std holds declarations: {standalone:?}"
+    );
+    assert_eq!(standalone, output.std_ir);
+}

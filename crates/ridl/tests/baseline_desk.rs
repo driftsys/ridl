@@ -1322,6 +1322,14 @@ fn check_explains_an_append_the_gate_reports_as_breaking() {
             false,
         ),
         (
+            "swap-and-append-standard-type",
+            "struct Report {\n  latch: LatchState\n  door: DoorState\n  hinge: Timestamp\n}",
+            1,
+            "because `latch` and `door` changed ordinal in the same edit",
+            "hinge: Timestamp",
+            false,
+        ),
+        (
             "swap-and-append-excluding-zero",
             "struct Report {\n  latch: LatchState\n  door: DoorState\n  hinge: integer [1..3]\n}",
             1,
