@@ -42,3 +42,23 @@ fn generated_transcode_matches_the_emitter() {
          RIDL_UPDATE_GENERATED=1 cargo test -p ridl-backend-rust --test transcode_regeneration"
     );
 }
+
+/// A repeated encoding takes its owner list once, so the output is the one
+/// the list without the repeat gives, and no transcode function is emitted
+/// twice.
+#[test]
+fn a_repeated_encoding_emits_each_transcode_function_once() {
+    let package = ir::compile_fixture("transcode.ridl");
+    let repeated = [
+        ridl_backend_rust::WireEncoding::FlatBuffers,
+        ridl_backend_rust::WireEncoding::Proto3,
+        ridl_backend_rust::WireEncoding::FlatBuffers,
+    ];
+    let once = ridl_backend_rust::generate_pipeline(&package, ENCODINGS, true, &[])
+        .expect("generate_pipeline")
+        .rust_source;
+    let twice = ridl_backend_rust::generate_pipeline(&package, &repeated, true, &[])
+        .expect("generate_pipeline")
+        .rust_source;
+    assert_eq!(twice, once);
+}

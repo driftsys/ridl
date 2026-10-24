@@ -84,11 +84,9 @@ use crate::{
 /// is one less thing for a reader in another language to get wrong.
 const BUFFER_ALIGN: usize = 8;
 
-/// Emits the codec for `package`.
-///
-/// `tuples` is the induced tuple set [`crate::generate`] discovered, in
-/// discovery order; a tuple's generated struct is a table like any other and
-/// needs its own three functions.
+/// Emits the codec for the package `ctx` was built over. An induced tuple's
+/// generated struct is a table like any other and needs its own three
+/// functions.
 ///
 /// Also returns the types it emits a `Payload<FlatBuffers>` implementation
 /// for, recorded during the same walk, so the transcode functions follow the

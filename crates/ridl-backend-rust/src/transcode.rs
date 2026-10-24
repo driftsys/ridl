@@ -21,10 +21,10 @@ pub(crate) struct PayloadOwner {
 }
 
 /// The transcode functions of the package, one `impl` block per type that has
-/// at least one pair. Empty when fewer than two encodings are listed.
+/// at least one pair.
 ///
-/// `owners` holds one list per listed encoding, in the order the encodings are
-/// listed.
+/// `owners` holds one list per distinct listed encoding, in the order the
+/// encodings are listed. The result is empty when it holds fewer than two.
 pub(crate) fn package_items(owners: &[(WireEncoding, Vec<PayloadOwner>)]) -> Vec<TokenStream> {
     if owners.len() < 2 {
         return Vec::new();
