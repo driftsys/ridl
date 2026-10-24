@@ -32,9 +32,9 @@ measured, than FlatBuffers. Floating-point cost is out of scope for this goal.
   reader needs only the generated header.
 - A generated `verify` per type whose cost grows with the data present, never
   with the declared capacity.
-- Total over typl: every typl construct has a rule, and a construct the encoding
-  cannot carry is a diagnostic that names it (ADR-0016 decision 6, ADR-0017
-  decision 4).
+- Total over typl: every typl construct has a rule (§6.1), and a type that
+  exceeds podbuf's size limits is a diagnostic that names it (ADR-0016 decision
+  6, ADR-0017 decision 4).
 - Compatible evolution within one type: appended fields, new values of an open
   enum or enum set, deprecated fields.
 
@@ -82,6 +82,11 @@ stays as the description of how the head is laid out.
   (Sebastien). The buffer is read-only from then on.
 - podbuf requires the buffer to start on an 8-byte boundary; `verify` checks it
   (Sebastien). Cache-line alignment is the gate's and the transport's concern.
+- **Deployment rule (author's call).** The gate's `verify` for a type must be
+  generated from a version of that type at least as new as the version every
+  consumer behind the gate was built from. A gate built from an older version
+  ignores the bytes of fields it does not know, so it cannot check a value that
+  a newer consumer then reads.
 
 ## 4. Target rule
 
@@ -95,6 +100,10 @@ stays as the description of how the head is laid out.
   a pointer, `usize`/`size_t`, `long`, a C `enum`, a C bitfield, or a 128-bit
   type (author's call). Every gap is an explicit pad field, so i686 (which
   aligns `u64` to 4 inside a struct) reproduces the same offsets.
+- Every head struct is declared with alignment 8: `_Alignas(8)` on its first
+  member in C and `#[repr(C, align(8))]` in Rust (author's call). Without it,
+  i686 gives a head that holds a `u64` an alignment of 4, which changes where a
+  head can sit inside another head or in the tail.
 - The generator emits `_Static_assert` checks on `sizeof` and `offsetof` in the
   C header and `const` assertions on `size_of` and `offset_of!` in Rust, for
   every type and field (author's call). A toolchain that disagrees fails the
@@ -107,18 +116,39 @@ stays as the description of how the head is laid out.
 A podbuf buffer is `[preamble][head][tail]` (Sebastien).
 
 - The **preamble** is 8 bytes and records the head size (§5.4).
-- The **head** is one `#[repr(C)]` struct per type. It holds every fixed-size
-  field: scalars, enums, enum sets, exact-length arrays (`[T; N]`,
-  `bytes [N..N]`), nested structs and tuples.
+- The **head** is one `#[repr(C, align(8))]` struct per type (§4). It holds
+  every fixed-size field: scalars, enums, enum sets, exact-length arrays
+  (`[T; N]`, `bytes [N..N]`), nested structs and tuples.
 - Every **variable-length** field — a bounded `string`, `bytes` or array, a map,
-  and the active arm of a union — is an 8-byte **descriptor**
-  `{ off: u32, len: u32 }` in the head. `off` is relative to the start of the
-  buffer, which is the start of the preamble; `len` counts bytes for
-  `string`/`bytes` and elements for an array or a map.
+  and the active arm of a union — is an 8-byte **descriptor** descriptor in the
+  head. `off: u32` is relative to the start of the buffer, which is the start of
+  the preamble. A `string`, `bytes` or union descriptor is
+  `{ off: u32, len: u32 }`; `len` counts bytes for `string`/`bytes` and bytes of
+  the arm head for a union. An array or map descriptor is
+  `{ off: u32, len: u16, elem_size: u16 }` (Sebastien, decision of 2026-10-24);
+  `len` counts elements or entries.
+- A descriptor whose `len` is 0 is all zero bytes, and so is the descriptor of
+  an absent optional field (author's call). Such a descriptor points at no tail
+  data: an empty string has no NUL in the tail.
 - The **tail** follows the head and holds only the data actually present: string
   and bytes contents, array elements, map entries, union arms.
 - A descriptor has its natural alignment, 4 (author's call). Data in the tail is
   placed at the alignment of its element type.
+- **Stride.** `elem_size` is the size in bytes of one element (or map entry) as
+  the producer laid it out. A reader steps from one element to the next by
+  `elem_size` and reads only the prefix of each element that it knows; a field
+  of the element that lies past the producer's `elem_size` reads as 0, by the
+  same rule as an appended field (§8.1). The stride costs no bytes: it uses the
+  upper half of the descriptor's length word. The limits are 65,535 elements per
+  array or map and 65,535 bytes per element (§6.1).
+- `elem_size` rule (author's call): for an element or entry that is a struct
+  head, `elem_size` is a multiple of 8, which is every head's alignment; for any
+  other element type (a scalar, an enum, an enum set, a descriptor, a tuple or
+  an exact-length array), `elem_size` equals the element size, because such an
+  element cannot grow compatibly.
+- A union arm has no separate stride (author's call). The arm's descriptor `len`
+  already states the arm head size the producer used, so a reader reads the
+  prefix it knows and a field past `len` reads as 0.
 
 A considered threshold rule (bounded fields stored inline when their capacity is
 at most 256 bytes) was dropped (Sebastien); see §10.
@@ -130,6 +160,12 @@ at most 256 bytes) was dropped (Sebastien); see §10.
 1. Take the fields in **declaration order**.
 2. Place each field at the **lowest offset** where it fits at its natural
    alignment (1, 2, 4 or 8) without overlapping a field already placed.
+   **Optional flags** (author's call): the flags are `u8` fields, one per eight
+   optional fields. When the placement reaches the optional field number
+   `8k + 1` (counting optional fields from 1 in declaration order), it first
+   places flags field `k` as a `u8` by this same rule, then places the optional
+   field. Bit `i` (from the least significant bit) of flags field `k` is set
+   when optional field number `8k + i + 1` is present.
 3. Round the struct size up to a multiple of 8.
 4. Every unused byte is an explicit pad field (`_padN`) whose value is zero.
 
@@ -145,13 +181,13 @@ Measured layouts from the spike (§12), types from the `veh-cluster` corpus.
 Placements are offsets inside the head. The buffer size without a tail is the
 head size plus the 8-byte preamble.
 
-| Type            | Fields in declaration order                      | Placement                                                                                                     | Head | Buffer without tail |
-| --------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ---- | ------------------- |
-| `DoorPayload`   | `sensor_id: u8`, `is_open: bool`                 | 0, 1; pad 2..8                                                                                                | 8    | 16                  |
-| `ClimateReport` | `cabin`, `setpoint` (16-bit raw), `fan: u8`      | 0, 2, 4; pad 5..8                                                                                             | 8    | 16                  |
-| `DiagFilter`    | `severity: u8`, `category?: string`              | 0; flag byte 1; descriptor 4..12; pad 2..4, 12..16                                                            | 16   | 24                  |
-| `FaultEvent`    | `code: u16`, `message: string`, `timestamp: i64` | 0; descriptor 4..12; `timestamp` cannot use 8..16, which overlaps the descriptor, so 16..24; pad 2..4, 12..16 | 24   | 32                  |
-| `FaultPage`     | `faults: [FaultEvent; 0..64]`                    | descriptor 0..8; elements are 24-byte `FaultEvent` heads, 8-aligned in the tail, strings after them           | 8    | 16                  |
+| Type            | Fields in declaration order                      | Placement                                                                                                               | Head | Buffer without tail |
+| --------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ---- | ------------------- |
+| `DoorPayload`   | `sensor_id: u8`, `is_open: bool`                 | 0, 1; pad 2..8                                                                                                          | 8    | 16                  |
+| `ClimateReport` | `cabin`, `setpoint` (16-bit raw), `fan: u8`      | 0, 2, 4; pad 5..8                                                                                                       | 8    | 16                  |
+| `DiagFilter`    | `severity: u8`, `category?: string`              | 0; flag byte 1; descriptor 4..12; pad 2..4, 12..16                                                                      | 16   | 24                  |
+| `FaultEvent`    | `code: u16`, `message: string`, `timestamp: i64` | 0; descriptor 4..12; `timestamp` cannot use 8..16, which overlaps the descriptor, so 16..24; pad 2..4, 12..16           | 24   | 32                  |
+| `FaultPage`     | `faults: [FaultEvent; 0..64]`                    | descriptor 0..8 with `elem_size` 24; elements are 24-byte `FaultEvent` heads, 8-aligned in the tail, strings after them | 8    | 16                  |
 
 Only the buffer start carries a preamble. An element, a union arm or a map entry
 in the tail is a head without a preamble.
@@ -195,22 +231,63 @@ that the ARXML or Franca IDL plugin generates (§10) covers the difference.
 | boolean                        | `u8`, 0 or 1                                                                                          | author's call |
 | enum                           | the narrowest integer that holds the declared values; strict unless declared `open` (§8.5)            | Sebastien     |
 | enum set                       | the integer width typl infers (typl §9.3); strict unless declared `open` (§8.5)                       | Sebastien     |
-| optional field `?`             | one bit in a flags integer placed by the first-fit law; an absent field's bytes are zero              | author's call |
+| optional field `?`             | one bit in a `u8` flags field placed by the first-fit law (§5.2); an absent field's bytes are zero    | author's call |
 | tuple                          | an inline struct, same law                                                                            | author's call |
 | exact-length array `[T; N]`    | inline `T[N]`, no length                                                                              | Sebastien     |
 | bounded `string`               | descriptor; tail holds the UTF-8 bytes followed by one NUL that `len` does not count                  | Sebastien     |
-| bounded `bytes`, bounded array | descriptor; tail holds the bytes or the element heads, contiguous                                     | Sebastien     |
+| bounded `bytes`, bounded array | descriptor; tail holds the bytes, or the elements at stride `elem_size`, contiguous                   | Sebastien     |
 | union                          | a narrow integer tag (the arm's ordinal) in the head, plus a descriptor to the active arm in the tail | Sebastien     |
 | map `[K : V; min..max]`        | descriptor to an array of `{ key, value }` entries sorted by key                                      | Sebastien     |
 
 - typl's `string [N]` bounds scalar values, not bytes (typl §4.4). Because the
   tail stores only the bytes present, no worst-case byte capacity is reserved.
-- A union descriptor's `len` equals the head size of the active arm.
+- A string that contains U+0000 cannot be encoded, because the string carries a
+  NUL terminator and `verify` rejects an interior NUL (author's call). The
+  encoder returns an error for such a string. This is a known limit of podbuf:
+  the conformance round trips between podbuf and the other encodings exclude
+  strings that contain U+0000.
+- A union descriptor's `len` is the head size of the active arm as the producer
+  laid it out, a multiple of 8, or 0 for an arm with no fields.
+- An enum's integer is signed when any declared value is negative, and unsigned
+  otherwise; its width is the narrowest that holds every declared value. For an
+  open enum or enum set, a new value that does not fit the inferred width or
+  signedness changes the width, which is a break (§8.2), as for an integer range
+  (typl §4.2).
 - Map key order: bytewise for strings and bytes; numeric for integers and
   floats. `+0.0` and `-0.0` are equal, so both present is a duplicate; a NaN key
   is rejected (Sebastien).
 - Every typl string, bytes and collection carries a bound, explicit or the
   `[0..256]` default (typl §4.4, §4.5, §12), so podbuf has no unbounded case.
+
+### 6.1 Totality
+
+Every typl construct has a podbuf rule (author's call):
+
+| typl construct                  | Rule                                                            |
+| ------------------------------- | --------------------------------------------------------------- |
+| boolean, integer, float         | a fixed-width scalar in the head (§6)                           |
+| enum, enum set                  | an integer in the head, strict or open (§8.5)                   |
+| string, bytes                   | a descriptor and tail bytes (§5.1, §6)                          |
+| exact-length array `[T; N]`     | inline `T[N]` in the head                                       |
+| bounded array                   | a descriptor with a stride, and the elements (§5.1)             |
+| map                             | a descriptor with a stride, and the sorted entries (§5.1, §6)   |
+| union                           | a tag in the head and a descriptor to the active arm head (§6)  |
+| struct, tuple                   | a head laid out by the first-fit law (§5.2), inline when nested |
+| optional `?`                    | a flag bit, and zeroed bytes when absent (§5.2, §6)             |
+| units, constraints, init values | no bytes of their own; constraints are checked by `verify` (§7) |
+| recursive shapes                | impossible: typl rejects them (typl §7.3)                       |
+
+podbuf adds build-time errors, each naming the type, for:
+
+- a type whose maximum podbuf size, computed from its declared bounds, exceeds
+  `u32::MAX` bytes, because a `u32` offset cannot address all of it;
+- an array or map whose maximum count exceeds 65,535, or whose element or entry
+  size exceeds 65,535 bytes, because the descriptor's `len` and `elem_size` are
+  `u16`.
+
+The exact codes are left to the builder (§16). A payload that exceeds the
+payload ceiling of ADR-0030 is reported by the existing lint RIDL-150, not by
+podbuf.
 
 ## 7. Verify
 
@@ -218,31 +295,37 @@ that the ARXML or Franca IDL plugin generates (§10) covers the difference.
 data present (Sebastien for the scope, author's call for the exact list):
 
 1. The buffer start is 8-aligned and the buffer length is at least 8. In the
-   preamble, `head_size` is a multiple of 8, `8 + head_size` is at most the
-   buffer length, and `head_size` covers every field of the reader's type that
-   is neither optional nor has a declared default (author's call; such fields
-   are in the first release, so every producer's head holds them). The
-   `reserved` word is not checked (§5.4).
+   preamble, `head_size` is a multiple of 8 and `8 + head_size` is at most the
+   buffer length (checked arithmetic). The `reserved` word is not checked
+   (§5.4).
 2. Each boolean is 0 or 1; each value of a strict enum is declared; each strict
    enum set has no undeclared bit; an open enum accepts any value that fits its
    integer width, and an open enum set accepts and keeps every bit (§8.5); each
    flags integer is checked only at the bits of the optional fields the reader
    knows, and the other bits are ignored; an absent optional's bytes are zero. A
-   field of the reader's type whose offset plus size exceeds `head_size` is
-   absent: it is not checked, and the accessor returns absent or the declared
-   default.
-3. The typl constraints of each value: integer ranges, string and bytes length
-   bounds (`min` to `max`, counted as typl counts them), and the other generated
-   typl checks, the same code the other encodings call.
-4. For each descriptor: `off` is aligned for its data, `off` is at least
-   `8 + head_size`, `off + len·size` (plus 1 for a string's NUL) is within the
-   buffer with no overflow (checked arithmetic), and `min ≤ len ≤ max`.
-5. For each string: the byte after the data is NUL, there is no NUL inside the
-   data, and the data is valid UTF-8.
-6. For each union: the tag names a declared arm, and `len` equals that arm's
-   head size; then the arm is verified.
-7. For each map: keys are strictly increasing in the order of §6.
-8. Each array element, union arm and map entry is verified with the same rules.
+   byte of the reader's head past `head_size`, of an element past the producer's
+   `elem_size`, or of an arm past its descriptor `len`, reads as 0 (§8.1), and
+   the field that holds it is checked with that value like any other.
+3. The typl constraints of each value: integer ranges, the string length bound
+   counted in Unicode scalar values (`min` to `max`, typl §4.4), and the other
+   generated typl checks, the same code the other encodings call.
+4. For each descriptor with `len` = 0: every other descriptor byte is 0. Such a
+   descriptor has no data, and the rest of this rule does not apply to it. For
+   each other descriptor: `off` is aligned for its data, `off` is at least
+   `8 + head_size`, and the data is within the buffer with no overflow (checked
+   arithmetic). The data is `len` bytes plus 1 for a string's NUL, `len` bytes
+   for `bytes` and for a union arm, and `len·elem_size` bytes for an array or a
+   map. For `bytes`, an array and a map, `min ≤ len ≤ max`. For a string,
+   `len ≤ 4·max`, the largest UTF-8 byte length of `max` scalar values; this
+   bounds the work, and rule 3 checks the scalar-value count.
+5. For each non-empty array or map: `elem_size` follows the rule of §5.1 (a
+   multiple of 8 for a struct element, the exact element size otherwise).
+6. For each non-empty string: the byte after the data is NUL, there is no NUL
+   inside the data, and the data is valid UTF-8.
+7. For each union: the tag names a declared arm, and `len` is a multiple of 8;
+   then the arm is verified.
+8. For each map: keys are strictly increasing in the order of §6.
+9. Each array element, union arm and map entry is verified with the same rules.
 
 **Not checked, by design:** pad bytes anywhere, in the head or in a nested head
 (author's call). First-fit backfill can place a field appended in a later
@@ -255,10 +338,10 @@ can leave unreferenced bytes in the tail and non-zero bytes in the pads; no
 consumer API reads either.
 
 **Encoder duty (Sebastien):** the encoder writes every pad byte, the preamble
-`reserved` word and every byte of an absent optional as zero, and writes no
-unreferenced bytes into the tail. Zeroed pads close the leak of stale memory to
-the consumer. `verify` checks absent optionals but neither pads nor unused tail
-capacity, so its cost does not grow with capacity.
+`reserved` word and every byte of an absent optional as zero (so its descriptor
+is all zero), and writes no unreferenced bytes into the tail. Zeroed pads close
+the leak of stale memory to the consumer. `verify` checks absent optionals but
+neither pads nor unused tail capacity, so its cost does not grow with capacity.
 
 ## 8. Evolution
 
@@ -268,14 +351,33 @@ typl assigns field identity by declaration order and is append-only (typl §7.4)
 That is the first-fit law's precondition: an appended field never moves an
 existing one.
 
-- Appending a field at the end of a struct, when the field is optional or has a
-  declared default (Sebastien). The preamble (§5.4) makes both directions work:
+- Appending a field at the end of a struct (Sebastien), under the rule of typl
+  §7.4 (author's call on how podbuf applies it). An appended field reads as 0
+  wherever its bytes are when the producer did not write it. First-fit backfill
+  can place the field in an older layout's pad bytes, inside the older
+  `head_size`, so `head_size` alone cannot tell that the field is missing;
+  instead, the encoder's zeroed pads make a missing field and a field with the
+  value 0 the same bytes. There is no declared default for a missing field. So
+  `ridl diff` accepts an append for podbuf only when 0 is a valid value of the
+  field: an optional field, whose flag bit reads 0 and so means absent, or a
+  scalar, enum or enum set whose type allows 0 (typl §7.4). Any other appended
+  non-optional field is a podbuf break.
   - **Older reader, newer (longer) head.** The reader reads only the fields it
-    knows. It ignores the head bytes past its own head size, including flag bits
-    and whole flags fields that it does not know.
-  - **Newer reader, older (shorter) head.** A field whose offset plus size
-    exceeds the producer's `head_size` is absent, if optional, or takes its
-    declared default. The generated accessors and `verify` handle this case.
+    knows. It ignores the head bytes it does not know, including flag bits and
+    whole flags fields of later fields.
+  - **Newer reader, older (shorter) head.** A field whose bytes lie past the
+    producer's `head_size`, or in the older layout's pads, reads as 0. The
+    generated accessors and `verify` read past `head_size` as 0.
+- Appending a field to the element type of an array, to the key or value type of
+  a map entry, or to a union arm type, under the same rule. The descriptor's
+  `elem_size` (§5.1) or the arm descriptor's `len` gives the producer's size,
+  and the fields past it read as 0.
+- An append to a struct type that is nested **inline** in a head anywhere in the
+  workspace — a struct field, a tuple member, an element of an exact-length
+  array, or a struct inside a map entry — is a podbuf break (author's call). The
+  inline copy cannot grow without moving the fields after it. `ridl diff`
+  reports it, naming each inline use. Moving such a field behind a descriptor is
+  out of scope.
 - Flag bits of appended optional fields follow the first-fit law like any other
   field: the bit goes in an existing flags field if that field has a free bit,
   otherwise in a new flags field. A reader checks only the flag bits of the
@@ -286,18 +388,24 @@ existing one.
   §8.5). An older reader sees the new value as unknown. With the preamble, the
   buffer is fully self-describing, so no compatible change requires the producer
   to know the consumer's version.
-- Retiring a field with typl's existing `@deprecated` doc tag. The field and its
-  type stay in the source and in the bytes; the encoder writes zero or the
-  default (Sebastien).
+- Retiring a field with typl's existing `@deprecated` doc tag (Sebastien). The
+  field and its type stay in the source and in the bytes; the encoder writes the
+  field's init value (typl §5.8, §7.2), not 0, so a reader that still reads the
+  field sees a valid value (author's call). A deprecated non-optional field
+  whose init value is neither declared nor derivable, and whose type excludes 0,
+  is a podbuf diagnostic: the encoder has no valid value to write.
 
 ### 8.2 Breaking changes (new type version)
 
 Removing a field with a `reserved` tombstone (the type is gone from the source,
 so its bytes cannot be kept), reordering, widening an integer across a width
-boundary, changing a bound, growing a nested struct or an element type, and
-removing an arm or an enum value, and adding a value to a strict enum or a flag
-to a strict enum set (Sebastien). Changing a strict enum to an open one, or the
-reverse, also breaks: it changes which values the type contains.
+boundary, changing a bound, appending to a struct that is nested inline (§8.1),
+appending a field that cannot read as 0 (§8.1), removing an arm or an enum
+value, adding a value to a strict enum or a flag to a strict enum set
+(Sebastien), and adding a value to an open enum or enum set that changes its
+inferred width or signedness (§6; author's call). Changing a strict enum to an
+open one, or the reverse, also breaks: it changes which values the type
+contains.
 
 ### 8.3 Type versions are a convention
 
@@ -356,11 +464,12 @@ podbuf generates, per type (Sebastien):
 - the `#[repr(C)]` head struct, with pad fields and assertions, and the preamble
   struct;
 - an encoder from the domain type, which writes the preamble;
-- `verify`, which reads the preamble first;
-- read-in-place accessors (a field read is one load; a string read returns a
-  slice built from its descriptor);
+- `verify`, which reads the preamble first, generated in Rust only, because the
+  gate is Rust (author's call);
+- read-in-place accessors (a field read is a bounds-checked load after `verify`,
+  §14; a string read returns a slice built from its descriptor);
 - a C header with the same structs, assertions and accessor macros or inline
-  functions.
+  functions, for consumers that read a buffer the gate has verified.
 
 podbuf exposes its computed layout — each field's offset, size, alignment and
 form (in place or descriptor), each descriptor's element type, the tag and arm
@@ -374,8 +483,8 @@ interface description without computing the first-fit law a second time.
 | -------------------------------------------------------------------------------------------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Fixed-capacity `repr(C)` (all strings and lists inline at capacity)                                                  | rejected       | `FaultPage` was 17,416 bytes at any fill, and verify cost grew with capacity (11,015 R52 instructions for 4 of 64 events against 1,594)                  |
 | Inline when capacity ≤ 256 bytes, tail otherwise                                                                     | rejected       | with a generated adapter, it saved almost nothing at run time, and cost two forms in the law, a threshold, and up to 4× wasted bytes                     |
-| FlatBuffers on this path                                                                                             | kept elsewhere | more tolerant evolution and many languages, but slower to encode (4–14×) and to read, larger on the R52 (about 23 KB against 3.6 KB), offsets everywhere |
-| proto3 on this path                                                                                                  | kept elsewhere | smallest bytes and best evolution, but a full parse on every read (4–10× slower verify plus decode)                                                      |
+| FlatBuffers on this path                                                                                             | kept elsewhere | more tolerant evolution and many languages, but slower to encode (2–14×) and to read, larger on the R52 (about 23 KB against 3.6 KB), offsets everywhere |
+| proto3 on this path                                                                                                  | kept elsewhere | smallest bytes and best evolution, but a full parse on every read (2–11× slower verify plus decode)                                                      |
 | SOME/IP serialization                                                                                                | rejected       | big-endian, packed and length-prefixed: a stream format, handled by connectors                                                                           |
 | Sort all fields by size                                                                                              | rejected       | an appended field would sort into the middle and move existing fields                                                                                    |
 | Sort fields by size per release segment                                                                              | rejected       | needs release history at build time; first-fit packs as well with no history                                                                             |
@@ -389,6 +498,10 @@ interface description without computing the first-fit law a second time.
 | Attribute `[open]` for an open enum                                                                                  | rejected       | strict or open changes which values the type contains, which is part of its shape, not an annotation                                                     |
 | Enum value fallback to an existing value                                                                             | rejected       | the producer must know the consumer's version; open enums need no such knowledge                                                                         |
 | Pad-byte check in `verify`                                                                                           | rejected       | an older reader would reject a valid newer buffer whose appended field sits in the older layout's pad bytes                                              |
+| Absence detected by `head_size` alone (`offset + size > head_size` means absent or default)                          | rejected       | first-fit backfill puts an appended field in the older layout's pads, inside `head_size`; fields read as 0 instead (§8.1)                                |
+| `ridl diff` break for an append to any nested type, element types included (option (a))                              | rejected       | every array element type and map entry type would be frozen; the stride in the descriptor keeps element appends compatible at no byte cost               |
+| 8-byte stride record `{ elem_size, reserved }` at the start of each array or map region in the tail                  | rejected       | 8 bytes per array or map for no gain within the `u16` limits of the descriptor stride (§6.1)                                                             |
+| Separate stride for a union arm                                                                                      | rejected       | the arm descriptor's `len` already gives the arm head size                                                                                               |
 | Zeroed-tail check in `verify`                                                                                        | rejected       | made verify cost grow with capacity; moved to the encoder                                                                                                |
 | Names `reprbuf`, `ridlbuf`, `hptbuf`, `typlbuf`, `wirebuf`, `membuf`, `cbuf`, `rxbuf`, `rpbuf`, `tailbuf`, `spanbuf` | rejected       | Rust-only, toolchain-bound, unexplained, misleading (wire, receive buffer, RPMsg), or taken on crates.io                                                 |
 
@@ -421,6 +534,14 @@ Bytes (proto3 / FlatBuffers / podbuf): 4/24/16, 14/40/35, 53/88/74, 269/304/289,
 of §5.4, which the spike did not have: 8 is added to each measured total.
 Instruction counts and `.text` sizes were not measured again with the preamble.
 
+Ratios: FlatBuffers encode is 2–14× podbuf encode; proto3 verify plus decode is
+2–11× podbuf verify plus read. The spike's podbuf verify also checked pad bytes,
+which this design does not check (§7), so its podbuf verify counts are higher
+than the design's would be. The FlatBuffers and podbuf columns are not the same
+checks: each verifier checks its own encoding's structure (vtables and offsets
+for FlatBuffers, descriptors for podbuf) plus the same typl checks, and the
+FlatBuffers read column lacks the two `FaultPage` rows.
+
 R52 `.text` for reader and verifier, all five types: podbuf about 3.6 KB;
 FlatBuffers about 22.8 KB and proto3 about 16.6 KB, of which about 10 KB is the
 typl float step check in software floating point.
@@ -451,8 +572,9 @@ accessors.
 - **Floats in `verify`.** A float is checked only by the typl constraints its
   type declares; a float type with no range accepts any bit pattern, NaN
   included.
-- **Empty union arm.** An arm whose type has no fields is the tag alone, with
-  the descriptor `{ 0, 0 }`.
+- **Empty union arm.** An arm whose type has no fields has head size 0, so its
+  descriptor has `len` = 0 and is all zero (§5.1); `verify` rejects any other
+  `off` (§7 rule 4).
 - **ridl-rt integration.** podbuf implements the same encoding contract in
   `ridl-rt` as proto3 and FlatBuffers (ADR-0020 decision 5), under the `podbuf`
   feature.
@@ -462,8 +584,10 @@ accessors.
   therefore implements the `ridl-rt` encoding contract like proto3 and
   FlatBuffers, and `ridl-rt-conformance` gets podbuf cases.
 - **Generated Rust.** It reads fields with safe little-endian loads and no
-  `unsafe` pointer casts. It is `no_std`, and `verify` and the in-place reads
-  allocate nothing. The minimum Rust version follows `ridl-rt`'s.
+  `unsafe` pointer casts. A field read after `verify` is a bounds-checked load:
+  its cost is one compare and one load, which is what §10 means by a field read.
+  It is `no_std`, and `verify` and the in-place reads allocate nothing. The
+  minimum Rust version follows `ridl-rt`'s.
 - **Verify work bound.** Overlapping descriptors can make `verify` do more work
   than the buffer length suggests, because two descriptors may cover the same
   bytes (§7). The work is bounded by the maxima that the type declares, which is
@@ -484,8 +608,9 @@ accessors.
 
 - The Rust and C names of generated items, and the accessor API shape, including
   the shape of the unknown variant of an open enum.
-- The diagnostic codes for a typl construct podbuf cannot carry, and for each
-  break `ridl diff` reports.
+- The diagnostic codes of the size-limit errors (§6.1) and of the deprecated
+  field with no valid value (§8.1), and the codes for each break `ridl diff`
+  reports.
 - How the padding lint decides that a type has not been released yet.
 - How the computed layout is represented in the codegen `Model`.
 - The ADR-0020 amendment text and the feature rename in `ridl-rt`.
