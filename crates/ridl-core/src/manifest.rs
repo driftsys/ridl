@@ -1075,7 +1075,8 @@ pub type KnownKey = (&'static str, &'static str, &'static str);
 ///
 /// The value type is the TOML type the reader accepts for the key: `string`,
 /// `table`, `array<string>` (an array of strings), `table<string>` (a table of
-/// strings), `table<table>` (a table of tables) or `boolean`. The note is
+/// strings), `table<table>` (a table of tables), `table<integer>` (a table of
+/// integers), `integer` or `boolean`. The note is
 /// what the key means beyond its own table, part of the frozen `manifest`
 /// surface, or `""`: `codec` implies `backend.rust.wasm`.
 pub const KNOWN_KEYS: &[(&str, &[KnownKey])] = &[
@@ -1106,6 +1107,14 @@ pub const KNOWN_KEYS: &[(&str, &[KnownKey])] = &[
         ],
     ),
     ("codegen", &[("header-file", "string", "")]),
+    (
+        "limits",
+        &[
+            ("default", "integer", ""),
+            ("kind", "table<integer>", ""),
+            ("interaction", "table<integer>", ""),
+        ],
+    ),
     (
         BACKEND_SECTION,
         &[
@@ -1790,6 +1799,66 @@ version = \"1.0.0\"
     }
 
     #[test]
+    fn an_unknown_key_directly_in_limits_warns() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefalt = 1\n\n[limits.kind]\nstream = 1\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-005", "MANI-021"]);
+        assert!(diags[0].message.contains("defalt"), "{diags:?}");
+        // Keys of the sub-tables are not checked as unknown manifest keys.
+        let text = format!("{PACKAGE_HEAD}[limits.interaction]\n\"Any.thing\" = 1\n");
+        let (_, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn a_zero_limit_is_accepted() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 0\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let default = manifest.expect("parses").limits.default;
+        assert_eq!(default.map(|v| *v.get_ref()), Some(0));
+    }
+
+    #[test]
+    fn limit_values_carry_the_span_of_their_text() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 4096\n\n[limits.kind]\nevent = 77\n");
+        let (manifest, _) = parse(&text);
+        let limits = manifest.expect("parses").limits;
+        let default = limits.default.expect("default");
+        assert_eq!(&text[default.span()], "4096");
+        let event = &limits.kinds[&LimitKind::Event];
+        assert_eq!(&text[event.span()], "77");
+    }
+
+    #[test]
+    fn every_kind_name_maps_to_its_kind() {
+        let text = format!(
+            "{PACKAGE_HEAD}[limits.kind]\nsignal = 1\nfixed = 2\nevent = 3\ncommand = 4\nquery = 5\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let kinds = manifest.expect("parses").limits.kinds;
+        let got: Vec<(LimitKind, u32)> = kinds.iter().map(|(k, v)| (*k, *v.get_ref())).collect();
+        assert_eq!(
+            got,
+            vec![
+                (LimitKind::Signal, 1),
+                (LimitKind::Fixed, 2),
+                (LimitKind::Event, 3),
+                (LimitKind::Command, 4),
+                (LimitKind::Query, 5),
+            ]
+        );
+    }
+
+    #[test]
+    fn limits_with_only_interactions_are_not_empty() {
+        let text = format!("{PACKAGE_HEAD}[limits.interaction]\n\"A.b\" = 1\n");
+        let (manifest, _) = parse(&text);
+        assert!(!manifest.expect("parses").limits.is_empty());
+    }
+
+    #[test]
     fn lints_key_is_known() {
         let text = format!("{PACKAGE_HEAD}[lints]\n");
         let (manifest, diags) = parse(&text);
@@ -2388,12 +2457,12 @@ version = \"1.0.0\"
         check_unknown_keys(file_id, &text, &mut diags);
         assert!(diags.is_empty(), "{diags:?}");
 
-        // Each listed key is one the reader reads: an integer where a table,
-        // a string or an array is expected draws a diagnostic other than
-        // MANI-005. A key the reader ignores draws none.
+        // Each listed key is one the reader reads: a value of the wrong type
+        // draws a diagnostic other than MANI-005. A key the reader ignores
+        // draws none.
         for (section, keys) in KNOWN_KEYS {
-            for (key, ..) in *keys {
-                let text = manifest_with(section, key, "1");
+            for (key, value_type, _) in *keys {
+                let text = manifest_with(section, key, type_samples(value_type).1[0]);
                 let (_, diags) = parse(&text);
                 assert!(
                     diags.iter().any(|d| d.code.as_str() != "MANI-005"),
@@ -2421,6 +2490,8 @@ version = \"1.0.0\"
             ),
             "table<table>" => (&["{ rust = {} }"], &["1", "{ rust = 1 }"]),
             "boolean" => (&["true", "false"], &["1", "\"true\""]),
+            "integer" => (&["0", "4096"], &["\"x\"", "-1", "[]"]),
+            "table<integer>" => (&["{ signal = 1 }", "{}"], &["1", "{ signal = \"x\" }"]),
             other => panic!("KNOWN_KEYS names the unknown value type `{other}`"),
         }
     }

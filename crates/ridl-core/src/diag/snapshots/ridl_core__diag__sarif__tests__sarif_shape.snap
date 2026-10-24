@@ -1540,7 +1540,7 @@ expression: log
             {
               "id": "MANI-015",
               "shortDescription": {
-                "text": "a `[backend.<name>]` value has the wrong shape: `encodings` is not an array of known, distinct encoding names, or `wasm` is not a boolean"
+                "text": "a `[backend.<name>]` value has the wrong shape: `encodings` is not an array of known, distinct encoding names, `wasm`, `codec` or `transcode` is not a boolean, or a `[limits]` value is not a non-negative integer or a table"
               },
               "defaultConfiguration": {
                 "level": "error"

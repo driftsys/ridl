@@ -1407,7 +1407,7 @@ diag_codes! {
         /// value that is not a table where a table is expected, or not an
         /// integer of 0 or more where a limit is expected.
         MANI_015 = "MANI-015", Error,
-            "a `[backend.<name>]` value has the wrong shape: `encodings` is not an array of known, distinct encoding names, or `wasm` is not a boolean";
+            "a `[backend.<name>]` value has the wrong shape: `encodings` is not an array of known, distinct encoding names, `wasm`, `codec` or `transcode` is not a boolean, or a `[limits]` value is not a non-negative integer or a table";
 
         /// A workspace member's manifest holds a `backend` key or a
         /// `[backend.<name>]` table. Only the workspace root's manifest, or a
