@@ -184,8 +184,8 @@ fn inner(count_value: i64, text: &str) -> Inner {
 
 #[test]
 fn a_non_ascii_string_survives_transcoding() {
-    // Each of these is within 16 characters, and the last two are longer in
-    // bytes than in characters.
+    // Each of these is within 16 characters, and each is longer in bytes than
+    // in characters.
     for value in ["é", "naïve café", "日本語", "😀😀"] {
         assert_equivalent!(Label, label(value));
     }
@@ -230,6 +230,13 @@ fn a_map_field_survives_transcoding_empty_and_full() {
     assert_equivalent!(
         Panel,
         Panel {
+            by_key: vec![],
+            ..Panel::default()
+        }
+    );
+    assert_equivalent!(
+        Panel,
+        Panel {
             by_key: vec![(key("a"), count(0))],
             ..Panel::default()
         }
@@ -240,7 +247,8 @@ fn a_map_field_survives_transcoding_empty_and_full() {
             by_key: vec![
                 (key("clé"), count(200)),
                 (key("b"), count(7)),
-                (key("sixteen!"), count(0)),
+                // Exactly 8 characters, the upper length bound of `Key`.
+                (key("12345678"), count(0)),
             ],
             ..Panel::default()
         }
@@ -300,18 +308,70 @@ fn an_output_buffer_that_is_too_small_fails_with_a_capacity_error() {
     ));
 }
 
+/// Asserts that `result` is a range violation of the typl type `type_name`.
+fn assert_range_violation<T>(result: Result<T, TranscodeError>, type_name: &str) {
+    match result {
+        Err(TranscodeError::Verify(VerifyError::Contract(violation))) => {
+            assert_eq!(violation.rule, Rule::Range);
+            assert_eq!(violation.type_name, Some(type_name));
+        }
+        Err(error) => panic!("expected a range violation of {type_name}, got {error:?}"),
+        Ok(_) => panic!("expected a range violation of {type_name}, got a success"),
+    }
+}
+
 #[test]
 fn a_value_outside_a_declared_range_fails_with_a_contract_violation() {
+    let mut out = [0u8; BUFFER];
     // A proto3 varint field 1 holding 201, one above the upper bound of
     // `Count`: well formed as proto3, so only the range rule rejects it.
-    let outside = [0x08, 0xc9, 0x01];
-    let mut out = [0u8; BUFFER];
-    assert!(matches!(
-        Count::transcode_proto3_to_flatbuffers(&outside, &mut out),
-        Err(TranscodeError::Verify(VerifyError::Contract(violation)))
-            if violation.rule == Rule::Range
-    ));
+    assert_range_violation(
+        Count::transcode_proto3_to_flatbuffers(&[0x08, 0xc9, 0x01], &mut out),
+        "Count",
+    );
     // The same bytes with the bound value 200 transcode.
     Count::transcode_proto3_to_flatbuffers(&[0x08, 0xc8, 0x01], &mut out)
         .expect("200 is inside the range");
+    // The lower bound of `Level` is -5. Proto3 writes a signed integer as a
+    // zigzag varint: -5 is 9 and -6 is 11.
+    assert_range_violation(
+        Level::transcode_proto3_to_flatbuffers(&[0x08, 0x0b], &mut out),
+        "Level",
+    );
+    Level::transcode_proto3_to_flatbuffers(&[0x08, 0x09], &mut out)
+        .expect("-5 is inside the range");
+}
+
+#[test]
+fn a_flatbuffers_value_outside_a_declared_range_fails_with_a_contract_violation() {
+    let mut a = [0u8; BUFFER];
+    let mut out = [0u8; BUFFER];
+    // Encode the bound value, then change its one stored byte, so the buffer
+    // stays well formed and only the range rule rejects it.
+    let mut count_bytes = Ref::<Count, FlatBuffers>::encode(&count(200), &mut a)
+        .expect("encode flatbuffers")
+        .bytes()
+        .to_vec();
+    Count::transcode_flatbuffers_to_proto3(&count_bytes, &mut out)
+        .expect("200 is inside the range");
+    let at = count_bytes.iter().position(|&b| b == 200).expect("a 200");
+    assert_eq!(count_bytes.iter().filter(|&&b| b == 200).count(), 1);
+    count_bytes[at] = 201;
+    assert_range_violation(
+        Count::transcode_flatbuffers_to_proto3(&count_bytes, &mut out),
+        "Count",
+    );
+
+    // `Level` is stored as an i8, so -5 is 0xfb and -6 is 0xfa.
+    let mut level_bytes = Ref::<Level, FlatBuffers>::encode(&level(-5), &mut a)
+        .expect("encode flatbuffers")
+        .bytes()
+        .to_vec();
+    let at = level_bytes.iter().position(|&b| b == 0xfb).expect("a -5");
+    assert_eq!(level_bytes.iter().filter(|&&b| b == 0xfb).count(), 1);
+    level_bytes[at] = 0xfa;
+    assert_range_violation(
+        Level::transcode_flatbuffers_to_proto3(&level_bytes, &mut out),
+        "Level",
+    );
 }

@@ -111,9 +111,11 @@ fn the_transcode_functions_follow_the_listed_encoding_order() {
         assert!(
             proto3 < flatbuffers,
             "proto3-to-FlatBuffers comes first in the block starting {:?}",
-            &block[..block.len().min(40)]
+            block.chars().take(40).collect::<String>()
         );
         checked += 1;
     }
-    assert!(checked > 1, "several blocks have both functions");
+    // Count, Level, Label, Mode, Reading, Inner, Panel, Outcome, Key and
+    // GaugeSetParams: every payload type of the fixture has both encodings.
+    assert_eq!(checked, 10, "the blocks that have both functions");
 }

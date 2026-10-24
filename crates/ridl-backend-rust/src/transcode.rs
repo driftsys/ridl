@@ -144,41 +144,53 @@ mod tests {
             .split("fn ")
             .skip(1)
             .map(|rest| rest.split_whitespace().next().expect("a name").to_string())
-            .map(|name| name.split('<').next().expect("a name").to_string())
             .collect()
+    }
+
+    /// The owner lists of the two encodings: FlatBuffers lists the types in
+    /// alphabetical order and proto3 in the reverse order.
+    fn both_lists() -> (
+        (WireEncoding, Vec<PayloadOwner>),
+        (WireEncoding, Vec<PayloadOwner>),
+    ) {
+        (
+            (
+                WireEncoding::FlatBuffers,
+                owners(&["Alpha", "Beta", "Gamma"]),
+            ),
+            (WireEncoding::Proto3, owners(&["Gamma", "Beta", "Alpha"])),
+        )
+    }
+
+    fn assert_function_order(items: &[TokenStream], expected: [&str; 2]) {
+        assert!(!items.is_empty());
+        for item in items {
+            assert_eq!(function_order(item), expected);
+        }
     }
 
     #[test]
     fn the_output_follows_the_order_of_the_first_listed_encoding() {
-        let flatbuffers = (
-            WireEncoding::FlatBuffers,
-            owners(&["Alpha", "Beta", "Gamma"]),
-        );
-        let proto3 = (WireEncoding::Proto3, owners(&["Gamma", "Beta", "Alpha"]));
-
+        let (flatbuffers, proto3) = both_lists();
         let items = package_items(&[flatbuffers, proto3]);
         assert_eq!(impl_order(&items), ["Alpha", "Beta", "Gamma"]);
-        assert_eq!(
-            function_order(&items[0]),
+        assert_function_order(
+            &items,
             [
                 "transcode_flatbuffers_to_proto3",
-                "transcode_proto3_to_flatbuffers"
-            ]
+                "transcode_proto3_to_flatbuffers",
+            ],
         );
 
-        let flatbuffers = (
-            WireEncoding::FlatBuffers,
-            owners(&["Alpha", "Beta", "Gamma"]),
-        );
-        let proto3 = (WireEncoding::Proto3, owners(&["Gamma", "Beta", "Alpha"]));
+        let (flatbuffers, proto3) = both_lists();
         let items = package_items(&[proto3, flatbuffers]);
         assert_eq!(impl_order(&items), ["Gamma", "Beta", "Alpha"]);
-        assert_eq!(
-            function_order(&items[0]),
+        assert_function_order(
+            &items,
             [
                 "transcode_proto3_to_flatbuffers",
-                "transcode_flatbuffers_to_proto3"
-            ]
+                "transcode_flatbuffers_to_proto3",
+            ],
         );
     }
 
