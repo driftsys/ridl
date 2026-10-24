@@ -130,3 +130,31 @@ Each ruling: what was decided — why — what it costs if wrong.
   the `runtime-crates` semver check reports, and LIM2 ships in the non-breaking
   release; the transport, the column's only reader, lands in LIM3. — Between the
   two releases a descriptor carries no limits, which nothing reads yet.
+- **R-17** — A payload that draws RIDL-151 still has its limit recorded in the
+  checked IR; a test states it. — The limit is declared, and the build stops on
+  the error anyway. — None.
+- **R-18** — `annotate_limits` records limits for every package of a unit that
+  has a `[limits]` table, computes short-name ambiguity over all packages of the
+  unit, and does not skip blocked packages. RIDL-151 computes ambiguity over the
+  examined packages only. — The IR holds the unit-wide rule of R-8; the two
+  differ only in a build that already has errors. — A limit checked and a limit
+  recorded can differ in such a build.
+- **R-19** — `freeze/codegen-protocol.txt` gained one line for the new proto
+  field `Decl.limit = 31`. The plan said no dump changes, but the freeze check
+  fails without the line and the line is additive. — The dump lists the IR
+  proto. — None; no approved break is involved.
+- **R-20** — `ridl diff` compares the limit only for a pair of the same kind; a
+  kind change is reported as `KindChanged` alone. — The kind change is already
+  breaking and the old limit has no meaning for another kind. — A limit change
+  that comes with a kind change is not shown.
+- **R-21** — The remote units' `[limits]` tables stay unloaded (R-6), so a
+  consumer that generates a remote unit's code hashes it with no limit, and its
+  catalog hash differs from the owner's when the owner declares a limit. Not
+  fixed in LIM2; the owner decides. — Loading a remote unit's table is a change
+  to the manifest loader that LIM1 ruled out of scope. — Peers may refuse to
+  attach over a hash that differs only by this; nothing reads limits at run time
+  until LIM3, which must settle it before shipping.
+- **R-22** — ADR-0014 decision 15, the catalog-descriptor design record,
+  ADR-0030 decision 13 (who records the limit) and two book pages were edited in
+  this stage. — Issue #1058 and ADR-0030 "Where the rules are stated" require
+  the records to state the limit; two sentences became false. — None.
