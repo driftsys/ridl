@@ -21,8 +21,17 @@
 #>
 [CmdletBinding()]
 param()
+# `irm ... | iex` runs this script in the caller's scope, so the two
+# preferences and the TLS setting changed below would stay changed in the
+# caller's session. The values are saved here and restored after Main.
+$SavedErrorActionPreference = $ErrorActionPreference
+$SavedProgressPreference = $ProgressPreference
+$SavedSecurityProtocol = [Net.ServicePointManager]::SecurityProtocol
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# Windows PowerShell 5.1 can default to protocols that GitHub refuses. Add
+# TLS 1.2 to the enabled set for the downloads; the set is restored after Main.
+[Net.ServicePointManager]::SecurityProtocol = $SavedSecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 $Repo = 'driftsys/ridl'
 $TagPrefix = 'editor-v'
@@ -90,4 +99,10 @@ function Main {
     }
 }
 
-Main
+try {
+    Main
+} finally {
+    [Net.ServicePointManager]::SecurityProtocol = $SavedSecurityProtocol
+    $ProgressPreference = $SavedProgressPreference
+    $ErrorActionPreference = $SavedErrorActionPreference
+}

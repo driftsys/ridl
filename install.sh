@@ -111,7 +111,7 @@ main() {
   tmpbin=""
 
   echo "Installed $INSTALL_DIR/$BINARY ($("$INSTALL_DIR/$BINARY" --version))" >&2
-  if ! printf '%s\n' "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
+  if ! printf '%s\n' "$PATH" | tr ':' '\n' | grep -qxF "$INSTALL_DIR"; then
     echo "" >&2
     echo "Add to your PATH:" >&2
     echo "  export PATH=\"$INSTALL_DIR:\$PATH\"" >&2
