@@ -142,8 +142,10 @@ member; rsdl is the apex.
     just doc-path-check  every docs/ file path named in a tracked file
                          resolves — the bare paths link-check cannot see, in
                          prose, in an inline code span, and in a source
-                         comment. A directory citation is checked when it
-                         ends with /; the slashless form (docs/book) is not.
+                         comment. A directory citation ending with / has
+                         to be a directory; a path with no extension and no
+                         trailing slash (docs/book) has to be a file or a
+                         directory.
                          Skips docs/archive/, docs/wip/ and CHANGELOG.md,
                          where such a path records what was true when it was
                          written (the changelog is generated from commit

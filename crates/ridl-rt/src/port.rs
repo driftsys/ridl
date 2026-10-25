@@ -519,6 +519,10 @@ pub trait CoherentSignals: SignalReader {
 /// - **Register, then read.** The caller registers on every poll, and
 ///   registers before it reads the port, so a change between the read and
 ///   the return still wakes it.
+/// - **Unobserved kinds and unknown correlations.** What a runtime does when
+///   [`wake_on`](Wakeable::wake_on) names a kind of key that nothing observes,
+///   or an `Outcome` correlation it does not know, is the runtime's choice;
+///   the contract states no behaviour for either case.
 ///
 /// [`Interest::Event`] and [`Interest::Claim`] are keyed per interface,
 /// because [`EventSource::next`] and [`Handler::next_claim`] drain one queue
