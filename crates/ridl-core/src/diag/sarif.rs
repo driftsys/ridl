@@ -18,7 +18,7 @@ use std::path::{Component, Path};
 
 use serde::Serialize;
 
-use super::{ALL_CATALOGS, CatalogEntry, Diagnostic, Label, Severity, SourceMap, Span, line_col};
+use super::{ALL_CATALOGS, CatalogEntry, Diagnostic, Label, Severity, SourceMap, Span};
 
 /// The `$schema` of every log.
 pub const SCHEMA: &str = "https://json.schemastore.org/sarif-2.1.0.json";
@@ -318,9 +318,8 @@ fn physical_location(
     root: Option<&Root>,
 ) -> Option<PhysicalLocation> {
     let path = sources.path(span.file)?;
-    let text = sources.text(span.file)?;
-    let start = line_col(text, span.range.start());
-    let end = line_col(text, span.range.end());
+    let start = sources.line_col(span.file, span.range.start())?;
+    let end = sources.line_col(span.file, span.range.end())?;
     Some(PhysicalLocation {
         artifact_location: artifact_location(path, root),
         region: Region {

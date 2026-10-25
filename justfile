@@ -2601,7 +2601,9 @@ install-check:
         fi
         rm "$reldir/ridl.exe"
 
-        http_port=8971
+        # Ask the operating system for a free port instead of fixing one, so a
+        # busy port on the host does not fail the check.
+        http_port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
         python3 -m http.server "$http_port" --bind 127.0.0.1 --directory "$scratch/release" \
             >"$scratch/http.log" 2>&1 &
         http_pid=$!

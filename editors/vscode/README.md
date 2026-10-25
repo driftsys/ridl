@@ -4,7 +4,8 @@ Editor support for the RIDL family: `typl`, the type language; `ridl`, the
 interface description language; and `rsdl`, the system description language. One
 language server serves all three, since the compiler checks a `.rsdl` system,
 the `.ridl` services it names, and the `.typl` vocabulary they import together.
-The remaining family languages (`rxdl`, `rmdl`) are sequenced separately in
+The remaining family members (`rmdl`, and the `rxdl` file kind) are sequenced
+separately in
 [`docs/ROADMAP.md`](https://github.com/driftsys/ridl/blob/main/docs/ROADMAP.md).
 
 Learn the languages:

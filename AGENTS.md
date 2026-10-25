@@ -122,8 +122,9 @@ member; rsdl is the apex.
     just toolchain-check the running toolchain is the one rust-toolchain.toml pins
     just gate-parity     CI invokes every member of just build, and the members
                          of build match the expected list in the recipe
-    just install-check   end-to-end test of install.sh (and install.ps1's dry
-                         run) against a fixture release
+    just install-check   end-to-end test of install.sh and, where pwsh
+                         is installed, install.ps1 (dry run, good install,
+                         corrupted download), against a fixture release
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
     just book-check      mdbook build on a copy of docs/ and of the
                          examples/**/*.rs and examples/**/*.ridl sources —
