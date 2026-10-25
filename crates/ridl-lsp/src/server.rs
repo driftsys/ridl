@@ -79,7 +79,7 @@ type Error = Box<dyn std::error::Error + Send + Sync>;
 /// initialize handshake (including the `initialized` notification), the
 /// workspace load from the client's root, the initial diagnostics publish,
 /// then the message loop.
-pub fn run(connection: Connection) -> Result<(), Error> {
+pub fn run(connection: Connection) -> Result<SessionEnd, Error> {
     run_with_version(connection, None)
 }
 
@@ -94,7 +94,10 @@ pub fn run(connection: Connection) -> Result<(), Error> {
 /// directly in the `json!` macro below, so a serialization failure is
 /// propagated as an error, matching what the single-call form did, rather
 /// than reaching the macro's internal `.unwrap()` for interpolated values.
-pub fn run_with_version(connection: Connection, version: Option<&str>) -> Result<(), Error> {
+pub fn run_with_version(
+    connection: Connection,
+    version: Option<&str>,
+) -> Result<SessionEnd, Error> {
     let (id, params) = connection.initialize_start()?;
     let params: lt::InitializeParams = serde_json::from_value(params)?;
     let capabilities = serde_json::to_value(server_capabilities())?;
@@ -192,14 +195,26 @@ fn workspace_root(params: &lt::InitializeParams) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
+/// How a session that reached the message loop ended. The LSP specification
+/// (3.17, "Exit Notification") ties the process exit code to this: 0 only
+/// after `shutdown` then `exit`, 1 otherwise.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SessionEnd {
+    /// The client sent `shutdown`, then `exit`.
+    Shutdown,
+    /// The client sent `exit` with no `shutdown` before it, or the
+    /// connection closed with no `shutdown`.
+    WithoutShutdown,
+}
+
 /// Receives and dispatches messages until the client shuts the server down
 /// or the connection closes.
-fn main_loop(connection: Connection, mut state: ServerState) -> Result<(), Error> {
+fn main_loop(connection: Connection, mut state: ServerState) -> Result<SessionEnd, Error> {
     for message in &connection.receiver {
         match message {
             Message::Request(request) => {
                 if connection.handle_shutdown(&request)? {
-                    return Ok(());
+                    return Ok(SessionEnd::Shutdown);
                 }
                 let response = if state.cancelled.remove(&request.id) {
                     Response::new_err(
@@ -212,6 +227,11 @@ fn main_loop(connection: Connection, mut state: ServerState) -> Result<(), Error
                 };
                 connection.sender.send(response.into())?;
             }
+            // `handle_shutdown` consumes the `exit` that follows a `shutdown`,
+            // so an `exit` seen here arrived with no `shutdown` before it.
+            Message::Notification(notification) if notification.method == "exit" => {
+                return Ok(SessionEnd::WithoutShutdown);
+            }
             Message::Notification(notification) => {
                 state.dispatch_notification(notification, &connection)?;
             }
@@ -220,7 +240,7 @@ fn main_loop(connection: Connection, mut state: ServerState) -> Result<(), Error
             Message::Response(_) => {}
         }
     }
-    Ok(())
+    Ok(SessionEnd::WithoutShutdown)
 }
 
 /// One quick fix from the latest analysis: the range of the diagnostic it

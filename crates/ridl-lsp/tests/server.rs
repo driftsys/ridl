@@ -287,7 +287,9 @@ fn write_workspace_in(dir: &TempDir, prefix: &str) -> (lt::Uri, lt::Uri) {
 }
 
 /// The server thread's join handle: it returns the server loop's result.
-type ServerThread = std::thread::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>;
+type ServerThread = std::thread::JoinHandle<
+    Result<ridl_lsp::server::SessionEnd, Box<dyn std::error::Error + Send + Sync>>,
+>;
 
 /// Spawns the server over an in-memory connection loaded at `root`.
 fn start(root: lt::Uri) -> (Connection, ServerThread) {
@@ -6853,4 +6855,39 @@ system Vehicle { Lane }\n";
 
     shut_down(&client, 14);
     server.join().expect("thread joins").expect("clean exit");
+}
+
+/// `shutdown` then `exit` ends the session as `SessionEnd::Shutdown`, the one
+/// outcome `ridl lsp` turns into exit code 0.
+#[test]
+fn shutdown_then_exit_ends_the_session_as_shutdown() {
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+    shut_down(&client, 2);
+    let end = server.join().expect("thread joins").expect("clean exit");
+    assert_eq!(end, ridl_lsp::server::SessionEnd::Shutdown);
+}
+
+/// `exit` with no `shutdown` before it ends the session without a shutdown.
+#[test]
+fn exit_without_shutdown_ends_the_session_without_shutdown() {
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+    notify::<lt::notification::Exit>(&client, ());
+    let end = server.join().expect("thread joins").expect("no error");
+    assert_eq!(end, ridl_lsp::server::SessionEnd::WithoutShutdown);
+}
+
+/// A closed connection with no `shutdown` ends the session without a
+/// shutdown.
+#[test]
+fn a_closed_connection_ends_the_session_without_shutdown() {
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+    drop(client);
+    let end = server.join().expect("thread joins").expect("no error");
+    assert_eq!(end, ridl_lsp::server::SessionEnd::WithoutShutdown);
 }
