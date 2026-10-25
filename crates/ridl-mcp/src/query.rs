@@ -558,6 +558,33 @@ mod tests {
             crate::snapshot::tests::name_location("a/a.ridl", "type Speed", "Speed")
         );
     }
+    /// The location comes from the source map's line index, which counts
+    /// lines by byte offset and columns by character. A CRLF file with a
+    /// multi-byte character on an earlier line pins both: a byte-counted
+    /// column or a CRLF pair counted as two line breaks moves the result.
+    #[test]
+    fn locations_count_lines_and_columns_in_a_crlf_file_with_multibyte_text() {
+        let path = format!("{}/a/a.ridl", fixture("ws"));
+        let disk = std::fs::read_to_string(&path).unwrap();
+        let source = disk
+            .replace("kilometres per hour", "kilom\u{e8}tres \u{e0} l'heure")
+            .replace('\n', "\r\n");
+        let snap = snapshot(
+            &fixture("ws"),
+            &[crate::types::OverlayInput {
+                path: path.clone(),
+                source,
+            }],
+        )
+        .unwrap();
+        let out = resolve(&snap, &input("Speed", None)).unwrap();
+        assert_eq!(
+            serde_json::to_value(out.location).unwrap(),
+            serde_json::json!({"path": path,
+                "start": {"line": 4, "column": 6},
+                "end": {"line": 4, "column": 11}})
+        );
+    }
     #[test]
     fn no_alias_without_an_alias() {
         assert!(

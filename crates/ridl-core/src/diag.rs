@@ -1649,6 +1649,17 @@ impl SourceMap {
         id
     }
 
+    /// The [`FileId`] already interned for `path`, or `None` when the map has
+    /// not seen `path`. Unlike [`file_id`](Self::file_id) it takes `&self` and
+    /// interns nothing, so a reader of a finished map can reach
+    /// [`line_col`](Self::line_col) from a path.
+    pub fn id_of(&self, path: &str) -> Option<FileId> {
+        self.files
+            .iter()
+            .position(|entry| entry.path == path)
+            .map(|index| FileId(index as u32))
+    }
+
     /// The path an interned [`FileId`] stands for, or `None` for an id this map
     /// never issued (including [`FileId::DETACHED`]). This is the reverse of
     /// [`file_id`](Self::file_id): a caller holding a diagnostic's `FileId` reads
@@ -2904,6 +2915,21 @@ mod tests {
 #[cfg(test)]
 mod json_tests {
     use super::*;
+
+    #[test]
+    fn id_of_finds_an_interned_path_and_interns_nothing() {
+        let mut sources = SourceMap::new();
+        let a = sources.file_id("a.ridl", "x\n");
+        let b = sources.file_id("b.ridl", "y\n");
+        assert_eq!(sources.id_of("a.ridl"), Some(a));
+        assert_eq!(sources.id_of("b.ridl"), Some(b));
+        assert_eq!(sources.id_of("c.ridl"), None);
+        assert_eq!(
+            sources.iter_files().count(),
+            2,
+            "a lookup of an unknown path adds no file"
+        );
+    }
 
     #[test]
     fn line_col_is_one_based_and_counts_chars() {
