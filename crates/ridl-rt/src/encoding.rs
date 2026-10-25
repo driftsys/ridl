@@ -29,7 +29,9 @@ mod sealed {
 /// assert_eq!(name::<ridl_rt::encoding::ReprC>(), "repr-c");
 /// ```
 ///
-/// and cannot add an encoding:
+/// and cannot add an encoding. The error codes on the `compile_fail` blocks
+/// below document the expected failure, and rustdoc does not check them:
+/// `crates/ridl-rt/tests/seal.rs` compiles each snippet and asserts its code.
 ///
 /// ```compile_fail,E0277
 /// struct Json;

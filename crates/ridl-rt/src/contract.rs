@@ -272,7 +272,9 @@ impl Member {
 pub enum TimingMode {
     /// `@Xms`: a strict period, on a signal only (ridl §9.2).
     StrictPeriodic,
-    /// `@[min..max]`, where either side may be absent.
+    /// `@[min..max]`, where either side may be absent. A signal or event with
+    /// no annotation takes the default range of ridl §9.1, which is this mode
+    /// too: a descriptor never reports an untimed member.
     Range,
 }
 
