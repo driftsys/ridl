@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import {
   copyIsStale,
   isDirOnPath,
@@ -116,6 +116,49 @@ test("performCopy on a missing source rejects and leaves no temporary file", asy
   }
 });
 
+test("performCopy removes its temporary file when the rename fails", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ridl-install-"));
+  try {
+    const source = path.join(dir, "ridl");
+    await fs.writeFile(source, "new contents");
+    const targetDir = path.join(dir, "target", "bin");
+    // A non-empty directory at the target makes `rename` fail after the
+    // temporary file exists.
+    const target = path.join(targetDir, "ridl");
+    await fs.mkdir(target, { recursive: true });
+    await fs.writeFile(path.join(target, "keep"), "x");
+    const plan = { source, targetDir, target, binaryName: "ridl", chmod: process.platform !== "win32" };
+    await assert.rejects(() => performCopy(plan));
+    assert.deepEqual(await fs.readdir(targetDir), ["ridl"]);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("performCopy writes only a temporary file and reaches the target by rename", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ridl-install-"));
+  const copyFile = mock.method(fs, "copyFile");
+  const rename = mock.method(fs, "rename");
+  try {
+    const source = path.join(dir, "ridl");
+    await fs.writeFile(source, "new contents");
+    const targetDir = path.join(dir, "target", "bin");
+    const target = path.join(targetDir, "ridl");
+    const plan = { source, targetDir, target, binaryName: "ridl", chmod: process.platform !== "win32" };
+    await performCopy(plan);
+    assert.equal(copyFile.mock.callCount(), 1);
+    const [from, to] = copyFile.mock.calls[0].arguments as [string, string];
+    assert.equal(from, source);
+    assert.notEqual(to, target);
+    assert.equal(path.dirname(to), targetDir);
+    assert.equal(rename.mock.callCount(), 1);
+    assert.deepEqual(rename.mock.calls[0].arguments, [to, target]);
+  } finally {
+    mock.restoreAll();
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("performCopy replaces a pre-existing target instead of rewriting it in place", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ridl-install-"));
   try {
@@ -162,4 +205,32 @@ test("copyIsStale is true only when the installed copy is strictly older", () =>
   assert.equal(copyIsStale("editor-v0.2.0", undefined), false);
   // bare semver (no `editor-v` prefix) parses too.
   assert.equal(copyIsStale("0.2.0", "0.1.0"), true);
+});
+
+test("copyIsStale compares each part of the version", () => {
+  // a lower major is older even with a higher minor and patch.
+  assert.equal(copyIsStale("2.0.0", "1.9.9"), true);
+  assert.equal(copyIsStale("1.9.9", "2.0.0"), false);
+  // minor decides when the major is equal.
+  assert.equal(copyIsStale("1.2.0", "1.1.9"), true);
+  assert.equal(copyIsStale("1.1.9", "1.2.0"), false);
+  // patch decides when major and minor are equal.
+  assert.equal(copyIsStale("1.1.2", "1.1.1"), true);
+  assert.equal(copyIsStale("1.1.1", "1.1.2"), false);
+});
+
+test("copyIsStale orders prereleases by semver precedence", () => {
+  // numeric identifiers compare by value: rc.10 is newer than rc.9.
+  assert.equal(copyIsStale("editor-v0.2.0-rc.10", "editor-v0.2.0-rc.9"), true);
+  assert.equal(copyIsStale("editor-v0.2.0-rc.9", "editor-v0.2.0-rc.10"), false);
+  // alphanumeric identifiers compare as text, and sort above numeric ones.
+  assert.equal(copyIsStale("0.2.0-rc", "0.2.0-beta"), true);
+  assert.equal(copyIsStale("0.2.0-beta", "0.2.0-rc"), false);
+  assert.equal(copyIsStale("0.2.0-rc", "0.2.0-1"), true);
+  assert.equal(copyIsStale("0.2.0-1", "0.2.0-rc"), false);
+  // a shorter identifier list is older than a longer one it prefixes.
+  assert.equal(copyIsStale("0.2.0-rc.1", "0.2.0-rc"), true);
+  assert.equal(copyIsStale("0.2.0-rc", "0.2.0-rc.1"), false);
+  // equal prereleases are not stale.
+  assert.equal(copyIsStale("0.2.0-rc.1", "0.2.0-rc.1"), false);
 });

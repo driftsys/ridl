@@ -111,8 +111,10 @@ function parseVersion(version: string | undefined): ParsedVersion | undefined {
  * Orders two parsed versions: negative when `a` is older than `b`, positive
  * when newer, zero when equal. The major.minor.patch triple is compared
  * numerically first. At equal triples, a prerelease sorts older than the
- * plain release of the same triple (matching semver precedence); two
- * prereleases of the same triple compare by the prerelease text.
+ * plain release of the same triple. Two prereleases of the same triple
+ * compare by semver precedence: dot-separated identifiers from the left,
+ * numeric identifiers by value and below alphanumeric ones, and a shorter
+ * list below a longer one that it prefixes.
  */
 function compareVersions(a: ParsedVersion, b: ParsedVersion): number {
   if (a.major !== b.major) return a.major - b.major;
@@ -121,7 +123,26 @@ function compareVersions(a: ParsedVersion, b: ParsedVersion): number {
   if (a.prerelease === b.prerelease) return 0;
   if (a.prerelease === undefined) return 1;
   if (b.prerelease === undefined) return -1;
-  return a.prerelease < b.prerelease ? -1 : 1;
+  return comparePrerelease(a.prerelease, b.prerelease);
+}
+
+function comparePrerelease(a: string, b: string): number {
+  const left = a.split(".");
+  const right = b.split(".");
+  for (let i = 0; i < Math.min(left.length, right.length); i++) {
+    const x = left[i];
+    const y = right[i];
+    const xNumeric = /^\d+$/.test(x);
+    const yNumeric = /^\d+$/.test(y);
+    if (xNumeric && yNumeric) {
+      if (Number(x) !== Number(y)) return Number(x) - Number(y);
+    } else if (xNumeric !== yNumeric) {
+      return xNumeric ? -1 : 1;
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
+  }
+  return left.length - right.length;
 }
 
 /**
