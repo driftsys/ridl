@@ -1787,16 +1787,19 @@ struct CompositeBody {
 }
 
 impl CompositeBody {
-    /// The highest ordinal the body assigns or retires — the classifier's
-    /// mark for an append: a new member above it keeps every ordinal, though
-    /// an appended non-optional struct field whose type excludes 0 is still
-    /// breaking on its own (driftsys/ridl#598).
-    fn high_water(&self) -> Option<u32> {
-        self.live
-            .iter()
-            .map(|(_, ordinal)| *ordinal)
-            .chain(self.reserved.iter().map(|(_, ordinal)| *ordinal))
-            .max()
+    /// Whether `ordinal` is above every ordinal the body assigns or retires,
+    /// by the classifier's append rule ([`ridl_diff::is_above_high_water`]).
+    /// A new member above the mark keeps every ordinal, though an appended
+    /// non-optional struct field whose type excludes 0 is still breaking on
+    /// its own (driftsys/ridl#598).
+    fn is_above_high_water(&self, ordinal: u32) -> bool {
+        ridl_diff::is_above_high_water(
+            i64::from(ordinal),
+            self.live
+                .iter()
+                .map(|(_, held)| i64::from(*held))
+                .chain(self.reserved.iter().map(|(_, held)| i64::from(*held))),
+        )
     }
 
     fn ordinal_of(&self, member: &str) -> Option<u32> {
@@ -1899,7 +1902,7 @@ fn member_drift(
             let after = composite_body(current, package, container)?;
             let ordinal = after.ordinal_of(member)?;
             let moved = after.moved_since(&before);
-            Some(if before.high_water().is_some_and(|mark| ordinal <= mark) {
+            Some(if !before.is_above_high_water(ordinal) {
                 let holder = before
                     .live
                     .iter()
@@ -1923,7 +1926,7 @@ fn member_drift(
                     .filter(|(name, held)| {
                         name != member
                             && before.ordinal_of(name).is_none()
-                            && before.high_water().is_some_and(|mark| *held <= mark)
+                            && !before.is_above_high_water(*held)
                     })
                     .map(|(name, _)| name.clone())
                     .collect();
