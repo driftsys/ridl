@@ -397,8 +397,11 @@ the choice open. Removing the wake from the settlement path turns red
 `an_outcome_waker_is_kept_with_its_call_and_woken_once_by_the_settlement` and
 every other suite case that waits for a settlement;
 `every_wake_runs_with_the_runtime_lock_released` in the suite and
-`every_wake_is_run_with_the_lock_released` in `ports.rs` fail when a waker is
-woken with the lock held; removing the `Slot` wake from a reclaim fails
+`every_wake_is_run_with_the_lock_released` and
+`every_wake_at_once_and_every_displacement_is_run_with_the_lock_released` in
+`ports.rs` fail when a waker is woken with the lock held, on the wake paths of a
+change, of a registration whose key already holds, and of a displacement;
+removing the `Slot` wake from a reclaim fails
 `every_slot_waker_is_woken_by_a_reclaim_and_the_send_that_follows_succeeds` and
 three other suite cases. In `ports.rs`,
 `a_dropped_handler_returns_its_claims_to_the_waiting_calls` fails without the

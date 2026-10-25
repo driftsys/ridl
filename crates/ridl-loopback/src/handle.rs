@@ -429,9 +429,11 @@ impl<E: Encoding> Wakeable for SinkHandle<E> {
 /// what keeps two callers on one provider from colliding.
 ///
 /// The call table is the runtime's, shared by every caller: with
-/// [`Loopback::SLOTS`](crate::Loopback::SLOTS) calls sent and not forgotten,
-/// a send answers [`SendError::Busy`] and draws no sequence number, because
-/// nothing was sent.
+/// [`Loopback::SLOTS`](crate::Loopback::SLOTS) calls holding a slot, a send
+/// answers [`SendError::Busy`] and draws no sequence number, because nothing
+/// was sent. A call holds its slot from the send until its `forget`, except
+/// that a call forgotten after a handler claimed it keeps the slot until its
+/// settlement.
 pub struct CallerHandle<E: Encoding = FlatBuffers> {
     shared: Shared,
     catalog: CatalogRef,
