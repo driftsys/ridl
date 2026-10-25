@@ -15,7 +15,7 @@ validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
 
 [dependencies]
-ridl-rt = { version = "0.13", features = ["flatbuffers"] }
+ridl-rt = { version = "0.14", features = ["flatbuffers"] }
 regex = { version = "1.13", optional = true }
 
 [lib]

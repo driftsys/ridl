@@ -90,7 +90,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "ridl-descriptor"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "planus",
  "serde",
@@ -98,18 +98,18 @@ dependencies = [
 
 [[package]]
 name = "ridl-loopback"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "ridl-rt",
 ]
 
 [[package]]
 name = "ridl-rt"
-version = "0.13.0"
+version = "0.14.0"
 
 [[package]]
 name = "ridl-transport-ws"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "ridl-descriptor",
  "ridl-rt",
