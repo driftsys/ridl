@@ -1935,6 +1935,27 @@ fn initialize_reports_the_server_version_when_given_one() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// The version-less `run` reports `serverInfo` with a name and no `version`
+/// field.
+#[test]
+fn initialize_omits_the_server_version_when_given_none() {
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+
+    request::<lt::request::Initialize>(&client, 1, lt::InitializeParams::default());
+    notify::<lt::notification::Initialized>(&client, lt::InitializedParams {});
+    let response = next_response(&client);
+    let result = response.response_result.expect("initialize succeeds");
+    assert_eq!(result["serverInfo"]["name"], "ridl-lsp");
+    assert!(
+        result["serverInfo"].get("version").is_none(),
+        "no version field: {result}"
+    );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// The §7.4 tombstone struct: the two live fields render their derived
 /// ordinals, and the reserved slot between them is counted, so `speed` is `#3`,
 /// not `#2` — a reorder is visibly a renumbering (general form §6.3).

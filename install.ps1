@@ -3,7 +3,8 @@
     Installs a binary on Windows from the newest editor-v* GitHub Release (or
     $env:RIDL_VERSION): downloads <binary>-x86_64-pc-windows-msvc.tar.gz and
     its .sha256, verifies the checksum, and places <binary>.exe in
-    $env:RIDL_INSTALL_DIR (default $HOME\.local\bin).
+    $env:RIDL_INSTALL_DIR (default %LOCALAPPDATA%\Programs\ridl, the folder the
+    VS Code extension uses for its "Install ridl to PATH" command).
 
     $env:RIDL_INSTALL_BINARY selects which binary the release carries to
     install: ridl (default, the porcelain CLI and what the editor extension
@@ -41,7 +42,8 @@ if ($BinaryName -ne 'ridl' -and $BinaryName -ne 'ridlc') {
     Write-Error "RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc', got '$BinaryName'"
 }
 $Binary = "$BinaryName.exe"
-$InstallDir = if ($env:RIDL_INSTALL_DIR) { $env:RIDL_INSTALL_DIR } else { Join-Path $HOME '.local\bin' }
+$LocalAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $HOME 'AppData\Local' }
+$InstallDir = if ($env:RIDL_INSTALL_DIR) { $env:RIDL_INSTALL_DIR } else { Join-Path $LocalAppData 'Programs\ridl' }
 $BaseUrl = if ($env:RIDL_INSTALL_BASE_URL) { $env:RIDL_INSTALL_BASE_URL } else { "https://github.com/$Repo/releases/download" }
 
 function Get-Version {

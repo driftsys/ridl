@@ -87,7 +87,7 @@ Both scripts read the same environment variables:
 
 | Variable              | Effect                                                                             |
 | --------------------- | ---------------------------------------------------------------------------------- |
-| `RIDL_INSTALL_DIR`    | Directory to install into. Default `~/.local/bin` (`$HOME\.local\bin` on Windows). |
+| `RIDL_INSTALL_DIR`    | Directory to install into. Default `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on Windows). |
 | `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                                       |
 | `RIDL_VERSION`        | The release tag to install, instead of the newest `editor-v*` one.                 |
 
