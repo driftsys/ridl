@@ -1723,8 +1723,9 @@ link-check root="":
     fi
     run_gate "$root"
 
-# Check that every `docs/…` file path, and every `docs/…` directory path that
-# ends with `/`, named in a tracked file resolves.
+# Check that every `docs/…` file path, every `docs/…` directory path that ends
+# with `/`, and every `docs/…` path with neither an extension nor a trailing
+# slash, named in a tracked file resolves.
 #
 # `link-check` covers Markdown links. This covers the other way a document gets
 # cited: a bare repository-relative path, written in prose, in an inline code
@@ -1744,18 +1745,17 @@ link-check root="":
 # as the end of a sentence or an ellipsis, and the directory is checked. A
 # `...` segment followed by more path (`docs/decisions/.../x.md`) is an omitted
 # segment: the citation is cut there and `docs/decisions/` is checked. A
-# directory written without its trailing slash, such as `docs/book`, has
-# nothing that tells it apart from a word, so it is not checked: cite a
-# directory with the slash for this recipe to check it. The bare `docs/` is not
-# checked either, and neither is a path that continues past a directory with a
-# dot in its name (`docs/v1.2/notes`), which would otherwise read as a file named
-# `v1.2` in docs/. A file cited with a trailing slash (`docs/<file>.md/`) is a
+# path whose last segment has no extension and no trailing slash, such as
+# `docs/book`, is checked as a path that must exist, so it resolves when a file
+# or a directory of that name exists, and is reported when neither does. One to
+# three dots after it are read as the end of a sentence. The bare `docs/` is not
+# checked. A file cited with a trailing slash (`docs/<file>.md/`) is a
 # directory citation, and is reported, because the file is not a directory.
 #
 # Two trees and one file are skipped, for the same reason in all three: a
 # `docs/…` path in them records what was true when it was written, not a claim
 # about the tree now.
-#   docs/archive/ — an archived plan says "Move: docs/wip/X to docs/archive/".
+#   docs/archive/ — an archived plan says "Move: the plan from docs/wip/ to docs/archive/".
 #                   Rewriting that would falsify the record it is kept for.
 #   docs/wip/     — a live plan lists the files it is going to create, which do
 #                   not exist yet by definition.
@@ -1806,14 +1806,18 @@ doc-path-check root="":
     #      kept with its trailing slash. It needs at least one segment, so the
     #      bare `docs/` is left out. The `d` ends the cycle, so a directory
     #      token is never also read as a file path;
-    #   4. any other token gives the file form when what follows the file form
-    #      holds no `/`, which is what keeps `docs/v1.2/notes` from giving the
+    #   4. a token whose last segment holds no dot is a path without an
+    #      extension or a trailing slash: zero to three trailing dots are
+    #      dropped and the path is kept as it is. It needs a last segment with
+    #      at least one character, so four dots after a directory give nothing;
+    #   5. any other token gives the file form when what follows the file form
+    #      holds no `/`, which is what keeps a path through a dotted directory from giving the
     #      file `v1.2` in docs/. The file form needs an extension to know where a
-    #      path ends, so a token with no extension, such as `docs/book`, gives
-    #      nothing, and what follows the extension (`docs/<file>.md.`,
+    #      path ends, and what follows the extension (`docs/<file>.md.`,
     #      `docs/<file>.md-old`) is cut.
     token_re="(^|[^A-Za-z0-9._/-])$d/[A-Za-z0-9._/-]*"
     dir_form="$d/([A-Za-z0-9._-]+/)+"
+    bare_form="$d/([A-Za-z0-9._-]+/)*[A-Za-z0-9_-]+"
     file_form="$d/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\.[A-Za-z0-9]+"
     # `-I` states that a file holding a NUL byte is skipped rather than leaving
     # that to whichever grep is installed. One tracked file is binary today,
@@ -1840,6 +1844,7 @@ doc-path-check root="":
             printf '%s\n' "$matches" \
                 | sed -nE -e 's#^[^d]*##' -e 's#/\.\.\./.*#/#' \
                     -e "\\#^$dir_form\\.{0,3}\$#{s#\\.+\$##;p;d;}" \
+                    -e "\\#^$bare_form\\.{0,3}\$#{s#\\.+\$##;p;d;}" \
                     -e "s#^($file_form)[^/]*\$#\\1#p" \
                 | sort -u
         fi
@@ -1888,7 +1893,7 @@ doc-path-check root="":
         if [ "$broken" -ne 0 ]; then
             echo "doc-path-check: $broken docs/ path(s) above do not resolve." >&2
             echo "doc-path-check: a path with an extension has to exist; a path ending with '/' has to be a directory." >&2
-            echo "doc-path-check: a directory cited without its trailing slash is not checked." >&2
+            echo "doc-path-check: a path with no extension and no trailing slash has to be a file or a directory." >&2
             echo "doc-path-check: $skip_archive, $skip_wip and $skip_changelog are not scanned; a path" >&2
             echo "doc-path-check: belonging to another repository should be written as a URL." >&2
             return 1
@@ -1918,9 +1923,9 @@ doc-path-check root="":
     list_files() {
         git_at "$1" -c core.quotePath=false ls-files "${@:2}"
     }
-    # The gate itself, over the repository at $1: every docs/ file path, and
-    # every docs/ directory path ending with `/`, named in a tracked file
-    # outside the two skipped trees and the changelog has to resolve.
+    # The gate itself, over the repository at $1: every docs/ file path,
+    # every docs/ directory path ending with `/` and every docs/ path with no
+    # extension, named in a tracked file outside the two skipped trees and the changelog has to resolve.
     run_gate() (
         cd "$1"
         # Each skipped pathspec has to match tracked files, so a typo that
@@ -1958,7 +1963,7 @@ doc-path-check root="":
         fi
         tracked="$(printf '%s\n' "$files" | grep -c . || true)"
         printf '%s\n' "$files" | scan_paths .
-        echo "doc-path-check: every docs/ file path, and every docs/ directory path ending with '/', named outside $skip_archive, $skip_wip and $skip_changelog resolves, over $tracked tracked files."
+        echo "doc-path-check: every docs/ file path, directory path ending with '/' and path with no extension, named outside $skip_archive, $skip_wip and $skip_changelog resolves, over $tracked tracked files."
     )
     # The fixtures. Each one builds a case the gate has to pass or fail and
     # fails this recipe when the gate does not. They run in a subshell, so the
@@ -1983,10 +1988,11 @@ doc-path-check root="":
         # nested directory with an uppercase letter and an underscore, a file
         # cited with a trailing slash, which is a directory citation, and one
         # whose name has a dot, which must not also give a file path. Then
-        # the forms that give nothing — a directory without its trailing
-        # slash, a path that continues past a dotted directory, four dots
-        # after a directory, the bare `docs/`, `docs/` followed by an
-        # ellipsis, and a relative or URL directory citation.
+        # the paths without an extension or a trailing slash: one in prose,
+        # one at the end of a sentence, one in a code span, and one that
+        # continues past a dotted directory. Then the forms that give nothing
+        # — four dots after a directory, the bare `docs/`, `docs/` followed
+        # by an ellipsis, and a relative or URL directory citation.
         sample="$work/sample"
         printf '%s\n' \
             "$d/plain.md named in prose" \
@@ -2014,16 +2020,17 @@ doc-path-check root="":
             "a nested directory, $d/Multi_Seg/two-2/, with an uppercase letter and an underscore" \
             "a file cited as a directory, $d/ROADMAP.md/" \
             "a directory whose name has a dot, $d/v1.2/, is not also a file" \
-            "a directory without its slash, $d/book, is not checked" \
-            "past a dotted directory, $d/v1.2/notes, and four dots, $d/four/...., give nothing" \
+            "a path without an extension or a slash, $d/book, is checked" \
+            "one at the end of a sentence, $d/sentence. and in a code span \`$d/Tools/run\`" \
+            "past a dotted directory, $d/v1.2/notes, is checked; four dots, $d/four/...., and a name followed by four dots, $d/name...., give nothing" \
             "the bare $d/ and $d/... give nothing" \
             "a relative directory ../$d/rel/ and a URL https://example.com/$d/web/" > "$sample"
-        expected="$d/Multi_Seg/two-2/ $d/ROADMAP.md $d/ROADMAP.md/ $d/comment.md $d/cut-draft.md $d/cut.md $d/decisions/"
+        expected="$d/Multi_Seg/two-2/ $d/ROADMAP.md $d/ROADMAP.md/ $d/Tools/run $d/book $d/comment.md $d/cut-draft.md $d/cut.md $d/decisions/"
         expected="$expected $d/decisions/ADR-0012-boundary_model.md $d/design/ $d/first/"
         expected="$expected $d/ir/cruise.system.txtpb $d/keep.../kept.md $d/lines.md $d/link.md"
-        expected="$expected $d/omitted/ $d/plain.md"
+        expected="$expected $d/omitted/ $d/plain.md $d/sentence"
         expected="$expected $d/span.md $d/sub/dir/nested.md $d/technotes/ $d/three/ $d/two/"
-        expected="$expected $d/typl-language-reference.markdown $d/v1.2/ "
+        expected="$expected $d/typl-language-reference.markdown $d/v1.2/ $d/v1.2/notes "
         if [ "$(extract_paths "$sample" | tr '\n' ' ')" != "$expected" ]; then
             echo "doc-path-check: the extractor no longer gives the expected paths on the built-in sample:" >&2
             extract_paths "$sample" >&2
@@ -2061,6 +2068,26 @@ doc-path-check root="":
             || ! grep -q -- "src/b.ridl -> $d/design/aa-present.md/" "$report" \
             || ! grep -q -- '^doc-path-check: 6 docs/ path' "$report"; then
             echo "doc-path-check: the scan no longer reports exactly the six broken paths in its fixture:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # A path without an extension or a trailing slash is checked with
+        # `-e`: it resolves when a directory or a file of that name exists, and
+        # it is reported when neither does. A sentence dot after it is dropped.
+        slashless="$work/slashless"
+        mkdir -p "$slashless/$d/design" "$slashless/src"
+        : > "$slashless/$d/design/ee-file"
+        printf '%s\n' "// $d/design" "// $d/design." "// $d/design/ee-file" \
+            "// $d/design/ee-file." "// $d/design/gone-dir" "// $d/design/gone-dir." > "$slashless/src/c.rs"
+        if printf '%s\n' src/c.rs | scan_paths "$slashless" 2>"$report"; then
+            echo "doc-path-check: the scan returned 0 over a fixture citing a missing path with no extension:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        if [ "$(grep -c -- '->' "$report" || true)" -ne 1 ] \
+            || ! grep -q -- "src/c.rs -> $d/design/gone-dir\$" "$report" \
+            || ! grep -q -- '^doc-path-check: 1 docs/ path' "$report"; then
+            echo "doc-path-check: the scan no longer reports only the missing path with no extension:" >&2
             cat "$report" >&2
             exit 1
         fi

@@ -818,7 +818,7 @@ ridl-rt = { version = \"0.8\", features = [\"flatbuffers\"] }\nregex = \"1\"\n";
         for path in runtime_inputs()
             .iter()
             .map(String::as_str)
-            .chain(["docs/x"])
+            .chain(["notes/x"])
         {
             let file = if path.ends_with(".toml") || path.ends_with(".lock") {
                 dir.join(path)
@@ -858,7 +858,7 @@ ridl-rt = { version = \"0.8\", features = [\"flatbuffers\"] }\nregex = \"1\"\n";
 
     #[test]
     fn runtime_skip_skips_when_only_other_files_changed() {
-        let dir = repo_with_change("skip", "docs/x/f");
+        let dir = repo_with_change("skip", "notes/x/f");
         let reason = runtime_skip(&dir, &runtime_row()).unwrap();
         assert!(reason.unwrap().contains("baseline `base`"));
         assert!(!baseline_lock_differs(&dir, &runtime_row()).unwrap());
@@ -884,21 +884,21 @@ ridl-rt = { version = \"0.8\", features = [\"flatbuffers\"] }\nregex = \"1\"\n";
 
     #[test]
     fn runtime_skip_runs_the_comparison_for_an_uncommitted_change() {
-        let dir = repo_with_change("dirty", "docs/x/f");
+        let dir = repo_with_change("dirty", "notes/x/f");
         std::fs::write(dir.join("crates/ridl-rt/f"), "edited").unwrap();
         assert_eq!(runtime_skip(&dir, &runtime_row()).unwrap(), None);
     }
 
     #[test]
     fn runtime_skip_runs_the_comparison_for_an_untracked_file() {
-        let dir = repo_with_change("untracked", "docs/x/f");
+        let dir = repo_with_change("untracked", "notes/x/f");
         std::fs::write(dir.join("crates/ridl-ir/new.rs"), "x").unwrap();
         assert_eq!(runtime_skip(&dir, &runtime_row()).unwrap(), None);
     }
 
     #[test]
     fn runtime_skip_fails_for_a_baseline_that_names_no_commit() {
-        let dir = repo_with_change("nobase", "docs/x/f");
+        let dir = repo_with_change("nobase", "notes/x/f");
         let row = Row {
             surface: "runtime-crates".into(),
             baseline: "missing".into(),
