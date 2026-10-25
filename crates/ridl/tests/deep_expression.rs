@@ -367,6 +367,34 @@ fn ridl_lsp_publishes_form_102_for_every_long_chain_shape_and_keeps_serving() {
         .write(&mut stdin)
         .expect("write initialized");
 
+    // The server loads the workspace and publishes the diagnostics of every
+    // file it found, after it sends the initialize response and before it
+    // reads the next message. A fixture written before that publish ends can
+    // be read mid-write, as an empty file, and published as FORM-104 under the
+    // same URI that the loop below waits for (driftsys/ridl#789). A hover
+    // request is answered only by the message loop, so its response says the
+    // load and the first publish are done.
+    let barrier = RequestId::from(3);
+    Message::Request(Request::new(
+        barrier.clone(),
+        "textDocument/hover".to_string(),
+        json!({
+            "textDocument": { "uri": file_uri(&dir.0.join("absent.ridl")) },
+            "position": { "line": 0, "character": 0 },
+        }),
+    ))
+    .write(&mut stdin)
+    .expect("write the barrier request");
+    let deadline = Instant::now() + TIMEOUT;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        match messages.recv_timeout(remaining) {
+            Ok(Message::Response(response)) if response.id == barrier => break,
+            Ok(_) => {}
+            Err(err) => lsp_gave_up(&mut child, "response to the barrier request", err),
+        }
+    }
+
     for (index, (shape, expr)) in shapes().into_iter().enumerate() {
         let path = dir.write(&format!("chain{index}.ridl"), &contract_file(&expr));
         let uri = file_uri(&path);
