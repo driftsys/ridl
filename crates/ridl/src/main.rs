@@ -209,8 +209,9 @@ enum Command {
         #[command(subcommand)]
         sub: Option<LockCommand>,
     },
-    /// Run the language server over stdio: exit 0 on a clean shutdown, 2 on a
-    /// transport error. Editors spawn this. Stdio is the only transport.
+    /// Run the language server over stdio: exit 0 after `shutdown` then `exit`,
+    /// 1 when the client ends the session without `shutdown`, 2 on a transport
+    /// error. Editors spawn this. Stdio is the only transport.
     Lsp {
         /// Select the stdio transport. Accepted because editor clients pass
         /// it, as the LSP specification recommends; omitting it changes
@@ -473,22 +474,32 @@ fn run_describe(path: &Path) -> ExitCode {
 
 /// `ridl lsp`: the language server over stdio. Every behavior lives in
 /// `ridl-lsp`; this wires the transport and maps the outcome onto the exit
-/// codes of ADR-0010 decision 1 — 0 when the client shut the server down, 2
-/// when the transport failed or ended before the handshake, which is the tool
-/// being unable to answer rather than a negative answer.
+/// codes of ADR-0010 decision 1, which follow the LSP specification: 0 only
+/// after the client sent `shutdown` then `exit`; 1 when the client sent `exit`
+/// with no `shutdown`, or closed stdin with no `shutdown`; 2 when the
+/// transport failed or ended before the handshake, which is the tool being
+/// unable to answer rather than a negative answer.
 fn run_lsp() -> ExitCode {
     let (connection, io_threads) = lsp_server::Connection::stdio();
-    if let Err(err) =
-        ridl_lsp::server::run_with_version(connection, Some(env!("RIDL_BUILD_VERSION")))
+    let end = match ridl_lsp::server::run_with_version(connection, Some(env!("RIDL_BUILD_VERSION")))
     {
-        eprintln!("error: {err}");
-        return ExitCode::from(2);
-    }
+        Ok(end) => end,
+        Err(err) => {
+            eprintln!("error: {err}");
+            return ExitCode::from(2);
+        }
+    };
     if let Err(err) = io_threads.join() {
         eprintln!("error: {err}");
         return ExitCode::from(2);
     }
-    ExitCode::SUCCESS
+    match end {
+        ridl_lsp::server::SessionEnd::Shutdown => ExitCode::SUCCESS,
+        ridl_lsp::server::SessionEnd::WithoutShutdown => {
+            eprintln!("error: the client ended the session without a `shutdown` request");
+            ExitCode::from(1)
+        }
+    }
 }
 
 /// `ridl mcp`: the Model Context Protocol server over stdio. `rmcp` is async,

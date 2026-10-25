@@ -109,6 +109,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }),
   );
+  // This listener stays registered for the whole session. Opening a RIDL
+  // document also restarts a client that stopped, after a failed start or an
+  // earlier stop, because `startClientIfNeeded` starts one whenever none is
+  // running. That is intended: the next document open is the retry.
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((document) => {
       if (shouldStartClientForLanguage(document.languageId)) {

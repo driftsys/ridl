@@ -144,8 +144,15 @@ impl Snapshot {
         }
     }
     pub fn location(&self, file: InputFile, range: TextRange) -> Location {
+        let path = file.path(&self.db);
+        // The source map scanned the file's line breaks once, when the compile
+        // interned it, so each lookup is a binary search. A file the map never
+        // saw falls back to the scan.
+        let id = self.output.sources.id_of(path);
         let position = |offset| {
-            let position = ridl_core::diag::line_col(file.text(&self.db), offset);
+            let position = id
+                .and_then(|id| self.output.sources.line_col(id, offset))
+                .unwrap_or_else(|| ridl_core::diag::line_col(file.text(&self.db), offset));
             Position {
                 line: position.line,
                 column: position.column,

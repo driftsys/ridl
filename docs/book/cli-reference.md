@@ -68,7 +68,7 @@ Commands:
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
   lock      Allocate a number to every interface that has none and write each unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one unit's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
-  lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
+  lsp       Run the language server over stdio: exit 0 after `shutdown` then `exit`, 1 when the client ends the session without `shutdown`, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   init      Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the directory would make a manifest inside a unit (MANI-013)
   new       Create a directory, with its parents, and scaffold a new unit in it, as `ridl init` does. Exits 2 without writing anything when the path exists
@@ -2022,7 +2022,7 @@ ridl lsp --help
 ```
 
 ```text
-Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
+Run the language server over stdio: exit 0 after `shutdown` then `exit`, 1 when the client ends the session without `shutdown`, 2 on a transport error. Editors spawn this. Stdio is the only transport
 
 Usage: ridl lsp [OPTIONS]
 
@@ -2052,11 +2052,12 @@ Code client runs the server as `ridl lsp --stdio`. Stdio is the only
 transport, so `--pipe` and `--socket` are refused with exit 2. The client's
 process id also arrives in the `initialize` request.
 
-**Exit codes.** 0 on a clean shutdown — the client sends `shutdown` then
-`exit`. 2 when the transport ends before the `initialize` handshake, or fails
-for any other reason. There is no exit 1: `ridl lsp` answers no question that
-can come back negative. Both outcomes are confirmed directly against the built
-binary by `crates/ridl/tests/servers.rs`.
+**Exit codes.** They follow the LSP specification (3.17, "Exit
+Notification"). 0 on a clean shutdown — the client sends `shutdown` then
+`exit`. 1 when the client sends `exit` with no `shutdown` before it, or closes
+stdin after the handshake with no `shutdown`. 2 when the transport ends before
+the `initialize` handshake, or fails for any other reason. All four outcomes are
+confirmed directly against the built binary by `crates/ridl/tests/servers.rs`.
 
 ### `ridl mcp`
 
