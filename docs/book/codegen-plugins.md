@@ -401,8 +401,8 @@ section carries those facts to a plugin at build time.
 
 ## What is not available yet
 
-- **`repr(C)`.** The `ENCODING_REPR_C` value exists in the schema, but no
-  consumer link carries it and no payload has a `repr(C)` size state
+- **`podbuf`.** The `ENCODING_PODBUF` value exists in the schema, but no
+  consumer link carries it and no payload has a `podbuf` size state
   ([driftsys/ridl#317][i317]).
 - **Members whose depth or size cannot be derived.** An event's depth is absent
   with the source `UNDERIVABLE` when its timing gives no bound. The build warns

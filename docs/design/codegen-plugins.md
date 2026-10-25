@@ -488,7 +488,7 @@ decision 2:
 | `off-board`         | proto3      |
 
 A crossing that is unspecified or unknown gives the unspecified encoding. No
-link carries the `repr(C)` encoding: the enum value exists in the schema, and
+link carries the `podbuf` encoding: the enum value exists in the schema, and
 nothing selects it until driftsys/ridl#317. The choice between a shared-memory
 store and a local socket on one machine stays the plugin's. Both carry
 FlatBuffers, so the choice does not change a size.
@@ -497,7 +497,7 @@ This rule is also what RSDL-807 (`link-encoding-not-emitted`) compares a
 `[backend.<name>] encodings` list against, once per emitted backend that can
 carry a codec — the Rust emit and each plugin, not a schema emit, whose backend
 takes no `encodings` option; it is aligned with the transport defaults when
-`repr(C)` or a shared-memory transport lands.
+`podbuf` or a shared-memory transport lands.
 
 A backend named by both an `--emit` and a `--plugin` is compared once, so its
 links draw one diagnostic rather than one per name. A plugin that emits a schema

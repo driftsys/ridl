@@ -12,11 +12,11 @@
 //! With the `std` feature off — the default — the crate is `no_std` and
 //! allocates nothing; it contains no `unsafe` code and has no dependency in any
 //! feature combination. The cargo features `flatbuffers`,
-//! `proto3` and `repr-c` name the payload encodings. `flatbuffers` enables the
+//! `proto3` and `podbuf` name the payload encodings. `flatbuffers` enables the
 //! [`flatbuffers`] module, the reading and writing a generated
 //! `Payload<FlatBuffers>` implementation shares; `proto3` enables the
 //! [`proto3`] module, the varint, tag, reader and writer helpers a generated
-//! `Payload<Proto3>` implementation shares; `repr-c` enables nothing in this
+//! `Payload<Proto3>` implementation shares; `podbuf` enables nothing in this
 //! version. A fourth feature, `std`, off by default, is not an
 //! encoding: it links the standard library and enables the [`task`] module —
 //! `block_on`, which waits on a future by parking the thread until a deadline,

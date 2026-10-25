@@ -93,8 +93,8 @@ out of the ecosystem tail where it sat behind a browser playground — and nothi
 outside this workspace can be generated until it lands.
 
 What stays in core: the payload encodings the re-scope fixes — **proto3** for
-the network, **FlatBuffers** for memory, and **`repr(C)`** as the third, added
-by the 2026-09-12 note §3.3. They are how the runtime talks to itself and to a
+the network, **FlatBuffers** for memory, and **`podbuf`** as the third, added by
+the 2026-09-12 note §3.3. They are how the runtime talks to itself and to a
 generic consumer, not a domain's choice. ADR-0018 decision 3's "two encodings
 and no more" is amended in place by
 [ADR-0020](decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -119,9 +119,9 @@ holds across all of them.
 (ARM Linux, Yocto), FreeRTOS or SAFERTOS, and baremetal under WAMR were listed
 on earlier revisions of this page; none has a confirmed requirement, nothing
 here depends on one, and no story assumes one. They are the rungs where a store
-without an MMU would need `repr(C)` layout and re-attach instead of demand-paged
-growth — which is one reason `repr(C)` is now a payload encoding in its own
-right rather than a contingency.
+without an MMU would need `podbuf` layout and re-attach instead of demand-paged
+growth — which is one reason `podbuf` is now a payload encoding in its own right
+rather than a contingency.
 
 The roadmap-simplification note's S-17 narrowed the ladder to three rungs —
 desktop, embedded Android, QNX 7.1. This page keeps four: mobile stays, because
@@ -233,9 +233,9 @@ seqlock, the sans-IO session, the platform traits and the scheduler are outside
 this repository (§3.7) and reopened by rmdl.
 
 **Then the typl debt**, then the Rust codegen finalized with its three payload
-codecs, proto3, FlatBuffers and `repr(C)`. `repr(C)` is the third payload
-encoding (§3.3); its layout rules are decided in a projection record of the
-shape of ADR-0017 and ADR-0019, written when the backend is.
+codecs, proto3, FlatBuffers and `podbuf`. `podbuf` is the third payload encoding
+(§3.3); its layout rules are decided in a projection record of the shape of
+ADR-0017 and ADR-0019, written when the backend is.
 
 **Sequence.**
 
@@ -251,7 +251,7 @@ E10 value objects, E10.10 last ────────────────�
 
 E14.1 · E10, the typl debt ─→ Rust codegen finalized
       ─→ E11.7 FlatBuffers ─→ E4.5a IR stability ─→ E4.5b plugin protocol
-                                                 ─→ E11.8 proto3, landed · E11.12 repr(C), after #801
+                                                 ─→ E11.8 proto3, landed · E11.12 podbuf, after #801
 #801 on-request encodings — depends on nothing ─→ E11.8 · E11.9 · E11.12
 
 E6 rsdl finalized and lowered to the IR — beside the lock; E6.17 last, landed
@@ -382,7 +382,7 @@ codegen request's deployment section (ADR-0022 decision 11).
 provisional flag, and the descriptor copies them: plan Task 3, as re-baselined,
 reads the IR's numbers and computes none.
 
-**The `repr(C)` column stays empty** until E11.12 defines the C-representable
+**The `podbuf` column stays empty** until E11.12 defines the C-representable
 layout. The encoding is present in the descriptor's enum from the start, and a
 payload with no entry for it means the toolchain cannot size that payload for
 that encoding.
@@ -410,9 +410,9 @@ and the as-built description is
 [the codegen plugin design](design/codegen-plugins.md) with
 [ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 11.
 
-**`repr(C)` joins when E11.12 lands.** The alignment and the layout of a slot
-for the third encoding come from its projection record; until then a channel
-whose encoding is `repr(C)` has no slot layout, and the model says so.
+**`podbuf` joins when E11.12 lands.** The alignment and the layout of a slot for
+the third encoding come from its projection record; until then a channel whose
+encoding is `podbuf` has no slot layout, and the model says so.
 
 ## Epic 6 — rsdl, rewritten as a language
 
@@ -571,7 +571,7 @@ FlatBuffers codec), test-only ports (retired by E11.15), a zero catalog hash
 column at a time: E16.4, driftsys/ridl#380, filled the `flatbuffers` column from
 the codegen model's bound; the later size table holds one `Sizes<E>`
 implementation per codec the manifest names, so `proto3` has one since E11.8
-landed, and `repr-c` has none until E11.12), and a narrow contract-clause
+landed, and `podbuf` has none until E11.12), and a narrow contract-clause
 translator (E5.1). The as-built record is
 [the interaction-face design record](design/interaction-face.md) and
 [ADR-0023](decisions/ADR-0023-interaction-face-generation.md); its reasoning
@@ -639,7 +639,7 @@ interaction whose payload is a named scalar or an enum used to carry no
 `Payload` implementation, because a FlatBuffers root is a table and the
 projection minted one only for a `struct` or a `union`; that was
 **driftsys/ridl#470**, and it blocked E11.7's own D-11, the generated face
-moving off `ReprC`. ADR-0019 decision 8 closed it on 2026-09-21 — every
+moving off `Podbuf`. ADR-0019 decision 8 closed it on 2026-09-21 — every
 declaration has a root table, and a named scalar, an enum and an enum set are
 rooted in a box — and D-11 landed over it in stage K9b. E11.14's `Done when` is
 written over a payload that has a codec.
@@ -786,11 +786,11 @@ discriminant question, not a naming one.
 **Milestone:** the Rust backend emits a complete, compiling surface with all
 three payload codecs. **Exit criteria:** a generated package links `ridl-rt`,
 constructs and validates its types, and round-trips a payload through
-FlatBuffers, through proto3 and through the `repr(C)` layout, with byte-level
+FlatBuffers, through proto3 and through the `podbuf` layout, with byte-level
 conformance against a `prost`-generated implementation (through `protox`) for
 proto3.
 
-**E11.12 is a new identifier**, the next free one in Epic 11, for the `repr(C)`
+**E11.12 is a new identifier**, the next free one in Epic 11, for the `podbuf`
 payload codec the 2026-09-12 note §3.3 adds. Its layout rules — the
 fixed-capacity layout of a bounded string, optional and collection, the string
 capacity and terminator, alignment and endianness — are its prerequisite, and
@@ -803,7 +803,7 @@ ADR-0018 amendments.
 | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
 | E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a payload round-trips through the library                                                                                                                                                                               | L    |
 | E11.8  | The proto3 payload codec plus byte-level conformance against a `prost`-generated implementation through `protox` (driftsys/ridl#264; the guard that keeps `prost` out of `ridl-rt` and generated packages is part of it); it reads an absent non-optional scalar or enum as its default — 0, or the enum's zero member — unless 0 is not a legal value of the field's type, in which case the field is refused with `MissingRequired`, as the FlatBuffers codec does (driftsys/ridl#472, ADR-0019 decision 9); it arrives as a `Sizes<Proto3>` implementation and a `Payload<Proto3>` with its buffer | our bytes parse there and its bytes parse here                                                                                                                                                                          | L    |
-| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; it arrives as a `Sizes<ReprC>` implementation and a `Payload<ReprC>` with its buffer                                                                                                                                                                                                                                                                                                             | a payload round-trips through the layout struct and the emitted header compiles as C (the removal of `#[repr(C)]` from the generated domain structs landed ahead of this story, ADR-0020 decision 3 amended 2026-10-12) | L    |
+| E11.12 | The `podbuf` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; it arrives as a `Sizes<Podbuf>` implementation and a `Payload<Podbuf>` with its buffer                                                                                                                                                                                                                                                                                                            | a payload round-trips through the layout struct and the emitted header compiles as C (the removal of `#[repr(C)]` from the generated domain structs landed ahead of this story, ADR-0020 decision 3 amended 2026-10-12) | L    |
 
 **E11.7's `Done when` is met, and every decision of its design note is built.**
 A payload round-trips through the library, and the conformance obligation the
@@ -811,7 +811,7 @@ story's design note took beyond that row — a round trip through an independent
 FlatBuffers implementation rather than byte equality against one, since
 FlatBuffers fixes no canonical encoding — is discharged against `planus` in
 `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`. The last decision
-to land was **D-11**, the generated interaction face moving off the `ReprC`
+to land was **D-11**, the generated interaction face moving off the `Podbuf`
 placeholder and onto the codec, which needed a `Payload<FlatBuffers>`
 implementation for a named scalar and an enum payload that the projection minted
 no root table for. That projection decision is **driftsys/ridl#470**, ADR-0019

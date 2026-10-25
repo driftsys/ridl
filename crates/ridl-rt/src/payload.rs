@@ -103,12 +103,12 @@ pub struct Encoded<'a, V> {
 /// constructors. A crate outside `ridl-rt` builds a `Ref` by checking:
 ///
 /// ```
-/// use ridl_rt::encoding::ReprC;
+/// use ridl_rt::encoding::Podbuf;
 /// use ridl_rt::payload::{Payload, Ref, VerifyError};
 ///
-/// fn check<'a, T>(bytes: &'a [u8]) -> Result<Ref<'a, T, ReprC>, VerifyError>
+/// fn check<'a, T>(bytes: &'a [u8]) -> Result<Ref<'a, T, Podbuf>, VerifyError>
 /// where
-///     T: Payload<ReprC, View<'a> = &'a [u8]>,
+///     T: Payload<Podbuf, View<'a> = &'a [u8]>,
 /// {
 ///     Ref::verify(bytes)
 /// }
@@ -121,12 +121,12 @@ pub struct Encoded<'a, V> {
 ///
 /// ```compile_fail,E0451
 /// use core::marker::PhantomData;
-/// use ridl_rt::encoding::ReprC;
+/// use ridl_rt::encoding::Podbuf;
 /// use ridl_rt::payload::{Payload, Ref};
 ///
-/// fn forge<'a, T>(bytes: &'a [u8]) -> Ref<'a, T, ReprC>
+/// fn forge<'a, T>(bytes: &'a [u8]) -> Ref<'a, T, Podbuf>
 /// where
-///     T: Payload<ReprC, View<'a> = &'a [u8]>,
+///     T: Payload<Podbuf, View<'a> = &'a [u8]>,
 /// {
 ///     Ref { bytes, view: bytes, _e: PhantomData }
 /// }
@@ -365,12 +365,12 @@ mod tests {
         transcode, EncodeError, Encoded, Malformed, Payload, Ref, Rule, TranscodeError,
         VerifyError, Violation,
     };
-    use crate::encoding::{Proto3, ReprC};
+    use crate::encoding::{Podbuf, Proto3};
 
     /// A payload for this test only: its view is the bytes.
     struct Raw;
 
-    impl Payload<ReprC> for Raw {
+    impl Payload<Podbuf> for Raw {
         const MAX_SIZE: usize = 0;
         type Buffer = [u8; 0];
         const BUFFER: [u8; 0] = [];
@@ -385,7 +385,7 @@ mod tests {
             Ok(buf)
         }
 
-        fn decode(_: Ref<'_, Self, ReprC>) -> Self {
+        fn decode(_: Ref<'_, Self, Podbuf>) -> Self {
             Raw
         }
     }
@@ -396,7 +396,7 @@ mod tests {
     #[test]
     fn a_ref_is_built_from_exactly_its_three_fields() {
         let bytes: &[u8] = &[1, 2];
-        let proof: Ref<'_, Raw, ReprC> = Ref {
+        let proof: Ref<'_, Raw, Podbuf> = Ref {
             bytes,
             view: bytes,
             _e: PhantomData,
@@ -436,7 +436,7 @@ mod tests {
         }
     }
 
-    /// A speed for the transcode tests. Under `ReprC` it is two little-endian
+    /// A speed for the transcode tests. Under `Podbuf` it is two little-endian
     /// bytes at the front of the buffer, and every value is legal. Under
     /// `Proto3` it is a marker byte then two little-endian bytes at the end
     /// of the buffer, and a value above 300 is refused.
@@ -445,7 +445,7 @@ mod tests {
 
     const SPEED_MAX: u16 = 300;
 
-    impl Payload<ReprC> for Speed {
+    impl Payload<Podbuf> for Speed {
         const MAX_SIZE: usize = 2;
         type Buffer = [u8; 2];
         const BUFFER: [u8; 2] = [0; 2];
@@ -471,7 +471,7 @@ mod tests {
             }
         }
 
-        fn decode(r: Ref<'_, Self, ReprC>) -> Self {
+        fn decode(r: Ref<'_, Self, Podbuf>) -> Self {
             Speed(u16::from_le_bytes([r.bytes()[0], r.bytes()[1]]))
         }
     }
@@ -523,10 +523,10 @@ mod tests {
     #[test]
     fn transcode_matches_direct_encode() {
         let mut source = [0u8; 8];
-        let source = Ref::<Speed, ReprC>::encode(&Speed(120), &mut source).unwrap();
+        let source = Ref::<Speed, Podbuf>::encode(&Speed(120), &mut source).unwrap();
 
         let mut out = [0u8; 8];
-        let moved = transcode::<Speed, ReprC, Proto3>(source.bytes(), &mut out).unwrap();
+        let moved = transcode::<Speed, Podbuf, Proto3>(source.bytes(), &mut out).unwrap();
 
         let mut direct = [0u8; 8];
         let direct = Ref::<Speed, Proto3>::encode(&Speed(120), &mut direct).unwrap();
@@ -540,10 +540,10 @@ mod tests {
         let source = Ref::<Speed, Proto3>::encode(&Speed(250), &mut source).unwrap();
 
         let mut out = [0u8; 8];
-        let moved = transcode::<Speed, Proto3, ReprC>(source.bytes(), &mut out).unwrap();
+        let moved = transcode::<Speed, Proto3, Podbuf>(source.bytes(), &mut out).unwrap();
 
         let mut direct = [0u8; 8];
-        let direct = Ref::<Speed, ReprC>::encode(&Speed(250), &mut direct).unwrap();
+        let direct = Ref::<Speed, Podbuf>::encode(&Speed(250), &mut direct).unwrap();
         assert_eq!(moved.bytes(), direct.bytes());
         assert_eq!(moved.decode(), Speed(250));
     }
@@ -561,16 +561,16 @@ mod tests {
     #[test]
     fn transcode_refuses_bad_input() {
         let mut out = [0u8; 8];
-        let result = transcode::<Speed, ReprC, Proto3>(&[1, 2, 3], &mut out).map(|r| r.bytes());
+        let result = transcode::<Speed, Podbuf, Proto3>(&[1, 2, 3], &mut out).map(|r| r.bytes());
         assert!(matches!(result, Err(TranscodeError::Verify(_))));
     }
 
     #[test]
     fn transcode_reports_contract() {
-        // `ReprC` accepts 301; `Proto3` refuses it.
+        // `Podbuf` accepts 301; `Proto3` refuses it.
         let mut out = [0u8; 8];
         let result =
-            transcode::<Speed, ReprC, Proto3>(&301u16.to_le_bytes(), &mut out).map(|r| r.bytes());
+            transcode::<Speed, Podbuf, Proto3>(&301u16.to_le_bytes(), &mut out).map(|r| r.bytes());
         assert!(matches!(
             result,
             Err(TranscodeError::Encode(EncodeError::Contract(_)))
@@ -581,7 +581,7 @@ mod tests {
     fn transcode_reports_capacity() {
         let mut out = [0u8; 1];
         let result =
-            transcode::<Speed, ReprC, Proto3>(&120u16.to_le_bytes(), &mut out).map(|r| r.bytes());
+            transcode::<Speed, Podbuf, Proto3>(&120u16.to_le_bytes(), &mut out).map(|r| r.bytes());
         assert!(matches!(
             result,
             Err(TranscodeError::Encode(EncodeError::Capacity { .. }))

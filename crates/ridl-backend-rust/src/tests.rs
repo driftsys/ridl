@@ -647,7 +647,7 @@ fn bound_state_gives_a_codec_only_to_a_bounded_type() {
 }
 
 /// The contract accepts `proto3`, alone and beside `flatbuffers`, and still
-/// refuses `repr-c` with the issue that builds its codec.
+/// refuses `podbuf` with the issue that builds its codec.
 #[test]
 fn the_contract_accepts_proto3() {
     use ridl_ir::codegen::v1::{BackendOption, CodegenRequest};
@@ -696,7 +696,7 @@ fn the_contract_accepts_proto3() {
             "`{value}` carries the FlatBuffers codec exactly when it names it"
         );
     }
-    let response = respond("repr-c");
+    let response = respond("podbuf");
     assert_eq!(response.diagnostics.len(), 1);
     assert!(
         response.diagnostics[0]
@@ -3597,7 +3597,7 @@ fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
         .arg("--cfg")
         .arg(r#"feature="proto3""#)
         .arg("--cfg")
-        .arg(r#"feature="repr-c""#)
+        .arg(r#"feature="podbuf""#)
         .arg(&source)
         .arg("-o")
         .arg(&rlib)
@@ -7365,11 +7365,11 @@ fn an_enum_set_bit_carries_its_doc() {
 fn encoding_names_agree_with_the_manifest_table() {
     use ridl_core::manifest::{ENCODING_NAMES, ENCODINGS_KEY};
     use ridl_ir::codegen::v1::{BackendOption, CodegenRequest};
-    use ridl_rt::encoding::{Encoding, FlatBuffers, Proto3, ReprC};
+    use ridl_rt::encoding::{Encoding, FlatBuffers, Podbuf, Proto3};
 
     assert_eq!(super::ENCODINGS_OPTION, ENCODINGS_KEY);
     assert_eq!(
-        [FlatBuffers::NAME, Proto3::NAME, ReprC::NAME],
+        [FlatBuffers::NAME, Proto3::NAME, Podbuf::NAME],
         ENCODING_NAMES
     );
     for name in ENCODING_NAMES {

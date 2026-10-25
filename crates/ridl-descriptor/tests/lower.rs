@@ -391,7 +391,7 @@ fn rows(
 }
 
 #[test]
-fn a_named_type_payload_has_a_row_per_sized_encoding_and_no_repr_c() {
+fn a_named_type_payload_has_a_row_per_sized_encoding_and_no_podbuf() {
     let package = package();
     let bytes = lower_one(&package).unwrap();
     let catalog = verify(&bytes).unwrap();

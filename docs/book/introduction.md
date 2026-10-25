@@ -45,7 +45,7 @@ The TypeScript package `@driftsys/ridl-transport-ws`
 (`packages/ridl-transport-ws/`) is the consuming side of that binding, for Deno
 and the browser. No other transport is built. Of the payload codecs,
 FlatBuffers and proto3 are built: the Rust backend emits a codec for the payload
-types of a package for each of the two the manifest names, and `repr(C)` has no
+types of a package for each of the two the manifest names, and `podbuf` has no
 codec.
 
 `ridl build --emit` writes Rust source, TypeScript source, a proto3 schema, a

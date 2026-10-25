@@ -253,7 +253,7 @@ other entry below is Accepted.
   driftsys/ridl#713.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
-  plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a
+  plugin system.** _Proposed._ `podbuf` joins proto3 and FlatBuffers as a
   payload encoding, and the encoding matrix settles the codec-in-wasm boundary
   as FlatBuffers; `ridl-rt` is one `no_std` crate with one cargo feature per
   encoding (a fourth, non-encoding feature `std` is ADR-0021 decision 8's

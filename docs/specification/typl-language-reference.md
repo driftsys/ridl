@@ -552,7 +552,7 @@ rejects.
 
 Two rules are an encoding's own rather than this reference's: the fixed-capacity
 form a `string` takes in a packed inline layout, and whether a terminator is
-guaranteed for a C reader. Both belong to the `repr(C)` projection record
+guaranteed for a C reader. Both belong to the `podbuf` projection record
 ([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4), which is written when that backend is.
 
@@ -571,8 +571,8 @@ bound.
 none of the ten inferred widths (§4.2, §4.3) carries an endianness.
 
 Each encoding fixes it: proto3 and FlatBuffers each define their own, and the
-`repr(C)` projection declares one. A transport that carries a per-signal choice
-— CAN and DBC's Intel/Motorola selection is the case that raises the question —
+`podbuf` projection declares one. A transport that carries a per-signal choice —
+CAN and DBC's Intel/Motorola selection is the case that raises the question —
 takes that choice from the deployment, which is rsdl's, and never from the type.
 The rsdl surface for stating it lands with the rsdl rewrite at v0.2 (§17.9).
 
@@ -1522,7 +1522,7 @@ with named external consumers.
 
 Not expressible today. The `set` collection once suggested here
 (`{T; min..max}`) is **rejected**: no target this family emits has a set type —
-proto3, FlatBuffers and `repr(C)` each carry a vector plus a rule — so a set
+proto3, FlatBuffers and `podbuf` each carry a vector plus a rule — so a set
 container would add a surface with no projection, and every backend would
 flatten it back into an array.
 

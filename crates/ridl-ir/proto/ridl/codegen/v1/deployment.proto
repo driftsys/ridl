@@ -109,7 +109,7 @@ enum Encoding {
   ENCODING_PROTO3 = 1;
   ENCODING_FLATBUFFERS = 2;
   // No link carries it until driftsys/ridl#317.
-  ENCODING_REPR_C = 3;
+  ENCODING_PODBUF = 3;
 }
 
 // Where a sizing value comes from.

@@ -446,6 +446,6 @@ mod tests {
             checked_encodings(&names(&["flatbuffers", "proto3"])),
             (true, true)
         );
-        assert_eq!(checked_encodings(&names(&["repr-c"])), (false, false));
+        assert_eq!(checked_encodings(&names(&["podbuf"])), (false, false));
     }
 }

@@ -86,7 +86,7 @@ Three layers are involved, and each is defined once:
 | a binding         | one document per transport, written from this one (§10, §11) | how the frame's fields are carried over that transport, and whether the binding carries any of the three payload encodings or fixes one |
 
 The payload's encoding is not this document's either. A payload crosses as bytes
-in one of the three core encodings — FlatBuffers, proto3, `repr(C)` — and which
+in one of the three core encodings — FlatBuffers, proto3, `podbuf` — and which
 encoding a session uses is named at `attach` (§3). A binding either carries any
 of the three, the `attach` tag naming the session's, or fixes one; the
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -130,7 +130,7 @@ definition, or the crate's own source under `crates/ridl-rt/src/`.
 | `Contract`    | `ridl_rt::error`    | the four contract-error categories of ridl §10.2: `InvalidValue(Violation)`, `PreconditionFailed`, `ContractBroken`, `UnknownInteraction`                                                                                                                                                                                                     |
 | `Transport`   | `ridl_rt::error`    | the detected infrastructure failures of ridl §10.3: `Timeout`, `Undelivered`, `Down`, `Corrupt`, `Busy`                                                                                                                                                                                                                                       |
 | `Violation`   | `ridl_rt::payload`  | the `Rule` that failed and, for a violation the generated code detected, the name of the typl type whose constraint failed; a `contract(InvalidValue)` outcome decoded from a frame carries the rule alone (§9.6), whereas a consumer's own `Detected(InvalidValue(..))` on received bytes and a violation delivered in process keep the name |
-| `Encoding`    | `ridl_rt::encoding` | the closed set of payload encodings: `FlatBuffers`, `Proto3`, `ReprC`, each named as its cargo feature is                                                                                                                                                                                                                                     |
+| `Encoding`    | `ridl_rt::encoding` | the closed set of payload encodings: `FlatBuffers`, `Proto3`, `Podbuf`, each named as its cargo feature is                                                                                                                                                                                                                                    |
 
 Two words this document adds, because `ridl-rt` has no need of them:
 
@@ -176,7 +176,7 @@ are:
 | --- | ----------- | ---------------- |
 | 1   | FlatBuffers | `flatbuffers`    |
 | 2   | proto3      | `proto3`         |
-| 3   | `repr(C)`   | `repr-c`         |
+| 3   | `podbuf`    | `podbuf`         |
 
 These are the values the `ridl-rt` design record lists as "the frame
 specification's wire tag values" against a constant `Encoding::FORMAT` that

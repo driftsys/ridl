@@ -14,9 +14,9 @@ namespace ridl.descriptor;
 enum Kind : ubyte { Signal = 0, Event = 1, Command = 2, Query = 3, Fixed = 4 }
 
 // The core encodings: proto3 and FlatBuffers (ADR-0018 decision 3) and
-// repr(C) (ADR-0020 decision 1, via ADR-0018's 2026-09-12 amendment). A new
+// podbuf (ADR-0020 decision 1, via ADR-0018's 2026-09-12 amendment). A new
 // encoding is appended.
-enum Encoding : ubyte { Proto3 = 0, FlatBuffers = 1, ReprC = 2 }
+enum Encoding : ubyte { Proto3 = 0, FlatBuffers = 1, Podbuf = 2 }
 
 // ridl §9 timing, as the IR carries it (ridl.ir.v2.TimingMode).
 enum TimingMode : ubyte { Unspecified = 0, StrictPeriodic = 1, Range = 2 }

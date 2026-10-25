@@ -103,7 +103,7 @@ fn encoding_name(encoding: Encoding) -> &'static str {
     match encoding {
         Encoding::Proto3 => "Proto3",
         Encoding::FlatBuffers => "FlatBuffers",
-        Encoding::ReprC => "ReprC",
+        Encoding::Podbuf => "Podbuf",
     }
 }
 

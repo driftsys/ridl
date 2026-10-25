@@ -201,7 +201,7 @@ Deno.test("each attached outcome and refusal reason maps to its code", () => {
 Deno.test("each encoding tag maps to its name on attach", () => {
   assert.equal(encodingTag("flatbuffers"), 1);
   assert.equal(encodingTag("proto3"), 2);
-  assert.equal(encodingTag("repr-c"), 3);
+  assert.equal(encodingTag("podbuf"), 3);
   const hash = new Uint8Array(32);
   for (const tag of [1, 2, 3]) {
     roundTrip([1, ...u32(1), tag, ...hash, 1, 0x76], {

@@ -399,7 +399,7 @@ trusted with no `unsafe` and no second verification pass.
    `unsafe` to decode (a flatc-generated accessor used as a `View` may still
    contain `unsafe` inside the accessor itself, which narrows the no-`unsafe`
    rule to code ridl emits, not to every `View`). `encoding::Encoding` is
-   sealed, so `FlatBuffers`, `Proto3` and `ReprC` are the only encodings a
+   sealed, so `FlatBuffers`, `Proto3` and `Podbuf` are the only encodings a
    payload can implement; adding a fourth is a decision recorded in an ADR,
    never an `impl` in a downstream crate.
 
@@ -414,7 +414,7 @@ trusted with no `unsafe` and no second verification pass.
    `bytes: &[u8]`. **One consumer in the tree does assume a prefix**, and it is
    named here rather than left to be found: `ridl-backend-rust`'s `encode_into`
    returns `encoded.bytes().len()`, and the face it emits sends `&buf[..len]`.
-   That is correct today, because that code names `ReprC`, whose encoder writes
+   That is correct today, because that code names `Podbuf`, whose encoder writes
    a prefix; it stops being correct the moment the face names an encoding that
    does not, so it changes with the face, in the stage that takes D-11. Passing
    `encoded.bytes()` itself, rather than a length the caller re-slices from the
@@ -434,8 +434,8 @@ trusted with no `unsafe` and no second verification pass.
    The paragraph above expected this to land with D-11, in the stage that moves
    the face onto `Wire`; it landed a stage early instead, because D-11 was then
    blocked: a payload type that mints no root table has no FlatBuffers root at
-   all (driftsys/ridl#470). At the time the emitted code still named `ReprC`, so
-   nothing observable changed — what changed is that it became
+   all (driftsys/ridl#470). At the time the emitted code still named `Podbuf`,
+   so nothing observable changed — what changed is that it became
    encoding-independent, which is the property this amendment asked for. **D-11
    has since landed** (stage K9b): the emitted code names the package's own
    `Wire` alias, which is `::ridl_rt::encoding::FlatBuffers`, and the subslice
@@ -464,7 +464,7 @@ trusted with no `unsafe` and no second verification pass.
    may be far smaller.
 
 8. **The three cargo features are declared and carry no dependency in 0.1.**
-   `flatbuffers`, `proto3` and `repr-c` exist so a runtime can name every
+   `flatbuffers`, `proto3` and `podbuf` exist so a runtime can name every
    encoding without linking a codec, and the crate has no dependency in any
    feature combination. The `flatbuffers` dependency, its version, and the
    obligation it brings — every final binary that enables the feature must
@@ -550,7 +550,7 @@ trusted with no `unsafe` and no second verification pass.
    generated `verify` returns. It decides no layout, takes no dependency,
    allocates nothing and has no `unsafe` code, so the three constraints this
    crate holds to are unaffected, and `just wasm-check` and `just compat-check`
-   cover it through their `--all-features` invocations. `repr-c` still enables
+   cover it through their `--all-features` invocations. `podbuf` still enables
    nothing. Under decision 10 the change is additive.
 
 9. **`Contract` and `CallError` stay exhaustive; every other error enum stays
@@ -589,7 +589,7 @@ trusted with no `unsafe` and no second verification pass.
     `Ordinal`, `InterfaceNo`, `CatalogHash`, `Correlation`, `ClaimId`,
     `Timestamp` and `Duration` — follow the same rule: each has one public field
     code outside the crate builds directly. The unit structs `FlatBuffers`,
-    `Proto3` and `ReprC` (`crates/ridl-rt/src/encoding.rs`) follow it for a
+    `Proto3` and `Podbuf` (`crates/ridl-rt/src/encoding.rs`) follow it for a
     different reason: each is a marker type with no field, and code outside the
     crate uses it as a value or a pattern, so a field added to any of them
     breaks that code just as surely. A field added to any of these structs is

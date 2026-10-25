@@ -52,7 +52,7 @@ pub fn ridl_rt_rlib_bare(dir: &Path) -> PathBuf {
 }
 
 fn ridl_rt_rlib_with(dir: &Path, std: bool) -> PathBuf {
-    let mut features = vec!["flatbuffers", "proto3", "repr-c"];
+    let mut features = vec!["flatbuffers", "proto3", "podbuf"];
     if std {
         features.push("std");
     }
@@ -256,7 +256,7 @@ pub fn check_for_wasm32(name: &str, source: &str) -> bool {
         .arg("--cfg")
         .arg(r#"feature="proto3""#)
         .arg("--cfg")
-        .arg(r#"feature="repr-c""#)
+        .arg(r#"feature="podbuf""#)
         .arg(&ridl_rt_source)
         .arg("-o")
         .arg(&rlib)

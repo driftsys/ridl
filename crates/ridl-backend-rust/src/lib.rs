@@ -550,7 +550,7 @@ fn package_items(
 /// package whose list is empty carries the domain types only.
 ///
 /// Two variants today, the two codecs `ridl-backend-rust` emits a `Payload`
-/// implementation for. `repr(C)` joins when the Rust backend emits its codec,
+/// implementation for. `podbuf` joins when the Rust backend emits its codec,
 /// which is what `#[non_exhaustive]` says to a caller that matches on this.
 ///
 /// The encoding reaches the output as the full path
@@ -573,7 +573,7 @@ pub enum WireEncoding {
 impl WireEncoding {
     /// The encoding `name` spells, as `ridl_rt::encoding::Encoding::NAME`
     /// spells it (`flatbuffers`, `proto3`), or `None` for every other string
-    /// — an encoding this backend has no codec for (`repr-c`) included.
+    /// — an encoding this backend has no codec for (`podbuf`) included.
     pub fn parse(name: &str) -> Option<Self> {
         match name {
             "flatbuffers" => Some(WireEncoding::FlatBuffers),

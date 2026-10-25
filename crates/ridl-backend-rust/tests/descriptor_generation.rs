@@ -1241,10 +1241,10 @@ fn proto3_is_accepted_through_the_contract() {
 /// that builds the codec, so a manifest author knows the name is right and
 /// the codec is pending.
 #[test]
-fn repr_c_is_refused_naming_its_issue() {
-    let message = refused_options(vec![encodings_option("repr-c")]);
+fn podbuf_is_refused_naming_its_issue() {
+    let message = refused_options(vec![encodings_option("podbuf")]);
     assert!(
-        message.contains("`repr-c`") && message.contains("driftsys/ridl#317"),
+        message.contains("`podbuf`") && message.contains("driftsys/ridl#317"),
         "got: {message}"
     );
 }

@@ -2754,7 +2754,11 @@ fn the_deployment_sections_enum_values_are_the_schemas() {
     assert_eq!(v1::Encoding::Unspecified as i32, 0);
     assert_eq!(v1::Encoding::Proto3 as i32, 1);
     assert_eq!(v1::Encoding::Flatbuffers as i32, 2);
-    assert_eq!(v1::Encoding::ReprC as i32, 3);
+    assert_eq!(v1::Encoding::Podbuf as i32, 3);
+    assert_eq!(
+        serde_json::to_value(v1::Encoding::Podbuf).unwrap(),
+        "ENCODING_PODBUF"
+    );
 
     assert_eq!(v1::ValueSource::Unspecified as i32, 0);
     assert_eq!(v1::ValueSource::Derived as i32, 1);

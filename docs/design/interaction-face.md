@@ -114,7 +114,7 @@ descriptor has no inherent constant of either name.
   `Sizes<Proto3>`, emitted beside it when `encodings` names `proto3` and built
   from `<T as Payload<Proto3>>::MAX_SIZE` in the same way. A proto3 payload with
   no finite bound is refused or skipped the same way, so a `Sizes<Proto3>` table
-  has no `None` either ([the proto3 codec record](proto3-codec.md)). A `repr(C)`
+  has no `None` either ([the proto3 codec record](proto3-codec.md)). A `podbuf`
   table arrives when the backend emits that codec (driftsys/ridl#317). The face
   reads buffers from `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of
   its port `P`, and from the `CLAIM_BUFFER` and `EVENT_BUFFER` of
@@ -709,7 +709,7 @@ as a slice, `generate_face_with(package, encodings)` and `generate_pipeline`,
 and a slice that is empty emits the domain types alone, with no codec, no
 descriptor and no face. A slice that names either encoding, or both, emits the
 descriptors and the same face, because the face reads its encoding from the
-port. `repr(C)` joins the enum when the Rust backend emits its codec; until then
+port. `podbuf` joins the enum when the Rust backend emits its codec; until then
 the backend refuses that name, so it cannot produce a face over implementations
 that do not exist.
 
@@ -731,8 +731,8 @@ never refuses a package: every site that named `Wire` writes the full path,
 `refuse_wire_collision` is deleted, and no name is reserved. The codec's free
 functions carry a `__ridl_fb_` prefix, which no typl name can spell.
 
-This was once a placeholder instead: `ReprC`, with `tests/interaction_face.rs`
-hand-writing `Payload<ReprC>` for the fixture's types, marked throwaway in its
+This was once a placeholder instead: `Podbuf`, with `tests/interaction_face.rs`
+hand-writing `Payload<Podbuf>` for the fixture's types, marked throwaway in its
 own module documentation. Both are gone.
 
 **The ports are `ridl-loopback`'s**, the in-process reference runtime (ADR-0020
@@ -753,7 +753,7 @@ deadline or the blocking client's timeout and by nothing else.
 ## The fixture and the round trip
 
 `crates/ridl-backend-rust/tests/fixtures/interaction_face.ridl` is a
-single-file, single-catalog package (`face.demo`) cut to what the `ReprC`
+single-file, single-catalog package (`face.demo`) cut to what the `Podbuf`
 stand-in could carry when it was written — fixed-width named scalars, one enum,
 one all-fixed-size struct, no optional field, sequence, map, union, string or
 bytes. The stand-in is gone and the generated codec carries every typl shape, so
@@ -1087,15 +1087,15 @@ is built.
 
 ## What is provisional
 
-| Placeholder                                                                                              | Replaced by                                  |
-| -------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| The `repr(C)` `Sizes<E>` table (`flatbuffers` and `proto3` are built; this backend emits no other codec) | driftsys/ridl#317                            |
-| The narrow contract-clause translator (`src/clauses.rs`)                                                 | driftsys/ridl#704                            |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion           | a test over `ridl-loopback`, not yet written |
+| Placeholder                                                                                             | Replaced by                                  |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| The `podbuf` `Sizes<E>` table (`flatbuffers` and `proto3` are built; this backend emits no other codec) | driftsys/ridl#317                            |
+| The narrow contract-clause translator (`src/clauses.rs`)                                                | driftsys/ridl#704                            |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion          | a test over `ridl-loopback`, not yet written |
 
 **The hand-written payload row was retired on 2026-09-21**, by design note D-11
 of [the FlatBuffers codec record](flatbuffers-codec.md). It read "the
-hand-written `Payload<ReprC>` implementations", and it was blocked twice over:
+hand-written `Payload<Podbuf>` implementations", and it was blocked twice over:
 the codec wrote a `Payload<FlatBuffers>` only for a declaration the projection
 minted a root table for, which was a `struct` or a `union`, while this face's
 payloads are four named scalars and one enum beside one struct. ADR-0019
@@ -1137,7 +1137,7 @@ ports" above.
   `ProviderError`, the `std` feature's `block_on`, and since 0.4.0 the `face`
   traits, ADR-0021 decision 19); the IR's provisional interface numbering (the
   lock design's L4, driftsys/ridl#391)
-- Replaced later by: driftsys/ridl#317 (the `repr(C)` size table) and
+- Replaced later by: driftsys/ridl#317 (the `podbuf` size table) and
   driftsys/ridl#704 (the clause translator). The payload stand-in, the test-only
   ports, the zero catalog hash, the `None` `flatbuffers` size column (now the
   `Sizes<FlatBuffers>` table) and the unemitted catalog check are already

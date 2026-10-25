@@ -320,12 +320,12 @@ impl From<ProtocolViolation> for DecodeError {
 }
 
 /// The encoding tag of an encoding name: `flatbuffers` 1, `proto3` 2,
-/// `repr-c` 3.
+/// `podbuf` 3.
 pub fn encoding_tag(name: &str) -> Option<u8> {
     match name {
         "flatbuffers" => Some(1),
         "proto3" => Some(2),
-        "repr-c" => Some(3),
+        "podbuf" => Some(3),
         _ => None,
     }
 }
@@ -795,5 +795,16 @@ impl Frame<'_> {
             }
         }
         Ok(w.at)
+    }
+}
+
+#[cfg(test)]
+mod encoding_tag_tests {
+    use super::encoding_tag;
+
+    #[test]
+    fn the_encoding_tag_of_podbuf_is_3() {
+        assert_eq!(encoding_tag("podbuf"), Some(3));
+        assert_eq!(encoding_tag("repr-c"), None);
     }
 }

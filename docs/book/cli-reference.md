@@ -859,9 +859,9 @@ version = "1.0.0"
 encodings = ["flatbuffers"]
 ```
 
-The names are `flatbuffers`, `proto3` and `repr-c`. An absent table, an absent
+The names are `flatbuffers`, `proto3` and `podbuf`. An absent table, an absent
 key and an empty list all mean types only. The Rust backend builds
-`flatbuffers` and `proto3`, alone or together, and refuses `repr-c`
+`flatbuffers` and `proto3`, alone or together, and refuses `podbuf`
 ([driftsys/ridl#317][i317]). The generated `Cargo.toml` enables one `ridl-rt`
 feature per named encoding, and none for types only. A single-file build has no
 manifest, so it is types only. Each emitted codec names its encoding, as

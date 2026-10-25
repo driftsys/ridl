@@ -1416,7 +1416,7 @@ diag_codes! {
         /// `[backend.<name>] encodings` is malformed: `backend` or
         /// `[backend.<name>]` is not a table, `encodings` is not an array of
         /// strings, an element is not one of `flatbuffers`, `proto3` and
-        /// `repr-c`, or an element repeats. The message names the offending
+        /// `podbuf`, or an element repeats. The message names the offending
         /// value and lists the known names. A `wasm` that is not a boolean is
         /// MANI-015 too, and its message names the value. So is a `[limits]`
         /// value that is not a table where a table is expected, or not an

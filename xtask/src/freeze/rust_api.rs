@@ -43,7 +43,7 @@ pub const RUNTIME_CRATES: [&str; 5] = [
 /// `crates/ridlc/tests/corpus/veh-cluster`, taken when the check was added.
 /// Their manifests name `flatbuffers` alone, as they did when the copies were
 /// taken, so the frozen dumps stay the FlatBuffers ones. The Rust backend
-/// emits a codec for `flatbuffers` and for `proto3`, and rejects `repr-c`;
+/// emits a codec for `flatbuffers` and for `proto3`, and rejects `podbuf`;
 /// `examples/cabin` and the corpus name both codecs, and the copies do
 /// not follow them.
 const GENERATED: [(&str, &str); 2] = [

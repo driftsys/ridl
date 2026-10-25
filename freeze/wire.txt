@@ -1,7 +1,7 @@
 catalog-hash veh.cabin 59b9f924835244a0d7b597e80aff1b1fea8b07acf192744af7f2033ecb2942de
 encoding flatbuffers
+encoding podbuf
 encoding proto3
-encoding repr-c
 fbs mavlink/common.fbs [Attitude] pitch: double (id: 2);
 fbs mavlink/common.fbs [Attitude] pitchspeed: double (id: 5);
 fbs mavlink/common.fbs [Attitude] roll: double (id: 1);

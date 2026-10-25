@@ -311,7 +311,7 @@ both, which the codecs need — and no feature for a types-only build. An applic
 | `flatbuffers`     | off     | The `flatbuffers` module the generated codec calls.                                                                                                                               |
 | `std`             | off     | The standard library; the `task` module: `block_on`, `noop_waker` and `flag_waker`; the `face::Timeout` trait; and the propagation hook of the `trace` module, `set_propagation`. |
 | `proto3`          | off     | The `proto3` module the generated proto3 codec calls.                                                                                                                             |
-| `repr-c`          | off     | Nothing yet. It names the `repr(C)` encoding.                                                                                                                                     |
+| `podbuf`          | off     | Nothing yet. It names the `podbuf` encoding.                                                                                                                                     |
 
 `ridl-rt` has no dependency in any feature combination. It builds for `wasm32`,
 and its minimum Rust version is 1.88. The generated crate declares edition 2021

@@ -166,10 +166,10 @@ ridl.codegen.v1.DottedName.dotted = 1 singular string
 ridl.codegen.v1.DottedName.joined_camel = 3 singular string
 ridl.codegen.v1.DottedName.segments = 2 repeated string
 ridl.codegen.v1.DottedName.underscored = 4 singular string
-ridl.codegen.v1.Encoding values ENCODING_FLATBUFFERS ENCODING_PROTO3 ENCODING_REPR_C ENCODING_UNSPECIFIED
+ridl.codegen.v1.Encoding values ENCODING_FLATBUFFERS ENCODING_PODBUF ENCODING_PROTO3 ENCODING_UNSPECIFIED
 ridl.codegen.v1.Encoding.ENCODING_FLATBUFFERS = 2
+ridl.codegen.v1.Encoding.ENCODING_PODBUF = 3
 ridl.codegen.v1.Encoding.ENCODING_PROTO3 = 1
-ridl.codegen.v1.Encoding.ENCODING_REPR_C = 3
 ridl.codegen.v1.Encoding.ENCODING_UNSPECIFIED = 0
 ridl.codegen.v1.Endpoint.component = 1 singular string
 ridl.codegen.v1.Endpoint.instance = 2 singular string

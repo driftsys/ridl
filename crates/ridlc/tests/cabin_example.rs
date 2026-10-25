@@ -246,7 +246,7 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
 /// A program that binds a client of the generated `Cabin` face over the
 /// loopback `runtime` builds. The two programs below differ in that
 /// expression alone. The generated prelude is imported for `Bind`, which the
-/// cabin consumer imports the same way; the `ReprC` import is unused in one
+/// cabin consumer imports the same way; the `Podbuf` import is unused in one
 /// of the two programs, which the crate-level attribute covers.
 fn binding_program(runtime: &str) -> String {
     format!(
@@ -255,7 +255,7 @@ use veh_cabin::veh::cabin as api;
 use api::cabin::prelude::*;
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{{CatalogRef, Interface}};
-use ridl_rt::encoding::ReprC;
+use ridl_rt::encoding::Podbuf;
 const CATALOG: CatalogRef = *<api::Cabin as Interface>::CATALOG;
 fn main() {{
     let rt = {runtime};
@@ -437,14 +437,14 @@ fn last_segment(path: &str) -> String {
 /// The generated face reads its payload encoding from its port, and the
 /// generated package carries the encoding tables of the encodings it was
 /// built with — for the cabin example, FlatBuffers and proto3. So a port that
-/// carries `ReprC` has no table in that package, and binding a face over it
+/// carries `Podbuf` has no table in that package, and binding a face over it
 /// must be refused.
 ///
 /// What this pins is **where** the refusal lands: at the binding, on the
 /// `Sizes` bound the face declares, and not inside the body of a call that a
 /// reader would have to step into to understand. The port does implement
 /// `Encoded`, so the refusal must not be that the port is not `Encoded`; the
-/// missing item is the package's `Sizes<ReprC>` table.
+/// missing item is the package's `Sizes<Podbuf>` table.
 ///
 /// The same program over `Loopback::new(CATALOG)`, whose encoding is
 /// FlatBuffers, compiles, and so does the same program over a proto3
@@ -457,7 +457,7 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
     let refused = compile_against_cabin(
         &built,
         "encoding_the_package_lacks",
-        &binding_program("Loopback::<ReprC>::with_encoding(CATALOG)"),
+        &binding_program("Loopback::<Podbuf>::with_encoding(CATALOG)"),
         ErrorFormat::Json,
     );
     let stderr = String::from_utf8_lossy(&refused.stderr);
@@ -482,7 +482,7 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
     let expected = Predicate {
         self_type: "Cabin".to_owned(),
         trait_name: "Sizes".to_owned(),
-        arguments: vec!["ReprC".to_owned()],
+        arguments: vec!["Podbuf".to_owned()],
     };
     // The statement the refusal must point at. `rustc` highlights the
     // argument inside it, and the span carries the whole statement, so the
@@ -510,7 +510,7 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
     // The port is `Encoded`; what the package lacks is its `Sizes` table. So
     // no unsatisfied-bound diagnostic may report a predicate whose trait is
     // `Encoded`. The name does appear elsewhere in the output — in the
-    // projection path `<Loopback<ReprC> as Encoded>::Encoding` of the
+    // projection path `<Loopback<Podbuf> as Encoded>::Encoding` of the
     // companion type-mismatch diagnostic, and in the
     // `ridl_rt::payload::Encoded` struct the generated FlatBuffers codec
     // names, which is a different item — so the predicate is read rather

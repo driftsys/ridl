@@ -14,7 +14,7 @@ use crate::{WireEncoding, generate_pipeline_over};
 /// The one option this backend reads: the encodings the generated package
 /// carries a codec for, as the manifest's `[backend.rust] encodings` names
 /// them, joined by `,`. Absent, the backend emits the domain types only. The
-/// names it has a codec for are `flatbuffers` and `proto3`; `repr-c` is
+/// names it has a codec for are `flatbuffers` and `proto3`; `podbuf` is
 /// refused with the issue that builds its codec, and any other name is
 /// refused as unknown (`WireEncoding`'s `#[non_exhaustive]` note names the
 /// encodings that join it).
@@ -136,17 +136,17 @@ fn parse_encoding(name: &str) -> Result<WireEncoding, String> {
     if name.is_empty() {
         return Err(format!(
             "`{ENCODINGS_OPTION}` names an empty element; each element is one of \
-             `flatbuffers`, `proto3` and `repr-c`"
+             `flatbuffers`, `proto3` and `podbuf`"
         ));
     }
     if let Some(encoding) = WireEncoding::parse(name) {
         return Ok(encoding);
     }
     Err(match name {
-        "repr-c" => "the Rust backend has no `repr-c` codec (driftsys/ridl#317)".to_string(),
+        "podbuf" => "the Rust backend has no `podbuf` codec (driftsys/ridl#317)".to_string(),
         other => format!(
             "`{ENCODINGS_OPTION}` names `{other}`, which is not an encoding; the names are \
-             `flatbuffers`, `proto3` and `repr-c`"
+             `flatbuffers`, `proto3` and `podbuf`"
         ),
     })
 }

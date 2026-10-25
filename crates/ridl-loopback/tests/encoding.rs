@@ -9,7 +9,7 @@
 
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
-use ridl_rt::encoding::{Encoding, Proto3, ReprC};
+use ridl_rt::encoding::{Encoding, Podbuf, Proto3};
 use ridl_rt::port::{Encoded, SignalReader, SignalWriter};
 use ridl_rt::sample::Provenance;
 
@@ -95,6 +95,6 @@ fn the_encoding_is_a_type_and_not_a_value() {
         .expect("read");
     assert_eq!(unpublished.provenance, Provenance::Init);
 
-    let repr_c = Loopback::<ReprC>::with_encoding(catalog());
-    assert_eq!(encoding_of(&repr_c), "repr-c");
+    let podbuf = Loopback::<Podbuf>::with_encoding(catalog());
+    assert_eq!(encoding_of(&podbuf), "podbuf");
 }
