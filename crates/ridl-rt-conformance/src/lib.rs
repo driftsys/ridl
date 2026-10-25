@@ -67,7 +67,10 @@
 //!   rules the wake out: a refresh, which wakes nothing, and a waker already
 //!   woken or displaced, which the contract clears. Whether a registration
 //!   whose key already holds is woken at once is the runtime's too: the task
-//!   reads the port after it registers, and finds the change either way. The
+//!   reads the port after it registers, and finds the change either way. So is
+//!   what a runtime does with a registration under a kind of key its handle
+//!   does not observe, or under a correlation that names no call in flight;
+//!   the port contract does not say, and the suite does not test either. The
 //!   tests assume a change made through a port is visible, and its waker
 //!   woken, before that port call returns, on the thread that made it.
 //! - **Which serving handlers a call wakes.** Each source subscribed to an

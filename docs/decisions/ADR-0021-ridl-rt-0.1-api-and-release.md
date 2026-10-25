@@ -794,8 +794,10 @@ trusted with no `unsafe` and no second verification pass.
     `SignalWriter`, `EventSource`, `EventSink`, `Caller` and `Handler` — is
     `Send` and need not be `Sync`, because one thread drives each. Deriving the
     split from the receiver rather than from a list classifies every one of the
-    eleven port traits. A single-threaded runtime is held to neither, for the
-    reason the third paragraph gives.
+    eleven port traits that existed when this decision was written; `Wakeable`
+    (decision 13), the twelfth, takes `&self` and is classified the same way. A
+    single-threaded runtime is held to neither, for the reason the third
+    paragraph gives.
 
     A face is built over one value implementing exactly the port traits its
     interface needs, which [ADR-0023](ADR-0023-interaction-face-generation.md)

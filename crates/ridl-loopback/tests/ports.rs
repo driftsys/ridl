@@ -5,7 +5,7 @@
 //! this runtime (driftsys/ridl#514). They came from this file.
 //! What stays here, and why each test is not in the suite. Each reason is an
 //! item of the list "What the suite leaves out" in that crate's
-//! documentation:
+//! documentation, or a choice of this runtime alone:
 //!
 //! - `two_runtimes_start_at_the_same_logical_time` — where a clock starts is
 //!   left to a runtime. The suite asks only that the clock move through the
@@ -34,8 +34,8 @@
 //!   runtime's own API with no port, and `Contract::UnknownInteraction` for an
 //!   unprovisioned one is this runtime's answer with no member table.
 //! - `every_split_handle_carries_the_catalog` — a runtime's own API beyond
-//!   the factory: `Loopback::split`. The suite checks the catalog on the aggregate and on
-//!   the handles its factory makes.
+//!   the factory: `Loopback::split`. The suite checks the catalog on the
+//!   aggregate and on the handles its factory makes.
 //! - `an_attached_aggregate_carries_the_catalog`,
 //!   `a_value_committed_through_one_aggregate_is_read_through_an_attached_one`,
 //!   `an_attached_aggregate_advances_the_one_clock`,
@@ -73,6 +73,7 @@
 //!   `a_waiting_call_on_another_interface_wakes_a_claim_registration_at_once`,
 //!   `a_waiter_woken_at_once_is_not_stored`,
 //!   `a_registration_on_a_forgotten_call_is_woken_at_once`,
+//!   `a_registration_on_a_correlation_whose_slot_was_reused_is_woken_at_once`,
 //!   `a_registration_whose_key_already_holds_is_woken_at_once`,
 //!   `a_key_no_role_of_the_handle_observes_is_woken_at_once` and
 //!   `a_slot_registration_while_a_slot_is_free_is_woken_at_once`.
@@ -147,7 +148,10 @@
 //!   `the_aggregate_routes_each_key_to_the_handle_that_observes_it` pins
 //!   `Loopback`'s own routing; and `every_wake_is_run_with_the_lock_released`
 //!   takes the wake paths the suite does not: a registration woken at once,
-//!   a serve, a handler's drop and a withdrawal.
+//!   a serve, a handler's drop and a withdrawal, and
+//!   `every_wake_at_once_and_every_displacement_is_run_with_the_lock_released`
+//!   takes the registrations woken at once of each kind and the displacement
+//!   of a stored waker of each kind.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
@@ -867,6 +871,39 @@ fn a_registration_on_a_forgotten_call_is_woken_at_once() {
     let (count, waker) = counting();
     caller.wake_on(Interest::Outcome(c), &waker);
     assert_eq!(wakes(&count), 1, "no outcome will be recorded");
+}
+
+#[test]
+fn a_registration_on_a_correlation_whose_slot_was_reused_is_woken_at_once() {
+    // The slot of `old` now holds a call under a higher generation. No
+    // outcome will ever be recorded under `old`, so the registration is woken
+    // at once, and the call now in the slot does not wake it again.
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut buf = [0u8; 8];
+    let old = caller.command(IFACE, ORD, &[1], None).expect("send");
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    caller.forget(old);
+    let new = caller
+        .command(IFACE, ORD, &[2], None)
+        .expect("send into the same slot");
+    assert_ne!(new, old, "the slot is reused under a new generation");
+
+    let (count, waker) = counting();
+    caller.wake_on(Interest::Outcome(old), &waker);
+    assert_eq!(wakes(&count), 1, "no outcome will be recorded under it");
+
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the new call");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    assert_eq!(wakes(&count), 1, "the waker was not stored");
 }
 
 #[test]
@@ -2355,4 +2392,152 @@ fn every_wake_is_run_with_the_lock_released() {
     caller.wake_on(Interest::Slot, &waker);
     caller.forget(sent[2]);
     assert_released(&rx, "a forget that withdraws an unclaimed call");
+}
+
+#[test]
+fn every_wake_at_once_and_every_displacement_is_run_with_the_lock_released() {
+    let rt = runtime();
+    let mut caller = rt.caller();
+    let mut handler = rt.handler();
+    let mut source = rt.source();
+    source.subscribe(IFACE, &[ORD]).expect("subscribe");
+    handler.serve(IFACE, &[ORD]).expect("serve");
+    let mut buf = [0u8; 8];
+
+    // A registration whose key already holds: a waiting call for the
+    // handler, a free slot, a settled call.
+    let c = caller.command(IFACE, ORD, &[1], None).expect("send");
+    let (waker, rx) = lock_probe(&rt);
+    handler.wake_on(Interest::Claim(IFACE), &waker);
+    assert_released(&rx, "a claim registration while a call is waiting");
+
+    let (waker, rx) = lock_probe(&rt);
+    caller.wake_on(Interest::Slot, &waker);
+    assert_released(&rx, "a slot registration while a slot is free");
+
+    let claim = handler
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("waiting");
+    handler.settle(claim.id, Ok(&[])).expect("settle");
+    let (waker, rx) = lock_probe(&rt);
+    caller.wake_on(Interest::Outcome(c), &waker);
+    assert_released(&rx, "an outcome registration after the settlement");
+
+    // A correlation that names no call in flight.
+    caller.forget(c);
+    let (waker, rx) = lock_probe(&rt);
+    caller.wake_on(Interest::Outcome(c), &waker);
+    assert_released(&rx, "an outcome registration on a forgotten call");
+
+    // A kind no role of the handle observes.
+    let (waker, rx) = lock_probe(&rt);
+    source.wake_on(Interest::Slot, &waker);
+    assert_released(
+        &rx,
+        "a registration under a kind the handle does not observe",
+    );
+
+    // A waker of another task displaces the stored one and wakes it. Nothing
+    // is waiting, so each first registration is stored.
+    let (first, first_rx) = lock_probe(&rt);
+    let (second, _second_rx) = lock_probe(&rt);
+    source.wake_on(Interest::Event(IFACE), &first);
+    source.wake_on(Interest::Event(IFACE), &second);
+    assert_released(&first_rx, "a displaced event waker");
+
+    let (first, first_rx) = lock_probe(&rt);
+    let (second, _second_rx) = lock_probe(&rt);
+    handler.wake_on(Interest::Claim(IFACE), &first);
+    handler.wake_on(Interest::Claim(IFACE), &second);
+    assert_released(&first_rx, "a displaced claim waker");
+
+    let c = caller.command(IFACE, ORD, &[2], None).expect("send");
+    let (first, first_rx) = lock_probe(&rt);
+    let (second, _second_rx) = lock_probe(&rt);
+    caller.wake_on(Interest::Outcome(c), &first);
+    caller.wake_on(Interest::Outcome(c), &second);
+    assert_released(&first_rx, "a displaced outcome waker");
+
+    // With the table full, slot registrations are stored.
+    while caller.command(IFACE, ORD, &[3], None).is_ok() {}
+    let (first, first_rx) = lock_probe(&rt);
+    let (second, _second_rx) = lock_probe(&rt);
+    caller.wake_on(Interest::Slot, &first);
+    caller.wake_on(Interest::Slot, &second);
+    assert_released(&first_rx, "a displaced slot waker");
+}
+
+/// The `.rs` files under `dir`, read into one string each.
+fn rust_sources(dir: &std::path::Path, found: &mut Vec<String>) {
+    for entry in std::fs::read_dir(dir).expect("a readable directory") {
+        let path = entry.expect("a directory entry").path();
+        if path.is_dir() {
+            rust_sources(&path, found);
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            found.push(std::fs::read_to_string(&path).expect("a readable source"));
+        }
+    }
+}
+
+/// The backticked names in `text` that have four or more words, which is how
+/// a test is cited. A name with fewer words is a method or a type.
+fn cited_test_names(text: &str) -> Vec<String> {
+    text.split('`')
+        .skip(1)
+        .step_by(2)
+        .filter(|span| {
+            span.starts_with(|c: char| c.is_ascii_lowercase())
+                && span
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                && span.matches('_').count() >= 3
+        })
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn the_records_cite_only_tests_that_exist_and_the_suite_keeps_the_list_they_cite() {
+    // The design record and the conformance crate are not in the packaged
+    // crate, so this check runs in the workspace only.
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let record = root.join("docs/design/ridl-loopback.md");
+    let suite = root.join("crates/ridl-rt-conformance/src/lib.rs");
+    if !record.is_file() || !suite.is_file() {
+        return;
+    }
+    let mut sources = Vec::new();
+    rust_sources(&root.join("crates"), &mut sources);
+
+    let documentation: String = include_str!("ports.rs")
+        .lines()
+        .filter(|line| line.starts_with("//!"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let record = std::fs::read_to_string(record).expect("the design record");
+    for (cited_in, text) in [("ports.rs", documentation), ("ridl-loopback.md", record)] {
+        let names = cited_test_names(&text);
+        assert!(
+            names.len() > 10,
+            "{cited_in}: the scan found the cited tests"
+        );
+        for name in names {
+            assert!(
+                sources.iter().any(|source| {
+                    source.contains(&format!("fn {name}("))
+                        || source.contains(&format!("fn {name}<"))
+                }),
+                "{cited_in} cites `{name}`, and no function has that name"
+            );
+        }
+    }
+
+    // `ports.rs` sends the reader to this list by its title.
+    let suite = std::fs::read_to_string(suite).expect("the conformance crate");
+    assert!(
+        suite.contains("# What the suite leaves out"),
+        "ports.rs cites the list \"What the suite leaves out\", which the \
+         conformance crate's documentation no longer has"
+    );
 }
