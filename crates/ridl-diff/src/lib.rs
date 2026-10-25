@@ -31,7 +31,7 @@ pub mod system;
 pub mod unit_verdict;
 mod walk;
 
-pub use classify::{absence_refused, category_from_word, classify, explain};
+pub use classify::{absence_refused, category_from_word, classify, explain, is_above_high_water};
 // Re-exported under its earlier path (ADR-0008 decision 9).
 pub use ridl_ir::v2::{LoadError, load_ir_json};
 pub use system::{SystemChange, SystemHeading, diff_systems};

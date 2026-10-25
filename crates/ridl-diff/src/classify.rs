@@ -472,22 +472,33 @@ fn appended_slot(old: &[(String, i64)], old_retired: &[i64], new: &[(String, i64
         }
     }
 
-    let high_water = old
-        .iter()
-        .map(|(_, slot)| *slot)
-        .chain(old_retired.iter().copied())
-        .max();
+    let held = || {
+        old.iter()
+            .map(|(_, slot)| *slot)
+            .chain(old_retired.iter().copied())
+    };
     let old_names: Vec<&String> = old.iter().map(|(name, _)| name).collect();
     for (name, slot) in new {
         if old_names.contains(&name) {
             continue;
         }
-        match high_water {
-            Some(mark) if *slot <= mark => return false,
-            _ => {}
+        if !is_above_high_water(*slot, held()) {
+            return false;
         }
     }
     true
+}
+
+/// Whether `slot` is above every slot in `held`, which is the append rule for
+/// one new member: the member keeps every existing ordinal or value, and it
+/// does not reuse a retired one (typl §7.4).
+///
+/// `held` lists every slot the old body assigns or retires, live and
+/// reserved together. When `held` is empty, any `slot` is above it. `ridl
+/// check --baseline` calls this function, so the desk check and the
+/// classifier apply one rule.
+pub fn is_above_high_water(slot: i64, held: impl IntoIterator<Item = i64>) -> bool {
+    held.into_iter().max().is_none_or(|mark| slot > mark)
 }
 
 // ==========================================================================
