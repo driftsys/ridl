@@ -1617,6 +1617,7 @@ pub struct Diagnostic {
 struct SourceEntry {
     path: String,
     text: String,
+    lines: LineIndex,
 }
 
 /// The file table the renderer reads: it maps every [`FileId`] to the path and
@@ -1643,6 +1644,7 @@ impl SourceMap {
         self.files.push(SourceEntry {
             path: path.to_string(),
             text: text.to_string(),
+            lines: LineIndex::new(text),
         });
         id
     }
@@ -1664,6 +1666,16 @@ impl SourceMap {
             .get(id.0 as usize)
             .map(|entry| entry.text.as_str())
     }
+
+    /// The line and column of byte `offset` in the file `id` stands for, by
+    /// the rule of [`line_col`], or `None` for an id this map never issued.
+    /// The map scans each file's line breaks once, when it interns the file,
+    /// so a lookup costs a binary search over the lines instead of a scan of
+    /// the text before the offset.
+    pub fn line_col(&self, id: FileId, offset: TextSize) -> Option<LineCol> {
+        let entry = self.files.get(id.0 as usize)?;
+        Some(entry.lines.line_col(&entry.text, offset))
+    }
 }
 
 /// A 1-based line and column. The column counts Unicode scalar values — Rust
@@ -1682,21 +1694,44 @@ pub struct LineCol {
 /// language server's line index. A CRLF pair is one line break, and its CR is
 /// counted as a column of the line it ends.
 pub fn line_col(text: &str, offset: TextSize) -> LineCol {
-    let mut offset = usize::from(offset).min(text.len());
-    while !text.is_char_boundary(offset) {
-        offset -= 1;
+    LineIndex::new(text).line_col(text, offset)
+}
+
+/// The byte offset at which each line of one text starts, under the rule of
+/// [`line_col`]. Building it scans the text once; each lookup is a binary
+/// search.
+#[derive(Debug)]
+struct LineIndex {
+    starts: Vec<usize>,
+}
+
+impl LineIndex {
+    fn new(text: &str) -> Self {
+        let bytes = text.as_bytes();
+        let mut starts = vec![0];
+        starts.extend(
+            (0..bytes.len())
+                .filter(|&at| ends_line(bytes, at))
+                .map(|at| at + 1),
+        );
+        Self { starts }
     }
-    let bytes = text.as_bytes();
-    let mut line = 1u32;
-    let mut line_start = 0usize;
-    for at in 0..offset {
-        if ends_line(bytes, at) {
-            line += 1;
-            line_start = at + 1;
+
+    /// The line and column of `offset` in `text`, the text this index was built
+    /// from, clamped as [`line_col`] describes.
+    fn line_col(&self, text: &str, offset: TextSize) -> LineCol {
+        let mut offset = usize::from(offset).min(text.len());
+        while !text.is_char_boundary(offset) {
+            offset -= 1;
+        }
+        // The last line that starts at or before `offset`.
+        let line = self.starts.partition_point(|&start| start <= offset) - 1;
+        let column = text[self.starts[line]..offset].chars().count() as u32 + 1;
+        LineCol {
+            line: line as u32 + 1,
+            column,
         }
     }
-    let column = text[line_start..offset].chars().count() as u32 + 1;
-    LineCol { line, column }
 }
 
 /// Whether the byte at `at` ends a line: an LF, or a CR that is not followed by
@@ -1827,11 +1862,15 @@ pub struct JsonDiagnostic {
 
 fn json_span(span: Span, sources: &SourceMap) -> JsonSpan {
     let path = sources.path(span.file).unwrap_or("").to_string();
-    let text = sources.text(span.file).unwrap_or("");
+    let at = |offset| {
+        sources
+            .line_col(span.file, offset)
+            .unwrap_or_else(|| line_col("", offset))
+    };
     JsonSpan {
         path,
-        start: line_col(text, span.range.start()),
-        end: line_col(text, span.range.end()),
+        start: at(span.range.start()),
+        end: at(span.range.end()),
     }
 }
 
@@ -2891,6 +2930,45 @@ mod json_tests {
             line_col(text, TextSize::from(99)),
             LineCol { line: 3, column: 1 }
         );
+    }
+
+    #[test]
+    fn source_map_line_col_pins_columns_including_a_mid_character_offset() {
+        // Lines: "aé" (3 bytes + LF), "\u{1F600}x" (5 bytes + CRLF), "z" (lone CR), "end".
+        let text = "a\u{e9}\n\u{1F600}x\r\nz\rend";
+        let mut sources = SourceMap::new();
+        let id = sources.file_id("a.ridl", text);
+        let at = |offset: u32| sources.line_col(id, TextSize::from(offset)).unwrap();
+        assert_eq!(at(0), LineCol { line: 1, column: 1 });
+        // Offset 2 is inside the two-byte `\u{e9}`: it moves back to offset 1.
+        assert_eq!(at(2), LineCol { line: 1, column: 2 });
+        assert_eq!(at(3), LineCol { line: 1, column: 3 });
+        assert_eq!(at(4), LineCol { line: 2, column: 1 });
+        // Offsets 5 to 7 are inside the four-byte emoji: they move back to 4.
+        assert_eq!(at(5), LineCol { line: 2, column: 1 });
+        assert_eq!(at(7), LineCol { line: 2, column: 1 });
+        assert_eq!(at(8), LineCol { line: 2, column: 2 });
+        // The CR of the CRLF pair is the last column of its line.
+        assert_eq!(at(9), LineCol { line: 2, column: 3 });
+        assert_eq!(at(11), LineCol { line: 3, column: 1 });
+        assert_eq!(at(12), LineCol { line: 3, column: 2 });
+        assert_eq!(at(13), LineCol { line: 4, column: 1 });
+        assert_eq!(at(99), LineCol { line: 4, column: 4 });
+        assert_eq!(sources.line_col(FileId::DETACHED, TextSize::from(0)), None);
+    }
+
+    #[test]
+    fn source_map_line_col_agrees_with_the_free_function_at_every_offset() {
+        let text = "a\u{e9}\n\u{1F600}x\r\nz\r\r\nend\r";
+        let mut sources = SourceMap::new();
+        let id = sources.file_id("a.ridl", text);
+        for offset in 0..=text.len() as u32 + 2 {
+            assert_eq!(
+                sources.line_col(id, TextSize::from(offset)),
+                Some(line_col(text, TextSize::from(offset))),
+                "offset {offset}"
+            );
+        }
     }
 
     #[test]
