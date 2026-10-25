@@ -3289,6 +3289,37 @@ mod json_tests {
         assert_eq!(first.labels[0].span.end, LineCol { line: 2, column: 9 });
     }
 
+    /// The serialized key names of a label are part of the agent-facing
+    /// contract; the typed fields alone do not pin them.
+    #[test]
+    fn to_json_serializes_a_label_as_message_and_span() {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("a.typl", "package a\n");
+        let span = Span {
+            file,
+            range: TextRange::new(TextSize::from(0), TextSize::from(7)),
+        };
+        let diagnostic = Diagnostic {
+            code: DiagCode::TYPL_009,
+            severity: Severity::Error,
+            message: "expected a type".to_string(),
+            primary: span,
+            labels: vec![Label {
+                span,
+                message: "declared here".to_string(),
+            }],
+            fixits: Vec::new(),
+        };
+
+        let value = serde_json::to_value(to_json(&[diagnostic], &sources)).unwrap();
+
+        let label = value[0]["labels"][0].as_object().unwrap();
+        let mut keys: Vec<&str> = label.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["message", "span"]);
+        assert_eq!(label["message"], "declared here");
+    }
+
     /// `Severity::Info` renders as `"info"`. The other two variants
     /// (`"error"`, `"warning"`) are already exercised above.
     #[test]

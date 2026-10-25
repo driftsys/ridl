@@ -414,6 +414,10 @@ pub async fn serve_stdio_with_version(
         None => RidlMcp::new(),
     };
     let service = server.serve(stdio()).await?;
+    // No test reaches the error of `waiting()`. It is a `JoinError` of the
+    // serve loop task itself, which no input over the transport can cause, and
+    // the function binds this process's own stdin and stdout, so a test cannot
+    // replace the transport either. `outcome` is tested on its own.
     let reason = service.waiting().await?;
     outcome(reason)
 }
