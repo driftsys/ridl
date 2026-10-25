@@ -106,10 +106,11 @@ reason:
 is what Claude Code and Codex need — they read their own MCP configuration and
 only require `ridl` on `PATH`. Each downloads `ridl-<target>.tar.gz` and its
 `.sha256` from the resolved release, verifies the checksum, and places `ridl` in
-`RIDL_INSTALL_DIR` (default `$HOME/.local/bin`). `RIDL_VERSION` pins a specific
-`editor-v*` tag; `RIDL_INSTALL_DRY_RUN=1` prints the resolved URL and exits
-without downloading. `just install-check` runs `install.sh` end to end against a
-`file://` fixture release: one good install, a reinstall over the existing
-binary, and one tampered tarball that the checksum must reject with nothing
-installed. When `pwsh` and `python3` are present, it runs the same cases for
-`install.ps1` against a local HTTP server on 127.0.0.1.
+`RIDL_INSTALL_DIR` (default `$HOME/.local/bin`; `install.ps1` uses
+`%LOCALAPPDATA%\Programs\ridl`, the folder the extension uses on Windows).
+`RIDL_VERSION` pins a specific `editor-v*` tag; `RIDL_INSTALL_DRY_RUN=1` prints
+the resolved URL and exits without downloading. `just install-check` runs
+`install.sh` end to end against a `file://` fixture release: one good install, a
+reinstall over the existing binary, and one tampered tarball that the checksum
+must reject with nothing installed. When `pwsh` and `python3` are present, it
+runs the same cases for `install.ps1` against a local HTTP server on 127.0.0.1.
