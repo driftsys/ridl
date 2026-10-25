@@ -95,9 +95,10 @@ reason:
   rename is atomic on POSIX.
 - **Staleness is a version comparison, not a timestamp.** `copyIsStale` compares
   the `ridl --version` output of the bundled binary against the installed one
-  and reports stale only when both versions are known and differ. An unknown
-  version on either side is not treated as stale, so a binary the probe could
-  not read is never replaced silently.
+  and reports stale only when both versions are known and the installed one is
+  strictly older. A newer installed copy is never offered for a downgrade. An
+  unknown version on either side is not treated as stale, so a binary the probe
+  could not read is never replaced silently.
 
 ## The install scripts
 
@@ -108,5 +109,7 @@ only require `ridl` on `PATH`. Each downloads `ridl-<target>.tar.gz` and its
 `RIDL_INSTALL_DIR` (default `$HOME/.local/bin`). `RIDL_VERSION` pins a specific
 `editor-v*` tag; `RIDL_INSTALL_DRY_RUN=1` prints the resolved URL and exits
 without downloading. `just install-check` runs `install.sh` end to end against a
-`file://` fixture release: one good install, and one tampered tarball that the
-checksum must reject with nothing installed.
+`file://` fixture release: one good install, a reinstall over the existing
+binary, and one tampered tarball that the checksum must reject with nothing
+installed. When `pwsh` and `python3` are present, it runs the same cases for
+`install.ps1` against a local HTTP server on 127.0.0.1.
