@@ -114,7 +114,10 @@ pub struct Encoded<'a, V> {
 /// }
 /// ```
 ///
-/// and cannot build one from its fields:
+/// and cannot build one from its fields. The error code on the `compile_fail`
+/// block is documentation only, because rustdoc does not check it;
+/// `crates/ridl-rt/tests/seal.rs` asserts E0451 for the forgery and E0616 for
+/// a read of a field:
 ///
 /// ```compile_fail,E0451
 /// use core::marker::PhantomData;

@@ -163,6 +163,22 @@ fn a_short_output_buffer_is_a_capacity_error() {
     );
 }
 
+/// The encode path hands an owned, non-`Copy` view to the proof: the view is
+/// built from the value, lent by `view`, moved out by `into_view`, and the
+/// proof decodes without a second check.
+#[test]
+fn an_encoded_proof_holds_an_owned_view_that_is_lent_then_moved_out() {
+    let mut out = [0u8; 4];
+    let proof = Ref::<Speed, Proto3>::encode(&Speed(88), &mut out).expect("4 bytes is enough");
+    assert_eq!(proof.bytes(), &[88, 0]);
+    assert_eq!(proof.view(), &Parsed { value: 88 });
+    assert_eq!(proof.into_view(), Parsed { value: 88 });
+
+    let mut out = [0u8; 4];
+    let proof = Ref::<Speed, Proto3>::encode(&Speed(250), &mut out).expect("4 bytes is enough");
+    assert_eq!(proof.decode(), Speed(250));
+}
+
 #[test]
 fn a_parsed_view_is_lent_then_moved_out() {
     let proof = Ref::<Speed, Proto3>::verify(&[0x2c, 0x01]).expect("300 is in range");
@@ -170,6 +186,9 @@ fn a_parsed_view_is_lent_then_moved_out() {
     assert_eq!(proof.decode(), Speed(300));
 }
 
+/// The two numbers are the ones the fixture declares for each codec above, so
+/// this test pins that the encoding parameter selects the codec's constant. It
+/// does not pin a computed size.
 #[test]
 fn a_type_with_two_codecs_names_each_max_size_through_its_encoding() {
     assert_eq!(<Speed as Payload<ReprC>>::MAX_SIZE, 2);

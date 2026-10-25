@@ -86,7 +86,7 @@ pub trait SignalReader: Attached {
     /// and a generated face returns the channel's init value under that
     /// provenance (ADR-0021 decision 17).
     ///
-    /// Returns `ReadError::Short` when `out` is shorter than the value.
+    /// Returns [`ReadError::Short`] when `out` is shorter than the value.
     fn read(
         &self,
         iface: InterfaceNo,
@@ -163,7 +163,7 @@ pub trait EventSource: Attached {
     ///
     /// Occurrences come in order, and a gap in `seq` is a loss (ridl §3.1). An
     /// occurrence older than its time to live is discarded here (ridl §5.2).
-    /// `ReadError::Short` does not consume the occurrence: the next call
+    /// [`ReadError::Short`] does not consume the occurrence: the next call
     /// returns the same one.
     fn next(&mut self, out: &mut [u8]) -> Result<Option<RawOccurrence>, ReadError>;
 }
@@ -267,13 +267,13 @@ pub trait Caller: Attached {
     fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>>;
     /// A query's reply, once it is known: the reply bytes copied into the front
     /// of `out` and their length, or the error. `Ok(None)` while unknown.
-    /// `ReadError::Short` does not consume the reply.
+    /// [`ReadError::Short`] does not consume the reply.
     ///
     /// The outer [`ReadError`] reports the port call itself: `Short` when
     /// `out` is too short, and `Detached` when the local runtime is gone.
     /// `reply` never returns `ReadError::Contract`. The inner [`CallError`] is
     /// the outcome from the peer or the transport, such as a contract error
-    /// the provider settled, or `Transport::Down` when the connection to the
+    /// the provider settled, or [`Transport::Down`](crate::error::Transport::Down) when the connection to the
     /// peer is lost.
     fn reply(
         &mut self,
@@ -300,8 +300,8 @@ pub struct Correlation(pub u64);
 /// the same id, until it is read with a large enough buffer or settled by
 /// that id (decision 5, amended 2026-09-28). Calls from two callers are never
 /// merged, even when they carry the same `seq`. A call lost in transport is never presented. The
-/// caller of a lost command sees `Transport::Undelivered` from `Caller::ack`;
-/// the caller of a lost query sees `Transport::Timeout` from `Caller::reply`
+/// caller of a lost command sees [`Transport::Undelivered`](crate::error::Transport::Undelivered) from [`Caller::ack`];
+/// the caller of a lost query sees [`Transport::Timeout`](crate::error::Transport::Timeout) from [`Caller::reply`]
 /// once the response bound passes.
 ///
 /// Every claim is settled. For a command, the generated dispatch settles
@@ -332,12 +332,12 @@ pub trait Handler: Attached {
     /// Copies the next call's arguments into the front of `out`. `Ok(None)`
     /// when no call is waiting. When `out` is shorter than the next call's
     /// arguments, returns [`ReadError::ShortClaim`] with that call's
-    /// `ClaimId` and the bytes it needs, and does not consume the call: a
+    /// [`ClaimId`] and the bytes it needs, and does not consume the call: a
     /// later `next_claim` with a buffer of at least `needed` bytes presents
     /// the same call under the same id. The id is assigned when the call is
     /// first presented, whether through `ShortClaim` or through `Ok(Some)`,
     /// and is unique in its channel. `next_claim` never returns
-    /// `ReadError::Short`.
+    /// [`ReadError::Short`].
     fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<Claim>, ReadError>;
     /// Settles a claim with the reply bytes (empty for a command) or the
     /// outcome the caller sees. A provider settles
@@ -472,8 +472,8 @@ pub trait CoherentSignals: SignalReader {
     /// into `samples` in the order of `ords`, and returns the number of bytes
     /// written to `out`.
     ///
-    /// Returns `ReadError::Short` with the size the whole set needs when `out`
-    /// is too short, `ReadError::TooFewSamples` with the number of entries
+    /// Returns [`ReadError::Short`] with the size the whole set needs when `out`
+    /// is too short, [`ReadError::TooFewSamples`] with the number of entries
     /// `samples` needs when `samples` is shorter than `ords`, and
     /// `ReadError::Contract(Contract::UnknownInteraction)` when an ordinal
     /// names no member.
