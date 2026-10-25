@@ -799,13 +799,17 @@ regenerates the fixture and compares the result byte-for-byte against the
 checked-in file, failing with the instruction to regenerate
 (`RIDL_UPDATE_GENERATED=1 cargo test -p
 ridl-backend-rust --test interaction_face_regeneration`)
-when it drifts. This is what makes the generated face genuinely compiled and
-linked by `cargo test`, rather than only snapshotted — the defect ADR-0018's
-Alternatives-considered table records against the retracted interaction layer
-("it cannot be connected to a runtime at all, and has never been compiled"). The
-regeneration test is kept apart from the tests that consume the fixture, so that
-it still compiles, and can rewrite the fixture, when a change to the face's
-shape leaves those tests unable to compile against the old fixture.
+when it drifts. A refresh run, with `RIDL_UPDATE_GENERATED=1`, writes the file
+and skips the pipeline comparison in the same target, because that test reads
+the file while the refresh writes it; run the target again without the variable
+to check the refreshed file against both comparisons. This is what makes the
+generated face genuinely compiled and linked by `cargo test`, rather than only
+snapshotted — the defect ADR-0018's Alternatives-considered table records
+against the retracted interaction layer ("it cannot be connected to a runtime at
+all, and has never been compiled"). The regeneration test is kept apart from the
+tests that consume the fixture, so that it still compiles, and can rewrite the
+fixture, when a change to the face's shape leaves those tests unable to compile
+against the old fixture.
 
 **What proves it** (F-14), in `tests/interaction_face.rs`: the round trips of a
 signal, an event, a command and a query through the async client, polled with
