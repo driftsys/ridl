@@ -18,9 +18,9 @@ categories = ["no-std", "encoding"]
 # pin.
 rust-version = "1.88"
 
-# One feature per payload encoding (ADR-0020 decision 5). In this version
-# `flatbuffers` and `proto3` each enable the module of the same name, `podbuf`
-# enables nothing, and the crate has no dependency in any combination.
+# One feature per payload encoding (ADR-0020 decision 5). Each of `flatbuffers`,
+# `proto3` and `podbuf` enables the module of the same name, and the crate has
+# no dependency in any combination.
 # `std` is not an encoding: it links the standard library and enables the
 # `task` module (ADR-0021 decision 8, amended 2026-09-26) and the propagation
 # hook of the `trace` module (ADR-0021 decision 22).
@@ -31,7 +31,7 @@ podbuf = []
 std = []
 
 # docs.rs builds with every feature on, so the crate docs' links to the
-# `flatbuffers`, `proto3` and `task` modules resolve.
+# `flatbuffers`, `proto3`, `podbuf` and `task` modules resolve.
 [package.metadata.docs.rs]
 all-features = true
 

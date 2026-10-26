@@ -277,12 +277,17 @@ pub fn scalar_count(s: &str) -> usize {
 /// The encoder reserves the head with [`Writer::reserve_head`], stores the head
 /// fields with the `put_*` methods, and appends the tail blocks with
 /// [`Writer::tail`] in the order of the head's fields, depth first. A tail
-/// block starts at its alignment; the gap before it is zero-filled. A store
-/// outside the written bytes is ignored.
+/// block starts at its alignment; the gap before it is zero-filled.
+///
+/// A store outside the written bytes is a defect of the encoder that issued
+/// it. The writer drops the store and remembers the first such offset, and
+/// [`Writer::finish`] then returns [`EncodeError::Layout`] instead of a buffer
+/// that would verify with wrong data. A debug build panics at the store.
 #[derive(Debug)]
 pub struct Writer<'o> {
     out: &'o mut [u8],
     len: usize,
+    defect: Option<usize>,
 }
 
 macro_rules! puts {
@@ -297,13 +302,27 @@ macro_rules! puts {
 impl<'o> Writer<'o> {
     /// A writer over `out`, which should start on an 8-byte boundary.
     pub fn new(out: &'o mut [u8]) -> Writer<'o> {
-        Writer { out, len: 0 }
+        Writer {
+            out,
+            len: 0,
+            defect: None,
+        }
     }
 
     /// Writes the preamble, zeroes a head of `size` bytes, and returns the
-    /// offset of the head, which is [`PREAMBLE_SIZE`]. `size` should be a
-    /// multiple of 8. Calling it again starts the buffer over.
+    /// offset of the head, which is [`PREAMBLE_SIZE`]. Calling it again starts
+    /// the buffer over.
+    ///
+    /// An output that does not start on an 8-byte boundary is
+    /// [`EncodeError::Unaligned`], and a `size` that is not a multiple of 8 is
+    /// [`EncodeError::Layout`].
     pub fn reserve_head(&mut self, size: u32) -> Result<usize, EncodeError> {
+        if !(self.out.as_ptr() as usize).is_multiple_of(BUFFER_ALIGN) {
+            return Err(EncodeError::Unaligned);
+        }
+        if !size.is_multiple_of(8) {
+            return Err(EncodeError::Layout { at: size as usize });
+        }
         let end = PREAMBLE_SIZE.saturating_add(size as usize);
         let available = self.out.len();
         let region = self.out.get_mut(..end).ok_or(EncodeError::Capacity {
@@ -313,6 +332,7 @@ impl<'o> Writer<'o> {
         region.fill(0);
         region[..4].copy_from_slice(&size.to_le_bytes());
         self.len = end;
+        self.defect = None;
         Ok(PREAMBLE_SIZE)
     }
 
@@ -345,8 +365,12 @@ impl<'o> Writer<'o> {
             .checked_add(bytes.len())
             .filter(|end| *end <= self.len)
             .map(|end| at..end);
-        if let Some(dst) = range.and_then(|r| self.out.get_mut(r)) {
-            dst.copy_from_slice(bytes);
+        match range.and_then(|r| self.out.get_mut(r)) {
+            Some(dst) => dst.copy_from_slice(bytes),
+            None => {
+                debug_assert!(false, "podbuf store outside the written bytes at {at}");
+                self.defect.get_or_insert(at);
+            }
         }
     }
 
@@ -386,9 +410,14 @@ impl<'o> Writer<'o> {
 
     /// Ends the buffer and returns the bytes written.
     ///
-    /// A writer whose head was never reserved has no preamble, and finishing
-    /// it is [`EncodeError::Capacity`] with the preamble size as `needed`.
+    /// A writer that dropped a store outside the written bytes returns
+    /// [`EncodeError::Layout`] with the offset of the first one. A writer
+    /// whose head was never reserved has no preamble, and finishing it is
+    /// [`EncodeError::Capacity`] with the preamble size as `needed`.
     pub fn finish(self) -> Result<&'o [u8], EncodeError> {
+        if let Some(at) = self.defect {
+            return Err(EncodeError::Layout { at });
+        }
         if self.len < PREAMBLE_SIZE {
             return Err(EncodeError::Capacity {
                 needed: PREAMBLE_SIZE,
@@ -451,31 +480,51 @@ mod tests {
         let mut w = Writer::new(&mut out.0);
         assert!(w.tail(u64::MAX, usize::MAX).is_err());
         assert!(w.reserve_head(u32::MAX).is_err());
+        assert!(matches!(
+            w.reserve_head(u32::MAX - 7),
+            Err(EncodeError::Capacity { .. })
+        ));
         w.reserve_head(8).unwrap();
         assert!(w.tail(u64::MAX, usize::MAX).is_err());
         assert!(w.tail(u64::MAX, 8).is_err());
         assert!(w.tail(1, usize::MAX).is_err());
-        w.put_desc(usize::MAX, Desc { off: 1, len: 1 });
-        w.put_array_desc(
-            usize::MAX - 2,
-            ArrayDesc {
-                off: 1,
-                len: 1,
-                elem_size: 1,
-            },
-        );
         // The refused calls leave the written length alone.
         assert_eq!(w.finish().unwrap().len(), 16);
     }
 
+    #[cfg(not(debug_assertions))]
     #[test]
-    fn a_store_past_the_written_bytes_is_ignored() {
+    fn a_store_past_the_written_bytes_makes_finish_fail() {
         let mut out = Aligned([0u8; 32]);
         let mut w = Writer::new(&mut out.0);
         w.reserve_head(8).unwrap();
         w.put_u32(14, 0xffff_ffff); // 14..18 passes the written 16 bytes
-        let bytes = w.finish().unwrap();
-        assert!(bytes.iter().skip(8).all(|b| *b == 0));
+        w.put_u8(usize::MAX, 1); // a later defect does not replace the first
+        assert!(matches!(w.finish(), Err(EncodeError::Layout { at: 14 })));
+        assert!(out.0.iter().skip(8).all(|b| *b == 0));
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "outside the written bytes")]
+    fn a_store_past_the_written_bytes_panics_in_a_debug_build() {
+        let mut out = Aligned([0u8; 32]);
+        let mut w = Writer::new(&mut out.0);
+        w.reserve_head(8).unwrap();
+        w.put_u32(14, 0xffff_ffff);
+    }
+
+    #[test]
+    fn reserve_head_refuses_an_unaligned_output_and_a_size_that_is_not_a_multiple_of_8() {
+        let mut out = Aligned([0u8; 64]);
+        let mut w = Writer::new(&mut out.0[1..]);
+        assert!(matches!(w.reserve_head(8), Err(EncodeError::Unaligned)));
+        let mut w = Writer::new(&mut out.0);
+        assert!(matches!(
+            w.reserve_head(12),
+            Err(EncodeError::Layout { at: 12 })
+        ));
+        assert!(w.reserve_head(16).is_ok());
     }
 
     #[test]

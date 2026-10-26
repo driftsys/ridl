@@ -20,8 +20,8 @@ fn the_preamble_check_is_rule_1() {
         Preamble::read(&buf.0[..7]),
         Err(VerifyError::Structure(Malformed::Preamble))
     ));
-    let mut b = Aligned([0u8; 16]);
-    b.0[0] = 12; // head_size 12, not a multiple of 8
+    let mut b = Aligned([0u8; 32]);
+    b.0[0] = 12; // head_size 12 fits (8 + 12 <= 32), so only the multiple-of-8 check refuses
     assert!(matches!(
         Preamble::read(&b.0),
         Err(VerifyError::Structure(Malformed::Preamble))
@@ -81,6 +81,27 @@ fn descriptors_read_both_layouts() {
     assert!(!a.is_zero());
     assert!(Desc::read(&r, 0).is_zero());
     assert!(ArrayDesc::read(&r, 0).is_zero());
+    // Each word alone makes a descriptor non-zero.
+    assert!(!Desc { off: 1, len: 0 }.is_zero());
+    assert!(!Desc { off: 0, len: 1 }.is_zero());
+    assert!(!ArrayDesc {
+        off: 1,
+        len: 0,
+        elem_size: 0
+    }
+    .is_zero());
+    assert!(!ArrayDesc {
+        off: 0,
+        len: 1,
+        elem_size: 0
+    }
+    .is_zero());
+    assert!(!ArrayDesc {
+        off: 0,
+        len: 0,
+        elem_size: 1
+    }
+    .is_zero());
 }
 
 #[test]
@@ -181,7 +202,7 @@ fn the_writer_reports_capacity_and_never_panics() {
         })
     ));
     assert!(matches!(
-        w.reserve_head(u32::MAX),
+        w.reserve_head(u32::MAX - 7),
         Err(EncodeError::Capacity { .. })
     ));
     let mut w = Writer::new(&mut out.0);
@@ -198,7 +219,6 @@ fn the_writer_reports_capacity_and_never_panics() {
         })
     ));
     assert_eq!(w.tail(8, 8).unwrap(), 8);
-    w.put_u64(usize::MAX, 1); // out of range: ignored, no panic
     assert_eq!(w.finish().unwrap().len(), 16);
 }
 

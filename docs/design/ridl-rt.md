@@ -404,7 +404,7 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
     pub fn decode(self) -> T;                                     // calls T::decode
 }
 
-#[non_exhaustive] pub enum EncodeError { Capacity { needed: usize, available: usize } }
+#[non_exhaustive] pub enum EncodeError { Capacity { needed: usize, available: usize }, Contract(Violation), Unaligned, Layout { at: usize } }
 #[non_exhaustive] pub enum VerifyError { Structure(Malformed), Contract(Violation) }
 #[non_exhaustive] pub enum Malformed {
     OutOfBounds, Unaligned, MissingRequired, Utf8, Union, TooDeep, TooManyTables, TooLarge,
@@ -438,6 +438,14 @@ reaches past the buffer; `Stride` is an array or map `elem_size` that its
 element type does not allow; `Terminator` is a string without its closing NUL or
 with a NUL inside; `KeyOrder` is map keys that do not strictly increase. A
 string that is not UTF-8 reuses `Utf8`.
+
+`EncodeError::Unaligned` and `EncodeError::Layout { at }` belong to the podbuf
+writer. `Unaligned` is an output buffer that does not start on an 8-byte
+boundary. `Layout` is a defect of the generated encoder: a head size that is not
+a multiple of 8 (`at` is the size), or a store outside the written bytes (`at`
+is the offset of the first one, reported by `Writer::finish`; a debug build
+panics at the store). Neither is `Capacity`, because a larger buffer does not
+repair them.
 
 `Encoding` is sealed: `FlatBuffers`, `Proto3` and `Podbuf` are the only
 encodings a payload type can implement, and the marker types carry no cargo
@@ -511,13 +519,13 @@ decides no layout: it is handed field numbers, wire types and scalars. It takes
 no dependency and allocates nothing. What a generated proto3 codec does with the
 module is [the proto3 codec record](proto3-codec.md).
 
-**`podbuf` is no longer empty.** It gates the `podbuf` module: the preamble
-check, `Region`, a window that reads 0 past the size the producer wrote, the two
-descriptor layouts, the bounds and alignment check of a descriptor's data
-(`tail_range`, with checked arithmetic), the string checks, `Writer`, which
-fills the caller's slice and zeroes what it reserves, and `Aligned`, an 8-byte
-aligned array wrapper. It decides no layout, takes no dependency, allocates
-nothing, and holds a `compile_error!` for a big-endian target.
+**`podbuf`** gates the `podbuf` module: the preamble check, `Region`, a window
+that reads 0 past the size the producer wrote, the two descriptor layouts, the
+bounds and alignment check of a descriptor's data (`tail_range`, with checked
+arithmetic), the string checks, `Writer`, which fills the caller's slice, zeroes
+what it reserves and reports a store outside the written bytes, and `Aligned`,
+an 8-byte aligned array wrapper. It decides no layout, takes no dependency,
+allocates nothing, and holds a `compile_error!` for a big-endian target.
 
 **Since 2026-09-25 a fourth feature, `std`, exists, off by default.** It is not
 an encoding: it links the standard library and gates the `task` module, whose

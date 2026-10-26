@@ -213,6 +213,23 @@ pub enum EncodeError {
     /// generated type, so a value longer than its declared bound is
     /// representable, and the encoder is where it is refused.
     Contract(Violation),
+    /// The output buffer does not start at the alignment the encoding
+    /// requires.
+    ///
+    /// A podbuf buffer starts on an 8-byte boundary; an encoding written to an
+    /// output that does not is a buffer its own `verify` refuses.
+    Unaligned,
+    /// The encoder asked for a layout the encoding does not allow, or stored a
+    /// value outside the bytes it had reserved: a defect in the generated
+    /// encoder, not in the value or in the output buffer.
+    ///
+    /// `at` is the offset of the first offending store, or the size the
+    /// encoder asked for when that size is not allowed (a podbuf head size
+    /// that is not a multiple of 8).
+    Layout {
+        /// The offset or the size that broke the layout.
+        at: usize,
+    },
 }
 
 /// A check that failed.
