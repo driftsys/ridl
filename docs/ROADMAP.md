@@ -1234,11 +1234,14 @@ shift).
 integers — products with a double-width intermediate, rescales with a declared
 rounding mode, saturating and checked operations, conversions — belongs in a
 library of its own, proposed as `safemath` beside
-[safeio](https://github.com/driftsys/safeio). A library of floating-point
-operations with proved error bounds is the alternative it could also hold. The
-generated code depends only on `ridl-rt`, because its own conversions are a few
-integer operations; once `safemath` exists, a story here makes the generated
-types implement its traits behind a feature.
+[safeio](https://github.com/driftsys/safeio). It would also hold fixed-point
+versions of the costly functions — `sin`, `cos`, `atan2`, `sqrt`, `exp` and
+`log` — built from tables with interpolation, CORDIC or minimax polynomials,
+each with a stated error bound and a bounded cycle count. A library of
+floating-point operations with proved error bounds is the alternative it could
+also hold. The generated code depends only on `ridl-rt`, because its own
+conversions are a few integer operations; once `safemath` exists, a story here
+makes the generated types implement its traits behind a feature.
 
 **Open language question: a step that is not a decimal.** A `step` is a decimal
 literal (typl §2.5). A binary step is exact as a decimal but long (`2⁻¹⁵` is
