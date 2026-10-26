@@ -184,6 +184,11 @@ TypeScript WebSocket transport package (driftsys/ridl#982), was filed as a new
 story, because no story held the transport package that the TypeScript framework
 names.
 
+**Filed 2026-10-26, with exact numerics.** Epic 18 is new, with its own
+milestone; its stories are driftsys/ridl#1087 (E18.1, first filed as E10.12
+before the epic was split out, and retitled) and driftsys/ridl#1089 to
+driftsys/ridl#1091. Its carried defect is driftsys/ridl#1092.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
@@ -1172,6 +1177,100 @@ needed for the first Kotlin demo.
 
 ---
 
+# Epic 18 — exact numerics
+
+**Not scheduled.** Filed 2026-10-26; the step that takes it is not chosen yet.
+
+**Milestone:** a quantized float is an integer in units of its step, in storage
+and on every wire, and a float is an optional view of it. **Value:** a
+contract's numeric semantics are exact (expr-core §7 evaluates exact rationals,
+with no IEEE-754 arithmetic in the contract plane), but the generated Rust type
+stores an `f64` and checks its grid with binary64 arithmetic. On a core with no
+floating-point unit, such as a Cortex-R52 configured without one, every such
+operation compiles to software floating-point calls; on any core, the IEEE
+result can differ from the contract, and integer bounds are much easier to prove
+than float ones (Kani, Creusot, Prusti). **Exit criteria:** a package that
+declares the exact-numerics policy generates Rust that uses no floating-point
+operation on a soft-float target, and its payloads carry integers whose step,
+unit and lower bound a reader without the typl source can recover.
+
+**The model.** typl is unchanged: `float [min..max step s]` already declares an
+exact set of values. Three layers are separated:
+
+- **Maths** — the contract: the range and the `step`.
+- **Storage and computation** — local to each backend: the integer
+  `n = value / step`, counted in units of the step from zero. The scale is
+  inferred from the step and the lower bound: binary (`2⁻ᵏ`) when both are
+  multiples of a power of two, decimal (`10⁻ᵏ`) when either needs a factor of 5.
+  When the lower bound is not a multiple of the step, the coarsest scale of that
+  base that holds both is used. **Open for E18.1's design:** whether storage
+  counts in units of the step (`n = value / step`) or in units of the scale (for
+  a step of 0.3, tenths, with a check that the count is a multiple of 3).
+  SafeNum's types count in units of the scale, and the wire can still carry
+  units of the step where that is narrower.
+- **Wire** — the same integer on every encoding, so two peers that compute
+  differently (a Rust node with no float, a TypeScript UI with a float view)
+  exchange the same bytes. Decimal and binary scales are not different wire
+  forms: the scale is schema metadata, not per-message data.
+
+A float without a `step` has no grid, so it has no exact integer form. It stays
+an `f64` in storage and a native float on the wire, and a package with the
+exact-numerics policy refuses it.
+
+| ID    | Story                                                                                                                                                                                                                                                                                                                                                                                                                                            | Done when                                                                                                                                                                                                           | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E18.1 | The Rust generated type: a quantized float is stored as an integer in units of its step, with the scale inferred from the step and the lower bound; the rounding mode of every conversion is specified; `require` and `ensure` translate to exact integer bounds; the float view (`new(f64)`, `get()`) and floats without a step are behind a `float` Cargo feature, with a `no-float` feature that fails the build when `float` is also enabled | with `float` off, a quantized float's type constructs, validates and evaluates its clauses with no floating-point operation, checked by linking for a soft-float target with no `__aeabi_f*` or `__aeabi_d*` symbol | L    |
+| E18.2 | The encodings: proto3, FlatBuffers and `repr(C)` carry the integer; each emitted schema and the catalog descriptor state the step, the unit and the lower bound of the field; a transport binding whose convention uses an offset (CAN/DBC, SOME/IP per deployment) applies it; ADR-0013 decision 4, ADR-0017 and ADR-0019 are amended                                                                                                           | a payload round-trips on each encoding carrying the integer, and a reader given only the emitted schema recovers the physical value                                                                                 | L    |
+| E18.3 | The exact-numerics package policy in `ridl.toml`: every float that the package uses, declared in it or in a dependency, has a range and a `step`; the policy is recorded in the IR and the catalog, and `ridl diff` reports its removal; the Rust crate of such a package does not enable `float` by default; ADR-0002 is amended                                                                                                                | a policy package that uses a float without a step is rejected, and `ridl diff` reports the removal of the policy                                                                                                    | M    |
+| E18.4 | A book chapter on numeric representation: how the step selects the scale, how to choose a decimal or a binary step, the float view and its features, and the policy                                                                                                                                                                                                                                                                              | the chapter is in the book, and its examples compile                                                                                                                                                                | S    |
+
+**Sequence.** E18.1, then E18.2: the wire carries the integer that E18.1 stores.
+E18.3 needs only the IR and can run beside them. E18.4 follows the three. All
+three code stories change the generated API or the wire, so they belong in a
+release marked breaking. The TypeScript codec follows the wire of E18.2; the
+TypeScript value layer, which stores the integer and always offers the float
+view, is part of the TypeScript work of step 2.
+
+**Choosing a decimal or a binary step** is guidance for authors, not a rule the
+compiler enforces, and E18.4 states it. A grid fixed outside the contract (a
+regulation, a DBC factor) fixes the step. Otherwise the base whose prime factors
+cover the constants of the computation makes its rescales exact: binary for
+gains, filters and Q-format products, decimal for SI conversions. When neither
+decides, binary gives the most precision per bit and the cheapest rescale (a
+shift).
+
+**Companion library, outside this repository.** Application arithmetic on these
+integers — products with a double-width intermediate, rescales with a declared
+rounding mode, saturating and checked operations, conversions — belongs in a
+library of its own: SafeNum, in
+[driftsys/safenum](https://github.com/driftsys/safenum), beside
+[SafeIO](https://github.com/driftsys/safeio). The repository and the crate name
+were created on 2026-10-26; version 0.0.1 is a placeholder with no API. Its MVP
+— the two types, explicit rounding, widening operators, a written semantics and
+Kani proofs — is tracked in driftsys/safenum#9. It would also hold fixed-point
+versions of the costly functions — `sin`, `cos`, `atan2`, `sqrt`, `exp` and
+`log` — built from tables with interpolation, CORDIC or minimax polynomials,
+each with a stated error bound and a bounded cycle count. A library of
+floating-point operations with proved error bounds is the alternative it could
+also hold. The generated code depends only on `ridl-rt`, because its own
+conversions are a few integer operations; once SafeNum publishes an API, a story
+here makes the generated types implement its traits behind a feature.
+
+**Open language question: a step that is not a decimal.** A `step` is a decimal
+literal (typl §2.5). A binary step is exact as a decimal but long (`2⁻¹⁵` is
+`0.000030517578125`), and a step whose denominator has a prime factor other than
+2 and 5 (`1/3`, `1/60`) cannot be written. Such a grid almost always comes from
+an external standard, which a transport binding records. A rational step in typl
+waits for a contract that must own such a grid itself; the slash already starts
+a regex literal (typl §15), so its spelling is part of that question.
+
+**Carried defect.** A float `require` or `ensure` clause is evaluated in IEEE
+binary64 arithmetic, against expr-core §7: `require x <= 0.1` becomes
+`args.0 <= 0.1f64`. E18.1 removes it for a float with a step. Tracked as
+driftsys/ridl#1092.
+
+---
+
 # Parked, and what reopens each
 
 Every parked story keeps its row, its `Done when` and its size under "Parked
@@ -1217,6 +1316,7 @@ reopening is an observation rather than an argument.
 | E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                       |
 | E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                              |
 | none | Kotlin, the first plugin        | after step 2                                                                       |
+| E18  | exact numerics                  | not scheduled — a quantized float is an integer in storage and on the wire         |
 
 Rows are in step order, not numeric order — the numbering is identity, as the
 tracker section above explains. Two rows have no epic: the Rust codegen section
