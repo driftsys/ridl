@@ -127,6 +127,34 @@ fn the_declared_limit_boundary_is_exact() {
     );
 }
 
+/// The podbuf size of `signal()`'s payload is the preamble, the 8-byte head
+/// that holds the descriptor and the 1,000 bytes: 1,016 bytes.
+#[test]
+fn the_declared_limit_reads_the_podbuf_size_when_the_manifest_names_podbuf() {
+    let podbuf = "[backend.rust]\nencodings = [\"podbuf\"]\n";
+    let members = |limits| {
+        run(
+            &[Member {
+                name: "demo",
+                source: &signal(),
+                manifest: limits,
+            }],
+            podbuf,
+        )
+        .diagnostics
+    };
+    let at = members("[limits.interaction]\n\"Iface.sig\" = 1016\n");
+    assert!(with("RIDL-151", &at).is_empty(), "{at:?}");
+    let below = members("[limits.interaction]\n\"Iface.sig\" = 1015\n");
+    let found = with("RIDL-151", &below);
+    assert_eq!(found.len(), 1, "{below:?}");
+    assert!(
+        found[0].message.contains("up to 1016 bytes in podbuf"),
+        "{}",
+        found[0].message
+    );
+}
+
 #[test]
 fn resolution_order_is_name_then_kind_then_default() {
     let source = "package demo\ntype Payload: bytes [0..1000]\n\

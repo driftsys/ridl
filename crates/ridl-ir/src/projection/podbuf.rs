@@ -349,11 +349,80 @@ pub fn max_size(packages: Packages<'_>, decl: &v2::Decl) -> Option<u64> {
         }
         _ => return None,
     };
-    let (tail, _) = head_tail(&head, HEAD_ALIGN)?;
+    head_bound(&head)
+}
+
+/// The largest podbuf buffer any legal value of `tuple` encodes to, as
+/// [`max_size`] bounds a struct: the induced argument or reply struct of an
+/// interaction. `None` for the same causes.
+#[must_use]
+pub fn tuple_max_size(packages: Packages<'_>, tuple: &v2::TupleType) -> Option<u64> {
+    let head = Layout::new(packages)
+        .tuple_head(packages.package, "a tuple", tuple)
+        .ok()?;
+    head_bound(&head)
+}
+
+/// The preamble, the head and the largest tail of `head`, or `None` above
+/// `u32::MAX` or past a descriptor limit.
+fn head_bound(head: &Head) -> Option<u64> {
+    let (tail, _) = head_tail(head, HEAD_ALIGN)?;
     let bound = u64::from(PREAMBLE_SIZE)
         .checked_add(u64::from(head.size))?
         .checked_add(tail)?;
     (bound <= u64::from(u32::MAX)).then_some(bound)
+}
+
+/// Whether an array or a map anywhere in `head` declares more than
+/// [`MAX_COUNT`] elements or an element or entry larger than
+/// [`MAX_ELEM_SIZE`]. This is the one cause, besides a sum above `u32::MAX`,
+/// for which [`max_size`] answers `None` on a head that was laid out, so a
+/// caller can tell the two apart.
+#[must_use]
+pub fn exceeds_descriptor_limits(head: &Head) -> bool {
+    head.fields
+        .iter()
+        .any(|placement| form_exceeds_descriptor_limits(&placement.form))
+}
+
+/// [`exceeds_descriptor_limits`] for one form.
+#[must_use]
+pub fn form_exceeds_descriptor_limits(form: &Form) -> bool {
+    match form {
+        Form::Bool
+        | Form::Int { .. }
+        | Form::Float(_)
+        | Form::Enum { .. }
+        | Form::EnumSet { .. } => false,
+        Form::Inline(head) => exceeds_descriptor_limits(head),
+        Form::InlineArray { element, .. } => form_exceeds_descriptor_limits(element),
+        Form::Descriptor(kind) => match kind {
+            DescriptorKind::Text { .. } | DescriptorKind::Bytes { .. } => false,
+            DescriptorKind::Array {
+                element,
+                elem_size,
+                max,
+                ..
+            } => {
+                *max > MAX_COUNT
+                    || u64::from(*elem_size) > MAX_ELEM_SIZE
+                    || form_exceeds_descriptor_limits(element)
+            }
+            DescriptorKind::Map {
+                entry,
+                elem_size,
+                max,
+                ..
+            } => {
+                *max > MAX_COUNT
+                    || u64::from(*elem_size) > MAX_ELEM_SIZE
+                    || exceeds_descriptor_limits(entry)
+            }
+            DescriptorKind::Arm { arms } => {
+                arms.iter().any(|(_, head)| exceeds_descriptor_limits(head))
+            }
+        },
+    }
 }
 
 // --- the walk --------------------------------------------------------------

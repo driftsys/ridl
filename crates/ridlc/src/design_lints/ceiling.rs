@@ -84,9 +84,30 @@ pub(super) struct Entry {
     pub(super) role: &'static str,
     pub(super) flatbuffers: Side,
     pub(super) proto3: Side,
+    pub(super) podbuf: Side,
 }
 
-fn entry(role: &'static str, sizes: &v1::PayloadSizes) -> Entry {
+/// The size of `shape` under podbuf. The codegen model carries no podbuf
+/// state, so the sizer states it here, from the same shape the lowering
+/// sizes for the other encodings. `None` is a payload with no shape.
+fn podbuf_side(
+    package: &v2::Package,
+    others: &[&v2::Package],
+    shape: Option<&PayloadShape<'_>>,
+) -> Side {
+    let size = shape.map_or(Size::Other, |shape| {
+        let sizes = SizeCtx::new(package, others);
+        from_sizer(size::size_state(
+            package,
+            shape,
+            &sizes,
+            size::Encoding::Podbuf,
+        ))
+    });
+    Side { size, ty: None }
+}
+
+fn entry(role: &'static str, sizes: &v1::PayloadSizes, podbuf: Side) -> Entry {
     let side = |state: Option<&v1::SizeState>| Side {
         size: state.map_or(Size::Other, from_model),
         ty: None,
@@ -95,6 +116,7 @@ fn entry(role: &'static str, sizes: &v1::PayloadSizes) -> Entry {
         role,
         flatbuffers: side(sizes.flatbuffers.as_ref()),
         proto3: side(sizes.proto3.as_ref()),
+        podbuf,
     }
 }
 
@@ -123,6 +145,7 @@ fn fallible_entry(
         role: "reply",
         flatbuffers: worst(size::Encoding::FlatBuffers),
         proto3: worst(size::Encoding::Proto3),
+        podbuf: worst(size::Encoding::Podbuf),
     }
 }
 
@@ -149,6 +172,7 @@ pub(super) fn fixed_entry(
         role: "value",
         flatbuffers: side(size::Encoding::FlatBuffers),
         proto3: side(size::Encoding::Proto3),
+        podbuf: side(size::Encoding::Podbuf),
     })
 }
 
@@ -161,49 +185,98 @@ pub(super) fn payloads(
     others: &[&v2::Package],
 ) -> Vec<Entry> {
     match interaction.shape.as_ref() {
-        Some(v1::interaction::Shape::Signal(signal)) => signal
-            .payload
-            .as_ref()
-            .and_then(|payload| payload.sizes.as_ref())
-            .map(|sizes| entry("payload", sizes))
-            .into_iter()
-            .collect(),
-        Some(v1::interaction::Shape::Event(event)) => event
-            .payload
-            .as_ref()
-            .and_then(|payload| payload.sizes.as_ref())
-            .map(|sizes| entry("payload", sizes))
-            .into_iter()
-            .collect(),
-        Some(v1::interaction::Shape::Command(command)) => command
-            .request_sizes
-            .as_ref()
-            .map(|sizes| entry("request", sizes))
-            .into_iter()
-            .collect(),
-        Some(v1::interaction::Shape::Query(query)) => {
-            let fallible = match decl.kind.as_ref() {
-                Some(v2::decl::Kind::QueryDef(def)) => {
-                    def.return_type
-                        .as_ref()
-                        .and_then(|ret| match ret.kind.as_ref() {
-                            Some(v2::return_type::Kind::Fallible(fallible)) => Some(fallible),
-                            _ => None,
-                        })
+        Some(v1::interaction::Shape::Signal(signal)) => {
+            let shape = match decl.kind.as_ref() {
+                Some(v2::decl::Kind::SignalDef(def)) => Some(PayloadShape::Named(&def.payload)),
+                _ => None,
+            };
+            let podbuf = podbuf_side(package, others, shape.as_ref());
+            signal
+                .payload
+                .as_ref()
+                .and_then(|payload| payload.sizes.as_ref())
+                .map(|sizes| entry("payload", sizes, podbuf))
+                .into_iter()
+                .collect()
+        }
+        Some(v1::interaction::Shape::Event(event)) => {
+            let shape = match decl.kind.as_ref() {
+                Some(v2::decl::Kind::EventDef(def)) => Some(PayloadShape::Named(&def.payload)),
+                _ => None,
+            };
+            let podbuf = podbuf_side(package, others, shape.as_ref());
+            event
+                .payload
+                .as_ref()
+                .and_then(|payload| payload.sizes.as_ref())
+                .map(|sizes| entry("payload", sizes, podbuf))
+                .into_iter()
+                .collect()
+        }
+        Some(v1::interaction::Shape::Command(command)) => {
+            let induced = match decl.kind.as_ref() {
+                Some(v2::decl::Kind::CommandDef(def)) => {
+                    Some((&def.params, codegen::params_as_tuple(&def.params)))
                 }
                 _ => None,
             };
+            let shape = induced
+                .as_ref()
+                .map(|(params, tuple)| codegen::request_shape(params, tuple.as_ref()));
+            let podbuf = podbuf_side(package, others, shape.as_ref());
+            command
+                .request_sizes
+                .as_ref()
+                .map(|sizes| entry("request", sizes, podbuf))
+                .into_iter()
+                .collect()
+        }
+        Some(v1::interaction::Shape::Query(query)) => {
+            let def = match decl.kind.as_ref() {
+                Some(v2::decl::Kind::QueryDef(def)) => Some(def),
+                _ => None,
+            };
+            let fallible = def.and_then(|def| {
+                def.return_type
+                    .as_ref()
+                    .and_then(|ret| match ret.kind.as_ref() {
+                        Some(v2::return_type::Kind::Fallible(fallible)) => Some(fallible),
+                        _ => None,
+                    })
+            });
+            // The shapes the lowering sizes the request and the reply as.
+            let request_tuple = def.and_then(|def| codegen::params_as_tuple(&def.params));
+            let request_shape =
+                def.map(|def| codegen::request_shape(&def.params, request_tuple.as_ref()));
+            let reply_tuple = def.and_then(|def| match codegen::query_reply_type(def) {
+                Some(_) => None,
+                None => codegen::reply_as_tuple(def.return_type.as_ref()),
+            });
+            let reply_shape = match (&reply_tuple, def.and_then(|def| def.return_type.as_ref())) {
+                (Some(tuple), _) => Some(PayloadShape::Tuple(tuple)),
+                (None, Some(ret)) => Some(PayloadShape::Return(ret)),
+                (None, None) => None,
+            };
             let reply = match fallible {
                 Some(fallible) => Some(fallible_entry(package, others, fallible)),
-                None => query
-                    .reply_sizes
-                    .as_ref()
-                    .map(|sizes| entry("reply", sizes)),
+                None => query.reply_sizes.as_ref().map(|sizes| {
+                    entry(
+                        "reply",
+                        sizes,
+                        podbuf_side(package, others, reply_shape.as_ref()),
+                    )
+                }),
             };
             query
                 .request_sizes
                 .as_ref()
-                .map(|sizes| entry("request", sizes))
+                .map(|sizes| {
+                    entry(
+                        "request",
+                        sizes,
+                        podbuf_side(package, others, request_shape.as_ref()),
+                    )
+                })
                 .into_iter()
                 .chain(reply)
                 .collect()
@@ -212,15 +285,17 @@ pub(super) fn payloads(
     }
 }
 
-/// The encodings to check: the names in `encodings` that have a size state,
-/// or FlatBuffers when `encodings` names none.
-pub(super) fn checked_encodings(encodings: &[String]) -> (bool, bool) {
+/// The encodings to check, as (FlatBuffers, proto3, podbuf): the names in
+/// `encodings` that have a size state, or FlatBuffers when `encodings` names
+/// none.
+pub(super) fn checked_encodings(encodings: &[String]) -> (bool, bool, bool) {
     if encodings.is_empty() {
-        return (true, false);
+        return (true, false, false);
     }
     (
         encodings.iter().any(|name| name == "flatbuffers"),
         encodings.iter().any(|name| name == "proto3"),
+        encodings.iter().any(|name| name == "podbuf"),
     )
 }
 
@@ -238,7 +313,7 @@ pub(super) fn describe_above(side: &Side, encoding: &str, limit: u64) -> Option<
 }
 
 pub(crate) fn check(ctx: &Ctx<'_>, std_ir: &v2::Package, encodings: &[String]) -> Vec<Diagnostic> {
-    let (flatbuffers, proto3) = checked_encodings(encodings);
+    let (flatbuffers, proto3, podbuf) = checked_encodings(encodings);
     let severity = lint_by_name("payload-above-ceiling")
         .expect("registered lint")
         .severity;
@@ -280,6 +355,9 @@ pub(crate) fn check(ctx: &Ctx<'_>, std_ir: &v2::Package, encodings: &[String]) -
                     }
                     if proto3 {
                         found.extend(describe(&payload.proto3, "proto3"));
+                    }
+                    if podbuf {
+                        found.extend(describe(&payload.podbuf, "podbuf"));
                     }
                     if found.is_empty() {
                         continue;
@@ -434,18 +512,18 @@ mod tests {
 
     #[test]
     fn no_encoding_named_checks_flatbuffers_alone() {
-        assert_eq!(checked_encodings(&[]), (true, false));
+        assert_eq!(checked_encodings(&[]), (true, false, false));
         let names = |names: &[&str]| {
             names
                 .iter()
                 .map(|name| name.to_string())
                 .collect::<Vec<_>>()
         };
-        assert_eq!(checked_encodings(&names(&["proto3"])), (false, true));
+        assert_eq!(checked_encodings(&names(&["proto3"])), (false, true, false));
         assert_eq!(
             checked_encodings(&names(&["flatbuffers", "proto3"])),
-            (true, true)
+            (true, true, false)
         );
-        assert_eq!(checked_encodings(&names(&["podbuf"])), (false, false));
+        assert_eq!(checked_encodings(&names(&["podbuf"])), (false, false, true));
     }
 }

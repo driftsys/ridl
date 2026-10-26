@@ -1693,7 +1693,7 @@ fn decl_kind(decl: &v2::Decl) -> v1::DeclKind {
 /// declared type, and a stream parameter, have no struct field, so a list
 /// holding either induces nothing (interaction face design, the request-shape
 /// rule).
-fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
+pub fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
     let mut fields = Vec::with_capacity(params.len());
     for param in params {
         let ty = param.r#type.as_ref()?;
@@ -1713,7 +1713,7 @@ fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
 /// fallible `T | E` reply, a named reply, and every other return form give
 /// `None` — a named reply keeps `reply_payload`, and a fallible reply is a
 /// sum this toolchain does not induce.
-fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
+pub fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
     let Some(ret) = ret else {
         return Some(v2::TupleType::default());
     };
@@ -1728,7 +1728,7 @@ fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
 
 /// What a call's request is sized as: the induced argument struct when the
 /// call has one, otherwise the single named parameter.
-fn request_shape<'a>(
+pub fn request_shape<'a>(
     params: &'a [v2::Param],
     induced: Option<&'a v2::TupleType>,
 ) -> PayloadShape<'a> {
@@ -1747,7 +1747,7 @@ fn single_param_type(params: &[v2::Param]) -> Option<&str> {
     named_type(param.r#type.as_ref()?)
 }
 
-fn query_reply_type(query: &v2::QueryDef) -> Option<&str> {
+pub fn query_reply_type(query: &v2::QueryDef) -> Option<&str> {
     match query.return_type.as_ref()?.kind.as_ref()? {
         v2::return_type::Kind::Value(value) => named_type(value),
         v2::return_type::Kind::Fallible(_) => None,

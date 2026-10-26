@@ -2,13 +2,13 @@
 //! count, unbounded with a cause, or absent with a cause. A bound is an upper
 //! bound: the largest legal value of the payload encodes to at most that many
 //! bytes under the projection the wire backend emits (ADR-0017 for proto3,
-//! ADR-0019 for FlatBuffers). Envelope and framing are excluded.
-//! [`Encoding::Podbuf`] has no state until the layout is defined
-//! (driftsys/ridl#317).
+//! ADR-0019 for FlatBuffers, the podbuf layout law for podbuf). Envelope and
+//! framing are excluded.
 //!
 //! Only a payload that is one named type is sized, through the projections —
 //! [`crate::projection::flatbuffers::max_size`] (ADR-0019 decision 8) in
-//! `flatbuffers`, and ADR-0017's projection in `proto3`. This module holds the
+//! `flatbuffers`, ADR-0017's projection in `proto3`, and
+//! [`crate::projection::podbuf::max_size`] in `podbuf`. This module holds the
 //! context both sizers resolve names with, the string capacity, and the leaf
 //! model `proto3` counts over; `flatbuffers` counts nothing of its own, it
 //! reads the projection's bound and the codegen model's cause. A request of
@@ -25,6 +25,7 @@
 //! "The size states").
 
 pub(crate) mod flatbuffers;
+pub(crate) mod podbuf;
 pub(crate) mod proto3;
 
 use crate::projection::flatbuffers::Packages;
@@ -185,9 +186,7 @@ fn no_bound_or_undefined(leaf: Option<Leaf<'_>>) -> AbsentCause {
     }
 }
 
-/// A core encoding a payload's size is stated for. No encoding is defined
-/// for [`Encoding::Podbuf`]: it has no layout until driftsys/ridl#317 lands,
-/// and [`size_state`] answers [`AbsentCause::EncodingUndefined`] for it.
+/// A core encoding a payload's size is stated for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Encoding {
     Proto3,
@@ -211,10 +210,9 @@ pub enum SizeState {
 /// Why a payload has no size state under an encoding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AbsentCause {
-    /// No codec defines the encoding of the shape. Every case: the
-    /// `podbuf` encoding, whatever the shape; a request of zero or of
-    /// several parameters; a parameter, a reply or a fixed payload that
-    /// declares no type; a fallible `T | E` reply; a return type that
+    /// No codec defines the encoding of the shape. Every case: a request of
+    /// zero or of several parameters; a parameter, a reply or a fixed payload
+    /// that declares no type; a fallible `T | E` reply; a return type that
     /// declares no reply type; a payload, a parameter or a reply that is a
     /// tuple, an array, a map or a stream; and a payload, a parameter or a
     /// reply that is a bare scalar some proto3 leaf bounds, which has a size
@@ -263,8 +261,7 @@ pub enum AbsentCause {
 ///
 /// A payload that is not one named type is absent under every encoding, with
 /// the cause `payload_name` gives it: this module states a size for a named
-/// type alone. `Podbuf` is absent with [`AbsentCause::EncodingUndefined`]
-/// whatever the shape. The `proto3` and `flatbuffers` submodules hold the
+/// type alone. The `proto3`, `flatbuffers` and `podbuf` submodules hold the
 /// per-encoding rules, each in its own `state`.
 pub fn size_state<'a>(
     home: &'a Package,
@@ -276,14 +273,14 @@ pub fn size_state<'a>(
         return match encoding {
             Encoding::Proto3 => proto3::tuple_state(home, tuple, ctx),
             Encoding::FlatBuffers => flatbuffers::tuple_state(home, tuple, ctx),
-            Encoding::Podbuf => SizeState::Absent(AbsentCause::EncodingUndefined),
+            Encoding::Podbuf => podbuf::tuple_state(home, tuple, ctx),
         };
     }
     type Sizer<'a> = fn(&'a Package, &str, &Ctx<'a>) -> SizeState;
     let sizer: Sizer<'a> = match encoding {
         Encoding::Proto3 => proto3::state as Sizer<'a>,
         Encoding::FlatBuffers => flatbuffers::state as Sizer<'a>,
-        Encoding::Podbuf => return SizeState::Absent(AbsentCause::EncodingUndefined),
+        Encoding::Podbuf => podbuf::state as Sizer<'a>,
     };
     match payload_name(shape) {
         Ok(name) => sizer(home, name, ctx),
@@ -1311,10 +1308,10 @@ mod tests {
     }
 
     #[test]
-    fn podbuf_is_absent_with_encoding_undefined() {
-        // `Point` resolves, so a `Podbuf` arm routed to a sizer would reach
-        // that sizer, and both sizers answer a bound for it; such a routing
-        // fails this test.
+    fn podbuf_is_routed_to_its_own_sizer() {
+        // `Point` resolves, so a `Podbuf` arm routed to another sizer would
+        // answer that sizer's bound for it (12 under proto3), not the
+        // preamble and the 8-byte head, 16 bytes.
         let package = package(
             "p",
             vec![decl(
@@ -1333,7 +1330,7 @@ mod tests {
                 &ctx,
                 Encoding::Podbuf
             ),
-            SizeState::Absent(AbsentCause::EncodingUndefined)
+            SizeState::Bounded(16)
         );
     }
 

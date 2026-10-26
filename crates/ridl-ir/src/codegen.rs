@@ -76,7 +76,9 @@ pub use contract::{
     text_file,
 };
 pub use deployment::{encoding_of, lower_deployment};
-pub use lower::{lower, lower_with};
+pub use lower::{
+    lower, lower_with, params_as_tuple, query_reply_type, reply_as_tuple, request_shape,
+};
 pub use unbounded::attribute as fb_unbounded;
 
 /// The transport bindings the toolchain knows, as the deployment section

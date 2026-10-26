@@ -836,6 +836,33 @@ diag_codes! {
         RIDL_152 = "RIDL-152", Error,
             "a `[limits]` entry names no interaction of its unit";
 
+        /// A struct, tuple or union whose largest podbuf encoding, computed
+        /// from its declared bounds, is above `u32::MAX` bytes, because a
+        /// `u32` offset cannot address all of it. Error; as an error code it
+        /// has no name and no level. Emitted by `ridlc` when a
+        /// `[backend.<name>]` table enables `podbuf`. The message names the
+        /// type.
+        RIDL_153 = "RIDL-153", Error,
+            "type too large for podbuf";
+
+        /// A field whose array or map declares more than 65,535 elements, or
+        /// whose element or entry is larger than 65,535 bytes, because the
+        /// podbuf descriptor records the count and the element size as
+        /// `u16`. Error; as an error code it has no name and no level.
+        /// Emitted by `ridlc` when a `[backend.<name>]` table enables
+        /// `podbuf`, on the field. The message names the type and the field.
+        RIDL_154 = "RIDL-154", Error,
+            "array or map exceeds the podbuf descriptor limits";
+
+        /// A non-optional field marked `@deprecated` whose init value is
+        /// neither declared nor derivable and whose type excludes 0, so the
+        /// podbuf encoder has no valid value to write for it. Error; as an
+        /// error code it has no name and no level. Emitted by `ridlc` when a
+        /// `[backend.<name>]` table enables `podbuf`, on the field. The
+        /// message names the type and the field.
+        RIDL_155 = "RIDL-155", Error,
+            "deprecated field has no valid podbuf value";
+
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker.
         RIDL_201 = "RIDL-201", Error,

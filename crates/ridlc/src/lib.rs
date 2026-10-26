@@ -2418,10 +2418,27 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
     // encodings are those of every `[backend.<name>]` table; none named means
     // FlatBuffers is checked. A workspace with no interface has nothing to
     // report, so `ridl.std` is not checked for it either.
+    let encodings = enabled_encodings(&backends);
+    // RIDL-153 to RIDL-155 read types, not interactions, so they run for a
+    // workspace with no interface, whenever a backend table enables podbuf.
+    if encodings.iter().any(|name| name == "podbuf") {
+        let blocked =
+            payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
+        let std_ir = check_package(db, workspace, std, std).ir;
+        diagnostics.extend(design_lints::check_podbuf(
+            db,
+            &packages,
+            &checked,
+            &resolutions,
+            &blocked,
+            &std_ir,
+            &encodings,
+            &mut sources,
+        ));
+    }
     if checked.iter().any(|pkg| pkg.ir.shapes().next().is_some()) {
         let blocked =
             payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
-        let encodings = enabled_encodings(&backends);
         let std_ir = check_package(db, workspace, std, std).ir;
         diagnostics.extend(design_lints::check_payload_ceiling(
             db,

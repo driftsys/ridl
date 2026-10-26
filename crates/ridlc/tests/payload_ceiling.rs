@@ -169,6 +169,47 @@ fn the_ceiling_boundary_is_exact() {
     );
 }
 
+/// The podbuf size of a payload that is a named `bytes` type is the preamble,
+/// the 8-byte head that holds the descriptor, and the bytes: 16 bytes more.
+/// At 16,240 bytes that is the ceiling itself, which passes; one byte more is
+/// above it, and the proto3 size of the same payload (16,244 bytes) is not.
+#[test]
+fn ridl_150_reads_the_podbuf_size_when_the_manifest_names_podbuf() {
+    let podbuf = "[backend.rust]\nencodings = [\"podbuf\"]\n";
+    let at = carried("type Payload: bytes [0..16240]\n");
+    let diagnostics = check(&at, podbuf);
+    assert!(ridl_150(&diagnostics).is_empty(), "{diagnostics:?}");
+    let above = carried("type Payload: bytes [0..16241]\n");
+    let diagnostics = check(&above, podbuf);
+    let found = ridl_150(&diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert!(
+        found[0].message.contains("up to 16257 bytes in podbuf"),
+        "{}",
+        found[0].message
+    );
+    // The same payload is within the ceiling when only proto3 is enabled.
+    let proto3 = "[backend.rust]\nencodings = [\"proto3\"]\n";
+    let diagnostics = check(&above, proto3);
+    assert!(ridl_150(&diagnostics).is_empty(), "{diagnostics:?}");
+}
+
+/// A command with two parameters is sized as the struct of its fields, which
+/// only the podbuf sizer states a size for among the three encodings.
+#[test]
+fn a_podbuf_request_of_several_parameters_is_sized_as_a_struct() {
+    let source = "package demo\ntype Blob: bytes [0..9000]\n\
+                  interface I {\n  command c(a: Blob, b: Blob) @[10ms..100ms]\n}\n";
+    let diagnostics = check(source, "[backend.rust]\nencodings = [\"podbuf\"]\n");
+    let found = ridl_150(&diagnostics);
+    assert_eq!(found.len(), 1, "{diagnostics:?}");
+    assert!(
+        found[0].message.contains("in podbuf") && found[0].message.contains("request"),
+        "{}",
+        found[0].message
+    );
+}
+
 /// A payload that holds a `ridl.std` type is sized over the standard package
 /// too, so it has a finite bound and draws nothing.
 #[test]
