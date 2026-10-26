@@ -736,17 +736,56 @@ Design and plan of record:
 [`typl-value-objects-design.md`](wip/typl-value-objects-design.md) and
 [`typl-value-objects-plan.md`](wip/typl-value-objects-plan.md).
 
-| ID     | Story                                                                             | Done when                                                         | Size |
-| ------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |
-| E10.1  | The shared vacuous-constraint classifier — one definition of "constrains nothing" | both backends agree on which types need a fallible constructor    | M    |
-| E10.2  | The Rust `ConstraintError` vocabulary                                             | one error type carries every constraint failure                   | S    |
-| E10.3  | Constrained named scalars — private inner, `new`, `TryFrom`                       | an out-of-range value is unconstructible                          | L    |
-| E10.4  | Vacuous named scalars — infallible construction                                   | a type that constrains nothing takes no fallible path             | M    |
-| E10.5  | `TryFrom<i64>` for enum and enum set                                              | an undefined discriminant is rejected                             | M    |
-| E10.6  | Sound derives — no derive that could reconstruct an invalid value                 | no path bypasses the validating seam                              | M    |
-| E10.7  | `--emit rust` writes a compiling crate                                            | the emitted crate builds standalone                               | M    |
-| E10.8  | Pattern validation behind a `validate-pattern` feature                            | regex constraints check without forcing the dependency            | M    |
-| E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification               | the decision is recorded and a constraint change classifies right | S    |
+| ID     | Story                                                                                                                                                                    | Done when                                                                                                                                                          | Size |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
+| E10.1  | The shared vacuous-constraint classifier — one definition of "constrains nothing"                                                                                        | both backends agree on which types need a fallible constructor                                                                                                     | M    |
+| E10.2  | The Rust `ConstraintError` vocabulary                                                                                                                                    | one error type carries every constraint failure                                                                                                                    | S    |
+| E10.3  | Constrained named scalars — private inner, `new`, `TryFrom`                                                                                                              | an out-of-range value is unconstructible                                                                                                                           | L    |
+| E10.4  | Vacuous named scalars — infallible construction                                                                                                                          | a type that constrains nothing takes no fallible path                                                                                                              | M    |
+| E10.5  | `TryFrom<i64>` for enum and enum set                                                                                                                                     | an undefined discriminant is rejected                                                                                                                              | M    |
+| E10.6  | Sound derives — no derive that could reconstruct an invalid value                                                                                                        | no path bypasses the validating seam                                                                                                                               | M    |
+| E10.7  | `--emit rust` writes a compiling crate                                                                                                                                   | the emitted crate builds standalone                                                                                                                                | M    |
+| E10.8  | Pattern validation behind a `validate-pattern` feature                                                                                                                   | regex constraints check without forcing the dependency                                                                                                             | M    |
+| E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification                                                                                                      | the decision is recorded and a constraint change classifies right                                                                                                  | S    |
+| E10.12 | A quantized float is carried as its raw grid index — the generated type stores `raw`, every encoding carries `raw`, and the API offers the raw value and the float value | with the float view off, a quantized float's type constructs, validates and round-trips a payload with no floating-point operation, checked on a soft-float target | L    |
+
+**E10.12, filed 2026-10-26.** A quantized float is a float declared with a range
+and a `step` (typl §4.3). Its valid values are `origin + n·step`, and `raw` is
+the integer `n = (value − origin) / step`, the value that a CAN/DBC signal and
+an AUTOSAR `LINEAR` CompuMethod carry. Today the generated Rust type stores an
+`f64` and checks the grid with binary64 arithmetic, which on a core with no
+floating-point unit (a Cortex-R52 configured without one) compiles to software
+floating-point calls. The story changes three things:
+
+- The generated type stores `raw`, in the unsigned or signed integer of the
+  width that the value count gives (typl §4.2), and checks validity on that
+  integer only.
+- Every payload encoding carries `raw`. This reverses ADR-0013 decision 4, which
+  keeps the native `float`/`double` on proto3 and FlatBuffers, so the emitted
+  `.proto` and `.fbs` schemas change, and the TypeScript codec of step 2 follows
+  the same wire.
+- The API offers `raw` construction and access always, and the float value
+  (`raw × step + origin`) behind a Cargo feature, so a soft-float target turns
+  the float view off.
+
+It is a breaking change to the generated API and to the wire, so it belongs in a
+release marked breaking. Its design records the amendments of typl §4.3 (the
+language layer is no longer always `float64` in memory, and proto3 and
+FlatBuffers no longer keep a native float), of ADR-0013 decision 4, and of the
+projection rules of ADR-0017 and ADR-0019, and verifies the `ridl-diff`
+classification of a change to `step` or to the lower bound, which changes what a
+`raw` value means. A float without a `step` keeps its `f64` representation.
+Related: typl §17.12, integer-backed unit types, deferred to v0.2, which covers
+the values whose unit makes them integers.
+
+**One language question is open for E10.12's design: a step that is not a
+decimal.** A `step` is a decimal literal (typl §2.5). A binary step is exact as
+a decimal but long (`2⁻¹⁵` is `0.000030517578125`), and a step whose denominator
+has a prime factor other than 2 and 5 (`1/3`, `1/60`) cannot be written at all.
+AUTOSAR's `LINEAR` CompuMethod has a denominator (`d0`) for this case. With
+`raw` stored, the grid check is exact for any step, so only the literal and the
+float view depend on the step's form. The design decides whether `step` gains a
+rational or a power-of-two form, and records the contract that needs it.
 
 **Validation amendments (2026-10-02).** driftsys/ridl#421 settles NaN's
 membership in a numeric domain (typl §5.5). driftsys/ridl#469 makes step a
