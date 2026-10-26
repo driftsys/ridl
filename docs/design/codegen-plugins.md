@@ -632,6 +632,44 @@ in the same file builds a workspace in a temporary directory that declares
 `depth`, `slots` and `budget` and checks that each declared value reaches the
 request with the declared source.
 
+### The podbuf projection
+
+`Model.podbuf` (`PodbufProjection`) carries the layout that
+`ridl_ir::projection::podbuf` computes, so that a plugin never computes the
+layout law again (ADR-0020 decisions 8 and 9). It holds one flat list, `heads`,
+and every reference from one head to another is an index into that list.
+
+- **Order.** The heads of the declarations come first, in `Model.declarations`
+  order: a struct and a union each have one head, any other declaration has
+  none. The heads of the named induced tuples follow, in `Model.tuples` order.
+  The heads reached from those come last, in the order a depth-first walk of the
+  fields reaches them: the entry head of a map, and the head of each arm of a
+  union.
+- **Source.** `PodbufHead.source` is the declaration index, the tuple index, a
+  `MapEntry` whose `path` is the declaration name followed by the names of the
+  fields that lead to the map, or an `ArmHead` that names the union declaration
+  and the arm ordinal.
+- **Size and alignment.** `size` is a multiple of 8 and `align` is 8 for every
+  head. A head with no field has size 0.
+- **Fields.** Each `PodbufField` has the `offset`, `size` and `align` the law
+  gave, a `source` (a struct field with its name and ordinal, a flags field, a
+  union tag, a union head's arm descriptor or the one value of a scalar arm, a
+  tuple position, a map key or a map value), the `form`, and, for an optional
+  field, the `optional` flag bit. `pads` lists the unused byte runs.
+- **Forms.** A struct, a tuple or a union written as a field is laid out inline
+  as a copy of its own head; the form names the head that has that layout
+  (`inline_head`), and when two declarations share one layout it names the first
+  of them. A descriptor form says what the tail holds: a bounded string or bytes
+  (`min`, `max`), an array (the element form, the stride `elem_size`, `min`,
+  `max`), a map (the entry head, `elem_size`, `min`, `max`) or the arms of a
+  union (the ordinal and head of each arm).
+- **Absence.** The field is absent when a head cannot be laid out: the IR is
+  malformed, or a head is larger than a `u32` offset can address. The podbuf
+  checks report the cause (RIDL-153, RIDL-154).
+- **Sizes.** `PayloadSizes.podbuf` and `Reservation.podbuf` are filled by the
+  same sizer as the other two encodings. A request of several parameters is
+  sized as an induced struct under proto3, FlatBuffers and podbuf alike.
+
 ## 8. What a plugin author reads
 
 The book chapter [Writing a codegen plugin](../book/codegen-plugins.md) is the

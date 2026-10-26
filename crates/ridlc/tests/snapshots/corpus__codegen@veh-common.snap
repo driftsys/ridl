@@ -1,5 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
 ---
@@ -2749,5 +2750,616 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       }
     }
   ],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "limit",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "actual",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          }
+        ],
+        "pads": [],
+        "declaration": 13
+      },
+      {
+        "size": 24,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "name",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "128"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "speed",
+                "ordinal": 2
+              }
+            },
+            "offset": 8,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "flags": 0
+            },
+            "offset": 12,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "gears",
+                "ordinal": 4
+              }
+            },
+            "offset": 13,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "override",
+                "ordinal": 3
+              }
+            },
+            "offset": 16,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            },
+            "optional": {
+              "flags": 0,
+              "bit": 0
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 14,
+            "size": 2
+          },
+          {
+            "offset": 20,
+            "size": 4
+          }
+        ],
+        "declaration": 14
+      },
+      {
+        "size": 56,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "range",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "inlineHead": 7
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "readings",
+                "ordinal": 2
+              }
+            },
+            "offset": 8,
+            "size": 32,
+            "align": 4,
+            "form": {
+              "inlineArray": {
+                "element": {
+                  "float": "FLOAT_WIDTH_F32"
+                },
+                "count": 8
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "labels",
+                "ordinal": 3
+              }
+            },
+            "offset": 40,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "array": {
+                  "element": {
+                    "descriptor": {
+                      "text": {
+                        "min": "1",
+                        "max": "64"
+                      }
+                    }
+                  },
+                  "elemSize": 8,
+                  "min": "1",
+                  "max": "16"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "meta",
+                "ordinal": 4
+              }
+            },
+            "offset": 48,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "map": {
+                  "entryHead": 8,
+                  "elemSize": 16,
+                  "min": "0",
+                  "max": "32"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [],
+        "declaration": 15
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "tag": true
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "arm": true
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "arms": {
+                  "arms": [
+                    {
+                      "ordinal": 1,
+                      "head": 9
+                    },
+                    {
+                      "ordinal": 2,
+                      "head": 10
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 3
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 16
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "value",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "timestamp",
+                "ordinal": 2
+              }
+            },
+            "offset": 8,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U64",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 4,
+            "size": 4
+          }
+        ],
+        "declaration": 17
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "code",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "message",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "256"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 2
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 18
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "ticks",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "frame",
+                "ordinal": 2
+              }
+            },
+            "offset": 2,
+            "size": 8,
+            "align": 1,
+            "form": {
+              "inlineArray": {
+                "element": {
+                  "int": {
+                    "width": "INT_WIDTH_U8",
+                    "signed": false
+                  }
+                },
+                "count": 8
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 10,
+            "size": 6
+          }
+        ],
+        "declaration": 19
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "position": 1
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "position": 2
+            },
+            "offset": 4,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          }
+        ],
+        "pads": [],
+        "tuple": 0
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "key": true
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "64"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "value": true
+            },
+            "offset": 8,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "128"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [],
+        "mapEntry": {
+          "path": [
+            "SensorBounds",
+            "meta"
+          ]
+        }
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "value",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "timestamp",
+                "ordinal": 2
+              }
+            },
+            "offset": 8,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U64",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 4,
+            "size": 4
+          }
+        ],
+        "arm": {
+          "declaration": 16,
+          "arm": 1
+        }
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "code",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "message",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "256"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 2
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "arm": {
+          "declaration": 16,
+          "arm": 2
+        }
+      }
+    ]
+  }
 }

@@ -65,6 +65,7 @@ mod facts;
 mod flatbuffers;
 mod lower;
 mod names;
+mod podbuf;
 mod resolve;
 mod unbounded;
 pub mod wire;

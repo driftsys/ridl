@@ -56,6 +56,10 @@ message Model {
   // fact rather than raised as an error: each printer refuses it with its own
   // message (design note D-1).
   repeated TupleCollision tuple_collisions = 10;
+  // The podbuf layout of every head the package reaches. Absent when a head
+  // cannot be laid out (a type larger than a `u32` can offset, or malformed
+  // IR); the podbuf check reports the cause.
+  PodbufProjection podbuf = 11;
 }
 
 // The packages the lowering was handed. The output depends on it, so it is
@@ -586,6 +590,7 @@ message Payload {
 message PayloadSizes {
   SizeState proto3 = 1;
   SizeState flatbuffers = 2;
+  SizeState podbuf = 3;
 }
 
 // One payload's state under one encoding.
@@ -671,6 +676,7 @@ message ReservationState {
 message Reservation {
   ReservationState proto3 = 1;
   ReservationState flatbuffers = 2;
+  ReservationState podbuf = 3;
 }
 
 message SignalShape {
@@ -1235,4 +1241,191 @@ enum FbScalarType {
   FB_SCALAR_TYPE_ULONG = 9;
   FB_SCALAR_TYPE_FLOAT = 10;
   FB_SCALAR_TYPE_DOUBLE = 11;
+}
+
+// ---------------------------------------------------------------------
+// The podbuf projection
+// ---------------------------------------------------------------------
+
+// The layout the podbuf encoding gives every head of the package, computed by
+// `ridl_ir::projection::podbuf`, so that a plugin never computes the layout
+// law again. A head is a struct's, a union's or a tuple's, a map entry's, or
+// the head of a union arm. Heads are ordered: the declarations in
+// `Model.declarations` order (a struct or a union has one head, any other
+// declaration none), the induced tuples that are named, in `Model.tuples`
+// order, then the nested heads in the order the walk reaches them. Every
+// `inline_head`, `entry_head` and arm `head` is an index into `heads`.
+message PodbufProjection {
+  repeated PodbufHead heads = 1;
+}
+
+message PodbufHead {
+  // What the head belongs to.
+  oneof source {
+    // Index into `Model.declarations`.
+    uint32 declaration = 10;
+    // Index into `Model.tuples`.
+    uint32 tuple = 11;
+    // The entry head of a map. `path` holds the declaration name, then the
+    // names of the fields that lead to the map.
+    MapEntry map_entry = 12;
+    // The head of one arm of a union.
+    ArmHead arm = 13;
+  }
+  // The head size in bytes, a multiple of `align`; 0 for a head with no field.
+  uint32 size = 2;
+  // The head alignment in bytes.
+  uint32 align = 3;
+  // Every placement, the flags fields included, sorted by offset.
+  repeated PodbufField fields = 4;
+  // The unused byte runs, sorted by offset.
+  repeated PodbufPad pads = 5;
+}
+
+// One arm of a union: the declaration and the arm ordinal.
+message ArmHead {
+  // Index into `Model.declarations`.
+  uint32 declaration = 1;
+  // `Arm.ordinal`.
+  uint32 arm = 2;
+}
+
+// One field of a head and where the layout law put it.
+message PodbufField {
+  PodbufSource source = 1;
+  uint32 offset = 2;
+  uint32 size = 3;
+  uint32 align = 4;
+  PodbufForm form = 5;
+  // The flag bit that records the presence of an optional field.
+  optional PodbufFlagBit optional = 6;
+}
+
+// What a field holds.
+message PodbufSource {
+  oneof kind {
+    // A struct field.
+    PodbufNamedField field = 10;
+    // The flags field with this index: a `u8` whose bits record the presence
+    // of eight optional fields.
+    uint32 flags = 11;
+    // A union's tag.
+    bool tag = 12;
+    // A union head's descriptor to the active arm, or the one value field of
+    // the head of an arm whose type is a scalar, an enum or an enum set.
+    bool arm = 13;
+    // A tuple field, by its 1-based position.
+    uint32 position = 14;
+    // A map entry's key.
+    bool key = 15;
+    // A map entry's value.
+    bool value = 16;
+  }
+}
+
+message PodbufNamedField {
+  // The typl name of the field.
+  string name = 1;
+  // The 1-based ordinal.
+  uint32 ordinal = 2;
+}
+
+message PodbufFlagBit {
+  // The index of the flags field.
+  uint32 flags = 1;
+  // The bit, 0 the least significant.
+  uint32 bit = 2;
+}
+
+message PodbufPad {
+  uint32 offset = 1;
+  uint32 size = 2;
+}
+
+// The bytes a field takes in a head.
+message PodbufForm {
+  oneof kind {
+    // A `u8`, 0 or 1.
+    bool boolean = 10;
+    PodbufInt int = 11;
+    FloatWidth float = 12;
+    PodbufEnum enum = 13;
+    PodbufEnumSet enum_set = 14;
+    // A nested struct, tuple or union, inline: an index into `heads`.
+    uint32 inline_head = 15;
+    // An exact-length array or exact-length `bytes`, inline with no length.
+    PodbufInlineArray inline_array = 16;
+    // A descriptor to data in the tail.
+    PodbufDescriptor descriptor = 17;
+  }
+}
+
+message PodbufInt {
+  IntWidth width = 1;
+  bool signed = 2;
+}
+
+message PodbufEnum {
+  IntWidth width = 1;
+  bool signed = 2;
+  // The name the field wrote.
+  string reference = 3;
+}
+
+message PodbufEnumSet {
+  IntWidth width = 1;
+  string reference = 2;
+}
+
+message PodbufInlineArray {
+  PodbufForm element = 1;
+  uint32 count = 2;
+}
+
+// What a descriptor points at.
+message PodbufDescriptor {
+  oneof kind {
+    // A bounded `string`: scalar values; the tail holds the UTF-8 bytes and
+    // one NUL that the length does not count.
+    PodbufBound text = 10;
+    // Bounded `bytes` whose bounds differ.
+    PodbufBound bytes = 11;
+    PodbufArray array = 12;
+    PodbufMap map = 13;
+    PodbufArms arms = 14;
+  }
+}
+
+message PodbufBound {
+  uint64 min = 1;
+  uint64 max = 2;
+}
+
+message PodbufArray {
+  PodbufForm element = 1;
+  // The stride of the array, in bytes.
+  uint32 elem_size = 2;
+  uint64 min = 3;
+  uint64 max = 4;
+}
+
+message PodbufMap {
+  // The head of one entry, `{ key, value }`: an index into `heads`.
+  uint32 entry_head = 1;
+  // The stride of the map, in bytes.
+  uint32 elem_size = 2;
+  uint64 min = 3;
+  uint64 max = 4;
+}
+
+// The arms of a union, in declaration order.
+message PodbufArms {
+  repeated PodbufArm arms = 1;
+}
+
+message PodbufArm {
+  // `Arm.ordinal`.
+  uint32 ordinal = 1;
+  // The head of the arm: an index into `heads`.
+  uint32 head = 2;
 }

@@ -2319,6 +2319,9 @@ fn a_reservation_sums_in_u64_above_the_u32_range() {
             flatbuffers: Some(v1::SizeState {
                 state: Some(v1::size_state::State::Bounded(size)),
             }),
+            podbuf: Some(v1::SizeState {
+                state: Some(v1::size_state::State::Bounded(size)),
+            }),
         })
     };
     let payloads = [
@@ -4420,4 +4423,123 @@ fn a_declaration_with_an_optional_array_has_no_proto3_bound() {
             })),
         })
     );
+}
+
+/// The podbuf state of a payload's sizes.
+fn podbuf_state(sizes: &Option<v1::PayloadSizes>) -> &v1::size_state::State {
+    sizes
+        .as_ref()
+        .and_then(|sizes| sizes.podbuf.as_ref())
+        .and_then(|state| state.state.as_ref())
+        .expect("a podbuf state is written")
+}
+
+/// The podbuf reservation of a member.
+fn podbuf_reserved(reservation: &Option<v1::Reservation>) -> &v1::reservation_state::State {
+    reservation
+        .as_ref()
+        .and_then(|reservation| reservation.podbuf.as_ref())
+        .and_then(|state| state.state.as_ref())
+        .expect("a podbuf reservation is written")
+}
+
+#[test]
+fn a_payload_carries_the_podbuf_size_state() {
+    // `Pair` holds two `SpeedKph` values: an 8-byte preamble and an 8-byte
+    // head.
+    let model = lower(&sized_package(), &[]);
+    assert_eq!(
+        podbuf_state(&signal_payload(&model, 0).sizes),
+        &v1::size_state::State::Bounded(16)
+    );
+}
+
+/// A request of several parameters is sized as an induced struct under every
+/// encoding, so the podbuf state is a number like the other two. The catalog
+/// descriptor writes no podbuf row for such a request; the model does not
+/// follow it.
+#[test]
+fn a_two_parameter_request_is_sized_under_every_encoding() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Command(command) = call_shape(&model, 0) else {
+        panic!("a command");
+    };
+    assert_eq!(
+        state(&command.request_sizes, true),
+        &v1::size_state::State::Bounded(28)
+    );
+    assert_eq!(
+        state(&command.request_sizes, false),
+        &v1::size_state::State::Bounded(147)
+    );
+    assert_eq!(
+        podbuf_state(&command.request_sizes),
+        &v1::size_state::State::Bounded(24)
+    );
+}
+
+#[test]
+fn a_zero_parameter_request_and_an_undefined_reply_have_a_podbuf_state() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Query(none) = call_shape(&model, 2) else {
+        panic!("a query");
+    };
+    assert_eq!(
+        podbuf_state(&none.request_sizes),
+        &v1::size_state::State::Bounded(8)
+    );
+    let v1::interaction::Shape::Query(risky) = call_shape(&model, 3) else {
+        panic!("a query");
+    };
+    assert_eq!(podbuf_state(&risky.reply_sizes), &undefined());
+}
+
+#[test]
+fn the_podbuf_reservations_follow_the_podbuf_payload_sizes() {
+    let model = lower(&budget_package(), &[]);
+    let tally = interface_named(&model, "Tally");
+    let ask = live_member(tally, "ask");
+    let set = live_member(tally, "set");
+    let table = live_member(tally, "table");
+    assert_eq!(podbuf_reserved(&ask.reservation), &bytes(32));
+    assert_eq!(podbuf_reserved(&set.reservation), &bytes(16));
+    assert_eq!(podbuf_reserved(&table.reservation), &bytes(0));
+    // level (16) + ask (32) + set (16) + table (0)
+    assert_eq!(podbuf_reserved(&tally.table_budget), &bytes(64));
+}
+
+#[test]
+fn the_podbuf_states_of_a_reservation_sum_in_u64() {
+    let bounded = |size: u32| {
+        let state = Some(v1::SizeState {
+            state: Some(v1::size_state::State::Bounded(size)),
+        });
+        Some(v1::PayloadSizes {
+            proto3: state.clone(),
+            flatbuffers: state.clone(),
+            podbuf: state,
+        })
+    };
+    let payloads = [
+        ("request", "Huge".to_string(), bounded(u32::MAX)),
+        ("reply", "Huge".to_string(), bounded(u32::MAX)),
+    ];
+    let reservation = super::lower::reserve("ask", Some(&payloads));
+    assert_eq!(
+        podbuf_reserved(&Some(reservation)),
+        &bytes(u64::from(u32::MAX) * 2)
+    );
+}
+
+/// `Label` has no length bound, so `Tagged` has no podbuf head. The
+/// projection is then left out of the model, and the sizes, which are
+/// computed on their own, are still written.
+#[test]
+fn a_head_that_cannot_be_laid_out_leaves_the_projection_out() {
+    let model = lower(&sized_package(), &[]);
+    assert_eq!(model.podbuf, None);
+    assert!(matches!(
+        podbuf_state(&signal_payload(&model, 0).sizes),
+        v1::size_state::State::Bounded(_)
+    ));
 }

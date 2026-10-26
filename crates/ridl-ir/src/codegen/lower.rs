@@ -91,6 +91,7 @@ pub fn lower_with(
         flatbuffers: None,
         foreign: lowering.foreign.clone(),
         tuple_collisions: lowering.collisions.clone(),
+        podbuf: None,
     };
 
     // The FlatBuffers projection is its own walk over the IR, in the order the
@@ -114,6 +115,9 @@ pub fn lower_with(
     let projected = flatbuffers::project(scope, &named, &lowering.foreign_at);
     patch_flatbuffers(&mut model, &projected);
     model.flatbuffers = Some(projected.projection);
+    // The podbuf projection is left out when a head cannot be laid out; the
+    // podbuf check reports the cause.
+    model.podbuf = super::podbuf::project(scope, &named).ok();
     model
 }
 
@@ -1284,6 +1288,7 @@ impl<'a> Lowering<'a> {
         v1::PayloadSizes {
             proto3: Some(self.size_state(home, shape, reference, Encoding::Proto3)),
             flatbuffers: Some(self.size_state(home, shape, reference, Encoding::FlatBuffers)),
+            podbuf: Some(self.size_state(home, shape, reference, Encoding::Podbuf)),
         }
     }
 
@@ -1565,6 +1570,7 @@ pub(super) fn reserve(member: &str, payloads: Option<&[MemberPayload]>) -> v1::R
     v1::Reservation {
         proto3: Some(state(|sizes| &sizes.proto3)),
         flatbuffers: Some(state(|sizes| &sizes.flatbuffers)),
+        podbuf: Some(state(|sizes| &sizes.podbuf)),
     }
 }
 
@@ -1610,6 +1616,7 @@ fn budget(slots: &[v1::InteractionSlot]) -> v1::Reservation {
     v1::Reservation {
         proto3: Some(state(|reservation| &reservation.proto3)),
         flatbuffers: Some(state(|reservation| &reservation.flatbuffers)),
+        podbuf: Some(state(|reservation| &reservation.podbuf)),
     }
 }
 
@@ -1626,6 +1633,7 @@ fn absent_sizes() -> v1::PayloadSizes {
     v1::PayloadSizes {
         proto3: Some(state()),
         flatbuffers: Some(state()),
+        podbuf: Some(state()),
     }
 }
 

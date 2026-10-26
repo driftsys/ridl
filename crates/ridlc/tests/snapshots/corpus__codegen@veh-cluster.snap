@@ -1,5 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
 ---
@@ -2750,7 +2751,618 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     }
   ],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "limit",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "actual",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          }
+        ],
+        "pads": [],
+        "declaration": 13
+      },
+      {
+        "size": 24,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "name",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "128"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "speed",
+                "ordinal": 2
+              }
+            },
+            "offset": 8,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "flags": 0
+            },
+            "offset": 12,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "gears",
+                "ordinal": 4
+              }
+            },
+            "offset": 13,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "override",
+                "ordinal": 3
+              }
+            },
+            "offset": 16,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            },
+            "optional": {
+              "flags": 0,
+              "bit": 0
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 14,
+            "size": 2
+          },
+          {
+            "offset": 20,
+            "size": 4
+          }
+        ],
+        "declaration": 14
+      },
+      {
+        "size": 56,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "range",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "inlineHead": 7
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "readings",
+                "ordinal": 2
+              }
+            },
+            "offset": 8,
+            "size": 32,
+            "align": 4,
+            "form": {
+              "inlineArray": {
+                "element": {
+                  "float": "FLOAT_WIDTH_F32"
+                },
+                "count": 8
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "labels",
+                "ordinal": 3
+              }
+            },
+            "offset": 40,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "array": {
+                  "element": {
+                    "descriptor": {
+                      "text": {
+                        "min": "1",
+                        "max": "64"
+                      }
+                    }
+                  },
+                  "elemSize": 8,
+                  "min": "1",
+                  "max": "16"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "meta",
+                "ordinal": 4
+              }
+            },
+            "offset": 48,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "map": {
+                  "entryHead": 8,
+                  "elemSize": 16,
+                  "min": "0",
+                  "max": "32"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [],
+        "declaration": 15
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "tag": true
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "arm": true
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "arms": {
+                  "arms": [
+                    {
+                      "ordinal": 1,
+                      "head": 9
+                    },
+                    {
+                      "ordinal": 2,
+                      "head": 10
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 3
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 16
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "value",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "timestamp",
+                "ordinal": 2
+              }
+            },
+            "offset": 8,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U64",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 4,
+            "size": 4
+          }
+        ],
+        "declaration": 17
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "code",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "message",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "256"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 2
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 18
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "ticks",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "frame",
+                "ordinal": 2
+              }
+            },
+            "offset": 2,
+            "size": 8,
+            "align": 1,
+            "form": {
+              "inlineArray": {
+                "element": {
+                  "int": {
+                    "width": "INT_WIDTH_U8",
+                    "signed": false
+                  }
+                },
+                "count": 8
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 10,
+            "size": 6
+          }
+        ],
+        "declaration": 19
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "position": 1
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "position": 2
+            },
+            "offset": 4,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          }
+        ],
+        "pads": [],
+        "tuple": 0
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "key": true
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "64"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "value": true
+            },
+            "offset": 8,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "128"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [],
+        "mapEntry": {
+          "path": [
+            "SensorBounds",
+            "meta"
+          ]
+        }
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "value",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "timestamp",
+                "ordinal": 2
+              }
+            },
+            "offset": 8,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U64",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 4,
+            "size": 4
+          }
+        ],
+        "arm": {
+          "declaration": 16,
+          "arm": 1
+        }
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "code",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "message",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "256"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 2
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "arm": {
+          "declaration": 16,
+          "arm": 2
+        }
+      }
+    ]
+  }
 }
 
 // ===== package veh.cluster =====
@@ -4819,6 +5431,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -4852,6 +5467,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -4890,6 +5508,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -4923,6 +5544,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -4961,6 +5585,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -4994,6 +5621,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -5032,6 +5662,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "53"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -5065,6 +5698,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 53
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               }
@@ -5097,6 +5733,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "50"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -5163,6 +5802,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 50
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -5187,6 +5829,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 50
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "shape": "SHAPE_NONE"
@@ -5231,6 +5876,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "96"
+              },
+              "podbuf": {
+                "bytes": "32"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -5316,6 +5964,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 50
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -5348,6 +5999,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -5384,6 +6038,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 50
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "replySizes": {
@@ -5392,6 +6049,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 46
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               }
             }
@@ -5421,6 +6081,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "streamFaults.reply: stream"
               },
               "flatbuffers": {
+                "unsized": "streamFaults.reply: stream"
+              },
+              "podbuf": {
                 "unsized": "streamFaults.reply: stream"
               }
             },
@@ -5480,6 +6143,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 324
+                  },
+                  "podbuf": {
+                    "bounded": 281
                   }
                 }
               },
@@ -5505,6 +6171,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 324
+                },
+                "podbuf": {
+                  "bounded": 281
                 }
               },
               "replySizes": {
@@ -5514,6 +6183,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 },
                 "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
                   "absent": {
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
@@ -5546,6 +6220,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "getFaultPage.reply: FaultPage | DiagError"
               },
               "flatbuffers": {
+                "unsized": "getFaultPage.reply: FaultPage | DiagError"
+              },
+              "podbuf": {
                 "unsized": "getFaultPage.reply: FaultPage | DiagError"
               }
             },
@@ -5613,6 +6290,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 324
+                  },
+                  "podbuf": {
+                    "bounded": 281
                   }
                 }
               },
@@ -5643,6 +6323,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 324
+                },
+                "podbuf": {
+                  "bounded": 281
                 }
               },
               "replySizes": {
@@ -5652,6 +6335,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 },
                 "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
                   "absent": {
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
@@ -5679,6 +6367,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "0"
               },
               "flatbuffers": {
+                "bytes": "0"
+              },
+              "podbuf": {
                 "bytes": "0"
               }
             },
@@ -5715,6 +6406,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 186
+                  },
+                  "podbuf": {
+                    "bounded": 145
                   }
                 }
               }
@@ -5740,6 +6434,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "0"
               },
               "flatbuffers": {
+                "bytes": "0"
+              },
+              "podbuf": {
                 "bytes": "0"
               }
             },
@@ -5776,6 +6473,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "unsized": "streamFaults"
         },
         "flatbuffers": {
+          "unsized": "streamFaults"
+        },
+        "podbuf": {
           "unsized": "streamFaults"
         }
       },
@@ -5824,6 +6524,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -5857,6 +6560,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -5907,6 +6613,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -5940,6 +6649,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -5984,6 +6696,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6017,6 +6732,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -6036,6 +6754,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         },
         "flatbuffers": {
           "bytes": "135"
+        },
+        "podbuf": {
+          "bytes": "48"
         }
       },
       "links": [],
@@ -6083,6 +6804,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "44"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6116,6 +6840,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 44
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -6154,6 +6881,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "54"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6187,6 +6917,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 54
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               }
@@ -6218,6 +6951,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "77"
+              },
+              "podbuf": {
+                "bytes": "24"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6263,6 +6999,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 44
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -6273,6 +7012,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
                 }
               },
               "replySizes": {
@@ -6281,6 +7023,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 44
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "requestTuple": {
@@ -6314,6 +7059,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "44"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6380,6 +7128,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 44
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -6390,6 +7141,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 44
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "shape": "SHAPE_NONE"
@@ -6421,6 +7175,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "88"
+              },
+              "podbuf": {
+                "bytes": "24"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6452,6 +7209,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
                 }
               },
               "replySizes": {
@@ -6460,6 +7220,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 55
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "requestTuple": {
@@ -6490,6 +7253,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "0"
               },
               "flatbuffers": {
+                "bytes": "0"
+              },
+              "podbuf": {
                 "bytes": "0"
               }
             },
@@ -6522,6 +7288,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         },
         "flatbuffers": {
           "bytes": "307"
+        },
+        "podbuf": {
+          "bytes": "96"
         }
       },
       "links": [],
@@ -6569,6 +7338,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6602,6 +7374,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -6621,6 +7396,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         },
         "flatbuffers": {
           "bytes": "43"
+        },
+        "podbuf": {
+          "bytes": "16"
         }
       },
       "links": [],
@@ -6668,6 +7446,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6701,6 +7482,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -6757,6 +7541,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "54"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6790,6 +7577,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 54
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               }
@@ -6804,6 +7594,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         },
         "flatbuffers": {
           "bytes": "97"
+        },
+        "podbuf": {
+          "bytes": "32"
         }
       },
       "links": [],
@@ -6854,6 +7647,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6887,6 +7683,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -6925,6 +7724,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6958,6 +7760,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -6995,6 +7800,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7027,6 +7835,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -7064,6 +7875,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7096,6 +7910,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -7134,6 +7951,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7167,6 +7987,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -7206,6 +8029,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "54"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7239,6 +8065,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 54
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               }
@@ -7270,6 +8099,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7358,6 +8190,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -7396,6 +8231,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 46
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "shape": "SHAPE_NONE"
@@ -7438,6 +8276,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "replayTrace.request: (samples)"
               },
               "flatbuffers": {
+                "unsized": "replayTrace.request: (samples)"
+              },
+              "podbuf": {
                 "unsized": "replayTrace.request: (samples)"
               }
             },
@@ -7494,6 +8335,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "absent": {
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
+                },
+                "podbuf": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
                 }
               },
               "shape": "SHAPE_NONE"
@@ -7524,6 +8370,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "streamFilterHistory.reply: stream"
               },
               "flatbuffers": {
+                "unsized": "streamFilterHistory.reply: stream"
+              },
+              "podbuf": {
                 "unsized": "streamFilterHistory.reply: stream"
               }
             },
@@ -7591,6 +8440,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -7616,6 +8468,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "replySizes": {
@@ -7625,6 +8480,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 },
                 "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
                   "absent": {
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
@@ -7657,6 +8517,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "rebalance.request: (samples)"
               },
               "flatbuffers": {
+                "unsized": "rebalance.request: (samples)"
+              },
+              "podbuf": {
                 "unsized": "rebalance.request: (samples)"
               }
             },
@@ -7728,6 +8591,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "absent": {
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
+                },
+                "podbuf": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
                 }
               },
               "replySizes": {
@@ -7737,6 +8605,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 },
                 "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
                   "absent": {
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
@@ -7770,6 +8643,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "92"
+              },
+              "podbuf": {
+                "bytes": "24"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -7834,6 +8710,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
                 }
               },
               "replySizes": {
@@ -7842,6 +8721,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 59
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "requestTuple": {
@@ -7877,6 +8759,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "unsized": "calibrate.reply: ClimateReport | HvacError"
               },
               "flatbuffers": {
+                "unsized": "calibrate.reply: ClimateReport | HvacError"
+              },
+              "podbuf": {
                 "unsized": "calibrate.reply: ClimateReport | HvacError"
               }
             },
@@ -7952,6 +8837,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -7982,6 +8870,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "replySizes": {
@@ -7991,6 +8882,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 },
                 "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
                   "absent": {
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
@@ -8024,6 +8920,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "102"
+              },
+              "podbuf": {
+                "bytes": "32"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8069,6 +8968,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 69
+                  },
+                  "podbuf": {
+                    "bounded": 24
                   }
                 }
               },
@@ -8079,6 +8981,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
                 }
               },
               "replySizes": {
@@ -8087,6 +8992,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 69
+                },
+                "podbuf": {
+                  "bounded": 24
                 }
               },
               "requestTuple": {
@@ -8121,6 +9029,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "79"
+              },
+              "podbuf": {
+                "bytes": "24"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8166,6 +9077,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -8176,6 +9090,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
                 }
               },
               "replySizes": {
@@ -8184,6 +9101,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 46
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "requestTuple": {
@@ -8211,6 +9131,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "0"
               },
               "flatbuffers": {
+                "bytes": "0"
+              },
+              "podbuf": {
                 "bytes": "0"
               }
             },
@@ -8247,6 +9170,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 314
+                  },
+                  "podbuf": {
+                    "bounded": 273
                   }
                 }
               }
@@ -8272,6 +9198,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "bytes": "0"
               },
               "flatbuffers": {
+                "bytes": "0"
+              },
+              "podbuf": {
                 "bytes": "0"
               }
             },
@@ -8327,6 +9256,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8400,6 +9332,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -8422,6 +9357,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "shape": "SHAPE_NONE"
@@ -8453,6 +9391,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8533,6 +9474,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -8566,6 +9510,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "shape": "SHAPE_NONE"
@@ -8597,6 +9544,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "76"
+              },
+              "podbuf": {
+                "bytes": "24"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8649,6 +9599,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -8669,6 +9622,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
                 }
               },
               "replySizes": {
@@ -8677,6 +9633,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "requestTuple": {
@@ -8692,6 +9651,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "unsized": "replayTrace"
         },
         "flatbuffers": {
+          "unsized": "replayTrace"
+        },
+        "podbuf": {
           "unsized": "replayTrace"
         }
       },
@@ -10222,5 +11184,604 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     }
   ],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "sensorId",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "isOpen",
+                "ordinal": 2
+              }
+            },
+            "offset": 1,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "boolean": true
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 6
+          }
+        ],
+        "declaration": 0
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "severity",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "flags": 0
+            },
+            "offset": 1,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "category",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "64"
+                }
+              }
+            },
+            "optional": {
+              "flags": 0,
+              "bit": 0
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 2
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 1
+      },
+      {
+        "size": 24,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "code",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "message",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "text": {
+                  "min": "1",
+                  "max": "256"
+                }
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "timestamp",
+                "ordinal": 3
+              }
+            },
+            "offset": 16,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U64",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 2
+          },
+          {
+            "offset": 12,
+            "size": 4
+          }
+        ],
+        "declaration": 2
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "faults",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 4,
+            "form": {
+              "descriptor": {
+                "array": {
+                  "element": {
+                    "inlineHead": 2
+                  },
+                  "elemSize": 24,
+                  "min": "0",
+                  "max": "64"
+                }
+              }
+            }
+          }
+        ],
+        "pads": [],
+        "declaration": 4
+      },
+      {
+        "size": 24,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "span",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 8,
+            "align": 8,
+            "form": {
+              "inlineHead": 7
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "bursts",
+                "ordinal": 2
+              }
+            },
+            "offset": 8,
+            "size": 16,
+            "align": 8,
+            "form": {
+              "inlineArray": {
+                "element": {
+                  "inlineHead": 7
+                },
+                "count": 2
+              }
+            }
+          }
+        ],
+        "pads": [],
+        "declaration": 6
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "hoursRun",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "clogged",
+                "ordinal": 2
+              }
+            },
+            "offset": 2,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "boolean": true
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 3,
+            "size": 5
+          }
+        ],
+        "declaration": 8
+      },
+      {
+        "size": 16,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "cabin",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "setpoint",
+                "ordinal": 2
+              }
+            },
+            "offset": 4,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "field": {
+                "name": "fan",
+                "ordinal": 3
+              }
+            },
+            "offset": 8,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 9,
+            "size": 7
+          }
+        ],
+        "declaration": 9
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "position": 1
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "position": 2
+            },
+            "offset": 2,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 4,
+            "size": 4
+          }
+        ],
+        "tuple": 0
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "position": 1
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "position": 2
+            },
+            "offset": 2,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 4,
+            "size": 4
+          }
+        ],
+        "tuple": 1
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 2
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 3
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "position": 1
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "position": 2
+            },
+            "offset": 2,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 4,
+            "size": 4
+          }
+        ],
+        "tuple": 4
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "position": 1
+            },
+            "offset": 0,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "position": 2
+            },
+            "offset": 2,
+            "size": 2,
+            "align": 2,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U16",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 4,
+            "size": 4
+          }
+        ],
+        "tuple": 5
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 6
+      },
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "position": 1
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          },
+          {
+            "source": {
+              "position": 2
+            },
+            "offset": 4,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          }
+        ],
+        "pads": [],
+        "tuple": 7
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 8
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 9
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 10
+      }
+    ]
+  }
 }

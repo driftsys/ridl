@@ -1,5 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
 ---
@@ -209,7 +210,10 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
     ]
   },
   "foreign": [],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": []
+  }
 }
 
 // ===== package veh.cluster =====
@@ -427,5 +431,36 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       }
     }
   ],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "speed",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 4,
+            "size": 4
+          }
+        ],
+        "declaration": 0
+      }
+    ]
+  }
 }
