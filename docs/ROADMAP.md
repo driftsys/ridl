@@ -184,6 +184,12 @@ TypeScript WebSocket transport package (driftsys/ridl#982), was filed as a new
 story, because no story held the transport package that the TypeScript framework
 names.
 
+**Filed 2026-10-26, as proposals.** E2.14, nested interface members
+(driftsys/ridl#1084), and E6.20, a partition under `machine`
+(driftsys/ridl#1085), are new rows under "Proposed, awaiting a decision". Each
+takes the next free identifier in its epic, and each waits for a decision that
+its row names.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
@@ -1169,6 +1175,39 @@ because such a reader has no verifier and no typl constraint checks (§3.13).
 **O-P3 is out of scope for this repository.** A Rust Binder runtime
 (`ridl-transport-binder`, Android only) belongs to a later repository and is not
 needed for the first Kotlin demo.
+
+---
+
+# Proposed, awaiting a decision
+
+Each row below has a design on record but no decision to build it, so neither is
+in a step. A row joins a step when the maintainer takes its decision, and the
+row says which decision that is.
+
+| ID    | Story                                                                                                                                                                                                                                        | Done when                                                                                                                                                                        | Size |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E2.14 | Nested interface members: an interface member, or a member of an inline service shape, names another interface in a named form (`slot0 : Widget`) or an indexed form (`slots : [Widget; 5]`), and each instance has its own interface number | a contract with a named and an indexed nested member is checked, locked and diffed, and a backend that meets a nested member emits one diagnostic saying it is not generated yet | L    |
+| E6.20 | A partition under `machine`: an optional grouping that carries an assurance level, with one implicit partition when a machine declares none, and a mixed-level placement rejected at check                                                   | a component whose `labels` demand a higher level than its partition is rejected, and a machine that declares no partition lowers with one implicit partition                     | M    |
+
+**E2.14 waits for the nested-interface design note to be accepted.** The note is
+[`2026-09-21-nested-interface-design.md`](wip/2026-09-21-nested-interface-design.md).
+Accepting it means an ADR that amends ADR-0015 decisions 16 and 17, and the
+note's three open questions answered: the lock key spelling for an index, the
+book's guidance on a per-instance command, and how `ridl diff` presents the
+instances of an indexed member. The row is the note's first step, the language
+and the IR. Its second step, the Rust face over the per-instance numbers, and
+its third, the bounded form, become their own rows when this one lands.
+
+**E6.20 waits for decision D-2 to be reopened.** D-2 of
+[`2026-09-12-rsdl-rewrite-decisions.md`](wip/2026-09-12-rsdl-rewrite-decisions.md)
+says rsdl declares no process, and it names the observation that reopens a
+grouping noun: a consumer whose safety argument needs a mixed-level placement
+rejected at design time. The rsdl reference §12 states the same shape. The
+partition should be designed against ARINC 653's time and space partitioning
+rather than invented, as the section "What this repository is, and is not" says.
+It needs the assurance levels to be comparable, which the `labels` promotion of
+ADR-0008 decision 3 provides. It carries no pump kind and no priority, because
+D-2 leaves scheduling to the backend and the engine.
 
 ---
 
