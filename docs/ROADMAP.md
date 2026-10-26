@@ -1203,7 +1203,11 @@ exact set of values. Three layers are separated:
   inferred from the step and the lower bound: binary (`2⁻ᵏ`) when both are
   multiples of a power of two, decimal (`10⁻ᵏ`) when either needs a factor of 5.
   When the lower bound is not a multiple of the step, the coarsest scale of that
-  base that holds both is used.
+  base that holds both is used. **Open for E18.1's design:** whether storage
+  counts in units of the step (`n = value / step`) or in units of the scale (for
+  a step of 0.3, tenths, with a check that the count is a multiple of 3).
+  SafeNum's types count in units of the scale, and the wire can still carry
+  units of the step where that is narrower.
 - **Wire** — the same integer on every encoding, so two peers that compute
   differently (a Rust node with no float, a TypeScript UI with a float view)
   exchange the same bytes. Decimal and binary scales are not different wire
@@ -1241,14 +1245,16 @@ rounding mode, saturating and checked operations, conversions — belongs in a
 library of its own: SafeNum, in
 [driftsys/safenum](https://github.com/driftsys/safenum), beside
 [SafeIO](https://github.com/driftsys/safeio). The repository and the crate name
-were created on 2026-10-26; version 0.0.1 is a placeholder with no API. It would
-also hold fixed-point versions of the costly functions — `sin`, `cos`, `atan2`,
-`sqrt`, `exp` and `log` — built from tables with interpolation, CORDIC or
-minimax polynomials, each with a stated error bound and a bounded cycle count. A
-library of floating-point operations with proved error bounds is the alternative
-it could also hold. The generated code depends only on `ridl-rt`, because its
-own conversions are a few integer operations; once SafeNum publishes an API, a
-story here makes the generated types implement its traits behind a feature.
+were created on 2026-10-26; version 0.0.1 is a placeholder with no API. Its MVP
+— the two types, explicit rounding, widening operators, a written semantics and
+Kani proofs — is tracked in driftsys/safenum#9. It would also hold fixed-point
+versions of the costly functions — `sin`, `cos`, `atan2`, `sqrt`, `exp` and
+`log` — built from tables with interpolation, CORDIC or minimax polynomials,
+each with a stated error bound and a bounded cycle count. A library of
+floating-point operations with proved error bounds is the alternative it could
+also hold. The generated code depends only on `ridl-rt`, because its own
+conversions are a few integer operations; once SafeNum publishes an API, a story
+here makes the generated types implement its traits behind a feature.
 
 **Open language question: a step that is not a decimal.** A `step` is a decimal
 literal (typl §2.5). A binary step is exact as a decimal but long (`2⁻¹⁵` is
