@@ -844,10 +844,13 @@ _cabin-generate:
 # failing to compile; the emitted crate failing to check with its default
 # features off for `thumbv7em-none-eabihf`; the crate emitted for the
 # veh-cluster corpus failing to check the same way, or with only
-# `validate-pattern` on; the program exiting non-zero or not reporting all four
-# round trips; the lock being out of date; the consumer being unformatted or
-# drawing a clippy warning; the generated crate drawing a clippy warning that
-# its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
+# `validate-pattern` on; either generated crate failing to check for
+# `i686-unknown-linux-gnu` or `aarch64-unknown-linux-gnu`, which evaluates its
+# podbuf layout assertions for those targets; the program exiting non-zero or
+# not reporting all seven round trips, the last being `podbuf round trip: 21.5`;
+# the lock being out of date; the consumer being unformatted or drawing a
+# clippy warning; the generated crate drawing a clippy warning that its
+# `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
 # corpus drawing a clippy diagnostic, with default features or without them, or
 # cargo finishing no build there; `cargo doc` on either generated crate drawing
@@ -924,6 +927,15 @@ demo: _cabin-generate
     # the crate links the standard library while `std` stays off.
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
         --no-default-features --target thumbv7em-none-eabihf
+    # The same two crates for a 32-bit and a 64-bit Arm or x86 target: the
+    # podbuf layout assertions (`size_of`, `offset_of!`) are `const` items, so
+    # checking evaluates them for each target without a linker.
+    for target in i686-unknown-linux-gnu aarch64-unknown-linux-gnu; do
+        for crate in veh_cabin ridl_generated; do
+            cargo check --manifest-path examples/cabin/Cargo.toml -p "$crate" --locked \
+                --target "$target"
+        done
+    done
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
         --no-default-features --features validate-pattern
     # The corpus crate is linted as well, with its default features and with
@@ -977,7 +989,8 @@ demo: _cabin-generate
     fi
     printf '%s\n' "$output"
     for round_trip in "signal ok 21" "event ok 5" "command ok 42" "query ok 7" \
-            "blocking command ok 43" "blocking query ok 9"; do
+            "blocking command ok 43" "blocking query ok 9" \
+            "podbuf round trip: 21.5"; do
         if ! printf '%s\n' "$output" | grep -qxF "$round_trip"; then
             echo "demo: the consumer did not report \"$round_trip\"" >&2
             exit 1

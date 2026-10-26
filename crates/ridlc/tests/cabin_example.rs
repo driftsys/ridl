@@ -441,7 +441,8 @@ fn last_segment(path: &str) -> String {
 
 /// The generated face reads its payload encoding from its port, and the
 /// generated package carries the encoding tables of the encodings it was
-/// built with — for the cabin example, FlatBuffers and proto3. So a port that
+/// built with. The package of this test lists FlatBuffers and proto3, a copy of
+/// the cabin example without its `podbuf`. So a port that
 /// carries `Podbuf` has no table in that package, and binding a face over it
 /// must be refused.
 ///
@@ -457,7 +458,8 @@ fn last_segment(path: &str) -> String {
 /// broken compile command rather than from the bound.
 #[test]
 fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
-    let built = emit_and_compile_cabin();
+    let package = cabin_package_with_encodings(r#"["flatbuffers", "proto3"]"#);
+    let built = emit_and_compile_cabin_from(package.path());
 
     let refused = compile_against_cabin(
         &built,
@@ -558,15 +560,9 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
     );
 }
 
-/// The counterpart of the refusal above: a package whose manifest lists
-/// `podbuf` carries the `Sizes<Podbuf>` table of its interface, so the same
-/// binding over a podbuf loopback compiles, and the table's claim buffer is
-/// 8-aligned.
-///
-/// The package is a copy of `examples/cabin/` with `podbuf` added to the
-/// encodings list, so the schema is the one the refusal test builds.
-#[test]
-fn a_package_that_lists_podbuf_carries_its_size_table() {
+/// A copy of `examples/cabin/` whose manifest lists `encodings` instead of the
+/// example's own list.
+fn cabin_package_with_encodings(encodings: &str) -> tempfile::TempDir {
     let package = tempfile::tempdir().expect("a temp dir is created");
     for file in ["cabin.ridl", "system.rsdl"] {
         std::fs::copy(example_dir().join(file), package.path().join(file))
@@ -574,14 +570,19 @@ fn a_package_that_lists_podbuf_carries_its_size_table() {
     }
     let manifest = std::fs::read_to_string(example_dir().join("ridl.toml"))
         .expect("the example manifest is readable");
-    let with_podbuf = manifest.replace(
-        r#"encodings = ["flatbuffers", "proto3"]"#,
-        r#"encodings = ["flatbuffers", "proto3", "podbuf"]"#,
-    );
-    assert_ne!(with_podbuf, manifest, "the manifest names the encodings");
-    std::fs::write(package.path().join("ridl.toml"), with_podbuf).expect("the manifest is written");
+    let own = r#"encodings = ["flatbuffers", "proto3", "podbuf"]"#;
+    let changed = manifest.replace(own, &format!("encodings = {encodings}"));
+    assert_ne!(changed, manifest, "the manifest names the encodings");
+    std::fs::write(package.path().join("ridl.toml"), changed).expect("the manifest is written");
+    package
+}
 
-    let built = emit_and_compile_cabin_from(package.path());
+/// The counterpart of the refusal above: the example lists `podbuf`, so it
+/// carries the `Sizes<Podbuf>` table of its interface, the same binding over a
+/// podbuf loopback compiles, and the table's claim buffer is 8-aligned.
+#[test]
+fn a_package_that_lists_podbuf_carries_its_size_table() {
+    let built = emit_and_compile_cabin();
     let program = format!(
         "{}\nfn aligned() {{\n    use ridl_rt::contract::Sizes;\n    \
          assert_eq!(core::mem::align_of::<<api::Cabin as Sizes<Podbuf>>::ClaimBuffer>(), 8);\n    \
@@ -599,6 +600,23 @@ fn a_package_that_lists_podbuf_carries_its_size_table() {
         "a face bound over a podbuf port must compile when the package lists podbuf, rustc said:\n{}",
         String::from_utf8_lossy(&accepted.stderr)
     );
+}
+
+/// The cabin example lists `podbuf` among its encodings, so the emitted crate
+/// carries a podbuf codec for its types and a podbuf size table for its
+/// interface. `just demo` round-trips one value through that codec.
+#[test]
+fn the_cabin_crate_carries_a_podbuf_codec_and_size_table() {
+    let out = tempfile::tempdir().expect("a temp dir is created");
+    let run = ridlc::run_build(&example_dir(), out.path(), &[Emit::Rust], false.into())
+        .expect("the build runs");
+    assert!(!run.has_error(), "the example must compile clean");
+    let src = std::fs::read_to_string(out.path().join("veh.cabin.rs"))
+        .expect("the emitted crate source is readable");
+    assert!(
+        src.contains("impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Setpoint")
+    );
+    assert!(src.contains("impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::Podbuf> for Cabin"));
 }
 
 /// The cabin workspace declares one system with one deployment, `Bench`, whose

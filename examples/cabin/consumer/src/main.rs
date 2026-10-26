@@ -39,7 +39,8 @@
 //! way a thread that also does other work serves. The generated crate's `std`
 //! feature, on by default, is what carries the `blocking` module.
 //!
-//! One runtime for all six round trips, and every face over it held for the
+//! Round trip 7 sends a value through the generated podbuf codec without a
+//! runtime. One runtime for the first six round trips, and every face over it held for the
 //! whole program, which is the shape an application has (driftsys/ridl#488).
 //! The `Publisher`, the async `Client` and the `blocking::Client` each own an
 //! aggregate from `Loopback::attach`, and the provider side serves over one
@@ -78,6 +79,8 @@ use api::cabin;
 use api::cabin::prelude::*;
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogRef, Interface};
+use ridl_rt::encoding::Podbuf;
+use ridl_rt::payload::{Payload, Ref};
 use ridl_rt::sample::Provenance;
 use veh_cabin::veh::cabin as api;
 // ANCHOR_END: imports
@@ -271,4 +274,20 @@ fn main() {
     let reply = reply.expect("the query is served within the timeout");
     assert_eq!(reply.get(), 9);
     println!("blocking query ok {}", reply.get());
+
+    // 7 — podbuf codec
+    // The value goes through the generated podbuf codec alone, outside the
+    // loopback: encoded into the type's own buffer, verified, and decoded.
+    // 21.5 is a half degree, which `Temperature` (an integer) cannot hold.
+    {
+        let setpoint = api::Setpoint::new(21.5).expect("21.5 is inside Setpoint's range");
+        let mut buf = <api::Setpoint as Payload<Podbuf>>::BUFFER;
+        let encoded = Ref::<api::Setpoint, Podbuf>::encode(&setpoint, buf.as_mut())
+            .expect("the setpoint is encoded");
+        let verified =
+            Ref::<api::Setpoint, Podbuf>::verify(encoded.bytes()).expect("the bytes verify");
+        let decoded = verified.decode();
+        assert_eq!(decoded.get(), 21.5);
+        println!("podbuf round trip: {}", decoded.get());
+    }
 }

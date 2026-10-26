@@ -4603,3 +4603,6733 @@ pub(crate) fn __ridl_fb_decode_SensorBoundsRange(
         },
     }
 }
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_Speed(value: &Speed) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = *value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_Speed(
+    value: &Speed,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = *value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_Speed(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::I32(__raw) => {
+                    let __v = ::core::primitive::f64::from(
+                        ::core::primitive::f32::from_bits(__raw),
+                    );
+                    Speed::check(&__v)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_Speed(buf: &[::core::primitive::u8]) -> Speed {
+    let mut __f0 = Speed::new_unchecked(0.0f64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                __f0 = Speed::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::core::primitive::f32::from_bits(__raw),
+                    ),
+                );
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Speed {
+    /// The largest proto3 message any legal `Speed` encodes to: 5 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 5usize;
+    type Buffer = [::core::primitive::u8; 5usize];
+    const BUFFER: Self::Buffer = [0u8; 5usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_Speed(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_Speed(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_Speed(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_Speed(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_Temperature(
+    value: &Temperature,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = *value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_Temperature(
+    value: &Temperature,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = *value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_Temperature(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::I32(__raw) => {
+                    let __v = ::core::primitive::f64::from(
+                        ::core::primitive::f32::from_bits(__raw),
+                    );
+                    Temperature::check(&__v)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_Temperature(
+    buf: &[::core::primitive::u8],
+) -> Temperature {
+    let mut __f0 = Temperature::new_unchecked(0.0f64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                __f0 = Temperature::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::core::primitive::f32::from_bits(__raw),
+                    ),
+                );
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Temperature {
+    /// The largest proto3 message any legal `Temperature` encodes to: 5 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 5usize;
+    type Buffer = [::core::primitive::u8; 5usize];
+    const BUFFER: Self::Buffer = [0u8; 5usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_Temperature(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_Temperature(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_Temperature(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_Temperature(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_RPM(value: &RPM) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = *value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_RPM(
+    value: &RPM,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = *value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_RPM(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::I32(__raw) => {
+                    let __v = ::core::primitive::f64::from(
+                        ::core::primitive::f32::from_bits(__raw),
+                    );
+                    RPM::check(&__v).map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_RPM(buf: &[::core::primitive::u8]) -> RPM {
+    let mut __f0 = RPM::new_unchecked(0.0f64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                __f0 = RPM::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::core::primitive::f32::from_bits(__raw),
+                    ),
+                );
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for RPM {
+    /// The largest proto3 message any legal `RPM` encodes to: 5 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 5usize;
+    type Buffer = [::core::primitive::u8; 5usize];
+    const BUFFER: Self::Buffer = [0u8; 5usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_RPM(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_RPM(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_RPM(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_RPM(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_Ratio(value: &Ratio) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = *value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_Ratio(
+    value: &Ratio,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = *value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_Ratio(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::I32(__raw) => {
+                    let __v = ::core::primitive::f64::from(
+                        ::core::primitive::f32::from_bits(__raw),
+                    );
+                    Ratio::check(&__v)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_Ratio(buf: &[::core::primitive::u8]) -> Ratio {
+    let mut __f0 = Ratio::new_unchecked(0.0f64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                __f0 = Ratio::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::core::primitive::f32::from_bits(__raw),
+                    ),
+                );
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Ratio {
+    /// The largest proto3 message any legal `Ratio` encodes to: 5 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 5usize;
+    type Buffer = [::core::primitive::u8; 5usize];
+    const BUFFER: Self::Buffer = [0u8; 5usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_Ratio(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_Ratio(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_Ratio(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_Ratio(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_Counter(value: &Counter) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = *value;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_Counter(
+    value: &Counter,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = *value;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint);
+            writer.varint(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_Counter(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::Varint(__raw) => {
+                    let __v = ::core::primitive::i64::from(
+                        ::ridl_rt::proto3::narrow_u32(__raw)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                    );
+                    Counter::check(&__v)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_Counter(buf: &[::core::primitive::u8]) -> Counter {
+    let mut __f0 = Counter::new_unchecked(0i64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::Varint(__raw) = __field.value {
+                __f0 = Counter::new_unchecked(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::proto3::narrow_u32(__raw).unwrap_or(0u32),
+                    ),
+                );
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Counter {
+    /// The largest proto3 message any legal `Counter` encodes to: 6 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 6usize;
+    type Buffer = [::core::primitive::u8; 6usize];
+    const BUFFER: Self::Buffer = [0u8; 6usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_Counter(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_Counter(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_Counter(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_Counter(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_Gain(value: &Gain) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = *value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_Gain(
+    value: &Gain,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = *value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_Gain(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::I32(__raw) => {
+                    let __v = ::core::primitive::f64::from(
+                        ::core::primitive::f32::from_bits(__raw),
+                    );
+                    Gain::check(&__v)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_Gain(buf: &[::core::primitive::u8]) -> Gain {
+    let mut __f0 = Gain::new_unchecked(0.0f64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                __f0 = Gain::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::core::primitive::f32::from_bits(__raw),
+                    ),
+                );
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Gain {
+    /// The largest proto3 message any legal `Gain` encodes to: 5 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 5usize;
+    type Buffer = [::core::primitive::u8; 5usize];
+    const BUFFER: Self::Buffer = [0u8; 5usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_Gain(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_Gain(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_Gain(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_Gain(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_GearPosition(
+    value: &GearPosition,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = *value;
+        let __r = ::core::primitive::i64::from(__s) as ::core::primitive::u64;
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_GearPosition(
+    value: &GearPosition,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = *value;
+        let __r = ::core::primitive::i64::from(__s) as ::core::primitive::u64;
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint);
+            writer.varint(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_GearPosition(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::Varint(__raw) => {
+                    let __v = ::core::primitive::i64::from(
+                        ::ridl_rt::proto3::narrow_i32(__raw)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                    );
+                    <GearPosition as ::core::convert::TryFrom<
+                        ::core::primitive::i64,
+                    >>::try_from(__v)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_GearPosition(
+    buf: &[::core::primitive::u8],
+) -> GearPosition {
+    let mut __f0 = GearPosition::Park;
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::Varint(__raw) = __field.value {
+                __f0 = <GearPosition as ::core::convert::TryFrom<
+                    ::core::primitive::i64,
+                >>::try_from(
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::narrow_i32(__raw).unwrap_or(0i32),
+                        ),
+                    )
+                    .unwrap_or(GearPosition::Park);
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for GearPosition {
+    /// The largest proto3 message any legal `GearPosition` encodes to: 2 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 2usize;
+    type Buffer = [::core::primitive::u8; 2usize];
+    const BUFFER: Self::Buffer = [0u8; 2usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_GearPosition(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_GearPosition(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_GearPosition(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_GearPosition(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_Warning(value: &Warning) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = *value;
+        let __r = ::core::primitive::i64::from(__s) as ::core::primitive::u64;
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_Warning(
+    value: &Warning,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = *value;
+        let __r = ::core::primitive::i64::from(__s) as ::core::primitive::u64;
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint);
+            writer.varint(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_Warning(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::Varint(__raw) => {
+                    let __v = ::core::primitive::i64::from(
+                        ::ridl_rt::proto3::narrow_i32(__raw)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                    );
+                    <Warning as ::core::convert::TryFrom<
+                        ::core::primitive::i64,
+                    >>::try_from(__v)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_Warning(buf: &[::core::primitive::u8]) -> Warning {
+    let mut __f0 = Warning::LowFuel;
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::Varint(__raw) = __field.value {
+                __f0 = <Warning as ::core::convert::TryFrom<
+                    ::core::primitive::i64,
+                >>::try_from(
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::narrow_i32(__raw).unwrap_or(0i32),
+                        ),
+                    )
+                    .unwrap_or(Warning::LowFuel);
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Warning {
+    /// The largest proto3 message any legal `Warning` encodes to: 2 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 2usize;
+    type Buffer = [::core::primitive::u8; 2usize];
+    const BUFFER: Self::Buffer = [0u8; 2usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_Warning(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_Warning(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_Warning(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_Warning(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_WarningFlags(
+    value: &WarningFlags,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = *value;
+        let __r = ::core::primitive::i64::from(__s) as ::core::primitive::u64;
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_WarningFlags(
+    value: &WarningFlags,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = *value;
+        let __r = ::core::primitive::i64::from(__s) as ::core::primitive::u64;
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint);
+            writer.varint(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_WarningFlags(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 1usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        if __field.number == 1u32 {
+            if __seen[0usize] {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Duplicate,
+                    ),
+                );
+            }
+            __seen[0usize] = true;
+            match __field.value {
+                ::ridl_rt::proto3::Value::Varint(__raw) => {
+                    let __v = ::core::primitive::i64::from(
+                        ::ridl_rt::proto3::narrow_u32(__raw)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                    );
+                    <WarningFlags as ::core::convert::TryFrom<
+                        ::core::primitive::i64,
+                    >>::try_from(__v)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                _ => {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::WireType,
+                        ),
+                    );
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_WarningFlags(
+    buf: &[::core::primitive::u8],
+) -> WarningFlags {
+    let mut __f0 = WarningFlags(0i64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        if __field.number == 1u32 {
+            if let ::ridl_rt::proto3::Value::Varint(__raw) = __field.value {
+                __f0 = <WarningFlags as ::core::convert::TryFrom<
+                    ::core::primitive::i64,
+                >>::try_from(
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::narrow_u32(__raw).unwrap_or(0u32),
+                        ),
+                    )
+                    .unwrap_or(WarningFlags(0i64));
+            }
+        }
+    }
+    __f0
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for WarningFlags {
+    /// The largest proto3 message any legal `WarningFlags` encodes to: 6 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 6usize;
+    type Buffer = [::core::primitive::u8; 6usize];
+    const BUFFER: Self::Buffer = [0u8; 6usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_WarningFlags(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_WarningFlags(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_WarningFlags(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_WarningFlags(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_SpeedLimitPayload(
+    value: &SpeedLimitPayload,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = value.limit;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    {
+        let __s = value.actual;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_SpeedLimitPayload(
+    value: &SpeedLimitPayload,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = value.limit;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    {
+        let __s = value.actual;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(2u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_SpeedLimitPayload(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 2usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __seen[0usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[0usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::I32(__raw) => {
+                        let __v = ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        );
+                        Speed::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                if __seen[1usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[1usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::I32(__raw) => {
+                        let __v = ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        );
+                        Speed::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_SpeedLimitPayload(
+    buf: &[::core::primitive::u8],
+) -> SpeedLimitPayload {
+    let mut __f0 = Speed::new_unchecked(0.0f64);
+    let mut __f1 = Speed::new_unchecked(0.0f64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                    __f0 = Speed::new_unchecked(
+                        ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        ),
+                    );
+                }
+            }
+            2u32 => {
+                if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                    __f1 = Speed::new_unchecked(
+                        ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        ),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    SpeedLimitPayload {
+        limit: __f0,
+        actual: __f1,
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for SpeedLimitPayload {
+    /// The largest proto3 message any legal `SpeedLimitPayload` encodes to: 10 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 10usize;
+    type Buffer = [::core::primitive::u8; 10usize];
+    const BUFFER: Self::Buffer = [0u8; 10usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_SpeedLimitPayload(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_SpeedLimitPayload(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_SpeedLimitPayload(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_SpeedLimitPayload(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_DriverProfile(
+    value: &DriverProfile,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = value.name.get();
+        __n = __n
+            .saturating_add(1usize)
+            .saturating_add(
+                ::ridl_rt::proto3::varint_len(__s.len() as ::core::primitive::u64),
+            )
+            .saturating_add(__s.len());
+    }
+    {
+        let __s = value.speed;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    if let ::core::option::Option::Some(__v) = &value.r#override {
+        {
+            let __s = *__v;
+            let __r = (__s.get() as ::core::primitive::f32).to_bits();
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    {
+        let __s = value.gears;
+        let __r = __s as ::core::primitive::u64;
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_DriverProfile(
+    value: &DriverProfile,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = value.name.get();
+        writer.tag(1u32, ::ridl_rt::proto3::WireType::Len);
+        writer.varint(__s.len() as ::core::primitive::u64);
+        writer.bytes(__s.as_bytes());
+    }
+    {
+        let __s = value.speed;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(2u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    if let ::core::option::Option::Some(__v) = &value.r#override {
+        {
+            let __s = *__v;
+            let __r = (__s.get() as ::core::primitive::f32).to_bits();
+            writer.tag(3u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    {
+        let __s = value.gears;
+        let __r = __s as ::core::primitive::u64;
+        if __r != 0 {
+            writer.tag(4u32, ::ridl_rt::proto3::WireType::Varint);
+            writer.varint(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_DriverProfile(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 4usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __seen[0usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[0usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        let __s = ::ridl_rt::proto3::utf8(__b)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        crate::ridl::std::Name::check(__s)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                if __seen[1usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[1usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::I32(__raw) => {
+                        let __v = ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        );
+                        Speed::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            3u32 => {
+                if __seen[2usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[2usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::I32(__raw) => {
+                        let __v = ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        );
+                        Speed::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            4u32 => {
+                if __seen[3usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[3usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Varint(__raw) => {
+                        let __v = ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::narrow_u32(__raw)
+                                .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                        );
+                        (|| -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+                            let __value = __v;
+                            if __value < 0 {
+                                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                                    type_name: ::core::option::Option::Some("DriverProfile"),
+                                    rule: ::ridl_rt::payload::Rule::Range,
+                                });
+                            }
+                            if __value > 6 {
+                                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                                    type_name: ::core::option::Option::Some("DriverProfile"),
+                                    rule: ::ridl_rt::payload::Rule::Range,
+                                });
+                            }
+                            ::core::result::Result::Ok(())
+                        })()
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if !__seen[0usize] {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Structure(
+                ::ridl_rt::payload::Malformed::MissingRequired,
+            ),
+        );
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_DriverProfile(
+    buf: &[::core::primitive::u8],
+) -> DriverProfile {
+    let mut __f0 = crate::ridl::std::Name::new_unchecked(::std::string::String::new());
+    let mut __f1 = Speed::new_unchecked(0.0f64);
+    let mut __f2 = ::core::option::Option::None;
+    let mut __f3 = 0i64;
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __f0 = crate::ridl::std::Name::new_unchecked(
+                        ::std::string::String::from(
+                            ::ridl_rt::proto3::utf8(__b).unwrap_or(""),
+                        ),
+                    );
+                }
+            }
+            2u32 => {
+                if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                    __f1 = Speed::new_unchecked(
+                        ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        ),
+                    );
+                }
+            }
+            3u32 => {
+                if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                    __f2 = ::core::option::Option::Some(
+                        Speed::new_unchecked(
+                            ::core::primitive::f64::from(
+                                ::core::primitive::f32::from_bits(__raw),
+                            ),
+                        ),
+                    );
+                }
+            }
+            4u32 => {
+                if let ::ridl_rt::proto3::Value::Varint(__raw) = __field.value {
+                    __f3 = ::core::primitive::i64::from(
+                        ::ridl_rt::proto3::narrow_u32(__raw).unwrap_or(0u32),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    DriverProfile {
+        name: __f0,
+        speed: __f1,
+        r#override: __f2,
+        gears: __f3,
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for DriverProfile {
+    /// The largest proto3 message any legal `DriverProfile` encodes to: 531 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 531usize;
+    type Buffer = [::core::primitive::u8; 531usize];
+    const BUFFER: Self::Buffer = [0u8; 531usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_DriverProfile(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_DriverProfile(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_DriverProfile(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_DriverProfile(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_SensorBounds(
+    value: &SensorBounds,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __l = __ridl_pb_len_SensorBoundsRange(&value.range);
+        __n = __n
+            .saturating_add(1usize)
+            .saturating_add(::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64))
+            .saturating_add(__l);
+    }
+    {
+        let __c = &value.readings;
+        let __l = __c.len().saturating_mul(4usize);
+        __n = __n
+            .saturating_add(1usize)
+            .saturating_add(::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64))
+            .saturating_add(__l);
+    }
+    {
+        let __c = &value.labels;
+        for __e in __c.iter() {
+            {
+                let __s = __e.get();
+                __n = __n
+                    .saturating_add(1usize)
+                    .saturating_add(
+                        ::ridl_rt::proto3::varint_len(
+                            __s.len() as ::core::primitive::u64,
+                        ),
+                    )
+                    .saturating_add(__s.len());
+            }
+        }
+    }
+    {
+        let __c = &value.meta;
+        for __e in __c.iter() {
+            let __l = {
+                let mut __n = 0usize;
+                {
+                    let __s = __e.0.get();
+                    if !__s.is_empty() {
+                        __n = __n
+                            .saturating_add(1usize)
+                            .saturating_add(
+                                ::ridl_rt::proto3::varint_len(
+                                    __s.len() as ::core::primitive::u64,
+                                ),
+                            )
+                            .saturating_add(__s.len());
+                    }
+                }
+                {
+                    let __s = __e.1.get();
+                    if !__s.is_empty() {
+                        __n = __n
+                            .saturating_add(1usize)
+                            .saturating_add(
+                                ::ridl_rt::proto3::varint_len(
+                                    __s.len() as ::core::primitive::u64,
+                                ),
+                            )
+                            .saturating_add(__s.len());
+                    }
+                }
+                __n
+            };
+            __n = __n
+                .saturating_add(1usize)
+                .saturating_add(
+                    ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64),
+                )
+                .saturating_add(__l);
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_SensorBounds(
+    value: &SensorBounds,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __l = __ridl_pb_len_SensorBoundsRange(&value.range);
+        writer.tag(1u32, ::ridl_rt::proto3::WireType::Len);
+        writer.varint(__l as ::core::primitive::u64);
+        __ridl_pb_encode_SensorBoundsRange(&value.range, writer)?;
+    }
+    {
+        let __c = &value.readings;
+        let __l = __c.len().saturating_mul(4usize);
+        writer.tag(2u32, ::ridl_rt::proto3::WireType::Len);
+        writer.varint(__l as ::core::primitive::u64);
+        for __e in __c.iter() {
+            let __s = *__e;
+            let __r = (__s.get() as ::core::primitive::f32).to_bits();
+            writer.fixed32(__r);
+        }
+    }
+    {
+        let __c = &value.labels;
+        if __c.is_empty() || __c.len() > 16usize {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                    type_name: ::core::option::Option::Some("SensorBounds"),
+                    rule: ::ridl_rt::payload::Rule::Length,
+                }),
+            );
+        }
+        for __e in __c.iter() {
+            {
+                let __s = __e.get();
+                writer.tag(3u32, ::ridl_rt::proto3::WireType::Len);
+                writer.varint(__s.len() as ::core::primitive::u64);
+                writer.bytes(__s.as_bytes());
+            }
+        }
+    }
+    {
+        let __c = &value.meta;
+        if __c.len() > 32usize {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                    type_name: ::core::option::Option::Some("SensorBounds"),
+                    rule: ::ridl_rt::payload::Rule::Length,
+                }),
+            );
+        }
+        for (__i, __e) in __c.iter().enumerate() {
+            for __p in __c[..__i].iter() {
+                if __p.0 == __e.0 {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                            type_name: ::core::option::Option::Some("SensorBounds"),
+                            rule: ::ridl_rt::payload::Rule::Unique,
+                        }),
+                    );
+                }
+            }
+        }
+        for __e in __c.iter() {
+            let __l = {
+                let mut __n = 0usize;
+                {
+                    let __s = __e.0.get();
+                    if !__s.is_empty() {
+                        __n = __n
+                            .saturating_add(1usize)
+                            .saturating_add(
+                                ::ridl_rt::proto3::varint_len(
+                                    __s.len() as ::core::primitive::u64,
+                                ),
+                            )
+                            .saturating_add(__s.len());
+                    }
+                }
+                {
+                    let __s = __e.1.get();
+                    if !__s.is_empty() {
+                        __n = __n
+                            .saturating_add(1usize)
+                            .saturating_add(
+                                ::ridl_rt::proto3::varint_len(
+                                    __s.len() as ::core::primitive::u64,
+                                ),
+                            )
+                            .saturating_add(__s.len());
+                    }
+                }
+                __n
+            };
+            writer.tag(4u32, ::ridl_rt::proto3::WireType::Len);
+            writer.varint(__l as ::core::primitive::u64);
+            {
+                let __s = __e.0.get();
+                if !__s.is_empty() {
+                    writer.tag(1u32, ::ridl_rt::proto3::WireType::Len);
+                    writer.varint(__s.len() as ::core::primitive::u64);
+                    writer.bytes(__s.as_bytes());
+                }
+            }
+            {
+                let __s = __e.1.get();
+                if !__s.is_empty() {
+                    writer.tag(2u32, ::ridl_rt::proto3::WireType::Len);
+                    writer.varint(__s.len() as ::core::primitive::u64);
+                    writer.bytes(__s.as_bytes());
+                }
+            }
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_SensorBounds(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 4usize];
+    let mut __c1 = 0usize;
+    let mut __c2 = 0usize;
+    let mut __c3 = 0usize;
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __seen[0usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[0usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        __ridl_pb_verify_SensorBoundsRange(__b)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                __seen[1usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__run) => {
+                        if __run
+                            .chunks(4usize)
+                            .next_back()
+                            .is_some_and(|__last| __last.len() != 4usize)
+                        {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Structure(
+                                    ::ridl_rt::payload::Malformed::OutOfBounds,
+                                ),
+                            );
+                        }
+                        for __chunk in __run.chunks(4usize) {
+                            let mut __bytes = [0u8; 4];
+                            __bytes.copy_from_slice(__chunk);
+                            let __raw = ::core::primitive::u32::from_le_bytes(__bytes);
+                            let __v = ::core::primitive::f64::from(
+                                ::core::primitive::f32::from_bits(__raw),
+                            );
+                            Speed::check(&__v)
+                                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                            __c1 += 1usize;
+                        }
+                    }
+                    ::ridl_rt::proto3::Value::I32(__raw) => {
+                        let __v = ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        );
+                        Speed::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                        __c1 += 1usize;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            3u32 => {
+                __seen[2usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        let __s = ::ridl_rt::proto3::utf8(__b)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        crate::ridl::std::Label::check(__s)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                        __c2 += 1usize;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            4u32 => {
+                __seen[3usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        {
+                            let mut __seen = [false; 2usize];
+                            let mut __reader = ::ridl_rt::proto3::Reader::new(__b);
+                            while let ::core::option::Option::Some(__field) = __reader
+                                .next()
+                            {
+                                let __field = __field
+                                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                                match __field.number {
+                                    1u32 => {
+                                        if __seen[0usize] {
+                                            return ::core::result::Result::Err(
+                                                ::ridl_rt::payload::VerifyError::Structure(
+                                                    ::ridl_rt::payload::Malformed::Duplicate,
+                                                ),
+                                            );
+                                        }
+                                        __seen[0usize] = true;
+                                        match __field.value {
+                                            ::ridl_rt::proto3::Value::Len(__b) => {
+                                                let __s = ::ridl_rt::proto3::utf8(__b)
+                                                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                                                crate::ridl::std::Label::check(__s)
+                                                    .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                                            }
+                                            _ => {
+                                                return ::core::result::Result::Err(
+                                                    ::ridl_rt::payload::VerifyError::Structure(
+                                                        ::ridl_rt::payload::Malformed::WireType,
+                                                    ),
+                                                );
+                                            }
+                                        }
+                                    }
+                                    2u32 => {
+                                        if __seen[1usize] {
+                                            return ::core::result::Result::Err(
+                                                ::ridl_rt::payload::VerifyError::Structure(
+                                                    ::ridl_rt::payload::Malformed::Duplicate,
+                                                ),
+                                            );
+                                        }
+                                        __seen[1usize] = true;
+                                        match __field.value {
+                                            ::ridl_rt::proto3::Value::Len(__b) => {
+                                                let __s = ::ridl_rt::proto3::utf8(__b)
+                                                    .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                                                crate::ridl::std::Name::check(__s)
+                                                    .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                                            }
+                                            _ => {
+                                                return ::core::result::Result::Err(
+                                                    ::ridl_rt::payload::VerifyError::Structure(
+                                                        ::ridl_rt::payload::Malformed::WireType,
+                                                    ),
+                                                );
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if !__seen[0usize] {
+                                return ::core::result::Result::Err(
+                                    ::ridl_rt::payload::VerifyError::Structure(
+                                        ::ridl_rt::payload::Malformed::MissingRequired,
+                                    ),
+                                );
+                            }
+                            if !__seen[1usize] {
+                                return ::core::result::Result::Err(
+                                    ::ridl_rt::payload::VerifyError::Structure(
+                                        ::ridl_rt::payload::Malformed::MissingRequired,
+                                    ),
+                                );
+                            }
+                        }
+                        if __c3 >= 32usize {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                                    type_name: ::core::option::Option::Some("SensorBounds"),
+                                    rule: ::ridl_rt::payload::Rule::Length,
+                                }),
+                            );
+                        }
+                        let __k = {
+                            let mut __k = &[] as &[::core::primitive::u8];
+                            let mut __reader = ::ridl_rt::proto3::Reader::new(__b);
+                            while let ::core::option::Option::Some(
+                                ::core::result::Result::Ok(__field),
+                            ) = __reader.next()
+                            {
+                                if __field.number == 1u32 {
+                                    if let ::ridl_rt::proto3::Value::Len(__kb) = __field.value {
+                                        __k = __kb;
+                                    }
+                                }
+                            }
+                            __k
+                        };
+                        let mut __left = __c3;
+                        let mut __prev = ::ridl_rt::proto3::Reader::new(buf);
+                        while __left > 0usize {
+                            match __prev.next() {
+                                ::core::option::Option::Some(
+                                    ::core::result::Result::Ok(__p),
+                                ) => {
+                                    if __p.number == 4u32 {
+                                        __left -= 1usize;
+                                        if let ::ridl_rt::proto3::Value::Len(__pb) = __p.value {
+                                            let __pk = {
+                                                let mut __k = &[] as &[::core::primitive::u8];
+                                                let mut __reader = ::ridl_rt::proto3::Reader::new(__pb);
+                                                while let ::core::option::Option::Some(
+                                                    ::core::result::Result::Ok(__field),
+                                                ) = __reader.next()
+                                                {
+                                                    if __field.number == 1u32 {
+                                                        if let ::ridl_rt::proto3::Value::Len(__kb) = __field.value {
+                                                            __k = __kb;
+                                                        }
+                                                    }
+                                                }
+                                                __k
+                                            };
+                                            if __pk == __k {
+                                                return ::core::result::Result::Err(
+                                                    ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                                                        type_name: ::core::option::Option::Some("SensorBounds"),
+                                                        rule: ::ridl_rt::payload::Rule::Unique,
+                                                    }),
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                _ => break,
+                            }
+                        }
+                        __c3 += 1usize;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if !__seen[0usize] {
+        __ridl_pb_verify_SensorBoundsRange(&[])?;
+    }
+    if !__seen[1usize] {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Structure(
+                ::ridl_rt::payload::Malformed::MissingRequired,
+            ),
+        );
+    }
+    if __c1 != 8usize {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some("SensorBounds"),
+                rule: ::ridl_rt::payload::Rule::Length,
+            }),
+        );
+    }
+    if !__seen[2usize] {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Structure(
+                ::ridl_rt::payload::Malformed::MissingRequired,
+            ),
+        );
+    }
+    if !(1usize..=16usize).contains(&__c2) {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some("SensorBounds"),
+                rule: ::ridl_rt::payload::Rule::Length,
+            }),
+        );
+    }
+    if __c3 > 32usize {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                type_name: ::core::option::Option::Some("SensorBounds"),
+                rule: ::ridl_rt::payload::Rule::Length,
+            }),
+        );
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_SensorBounds(
+    buf: &[::core::primitive::u8],
+) -> SensorBounds {
+    let mut __f0 = __ridl_pb_decode_SensorBoundsRange(&[]);
+    let mut __f1 = ::std::vec::Vec::new();
+    let mut __f2 = ::std::vec::Vec::new();
+    let mut __f3 = ::std::vec::Vec::new();
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __f0 = __ridl_pb_decode_SensorBoundsRange(__b);
+                }
+            }
+            2u32 => {
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__run) => {
+                        for __chunk in __run.chunks(4usize) {
+                            let mut __bytes = [0u8; 4];
+                            __bytes.copy_from_slice(__chunk);
+                            let __raw = ::core::primitive::u32::from_le_bytes(__bytes);
+                            __f1.push(
+                                Speed::new_unchecked(
+                                    ::core::primitive::f64::from(
+                                        ::core::primitive::f32::from_bits(__raw),
+                                    ),
+                                ),
+                            );
+                        }
+                    }
+                    ::ridl_rt::proto3::Value::I32(__raw) => {
+                        __f1.push(
+                            Speed::new_unchecked(
+                                ::core::primitive::f64::from(
+                                    ::core::primitive::f32::from_bits(__raw),
+                                ),
+                            ),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            3u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __f2.push(
+                        crate::ridl::std::Label::new_unchecked(
+                            ::std::string::String::from(
+                                ::ridl_rt::proto3::utf8(__b).unwrap_or(""),
+                            ),
+                        ),
+                    );
+                }
+            }
+            4u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    let mut __k = crate::ridl::std::Label::new_unchecked(
+                        ::std::string::String::new(),
+                    );
+                    let mut __v = crate::ridl::std::Name::new_unchecked(
+                        ::std::string::String::new(),
+                    );
+                    let mut __reader = ::ridl_rt::proto3::Reader::new(__b);
+                    while let ::core::option::Option::Some(
+                        ::core::result::Result::Ok(__field),
+                    ) = __reader.next()
+                    {
+                        match __field.number {
+                            1u32 => {
+                                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                                    __k = crate::ridl::std::Label::new_unchecked(
+                                        ::std::string::String::from(
+                                            ::ridl_rt::proto3::utf8(__b).unwrap_or(""),
+                                        ),
+                                    );
+                                }
+                            }
+                            2u32 => {
+                                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                                    __v = crate::ridl::std::Name::new_unchecked(
+                                        ::std::string::String::from(
+                                            ::ridl_rt::proto3::utf8(__b).unwrap_or(""),
+                                        ),
+                                    );
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    __f3.push((__k, __v));
+                }
+            }
+            _ => {}
+        }
+    }
+    SensorBounds {
+        range: __f0,
+        readings: {
+            let mut __it = __f1.into_iter();
+            ::core::array::from_fn(|_| {
+                __it.next().unwrap_or_else(|| Speed::new_unchecked(0.0f64))
+            })
+        },
+        labels: __f2,
+        meta: __f3,
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for SensorBounds {
+    /// The largest proto3 message any legal `SensorBounds` encodes to: 29054 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 29054usize;
+    type Buffer = [::core::primitive::u8; 29054usize];
+    const BUFFER: Self::Buffer = [0u8; 29054usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_SensorBounds(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_SensorBounds(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_SensorBounds(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_SensorBounds(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_SensorResult(
+    value: &SensorResult,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    match value {
+        SensorResult::Ok(__a) => {
+            let __l = __ridl_pb_len_SensorReading(__a);
+            __n = __n
+                .saturating_add(1usize)
+                .saturating_add(
+                    ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64),
+                )
+                .saturating_add(__l);
+        }
+        SensorResult::Err(__a) => {
+            let __l = __ridl_pb_len_SensorFault(__a);
+            __n = __n
+                .saturating_add(1usize)
+                .saturating_add(
+                    ::ridl_rt::proto3::varint_len(__l as ::core::primitive::u64),
+                )
+                .saturating_add(__l);
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_SensorResult(
+    value: &SensorResult,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    match value {
+        SensorResult::Ok(__a) => {
+            let __l = __ridl_pb_len_SensorReading(__a);
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Len);
+            writer.varint(__l as ::core::primitive::u64);
+            __ridl_pb_encode_SensorReading(__a, writer)?;
+        }
+        SensorResult::Err(__a) => {
+            let __l = __ridl_pb_len_SensorFault(__a);
+            writer.tag(2u32, ::ridl_rt::proto3::WireType::Len);
+            writer.varint(__l as ::core::primitive::u64);
+            __ridl_pb_encode_SensorFault(__a, writer)?;
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_SensorResult(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __arm = false;
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __arm {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __arm = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        __ridl_pb_verify_SensorReading(__b)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                if __arm {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __arm = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        __ridl_pb_verify_SensorFault(__b)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if !__arm {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Structure(
+                ::ridl_rt::payload::Malformed::MissingRequired,
+            ),
+        );
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_SensorResult(
+    buf: &[::core::primitive::u8],
+) -> SensorResult {
+    let mut __out = SensorResult::Ok(__ridl_pb_decode_SensorReading(&[]));
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __out = SensorResult::Ok(__ridl_pb_decode_SensorReading(__b));
+                }
+            }
+            2u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __out = SensorResult::Err(__ridl_pb_decode_SensorFault(__b));
+                }
+            }
+            _ => {}
+        }
+    }
+    __out
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for SensorResult {
+    /// The largest proto3 message any legal `SensorResult` encodes to: 1036 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 1036usize;
+    type Buffer = [::core::primitive::u8; 1036usize];
+    const BUFFER: Self::Buffer = [0u8; 1036usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_SensorResult(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_SensorResult(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_SensorResult(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_SensorResult(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_SensorReading(
+    value: &SensorReading,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = value.value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    {
+        let __s = value.timestamp;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_SensorReading(
+    value: &SensorReading,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = value.value;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    {
+        let __s = value.timestamp;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            writer.tag(2u32, ::ridl_rt::proto3::WireType::Varint);
+            writer.varint(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_SensorReading(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 2usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __seen[0usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[0usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::I32(__raw) => {
+                        let __v = ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        );
+                        Speed::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                if __seen[1usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[1usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Varint(__raw) => {
+                        let __v = __raw as ::core::primitive::i64;
+                        crate::ridl::std::Timestamp::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_SensorReading(
+    buf: &[::core::primitive::u8],
+) -> SensorReading {
+    let mut __f0 = Speed::new_unchecked(0.0f64);
+    let mut __f1 = crate::ridl::std::Timestamp::new_unchecked(0i64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                    __f0 = Speed::new_unchecked(
+                        ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        ),
+                    );
+                }
+            }
+            2u32 => {
+                if let ::ridl_rt::proto3::Value::Varint(__raw) = __field.value {
+                    __f1 = crate::ridl::std::Timestamp::new_unchecked(
+                        __raw as ::core::primitive::i64,
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    SensorReading {
+        value: __f0,
+        timestamp: __f1,
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for SensorReading {
+    /// The largest proto3 message any legal `SensorReading` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = [::core::primitive::u8; 16usize];
+    const BUFFER: Self::Buffer = [0u8; 16usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_SensorReading(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_SensorReading(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_SensorReading(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_SensorReading(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_SensorFault(
+    value: &SensorFault,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = value.code;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+        }
+    }
+    {
+        let __s = value.message.get();
+        __n = __n
+            .saturating_add(1usize)
+            .saturating_add(
+                ::ridl_rt::proto3::varint_len(__s.len() as ::core::primitive::u64),
+            )
+            .saturating_add(__s.len());
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_SensorFault(
+    value: &SensorFault,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = value.code;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint);
+            writer.varint(__r);
+        }
+    }
+    {
+        let __s = value.message.get();
+        writer.tag(2u32, ::ridl_rt::proto3::WireType::Len);
+        writer.varint(__s.len() as ::core::primitive::u64);
+        writer.bytes(__s.as_bytes());
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_SensorFault(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 2usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __seen[0usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[0usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Varint(__raw) => {
+                        let __v = ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::narrow_u32(__raw)
+                                .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                        );
+                        Counter::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                if __seen[1usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[1usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        let __s = ::ridl_rt::proto3::utf8(__b)
+                            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+                        crate::ridl::std::Message::check(__s)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if !__seen[1usize] {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Structure(
+                ::ridl_rt::payload::Malformed::MissingRequired,
+            ),
+        );
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_SensorFault(
+    buf: &[::core::primitive::u8],
+) -> SensorFault {
+    let mut __f0 = Counter::new_unchecked(0i64);
+    let mut __f1 = crate::ridl::std::Message::new_unchecked(
+        ::std::string::String::new(),
+    );
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::Varint(__raw) = __field.value {
+                    __f0 = Counter::new_unchecked(
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::narrow_u32(__raw).unwrap_or(0u32),
+                        ),
+                    );
+                }
+            }
+            2u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __f1 = crate::ridl::std::Message::new_unchecked(
+                        ::std::string::String::from(
+                            ::ridl_rt::proto3::utf8(__b).unwrap_or(""),
+                        ),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    SensorFault {
+        code: __f0,
+        message: __f1,
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for SensorFault {
+    /// The largest proto3 message any legal `SensorFault` encodes to: 1033 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 1033usize;
+    type Buffer = [::core::primitive::u8; 1033usize];
+    const BUFFER: Self::Buffer = [0u8; 1033usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_SensorFault(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_SensorFault(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_SensorFault(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_SensorFault(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_pb_len_RawWheelFrame(
+    value: &RawWheelFrame,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = value.ticks;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + ::ridl_rt::proto3::varint_len(__r));
+        }
+    }
+    {
+        let __s = value.frame.as_slice();
+        __n = __n
+            .saturating_add(1usize)
+            .saturating_add(
+                ::ridl_rt::proto3::varint_len(__s.len() as ::core::primitive::u64),
+            )
+            .saturating_add(__s.len());
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_pb_encode_RawWheelFrame(
+    value: &RawWheelFrame,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = value.ticks;
+        let __r = __s.get() as ::core::primitive::u64;
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint);
+            writer.varint(__r);
+        }
+    }
+    {
+        let __s = value.frame.as_slice();
+        if __s.len() != 8usize {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                    type_name: ::core::option::Option::Some("RawWheelFrame"),
+                    rule: ::ridl_rt::payload::Rule::Length,
+                }),
+            );
+        }
+        writer.tag(2u32, ::ridl_rt::proto3::WireType::Len);
+        writer.varint(__s.len() as ::core::primitive::u64);
+        writer.bytes(__s);
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_pb_verify_RawWheelFrame(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 2usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __seen[0usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[0usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Varint(__raw) => {
+                        let __v = ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::narrow_u32(__raw)
+                                .map_err(::ridl_rt::payload::VerifyError::Structure)?,
+                        );
+                        Counter::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                if __seen[1usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[1usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::Len(__b) => {
+                        (|| -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+                            let __value = __b;
+                            if (__value.len() as ::core::primitive::u64) < 8 {
+                                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                                    type_name: ::core::option::Option::Some("RawWheelFrame"),
+                                    rule: ::ridl_rt::payload::Rule::Length,
+                                });
+                            }
+                            if (__value.len() as ::core::primitive::u64) > 8 {
+                                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                                    type_name: ::core::option::Option::Some("RawWheelFrame"),
+                                    rule: ::ridl_rt::payload::Rule::Length,
+                                });
+                            }
+                            ::core::result::Result::Ok(())
+                        })()
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if !__seen[1usize] {
+        return ::core::result::Result::Err(
+            ::ridl_rt::payload::VerifyError::Structure(
+                ::ridl_rt::payload::Malformed::MissingRequired,
+            ),
+        );
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+#[allow(dead_code)]
+pub(crate) fn __ridl_pb_decode_RawWheelFrame(
+    buf: &[::core::primitive::u8],
+) -> RawWheelFrame {
+    let mut __f0 = Counter::new_unchecked(0i64);
+    let mut __f1 = ::std::vec::Vec::new();
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::Varint(__raw) = __field.value {
+                    __f0 = Counter::new_unchecked(
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::proto3::narrow_u32(__raw).unwrap_or(0u32),
+                        ),
+                    );
+                }
+            }
+            2u32 => {
+                if let ::ridl_rt::proto3::Value::Len(__b) = __field.value {
+                    __f1 = __b.to_vec();
+                }
+            }
+            _ => {}
+        }
+    }
+    RawWheelFrame {
+        ticks: __f0,
+        frame: __f1,
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for RawWheelFrame {
+    /// The largest proto3 message any legal `RawWheelFrame` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = [::core::primitive::u8; 16usize];
+    const BUFFER: Self::Buffer = [0u8; 16usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_RawWheelFrame(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_RawWheelFrame(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_RawWheelFrame(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_RawWheelFrame(::ridl_rt::payload::View::bytes(r.view()))
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_SensorBoundsRange(
+    value: &SensorBoundsRange,
+) -> ::core::primitive::usize {
+    let mut __n = 0usize;
+    {
+        let __s = value.min;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    {
+        let __s = value.max;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            __n = __n.saturating_add(1usize + 4usize);
+        }
+    }
+    __n
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_SensorBoundsRange(
+    value: &SensorBoundsRange,
+    writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    {
+        let __s = value.min;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(1u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    {
+        let __s = value.max;
+        let __r = (__s.get() as ::core::primitive::f32).to_bits();
+        if __r != 0 {
+            writer.tag(2u32, ::ridl_rt::proto3::WireType::I32);
+            writer.fixed32(__r);
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_verify_SensorBoundsRange(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __seen = [false; 2usize];
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        let __field = __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        match __field.number {
+            1u32 => {
+                if __seen[0usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[0usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::I32(__raw) => {
+                        let __v = ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        );
+                        Speed::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            2u32 => {
+                if __seen[1usize] {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Duplicate,
+                        ),
+                    );
+                }
+                __seen[1usize] = true;
+                match __field.value {
+                    ::ridl_rt::proto3::Value::I32(__raw) => {
+                        let __v = ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        );
+                        Speed::check(&__v)
+                            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                    }
+                    _ => {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::WireType,
+                            ),
+                        );
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_decode_SensorBoundsRange(
+    buf: &[::core::primitive::u8],
+) -> SensorBoundsRange {
+    let mut __f0 = Speed::new_unchecked(0.0f64);
+    let mut __f1 = Speed::new_unchecked(0.0f64);
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(::core::result::Result::Ok(__field)) = __reader
+        .next()
+    {
+        match __field.number {
+            1u32 => {
+                if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                    __f0 = Speed::new_unchecked(
+                        ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        ),
+                    );
+                }
+            }
+            2u32 => {
+                if let ::ridl_rt::proto3::Value::I32(__raw) = __field.value {
+                    __f1 = Speed::new_unchecked(
+                        ::core::primitive::f64::from(
+                            ::core::primitive::f32::from_bits(__raw),
+                        ),
+                    );
+                }
+            }
+            _ => {}
+        }
+    }
+    SensorBoundsRange {
+        min: __f0,
+        max: __f1,
+    }
+}
+/// The podbuf head of `SpeedLimitPayload`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 8 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+pub struct SpeedLimitPayloadPodbufHead {
+    pub limit: ::core::primitive::f32,
+    pub actual: ::core::primitive::f32,
+}
+const _: () = {
+    assert!(::core::mem::size_of:: < SpeedLimitPayloadPodbufHead > () == 8usize);
+    assert!(::core::mem::align_of:: < SpeedLimitPayloadPodbufHead > () == 8usize);
+    assert!(::core::mem::offset_of!(SpeedLimitPayloadPodbufHead, limit) == 0usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::f32 > () == 4usize);
+    assert!(::core::mem::offset_of!(SpeedLimitPayloadPodbufHead, actual) == 4usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::f32 > () == 4usize);
+};
+#[allow(deprecated)]
+impl SpeedLimitPayload {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        __at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        w.put_f32(__at, self.limit.get() as ::core::primitive::f32);
+        w.put_f32(__at + 4usize, self.actual.get() as ::core::primitive::f32);
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `SpeedLimitPayload` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct SpeedLimitPayloadPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SpeedLimitPayloadPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> SpeedLimitPayloadPodbufView<'a> {
+    /// Reads `SpeedLimitPayload`'s `limit` field in place.
+    pub fn limit(&self) -> Speed {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Speed::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+    /// Reads `SpeedLimitPayload`'s `actual` field in place.
+    pub fn actual(&self) -> Speed {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Speed::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(4usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl SpeedLimitPayload {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SpeedLimitPayloadPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(SpeedLimitPayloadPodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        buf: &[::core::primitive::u8],
+        at: ::core::primitive::usize,
+        size: ::core::primitive::usize,
+        _tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        Speed::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, at, size).f32_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        Speed::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, at, size).f32_at(4usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+impl SpeedLimitPayload {
+    pub(crate) fn __ridl_podbuf_decode(view: SpeedLimitPayloadPodbufView<'_>) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        SpeedLimitPayload {
+            limit: Speed::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+                ),
+            ),
+            actual: Speed::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(4usize),
+                ),
+            ),
+        }
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for SpeedLimitPayload {
+    /// The largest podbuf buffer any legal `SpeedLimitPayload` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 16usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 16usize],
+    >::zeroed();
+    type View<'a> = SpeedLimitPayloadPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, SpeedLimitPayloadPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: SpeedLimitPayloadPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 8usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SpeedLimitPayloadPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// The podbuf head of `DriverProfile`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 24 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+pub struct DriverProfilePodbufHead {
+    pub name: ::ridl_rt::podbuf::Desc,
+    pub speed: ::core::primitive::f32,
+    pub _flags0: ::core::primitive::u8,
+    pub gears: ::core::primitive::u8,
+    pub _pad14: [::core::primitive::u8; 2],
+    pub r#override: ::core::primitive::f32,
+    pub _pad20: [::core::primitive::u8; 4],
+}
+const _: () = {
+    assert!(::core::mem::size_of:: < DriverProfilePodbufHead > () == 24usize);
+    assert!(::core::mem::align_of:: < DriverProfilePodbufHead > () == 8usize);
+    assert!(::core::mem::offset_of!(DriverProfilePodbufHead, name) == 0usize);
+    assert!(::core::mem::size_of:: < ::ridl_rt::podbuf::Desc > () == 8usize);
+    assert!(::core::mem::offset_of!(DriverProfilePodbufHead, speed) == 8usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::f32 > () == 4usize);
+    assert!(::core::mem::offset_of!(DriverProfilePodbufHead, _flags0) == 12usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::u8 > () == 1usize);
+    assert!(::core::mem::offset_of!(DriverProfilePodbufHead, gears) == 13usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::u8 > () == 1usize);
+    assert!(::core::mem::offset_of!(DriverProfilePodbufHead, _pad14) == 14usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 2] > () == 2usize);
+    assert!(::core::mem::offset_of!(DriverProfilePodbufHead, r#override) == 16usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::f32 > () == 4usize);
+    assert!(::core::mem::offset_of!(DriverProfilePodbufHead, _pad20) == 20usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 4] > () == 4usize);
+};
+#[allow(deprecated)]
+impl DriverProfile {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(24u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        __at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        {
+            let __s: &::core::primitive::str = self.name.get();
+            if __s.as_bytes().contains(&0u8) {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Name"),
+                        rule: ::ridl_rt::payload::Rule::Pattern,
+                    }),
+                );
+            }
+            if !__s.is_empty() {
+                let __n = __s.len();
+                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
+                w.put_bytes(__data, __s.as_bytes());
+                w.put_desc(
+                    __at,
+                    ::ridl_rt::podbuf::Desc {
+                        off: __data as ::core::primitive::u32,
+                        len: __n as ::core::primitive::u32,
+                    },
+                );
+            }
+        }
+        w.put_f32(__at + 8usize, self.speed.get() as ::core::primitive::f32);
+        {
+            let mut __f = 0u8;
+            if self.r#override.is_some() {
+                __f |= 1u8;
+            }
+            w.put_u8(__at + 12usize, __f);
+        }
+        w.put_u8(__at + 13usize, self.gears as ::core::primitive::u8);
+        if let ::core::option::Option::Some(__o) = &self.r#override {
+            w.put_f32(__at + 16usize, __o.get() as ::core::primitive::f32);
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `DriverProfile` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct DriverProfilePodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for DriverProfilePodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> DriverProfilePodbufView<'a> {
+    /// Reads `DriverProfile`'s `name` field in place.
+    pub fn name(&self) -> &'a ::core::primitive::str {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        {
+            let __d = ::ridl_rt::podbuf::Desc::read(
+                &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+                0usize,
+            );
+            ::core::str::from_utf8(
+                    __b
+                        .get(
+                            (__d.off
+                                as ::core::primitive::usize)..(__d.off
+                                as ::core::primitive::usize)
+                                .saturating_add(__d.len as ::core::primitive::usize),
+                        )
+                        .unwrap_or(&[]),
+                )
+                .unwrap_or("")
+        }
+    }
+    /// Reads `DriverProfile`'s `speed` field in place.
+    pub fn speed(&self) -> Speed {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Speed::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(8usize),
+            ),
+        )
+    }
+    /// Reads `DriverProfile`'s `gears` field in place.
+    pub fn gears(&self) -> ::core::primitive::i64 {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        ::core::primitive::i64::from(
+            ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(13usize),
+        )
+    }
+    /// Reads `DriverProfile`'s `r#override` field in place.
+    pub fn r#override(&self) -> ::core::option::Option<Speed> {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        if ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(12usize) & 1u8 != 0 {
+            ::core::option::Option::Some(
+                Speed::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(16usize),
+                    ),
+                ),
+            )
+        } else {
+            ::core::option::Option::None
+        }
+    }
+}
+#[allow(deprecated)]
+impl DriverProfile {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        DriverProfilePodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(DriverProfilePodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        buf: &[::core::primitive::u8],
+        at: ::core::primitive::usize,
+        size: ::core::primitive::usize,
+        __tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        {
+            let __d = ::ridl_rt::podbuf::Desc::read(
+                &::ridl_rt::podbuf::Region::new(buf, at, size),
+                0usize,
+            );
+            let __s: &::core::primitive::str = if __d.len == 0 {
+                if __d.off != 0 {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::OutOfBounds,
+                        ),
+                    );
+                }
+                ""
+            } else {
+                if ::core::primitive::u64::from(__d.len) > 512u64 {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::OutOfBounds,
+                        ),
+                    );
+                }
+                let __g = ::ridl_rt::podbuf::tail_range(
+                    __d.off,
+                    ::core::primitive::u64::from(__d.len) + 1u64,
+                    buf.len(),
+                    __tail,
+                    1usize,
+                )?;
+                ::ridl_rt::podbuf::text(buf.get(__g).unwrap_or(&[]))?
+            };
+            crate::ridl::std::Name::check(__s)
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        Speed::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, at, size).f32_at(8usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        (|| -> ::core::result::Result<(), ::ridl_rt::payload::Violation> {
+            let __value = ::core::primitive::i64::from(
+                ::ridl_rt::podbuf::Region::new(buf, at, size).u8_at(13usize),
+            );
+            if __value < 0 {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: ::core::option::Option::Some("DriverProfile"),
+                    rule: ::ridl_rt::payload::Rule::Range,
+                });
+            }
+            if __value > 6 {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: ::core::option::Option::Some("DriverProfile"),
+                    rule: ::ridl_rt::payload::Rule::Range,
+                });
+            }
+            ::core::result::Result::Ok(())
+        })()
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        if ::ridl_rt::podbuf::Region::new(buf, at, size).u8_at(12usize) & 1u8 != 0 {
+            Speed::check(
+                    &(::core::primitive::f64::from(
+                        ::ridl_rt::podbuf::Region::new(buf, at, size).f32_at(16usize),
+                    )),
+                )
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        } else if ::ridl_rt::podbuf::Region::new(buf, at, size)
+            .bytes_at(16usize, 4usize)
+            .any(|__byte| __byte != 0u8)
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                    type_name: ::core::option::Option::Some("DriverProfile"),
+                    rule: ::ridl_rt::payload::Rule::Variant,
+                }),
+            );
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+impl DriverProfile {
+    pub(crate) fn __ridl_podbuf_decode(view: DriverProfilePodbufView<'_>) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        DriverProfile {
+            name: crate::ridl::std::Name::new_unchecked(
+                ::std::string::String::from({
+                    let __d = ::ridl_rt::podbuf::Desc::read(
+                        &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+                        0usize,
+                    );
+                    ::core::str::from_utf8(
+                            __b
+                                .get(
+                                    (__d.off
+                                        as ::core::primitive::usize)..(__d.off
+                                        as ::core::primitive::usize)
+                                        .saturating_add(__d.len as ::core::primitive::usize),
+                                )
+                                .unwrap_or(&[]),
+                        )
+                        .unwrap_or("")
+                }),
+            ),
+            speed: Speed::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(8usize),
+                ),
+            ),
+            gears: ::core::primitive::i64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(13usize),
+            ),
+            r#override: if ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(12usize)
+                & 1u8 != 0
+            {
+                ::core::option::Option::Some(
+                    Speed::new_unchecked(
+                        ::core::primitive::f64::from(
+                            ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(16usize),
+                        ),
+                    ),
+                )
+            } else {
+                ::core::option::Option::None
+            },
+        }
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for DriverProfile {
+    /// The largest podbuf buffer any legal `DriverProfile` encodes to: 545 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 545usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 545usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 545usize],
+    >::zeroed();
+    type View<'a> = DriverProfilePodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, DriverProfilePodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: DriverProfilePodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 24usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        DriverProfilePodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// The podbuf head of `SensorBounds`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 56 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+pub struct SensorBoundsPodbufHead {
+    pub range: SensorBoundsRangePodbufHead,
+    pub readings: [::core::primitive::f32; 8],
+    pub labels: ::ridl_rt::podbuf::ArrayDesc,
+    pub meta: ::ridl_rt::podbuf::ArrayDesc,
+}
+const _: () = {
+    assert!(::core::mem::size_of:: < SensorBoundsPodbufHead > () == 56usize);
+    assert!(::core::mem::align_of:: < SensorBoundsPodbufHead > () == 8usize);
+    assert!(::core::mem::offset_of!(SensorBoundsPodbufHead, range) == 0usize);
+    assert!(::core::mem::size_of:: < SensorBoundsRangePodbufHead > () == 8usize);
+    assert!(::core::mem::offset_of!(SensorBoundsPodbufHead, readings) == 8usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::f32; 8] > () == 32usize);
+    assert!(::core::mem::offset_of!(SensorBoundsPodbufHead, labels) == 40usize);
+    assert!(::core::mem::size_of:: < ::ridl_rt::podbuf::ArrayDesc > () == 8usize);
+    assert!(::core::mem::offset_of!(SensorBoundsPodbufHead, meta) == 48usize);
+    assert!(::core::mem::size_of:: < ::ridl_rt::podbuf::ArrayDesc > () == 8usize);
+};
+#[allow(deprecated)]
+impl SensorBounds {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(56u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        __at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        SensorBoundsRange::__ridl_podbuf_encode_at(&self.range, w, __at)?;
+        for (__i, __e) in self.readings.iter().enumerate() {
+            let __ea = __at + 8usize + __i * 4usize;
+            w.put_f32(__ea, __e.get() as ::core::primitive::f32);
+        }
+        {
+            let __c = &self.labels;
+            if __c.is_empty() || __c.len() > 16usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("SensorBounds"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            if !__c.is_empty() {
+                let __off = w
+                    .tail((__c.len() * 8usize) as ::core::primitive::u64, 4usize)?;
+                w.put_array_desc(
+                    __at + 40usize,
+                    ::ridl_rt::podbuf::ArrayDesc {
+                        off: __off as ::core::primitive::u32,
+                        len: __c.len() as ::core::primitive::u16,
+                        elem_size: 8u16,
+                    },
+                );
+                for (__i, __e) in __c.iter().enumerate() {
+                    let __ea = __off + __i * 8usize;
+                    {
+                        let __s: &::core::primitive::str = __e.get();
+                        if __s.as_bytes().contains(&0u8) {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                                    type_name: ::core::option::Option::Some("Label"),
+                                    rule: ::ridl_rt::payload::Rule::Pattern,
+                                }),
+                            );
+                        }
+                        if !__s.is_empty() {
+                            let __n = __s.len();
+                            let __data = w
+                                .tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
+                            w.put_bytes(__data, __s.as_bytes());
+                            w.put_desc(
+                                __ea,
+                                ::ridl_rt::podbuf::Desc {
+                                    off: __data as ::core::primitive::u32,
+                                    len: __n as ::core::primitive::u32,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        {
+            let __c = &self.meta;
+            if __c.len() > 32usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("SensorBounds"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            let mut __s: ::std::vec::Vec<_> = __c.iter().collect();
+            __s.sort_by(|__a, __b| ::core::cmp::Ord::cmp(
+                __a.0.get().as_bytes(),
+                __b.0.get().as_bytes(),
+            ));
+            for __p in __s.windows(2) {
+                if __p[0].0.get() == __p[1].0.get() {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                            type_name: ::core::option::Option::Some("SensorBounds"),
+                            rule: ::ridl_rt::payload::Rule::Unique,
+                        }),
+                    );
+                }
+            }
+            if !__s.is_empty() {
+                let __off = w
+                    .tail((__s.len() * 16usize) as ::core::primitive::u64, 8usize)?;
+                w.put_array_desc(
+                    __at + 48usize,
+                    ::ridl_rt::podbuf::ArrayDesc {
+                        off: __off as ::core::primitive::u32,
+                        len: __s.len() as ::core::primitive::u16,
+                        elem_size: 16u16,
+                    },
+                );
+                for (__i, __e) in __s.iter().enumerate() {
+                    let __ea = __off + __i * 16usize;
+                    {
+                        let __s: &::core::primitive::str = __e.0.get();
+                        if __s.as_bytes().contains(&0u8) {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                                    type_name: ::core::option::Option::Some("Label"),
+                                    rule: ::ridl_rt::payload::Rule::Pattern,
+                                }),
+                            );
+                        }
+                        if !__s.is_empty() {
+                            let __n = __s.len();
+                            let __data = w
+                                .tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
+                            w.put_bytes(__data, __s.as_bytes());
+                            w.put_desc(
+                                __ea,
+                                ::ridl_rt::podbuf::Desc {
+                                    off: __data as ::core::primitive::u32,
+                                    len: __n as ::core::primitive::u32,
+                                },
+                            );
+                        }
+                    }
+                    {
+                        let __s: &::core::primitive::str = __e.1.get();
+                        if __s.as_bytes().contains(&0u8) {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                                    type_name: ::core::option::Option::Some("Name"),
+                                    rule: ::ridl_rt::payload::Rule::Pattern,
+                                }),
+                            );
+                        }
+                        if !__s.is_empty() {
+                            let __n = __s.len();
+                            let __data = w
+                                .tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
+                            w.put_bytes(__data, __s.as_bytes());
+                            w.put_desc(
+                                __ea + 8usize,
+                                ::ridl_rt::podbuf::Desc {
+                                    off: __data as ::core::primitive::u32,
+                                    len: __n as ::core::primitive::u32,
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `SensorBounds` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct SensorBoundsPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SensorBoundsPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> SensorBoundsPodbufView<'a> {
+    /// Reads `SensorBounds`'s `range` field in place.
+    pub fn range(&self) -> SensorBoundsRangePodbufView<'a> {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        SensorBoundsRangePodbufView {
+            buf: __b,
+            at: __a,
+            size: __z,
+        }
+    }
+    /// Reads `SensorBounds`'s `readings` field in place.
+    pub fn readings(&self) -> impl ::core::iter::Iterator<Item = Speed> + 'a {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        {
+            let (__b, __a, __z) = (__b, __a, __z);
+            (0..8usize)
+                .map(move |__i| Speed::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::podbuf::Region::new(__b, __a, __z)
+                            .f32_at(8usize + __i * 4usize),
+                    ),
+                ))
+        }
+    }
+    /// Reads `SensorBounds`'s `labels` field in place.
+    pub fn labels(
+        &self,
+    ) -> impl ::core::iter::Iterator<Item = &'a ::core::primitive::str> + 'a {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        {
+            let __d = ::ridl_rt::podbuf::ArrayDesc::read(
+                &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+                40usize,
+            );
+            (0..::core::primitive::usize::from(__d.len))
+                .map(move |__i| {
+                    let __ez = ::core::primitive::usize::from(__d.elem_size);
+                    let __es = (__d.off as ::core::primitive::usize)
+                        .saturating_add(__i.saturating_mul(__ez));
+                    {
+                        let __d = ::ridl_rt::podbuf::Desc::read(
+                            &::ridl_rt::podbuf::Region::new(__b, __es, __ez),
+                            0usize,
+                        );
+                        ::core::str::from_utf8(
+                                __b
+                                    .get(
+                                        (__d.off
+                                            as ::core::primitive::usize)..(__d.off
+                                            as ::core::primitive::usize)
+                                            .saturating_add(__d.len as ::core::primitive::usize),
+                                    )
+                                    .unwrap_or(&[]),
+                            )
+                            .unwrap_or("")
+                    }
+                })
+        }
+    }
+    /// Reads `SensorBounds`'s `meta` field in place.
+    pub fn meta(
+        &self,
+    ) -> impl ::core::iter::Iterator<
+        Item = (&'a ::core::primitive::str, &'a ::core::primitive::str),
+    > + 'a {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        {
+            let __d = ::ridl_rt::podbuf::ArrayDesc::read(
+                &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+                48usize,
+            );
+            (0..::core::primitive::usize::from(__d.len))
+                .map(move |__i| {
+                    let __ez = ::core::primitive::usize::from(__d.elem_size);
+                    let __es = (__d.off as ::core::primitive::usize)
+                        .saturating_add(__i.saturating_mul(__ez));
+                    (
+                        {
+                            let __d = ::ridl_rt::podbuf::Desc::read(
+                                &::ridl_rt::podbuf::Region::new(__b, __es, __ez),
+                                0usize,
+                            );
+                            ::core::str::from_utf8(
+                                    __b
+                                        .get(
+                                            (__d.off
+                                                as ::core::primitive::usize)..(__d.off
+                                                as ::core::primitive::usize)
+                                                .saturating_add(__d.len as ::core::primitive::usize),
+                                        )
+                                        .unwrap_or(&[]),
+                                )
+                                .unwrap_or("")
+                        },
+                        {
+                            let __d = ::ridl_rt::podbuf::Desc::read(
+                                &::ridl_rt::podbuf::Region::new(__b, __es, __ez),
+                                8usize,
+                            );
+                            ::core::str::from_utf8(
+                                    __b
+                                        .get(
+                                            (__d.off
+                                                as ::core::primitive::usize)..(__d.off
+                                                as ::core::primitive::usize)
+                                                .saturating_add(__d.len as ::core::primitive::usize),
+                                        )
+                                        .unwrap_or(&[]),
+                                )
+                                .unwrap_or("")
+                        },
+                    )
+                })
+        }
+    }
+}
+#[allow(deprecated)]
+impl SensorBounds {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SensorBoundsPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(SensorBoundsPodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        buf: &[::core::primitive::u8],
+        at: ::core::primitive::usize,
+        size: ::core::primitive::usize,
+        __tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        SensorBoundsRange::__ridl_podbuf_verify_at(buf, at, size, __tail)?;
+        for __i in 0..8usize {
+            let __o = 8usize + __i * 4usize;
+            Speed::check(
+                    &(::core::primitive::f64::from(
+                        ::ridl_rt::podbuf::Region::new(buf, at, size).f32_at(__o),
+                    )),
+                )
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        {
+            let __d = ::ridl_rt::podbuf::ArrayDesc::read(
+                &::ridl_rt::podbuf::Region::new(buf, at, size),
+                40usize,
+            );
+            if __d.len == 0 {
+                if __d.off != 0 || __d.elem_size != 0 {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::OutOfBounds,
+                        ),
+                    );
+                }
+            } else {
+                if ::core::primitive::u32::from(__d.elem_size) != 8u32 {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Stride,
+                        ),
+                    );
+                }
+                ::ridl_rt::podbuf::tail_range(
+                    __d.off,
+                    ::core::primitive::u64::from(__d.len)
+                        * ::core::primitive::u64::from(__d.elem_size),
+                    buf.len(),
+                    __tail,
+                    4usize,
+                )?;
+            }
+            if ::core::primitive::usize::from(__d.len) < 1usize
+                || ::core::primitive::usize::from(__d.len) > 16usize
+            {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("SensorBounds"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            for __i in 0..::core::primitive::usize::from(__d.len) {
+                let __ez = ::core::primitive::usize::from(__d.elem_size);
+                let __es = (__d.off as ::core::primitive::usize)
+                    .saturating_add(__i.saturating_mul(__ez));
+                {
+                    let __d = ::ridl_rt::podbuf::Desc::read(
+                        &::ridl_rt::podbuf::Region::new(buf, __es, __ez),
+                        0usize,
+                    );
+                    let __s: &::core::primitive::str = if __d.len == 0 {
+                        if __d.off != 0 {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Structure(
+                                    ::ridl_rt::payload::Malformed::OutOfBounds,
+                                ),
+                            );
+                        }
+                        ""
+                    } else {
+                        if ::core::primitive::u64::from(__d.len) > 256u64 {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Structure(
+                                    ::ridl_rt::payload::Malformed::OutOfBounds,
+                                ),
+                            );
+                        }
+                        let __g = ::ridl_rt::podbuf::tail_range(
+                            __d.off,
+                            ::core::primitive::u64::from(__d.len) + 1u64,
+                            buf.len(),
+                            __tail,
+                            1usize,
+                        )?;
+                        ::ridl_rt::podbuf::text(buf.get(__g).unwrap_or(&[]))?
+                    };
+                    crate::ridl::std::Label::check(__s)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+            }
+        }
+        {
+            let __d = ::ridl_rt::podbuf::ArrayDesc::read(
+                &::ridl_rt::podbuf::Region::new(buf, at, size),
+                48usize,
+            );
+            if __d.len == 0 {
+                if __d.off != 0 || __d.elem_size != 0 {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::OutOfBounds,
+                        ),
+                    );
+                }
+            } else {
+                if !__d.elem_size.is_multiple_of(8u16) {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::Stride,
+                        ),
+                    );
+                }
+                ::ridl_rt::podbuf::tail_range(
+                    __d.off,
+                    ::core::primitive::u64::from(__d.len)
+                        * ::core::primitive::u64::from(__d.elem_size),
+                    buf.len(),
+                    __tail,
+                    8usize,
+                )?;
+            }
+            if ::core::primitive::usize::from(__d.len) > 32usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("SensorBounds"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            for __i in 0..::core::primitive::usize::from(__d.len) {
+                let __ez = ::core::primitive::usize::from(__d.elem_size);
+                let __es = (__d.off as ::core::primitive::usize)
+                    .saturating_add(__i.saturating_mul(__ez));
+                {
+                    let __d = ::ridl_rt::podbuf::Desc::read(
+                        &::ridl_rt::podbuf::Region::new(buf, __es, __ez),
+                        0usize,
+                    );
+                    let __s: &::core::primitive::str = if __d.len == 0 {
+                        if __d.off != 0 {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Structure(
+                                    ::ridl_rt::payload::Malformed::OutOfBounds,
+                                ),
+                            );
+                        }
+                        ""
+                    } else {
+                        if ::core::primitive::u64::from(__d.len) > 256u64 {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Structure(
+                                    ::ridl_rt::payload::Malformed::OutOfBounds,
+                                ),
+                            );
+                        }
+                        let __g = ::ridl_rt::podbuf::tail_range(
+                            __d.off,
+                            ::core::primitive::u64::from(__d.len) + 1u64,
+                            buf.len(),
+                            __tail,
+                            1usize,
+                        )?;
+                        ::ridl_rt::podbuf::text(buf.get(__g).unwrap_or(&[]))?
+                    };
+                    crate::ridl::std::Label::check(__s)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                {
+                    let __d = ::ridl_rt::podbuf::Desc::read(
+                        &::ridl_rt::podbuf::Region::new(buf, __es, __ez),
+                        8usize,
+                    );
+                    let __s: &::core::primitive::str = if __d.len == 0 {
+                        if __d.off != 0 {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Structure(
+                                    ::ridl_rt::payload::Malformed::OutOfBounds,
+                                ),
+                            );
+                        }
+                        ""
+                    } else {
+                        if ::core::primitive::u64::from(__d.len) > 512u64 {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Structure(
+                                    ::ridl_rt::payload::Malformed::OutOfBounds,
+                                ),
+                            );
+                        }
+                        let __g = ::ridl_rt::podbuf::tail_range(
+                            __d.off,
+                            ::core::primitive::u64::from(__d.len) + 1u64,
+                            buf.len(),
+                            __tail,
+                            1usize,
+                        )?;
+                        ::ridl_rt::podbuf::text(buf.get(__g).unwrap_or(&[]))?
+                    };
+                    crate::ridl::std::Name::check(__s)
+                        .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+                }
+                let __r = ::ridl_rt::podbuf::Region::new(buf, __es, __ez);
+                if __i > 0 {
+                    let __q = ::ridl_rt::podbuf::Region::new(
+                        buf,
+                        __es.saturating_sub(__ez),
+                        __ez,
+                    );
+                    {
+                        let __ka: &[::core::primitive::u8] = {
+                            let __d = ::ridl_rt::podbuf::Desc::read(&__q, 0usize);
+                            buf.get(
+                                    (__d.off
+                                        as ::core::primitive::usize)..(__d.off
+                                        as ::core::primitive::usize)
+                                        .saturating_add(__d.len as ::core::primitive::usize),
+                                )
+                                .unwrap_or(&[])
+                        };
+                        let __kb: &[::core::primitive::u8] = {
+                            let __d = ::ridl_rt::podbuf::Desc::read(&__r, 0usize);
+                            buf.get(
+                                    (__d.off
+                                        as ::core::primitive::usize)..(__d.off
+                                        as ::core::primitive::usize)
+                                        .saturating_add(__d.len as ::core::primitive::usize),
+                                )
+                                .unwrap_or(&[])
+                        };
+                        if __ka >= __kb {
+                            return ::core::result::Result::Err(
+                                ::ridl_rt::payload::VerifyError::Structure(
+                                    ::ridl_rt::payload::Malformed::KeyOrder,
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+impl SensorBounds {
+    pub(crate) fn __ridl_podbuf_decode(view: SensorBoundsPodbufView<'_>) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        SensorBounds {
+            range: SensorBoundsRange::__ridl_podbuf_decode(SensorBoundsRangePodbufView {
+                buf: __b,
+                at: __a,
+                size: __z,
+            }),
+            readings: ::core::array::from_fn(|__i| Speed::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z)
+                        .f32_at(8usize + __i * 4usize),
+                ),
+            )),
+            labels: {
+                let __d = ::ridl_rt::podbuf::ArrayDesc::read(
+                    &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+                    40usize,
+                );
+                (0..::core::primitive::usize::from(__d.len))
+                    .map(move |__i| {
+                        let __ez = ::core::primitive::usize::from(__d.elem_size);
+                        let __es = (__d.off as ::core::primitive::usize)
+                            .saturating_add(__i.saturating_mul(__ez));
+                        crate::ridl::std::Label::new_unchecked(
+                            ::std::string::String::from({
+                                let __d = ::ridl_rt::podbuf::Desc::read(
+                                    &::ridl_rt::podbuf::Region::new(__b, __es, __ez),
+                                    0usize,
+                                );
+                                ::core::str::from_utf8(
+                                        __b
+                                            .get(
+                                                (__d.off
+                                                    as ::core::primitive::usize)..(__d.off
+                                                    as ::core::primitive::usize)
+                                                    .saturating_add(__d.len as ::core::primitive::usize),
+                                            )
+                                            .unwrap_or(&[]),
+                                    )
+                                    .unwrap_or("")
+                            }),
+                        )
+                    })
+            }
+                .collect::<::std::vec::Vec<crate::ridl::std::Label>>(),
+            meta: {
+                let __d = ::ridl_rt::podbuf::ArrayDesc::read(
+                    &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+                    48usize,
+                );
+                (0..::core::primitive::usize::from(__d.len))
+                    .map(move |__i| {
+                        let __ez = ::core::primitive::usize::from(__d.elem_size);
+                        let __es = (__d.off as ::core::primitive::usize)
+                            .saturating_add(__i.saturating_mul(__ez));
+                        (
+                            crate::ridl::std::Label::new_unchecked(
+                                ::std::string::String::from({
+                                    let __d = ::ridl_rt::podbuf::Desc::read(
+                                        &::ridl_rt::podbuf::Region::new(__b, __es, __ez),
+                                        0usize,
+                                    );
+                                    ::core::str::from_utf8(
+                                            __b
+                                                .get(
+                                                    (__d.off
+                                                        as ::core::primitive::usize)..(__d.off
+                                                        as ::core::primitive::usize)
+                                                        .saturating_add(__d.len as ::core::primitive::usize),
+                                                )
+                                                .unwrap_or(&[]),
+                                        )
+                                        .unwrap_or("")
+                                }),
+                            ),
+                            crate::ridl::std::Name::new_unchecked(
+                                ::std::string::String::from({
+                                    let __d = ::ridl_rt::podbuf::Desc::read(
+                                        &::ridl_rt::podbuf::Region::new(__b, __es, __ez),
+                                        8usize,
+                                    );
+                                    ::core::str::from_utf8(
+                                            __b
+                                                .get(
+                                                    (__d.off
+                                                        as ::core::primitive::usize)..(__d.off
+                                                        as ::core::primitive::usize)
+                                                        .saturating_add(__d.len as ::core::primitive::usize),
+                                                )
+                                                .unwrap_or(&[]),
+                                        )
+                                        .unwrap_or("")
+                                }),
+                            ),
+                        )
+                    })
+            }
+                .collect::<
+                    ::std::vec::Vec<(crate::ridl::std::Label, crate::ridl::std::Name)>,
+                >(),
+        }
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for SensorBounds {
+    /// The largest podbuf buffer any legal `SensorBounds` encodes to: 29463 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 29463usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 29463usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 29463usize],
+    >::zeroed();
+    type View<'a> = SensorBoundsPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, SensorBoundsPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: SensorBoundsPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 56usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SensorBoundsPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// The podbuf head of `SensorResult`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 16 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+pub struct SensorResultPodbufHead {
+    pub tag: ::core::primitive::u8,
+    pub _pad1: [::core::primitive::u8; 3],
+    pub arm: ::ridl_rt::podbuf::Desc,
+    pub _pad12: [::core::primitive::u8; 4],
+}
+const _: () = {
+    assert!(::core::mem::size_of:: < SensorResultPodbufHead > () == 16usize);
+    assert!(::core::mem::align_of:: < SensorResultPodbufHead > () == 8usize);
+    assert!(::core::mem::offset_of!(SensorResultPodbufHead, tag) == 0usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::u8 > () == 1usize);
+    assert!(::core::mem::offset_of!(SensorResultPodbufHead, _pad1) == 1usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 3] > () == 3usize);
+    assert!(::core::mem::offset_of!(SensorResultPodbufHead, arm) == 4usize);
+    assert!(::core::mem::size_of:: < ::ridl_rt::podbuf::Desc > () == 8usize);
+    assert!(::core::mem::offset_of!(SensorResultPodbufHead, _pad12) == 12usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 4] > () == 4usize);
+};
+#[allow(deprecated)]
+impl SensorResult {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(16u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        __at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        match self {
+            SensorResult::Ok(__a) => {
+                w.put_u8(__at, 1u8);
+                let __off = w.tail(16u64, 8usize)?;
+                w.put_desc(
+                    __at + 4usize,
+                    ::ridl_rt::podbuf::Desc {
+                        off: __off as ::core::primitive::u32,
+                        len: 16u32,
+                    },
+                );
+                SensorReading::__ridl_podbuf_encode_at(__a, w, __off)?;
+            }
+            SensorResult::Err(__a) => {
+                w.put_u8(__at, 2u8);
+                let __off = w.tail(16u64, 8usize)?;
+                w.put_desc(
+                    __at + 4usize,
+                    ::ridl_rt::podbuf::Desc {
+                        off: __off as ::core::primitive::u32,
+                        len: 16u32,
+                    },
+                );
+                SensorFault::__ridl_podbuf_encode_at(__a, w, __off)?;
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `SensorResult` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct SensorResultPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SensorResultPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> SensorResultPodbufView<'a> {
+    /// Reads `SensorResult`'s `arm` field in place.
+    pub fn arm(&self) -> SensorResultPodbufArm<'a> {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        let __d = ::ridl_rt::podbuf::Desc::read(
+            &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+            4usize,
+        );
+        match ::core::primitive::i64::from(
+            ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(0usize),
+        ) {
+            1i64 => {
+                SensorResultPodbufArm::Ok(SensorReadingPodbufView {
+                    buf: __b,
+                    at: __d.off as ::core::primitive::usize,
+                    size: __d.len as ::core::primitive::usize,
+                })
+            }
+            2i64 => {
+                SensorResultPodbufArm::Err(SensorFaultPodbufView {
+                    buf: __b,
+                    at: __d.off as ::core::primitive::usize,
+                    size: __d.len as ::core::primitive::usize,
+                })
+            }
+            _ => {
+                SensorResultPodbufArm::Ok(SensorReadingPodbufView {
+                    buf: __b,
+                    at: __d.off as ::core::primitive::usize,
+                    size: __d.len as ::core::primitive::usize,
+                })
+            }
+        }
+    }
+}
+/// The arms of `SensorResult` as a view reads them: the active arm's view, or its value for a scalar, enum or enum set arm.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub enum SensorResultPodbufArm<'a> {
+    /// The `ok` arm.
+    Ok(SensorReadingPodbufView<'a>),
+    /// The `err` arm.
+    Err(SensorFaultPodbufView<'a>),
+}
+#[allow(deprecated)]
+impl SensorResult {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SensorResultPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(SensorResultPodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        buf: &[::core::primitive::u8],
+        at: ::core::primitive::usize,
+        size: ::core::primitive::usize,
+        __tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        let __d = ::ridl_rt::podbuf::Desc::read(
+            &::ridl_rt::podbuf::Region::new(buf, at, size),
+            4usize,
+        );
+        if !__d.len.is_multiple_of(8u32) {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::Union,
+                ),
+            );
+        }
+        match ::core::primitive::i64::from(
+            ::ridl_rt::podbuf::Region::new(buf, at, size).u8_at(0usize),
+        ) {
+            1i64 => {
+                if __d.len == 0 {
+                    if __d.off != 0 {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::OutOfBounds,
+                            ),
+                        );
+                    }
+                } else {
+                    ::ridl_rt::podbuf::tail_range(
+                        __d.off,
+                        ::core::primitive::u64::from(__d.len),
+                        buf.len(),
+                        __tail,
+                        8usize,
+                    )?;
+                }
+                SensorReading::__ridl_podbuf_verify_at(
+                    buf,
+                    __d.off as ::core::primitive::usize,
+                    __d.len as ::core::primitive::usize,
+                    __tail,
+                )?;
+            }
+            2i64 => {
+                if __d.len == 0 {
+                    if __d.off != 0 {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::OutOfBounds,
+                            ),
+                        );
+                    }
+                } else {
+                    ::ridl_rt::podbuf::tail_range(
+                        __d.off,
+                        ::core::primitive::u64::from(__d.len),
+                        buf.len(),
+                        __tail,
+                        8usize,
+                    )?;
+                }
+                SensorFault::__ridl_podbuf_verify_at(
+                    buf,
+                    __d.off as ::core::primitive::usize,
+                    __d.len as ::core::primitive::usize,
+                    __tail,
+                )?;
+            }
+            _ => {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::VerifyError::Structure(
+                        ::ridl_rt::payload::Malformed::Union,
+                    ),
+                );
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+impl SensorResult {
+    pub(crate) fn __ridl_podbuf_decode(view: SensorResultPodbufView<'_>) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        let __d = ::ridl_rt::podbuf::Desc::read(
+            &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+            4usize,
+        );
+        match ::core::primitive::i64::from(
+            ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(0usize),
+        ) {
+            1i64 => {
+                SensorResult::Ok(
+                    SensorReading::__ridl_podbuf_decode(SensorReadingPodbufView {
+                        buf: __b,
+                        at: __d.off as ::core::primitive::usize,
+                        size: __d.len as ::core::primitive::usize,
+                    }),
+                )
+            }
+            2i64 => {
+                SensorResult::Err(
+                    SensorFault::__ridl_podbuf_decode(SensorFaultPodbufView {
+                        buf: __b,
+                        at: __d.off as ::core::primitive::usize,
+                        size: __d.len as ::core::primitive::usize,
+                    }),
+                )
+            }
+            _ => {
+                SensorResult::Ok(
+                    SensorReading::__ridl_podbuf_decode(SensorReadingPodbufView {
+                        buf: __b,
+                        at: __d.off as ::core::primitive::usize,
+                        size: __d.len as ::core::primitive::usize,
+                    }),
+                )
+            }
+        }
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for SensorResult {
+    /// The largest podbuf buffer any legal `SensorResult` encodes to: 1065 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 1065usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 1065usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 1065usize],
+    >::zeroed();
+    type View<'a> = SensorResultPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, SensorResultPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: SensorResultPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 16usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SensorResultPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// The podbuf head of `SensorReading`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 16 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+pub struct SensorReadingPodbufHead {
+    pub value: ::core::primitive::f32,
+    pub _pad4: [::core::primitive::u8; 4],
+    pub timestamp: ::core::primitive::u64,
+}
+const _: () = {
+    assert!(::core::mem::size_of:: < SensorReadingPodbufHead > () == 16usize);
+    assert!(::core::mem::align_of:: < SensorReadingPodbufHead > () == 8usize);
+    assert!(::core::mem::offset_of!(SensorReadingPodbufHead, value) == 0usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::f32 > () == 4usize);
+    assert!(::core::mem::offset_of!(SensorReadingPodbufHead, _pad4) == 4usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 4] > () == 4usize);
+    assert!(::core::mem::offset_of!(SensorReadingPodbufHead, timestamp) == 8usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::u64 > () == 8usize);
+};
+#[allow(deprecated)]
+impl SensorReading {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(16u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        __at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        w.put_f32(__at, self.value.get() as ::core::primitive::f32);
+        w.put_u64(__at + 8usize, self.timestamp.get() as ::core::primitive::u64);
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `SensorReading` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct SensorReadingPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SensorReadingPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> SensorReadingPodbufView<'a> {
+    /// Reads `SensorReading`'s `value` field in place.
+    pub fn value(&self) -> Speed {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Speed::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+    /// Reads `SensorReading`'s `timestamp` field in place.
+    pub fn timestamp(&self) -> crate::ridl::std::Timestamp {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        crate::ridl::std::Timestamp::new_unchecked(
+            ::ridl_rt::podbuf::Region::new(__b, __a, __z).u64_at(8usize)
+                as ::core::primitive::i64,
+        )
+    }
+}
+#[allow(deprecated)]
+impl SensorReading {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SensorReadingPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(SensorReadingPodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        buf: &[::core::primitive::u8],
+        at: ::core::primitive::usize,
+        size: ::core::primitive::usize,
+        _tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        Speed::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, at, size).f32_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        crate::ridl::std::Timestamp::check(
+                &(::ridl_rt::podbuf::Region::new(buf, at, size).u64_at(8usize)
+                    as ::core::primitive::i64),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+impl SensorReading {
+    pub(crate) fn __ridl_podbuf_decode(view: SensorReadingPodbufView<'_>) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        SensorReading {
+            value: Speed::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+                ),
+            ),
+            timestamp: crate::ridl::std::Timestamp::new_unchecked(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).u64_at(8usize)
+                    as ::core::primitive::i64,
+            ),
+        }
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for SensorReading {
+    /// The largest podbuf buffer any legal `SensorReading` encodes to: 24 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 24usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 24usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 24usize],
+    >::zeroed();
+    type View<'a> = SensorReadingPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, SensorReadingPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: SensorReadingPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 16usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SensorReadingPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// The podbuf head of `SensorFault`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 16 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+pub struct SensorFaultPodbufHead {
+    pub code: ::core::primitive::u16,
+    pub _pad2: [::core::primitive::u8; 2],
+    pub message: ::ridl_rt::podbuf::Desc,
+    pub _pad12: [::core::primitive::u8; 4],
+}
+const _: () = {
+    assert!(::core::mem::size_of:: < SensorFaultPodbufHead > () == 16usize);
+    assert!(::core::mem::align_of:: < SensorFaultPodbufHead > () == 8usize);
+    assert!(::core::mem::offset_of!(SensorFaultPodbufHead, code) == 0usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::u16 > () == 2usize);
+    assert!(::core::mem::offset_of!(SensorFaultPodbufHead, _pad2) == 2usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 2] > () == 2usize);
+    assert!(::core::mem::offset_of!(SensorFaultPodbufHead, message) == 4usize);
+    assert!(::core::mem::size_of:: < ::ridl_rt::podbuf::Desc > () == 8usize);
+    assert!(::core::mem::offset_of!(SensorFaultPodbufHead, _pad12) == 12usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 4] > () == 4usize);
+};
+#[allow(deprecated)]
+impl SensorFault {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(16u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        __at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        w.put_u16(__at, self.code.get() as ::core::primitive::u16);
+        {
+            let __s: &::core::primitive::str = self.message.get();
+            if __s.as_bytes().contains(&0u8) {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("Message"),
+                        rule: ::ridl_rt::payload::Rule::Pattern,
+                    }),
+                );
+            }
+            if !__s.is_empty() {
+                let __n = __s.len();
+                let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
+                w.put_bytes(__data, __s.as_bytes());
+                w.put_desc(
+                    __at + 4usize,
+                    ::ridl_rt::podbuf::Desc {
+                        off: __data as ::core::primitive::u32,
+                        len: __n as ::core::primitive::u32,
+                    },
+                );
+            }
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `SensorFault` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct SensorFaultPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SensorFaultPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> SensorFaultPodbufView<'a> {
+    /// Reads `SensorFault`'s `code` field in place.
+    pub fn code(&self) -> Counter {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Counter::new_unchecked(
+            ::core::primitive::i64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).u16_at(0usize),
+            ),
+        )
+    }
+    /// Reads `SensorFault`'s `message` field in place.
+    pub fn message(&self) -> &'a ::core::primitive::str {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        {
+            let __d = ::ridl_rt::podbuf::Desc::read(
+                &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+                4usize,
+            );
+            ::core::str::from_utf8(
+                    __b
+                        .get(
+                            (__d.off
+                                as ::core::primitive::usize)..(__d.off
+                                as ::core::primitive::usize)
+                                .saturating_add(__d.len as ::core::primitive::usize),
+                        )
+                        .unwrap_or(&[]),
+                )
+                .unwrap_or("")
+        }
+    }
+}
+#[allow(deprecated)]
+impl SensorFault {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SensorFaultPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(SensorFaultPodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        buf: &[::core::primitive::u8],
+        at: ::core::primitive::usize,
+        size: ::core::primitive::usize,
+        __tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        Counter::check(
+                &(::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, at, size).u16_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        {
+            let __d = ::ridl_rt::podbuf::Desc::read(
+                &::ridl_rt::podbuf::Region::new(buf, at, size),
+                4usize,
+            );
+            let __s: &::core::primitive::str = if __d.len == 0 {
+                if __d.off != 0 {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::OutOfBounds,
+                        ),
+                    );
+                }
+                ""
+            } else {
+                if ::core::primitive::u64::from(__d.len) > 1024u64 {
+                    return ::core::result::Result::Err(
+                        ::ridl_rt::payload::VerifyError::Structure(
+                            ::ridl_rt::payload::Malformed::OutOfBounds,
+                        ),
+                    );
+                }
+                let __g = ::ridl_rt::podbuf::tail_range(
+                    __d.off,
+                    ::core::primitive::u64::from(__d.len) + 1u64,
+                    buf.len(),
+                    __tail,
+                    1usize,
+                )?;
+                ::ridl_rt::podbuf::text(buf.get(__g).unwrap_or(&[]))?
+            };
+            crate::ridl::std::Message::check(__s)
+                .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+impl SensorFault {
+    pub(crate) fn __ridl_podbuf_decode(view: SensorFaultPodbufView<'_>) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        SensorFault {
+            code: Counter::new_unchecked(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).u16_at(0usize),
+                ),
+            ),
+            message: crate::ridl::std::Message::new_unchecked(
+                ::std::string::String::from({
+                    let __d = ::ridl_rt::podbuf::Desc::read(
+                        &::ridl_rt::podbuf::Region::new(__b, __a, __z),
+                        4usize,
+                    );
+                    ::core::str::from_utf8(
+                            __b
+                                .get(
+                                    (__d.off
+                                        as ::core::primitive::usize)..(__d.off
+                                        as ::core::primitive::usize)
+                                        .saturating_add(__d.len as ::core::primitive::usize),
+                                )
+                                .unwrap_or(&[]),
+                        )
+                        .unwrap_or("")
+                }),
+            ),
+        }
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for SensorFault {
+    /// The largest podbuf buffer any legal `SensorFault` encodes to: 1049 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 1049usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 1049usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 1049usize],
+    >::zeroed();
+    type View<'a> = SensorFaultPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, SensorFaultPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: SensorFaultPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 16usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SensorFaultPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// The podbuf head of `RawWheelFrame`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 16 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+#[allow(dead_code)]
+pub(crate) struct RawWheelFramePodbufHead {
+    pub ticks: ::core::primitive::u16,
+    pub frame: [::core::primitive::u8; 8],
+    pub _pad10: [::core::primitive::u8; 6],
+}
+#[allow(dead_code)]
+const _: () = {
+    assert!(::core::mem::size_of:: < RawWheelFramePodbufHead > () == 16usize);
+    assert!(::core::mem::align_of:: < RawWheelFramePodbufHead > () == 8usize);
+    assert!(::core::mem::offset_of!(RawWheelFramePodbufHead, ticks) == 0usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::u16 > () == 2usize);
+    assert!(::core::mem::offset_of!(RawWheelFramePodbufHead, frame) == 2usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 8] > () == 8usize);
+    assert!(::core::mem::offset_of!(RawWheelFramePodbufHead, _pad10) == 10usize);
+    assert!(::core::mem::size_of:: < [::core::primitive::u8; 6] > () == 6usize);
+};
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl RawWheelFrame {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(16u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        __at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        w.put_u16(__at, self.ticks.get() as ::core::primitive::u16);
+        {
+            let __b: &[::core::primitive::u8] = self.frame.as_slice();
+            if __b.len() != 8usize {
+                return ::core::result::Result::Err(
+                    ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
+                        type_name: ::core::option::Option::Some("RawWheelFrame"),
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    }),
+                );
+            }
+            w.put_bytes(__at + 2usize, __b);
+        }
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `RawWheelFrame` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+#[allow(dead_code)]
+pub(crate) struct RawWheelFramePodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl<'a> ::ridl_rt::payload::View<'a> for RawWheelFramePodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl<'a> RawWheelFramePodbufView<'a> {
+    /// Reads `RawWheelFrame`'s `ticks` field in place.
+    pub(crate) fn ticks(&self) -> Counter {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Counter::new_unchecked(
+            ::core::primitive::i64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).u16_at(0usize),
+            ),
+        )
+    }
+    /// Reads `RawWheelFrame`'s `frame` field in place.
+    pub(crate) fn frame(
+        &self,
+    ) -> impl ::core::iter::Iterator<Item = ::core::primitive::u8> + 'a {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        {
+            let __r = ::ridl_rt::podbuf::Region::new(__b, __a, __z);
+            (0..8usize).map(move |__i| __r.u8_at((2usize).saturating_add(__i)))
+        }
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl RawWheelFrame {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        RawWheelFramePodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(RawWheelFramePodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        buf: &[::core::primitive::u8],
+        at: ::core::primitive::usize,
+        size: ::core::primitive::usize,
+        _tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        Counter::check(
+                &(::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, at, size).u16_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl RawWheelFrame {
+    pub(crate) fn __ridl_podbuf_decode(view: RawWheelFramePodbufView<'_>) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        RawWheelFrame {
+            ticks: Counter::new_unchecked(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).u16_at(0usize),
+                ),
+            ),
+            frame: ::ridl_rt::podbuf::Region::new(__b, __a, __z)
+                .bytes_at(2usize, 8usize)
+                .collect::<::std::vec::Vec<::core::primitive::u8>>(),
+        }
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for RawWheelFrame {
+    /// The largest podbuf buffer any legal `RawWheelFrame` encodes to: 24 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 24usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 24usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 24usize],
+    >::zeroed();
+    type View<'a> = RawWheelFramePodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, RawWheelFramePodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: RawWheelFramePodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 16usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        RawWheelFramePodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// The podbuf head of `SensorBoundsRange`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 8 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+#[allow(dead_code)]
+pub struct SensorBoundsRangePodbufHead {
+    pub min: ::core::primitive::f32,
+    pub max: ::core::primitive::f32,
+}
+#[allow(dead_code)]
+const _: () = {
+    assert!(::core::mem::size_of:: < SensorBoundsRangePodbufHead > () == 8usize);
+    assert!(::core::mem::align_of:: < SensorBoundsRangePodbufHead > () == 8usize);
+    assert!(::core::mem::offset_of!(SensorBoundsRangePodbufHead, min) == 0usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::f32 > () == 4usize);
+    assert!(::core::mem::offset_of!(SensorBoundsRangePodbufHead, max) == 4usize);
+    assert!(::core::mem::size_of:: < ::core::primitive::f32 > () == 4usize);
+};
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl SensorBoundsRange {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        __at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        w.put_f32(__at, self.min.get() as ::core::primitive::f32);
+        w.put_f32(__at + 4usize, self.max.get() as ::core::primitive::f32);
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `SensorBoundsRange` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+#[allow(dead_code)]
+pub struct SensorBoundsRangePodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl<'a> ::ridl_rt::payload::View<'a> for SensorBoundsRangePodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl<'a> SensorBoundsRangePodbufView<'a> {
+    /// Reads `SensorBoundsRange`'s `min` field in place.
+    pub fn min(&self) -> Speed {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Speed::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+    /// Reads `SensorBoundsRange`'s `max` field in place.
+    pub fn max(&self) -> Speed {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Speed::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(4usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl SensorBoundsRange {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        SensorBoundsRangePodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(SensorBoundsRangePodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        buf: &[::core::primitive::u8],
+        at: ::core::primitive::usize,
+        size: ::core::primitive::usize,
+        _tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        Speed::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, at, size).f32_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        Speed::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, at, size).f32_at(4usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+#[allow(dead_code)]
+impl SensorBoundsRange {
+    pub(crate) fn __ridl_podbuf_decode(view: SensorBoundsRangePodbufView<'_>) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        SensorBoundsRange {
+            min: Speed::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+                ),
+            ),
+            max: Speed::new_unchecked(
+                ::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(4usize),
+                ),
+            ),
+        }
+    }
+}
+/// A `Speed` value in podbuf bytes, read in place without copying it. The value is a bounds-checked load; a value past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct SpeedPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for SpeedPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> SpeedPodbufView<'a> {
+    /// Reads the `Speed` value in place.
+    pub fn value(&self) -> Speed {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Speed::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl Speed {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        w.put_f32(__at, self.get() as ::core::primitive::f32);
+        ::core::result::Result::Ok(())
+    }
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<SpeedPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __head = ::ridl_rt::podbuf::PREAMBLE_SIZE;
+        let __size = __p.head_size as ::core::primitive::usize;
+        #[allow(unused_variables)]
+        let __tail = __head + __size;
+        Speed::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, __head, __size).f32_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(SpeedPodbufView {
+            buf,
+            at: __head,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_decode(view: SpeedPodbufView<'_>) -> Self {
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        Speed::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Speed {
+    /// The largest podbuf buffer any legal `Speed` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 16usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 16usize],
+    >::zeroed();
+    type View<'a> = SpeedPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, SpeedPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: SpeedPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 8usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<SpeedPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// A `Temperature` value in podbuf bytes, read in place without copying it. The value is a bounds-checked load; a value past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct TemperaturePodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for TemperaturePodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> TemperaturePodbufView<'a> {
+    /// Reads the `Temperature` value in place.
+    pub fn value(&self) -> Temperature {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Temperature::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl Temperature {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        w.put_f32(__at, self.get() as ::core::primitive::f32);
+        ::core::result::Result::Ok(())
+    }
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        TemperaturePodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __head = ::ridl_rt::podbuf::PREAMBLE_SIZE;
+        let __size = __p.head_size as ::core::primitive::usize;
+        #[allow(unused_variables)]
+        let __tail = __head + __size;
+        Temperature::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, __head, __size).f32_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(TemperaturePodbufView {
+            buf,
+            at: __head,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_decode(view: TemperaturePodbufView<'_>) -> Self {
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        Temperature::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Temperature {
+    /// The largest podbuf buffer any legal `Temperature` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 16usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 16usize],
+    >::zeroed();
+    type View<'a> = TemperaturePodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, TemperaturePodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: TemperaturePodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 8usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        TemperaturePodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// A `RPM` value in podbuf bytes, read in place without copying it. The value is a bounds-checked load; a value past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct RPMPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for RPMPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> RPMPodbufView<'a> {
+    /// Reads the `RPM` value in place.
+    pub fn value(&self) -> RPM {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        RPM::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl RPM {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        w.put_f32(__at, self.get() as ::core::primitive::f32);
+        ::core::result::Result::Ok(())
+    }
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<RPMPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __head = ::ridl_rt::podbuf::PREAMBLE_SIZE;
+        let __size = __p.head_size as ::core::primitive::usize;
+        #[allow(unused_variables)]
+        let __tail = __head + __size;
+        RPM::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, __head, __size).f32_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(RPMPodbufView {
+            buf,
+            at: __head,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_decode(view: RPMPodbufView<'_>) -> Self {
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        RPM::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for RPM {
+    /// The largest podbuf buffer any legal `RPM` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 16usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 16usize],
+    >::zeroed();
+    type View<'a> = RPMPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, RPMPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: RPMPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 8usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<RPMPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// A `Ratio` value in podbuf bytes, read in place without copying it. The value is a bounds-checked load; a value past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct RatioPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for RatioPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> RatioPodbufView<'a> {
+    /// Reads the `Ratio` value in place.
+    pub fn value(&self) -> Ratio {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Ratio::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl Ratio {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        w.put_f32(__at, self.get() as ::core::primitive::f32);
+        ::core::result::Result::Ok(())
+    }
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<RatioPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __head = ::ridl_rt::podbuf::PREAMBLE_SIZE;
+        let __size = __p.head_size as ::core::primitive::usize;
+        #[allow(unused_variables)]
+        let __tail = __head + __size;
+        Ratio::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, __head, __size).f32_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(RatioPodbufView {
+            buf,
+            at: __head,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_decode(view: RatioPodbufView<'_>) -> Self {
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        Ratio::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Ratio {
+    /// The largest podbuf buffer any legal `Ratio` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 16usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 16usize],
+    >::zeroed();
+    type View<'a> = RatioPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, RatioPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: RatioPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 8usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<RatioPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// A `Counter` value in podbuf bytes, read in place without copying it. The value is a bounds-checked load; a value past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct CounterPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for CounterPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> CounterPodbufView<'a> {
+    /// Reads the `Counter` value in place.
+    pub fn value(&self) -> Counter {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Counter::new_unchecked(
+            ::core::primitive::i64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).u16_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl Counter {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        w.put_u16(__at, self.get() as ::core::primitive::u16);
+        ::core::result::Result::Ok(())
+    }
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<CounterPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __head = ::ridl_rt::podbuf::PREAMBLE_SIZE;
+        let __size = __p.head_size as ::core::primitive::usize;
+        #[allow(unused_variables)]
+        let __tail = __head + __size;
+        Counter::check(
+                &(::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, __head, __size).u16_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(CounterPodbufView {
+            buf,
+            at: __head,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_decode(view: CounterPodbufView<'_>) -> Self {
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        Counter::new_unchecked(
+            ::core::primitive::i64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).u16_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Counter {
+    /// The largest podbuf buffer any legal `Counter` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 16usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 16usize],
+    >::zeroed();
+    type View<'a> = CounterPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, CounterPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: CounterPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 8usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<CounterPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// A `Gain` value in podbuf bytes, read in place without copying it. The value is a bounds-checked load; a value past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct GainPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for GainPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> GainPodbufView<'a> {
+    /// Reads the `Gain` value in place.
+    pub fn value(&self) -> Gain {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        Gain::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl Gain {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        w.put_f32(__at, self.get() as ::core::primitive::f32);
+        ::core::result::Result::Ok(())
+    }
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<GainPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __head = ::ridl_rt::podbuf::PREAMBLE_SIZE;
+        let __size = __p.head_size as ::core::primitive::usize;
+        #[allow(unused_variables)]
+        let __tail = __head + __size;
+        Gain::check(
+                &(::core::primitive::f64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, __head, __size).f32_at(0usize),
+                )),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(GainPodbufView {
+            buf,
+            at: __head,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_decode(view: GainPodbufView<'_>) -> Self {
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        Gain::new_unchecked(
+            ::core::primitive::f64::from(
+                ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(0usize),
+            ),
+        )
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Gain {
+    /// The largest podbuf buffer any legal `Gain` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 16usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 16usize],
+    >::zeroed();
+    type View<'a> = GainPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, GainPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: GainPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 8usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<GainPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// A `GearPosition` value in podbuf bytes, read in place without copying it. The value is a bounds-checked load; a value past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct GearPositionPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for GearPositionPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> GearPositionPodbufView<'a> {
+    /// Reads the `GearPosition` value in place.
+    pub fn value(&self) -> GearPosition {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        <GearPosition as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(0usize),
+                ),
+            )
+            .unwrap_or(GearPosition::Park)
+    }
+}
+#[allow(deprecated)]
+impl GearPosition {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        w.put_u8(__at, ::core::primitive::i64::from(*self) as ::core::primitive::u8);
+        ::core::result::Result::Ok(())
+    }
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        GearPositionPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __head = ::ridl_rt::podbuf::PREAMBLE_SIZE;
+        let __size = __p.head_size as ::core::primitive::usize;
+        #[allow(unused_variables)]
+        let __tail = __head + __size;
+        <GearPosition as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, __head, __size).u8_at(0usize),
+                ),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(GearPositionPodbufView {
+            buf,
+            at: __head,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_decode(view: GearPositionPodbufView<'_>) -> Self {
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        <GearPosition as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(0usize),
+                ),
+            )
+            .unwrap_or(GearPosition::Park)
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for GearPosition {
+    /// The largest podbuf buffer any legal `GearPosition` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 16usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 16usize],
+    >::zeroed();
+    type View<'a> = GearPositionPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, GearPositionPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: GearPositionPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 8usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        GearPositionPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// A `Warning` value in podbuf bytes, read in place without copying it. The value is a bounds-checked load; a value past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct WarningPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for WarningPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> WarningPodbufView<'a> {
+    /// Reads the `Warning` value in place.
+    pub fn value(&self) -> Warning {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        <Warning as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(0usize),
+                ),
+            )
+            .unwrap_or(Warning::LowFuel)
+    }
+}
+#[allow(deprecated)]
+impl Warning {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        w.put_u8(__at, ::core::primitive::i64::from(*self) as ::core::primitive::u8);
+        ::core::result::Result::Ok(())
+    }
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<WarningPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __head = ::ridl_rt::podbuf::PREAMBLE_SIZE;
+        let __size = __p.head_size as ::core::primitive::usize;
+        #[allow(unused_variables)]
+        let __tail = __head + __size;
+        <Warning as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, __head, __size).u8_at(0usize),
+                ),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(WarningPodbufView {
+            buf,
+            at: __head,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_decode(view: WarningPodbufView<'_>) -> Self {
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        <Warning as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(0usize),
+                ),
+            )
+            .unwrap_or(Warning::LowFuel)
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Warning {
+    /// The largest podbuf buffer any legal `Warning` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 16usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 16usize],
+    >::zeroed();
+    type View<'a> = WarningPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, WarningPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: WarningPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 8usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<WarningPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// A `WarningFlags` value in podbuf bytes, read in place without copying it. The value is a bounds-checked load; a value past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct WarningFlagsPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for WarningFlagsPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> WarningFlagsPodbufView<'a> {
+    /// Reads the `WarningFlags` value in place.
+    pub fn value(&self) -> WarningFlags {
+        let __b = self.buf;
+        let __a = self.at;
+        let __z = self.size;
+        <WarningFlags as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(0usize),
+                ),
+            )
+            .unwrap_or(WarningFlags(0i64))
+    }
+}
+#[allow(deprecated)]
+impl WarningFlags {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(8u32)?;
+        w.put_u8(__at, ::core::primitive::i64::from(*self) as ::core::primitive::u8);
+        ::core::result::Result::Ok(())
+    }
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        WarningFlagsPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __head = ::ridl_rt::podbuf::PREAMBLE_SIZE;
+        let __size = __p.head_size as ::core::primitive::usize;
+        #[allow(unused_variables)]
+        let __tail = __head + __size;
+        <WarningFlags as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(buf, __head, __size).u8_at(0usize),
+                ),
+            )
+            .map_err(::ridl_rt::payload::VerifyError::Contract)?;
+        ::core::result::Result::Ok(WarningFlagsPodbufView {
+            buf,
+            at: __head,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_decode(view: WarningFlagsPodbufView<'_>) -> Self {
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        <WarningFlags as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(
+                ::core::primitive::i64::from(
+                    ::ridl_rt::podbuf::Region::new(__b, __a, __z).u8_at(0usize),
+                ),
+            )
+            .unwrap_or(WarningFlags(0i64))
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for WarningFlags {
+    /// The largest podbuf buffer any legal `WarningFlags` encodes to: 16 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 16usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 16usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 16usize],
+    >::zeroed();
+    type View<'a> = WarningFlagsPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, WarningFlagsPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: WarningFlagsPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 8usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        WarningFlagsPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        if buf.len()
+            > <Self as ::ridl_rt::payload::Payload<
+                ::ridl_rt::encoding::Podbuf,
+            >>::MAX_SIZE
+        {
+            return ::core::result::Result::Err(
+                ::ridl_rt::payload::VerifyError::Structure(
+                    ::ridl_rt::payload::Malformed::TooLarge,
+                ),
+            );
+        }
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
