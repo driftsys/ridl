@@ -112,9 +112,13 @@ const FLATBUFFERS_REFUSED: [(&str, &str); 1] =
 /// argument message overflows a `u32` bound (`proto3_unbounded_call.ridl`)
 /// is not refused: its interface is skipped with a note, which is scanned
 /// like any other output.
-const PROTO3_REFUSED: [(&str, &str); 3] = [
+const PROTO3_REFUSED: [(&str, &str); 4] = [
     (
         "payload_constraints.ridl",
+        "a map key must be an integral or string type",
+    ),
+    (
+        "podbuf_roundtrip.ridl",
         "a map key must be an integral or string type",
     ),
     ("proto3_unbounded.ridl", "` has no proto3 codec: "),

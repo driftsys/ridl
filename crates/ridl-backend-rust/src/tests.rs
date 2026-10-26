@@ -777,6 +777,41 @@ fn the_podbuf_head_struct_is_repr_c_with_pads_and_assertions() {
     );
 }
 
+/// The read side of the codec is emitted beside the head struct: the view
+/// with its `View` implementation and one accessor per field, the verifier
+/// in its root and `_at` forms, the decoder, and for a union the enum of arm
+/// views, with a lifetime when an arm borrows the buffer.
+#[test]
+fn the_podbuf_view_verifier_decoder_and_arm_enum_are_emitted() {
+    let src = generate_podbuf_fixture();
+    let dense: String = src.chars().filter(|c| !c.is_whitespace()).collect();
+    for expected in [
+        "pubstructFaultEventPodbufView<'a>{",
+        "impl<'a>::ridl_rt::payload::View<'a>forFaultEventPodbufView<'a>{",
+        "pubfncode(&self)->::core::primitive::i64{",
+        "pubfnmessage(&self)->&'a::core::primitive::str{",
+        "pubfncategory(&self)->::core::option::Option<&'a::core::primitive::str>{",
+        "pubfnfaults(&self,)->impl::core::iter::Iterator<Item=FaultEventPodbufView<'a>>+'a{",
+        "pubfnby_name(&self,)->impl::core::iter::Iterator<Item=(&'a::core::primitive::str,Weight)>+'a{",
+        "pubfndoor(&self)->DoorPayloadPodbufView<'a>{",
+        "pubenumOutcomePodbufArm<'a>{",
+        "Ok(DoorPayloadPodbufView<'a>),",
+        "Bad(Health),",
+        "pubfnarm(&self)->OutcomePodbufArm<'a>{",
+        "pub(crate)fn__ridl_podbuf_verify(buf:&[::core::primitive::u8],)->::core::result::Result<FaultEventPodbufView<'_>,::ridl_rt::payload::VerifyError,>{",
+        "pub(crate)fn__ridl_podbuf_verify_at(buf:&[::core::primitive::u8],at:::core::primitive::usize,size:::core::primitive::usize,__tail:::core::primitive::usize,)",
+        "pub(crate)fn__ridl_podbuf_decode(view:FaultEventPodbufView<'_>)->Self{",
+        "FaultEvent::__ridl_podbuf_verify_at(buf,__es,__ez,__tail)?;",
+    ] {
+        assert!(dense.contains(expected), "missing `{expected}` in:\n{src}");
+    }
+    // A head with no field reads nothing: its verifier names no parameter.
+    assert!(
+        dense.contains("pub(crate)fn__ridl_podbuf_verify_at(_buf:&[::core::primitive::u8],_at:::core::primitive::usize,_size:::core::primitive::usize,_tail:::core::primitive::usize,)"),
+        "got:\n{src}"
+    );
+}
+
 /// The layout the codec emitted from, as the drift test reads it: one entry
 /// per head struct, with the numbers the `const` assertions carry.
 #[test]

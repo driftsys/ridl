@@ -110,3 +110,64 @@ struct Wrapped {
 struct Scored {
   byScore : [float : Weight; 0..8]
 }
+
+/// A strict enum, one byte wide.
+enum GearPosition {
+  PARK    = 0
+  REVERSE = 1
+  NEUTRAL = 2
+  DRIVE   = 3
+}
+
+/// Three declared bits, so bit 7 is undeclared.
+enumset WarningFlags {
+  LOW_FUEL    = 0
+  LOW_OIL     = 1
+  DOOR_AJAR   = 2
+}
+
+/// A strict enum at head offset 0.
+struct Shifter {
+  gear : GearPosition
+}
+
+/// An enum set at head offset 0.
+struct Warnings {
+  flags : WarningFlags
+}
+
+/// Two descriptors, at 0..8 and 8..16.
+struct TwoStrings {
+  a : string [0..8]
+  b : string [0..8]
+}
+
+/// A string bounded at two scalar values: at most eight bytes on the wire.
+struct Short2 {
+  s : string [0..2]
+}
+
+/// An array of two-byte scalars: the stride is the element size, exactly.
+struct Readings {
+  xs : [integer [0..65535]; 0..8]
+}
+
+/// A struct with no field: a head of size 0.
+struct Empty {}
+
+/// A union whose first arm has an empty head.
+union Maybe {
+  none : Empty
+  some : DoorPayload
+}
+
+/// A float with no range: any bit pattern is a value.
+struct FreeFloat {
+  x : float
+}
+
+/// Bounded bytes, and a required array of at least one element.
+struct Blob {
+  data  : bytes [0..8]
+  marks : [integer [0..255]; 1..4]
+}

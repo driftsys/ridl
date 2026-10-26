@@ -192,6 +192,15 @@ pub(crate) fn check(ctx: &Ctx, interfaces: &[&v1::Interface]) -> Result<(), Gene
                 &codec_podbuf::view_ident(name),
                 format!("the podbuf view of {source} (the suffix `PodbufView`)"),
             )?;
+            if matches!(owner, codec_podbuf::HeadOwner::Declaration(index)
+            if ctx.declaration(index).is_some_and(|decl| {
+                matches!(decl.kind, Some(v1::declaration::Kind::Union(_)))
+            })) {
+                types.claim(
+                    &codec_podbuf::arm_ident(name),
+                    format!("the podbuf arm views of {source} (the suffix `PodbufArm`)"),
+                )?;
+            }
         }
     }
 

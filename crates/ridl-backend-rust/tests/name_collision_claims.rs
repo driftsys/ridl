@@ -334,6 +334,50 @@ struct Level{suffix} {{
     }
 }
 
+/// The podbuf codec also emits `<Union>PodbufArm`, the enum of arm views,
+/// for a union alone: a declaration named like it is refused with `podbuf`
+/// listed, and a struct's arm name is not claimed.
+#[test]
+fn a_podbuf_arm_enum_named_like_a_declaration_is_refused_for_a_union_only() {
+    let source = "package probe.podbuf
+
+struct Level {
+  value : integer [0..100]
+}
+
+union Choice {
+  level : Level
+}
+
+struct ChoicePodbufArm {
+  level : Level
+}
+
+struct LevelPodbufArm {
+  level : Level
+}
+";
+    let output = ridlc::compile("podbuf_arm_claim.ridl", source);
+    let err = generate_pipeline(&output.package, &[WireEncoding::Podbuf], false, &[])
+        .expect_err("the union's arm enum name is refused when podbuf is listed");
+    names_all(
+        &err.message,
+        &[
+            "`ChoicePodbufArm`",
+            "declaration `ChoicePodbufArm`",
+            "declaration `Choice`",
+            "`PodbufArm`",
+        ],
+    );
+    assert!(
+        !err.message.contains("`LevelPodbufArm`"),
+        "a struct claims no arm enum, got: {}",
+        err.message
+    );
+    generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
+        .unwrap_or_else(|err| panic!("the pair builds without podbuf, got: {}", err.message));
+}
+
 /// X-11: the tuple at `Reading.bounds` is `ReadingBounds`, which a declaration
 /// already names. The refusal comes from the claim table, before the codec,
 /// so it does not speak of the FlatBuffers projection.
