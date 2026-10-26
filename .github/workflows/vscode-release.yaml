@@ -298,8 +298,11 @@ jobs:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: editors/vscode/scripts/publish-vsix.sh vsce vsix
 
+  # Disabled: no OVSX_PAT secret is available to this repository. Remove the
+  # `if` when the secret is set again.
   publish-ovsx:
     name: publish to Open VSX
+    if: false
     needs: package-vsix
     runs-on: ubuntu-latest
     environment: marketplace
