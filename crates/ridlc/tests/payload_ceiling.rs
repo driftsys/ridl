@@ -210,6 +210,27 @@ fn a_podbuf_request_of_several_parameters_is_sized_as_a_struct() {
     );
 }
 
+/// A query reply is sized under podbuf as the lowering sizes it: a named
+/// reply as that type, a tuple reply as the struct of its fields.
+#[test]
+fn a_podbuf_query_reply_is_sized_for_a_named_and_a_tuple_reply() {
+    let podbuf = "[backend.rust]\nencodings = [\"podbuf\"]\n";
+    let named = "package demo\ntype Reply: bytes [0..16241]\n\
+                 interface I {\n  query get(): Reply @[..1s]\n}\n";
+    let tuple = "package demo\ntype Blob: bytes [0..9000]\n\
+                 interface I {\n  query get(): (a: Blob, b: Blob) @[..1s]\n}\n";
+    for source in [named, tuple] {
+        let diagnostics = check(source, podbuf);
+        let found = ridl_150(&diagnostics);
+        assert_eq!(found.len(), 1, "{diagnostics:?}");
+        assert!(
+            found[0].message.contains("reply") && found[0].message.contains("in podbuf"),
+            "{}",
+            found[0].message
+        );
+    }
+}
+
 /// A payload that holds a `ridl.std` type is sized over the standard package
 /// too, so it has a finite bound and draws nothing.
 #[test]

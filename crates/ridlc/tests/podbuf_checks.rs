@@ -62,6 +62,12 @@ const DESCRIPTOR_LIMITS: &str = "package demo\n\
     type Wide: bytes [70000..70000]\n\
     struct Limits {\n  count: [Flag; 0..70000]\n  wide: [Wide; 0..4]\n}\n";
 
+/// `many` has 70,000 entries and `wide` has an entry of 70,000 bytes, both in
+/// maps.
+const MAP_LIMITS: &str = "package demo\n\
+    type Wide: bytes [70000..70000]\n\
+    struct Maps {\n  many: [integer : boolean; 0..70000]\n  wide: [integer : Wide; 0..2]\n}\n";
+
 /// A deprecated field of a string type that cannot be empty: typl derives no
 /// init value for it (§5.8), and the empty string is not a valid value.
 const DEPRECATED: &str = "package demo\n\
@@ -94,6 +100,24 @@ fn an_array_past_65535_elements_or_bytes_per_element_is_ridl_154() {
     );
     assert!(
         messages.iter().any(|m| m.contains("`demo.Limits.wide`")),
+        "{messages:?}"
+    );
+}
+
+#[test]
+fn a_map_past_65535_entries_or_bytes_per_entry_is_ridl_154() {
+    let out = check(MAP_LIMITS, PODBUF);
+    assert_eq!(codes(&out), vec!["RIDL-154", "RIDL-154"], "{out:?}");
+    let messages: Vec<&str> = podbuf_errors(&out)
+        .iter()
+        .map(|diagnostic| diagnostic.message.as_str())
+        .collect();
+    assert!(
+        messages.iter().any(|m| m.contains("`demo.Maps.many`")),
+        "{messages:?}"
+    );
+    assert!(
+        messages.iter().any(|m| m.contains("`demo.Maps.wide`")),
         "{messages:?}"
     );
 }
