@@ -2008,7 +2008,9 @@ fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String>
         }
         for shape in home.shapes() {
             for decl in &shape.interface.interactions {
-                if interaction_payloads(decl).iter().any(|ty| holds(ty, false)) {
+                if interaction_payloads(decl).iter().any(|ty| {
+                    field_form(packages, ty).is_ok_and(|form| root_holds_inline(&form, &target))
+                }) {
                     uses.push(format!("{}/{}/{}", home.name, shape.name, decl.name));
                 }
             }
@@ -2018,14 +2020,14 @@ fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String>
     uses
 }
 
-/// The types an interaction puts on the wire as podbuf heads of their own,
-/// each a root that may grow: a call's request — the argument struct the
-/// lowering induces from several parameters, written here as the tuple
-/// `params_as_tuple` gives, or the single named parameter sent as it is — a
-/// query's reply (a value as declared; the two arms of a fallible reply), and
-/// a fixed payload. A signal or event payload is a named type, a root on its
-/// own, and holds nothing at a fixed offset of another head, so it is not
-/// listed. A request with a stream parameter induces no struct.
+/// The types an interaction puts on the wire as roots: a call's request — the
+/// argument struct the lowering induces from several parameters, written here
+/// as the tuple `params_as_tuple` gives, or the single named parameter sent
+/// as it is — a query's reply (a value as declared; the two arms of a fallible
+/// reply), and a fixed payload. A signal or event payload is a named type, a
+/// root on its own, and holds nothing at a fixed offset of another head, so it
+/// is not listed. A request with a stream parameter induces no struct.
+/// [`root_holds_inline`] reads each one.
 fn interaction_payloads(decl: &v2::Decl) -> Vec<v2::FieldType> {
     use v2::decl::Kind;
 
@@ -2066,6 +2068,25 @@ fn interaction_payloads(decl: &v2::Decl) -> Vec<v2::FieldType> {
         _ => {}
     }
     payloads
+}
+
+/// Whether a root — an interaction's request, reply or fixed payload — holds
+/// the struct `target` at a fixed offset of a head. The encoder lays out a
+/// head for a declaration and for a named induced tuple only
+/// (`ridl_ir::codegen` feeds `podbuf::tuple_head` from the tuples the lowering
+/// names), so a root contributes a use only through such a head: the induced
+/// argument tuple, a tuple reply, a tuple written anywhere inside the root.
+/// A root that is itself an exact-length array, such as a fixed payload
+/// `[S; 2..2]`, has no head — its podbuf encoding is undefined — and the
+/// struct directly inside it is not a use; a tuple inside it still is.
+fn root_holds_inline(
+    form: &projection::podbuf::Form,
+    target: &projection::podbuf::Inlined,
+) -> bool {
+    match form {
+        projection::podbuf::Form::InlineArray { element, .. } => root_holds_inline(element, target),
+        _ => holds_inline(form, target, false),
+    }
 }
 
 /// Whether `form` holds the struct `target` at a fixed offset of a head that

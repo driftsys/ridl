@@ -562,6 +562,48 @@ struct Bounds {
     );
 }
 
+/// A fixed payload that is an exact-length array of the struct has no podbuf
+/// head, so an append to the struct is not an inline use: exit 0 under
+/// `--encoding podbuf`, and no `podbuf_inline_append` line.
+#[test]
+fn a_fixed_exact_array_payload_is_not_a_podbuf_inline_use() {
+    const V1: &str = "package veh.cluster
+type Level: integer [0..100]
+struct Reading {
+  value: Level
+}
+interface Ctl {
+  fixed window: [Reading; 2..2]
+}
+";
+    const V2: &str = "package veh.cluster
+type Level: integer [0..100]
+struct Reading {
+  value: Level
+  quality: Level
+}
+interface Ctl {
+  fixed window: [Reading; 2..2]
+}
+";
+    let dir = TempDir::new("fixed-array");
+    let v1 = dir.write("v1.ridl", V1);
+    let v2 = dir.write("v2.ridl", V2);
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "podbuf".as_ref(),
+        v1.as_os_str(),
+        v2.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "no head holds the struct, stderr:\n{stderr}");
+    assert!(stdout.starts_with("compatible"), "stdout:\n{stdout}");
+    assert!(
+        !stdout.contains("podbuf_inline_append"),
+        "stdout:\n{stdout}"
+    );
+}
+
 /// A compatible source change (an appended interaction) exits 0.
 #[test]
 fn source_dir_vs_source_dir_compatible_exits_zero() {

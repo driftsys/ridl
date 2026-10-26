@@ -163,18 +163,21 @@ common cases:
   `interface_number_changed`).
 - **Breaking under podbuf**: a struct field appended to a struct that another
   struct, a tuple or an exact-length array holds inline anywhere in the new
-  side, in a struct or in the request, the reply or the fixed payload of an
-  interaction (`podbuf_inline_append`). A podbuf head holds such a struct at a
+  side, in a struct, in the argument struct a call with several parameters
+  induces, or in a tuple reply (`podbuf_inline_append`). A podbuf head holds such a struct at a
   fixed offset, so the inline copy cannot grow without moving the fields after
   it; the other encodings hold no struct inline. The line names each inline
   use.
   A snapshot does not record the encodings a workspace builds, so the verdict
   follows `ridl diff --encoding podbuf`: breaking with it, compatible without
-  it, under the heading `breaking under podbuf` either way. A struct that is a
-  root of its own (a single named parameter, a named reply, a signal or event
-  payload), or that is used only as the element of a bounded array, the key or
-  value of a map entry, or a union arm, can grow under podbuf, and such an
-  append is compatible. A field
+  it, under the heading `breaking under podbuf` either way. The search mirrors
+  the heads the encoder lays out, a declaration and a named induced tuple: a
+  struct that is a root of its own (a single named parameter, a named reply, a
+  signal, event or fixed payload), that is used only as the element of a
+  bounded array, the key or value of a map entry, or a union arm, or only
+  inside an exact-length array that is itself a root (a fixed payload
+  `[S; 2..2]`, which has no head) can grow under podbuf, and such an append is
+  compatible. A field
   removed from a struct, its slot held by a tombstone, is `decl_removed`,
   breaking under every encoding: the type is gone from the source, so its
   bytes cannot be kept.

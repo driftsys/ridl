@@ -3110,11 +3110,44 @@ mod podbuf {
         );
     }
 
-    /// A fixed payload that is an exact-length array of the struct.
+    /// A fixed payload that is an exact-length array of the struct has no
+    /// head: the encoder lays out a head for a declaration and for a named
+    /// induced tuple only, so the struct inside such a root is not a use. The
+    /// same holds for a reply of that shape.
     #[test]
-    fn an_exact_array_fixed_payload_holds_the_struct_inline() {
+    fn an_exact_array_root_has_no_head_and_is_not_a_use() {
+        assert_no_interaction_use(|| {
+            vec![
+                fixed("window", 1, array(named("SensorReading"), 2, 2)),
+                query(
+                    "read",
+                    2,
+                    vec![param("at", named("Level"))],
+                    array(named("SensorReading"), 2, 2),
+                ),
+            ]
+        });
+    }
+
+    /// A tuple inside an exact-length array root is a named head, and the
+    /// struct inside that tuple sits at a fixed offset of it.
+    #[test]
+    fn a_tuple_inside_an_exact_array_fixed_payload_holds_the_struct_inline() {
         assert_interaction_use(
-            || vec![fixed("window", 1, array(named("SensorReading"), 2, 2))],
+            || {
+                vec![fixed(
+                    "window",
+                    1,
+                    array(
+                        tuple(vec![
+                            ("reading", named("SensorReading")),
+                            ("at", named("Level")),
+                        ]),
+                        2,
+                        2,
+                    ),
+                )]
+            },
             "nested inline in veh.common/Ctl/window",
         );
     }

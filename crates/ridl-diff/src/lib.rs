@@ -261,20 +261,23 @@ declare_categories! {
         /// struct that another head of the new side holds inline: as a struct
         /// field, a tuple member, or an element of an exact-length array,
         /// anywhere in the workspace, the argument struct a call with several
-        /// parameters induces, a tuple reply and a fixed payload included.
-        /// The inline copy cannot grow without
+        /// parameters induces and a tuple reply included. The inline copy
+        /// cannot grow without
         /// moving the fields after it, so the append is breaking when the
         /// comparison is judged for the `podbuf` encoding, and compatible
         /// otherwise, listed under the heading "breaking under podbuf"
         /// ([`heading`]). The path is the appended field's; the detail names
         /// each inline use, a struct field as `<package>/<struct>/<field>`
         /// and an interaction's request, reply or fixed payload as
-        /// `<package>/<interface>/<interaction>`. A struct used only as a
-        /// root of its own — a single named parameter, a named reply, a
-        /// signal or event payload — or only behind a descriptor — the
-        /// element of a bounded array, the key or value of a map entry, a
-        /// union arm — is not reported: the root or the descriptor's stride
-        /// gives the producer's size, and the fields past it read as 0.
+        /// `<package>/<interface>/<interaction>`. The search mirrors the
+        /// heads the encoder lays out — a declaration and a named induced
+        /// tuple — so a struct used only as a root of its own (a single named
+        /// parameter, a named reply, a signal or event payload), only behind
+        /// a descriptor (the element of a bounded array, the key or value of
+        /// a map entry, a union arm), or only inside an exact-length array
+        /// that is itself a root (a fixed payload `[S; 2..2]`, which has no
+        /// head) is not reported: the root or the descriptor's stride gives
+        /// the producer's size, and the fields past it read as 0.
         PodbufInlineAppend,
     }
 }
@@ -462,6 +465,8 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 /// other category is judged the same under every list, and a name that is
 /// not `podbuf` adds no rule. The CLI and the MCP tool refuse a name that is
 /// not one of the three before calling this; the engine does not check it.
+/// `new` and `context` must not share a package: the podbuf rule searches
+/// both as one scope and would name a use of a shared package twice.
 pub fn diff_refs_with(
     old: &[&Package],
     new: &[&Package],
