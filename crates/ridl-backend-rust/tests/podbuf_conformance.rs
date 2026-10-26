@@ -40,6 +40,8 @@ struct Row {
     ty: &'static str,
     value: &'static str,
     bytes: &'static str,
+    /// The program function that rebuilds the value from the view.
+    build: &'static str,
 }
 
 /// Each row's bytes are derived by hand. The preamble is `head_size: u32`
@@ -54,6 +56,7 @@ const VALUE_TABLE: &[Row] = &[
         ty: "DoorPayload",
         value: "door(7, true)",
         bytes: "08000000 00000000 | 07 01 000000000000",
+        build: "build_door",
     },
     // §5.3: 0x0102 at 0, 0x0304 at 2, 5 at 4, pad 5..8; head 8.
     Row {
@@ -61,6 +64,7 @@ const VALUE_TABLE: &[Row] = &[
         ty: "ClimateReport",
         value: "ClimateReport { cabin: 0x0102, setpoint: 0x0304, fan: 5 }",
         bytes: "08000000 00000000 | 0201 0403 05 000000",
+        build: "build_climate",
     },
     // §5.3: severity at 0, the flags byte at 1 (no bit set), pad 2..4, the
     // descriptor at 4..12 (all zero for an absent optional), pad 12..16;
@@ -70,6 +74,7 @@ const VALUE_TABLE: &[Row] = &[
         ty: "DiagFilter",
         value: "DiagFilter { severity: 2, category: None }",
         bytes: "10000000 00000000 | 02 00 0000 | 0000000000000000 | 00000000",
+        build: "build_filter",
     },
     // The same with bit 0 of the flags byte set: the descriptor holds
     // `off` 24 (8 + 16), `len` 2, and the tail holds "ab" and a NUL.
@@ -78,6 +83,7 @@ const VALUE_TABLE: &[Row] = &[
         ty: "DiagFilter",
         value: r#"DiagFilter { severity: 3, category: Some("ab".into()) }"#,
         bytes: "10000000 00000000 | 03 01 0000 | 18000000 02000000 | 00000000 | 6162 00",
+        build: "build_filter",
     },
     // §5.3: code at 0, pad 2..4, the descriptor at 4..12 (`off` 32, `len` 4
     // bytes of the three scalar values of "h\u{e9}y"), pad 12..16, the i64 at
@@ -88,6 +94,7 @@ const VALUE_TABLE: &[Row] = &[
         value: r#"ev(0x0102, "h\u{e9}y", 0x0102030405060708)"#,
         bytes: "18000000 00000000 | 0201 0000 | 20000000 04000000 | 00000000 \
                 | 0807060504030201 | 68c3a979 00",
+        build: "build_event",
     },
     // §6: an empty array is an all-zero descriptor and no block.
     Row {
@@ -95,6 +102,7 @@ const VALUE_TABLE: &[Row] = &[
         ty: "FaultPage",
         value: "FaultPage { faults: Vec::new() }",
         bytes: "08000000 00000000 | 0000000000000000",
+        build: "build_page",
     },
     // §5.3: one descriptor (`off` 16, `len` 1, `elem_size` 24); the element
     // head at 16..40, then its string at 40, the end of the block.
@@ -105,6 +113,7 @@ const VALUE_TABLE: &[Row] = &[
         bytes: "08000000 00000000 | 10000000 0100 1800 \
                 | 0700 0000 | 28000000 01000000 | 00000000 | 0000000000000000 \
                 | 6100",
+        build: "build_page",
     },
     // Four elements at 16, 40, 64 and 88; the block ends at 112, where the
     // strings follow in element order: "a" at 112, "bc" at 114. The first and
@@ -120,6 +129,7 @@ const VALUE_TABLE: &[Row] = &[
                 | 0300 0000 | 72000000 02000000 | 00000000 | 0000000000000000 \
                 | 0400 0000 | 0000000000000000 | 00000000 | ffffffffffffffff \
                 | 6100 626300",
+        build: "build_page",
     },
     // §6: tag 1 (the ordinal of `ok`) at 0, pad 1..4, the arm descriptor at
     // 4..12 (`off` 24, `len` 8), pad 12..16; head 16. The arm is the
@@ -130,6 +140,7 @@ const VALUE_TABLE: &[Row] = &[
         value: "Outcome::Ok(door(9, false))",
         bytes: "10000000 00000000 | 01 000000 | 18000000 08000000 | 00000000 \
                 | 09 00 000000000000",
+        build: "build_outcome",
     },
     // The `bad` arm (tag 2) holds an enum, so its arm head is one field at
     // offset 0: `Health::Fail` is 2.
@@ -139,6 +150,7 @@ const VALUE_TABLE: &[Row] = &[
         value: "Outcome::Bad(Health::Fail)",
         bytes: "10000000 00000000 | 02 000000 | 18000000 08000000 | 00000000 \
                 | 02 000000 00000000",
+        build: "build_outcome",
     },
     // §6: a map is a descriptor to entries sorted by key. An entry is
     // `{ key: descriptor at 0..8, value: u8 at 8 }`, 16 bytes. The block is
@@ -153,6 +165,7 @@ const VALUE_TABLE: &[Row] = &[
                 | 30000000 01000000 | 01 | 00000000000000 \
                 | 32000000 01000000 | 02 | 00000000000000 \
                 | 6100 6200",
+        build: "build_labels",
     },
     // §5.2: the inline `DoorPayload` head at 0..8, the enum at 8, pad 9,
     // the two-element array at 10..14 (a later small field fills the gap),
@@ -164,6 +177,27 @@ const VALUE_TABLE: &[Row] = &[
                 span: NestedSpan { lo: 1, hi: 0x0302 }, readings: [0x0a0b, 0x0c0d] }",
         bytes: "18000000 00000000 | 0501 000000000000 | 01 00 | 0b0a 0d0c | 0000 \
                 | 01 00 0203 00000000",
+        build: "build_nested",
+    },
+    // §5.2: exact-length bytes are inline with no length: four bytes at 0,
+    // pad 4..8.
+    Row {
+        name: "Digest",
+        ty: "Digest",
+        value: "Digest { hash: vec![1, 2, 3, 4] }",
+        bytes: "08000000 00000000 | 01020304 00000000",
+        build: "build_digest",
+    },
+    // §6: bounded bytes and a bounded array of one-byte scalars: two
+    // descriptors at 0..8 and 8..16, head 16. The bytes (`off` 24, `len` 3,
+    // no NUL) are at 24..27; the block of two scalars (`off` 27, `len` 2,
+    // `elem_size` 1) follows at 27, which needs no alignment.
+    Row {
+        name: "Blob",
+        ty: "Blob",
+        value: "Blob { data: vec![9, 8, 7], marks: vec![5, 6] }",
+        bytes: "10000000 00000000 | 18000000 03000000 | 1b000000 0200 0100 | 090807 0506",
+        build: "build_blob",
     },
 ];
 
@@ -183,6 +217,58 @@ fn map(pairs: &[(&str, i64)]) -> Vec<(Name, Weight)> {
         .map(|(key, value)| (Name::new_unchecked((*key).into()), Weight::new_unchecked(*value)))
         .collect()
 }
+
+fn build_door(v: &DoorPayloadPodbufView<'_>) -> DoorPayload {
+    DoorPayload { sensor_id: v.sensor_id(), is_open: v.is_open() }
+}
+
+fn build_climate(v: &ClimateReportPodbufView<'_>) -> ClimateReport {
+    ClimateReport { cabin: v.cabin(), setpoint: v.setpoint(), fan: v.fan() }
+}
+
+fn build_filter(v: &DiagFilterPodbufView<'_>) -> DiagFilter {
+    DiagFilter { severity: v.severity(), category: v.category().map(str::to_string) }
+}
+
+fn build_event(v: &FaultEventPodbufView<'_>) -> FaultEvent {
+    FaultEvent { code: v.code(), message: v.message().to_string(), timestamp: v.timestamp() }
+}
+
+fn build_page(v: &FaultPagePodbufView<'_>) -> FaultPage {
+    FaultPage { faults: v.faults().map(|event| build_event(&event)).collect() }
+}
+
+fn build_outcome(v: &OutcomePodbufView<'_>) -> Outcome {
+    match v.arm() {
+        OutcomePodbufArm::Ok(door) => Outcome::Ok(build_door(&door)),
+        OutcomePodbufArm::Bad(health) => Outcome::Bad(health),
+    }
+}
+
+fn build_labels(v: &LabelsPodbufView<'_>) -> Labels {
+    Labels {
+        by_name: v.by_name().map(|(key, value)| (Name::new_unchecked(key.to_string()), value)).collect(),
+    }
+}
+
+fn build_nested(v: &NestedPodbufView<'_>) -> Nested {
+    let span = v.span();
+    let readings: Vec<i64> = v.readings().collect();
+    Nested {
+        door: build_door(&v.door()),
+        health: v.health(),
+        span: NestedSpan { lo: span.lo(), hi: span.hi() },
+        readings: readings.try_into().expect("two readings"),
+    }
+}
+
+fn build_digest(v: &DigestPodbufView<'_>) -> Digest {
+    Digest { hash: v.hash().collect() }
+}
+
+fn build_blob(v: &BlobPodbufView<'_>) -> Blob {
+    Blob { data: v.data().to_vec(), marks: v.marks().collect() }
+}
 "#;
 
 /// The program over the table: one phase each for the table, the stride
@@ -196,8 +282,8 @@ fn table_transcript() -> &'static str {
             .iter()
             .map(|row| {
                 format!(
-                    "        row::<{}>(&mut rows, {:?}, {}, {:?});\n",
-                    row.ty, row.name, row.value, row.bytes
+                    "        row::<{}>(&mut rows, {:?}, {}, {:?}, {});\n",
+                    row.ty, row.name, row.value, row.bytes, row.build
                 )
             })
             .collect();
@@ -591,9 +677,9 @@ fn stride_differs_from_the_reader_in_both_directions_seen_by_version_2() {
     // A byte set where the absent note's descriptor starts: version 1 does
     // not check its pad, version 2 checks that an absent optional is zero.
     aligned_bytes!(dirty, V1_ENTRIES_DIRTY);
-    assert_ne!(
+    assert_eq!(
         verdict::<Entries>(dirty),
-        "OK",
+        "Contract",
         "an absent optional with a nonzero descriptor is refused"
     );
 "#,

@@ -172,11 +172,14 @@ fn verdict<T: Payload<Podbuf>>(bytes: &[u8]) -> String {
 /// `row`, `phase` and the three passes.
 ///
 /// `touch::<T>` is the one operation every pass applies to a buffer: verify
-/// it as a `T`, and when it is accepted read every field of the view (the
-/// decoder calls each accessor and reads each string to its end), write the
-/// value again, and check that the new bytes verify and decode to the same
-/// value. A panic anywhere in it is a defect: a verified buffer must read in
-/// bounds.
+/// it as a `T`, and when it is accepted rebuild the value through the view
+/// accessors (the caller's `build` calls every accessor, descends into nested
+/// views and union arms, drains every iterator and reads every string and
+/// byte slice to its end), require it to equal the value `decode` builds
+/// (the decoder does not call the view accessors, so this is what exercises
+/// them), write the value again, and check that the new bytes verify and
+/// decode to the same value. A panic anywhere in it is a defect: a verified
+/// buffer must read in bounds.
 pub const HARNESS: &str = r#"
 /// A small fixed-seed generator, so the random pass runs the same cases
 /// every time. Marsaglia's xorshift64.
@@ -201,11 +204,15 @@ impl Rng {
     }
 }
 
-type Touch = fn(&[u8]) -> bool;
+type Touch = Box<dyn Fn(&[u8]) -> bool>;
+
+/// Rebuilds a value from the accessors of its view.
+type Build<T> = for<'a> fn(&<T as Payload<Podbuf>>::View<'a>) -> T;
 
 /// Verifies `bytes` as a `T` from an aligned copy. Returns whether it was
-/// accepted; when it was, reads the whole value and writes it again.
-fn touch<T>(bytes: &[u8]) -> bool
+/// accepted; when it was, reads the whole value through the view and through
+/// `decode`, requires the two to agree, and writes it again.
+fn touch<T>(bytes: &[u8], build: Build<T>) -> bool
 where
     T: Payload<Podbuf> + PartialEq + core::fmt::Debug,
 {
@@ -213,7 +220,9 @@ where
     let Ok(proof) = Ref::<T, Podbuf>::verify(&copy.0[..bytes.len()]) else {
         return false;
     };
+    let rebuilt = build(proof.view());
     let value = proof.decode();
+    assert_eq!(rebuilt, value, "the view accessors and decode disagree");
     let mut out = <T as Payload<Podbuf>>::BUFFER;
     let again = Ref::<T, Podbuf>::encode(&value, out.as_mut())
         .expect("a buffer that verified writes again");
@@ -233,9 +242,9 @@ struct Row {
 
 /// Checks one row: `value` encodes to the bytes `spec` names, those bytes
 /// verify, and decoding them gives `value` back.
-fn row<T>(rows: &mut Vec<Row>, name: &'static str, value: T, spec: &str)
+fn row<T>(rows: &mut Vec<Row>, name: &'static str, value: T, spec: &str, build: Build<T>)
 where
-    T: Payload<Podbuf> + PartialEq + core::fmt::Debug,
+    T: Payload<Podbuf> + PartialEq + core::fmt::Debug + 'static,
 {
     let expected = parse(spec);
     assert_eq!(encode(&value), expected, "{name}: the bytes the encoder writes");
@@ -246,8 +255,9 @@ where
     let copy = aligned(&expected);
     let proof = Ref::<T, Podbuf>::verify(&copy.0[..expected.len()])
         .unwrap_or_else(|error| panic!("{name}: the expected bytes do not verify: {error:?}"));
+    assert_eq!(build(proof.view()), value, "{name}: the value read through the view");
     assert_eq!(proof.decode(), value, "{name}: the value decoded from the bytes");
-    rows.push(Row { name, touch: touch::<T>, bytes: expected });
+    rows.push(Row { name, touch: Box::new(move |bytes| touch::<T>(bytes, build)), bytes: expected });
 }
 
 /// Runs `body`, and prints one line: its name and `ok` with the summary it
@@ -324,9 +334,9 @@ fn random(rows: &[Row]) -> String {
                 }
             }
             let touch = if rng.below(4) == 0 {
-                rows[rng.below(rows.len())].touch
+                &rows[rng.below(rows.len())].touch
             } else {
-                source.touch
+                &source.touch
             };
             (touch, bytes)
         } else {
@@ -336,7 +346,7 @@ fn random(rows: &[Row]) -> String {
                 bytes[0..4].copy_from_slice(&head_size.to_le_bytes());
                 bytes[4..8].copy_from_slice(&[0; 4]);
             }
-            (rows[rng.below(rows.len())].touch, bytes)
+            (&rows[rng.below(rows.len())].touch, bytes)
         };
         cases += 1;
         accepted += usize::from(touch(&bytes));
