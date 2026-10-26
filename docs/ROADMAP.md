@@ -1205,10 +1205,11 @@ grouping noun: a consumer whose safety argument needs a mixed-level placement
 rejected at design time. The rsdl reference §12 states the same shape. The
 partition should be designed against ARINC 653's time and space partitioning
 rather than invented, as the section "What this repository is, and is not" says.
-The rejection compares levels on the ordered `0..N` assurance scale of ADR-0018
-decision 9. An rsdl `labels` value is a list of names with no defined order, so
-the story also defines how a label maps to a level. It carries no pump kind and
-no priority, because D-2 leaves scheduling to the backend and the engine.
+The rejection compares levels on the ordered `0..N` scales of ADR-0018 decision
+9, one dimension at a time, because its three dimensions do not compare in the
+same direction. An rsdl `labels` value is a list of names with no defined order,
+so the story also defines how a label maps to a level. It carries no pump kind
+and no priority, because D-2 leaves scheduling to the backend and the engine.
 
 ---
 
