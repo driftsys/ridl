@@ -166,6 +166,11 @@ struct FreeFloat {
   x : float
 }
 
+/// Exact-length bytes: four bytes inline at offset 0.
+struct Digest {
+  hash : bytes [4]
+}
+
 /// Bounded bytes, and a required array of at least one element.
 struct Blob {
   data  : bytes [0..8]

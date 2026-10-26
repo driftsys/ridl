@@ -1135,9 +1135,9 @@ ports" above.
   `ProviderError`, the `std` feature's `block_on`, and since 0.4.0 the `face`
   traits, ADR-0021 decision 19); the IR's provisional interface numbering (the
   lock design's L4, driftsys/ridl#391)
-- Replaced later by: driftsys/ridl#317 (the `podbuf` size table) and
-  driftsys/ridl#704 (the clause translator). The payload stand-in, the test-only
-  ports, the zero catalog hash, the `None` `flatbuffers` size column (now the
+- Replaced later by: driftsys/ridl#704 (the clause translator). The `podbuf`
+  size table is built. The payload stand-in, the test-only ports, the zero
+  catalog hash, the `None` `flatbuffers` size column (now the
   `Sizes<FlatBuffers>` table) and the unemitted catalog check are already
   replaced
 - Reasoning trail (archived):

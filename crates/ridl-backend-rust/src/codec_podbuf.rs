@@ -566,7 +566,11 @@ impl<'a> Codec<'a> {
             package: self.ctx.package_name().to_string(),
             foreign: false,
             index: boxed.declaration,
-            kind: 0,
+            kind: match decl.kind.as_ref() {
+                Some(v1::declaration::Kind::Enum(_)) => v1::DeclKind::Enum,
+                Some(v1::declaration::Kind::EnumSet(_)) => v1::DeclKind::EnumSet,
+                _ => v1::DeclKind::Scalar,
+            } as i32,
         };
         let ty_pos = v1::Type {
             optional: false,

@@ -637,7 +637,12 @@ request with the declared source.
 `Model.podbuf` (`PodbufProjection`) carries the layout that
 `ridl_ir::projection::podbuf` computes, so that a plugin never computes the
 layout law again (ADR-0020 decisions 8 and 9). It holds one flat list, `heads`,
-and every reference from one head to another is an index into that list.
+and every reference from one head to another is an index into that list. A
+second list, `boxes`, holds the one-field head of each named scalar, enum and
+enum set that can be laid out, with the declaration index: such a type is a
+payload root by itself, with its value at offset 0 of its box. A box is in no
+index of `heads`. `Declaration.podbuf` is the size state of a declaration as a
+payload root, and the bound a generated `Payload<Podbuf>` carries.
 
 - **Order.** The heads of the declarations come first, in `Model.declarations`
   order: a struct and a union each have one head, any other declaration has

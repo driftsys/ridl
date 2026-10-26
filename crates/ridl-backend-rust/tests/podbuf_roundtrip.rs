@@ -101,6 +101,7 @@ fn a_report_round_trips_through_ref_verify_and_decode() {
     round_trip(Outcome::Ok(door(1, false)));
     round_trip(Outcome::Bad(Health::Fail));
     round_trip(Health::Warn);
+    round_trip(WarningFlags(5));
     round_trip(Name::new_unchecked("a name".into()));
     round_trip(Weight::new_unchecked(200));
     "#,
@@ -206,6 +207,25 @@ fn an_unaligned_output_is_refused_and_an_unaligned_input_does_not_verify() {
     );
 }
 
+/// The view of an exact-length `bytes [4]` reads the four bytes at their
+/// offsets, not shifted by one.
+#[test]
+fn an_exact_length_bytes_view_reads_the_bytes_in_place() {
+    run(
+        "podbuf_roundtrip.ridl",
+        "podbuf_payload_exact_bytes",
+        r#"
+    let value = Digest { hash: vec![1, 2, 3, 4] };
+    let mut buf = <Digest as Payload<Podbuf>>::BUFFER;
+    let proof = Ref::<Digest, Podbuf>::encode(&value, buf.as_mut()).expect("encode");
+    let verified = Ref::<Digest, Podbuf>::verify(proof.bytes()).expect("verify");
+    let seen: Vec<u8> = verified.view().hash().collect();
+    assert_eq!(seen, [1, 2, 3, 4]);
+    assert_eq!(verified.decode(), value);
+    "#,
+    );
+}
+
 #[test]
 fn a_buffer_above_max_size_does_not_verify() {
     run(
@@ -215,6 +235,12 @@ fn a_buffer_above_max_size_does_not_verify() {
     let big = Aligned([0u8; 64]);
     assert!(matches!(
         Ref::<DoorPayload, Podbuf>::verify(&big.0[..24]),
+        Err(VerifyError::Structure(_))
+    ));
+    // Exactly MAX_SIZE (16) is not too large; one byte more is.
+    assert!(Ref::<DoorPayload, Podbuf>::verify(&big.0[..16]).is_ok());
+    assert!(matches!(
+        Ref::<DoorPayload, Podbuf>::verify(&big.0[..17]),
         Err(VerifyError::Structure(_))
     ));
     "#,
