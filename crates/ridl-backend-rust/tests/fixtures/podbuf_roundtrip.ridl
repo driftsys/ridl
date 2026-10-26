@@ -82,3 +82,31 @@ struct Nested {
   span     : (lo: integer [0..15], hi: integer [0..65535])
   readings : [integer [0..65535]; 2]
 }
+
+/// Three tail-writing fields in declaration order, so the tail order and
+/// the alignment of each block are visible: the string's bytes first, then
+/// the block of 64-bit integers at alignment 8, then the block of
+/// `FaultEvent` heads at alignment 8 with its elements' strings after it.
+struct Ordered {
+  label  : string [0..16]
+  xs     : [integer [-9223372036854775808..9223372036854775807]; 0..4]
+  faults : [FaultEvent; 0..4]
+}
+
+/// A string before a map: the entry block starts at alignment 8.
+struct Keyed {
+  label  : string [0..16]
+  byName : [Name : Weight; 0..8]
+}
+
+/// A string before an inline union: the arm's head starts at alignment 8.
+struct Wrapped {
+  label   : string [0..16]
+  outcome : Outcome
+}
+
+/// A map keyed by a float: a NaN key is refused, and `0.0` and `-0.0` are
+/// one key.
+struct Scored {
+  byScore : [float : Weight; 0..8]
+}

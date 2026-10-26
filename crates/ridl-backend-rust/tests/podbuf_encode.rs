@@ -45,6 +45,13 @@ fn map(pairs: &[(&str, i64)]) -> Vec<(Name, Weight)> {
 fn door(sensor_id: i64, is_open: bool) -> DoorPayload {
     DoorPayload { sensor_id, is_open }
 }
+
+fn smap(pairs: &[(f64, i64)]) -> Vec<(f64, Weight)> {
+    pairs
+        .iter()
+        .map(|(key, value)| (*key, Weight::new_unchecked(*value)))
+        .collect()
+}
 "#;
 
 /// Encodes `expr` and returns the buffer, panicking when the encoder refuses
@@ -225,7 +232,79 @@ fn a_duplicate_map_key_is_refused_by_the_encoder() {
 #[test]
 fn a_string_holding_u0000_is_refused_by_the_encoder() {
     let transcript = run_result(r#"FaultEvent { code: 1, message: "a\0b".into(), timestamp: 0 }"#);
-    assert!(transcript.contains("EncodeError"), "got: {transcript}");
+    assert!(
+        transcript.contains("EncodeError::Contract") && transcript.contains("Pattern"),
+        "got: {transcript}"
+    );
+}
+
+/// §14 and §5.1: the tail is written in field order (the string's bytes,
+/// then the block of `i64`, then the block of `FaultEvent` heads with its
+/// element's string after it), and each block starts at the alignment of
+/// its element: the 3-byte string ends at 35 and the next block starts at
+/// 40, not 35.
+#[test]
+fn tail_blocks_follow_field_order_at_their_element_alignment() {
+    let bytes = run(r#"Ordered { label: "ab".into(), xs: vec![1, 2], faults: vec![ev(1, "a")] }"#);
+    assert_eq!(bytes.len(), 82);
+    assert_eq!(&bytes[8..16], &[32, 0, 0, 0, 2, 0, 0, 0]); // label: off 32, len 2
+    assert_eq!(&bytes[16..24], &[40, 0, 0, 0, 2, 0, 8, 0]); // xs: off 40, len 2, elem_size 8
+    assert_eq!(&bytes[24..32], &[56, 0, 0, 0, 1, 0, 24, 0]); // faults: off 56, len 1, elem_size 24
+    assert_eq!(&bytes[32..35], b"ab\0");
+    assert_eq!(&bytes[35..40], &[0; 5]); // the gap before the i64 block
+    assert_eq!(&bytes[40..48], &1i64.to_le_bytes());
+    assert_eq!(&bytes[48..56], &2i64.to_le_bytes());
+    assert_eq!(&bytes[56..58], &[1, 0]); // the element's code
+    assert_eq!(&bytes[60..68], &[80, 0, 0, 0, 1, 0, 0, 0]); // the element's message
+    assert_eq!(&bytes[80..82], b"a\0");
+}
+
+/// §5.1: a map's entry block starts at alignment 8 after a 3-byte string.
+#[test]
+fn a_map_block_after_a_string_starts_at_alignment_8() {
+    let bytes = run(r#"Keyed { label: "ab".into(), by_name: map(&[("a", 1)]) }"#);
+    assert_eq!(bytes.len(), 50);
+    assert_eq!(&bytes[8..16], &[24, 0, 0, 0, 2, 0, 0, 0]);
+    assert_eq!(&bytes[16..24], &[32, 0, 0, 0, 1, 0, 16, 0]); // off 32, not 27
+    assert_eq!(&bytes[32..40], &[48, 0, 0, 0, 1, 0, 0, 0]); // the key's descriptor
+    assert_eq!(bytes[40], 1);
+    assert_eq!(&bytes[48..50], b"a\0");
+}
+
+/// §5.1: the arm head of a union inline in a struct starts at alignment 8
+/// after that struct's 3-byte string.
+#[test]
+fn a_union_arm_after_a_string_starts_at_alignment_8() {
+    let bytes = run(r#"Wrapped { label: "ab".into(), outcome: Outcome::Bad(Health::Warn) }"#);
+    assert_eq!(bytes.len(), 48);
+    assert_eq!(&bytes[8..16], &[32, 0, 0, 0, 2, 0, 0, 0]);
+    assert_eq!(bytes[16], 2); // the tag, inline at head offset 8
+    assert_eq!(&bytes[20..28], &[40, 0, 0, 0, 8, 0, 0, 0]); // the arm: off 40, not 35
+    assert_eq!(&bytes[32..35], b"ab\0");
+    assert_eq!(&bytes[40..48], &[1, 0, 0, 0, 0, 0, 0, 0]);
+}
+
+/// §6: float keys sort numerically, a NaN key is refused with the `Range`
+/// rule, and `0.0` and `-0.0` are one key, refused with `Unique`.
+#[test]
+fn float_map_keys_sort_numerically_and_refuse_nan_and_signed_zero_pairs() {
+    let bytes = run("Scored { by_score: smap(&[(2.5, 1), (-1.0, 2)]) }");
+    assert_eq!(bytes.len(), 48);
+    assert_eq!(&bytes[8..16], &[16, 0, 0, 0, 2, 0, 16, 0]);
+    assert_eq!(&bytes[16..24], &(-1.0f64).to_le_bytes());
+    assert_eq!(bytes[24], 2);
+    assert_eq!(&bytes[32..40], &2.5f64.to_le_bytes());
+    assert_eq!(bytes[40], 1);
+    let nan = run_result("Scored { by_score: smap(&[(f64::NAN, 1)]) }");
+    assert!(
+        nan.contains("EncodeError::Contract") && nan.contains("Range"),
+        "got: {nan}"
+    );
+    let zeros = run_result("Scored { by_score: smap(&[(0.0, 1), (-0.0, 2)]) }");
+    assert!(
+        zeros.contains("EncodeError::Contract") && zeros.contains("Unique"),
+        "got: {zeros}"
+    );
 }
 
 /// §8.1: a deprecated field is written as its init value, 5, not as the
