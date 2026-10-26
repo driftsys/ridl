@@ -1271,9 +1271,10 @@ reopening is an observation rather than an argument.
 | none | Kotlin, the first plugin        | after step 2                                                                       |
 | none | the next breaking release       | after 0.14.0 — LIM3, E2.14 and E6.20                                               |
 
-Rows are in step order, not numeric order — the numbering is identity, as the
-tracker section above explains. Three rows have no epic: the Rust codegen
-section is a section of this page holding three Epic 11 stories (E11.7, E11.8,
-E11.12), and Kotlin is a plugin written outside this workspace with no story
-identifier here, and the row for the next breaking release groups the last
-limits stage and two stories, of Epics 2 and 6.
+Rows are in step order, not numeric order, except the last, which is a release
+rather than a step — the numbering is identity, as the tracker section above
+explains. Three rows have no epic: the Rust codegen section is a section of this
+page holding three Epic 11 stories (E11.7, E11.8, E11.12), and Kotlin is a
+plugin written outside this workspace with no story identifier here, and the row
+for the next breaking release groups the last limits stage and two stories, of
+Epics 2 and 6.
