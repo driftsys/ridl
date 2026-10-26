@@ -267,6 +267,19 @@ pub enum Malformed {
     /// three, with this variant, because a payload is one value written once
     /// and no generated writer emits a field twice.
     Duplicate,
+    /// A podbuf buffer is shorter than its 8-byte preamble, or the preamble's
+    /// `head_size` is not a multiple of 8 or reaches past the end of the
+    /// buffer.
+    Preamble,
+    /// A podbuf array or map descriptor states an `elem_size` that the rules
+    /// for its element type do not allow: a multiple of 8 for a struct
+    /// element, the exact element size for any other element.
+    Stride,
+    /// A podbuf string does not end in a NUL byte, or holds a NUL byte before
+    /// its end.
+    Terminator,
+    /// The keys of a podbuf map are not in strictly increasing order.
+    KeyOrder,
 }
 
 /// A value that breaks a typl constraint.
@@ -433,6 +446,25 @@ mod tests {
                 assert_eq!(a == b, i == j);
             }
             assert_ne!(*a, Malformed::OutOfBounds);
+        }
+    }
+
+    /// The four variants the podbuf codec adds exist on every feature set, and
+    /// differ from each other and from the variants that already existed.
+    #[test]
+    fn malformed_has_the_four_podbuf_variants() {
+        let added = [
+            Malformed::Preamble,
+            Malformed::Stride,
+            Malformed::Terminator,
+            Malformed::KeyOrder,
+        ];
+        for (i, a) in added.iter().enumerate() {
+            for (j, b) in added.iter().enumerate() {
+                assert_eq!(a == b, i == j);
+            }
+            assert_ne!(*a, Malformed::OutOfBounds);
+            assert_ne!(*a, Malformed::Utf8);
         }
     }
 

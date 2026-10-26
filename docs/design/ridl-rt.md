@@ -25,7 +25,7 @@ every section below cites for the contract it implements.
 Nine modules, each public item living in exactly one (ADR-0020 decision 5;
 `error` renamed from that decision's original `strata`, amended in place
 2026-09-13; `correlate` added by ADR-0021 decision 15; `face` by ADR-0021
-decision 19; `trace` by ADR-0021 decision 21), plus three that a cargo feature
+decision 19; `trace` by ADR-0021 decision 21), plus four that a cargo feature
 adds:
 
 | Module        | Contents                                                                                                                                                                                                                                                                        |
@@ -41,6 +41,7 @@ adds:
 | `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                                     |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter                        |
 | `proto3`      | under the feature of the same name, since 2026-10-20: `WireType`, `Value`, `Field`, `Reader`, `Writer`, `Verified`, `varint_len`, `tag_len`, the zigzag functions, `check_capacity`, `read_varint`, `narrow_u32`, `narrow_i32`, `unzigzag32_checked`, `utf8`                    |
+| `podbuf`      | under the feature of the same name: `PREAMBLE_SIZE`, `Preamble`, `Region`, `Desc`, `ArrayDesc`, `tail_range`, `text`, `scalar_count`, `Writer`, `Aligned`                                                                                                                       |
 | `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                           |
 
 Generated code names every item by its full path and imports none, because
@@ -408,6 +409,7 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
 #[non_exhaustive] pub enum Malformed {
     OutOfBounds, Unaligned, MissingRequired, Utf8, Union, TooDeep, TooManyTables, TooLarge,
     Varint, WireType, Duplicate, // the proto3 codec's, since 2026-10-20
+    Preamble, Stride, Terminator, KeyOrder, // the podbuf codec's
 }
 pub struct Violation { pub type_name: Option<&'static str>, pub rule: Rule }
 #[non_exhaustive] pub enum Rule { Range, Step, Length, Pattern, Variant, Unique }
@@ -428,6 +430,14 @@ or a wire type the known field's type does not take; `Duplicate` is a field that
 is not repeated written twice, or a union message with two arms. The rustdoc of
 `Duplicate` states that refusing it deviates on purpose from protobuf's "last
 one wins" and merge rules ([the proto3 codec record](proto3-codec.md)).
+
+`Malformed::Preamble`, `Stride`, `Terminator` and `KeyOrder` belong to the
+podbuf codec and are not gated by a feature either. `Preamble` is a buffer
+shorter than its 8-byte preamble or a `head_size` that is not a multiple of 8 or
+reaches past the buffer; `Stride` is an array or map `elem_size` that its
+element type does not allow; `Terminator` is a string without its closing NUL or
+with a NUL inside; `KeyOrder` is map keys that do not strictly increase. A
+string that is not UTF-8 reuses `Utf8`.
 
 `Encoding` is sealed: `FlatBuffers`, `Proto3` and `Podbuf` are the only
 encodings a payload type can implement, and the marker types carry no cargo
@@ -498,8 +508,16 @@ after its first error, the narrowing of a varint to the scalar its field
 declares, and `Verified<'a>`, the view a generated proto3 `verify` returns,
 which holds the verified bytes and has no accessors. Like `flatbuffers`, it
 decides no layout: it is handed field numbers, wire types and scalars. It takes
-no dependency and allocates nothing. `podbuf` remains empty. What a generated
-proto3 codec does with the module is [the proto3 codec record](proto3-codec.md).
+no dependency and allocates nothing. What a generated proto3 codec does with the
+module is [the proto3 codec record](proto3-codec.md).
+
+**`podbuf` is no longer empty.** It gates the `podbuf` module: the preamble
+check, `Region`, a window that reads 0 past the size the producer wrote, the two
+descriptor layouts, the bounds and alignment check of a descriptor's data
+(`tail_range`, with checked arithmetic), the string checks, `Writer`, which
+fills the caller's slice and zeroes what it reserves, and `Aligned`, an 8-byte
+aligned array wrapper. It decides no layout, takes no dependency, allocates
+nothing, and holds a `compile_error!` for a big-endian target.
 
 **Since 2026-09-25 a fourth feature, `std`, exists, off by default.** It is not
 an encoding: it links the standard library and gates the `task` module, whose
