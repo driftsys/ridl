@@ -466,6 +466,102 @@ fn a_narrowed_range_exits_one_and_a_widened_range_exits_zero() {
     );
 }
 
+/// `ridl diff --encoding podbuf` over a field appended to a struct that
+/// another struct holds inline: exit 1 with the flag, exit 0 without it, and
+/// the line sits under the heading "breaking under podbuf" both times. An
+/// encoding the manifest does not name is a usage error, exit 2.
+#[test]
+fn diff_encoding_podbuf_exits_1_on_an_inline_append() {
+    const INLINE_V1: &str = "package veh.cluster
+type Level: integer [0..100]
+struct Reading {
+  value: Level
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+";
+    const INLINE_V2: &str = "package veh.cluster
+type Level: integer [0..100]
+struct Reading {
+  value: Level
+  quality: Level
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+";
+    let dir = TempDir::new("encoding");
+    let v1 = dir.write("v1.typl", INLINE_V1);
+    let v2 = dir.write("v2.typl", INLINE_V2);
+
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "podbuf".as_ref(),
+        v1.as_os_str(),
+        v2.as_os_str(),
+    ]);
+    assert_eq!(
+        code, 1,
+        "an inline append exits 1 under podbuf, stderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains(
+            "breaking under podbuf:\n  [breaking] podbuf_inline_append \
+             veh.cluster/Reading/quality: (absent) -> nested inline in veh.cluster/Bounds/range"
+        ),
+        "stdout:\n{stdout}"
+    );
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), v1.as_os_str(), v2.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "the same append exits 0 without the flag, stderr:\n{stderr}"
+    );
+    assert!(stdout.starts_with("compatible"), "stdout:\n{stdout}");
+    assert!(
+        stdout.contains(
+            "breaking under podbuf:\n  [compatible] podbuf_inline_append veh.cluster/Reading/quality"
+        ),
+        "stdout:\n{stdout}"
+    );
+
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "flatbuffers".as_ref(),
+        "--encoding".as_ref(),
+        "proto3".as_ref(),
+        v1.as_os_str(),
+        v2.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "no other encoding has the rule, stderr:\n{stderr}");
+    assert!(stdout.starts_with("compatible"), "stdout:\n{stdout}");
+
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "podbuff".as_ref(),
+        v1.as_os_str(),
+        v2.as_os_str(),
+    ]);
+    assert_eq!(
+        code, 2,
+        "an unknown encoding is a usage error, stdout:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("invalid value 'podbuff' for '--encoding <ENCODING>'"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("[possible values: flatbuffers, proto3, podbuf]"),
+        "stderr:\n{stderr}"
+    );
+}
+
 /// A compatible source change (an appended interaction) exits 0.
 #[test]
 fn source_dir_vs_source_dir_compatible_exits_zero() {

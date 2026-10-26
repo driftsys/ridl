@@ -1507,9 +1507,10 @@ Arguments:
   [NEW]  The candidate, in the same forms as the baseline
 
 Options:
-      --format <FORMAT>     Output format for the report [default: text] [possible values: text, json]
-      --explain <CATEGORY>  Print the classification rule for one change category and exit, instead of comparing snapshots. Takes a category exactly as the report prints it, e.g. `timing_changed`
-  -h, --help                Print help
+      --format <FORMAT>      Output format for the report [default: text] [possible values: text, json]
+      --explain <CATEGORY>   Print the classification rule for one change category and exit, instead of comparing snapshots. Takes a category exactly as the report prints it, e.g. `timing_changed`
+      --encoding <ENCODING>  An encoding the change is judged for, as `[backend.<name>] encodings` names it; repeat the flag for several. A snapshot does not record the encodings a workspace builds. Only `podbuf` has a rule of its own: with it, a change under the heading "breaking under podbuf" is breaking; without it, compatible [possible values: flatbuffers, proto3, podbuf]
+  -h, --help                 Print help
 ```
 
 `OLD` and `NEW` each take one of three forms: an `.ir.json` snapshot, a
@@ -1529,6 +1530,33 @@ this is checked before the directory is read as a source tree, so a source
 directory holding such an entry is refused too. Every other input reaches
 the source compiler. Omit both and pass `--explain <CATEGORY>` instead to print that
 category's classification rule without comparing anything.
+
+`--encoding <ENCODING>` names an encoding the change is judged for, with the
+names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
+`proto3`, `podbuf`); repeat the flag for several. A snapshot does not record
+the encodings a workspace builds, so the command does not read them from a
+manifest. Only `podbuf` has a rule of its own: a struct field appended to a
+struct that another struct, a tuple or an exact-length array holds inline
+anywhere in the new side is `podbuf_inline_append`, breaking with
+`--encoding podbuf` and compatible without it, because the inline copy cannot
+grow without moving the fields after it. The line names each inline use and
+sits under the heading `breaking under podbuf` either way, so that a workspace
+that does not build podbuf still sees it. A struct used only behind a
+descriptor — the element of a bounded array, the key or value of a map entry,
+a union arm — draws no such line: the descriptor's stride gives the producer's
+size. A name outside the three is a usage error, exit 2. With `Reading` held
+inline by `Bounds` and a field appended to it:
+
+```sh
+ridl diff --encoding podbuf v1.typl v2.typl
+```
+
+```text
+breaking
+  [compatible] decl_added veh.cluster/Reading/quality: (absent) -> quality
+breaking under podbuf:
+  [breaking] podbuf_inline_append veh.cluster/Reading/quality: (absent) -> nested inline in veh.cluster/Bounds/range
+```
 
 **It writes nothing.** The report goes to stdout; a compile error's
 diagnostics go to stderr instead and no report prints.
@@ -1833,6 +1861,7 @@ the categories `ridl diff` reports are:
   service_interface_removed
   doc_only
   visibility_changed
+  podbuf_inline_append
 ```
 
 ### `ridl lock`

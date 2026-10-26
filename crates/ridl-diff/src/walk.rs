@@ -44,10 +44,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ridl_ir::v2;
+use ridl_ir::{projection, v2};
 
 use crate::classify::{struct_slots, union_slots, value_slots};
-use crate::{Category, Change, emit, frozen};
+use crate::{Category, Change, Verdict, emit, frozen};
 
 /// Walks two matched packages, appending every difference to `changes`.
 /// `matching` is the unit-wide pass 1 of the interface walk over the two
@@ -1899,5 +1899,163 @@ fn signal_init_str(def: &v2::SignalDef) -> String {
     match def.init.as_ref().and_then(|init| init.value.as_ref()) {
         Some(value) => value.clone(),
         None => "(none)".to_string(),
+    }
+}
+
+// ==========================================================================
+// The podbuf break rule: an append to a struct nested inline in a head.
+// ==========================================================================
+
+/// The [`Category::PodbufInlineAppend`] changes of one walked and classified
+/// package pair: one per struct field appended compatibly, in `pair`, to a
+/// struct that a head of `scope` — every package of the new side, the context
+/// packages included — holds inline. The verdict is the placeholder
+/// [`emit`] stamps; the classifier settles it from the encodings.
+///
+/// Only an append the generic rule accepts is read: a [`Category::DeclAdded`]
+/// at `<package>/<struct>/<field>` whose verdict is compatible. An append the
+/// generic rule refuses is breaking already, and a second line for the same
+/// field would say nothing new. The struct's inline uses are found with the
+/// podbuf layout law ([`projection::podbuf::field_form`]), so what the rule
+/// calls inline is what the encoder lays out inline.
+pub(crate) fn podbuf_inline_appends(pair: &[Change], scope: &[&v2::Package]) -> Vec<Change> {
+    let mut changes = Vec::new();
+    for change in pair {
+        if change.category != Category::DeclAdded || change.verdict != Verdict::Compatible {
+            continue;
+        }
+        let mut segments = change.path.split('/');
+        let (Some(package), Some(name), Some(field), None) = (
+            segments.next(),
+            segments.next(),
+            segments.next(),
+            segments.next(),
+        ) else {
+            continue;
+        };
+        let Some(home) = scope.iter().copied().find(|pkg| pkg.name == package) else {
+            continue;
+        };
+        let is_struct_field = home.decls.iter().any(|decl| {
+            decl.name == name
+                && match &decl.kind {
+                    Some(v2::decl::Kind::StructDef(def)) => def.members.iter().any(|slot| {
+                        matches!(&slot.member, Some(v2::struct_member::Member::Field(f)) if f.name == field)
+                    }),
+                    _ => false,
+                }
+        });
+        if !is_struct_field {
+            continue;
+        }
+        let uses = inline_uses(scope, package, name);
+        if uses.is_empty() {
+            continue;
+        }
+        emit(
+            &mut changes,
+            change.path.clone(),
+            Category::PodbufInlineAppend,
+            None,
+            Some(format!("nested inline in {}", uses.join(", "))),
+        );
+    }
+    changes
+}
+
+/// Every struct field of `scope` whose podbuf form holds the struct
+/// `package.name` inline, as `<package>/<struct>/<field>`, sorted. A field
+/// whose form the layout law refuses — a stream, a type it cannot resolve — is
+/// skipped: the podbuf checks of `ridl check` report it.
+fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String> {
+    use ridl_ir::projection::flatbuffers::Packages;
+    use ridl_ir::projection::podbuf::field_form;
+
+    let target = projection::podbuf::Inlined::Declaration {
+        package: package.to_string(),
+        name: name.to_string(),
+    };
+    let mut uses = Vec::new();
+    for (index, home) in scope.iter().enumerate() {
+        let others: Vec<&v2::Package> = scope
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != index)
+            .map(|(_, pkg)| *pkg)
+            .collect();
+        let packages = Packages {
+            package: home,
+            others: &others,
+        };
+        for decl in &home.decls {
+            let Some(v2::decl::Kind::StructDef(def)) = &decl.kind else {
+                continue;
+            };
+            for slot in &def.members {
+                let Some(v2::struct_member::Member::Field(field)) = &slot.member else {
+                    continue;
+                };
+                let Some(ty) = field.r#type.as_ref() else {
+                    continue;
+                };
+                let Ok(form) = field_form(packages, ty) else {
+                    continue;
+                };
+                if holds_inline(&form, &target, true) {
+                    uses.push(format!("{}/{}/{}", home.name, decl.name, field.name));
+                }
+            }
+        }
+    }
+    uses.sort();
+    uses.dedup();
+    uses
+}
+
+/// Whether `form` holds the struct `target` at a fixed offset of a head that
+/// cannot grow. `fixed` is whether `form` itself sits at such an offset: true
+/// for a head field, a tuple member and an inline array element; false for
+/// the element of a bounded array, the key or value of a map entry, whose
+/// stride is the producer's and may grow (design: appending to the element
+/// type of an array or to a map entry's types is compatible). Another
+/// declaration held inline is not entered: its own fields are read when the
+/// walk reaches that declaration's struct, and a use is reported once, at the
+/// field that names the struct. A union arm's head is the arm type's own
+/// head, so it is not entered either.
+fn holds_inline(
+    form: &projection::podbuf::Form,
+    target: &projection::podbuf::Inlined,
+    fixed: bool,
+) -> bool {
+    use projection::podbuf::{DescriptorKind, Form, Head, Inlined};
+
+    let any_field = |head: &Head, fixed: bool| {
+        head.fields
+            .iter()
+            .any(|placement| holds_inline(&placement.form, target, fixed))
+    };
+    match form {
+        Form::Inline { of, .. } if of == target => fixed,
+        Form::Inline {
+            of: Inlined::Declaration { .. },
+            ..
+        } => false,
+        Form::Inline {
+            of: Inlined::Tuple,
+            head,
+        } => any_field(head, true),
+        Form::InlineArray { element, .. } => holds_inline(element, target, true),
+        Form::Descriptor(DescriptorKind::Array { element, .. }) => {
+            holds_inline(element, target, false)
+        }
+        Form::Descriptor(DescriptorKind::Map { entry, .. }) => any_field(entry, false),
+        Form::Descriptor(
+            DescriptorKind::Arm { .. } | DescriptorKind::Text { .. } | DescriptorKind::Bytes { .. },
+        )
+        | Form::Bool
+        | Form::Int { .. }
+        | Form::Float(_)
+        | Form::Enum { .. }
+        | Form::EnumSet { .. } => false,
     }
 }

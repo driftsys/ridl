@@ -185,6 +185,13 @@ enum Command {
         /// report prints it, e.g. `timing_changed`.
         #[arg(long, value_name = "CATEGORY")]
         explain: Option<String>,
+        /// An encoding the change is judged for, as `[backend.<name>]
+        /// encodings` names it; repeat the flag for several. A snapshot does
+        /// not record the encodings a workspace builds. Only `podbuf` has a
+        /// rule of its own: with it, a change under the heading "breaking
+        /// under podbuf" is breaking; without it, compatible.
+        #[arg(long, value_enum, value_name = "ENCODING")]
+        encoding: Vec<DiffEncoding>,
     },
     /// Allocate a number to every interface that has none and write each
     /// unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one
@@ -317,6 +324,27 @@ enum DiffFormat {
     Json,
 }
 
+/// An encoding `ridl diff --encoding` judges the change for: the names of
+/// `ridl_core::manifest::ENCODING_NAMES`, so that the flag takes what the
+/// manifest takes. A name outside the list is clap's usage error, exit 2.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+enum DiffEncoding {
+    Flatbuffers,
+    Proto3,
+    Podbuf,
+}
+
+impl DiffEncoding {
+    /// The name as the manifest and `ridl_diff::diff_refs_with` spell it.
+    fn name(self) -> &'static str {
+        match self {
+            DiffEncoding::Flatbuffers => "flatbuffers",
+            DiffEncoding::Proto3 => "proto3",
+            DiffEncoding::Podbuf => "podbuf",
+        }
+    }
+}
+
 /// The `ridl check` output format.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 enum CheckFormat {
@@ -363,10 +391,11 @@ fn main() -> ExitCode {
             new,
             format,
             explain,
+            encoding,
         } => match explain {
             Some(category) => run_explain(&category),
             None => match (old, new) {
-                (Some(old), Some(new)) => run_diff(&old, &new, format),
+                (Some(old), Some(new)) => run_diff(&old, &new, format, &encoding),
                 _ => {
                     eprintln!(
                         "error: `ridl diff` needs both an old and a new input, \
@@ -549,11 +578,11 @@ fn run_explain(category: &str) -> ExitCode {
     }
 }
 
-/// Compares the `old` and `new` inputs and renders the report to stdout,
-/// returning the diff exit code: 2 on an I/O or compile error while loading
-/// either side, 1 when the change is breaking, 0 when it is compatible or the
-/// two are identical.
-fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
+/// Compares the `old` and `new` inputs, judged for `encodings`, and renders
+/// the report to stdout, returning the diff exit code: 2 on an I/O or compile
+/// error while loading either side, 1 when the change is breaking, 0 when it
+/// is compatible or the two are identical.
+fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncoding]) -> ExitCode {
     let mut db = ridl_core::RidlDatabase::default();
     let old_side = match ridlc::load_diff_side(&mut db, old, &[]) {
         Ok(side) => side,
@@ -571,12 +600,14 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
     // field appended with a `ridl.std` type is then judged by that type's
     // declaration rather than reported breaking as unresolved
     // (driftsys/ridl#598).
-    let report = ridl_diff::diff_workspaces(
+    let encodings: Vec<&str> = encodings.iter().map(|encoding| encoding.name()).collect();
+    let report = ridl_diff::diff_workspaces_with(
         &old_side.packages,
         old_side.system.as_ref(),
         &new_side.packages,
         new_side.system.as_ref(),
         &[ridlc::std_ir()],
+        &encodings,
     );
     // `render_text` already terminates every line, so it prints as is; the JSON
     // rendering has no trailing newline and gets one.
@@ -3121,6 +3152,23 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `ridl diff --encoding` takes exactly the names a manifest's
+    /// `[backend.<name>] encodings` list takes, spelled the same way, so a
+    /// name added to one list does not compile or pass without the other.
+    #[test]
+    fn the_diff_encoding_flag_takes_the_manifest_encoding_names() {
+        use clap::ValueEnum as _;
+        let flag: Vec<&str> = DiffEncoding::value_variants()
+            .iter()
+            .map(|encoding| encoding.name())
+            .collect();
+        assert_eq!(flag, ridl_core::manifest::ENCODING_NAMES);
+        for encoding in DiffEncoding::value_variants() {
+            let shown = encoding.to_possible_value().unwrap();
+            assert_eq!(shown.get_name(), encoding.name());
+        }
+    }
 
     /// A history rename that fails after the snapshots moved in leaves no
     /// history of the replaced baseline beside the fresh snapshots.

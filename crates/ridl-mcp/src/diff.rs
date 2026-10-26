@@ -12,8 +12,21 @@ pub struct DiffInput {
     pub new: String,
     /// Optional unsaved source files applied to the new source side only.
     pub overlays: Option<Vec<OverlayInput>>,
+    /// Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). Only podbuf has a rule of its own: with it, a podbuf_inline_append change is breaking; without it, compatible. The same as `ridl diff --encoding`.
+    pub encodings: Option<Vec<String>>,
 }
 pub fn diff(input: &DiffInput) -> Result<serde_json::Value, ToolError> {
+    let encodings = input.encodings.as_deref().unwrap_or_default();
+    if let Some(unknown) = encodings
+        .iter()
+        .find(|name| !ridl_core::manifest::ENCODING_NAMES.contains(&name.as_str()))
+    {
+        return Err(ToolError::Request(format!(
+            "unknown encoding `{unknown}`; the encodings are {}",
+            ridl_core::manifest::ENCODING_NAMES.join(", ")
+        )));
+    }
+    let encodings: Vec<&str> = encodings.iter().map(String::as_str).collect();
     let mut db = ridl_core::RidlDatabase::default();
     let load_error = |side: &str, error: ridlc::DiffSideError| match error {
         ridlc::DiffSideError::Compile {
@@ -39,12 +52,13 @@ pub fn diff(input: &DiffInput) -> Result<serde_json::Value, ToolError> {
         .collect::<Vec<_>>();
     let new = ridlc::load_diff_side(&mut db, Path::new(&input.new), &overlays)
         .map_err(|error| load_error("new", error))?;
-    let report = ridl_diff::diff_workspaces(
+    let report = ridl_diff::diff_workspaces_with(
         &old.packages,
         old.system.as_ref(),
         &new.packages,
         new.system.as_ref(),
         &[ridlc::std_ir()],
+        &encodings,
     );
     Ok(serde_json::from_str(&ridl_diff::render_json(&report))
         .expect("render_json writes valid JSON"))
@@ -74,6 +88,7 @@ mod tests {
             old,
             new,
             overlays: None,
+            encodings: None,
         })
         .unwrap();
         assert_eq!(result, expected);
@@ -90,6 +105,7 @@ mod tests {
             old: root.clone(),
             new: root,
             overlays: Some(vec![OverlayInput { path, source }]),
+            encodings: None,
         })
         .unwrap();
         assert_eq!(result["verdict"], "compatible");
@@ -103,6 +119,7 @@ mod tests {
             old,
             new: fixture("ws"),
             overlays: None,
+            encodings: None,
         })
         .unwrap_err()
         {
@@ -116,6 +133,7 @@ mod tests {
             old: fixture("ws"),
             new: fixture("ws-diag"),
             overlays: None,
+            encodings: None,
         })
         .unwrap_err()
         {
@@ -217,6 +235,68 @@ mod tests {
         }
     }
 
+    /// An append to a struct another struct holds inline is `podbuf_inline_append`:
+    /// compatible with no `encodings`, breaking with `["podbuf"]`.
+    #[test]
+    fn diff_with_podbuf_makes_an_inline_append_breaking() {
+        let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
+        let path = copy.0.join("a/a.ridl");
+        let text = std::fs::read_to_string(&path).unwrap().replace(
+            "union Outcome {",
+            "struct Pair {\n  first: Reading\n  second: Reading\n}\n\nunion Outcome {",
+        );
+        std::fs::write(&path, &text).unwrap();
+        let appended = text.replace(
+            "  health: Health\n}",
+            "  health: Health\n  quality: Level\n}",
+        );
+        let input = |encodings: Option<Vec<String>>| DiffInput {
+            old: copy.0.to_str().unwrap().into(),
+            new: copy.0.to_str().unwrap().into(),
+            overlays: Some(vec![OverlayInput {
+                path: path.to_str().unwrap().into(),
+                source: appended.clone(),
+            }]),
+            encodings,
+        };
+        let without = diff(&input(None)).unwrap();
+        assert_eq!(without["verdict"], "compatible");
+        let with = diff(&input(Some(vec!["podbuf".into()]))).unwrap();
+        assert_eq!(with["verdict"], "breaking");
+        let podbuf = with["changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|change| change["category"] == "podbuf_inline_append")
+            .expect("the podbuf line is reported");
+        assert_eq!(podbuf["verdict"], "breaking");
+        assert_eq!(podbuf["path"], "fx.a/Reading/quality");
+        assert_eq!(
+            podbuf["after"],
+            "nested inline in fx.a/Pair/first, fx.a/Pair/second"
+        );
+        let flatbuffers_only = diff(&input(Some(vec!["flatbuffers".into()]))).unwrap();
+        assert_eq!(flatbuffers_only["verdict"], "compatible");
+    }
+
+    #[test]
+    fn diff_with_an_unknown_encoding_is_a_tool_error() {
+        match diff(&DiffInput {
+            old: fixture("ws"),
+            new: fixture("ws"),
+            overlays: None,
+            encodings: Some(vec!["podbuff".into()]),
+        })
+        .unwrap_err()
+        {
+            ToolError::Request(message) => assert_eq!(
+                message,
+                "unknown encoding `podbuff`; the encodings are flatbuffers, proto3, podbuf"
+            ),
+            _ => panic!("expected a request error"),
+        }
+    }
+
     #[test]
     fn diff_uses_std_as_context() {
         let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
@@ -234,6 +314,7 @@ mod tests {
             old: fixture("ws"),
             new: copy.0.to_str().unwrap().into(),
             overlays: None,
+            encodings: None,
         };
         let cli = std::process::Command::new("cargo")
             .current_dir(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."))

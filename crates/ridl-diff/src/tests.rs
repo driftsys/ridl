@@ -2342,3 +2342,569 @@ fn the_snapshot_loader_is_re_exported() {
     let load: fn(&std::path::Path) -> Result<v2::Package, crate::LoadError> = crate::load_ir_json;
     let _ = load;
 }
+
+// ==========================================================================
+// The podbuf break rules: an append to a struct nested inline in a head.
+// ==========================================================================
+
+mod podbuf {
+    use ridl_ir::v2;
+
+    use crate::{Category, Verdict, diff_refs_with, render_text};
+
+    fn typl_decl(name: &str, kind: v2::decl::Kind) -> v2::Decl {
+        v2::Decl {
+            limit: None,
+            name: name.to_string(),
+            visibility: v2::Visibility::Public as i32,
+            is_error: false,
+            doc: String::new(),
+            labels: Vec::new(),
+            deprecated: None,
+            ordinal: 0,
+            kind: Some(kind),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
+        }
+    }
+
+    /// An `integer [min..max]` at `u8` width, so that it has a podbuf form.
+    fn int_type(name: &str, min: &str, max: &str) -> v2::Decl {
+        typl_decl(
+            name,
+            v2::decl::Kind::TypeDef(v2::TypeDef {
+                backing: Some(v2::Backing {
+                    kind: Some(v2::backing::Kind::Primitive(
+                        v2::PrimitiveType::Integer as i32,
+                    )),
+                }),
+                constraint: Some(v2::Constraint {
+                    min: Some(min.to_string()),
+                    max: Some(max.to_string()),
+                    ..Default::default()
+                }),
+                declared_init: None,
+                init: None,
+                width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
+            }),
+        )
+    }
+
+    /// A `string [0..16]`, the key type of a map.
+    fn string_type(name: &str) -> v2::Decl {
+        typl_decl(
+            name,
+            v2::decl::Kind::TypeDef(v2::TypeDef {
+                backing: Some(v2::Backing {
+                    kind: Some(v2::backing::Kind::Primitive(
+                        v2::PrimitiveType::String as i32,
+                    )),
+                }),
+                constraint: Some(v2::Constraint {
+                    len_min: Some(0),
+                    len_max: Some(16),
+                    ..Default::default()
+                }),
+                declared_init: None,
+                init: None,
+                width: None,
+            }),
+        )
+    }
+
+    fn named(reference: &str) -> v2::FieldType {
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Named(reference.to_string())),
+        }
+    }
+
+    fn array(element: v2::FieldType, min: u64, max: u64) -> v2::FieldType {
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(element)),
+                min,
+                max,
+            }))),
+        }
+    }
+
+    fn map(key: v2::FieldType, value: v2::FieldType) -> v2::FieldType {
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(key)),
+                value: Some(Box::new(value)),
+                min: 0,
+                max: 8,
+            }))),
+        }
+    }
+
+    fn tuple(fields: Vec<(&str, v2::FieldType)>) -> v2::FieldType {
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                fields: fields
+                    .into_iter()
+                    .map(|(name, ty)| v2::TupleField {
+                        name: name.to_string(),
+                        r#type: Some(ty),
+                    })
+                    .collect(),
+            })),
+        }
+    }
+
+    fn field(name: &str, ordinal: u32, ty: v2::FieldType) -> v2::StructMember {
+        v2::StructMember {
+            member: Some(v2::struct_member::Member::Field(Box::new(v2::Field {
+                name: name.to_string(),
+                ordinal,
+                r#type: Some(ty),
+                declared_init: None,
+                init: None,
+                doc: String::new(),
+                labels: Vec::new(),
+                deprecated: None,
+                links: Vec::new(),
+                see: Vec::new(),
+                since: Vec::new(),
+            }))),
+        }
+    }
+
+    fn reserved_field(ordinal: u32) -> v2::StructMember {
+        v2::StructMember {
+            member: Some(v2::struct_member::Member::Reserved(v2::Reserved {
+                ordinal,
+                name: None,
+                value: None,
+            })),
+        }
+    }
+
+    fn struct_decl(name: &str, members: Vec<v2::StructMember>) -> v2::Decl {
+        typl_decl(
+            name,
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members,
+                fixed_layout: false,
+            }),
+        )
+    }
+
+    fn package(name: &str, decls: Vec<v2::Decl>) -> v2::Package {
+        v2::Package {
+            name: name.to_string(),
+            decls,
+            interfaces: Vec::new(),
+            services: Vec::new(),
+            retired: Vec::new(),
+            unit: String::new(),
+        }
+    }
+
+    /// `SensorReading { value: Level }`, the struct every fixture appends to.
+    fn reading_v1() -> v2::Decl {
+        struct_decl("SensorReading", vec![field("value", 1, named("Level"))])
+    }
+
+    /// `SensorReading { value: Level, quality: Level }`: an append whose type
+    /// holds 0, so the generic rule says compatible.
+    fn reading_v2() -> v2::Decl {
+        struct_decl(
+            "SensorReading",
+            vec![
+                field("value", 1, named("Level")),
+                field("quality", 2, named("Level")),
+            ],
+        )
+    }
+
+    /// `veh.common` with `SensorReading` as given and the inline uses: a
+    /// struct field, a tuple member and an element of an exact-length array.
+    fn inline_package(reading: v2::Decl) -> v2::Package {
+        package(
+            "veh.common",
+            vec![
+                int_type("Level", "0", "100"),
+                reading,
+                struct_decl(
+                    "SensorBounds",
+                    vec![
+                        field("range", 1, named("SensorReading")),
+                        field("limit", 2, named("Level")),
+                        field(
+                            "pair",
+                            3,
+                            tuple(vec![
+                                ("low", named("Level")),
+                                ("high", named("SensorReading")),
+                            ]),
+                        ),
+                        field("window", 4, array(named("SensorReading"), 2, 2)),
+                    ],
+                ),
+            ],
+        )
+    }
+
+    /// `veh.common` with `SensorReading` as given and only tail uses: a
+    /// bounded array element and a map value, each a tail block with a stride.
+    fn tail_package(reading: v2::Decl) -> v2::Package {
+        package(
+            "veh.common",
+            vec![
+                int_type("Level", "0", "100"),
+                string_type("Label"),
+                reading,
+                struct_decl(
+                    "Log",
+                    vec![
+                        field("entries", 1, array(named("SensorReading"), 0, 8)),
+                        field("by_label", 2, map(named("Label"), named("SensorReading"))),
+                    ],
+                ),
+            ],
+        )
+    }
+
+    fn diff(old: &v2::Package, new: &v2::Package, encodings: &[&str]) -> crate::DiffReport {
+        diff_refs_with(&[old], &[new], &[], encodings)
+    }
+
+    #[test]
+    fn appending_to_a_struct_nested_inline_is_a_podbuf_break_naming_the_uses() {
+        let report = diff(
+            &inline_package(reading_v1()),
+            &inline_package(reading_v2()),
+            &["podbuf"],
+        );
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .expect("the append is reported as a podbuf inline append");
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(change.path, "veh.common/SensorReading/quality");
+        assert_eq!(change.before, None);
+        assert_eq!(
+            change.after.as_deref(),
+            Some(
+                "nested inline in veh.common/SensorBounds/pair, \
+                 veh.common/SensorBounds/range, veh.common/SensorBounds/window"
+            )
+        );
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    #[test]
+    fn the_same_append_is_compatible_without_podbuf_and_listed_under_its_heading() {
+        let report = diff(
+            &inline_package(reading_v1()),
+            &inline_package(reading_v2()),
+            &[],
+        );
+        assert_eq!(report.verdict, Verdict::Compatible);
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .expect("the append is still reported, as compatible");
+        assert_eq!(change.verdict, Verdict::Compatible);
+        let text = render_text(&report);
+        assert!(
+            text.contains(
+                "breaking under podbuf:\n  [compatible] podbuf_inline_append \
+                 veh.common/SensorReading/quality: (absent) -> nested inline in"
+            ),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_encoding_without_podbuf_rules_leaves_the_verdict_compatible() {
+        let report = diff(
+            &inline_package(reading_v1()),
+            &inline_package(reading_v2()),
+            &["flatbuffers", "proto3"],
+        );
+        assert_eq!(report.verdict, Verdict::Compatible);
+    }
+
+    /// An inline use in another package of the new side is found and named:
+    /// the search covers the whole workspace, not the package of the struct.
+    #[test]
+    fn an_inline_use_in_another_package_is_named() {
+        let old = [
+            package(
+                "veh.common",
+                vec![int_type("Level", "0", "100"), reading_v1()],
+            ),
+            package(
+                "veh.other",
+                vec![struct_decl(
+                    "Frame",
+                    vec![field("reading", 1, named("veh.common.SensorReading"))],
+                )],
+            ),
+        ];
+        let new = [
+            package(
+                "veh.common",
+                vec![int_type("Level", "0", "100"), reading_v2()],
+            ),
+            old[1].clone(),
+        ];
+        let old: Vec<&v2::Package> = old.iter().collect();
+        let new: Vec<&v2::Package> = new.iter().collect();
+        let report = diff_refs_with(&old, &new, &[], &["podbuf"]);
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .expect("the cross-package use is found");
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(
+            change.after.as_deref(),
+            Some("nested inline in veh.other/Frame/reading")
+        );
+    }
+
+    /// A struct used only behind a descriptor, as the element of a bounded
+    /// array or the value of a map entry, can grow: the descriptor's stride
+    /// gives the producer's size, and the fields past it read as 0.
+    #[test]
+    fn an_appended_field_to_an_array_element_type_is_compatible_under_podbuf() {
+        let report = diff(
+            &tail_package(reading_v1()),
+            &tail_package(reading_v2()),
+            &["podbuf"],
+        );
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            report
+                .changes
+                .iter()
+                .all(|change| change.category != Category::PodbufInlineAppend),
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// An appended non-optional field whose type excludes 0 is breaking under
+    /// the generic rule (driftsys/ridl#598); podbuf adds no second line to it.
+    #[test]
+    fn an_appended_field_whose_type_excludes_zero_is_breaking_under_every_encoding() {
+        let with_nonzero = |reading: v2::Decl| {
+            let mut package = inline_package(reading);
+            package.decls.push(int_type("Positive", "1", "100"));
+            package
+        };
+        let new = struct_decl(
+            "SensorReading",
+            vec![
+                field("value", 1, named("Level")),
+                field("nonzero", 2, named("Positive")),
+            ],
+        );
+        for encodings in [&[][..], &["podbuf"][..]] {
+            let report = diff(
+                &with_nonzero(reading_v1()),
+                &with_nonzero(new.clone()),
+                encodings,
+            );
+            assert_eq!(report.verdict, Verdict::Breaking, "{encodings:?}");
+            let appended = report
+                .changes
+                .iter()
+                .find(|change| change.path == "veh.common/SensorReading/nonzero")
+                .expect("the append is reported");
+            assert_eq!(appended.category, Category::DeclAdded);
+            assert_eq!(appended.verdict, Verdict::Breaking);
+            assert!(
+                report
+                    .changes
+                    .iter()
+                    .all(|change| change.category != Category::PodbufInlineAppend),
+                "{encodings:?}: {:?}",
+                report.changes
+            );
+        }
+    }
+
+    /// A field removed from a struct, its slot held by a tombstone, is
+    /// `decl_removed`, breaking, whatever the encodings: the type is gone from
+    /// the source, so its bytes cannot be kept. podbuf adds no second line.
+    #[test]
+    fn a_retired_field_is_breaking_under_every_encoding() {
+        let retired = struct_decl(
+            "SensorReading",
+            vec![field("value", 1, named("Level")), reserved_field(2)],
+        );
+        for encodings in [&[][..], &["podbuf"][..]] {
+            let report = diff(
+                &inline_package(reading_v2()),
+                &inline_package(retired.clone()),
+                encodings,
+            );
+            assert_eq!(report.verdict, Verdict::Breaking, "{encodings:?}");
+            let removed = report
+                .changes
+                .iter()
+                .find(|change| change.path == "veh.common/SensorReading/quality")
+                .expect("the removal is reported");
+            assert_eq!(removed.category, Category::DeclRemoved);
+            assert_eq!(removed.verdict, Verdict::Breaking);
+            assert_eq!(
+                report
+                    .changes
+                    .iter()
+                    .filter(|change| change.path == "veh.common/SensorReading/quality")
+                    .count(),
+                1,
+                "{encodings:?}: {:?}",
+                report.changes
+            );
+        }
+    }
+
+    /// A struct inside a tuple that is the element of a bounded array sits at
+    /// a fixed offset of the tuple's head: the element may grow, the struct
+    /// inside it may not.
+    #[test]
+    fn a_struct_inside_a_tuple_element_of_a_bounded_array_is_an_inline_use() {
+        let with_log = |reading: v2::Decl| {
+            package(
+                "veh.common",
+                vec![
+                    int_type("Level", "0", "100"),
+                    reading,
+                    struct_decl(
+                        "Log",
+                        vec![field(
+                            "entries",
+                            1,
+                            array(
+                                tuple(vec![
+                                    ("at", named("Level")),
+                                    ("reading", named("SensorReading")),
+                                ]),
+                                0,
+                                8,
+                            ),
+                        )],
+                    ),
+                ],
+            )
+        };
+        let report = diff(
+            &with_log(reading_v1()),
+            &with_log(reading_v2()),
+            &["podbuf"],
+        );
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .expect("the use inside the tuple is found");
+        assert_eq!(
+            change.after.as_deref(),
+            Some("nested inline in veh.common/Log/entries")
+        );
+    }
+
+    /// A struct reached only through another declaration held inline is
+    /// reported once, at the field that names it; the outer declaration's
+    /// own fields are not entered.
+    #[test]
+    fn a_use_through_another_inline_declaration_is_named_once() {
+        let with_frame = |reading: v2::Decl| {
+            let mut package = inline_package(reading);
+            package.decls.push(struct_decl(
+                "Frame",
+                vec![field("bounds", 1, named("SensorBounds"))],
+            ));
+            package
+        };
+        let report = diff(
+            &with_frame(reading_v1()),
+            &with_frame(reading_v2()),
+            &["podbuf"],
+        );
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .expect("the append is reported");
+        assert_eq!(
+            change.after.as_deref(),
+            Some(
+                "nested inline in veh.common/SensorBounds/pair, \
+                 veh.common/SensorBounds/range, veh.common/SensorBounds/window"
+            )
+        );
+    }
+
+    /// An arm appended to a union that a struct holds inline is not a podbuf
+    /// break: the union's head is its tag and an arm descriptor, and the arms
+    /// are tail blocks, so the head does not grow.
+    #[test]
+    fn an_arm_appended_to_an_inline_union_is_not_a_podbuf_break() {
+        let arm = |name: &str, ordinal: u32| v2::UnionArm {
+            name: name.to_string(),
+            ordinal,
+            type_ref: "Level".to_string(),
+            doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
+        };
+        let with_union = |arms: Vec<v2::UnionArm>| {
+            package(
+                "veh.common",
+                vec![
+                    int_type("Level", "0", "100"),
+                    typl_decl(
+                        "Choice",
+                        v2::decl::Kind::UnionDef(v2::UnionDef {
+                            arms,
+                            reserved: Vec::new(),
+                            is_result: false,
+                        }),
+                    ),
+                    struct_decl("Holder", vec![field("choice", 1, named("Choice"))]),
+                ],
+            )
+        };
+        let report = diff(
+            &with_union(vec![arm("low", 1)]),
+            &with_union(vec![arm("low", 1), arm("high", 2)]),
+            &["podbuf"],
+        );
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            report
+                .changes
+                .iter()
+                .all(|change| change.category != Category::PodbufInlineAppend),
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// `diff_refs_in` is `diff_refs_with` under no encoding.
+    #[test]
+    fn diff_refs_in_judges_under_no_encoding() {
+        let old = inline_package(reading_v1());
+        let new = inline_package(reading_v2());
+        assert_eq!(
+            crate::diff_refs_in(&[&old], &[&new], &[]),
+            diff_refs_with(&[&old], &[&new], &[], &[])
+        );
+    }
+}

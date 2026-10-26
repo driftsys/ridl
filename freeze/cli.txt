@@ -109,6 +109,11 @@ ridl describe -h switch
 ridl describe arg 1 <PATH> required
 ridl describe requires <PATH>
 ridl diff
+ridl diff --encoding <ENCODING>
+ridl diff --encoding optional
+ridl diff --encoding value flatbuffers
+ridl diff --encoding value podbuf
+ridl diff --encoding value proto3
 ridl diff --explain <CATEGORY>
 ridl diff --explain optional
 ridl diff --format <FORMAT>

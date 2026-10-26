@@ -42,14 +42,16 @@ mod classify_tests;
 /// [`diff_sets_in`](crate::diff_sets_in) resolves such a reference against every
 /// package of the new snapshot and the context packages, such as `ridl.std`.
 pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
-    classify_in(change, old, new, &[])
+    classify_in(change, old, new, &[], &[])
 }
 
 /// [`classify`], with `scope` — every package of the new snapshot, and the
 /// context packages such as `ridl.std` — to resolve a reference to another
-/// package's declaration. Only the appended struct field reads it: whether its
-/// type is legal at 0 is decided by the declaration the new side names
-/// (driftsys/ridl#598).
+/// package's declaration, and `encodings`, the list the comparison is judged
+/// for ([`diff_refs_with`](crate::diff_refs_with)). Only the appended struct
+/// field reads `scope`: whether its type is legal at 0 is decided by the
+/// declaration the new side names (driftsys/ridl#598). Only
+/// [`Category::PodbufInlineAppend`] reads `encodings`.
 // A new variant must be given a real arm here, not swept into a
 // catch-all: rustc forces *an* arm, and the arm its `help:` text
 // proposes is `_ =>`, which classifies the new variant silently. The
@@ -65,6 +67,7 @@ pub(crate) fn classify_in(
     old: &v2::Package,
     new: &v2::Package,
     scope: &[&v2::Package],
+    encodings: &[&str],
 ) -> Verdict {
     match change.category {
         // Shifts or reuses a wire identity, or replaces a wire-carrying type.
@@ -143,6 +146,18 @@ pub(crate) fn classify_in(
         // against; a change moves it in both directions (ADR-0012 decision
         // 12).
         Category::InteractionClassChanged => Verdict::Breaking,
+
+        // The walk emits this only for an append the generic rule accepts, so
+        // the verdict is the encoding's alone: an inline copy of the struct
+        // cannot grow under podbuf, and no other encoding holds a struct
+        // inline.
+        Category::PodbufInlineAppend => {
+            if encodings.contains(&"podbuf") {
+                Verdict::Breaking
+            } else {
+                Verdict::Compatible
+            }
+        }
     }
 }
 
@@ -1484,6 +1499,19 @@ pub fn explain(category: Category) -> &'static str {
             "              consumer's build. The wire layout does not move, but the\n",
             "              consumer-visible guarantee narrows (ADR-0008 d14). Any\n",
             "              direction involving an unset visibility is breaking"
+        ),
+        Category::PodbufInlineAppend => concat!(
+            "A struct field appended, compatible under the generic rule, to a\n",
+            "struct that another head holds inline anywhere in the new side: as a\n",
+            "struct field, a tuple member, or an element of an exact-length\n",
+            "array. The detail names each inline use. A struct used only behind a\n",
+            "descriptor — the element of a bounded array, the key or value of a\n",
+            "map entry, a union arm — is not reported: the stride gives the\n",
+            "producer's size, and the fields past it read as 0.\n",
+            "  breaking    with `--encoding podbuf`: the inline copy cannot grow\n",
+            "              without moving the fields after it\n",
+            "  compatible  otherwise; listed under the heading \"breaking under\n",
+            "              podbuf\", so that a workspace that builds podbuf sees it"
         ),
     }
 }
