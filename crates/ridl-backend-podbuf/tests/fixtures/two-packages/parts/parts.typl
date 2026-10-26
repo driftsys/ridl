@@ -1,0 +1,19 @@
+package pod.parts
+
+// A struct, a union and a struct that holds a tuple: the three kinds of head
+// that another package lays out inline.
+
+struct Wheel {
+  radius : integer [0..100]
+  grip   : integer [0..1000000]
+}
+
+struct Hub {
+  size  : (width: integer [0..10], height: integer [0..10])
+  label : string [0..16]
+}
+
+union Tyre {
+  slick : Wheel
+  flat  : Hub
+}

@@ -1,0 +1,12 @@
+package pod.vehicle
+
+import pod.parts.Wheel
+import pod.parts.Hub
+import pod.parts.Tyre
+
+struct Axle {
+  note  : integer [0..255]
+  wheel : Wheel
+  hub   : Hub
+  tyre  : Tyre
+}

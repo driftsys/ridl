@@ -65,6 +65,7 @@ ridl build --emit value flatbuffers
 ridl build --emit value ir-binary
 ridl build --emit value ir-json
 ridl build --emit value ir-text
+ridl build --emit value podbuf
 ridl build --emit value proto
 ridl build --emit value rust
 ridl build --emit value typescript
@@ -229,6 +230,7 @@ ridlc build --emit value flatbuffers
 ridlc build --emit value ir-binary
 ridlc build --emit value ir-json
 ridlc build --emit value ir-text
+ridlc build --emit value podbuf
 ridlc build --emit value proto
 ridlc build --emit value rust
 ridlc build --emit value typescript

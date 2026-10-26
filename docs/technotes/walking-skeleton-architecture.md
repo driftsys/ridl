@@ -189,6 +189,17 @@ crate the workspace holds — see `AGENTS.md` for that.
   declarations become non-exported members. It depends on `ridl-ir` and nothing
   else.
 
+- **`crates/ridl-backend-podbuf`** — the wire backend that writes the podbuf C
+  header, `ridl build --emit podbuf`. It reads the podbuf layout from the
+  codegen model, where `ridl_ir::projection::podbuf` computes it once, so it
+  never applies the first-fit law itself. The header holds one head `struct` per
+  type with the pad members written out, `_Static_assert` checks on every size
+  and offset, the enum and union-tag constants, and accessors that read through
+  the preamble's head size. A head of another package that a field lays out
+  inline is defined again behind a per-type guard macro, so the headers of two
+  packages can be included together. `tests/c_compile.rs` compiles the headers
+  with the host C compiler and, with `clang`, for i686, AArch64 and ARMv8-R.
+
 - **`crates/ridl-diff`** — the `ridl diff` engine. It compares two resolved IR
   v2 snapshots and reads **only** the IR, never source, so the comparison is
   honest against exactly what a backend sees. Two halves: `walk` says what

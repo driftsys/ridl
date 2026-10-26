@@ -652,6 +652,7 @@ Options:
           - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
+          - podbuf:          The podbuf C header, written to `<base>.h`
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
           - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
@@ -929,8 +930,8 @@ declaration. The lint RSDL-807 `link-encoding-not-emitted` warns when a link of
 the selected deployment carries an encoding that the emitted backend's list
 does not name. It is compared once per emitted backend that can carry a codec:
 the `rust` emit and each `--plugin`, and a backend named by both an `--emit`
-and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`),
-the `typescript` emit and `codegen-model` are not compared, because their
+and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`), the
+`podbuf` emit, the `typescript` emit and `codegen-model` are not compared, because their
 backends take no `encodings` option, and `codegen-request` is not compared
 either, because it writes its options into the request rather than emitting a
 codec from them. A `[backend.<name>]` table whose
@@ -1003,6 +1004,17 @@ differ — a union is isolated in a wrapper table, every struct is a `table`, a
 map is a vector of generated entry tables with no `(key)`, and enum values are
 not prefixed because FlatBuffers scopes them inside their enum — and are
 recorded in ADR-0019.
+
+**`podbuf` is the third wire backend**: it writes the C header, `<base>.h`,
+through which a C consumer reads a podbuf buffer that the gate has verified,
+with no library. The header holds the preamble and descriptor structs, one head
+`struct` per type with its pad members written out and `_Static_assert` checks
+on every `sizeof` and `offsetof`, the constants of the enums and the union
+tags, and inline accessor functions that read through the preamble's head size
+and answer 0 for a field past it. It refuses a big-endian target with `#error`.
+It takes no option. A package that lays out a struct, tuple or union of another
+package inline defines that head again behind a guard macro, so the headers of
+two packages can be included in one translation unit.
 
 **`codegen-model` is not a backend at all**: it writes the lowered codegen
 model — one package, resolved over the scope the build read, with the scalar
@@ -2495,7 +2507,7 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `codegen-model`, `codegen-request`, `catalog`
+          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `podbuf`, `codegen-model`, `codegen-request`, `catalog`
 
           Possible values:
           - rust:            Idiomatic Rust source, written to `<base>.rs`
@@ -2505,6 +2517,7 @@ Options:
           - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
+          - podbuf:          The podbuf C header, written to `<base>.h`
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
           - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
