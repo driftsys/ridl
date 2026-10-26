@@ -181,7 +181,7 @@ wasm-check:
         rustup target add wasm32-unknown-unknown
         cargo check --target wasm32-unknown-unknown \
             -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir -p ridl-descriptor \
-            -p ridl-backend-proto -p ridl-backend-flatbuffers \
+            -p ridl-backend-proto -p ridl-backend-flatbuffers -p ridl-backend-podbuf \
             -p ridl-backend-rust -p ridl-backend-ts \
             -p ridl-rt -p ridl-fmt \
             --no-default-features

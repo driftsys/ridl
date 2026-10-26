@@ -17,3 +17,13 @@ union Tyre {
   slick : Wheel
   flat  : Hub
 }
+
+// A signed field, and a field that a producer of an older type leaves out.
+struct Reading {
+  delta : integer [-30000..30000]
+  extra : integer [0..9223372036854775807]
+}
+
+struct Bag {
+  items : [Reading; 0..4]
+}

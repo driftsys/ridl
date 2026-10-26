@@ -190,3 +190,83 @@ int main(void) {
         "the accessor program exited with {status}"
     );
 }
+
+/// An accessor over a head of a given size answers 0 for a field past that
+/// size, in the root head and in an array element whose stride is smaller than
+/// the reader's head, and a signed field comes back signed.
+#[test]
+fn the_accessors_bound_every_head_by_the_producer_size() {
+    let Some(cc) = host_cc() else {
+        return skip("no C compiler (cc, clang or gcc) on PATH");
+    };
+    let program = r#"
+#include "pod_parts.h"
+
+/* Reading: delta (i16) at 0, extra (u64) at 8; head 16 bytes. delta = -2,
+   extra = 9. */
+static const uint8_t reading[] = {
+  16, 0, 0, 0, 0, 0, 0, 0,
+  0xFE, 0xFF, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0
+};
+/* A Bag whose producer wrote 8-byte elements: two elements at offsets 16 and
+   24, with delta -2 and 5 and no `extra`. */
+static const uint8_t bag[] = {
+  8, 0, 0, 0, 0, 0, 0, 0,
+  16, 0, 0, 0, 2, 0, 8, 0,
+  0xFE, 0xFF, 0, 0, 0, 0, 0, 0,
+  5, 0, 0, 0, 0, 0, 0, 0
+};
+/* The same Bag with 16-byte elements: one element, extra = 9. */
+static const uint8_t bag16[] = {
+  8, 0, 0, 0, 0, 0, 0, 0,
+  16, 0, 0, 0, 1, 0, 16, 0,
+  7, 0, 0, 0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0
+};
+
+int main(void) {
+  int64_t delta;
+  uint16_t count = 0, stride = 0;
+  const uint8_t *items;
+
+  delta = pod_parts_reading_delta(reading);
+  if (delta != -2) return 1;
+  if (pod_parts_reading_extra(reading) != 9) return 2;
+
+  items = pod_parts_bag_items(bag, &count, &stride);
+  if (items == NULL || count != 2 || stride != 8) return 3;
+  delta = pod_parts_reading_delta_at(items, stride);
+  if (delta != -2) return 4;
+  if (pod_parts_reading_extra_at(items, stride) != 0) return 5;
+  delta = pod_parts_reading_delta_at(items + stride, stride);
+  if (delta != 5) return 6;
+  if (pod_parts_reading_extra_at(items + stride, stride) != 0) return 7;
+
+  items = pod_parts_bag_items(bag16, &count, &stride);
+  if (items == NULL || count != 1 || stride != 16) return 8;
+  if (pod_parts_reading_extra_at(items, stride) != 9) return 9;
+  return 0;
+}
+"#;
+    let dir = with_headers(&two_package_headers(), &[("program.c", program)]);
+    run(
+        cc,
+        &[
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "program.c",
+            "-o",
+            "program",
+        ],
+        dir.path(),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let status = std::process::Command::new(dir.path().join("program"))
+        .status()
+        .expect("run the program");
+    assert!(
+        status.success(),
+        "the accessor program exited with {status}"
+    );
+}

@@ -43,7 +43,11 @@ fn fault_event_head_is_declared_with_pads_and_static_asserts() {
     assert!(h.contains("uint8_t _pad2[2];"), "{h}");
     assert!(h.contains("ridl_podbuf_desc message;"), "{h}");
     assert!(h.contains("uint8_t _pad12[4];"), "{h}");
-    assert!(h.contains("int64_t timestamp;"), "{h}");
+    assert!(h.contains("\n  int64_t timestamp;"), "{h}");
+    assert!(
+        h.contains("static inline int64_t veh_cluster_fault_event_timestamp("),
+        "{h}"
+    );
     assert!(
         h.contains("_Static_assert(sizeof(veh_cluster_fault_event_head) == 24"),
         "{h}"

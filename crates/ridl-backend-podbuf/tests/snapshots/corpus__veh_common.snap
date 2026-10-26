@@ -47,54 +47,55 @@ static inline uint32_t ridl_podbuf_head_size(const uint8_t *buf) {
          ((uint32_t)buf[3] << 24);
 }
 
-/* Whether `size` bytes at head offset `off` lie inside the producer's head. */
-static inline int ridl_podbuf_fits(const uint8_t *buf, uint32_t off, uint32_t size) {
-  return (uint64_t)off + size <= ridl_podbuf_head_size(buf);
+/* Whether `n` bytes at head offset `off` lie inside a head of `sz` bytes. */
+static inline int ridl_podbuf_fits(uint32_t sz, uint32_t off, uint32_t n) {
+  return (uint64_t)off + n <= sz;
 }
 
-/* A little-endian unsigned load from the head; 0 past the producer's head. */
-static inline uint64_t ridl_podbuf_load(const uint8_t *buf, uint32_t off, uint32_t size) {
+/* A little-endian unsigned load from a head of `sz` bytes; 0 past it. */
+static inline uint64_t ridl_podbuf_load(const uint8_t *h, uint32_t sz, uint32_t off, uint32_t n) {
   uint64_t value = 0;
   uint32_t i;
-  if (!ridl_podbuf_fits(buf, off, size)) {
+  if (!ridl_podbuf_fits(sz, off, n)) {
     return 0;
   }
-  for (i = size; i > 0; i--) {
-    value = (value << 8) | buf[RIDL_PODBUF_PREAMBLE_SIZE + off + i - 1];
+  for (i = n; i > 0; i--) {
+    value = (value << 8) | h[off + i - 1];
   }
   return value;
 }
 
-static inline float ridl_podbuf_load_f32(const uint8_t *buf, uint32_t off) {
+static inline float ridl_podbuf_load_f32(const uint8_t *h, uint32_t sz, uint32_t off) {
   union {
     uint32_t bits;
     float value;
   } pun;
-  pun.bits = (uint32_t)ridl_podbuf_load(buf, off, 4);
+  pun.bits = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
   return pun.value;
 }
 
-static inline double ridl_podbuf_load_f64(const uint8_t *buf, uint32_t off) {
+static inline double ridl_podbuf_load_f64(const uint8_t *h, uint32_t sz, uint32_t off) {
   union {
     uint64_t bits;
     double value;
   } pun;
-  pun.bits = ridl_podbuf_load(buf, off, 8);
+  pun.bits = ridl_podbuf_load(h, sz, off, 8);
   return pun.value;
 }
 
-static inline ridl_podbuf_desc ridl_podbuf_desc_at(const uint8_t *buf, uint32_t off) {
+static inline ridl_podbuf_desc ridl_podbuf_desc_at(const uint8_t *h, uint32_t sz, uint32_t off) {
   ridl_podbuf_desc d;
-  d.off = (uint32_t)ridl_podbuf_load(buf, off, 4);
-  d.len = (uint32_t)ridl_podbuf_load(buf, off + 4, 4);
+  d.off = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
+  d.len = (uint32_t)ridl_podbuf_load(h, sz, off + 4, 4);
   return d;
 }
 
-static inline ridl_podbuf_array_desc ridl_podbuf_array_desc_at(const uint8_t *buf, uint32_t off) {
+static inline ridl_podbuf_array_desc ridl_podbuf_array_desc_at(const uint8_t *h, uint32_t sz,
+                                                               uint32_t off) {
   ridl_podbuf_array_desc d;
-  d.off = (uint32_t)ridl_podbuf_load(buf, off, 4);
-  d.len = (uint16_t)ridl_podbuf_load(buf, off + 4, 2);
-  d.elem_size = (uint16_t)ridl_podbuf_load(buf, off + 6, 2);
+  d.off = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
+  d.len = (uint16_t)ridl_podbuf_load(h, sz, off + 4, 2);
+  d.elem_size = (uint16_t)ridl_podbuf_load(h, sz, off + 6, 2);
   return d;
 }
 
@@ -121,13 +122,13 @@ typedef struct veh_common_speed_limit_payload_head {
   _Alignas(8) float limit;
   float actual;
 } veh_common_speed_limit_payload_head;
+#endif
 _Static_assert(sizeof(veh_common_speed_limit_payload_head) == 8, "veh_common_speed_limit_payload_head size");
 _Static_assert(_Alignof(veh_common_speed_limit_payload_head) == 8, "veh_common_speed_limit_payload_head alignment");
 _Static_assert(offsetof(veh_common_speed_limit_payload_head, limit) == 0, "veh_common_speed_limit_payload_head.limit offset");
 _Static_assert(sizeof(((veh_common_speed_limit_payload_head *)0)->limit) == 4, "veh_common_speed_limit_payload_head.limit size");
 _Static_assert(offsetof(veh_common_speed_limit_payload_head, actual) == 4, "veh_common_speed_limit_payload_head.actual offset");
 _Static_assert(sizeof(((veh_common_speed_limit_payload_head *)0)->actual) == 4, "veh_common_speed_limit_payload_head.actual size");
-#endif
 
 #ifndef VEH_COMMON_DRIVER_PROFILE_HEAD_DEFINED
 #define VEH_COMMON_DRIVER_PROFILE_HEAD_DEFINED
@@ -140,6 +141,7 @@ typedef struct veh_common_driver_profile_head {
   float override;
   uint8_t _pad20[4];
 } veh_common_driver_profile_head;
+#endif
 _Static_assert(sizeof(veh_common_driver_profile_head) == 24, "veh_common_driver_profile_head size");
 _Static_assert(_Alignof(veh_common_driver_profile_head) == 8, "veh_common_driver_profile_head alignment");
 _Static_assert(offsetof(veh_common_driver_profile_head, name) == 0, "veh_common_driver_profile_head.name offset");
@@ -152,7 +154,6 @@ _Static_assert(offsetof(veh_common_driver_profile_head, gears) == 13, "veh_commo
 _Static_assert(sizeof(((veh_common_driver_profile_head *)0)->gears) == 1, "veh_common_driver_profile_head.gears size");
 _Static_assert(offsetof(veh_common_driver_profile_head, override) == 16, "veh_common_driver_profile_head.override offset");
 _Static_assert(sizeof(((veh_common_driver_profile_head *)0)->override) == 4, "veh_common_driver_profile_head.override size");
-#endif
 
 #ifndef VEH_COMMON_SENSOR_BOUNDS_RANGE_HEAD_DEFINED
 #define VEH_COMMON_SENSOR_BOUNDS_RANGE_HEAD_DEFINED
@@ -160,13 +161,13 @@ typedef struct veh_common_sensor_bounds_range_head {
   _Alignas(8) float f1;
   float f2;
 } veh_common_sensor_bounds_range_head;
+#endif
 _Static_assert(sizeof(veh_common_sensor_bounds_range_head) == 8, "veh_common_sensor_bounds_range_head size");
 _Static_assert(_Alignof(veh_common_sensor_bounds_range_head) == 8, "veh_common_sensor_bounds_range_head alignment");
 _Static_assert(offsetof(veh_common_sensor_bounds_range_head, f1) == 0, "veh_common_sensor_bounds_range_head.f1 offset");
 _Static_assert(sizeof(((veh_common_sensor_bounds_range_head *)0)->f1) == 4, "veh_common_sensor_bounds_range_head.f1 size");
 _Static_assert(offsetof(veh_common_sensor_bounds_range_head, f2) == 4, "veh_common_sensor_bounds_range_head.f2 offset");
 _Static_assert(sizeof(((veh_common_sensor_bounds_range_head *)0)->f2) == 4, "veh_common_sensor_bounds_range_head.f2 size");
-#endif
 
 #ifndef VEH_COMMON_SENSOR_BOUNDS_HEAD_DEFINED
 #define VEH_COMMON_SENSOR_BOUNDS_HEAD_DEFINED
@@ -176,6 +177,7 @@ typedef struct veh_common_sensor_bounds_head {
   ridl_podbuf_array_desc labels;
   ridl_podbuf_array_desc meta;
 } veh_common_sensor_bounds_head;
+#endif
 _Static_assert(sizeof(veh_common_sensor_bounds_head) == 56, "veh_common_sensor_bounds_head size");
 _Static_assert(_Alignof(veh_common_sensor_bounds_head) == 8, "veh_common_sensor_bounds_head alignment");
 _Static_assert(offsetof(veh_common_sensor_bounds_head, range) == 0, "veh_common_sensor_bounds_head.range offset");
@@ -186,7 +188,6 @@ _Static_assert(offsetof(veh_common_sensor_bounds_head, labels) == 40, "veh_commo
 _Static_assert(sizeof(((veh_common_sensor_bounds_head *)0)->labels) == 8, "veh_common_sensor_bounds_head.labels size");
 _Static_assert(offsetof(veh_common_sensor_bounds_head, meta) == 48, "veh_common_sensor_bounds_head.meta offset");
 _Static_assert(sizeof(((veh_common_sensor_bounds_head *)0)->meta) == 8, "veh_common_sensor_bounds_head.meta size");
-#endif
 
 #ifndef VEH_COMMON_SENSOR_RESULT_HEAD_DEFINED
 #define VEH_COMMON_SENSOR_RESULT_HEAD_DEFINED
@@ -196,13 +197,13 @@ typedef struct veh_common_sensor_result_head {
   ridl_podbuf_desc arm;
   uint8_t _pad12[4];
 } veh_common_sensor_result_head;
+#endif
 _Static_assert(sizeof(veh_common_sensor_result_head) == 16, "veh_common_sensor_result_head size");
 _Static_assert(_Alignof(veh_common_sensor_result_head) == 8, "veh_common_sensor_result_head alignment");
 _Static_assert(offsetof(veh_common_sensor_result_head, tag) == 0, "veh_common_sensor_result_head.tag offset");
 _Static_assert(sizeof(((veh_common_sensor_result_head *)0)->tag) == 1, "veh_common_sensor_result_head.tag size");
 _Static_assert(offsetof(veh_common_sensor_result_head, arm) == 4, "veh_common_sensor_result_head.arm offset");
 _Static_assert(sizeof(((veh_common_sensor_result_head *)0)->arm) == 8, "veh_common_sensor_result_head.arm size");
-#endif
 
 #ifndef VEH_COMMON_SENSOR_READING_HEAD_DEFINED
 #define VEH_COMMON_SENSOR_READING_HEAD_DEFINED
@@ -211,13 +212,13 @@ typedef struct veh_common_sensor_reading_head {
   uint8_t _pad4[4];
   uint64_t timestamp;
 } veh_common_sensor_reading_head;
+#endif
 _Static_assert(sizeof(veh_common_sensor_reading_head) == 16, "veh_common_sensor_reading_head size");
 _Static_assert(_Alignof(veh_common_sensor_reading_head) == 8, "veh_common_sensor_reading_head alignment");
 _Static_assert(offsetof(veh_common_sensor_reading_head, value) == 0, "veh_common_sensor_reading_head.value offset");
 _Static_assert(sizeof(((veh_common_sensor_reading_head *)0)->value) == 4, "veh_common_sensor_reading_head.value size");
 _Static_assert(offsetof(veh_common_sensor_reading_head, timestamp) == 8, "veh_common_sensor_reading_head.timestamp offset");
 _Static_assert(sizeof(((veh_common_sensor_reading_head *)0)->timestamp) == 8, "veh_common_sensor_reading_head.timestamp size");
-#endif
 
 #ifndef VEH_COMMON_SENSOR_FAULT_HEAD_DEFINED
 #define VEH_COMMON_SENSOR_FAULT_HEAD_DEFINED
@@ -227,13 +228,13 @@ typedef struct veh_common_sensor_fault_head {
   ridl_podbuf_desc message;
   uint8_t _pad12[4];
 } veh_common_sensor_fault_head;
+#endif
 _Static_assert(sizeof(veh_common_sensor_fault_head) == 16, "veh_common_sensor_fault_head size");
 _Static_assert(_Alignof(veh_common_sensor_fault_head) == 8, "veh_common_sensor_fault_head alignment");
 _Static_assert(offsetof(veh_common_sensor_fault_head, code) == 0, "veh_common_sensor_fault_head.code offset");
 _Static_assert(sizeof(((veh_common_sensor_fault_head *)0)->code) == 2, "veh_common_sensor_fault_head.code size");
 _Static_assert(offsetof(veh_common_sensor_fault_head, message) == 4, "veh_common_sensor_fault_head.message offset");
 _Static_assert(sizeof(((veh_common_sensor_fault_head *)0)->message) == 8, "veh_common_sensor_fault_head.message size");
-#endif
 
 #ifndef VEH_COMMON_RAW_WHEEL_FRAME_HEAD_DEFINED
 #define VEH_COMMON_RAW_WHEEL_FRAME_HEAD_DEFINED
@@ -242,13 +243,13 @@ typedef struct veh_common_raw_wheel_frame_head {
   uint8_t frame[8];
   uint8_t _pad10[6];
 } veh_common_raw_wheel_frame_head;
+#endif
 _Static_assert(sizeof(veh_common_raw_wheel_frame_head) == 16, "veh_common_raw_wheel_frame_head size");
 _Static_assert(_Alignof(veh_common_raw_wheel_frame_head) == 8, "veh_common_raw_wheel_frame_head alignment");
 _Static_assert(offsetof(veh_common_raw_wheel_frame_head, ticks) == 0, "veh_common_raw_wheel_frame_head.ticks offset");
 _Static_assert(sizeof(((veh_common_raw_wheel_frame_head *)0)->ticks) == 2, "veh_common_raw_wheel_frame_head.ticks size");
 _Static_assert(offsetof(veh_common_raw_wheel_frame_head, frame) == 2, "veh_common_raw_wheel_frame_head.frame offset");
 _Static_assert(sizeof(((veh_common_raw_wheel_frame_head *)0)->frame) == 8, "veh_common_raw_wheel_frame_head.frame size");
-#endif
 
 #ifndef VEH_COMMON_SENSOR_BOUNDS_META_ENTRY_HEAD_DEFINED
 #define VEH_COMMON_SENSOR_BOUNDS_META_ENTRY_HEAD_DEFINED
@@ -256,13 +257,13 @@ typedef struct veh_common_sensor_bounds_meta_entry_head {
   _Alignas(8) ridl_podbuf_desc key;
   ridl_podbuf_desc value;
 } veh_common_sensor_bounds_meta_entry_head;
+#endif
 _Static_assert(sizeof(veh_common_sensor_bounds_meta_entry_head) == 16, "veh_common_sensor_bounds_meta_entry_head size");
 _Static_assert(_Alignof(veh_common_sensor_bounds_meta_entry_head) == 8, "veh_common_sensor_bounds_meta_entry_head alignment");
 _Static_assert(offsetof(veh_common_sensor_bounds_meta_entry_head, key) == 0, "veh_common_sensor_bounds_meta_entry_head.key offset");
 _Static_assert(sizeof(((veh_common_sensor_bounds_meta_entry_head *)0)->key) == 8, "veh_common_sensor_bounds_meta_entry_head.key size");
 _Static_assert(offsetof(veh_common_sensor_bounds_meta_entry_head, value) == 8, "veh_common_sensor_bounds_meta_entry_head.value offset");
 _Static_assert(sizeof(((veh_common_sensor_bounds_meta_entry_head *)0)->value) == 8, "veh_common_sensor_bounds_meta_entry_head.value size");
-#endif
 
 #ifndef VEH_COMMON_SENSOR_RESULT_OK_ARM_HEAD_DEFINED
 #define VEH_COMMON_SENSOR_RESULT_OK_ARM_HEAD_DEFINED
@@ -271,13 +272,13 @@ typedef struct veh_common_sensor_result_ok_arm_head {
   uint8_t _pad4[4];
   uint64_t timestamp;
 } veh_common_sensor_result_ok_arm_head;
+#endif
 _Static_assert(sizeof(veh_common_sensor_result_ok_arm_head) == 16, "veh_common_sensor_result_ok_arm_head size");
 _Static_assert(_Alignof(veh_common_sensor_result_ok_arm_head) == 8, "veh_common_sensor_result_ok_arm_head alignment");
 _Static_assert(offsetof(veh_common_sensor_result_ok_arm_head, value) == 0, "veh_common_sensor_result_ok_arm_head.value offset");
 _Static_assert(sizeof(((veh_common_sensor_result_ok_arm_head *)0)->value) == 4, "veh_common_sensor_result_ok_arm_head.value size");
 _Static_assert(offsetof(veh_common_sensor_result_ok_arm_head, timestamp) == 8, "veh_common_sensor_result_ok_arm_head.timestamp offset");
 _Static_assert(sizeof(((veh_common_sensor_result_ok_arm_head *)0)->timestamp) == 8, "veh_common_sensor_result_ok_arm_head.timestamp size");
-#endif
 
 #ifndef VEH_COMMON_SENSOR_RESULT_ERR_ARM_HEAD_DEFINED
 #define VEH_COMMON_SENSOR_RESULT_ERR_ARM_HEAD_DEFINED
@@ -287,85 +288,214 @@ typedef struct veh_common_sensor_result_err_arm_head {
   ridl_podbuf_desc message;
   uint8_t _pad12[4];
 } veh_common_sensor_result_err_arm_head;
+#endif
 _Static_assert(sizeof(veh_common_sensor_result_err_arm_head) == 16, "veh_common_sensor_result_err_arm_head size");
 _Static_assert(_Alignof(veh_common_sensor_result_err_arm_head) == 8, "veh_common_sensor_result_err_arm_head alignment");
 _Static_assert(offsetof(veh_common_sensor_result_err_arm_head, code) == 0, "veh_common_sensor_result_err_arm_head.code offset");
 _Static_assert(sizeof(((veh_common_sensor_result_err_arm_head *)0)->code) == 2, "veh_common_sensor_result_err_arm_head.code size");
 _Static_assert(offsetof(veh_common_sensor_result_err_arm_head, message) == 4, "veh_common_sensor_result_err_arm_head.message offset");
 _Static_assert(sizeof(((veh_common_sensor_result_err_arm_head *)0)->message) == 8, "veh_common_sensor_result_err_arm_head.message size");
-#endif
+
+static inline float veh_common_speed_limit_payload_limit_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
 
 static inline float veh_common_speed_limit_payload_limit(const uint8_t *buf) {
-  return ridl_podbuf_load_f32(buf, 0);
-}
-static inline float veh_common_speed_limit_payload_actual(const uint8_t *buf) {
-  return ridl_podbuf_load_f32(buf, 4);
-}
-static inline const char *veh_common_driver_profile_name(const uint8_t *buf, uint32_t *len) {
-  ridl_podbuf_desc d = ridl_podbuf_desc_at(buf, 0);
-  *len = d.len;
-  return d.len ? (const char *)(buf + d.off) : NULL;
-}
-static inline float veh_common_driver_profile_speed(const uint8_t *buf) {
-  return ridl_podbuf_load_f32(buf, 8);
-}
-static inline uint8_t veh_common_driver_profile_gears(const uint8_t *buf) {
-  return (uint8_t)ridl_podbuf_load(buf, 13, 1);
-}
-static inline float veh_common_driver_profile_override(const uint8_t *buf) {
-  return ridl_podbuf_load_f32(buf, 16);
-}
-static inline int veh_common_driver_profile_has_override(const uint8_t *buf) {
-  return (int)((ridl_podbuf_load(buf, 12, 1) >> 0) & 1u);
+  return veh_common_speed_limit_payload_limit_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
 }
 
-static inline const veh_common_sensor_bounds_range_head *veh_common_sensor_bounds_range(const uint8_t *buf) {
-  return ridl_podbuf_fits(buf, 0, 8)
-    ? (const veh_common_sensor_bounds_range_head *)(buf + RIDL_PODBUF_PREAMBLE_SIZE + 0) : NULL;
+static inline float veh_common_speed_limit_payload_actual_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 4);
 }
-static inline const float *veh_common_sensor_bounds_readings(const uint8_t *buf) {
-  return ridl_podbuf_fits(buf, 8, 32)
-    ? (const float *)(buf + RIDL_PODBUF_PREAMBLE_SIZE + 8) : NULL;
+
+static inline float veh_common_speed_limit_payload_actual(const uint8_t *buf) {
+  return veh_common_speed_limit_payload_actual_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
 }
-static inline const uint8_t *veh_common_sensor_bounds_labels(const uint8_t *buf, uint16_t *count, uint16_t *elem_size) {
-  ridl_podbuf_array_desc d = ridl_podbuf_array_desc_at(buf, 40);
-  *count = d.len;
-  *elem_size = d.elem_size;
-  return d.len ? buf + d.off : NULL;
-}
-static inline const uint8_t *veh_common_sensor_bounds_meta(const uint8_t *buf, uint16_t *count, uint16_t *elem_size) {
-  ridl_podbuf_array_desc d = ridl_podbuf_array_desc_at(buf, 48);
-  *count = d.len;
-  *elem_size = d.elem_size;
-  return d.len ? buf + d.off : NULL;
-}
-static inline uint8_t veh_common_sensor_result_tag(const uint8_t *buf) {
-  return (uint8_t)ridl_podbuf_load(buf, 0, 1);
-}
-static inline const uint8_t *veh_common_sensor_result_arm(const uint8_t *buf, uint32_t *len) {
-  ridl_podbuf_desc d = ridl_podbuf_desc_at(buf, 4);
-  *len = d.len;
-  return d.len ? buf + d.off : NULL;
-}
-static inline float veh_common_sensor_reading_value(const uint8_t *buf) {
-  return ridl_podbuf_load_f32(buf, 0);
-}
-static inline uint64_t veh_common_sensor_reading_timestamp(const uint8_t *buf) {
-  return (uint64_t)ridl_podbuf_load(buf, 8, 8);
-}
-static inline uint16_t veh_common_sensor_fault_code(const uint8_t *buf) {
-  return (uint16_t)ridl_podbuf_load(buf, 0, 2);
-}
-static inline const char *veh_common_sensor_fault_message(const uint8_t *buf, uint32_t *len) {
-  ridl_podbuf_desc d = ridl_podbuf_desc_at(buf, 4);
+
+static inline const char *veh_common_driver_profile_name_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {
+  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, 0);
   *len = d.len;
   return d.len ? (const char *)(buf + d.off) : NULL;
 }
+
+static inline const char *veh_common_driver_profile_name(const uint8_t *buf, uint32_t *len) {
+  return veh_common_driver_profile_name_at(buf, buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf), len);
+}
+
+static inline float veh_common_driver_profile_speed_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 8);
+}
+
+static inline float veh_common_driver_profile_speed(const uint8_t *buf) {
+  return veh_common_driver_profile_speed_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t veh_common_driver_profile_gears_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 13, 1);
+}
+
+static inline uint8_t veh_common_driver_profile_gears(const uint8_t *buf) {
+  return veh_common_driver_profile_gears_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline float veh_common_driver_profile_override_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 16);
+}
+
+static inline float veh_common_driver_profile_override(const uint8_t *buf) {
+  return veh_common_driver_profile_override_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline int veh_common_driver_profile_has_override_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 12, 1) >> 0) & 1u);
+}
+
+static inline int veh_common_driver_profile_has_override(const uint8_t *buf) {
+  return veh_common_driver_profile_has_override_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline float veh_common_sensor_bounds_range_f1_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
+
+static inline float veh_common_sensor_bounds_range_f2_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 4);
+}
+
+static inline const uint8_t *veh_common_sensor_bounds_range_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_fits(sz, 0, 8) ? h + 0 : NULL;
+}
+
+static inline const uint8_t *veh_common_sensor_bounds_range(const uint8_t *buf) {
+  return veh_common_sensor_bounds_range_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const uint8_t *veh_common_sensor_bounds_readings_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_fits(sz, 8, 32) ? h + 8 : NULL;
+}
+
+static inline const uint8_t *veh_common_sensor_bounds_readings(const uint8_t *buf) {
+  return veh_common_sensor_bounds_readings_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const uint8_t *veh_common_sensor_bounds_labels_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint16_t *count, uint16_t *elem_size) {
+  ridl_podbuf_array_desc d = ridl_podbuf_array_desc_at(h, sz, 40);
+  *count = d.len;
+  *elem_size = d.elem_size;
+  return d.len ? buf + d.off : NULL;
+}
+
+static inline const uint8_t *veh_common_sensor_bounds_labels(const uint8_t *buf, uint16_t *count, uint16_t *elem_size) {
+  return veh_common_sensor_bounds_labels_at(buf, buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf), count, elem_size);
+}
+
+static inline const uint8_t *veh_common_sensor_bounds_meta_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint16_t *count, uint16_t *elem_size) {
+  ridl_podbuf_array_desc d = ridl_podbuf_array_desc_at(h, sz, 48);
+  *count = d.len;
+  *elem_size = d.elem_size;
+  return d.len ? buf + d.off : NULL;
+}
+
+static inline const uint8_t *veh_common_sensor_bounds_meta(const uint8_t *buf, uint16_t *count, uint16_t *elem_size) {
+  return veh_common_sensor_bounds_meta_at(buf, buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf), count, elem_size);
+}
+
+static inline uint8_t veh_common_sensor_result_tag_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
+}
+
+static inline uint8_t veh_common_sensor_result_tag(const uint8_t *buf) {
+  return veh_common_sensor_result_tag_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const uint8_t *veh_common_sensor_result_arm_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {
+  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, 4);
+  *len = d.len;
+  return d.len ? buf + d.off : NULL;
+}
+
+static inline const uint8_t *veh_common_sensor_result_arm(const uint8_t *buf, uint32_t *len) {
+  return veh_common_sensor_result_arm_at(buf, buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf), len);
+}
+
+static inline float veh_common_sensor_reading_value_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
+
+static inline float veh_common_sensor_reading_value(const uint8_t *buf) {
+  return veh_common_sensor_reading_value_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint64_t veh_common_sensor_reading_timestamp_at(const uint8_t *h, uint32_t sz) {
+  return (uint64_t)ridl_podbuf_load(h, sz, 8, 8);
+}
+
+static inline uint64_t veh_common_sensor_reading_timestamp(const uint8_t *buf) {
+  return veh_common_sensor_reading_timestamp_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint16_t veh_common_sensor_fault_code_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline uint16_t veh_common_sensor_fault_code(const uint8_t *buf) {
+  return veh_common_sensor_fault_code_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const char *veh_common_sensor_fault_message_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {
+  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, 4);
+  *len = d.len;
+  return d.len ? (const char *)(buf + d.off) : NULL;
+}
+
+static inline const char *veh_common_sensor_fault_message(const uint8_t *buf, uint32_t *len) {
+  return veh_common_sensor_fault_message_at(buf, buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf), len);
+}
+
+static inline uint16_t veh_common_raw_wheel_frame_ticks_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
 static inline uint16_t veh_common_raw_wheel_frame_ticks(const uint8_t *buf) {
-  return (uint16_t)ridl_podbuf_load(buf, 0, 2);
+  return veh_common_raw_wheel_frame_ticks_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
 }
+
+static inline const uint8_t *veh_common_raw_wheel_frame_frame_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_fits(sz, 2, 8) ? h + 2 : NULL;
+}
+
 static inline const uint8_t *veh_common_raw_wheel_frame_frame(const uint8_t *buf) {
-  return ridl_podbuf_fits(buf, 2, 8)
-    ? (const uint8_t *)(buf + RIDL_PODBUF_PREAMBLE_SIZE + 2) : NULL;
+  return veh_common_raw_wheel_frame_frame_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
 }
+
+static inline const char *veh_common_sensor_bounds_meta_entry_key_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {
+  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, 0);
+  *len = d.len;
+  return d.len ? (const char *)(buf + d.off) : NULL;
+}
+
+static inline const char *veh_common_sensor_bounds_meta_entry_value_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {
+  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, 8);
+  *len = d.len;
+  return d.len ? (const char *)(buf + d.off) : NULL;
+}
+
+static inline float veh_common_sensor_result_ok_arm_value_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
+
+static inline uint64_t veh_common_sensor_result_ok_arm_timestamp_at(const uint8_t *h, uint32_t sz) {
+  return (uint64_t)ridl_podbuf_load(h, sz, 8, 8);
+}
+
+static inline uint16_t veh_common_sensor_result_err_arm_code_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline const char *veh_common_sensor_result_err_arm_message_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {
+  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, 4);
+  *len = d.len;
+  return d.len ? (const char *)(buf + d.off) : NULL;
+}
+
 #endif /* RIDL_PODBUF_VEH_COMMON_H */

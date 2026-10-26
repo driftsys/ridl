@@ -11,8 +11,13 @@
 //! - `_Static_assert` checks on `sizeof` and `offsetof` for every head and
 //!   field, so a toolchain that disagrees fails the build;
 //! - the constants of the enums, enum sets and union tags;
-//! - inline accessor functions that read through the preamble's `head_size`
-//!   and answer 0 (or `NULL`) for a field that lies past it.
+//! - inline accessor functions, `<owner>_<field>_at`, that read a field from a
+//!   head of a size the caller gives and answer 0 (or `NULL`) for a field that
+//!   lies past it, so a reader built from a newer type reads the data of an
+//!   older producer; they exist for the head of a declaration and for the
+//!   heads in the tail (array elements, map entries, union arms), and the
+//!   head of a declaration also has `<owner>_<field>`, which reads a whole
+//!   buffer through the preamble's `head_size`.
 //!
 //! The layout is not computed here. It is read from the model's podbuf
 //! projection ([`v1::PodbufProjection`]), which `ridl_ir::projection::podbuf`
@@ -489,11 +494,7 @@ impl<'a> Header<'a> {
             self.render_head(&mut out, at, &mut claims)?;
         }
         for &at in &order {
-            if matches!(
-                self.heads[at].source,
-                Some(v1::podbuf_head::Source::Declaration(_))
-            ) && self.heads[at].size > 0
-            {
+            if self.is_local(at) && self.heads[at].size > 0 {
                 self.render_accessors(&mut out, at, &mut claims)?;
             }
         }
@@ -604,6 +605,7 @@ impl<'a> Header<'a> {
             let _ = writeln!(out, "  {align}{};", member.declaration);
         }
         let _ = writeln!(out, "}} {name};");
+        let _ = writeln!(out, "#endif");
         let _ = writeln!(
             out,
             "_Static_assert(sizeof({name}) == {}, \"{name} size\");",
@@ -627,12 +629,21 @@ impl<'a> Header<'a> {
                 "_Static_assert(sizeof((({name} *)0)->{field}) == {size}, \"{name}.{field} size\");"
             );
         }
-        let _ = writeln!(out, "#endif\n");
+        out.push('\n');
         Ok(())
     }
 
-    /// The accessors of a declaration's head: one per field that is not a
-    /// flags byte, and a presence test per optional field.
+    /// The accessors of a head: for each field that is not a flags byte, a
+    /// function `<owner>_<field>_at` that reads the field from a head of a
+    /// given size, and a presence test per optional field. The size is the
+    /// producer's: the preamble's `head_size` for the root head, the
+    /// descriptor's `elem_size` for an element or map entry, the arm
+    /// descriptor's `len` for an arm. A field past it reads as 0, so a reader
+    /// built from a newer type reads an older producer's data. The head of a
+    /// declaration also gets `<owner>_<field>`, which reads a whole buffer.
+    ///
+    /// A function that follows a descriptor takes the buffer start too,
+    /// because `off` counts from it.
     fn render_accessors(
         &self,
         out: &mut String,
@@ -642,10 +653,16 @@ impl<'a> Header<'a> {
         use v1::podbuf_descriptor::Kind as Descriptor;
         use v1::podbuf_form::Kind;
         let head = &self.heads[at];
-        let Some(v1::podbuf_head::Source::Declaration(declaration)) = head.source else {
-            return Ok(());
+        let root = matches!(head.source, Some(v1::podbuf_head::Source::Declaration(_)));
+        let owner = match head.source {
+            Some(v1::podbuf_head::Source::Declaration(declaration)) => {
+                format!("{}_{}", self.prefix, self.declaration_snake(declaration))
+            }
+            _ => {
+                let name = &self.type_names[at];
+                name.strip_suffix("_head").unwrap_or(name).to_string()
+            }
         };
-        let owner = format!("{}_{}", self.prefix, self.declaration_snake(declaration));
         let flags_offset = |index: u32| -> Option<u32> {
             head.fields.iter().find_map(|field| {
                 let kind = field.source.as_ref()?.kind.as_ref()?;
@@ -669,85 +686,126 @@ impl<'a> Header<'a> {
             let function = format!("{owner}_{}", member.trim_end_matches('_'));
             let offset = field.offset;
             let size = field.size;
+            let inline_bytes =
+                format!("  return ridl_podbuf_fits(sz, {offset}, {size}) ? h + {offset} : NULL;\n");
 
-            let body = match kind {
-                Kind::Boolean(_) | Kind::Int(_) | Kind::Enum(_) | Kind::EnumSet(_) => {
-                    let c_type = self.base_type(form).unwrap_or_default();
-                    format!(
-                        "static inline {c_type} {function}(const uint8_t *buf) {{\n  \
-                         return ({c_type})ridl_podbuf_load(buf, {offset}, {size});\n}}\n"
-                    )
-                }
-                Kind::Float(width) => {
-                    let (c_type, helper) = if *width == v1::FloatWidth::F32 as i32 {
-                        ("float", "ridl_podbuf_load_f32")
-                    } else {
-                        ("double", "ridl_podbuf_load_f64")
-                    };
-                    format!(
-                        "static inline {c_type} {function}(const uint8_t *buf) {{\n  \
-                         return {helper}(buf, {offset});\n}}\n"
-                    )
-                }
-                Kind::InlineHead(_) => {
-                    let Some(base) = self.base_type(form) else {
-                        continue;
-                    };
-                    format!(
-                        "static inline const {base} *{function}(const uint8_t *buf) {{\n  \
-                         return ridl_podbuf_fits(buf, {offset}, {size})\n    \
-                         ? (const {base} *)(buf + RIDL_PODBUF_PREAMBLE_SIZE + {offset}) : NULL;\n}}\n"
-                    )
-                }
-                Kind::InlineArray(_) => {
-                    let (_, element) = self.dimensions(form);
-                    let Some(base) = self.base_type(element) else {
-                        continue;
-                    };
-                    format!(
-                        "static inline const {base} *{function}(const uint8_t *buf) {{\n  \
-                         return ridl_podbuf_fits(buf, {offset}, {size})\n    \
-                         ? (const {base} *)(buf + RIDL_PODBUF_PREAMBLE_SIZE + {offset}) : NULL;\n}}\n"
-                    )
-                }
-                Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
-                    Some(Descriptor::Text(_)) => format!(
-                        "static inline const char *{function}(const uint8_t *buf, uint32_t *len) {{\n  \
-                         ridl_podbuf_desc d = ridl_podbuf_desc_at(buf, {offset});\n  \
-                         *len = d.len;\n  \
-                         return d.len ? (const char *)(buf + d.off) : NULL;\n}}\n"
-                    ),
-                    Some(Descriptor::Bytes(_)) | Some(Descriptor::Arms(_)) => format!(
-                        "static inline const uint8_t *{function}(const uint8_t *buf, uint32_t *len) {{\n  \
-                         ridl_podbuf_desc d = ridl_podbuf_desc_at(buf, {offset});\n  \
-                         *len = d.len;\n  \
-                         return d.len ? buf + d.off : NULL;\n}}\n"
-                    ),
-                    Some(Descriptor::Array(_)) | Some(Descriptor::Map(_)) => format!(
-                        "static inline const uint8_t *{function}(const uint8_t *buf, uint16_t *count, uint16_t *elem_size) {{\n  \
-                         ridl_podbuf_array_desc d = ridl_podbuf_array_desc_at(buf, {offset});\n  \
-                         *count = d.len;\n  \
-                         *elem_size = d.elem_size;\n  \
-                         return d.len ? buf + d.off : NULL;\n}}\n"
-                    ),
-                    None => continue,
-                },
+            // The return type, the extra parameters (with the names to pass
+            // on) and the body of `_at`, which sees `buf`, `h` and `sz`.
+            let (ret, params, names, uses_buf, body): (String, &str, &str, bool, String) =
+                match kind {
+                    Kind::Boolean(_) | Kind::Int(_) | Kind::Enum(_) | Kind::EnumSet(_) => {
+                        let c_type = self.base_type(form).unwrap_or_default();
+                        let body = format!(
+                            "  return ({c_type})ridl_podbuf_load(h, sz, {offset}, {size});\n"
+                        );
+                        (c_type, "", "", false, body)
+                    }
+                    Kind::Float(width) => {
+                        let (c_type, helper) = if *width == v1::FloatWidth::F32 as i32 {
+                            ("float", "ridl_podbuf_load_f32")
+                        } else {
+                            ("double", "ridl_podbuf_load_f64")
+                        };
+                        let body = format!("  return {helper}(h, sz, {offset});\n");
+                        (c_type.to_string(), "", "", false, body)
+                    }
+                    Kind::InlineHead(_) => {
+                        if self.base_type(form).is_none() {
+                            continue;
+                        }
+                        ("const uint8_t *".to_string(), "", "", false, inline_bytes)
+                    }
+                    Kind::InlineArray(_) => {
+                        let (_, element) = self.dimensions(form);
+                        if self.base_type(element).is_none() {
+                            continue;
+                        }
+                        ("const uint8_t *".to_string(), "", "", false, inline_bytes)
+                    }
+                    Kind::Descriptor(descriptor) => match descriptor.kind.as_ref() {
+                        Some(Descriptor::Text(_)) => (
+                            "const char *".to_string(),
+                            ", uint32_t *len",
+                            ", len",
+                            true,
+                            format!(
+                                "  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, {offset});\n  \
+                             *len = d.len;\n  \
+                             return d.len ? (const char *)(buf + d.off) : NULL;\n"
+                            ),
+                        ),
+                        Some(Descriptor::Bytes(_)) | Some(Descriptor::Arms(_)) => (
+                            "const uint8_t *".to_string(),
+                            ", uint32_t *len",
+                            ", len",
+                            true,
+                            format!(
+                                "  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, {offset});\n  \
+                             *len = d.len;\n  \
+                             return d.len ? buf + d.off : NULL;\n"
+                            ),
+                        ),
+                        Some(Descriptor::Array(_)) | Some(Descriptor::Map(_)) => (
+                            "const uint8_t *".to_string(),
+                            ", uint16_t *count, uint16_t *elem_size",
+                            ", count, elem_size",
+                            true,
+                            format!(
+                                "  ridl_podbuf_array_desc d = ridl_podbuf_array_desc_at(h, sz, {offset});\n  \
+                             *count = d.len;\n  \
+                             *elem_size = d.elem_size;\n  \
+                             return d.len ? buf + d.off : NULL;\n"
+                            ),
+                        ),
+                        None => continue,
+                    },
+                };
+            let at_name = format!("{function}_at");
+            claims.claim(&at_name, format!("the accessor of `{member}`"))?;
+            let lead = if uses_buf {
+                "const uint8_t *buf, const uint8_t *h, uint32_t sz"
+            } else {
+                "const uint8_t *h, uint32_t sz"
             };
-            claims.claim(&function, format!("the accessor of `{member}`"))?;
-            out.push_str(&body);
+            let _ = writeln!(
+                out,
+                "static inline {ret}{}{at_name}({lead}{params}) {{\n{body}}}\n",
+                if ret.ends_with('*') { "" } else { " " }
+            );
+            if root {
+                claims.claim(&function, format!("the accessor of `{member}`"))?;
+                let pass = if uses_buf { "buf, " } else { "" };
+                let _ = writeln!(
+                    out,
+                    "static inline {ret}{}{function}(const uint8_t *buf{params}) {{\n  \
+                     return {at_name}({pass}buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf){names});\n}}\n",
+                    if ret.ends_with('*') { "" } else { " " }
+                );
+            }
 
             if let Some(bit) = field.optional.as_ref() {
                 let Some(flags) = flags_offset(bit.flags) else {
                     continue;
                 };
                 let has = format!("{owner}_has_{}", member.trim_end_matches('_'));
-                claims.claim(&has, format!("the presence test of `{member}`"))?;
+                claims.claim(
+                    &format!("{has}_at"),
+                    format!("the presence test of `{member}`"),
+                )?;
                 let _ = writeln!(
                     out,
-                    "static inline int {has}(const uint8_t *buf) {{\n  \
-                     return (int)((ridl_podbuf_load(buf, {flags}, 1) >> {}) & 1u);\n}}\n",
+                    "static inline int {has}_at(const uint8_t *h, uint32_t sz) {{\n  \
+                     return (int)((ridl_podbuf_load(h, sz, {flags}, 1) >> {}) & 1u);\n}}\n",
                     bit.bit
                 );
+                if root {
+                    claims.claim(&has, format!("the presence test of `{member}`"))?;
+                    let _ = writeln!(
+                        out,
+                        "static inline int {has}(const uint8_t *buf) {{\n  \
+                         return {has}_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));\n}}\n"
+                    );
+                }
             }
         }
         Ok(())
@@ -867,54 +925,55 @@ static inline uint32_t ridl_podbuf_head_size(const uint8_t *buf) {
          ((uint32_t)buf[3] << 24);
 }
 
-/* Whether `size` bytes at head offset `off` lie inside the producer's head. */
-static inline int ridl_podbuf_fits(const uint8_t *buf, uint32_t off, uint32_t size) {
-  return (uint64_t)off + size <= ridl_podbuf_head_size(buf);
+/* Whether `n` bytes at head offset `off` lie inside a head of `sz` bytes. */
+static inline int ridl_podbuf_fits(uint32_t sz, uint32_t off, uint32_t n) {
+  return (uint64_t)off + n <= sz;
 }
 
-/* A little-endian unsigned load from the head; 0 past the producer's head. */
-static inline uint64_t ridl_podbuf_load(const uint8_t *buf, uint32_t off, uint32_t size) {
+/* A little-endian unsigned load from a head of `sz` bytes; 0 past it. */
+static inline uint64_t ridl_podbuf_load(const uint8_t *h, uint32_t sz, uint32_t off, uint32_t n) {
   uint64_t value = 0;
   uint32_t i;
-  if (!ridl_podbuf_fits(buf, off, size)) {
+  if (!ridl_podbuf_fits(sz, off, n)) {
     return 0;
   }
-  for (i = size; i > 0; i--) {
-    value = (value << 8) | buf[RIDL_PODBUF_PREAMBLE_SIZE + off + i - 1];
+  for (i = n; i > 0; i--) {
+    value = (value << 8) | h[off + i - 1];
   }
   return value;
 }
 
-static inline float ridl_podbuf_load_f32(const uint8_t *buf, uint32_t off) {
+static inline float ridl_podbuf_load_f32(const uint8_t *h, uint32_t sz, uint32_t off) {
   union {
     uint32_t bits;
     float value;
   } pun;
-  pun.bits = (uint32_t)ridl_podbuf_load(buf, off, 4);
+  pun.bits = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
   return pun.value;
 }
 
-static inline double ridl_podbuf_load_f64(const uint8_t *buf, uint32_t off) {
+static inline double ridl_podbuf_load_f64(const uint8_t *h, uint32_t sz, uint32_t off) {
   union {
     uint64_t bits;
     double value;
   } pun;
-  pun.bits = ridl_podbuf_load(buf, off, 8);
+  pun.bits = ridl_podbuf_load(h, sz, off, 8);
   return pun.value;
 }
 
-static inline ridl_podbuf_desc ridl_podbuf_desc_at(const uint8_t *buf, uint32_t off) {
+static inline ridl_podbuf_desc ridl_podbuf_desc_at(const uint8_t *h, uint32_t sz, uint32_t off) {
   ridl_podbuf_desc d;
-  d.off = (uint32_t)ridl_podbuf_load(buf, off, 4);
-  d.len = (uint32_t)ridl_podbuf_load(buf, off + 4, 4);
+  d.off = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
+  d.len = (uint32_t)ridl_podbuf_load(h, sz, off + 4, 4);
   return d;
 }
 
-static inline ridl_podbuf_array_desc ridl_podbuf_array_desc_at(const uint8_t *buf, uint32_t off) {
+static inline ridl_podbuf_array_desc ridl_podbuf_array_desc_at(const uint8_t *h, uint32_t sz,
+                                                               uint32_t off) {
   ridl_podbuf_array_desc d;
-  d.off = (uint32_t)ridl_podbuf_load(buf, off, 4);
-  d.len = (uint16_t)ridl_podbuf_load(buf, off + 4, 2);
-  d.elem_size = (uint16_t)ridl_podbuf_load(buf, off + 6, 2);
+  d.off = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
+  d.len = (uint16_t)ridl_podbuf_load(h, sz, off + 4, 2);
+  d.elem_size = (uint16_t)ridl_podbuf_load(h, sz, off + 6, 2);
   return d;
 }
 
