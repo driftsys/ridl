@@ -448,6 +448,7 @@ ridl.codegen.v1.PodbufHead.align = 3 singular uint32
 ridl.codegen.v1.PodbufHead.arm = 13 singular ridl.codegen.v1.ArmHead oneof=source
 ridl.codegen.v1.PodbufHead.declaration = 10 singular uint32 oneof=source
 ridl.codegen.v1.PodbufHead.fields = 4 repeated ridl.codegen.v1.PodbufField
+ridl.codegen.v1.PodbufHead.foreign = 14 singular uint32 oneof=source
 ridl.codegen.v1.PodbufHead.map_entry = 12 singular ridl.codegen.v1.MapEntry oneof=source
 ridl.codegen.v1.PodbufHead.pads = 5 repeated ridl.codegen.v1.PodbufPad
 ridl.codegen.v1.PodbufHead.size = 2 singular uint32
@@ -465,6 +466,10 @@ ridl.codegen.v1.PodbufNamedField.ordinal = 2 singular uint32
 ridl.codegen.v1.PodbufPad.offset = 1 singular uint32
 ridl.codegen.v1.PodbufPad.size = 2 singular uint32
 ridl.codegen.v1.PodbufProjection.heads = 1 repeated ridl.codegen.v1.PodbufHead
+ridl.codegen.v1.PodbufProjection.refused = 2 repeated ridl.codegen.v1.PodbufRefused
+ridl.codegen.v1.PodbufRefused.cause = 2 singular string
+ridl.codegen.v1.PodbufRefused.declaration = 10 singular uint32 oneof=source
+ridl.codegen.v1.PodbufRefused.tuple = 11 singular uint32 oneof=source
 ridl.codegen.v1.PodbufSource.arm = 13 singular bool oneof=kind
 ridl.codegen.v1.PodbufSource.field = 10 singular ridl.codegen.v1.PodbufNamedField oneof=kind
 ridl.codegen.v1.PodbufSource.flags = 11 singular uint32 oneof=kind

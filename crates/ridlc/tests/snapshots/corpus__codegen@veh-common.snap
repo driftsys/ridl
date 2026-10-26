@@ -3360,6 +3360,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "arm": 2
         }
       }
-    ]
+    ],
+    "refused": []
   }
 }

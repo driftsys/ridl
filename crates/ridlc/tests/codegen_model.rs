@@ -1062,7 +1062,14 @@ const PODBUF_SOURCE: &str = "package demo.pod\n\n\
     union Shape {\n  inner : Inner\n  code : Code\n}\n\n\
     struct Sample {\n  flag : boolean\n  big : float [0.0..1.0 step 0.5]\n  \
     name : Name\n  maybe : Code?\n  inner : Inner\n  shape : Shape\n  \
-    table : [string [1..4] : Inner; 0..4]\n}\n";
+    table : [string [1..4] : Inner; 0..4]\n}\n\n\
+    struct Flagged {\n  readings : [Code; 1..8]\n  \
+    o1 : integer [0..255]?\n  o2 : integer [0..255]?\n  o3 : integer [0..255]?\n  \
+    o4 : integer [0..255]?\n  o5 : integer [0..255]?\n  o6 : integer [0..255]?\n  \
+    o7 : integer [0..255]?\n  o8 : integer [0..255]?\n  o9 : integer [0..255]?\n}\n\n\
+    struct Twin1 {\n  x : integer [0..255]\n}\n\n\
+    struct Twin2 {\n  x : integer [0..255]\n}\n\n\
+    struct Both {\n  a : Twin1\n  b : Twin2\n}\n";
 
 fn podbuf_model() -> v1::Model {
     let compiled = ridlc::compile("pod.typl", PODBUF_SOURCE);
@@ -1419,5 +1426,149 @@ fn the_veh_cluster_fault_event_has_the_head_the_law_gives() {
             .iter()
             .any(|head| head["size"] == 24),
         "the canonical JSON carries the 24-byte head"
+    );
+}
+
+#[test]
+fn a_bounded_array_names_its_stride_and_its_bounds() {
+    let model = podbuf_model();
+    let (_, flagged) = declaration_head(&model, "Flagged");
+    let v1::podbuf_form::Kind::Descriptor(descriptor) = form_kind(field(flagged, "readings"))
+    else {
+        panic!("a descriptor");
+    };
+    let Some(v1::podbuf_descriptor::Kind::Array(array)) = descriptor.kind.as_ref() else {
+        panic!("an array");
+    };
+    assert_eq!((array.elem_size, array.min, array.max), (2, 1, 8));
+    assert_eq!(
+        array.element.as_ref().and_then(|e| e.kind.clone()),
+        Some(v1::podbuf_form::Kind::Int(v1::PodbufInt {
+            width: v1::IntWidth::U16 as i32,
+            signed: false,
+        }))
+    );
+}
+
+#[test]
+fn optional_fields_take_bits_in_order_and_a_ninth_takes_a_second_flags_field() {
+    let model = podbuf_model();
+    let (_, flagged) = declaration_head(&model, "Flagged");
+    let bits: Vec<_> = (1..=9)
+        .map(|n| {
+            let bit = field(flagged, &format!("o{n}")).optional.expect("optional");
+            (bit.flags, bit.bit)
+        })
+        .collect();
+    assert_eq!(
+        bits,
+        vec![
+            (0, 0),
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (0, 5),
+            (0, 6),
+            (0, 7),
+            (1, 0)
+        ]
+    );
+    let flags: Vec<_> = flagged
+        .fields
+        .iter()
+        .filter_map(|f| match f.source.as_ref().and_then(|s| s.kind.as_ref()) {
+            Some(v1::podbuf_source::Kind::Flags(index)) => Some(*index),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(flags, vec![0, 1]);
+}
+
+/// Two declarations with the same layout are two heads, and a field names the
+/// head of the type it was written with.
+#[test]
+fn two_declarations_with_one_layout_keep_their_own_heads() {
+    let model = podbuf_model();
+    let (one, _) = declaration_head(&model, "Twin1");
+    let (two, _) = declaration_head(&model, "Twin2");
+    assert_ne!(one, two);
+    let (_, both) = declaration_head(&model, "Both");
+    assert_eq!(
+        form_kind(field(both, "a")),
+        &v1::podbuf_form::Kind::InlineHead(one)
+    );
+    assert_eq!(
+        form_kind(field(both, "b")),
+        &v1::podbuf_form::Kind::InlineHead(two)
+    );
+}
+
+/// A struct of another package, written inline, has a head of its own that
+/// points into `Model.foreign`.
+#[test]
+fn a_foreign_struct_written_inline_gets_a_foreign_head() {
+    let root = tempfile::tempdir().expect("a temp dir");
+    let write = |path: &str, text: &str| {
+        let path = root.path().join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    write(
+        "a/ridl.toml",
+        "[package]\nname = \"p.a\"\nversion = \"1.0.0\"\n",
+    );
+    write(
+        "a/a.typl",
+        "package p.a\n\nstruct Remote {\n  x : integer [0..255]\n  y : integer [0..65535]\n}\n",
+    );
+    write(
+        "b/ridl.toml",
+        "[package]\nname = \"p.b\"\nversion = \"1.0.0\"\n",
+    );
+    write(
+        "b/b.typl",
+        "package p.b\n\nimport p.a.Remote\n\nstruct Local {\n  r : Remote\n}\n",
+    );
+    let mut db = RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, root.path()).expect("the workspace loads");
+    let mut packages: Vec<v2::Package> = output
+        .checked
+        .iter()
+        .map(|checked| checked.ir.clone())
+        .collect();
+    packages.push(output.std_ir.clone());
+    let others: Vec<&v2::Package> = packages.iter().collect();
+    let local = packages.iter().find(|p| p.name == "p.b").expect("p.b");
+    let model = codegen::lower(local, &others);
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (_, head) = declaration_head(&model, "Local");
+    let v1::podbuf_form::Kind::InlineHead(at) = form_kind(field(head, "r")) else {
+        panic!("an inline head");
+    };
+    let remote = &projection.heads[*at as usize];
+    let Some(v1::podbuf_head::Source::Foreign(index)) = remote.source else {
+        panic!("a foreign source, got {:?}", remote.source);
+    };
+    let foreign = &model.foreign[index as usize];
+    assert_eq!(foreign.package, "p.a");
+    assert_eq!(
+        foreign
+            .declaration
+            .as_ref()
+            .and_then(|d| d.name.as_ref())
+            .map(|n| n.declared.as_str()),
+        Some("Remote")
+    );
+    assert_eq!(remote.size, 8);
+    assert_eq!(
+        remote
+            .fields
+            .iter()
+            .map(|f| (f.offset, f.size))
+            .collect::<Vec<_>>(),
+        vec![(0, 1), (2, 2)]
     );
 }

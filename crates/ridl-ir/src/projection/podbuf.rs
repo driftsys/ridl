@@ -125,8 +125,11 @@ pub enum Form {
         reference: String,
     },
     /// A nested struct, a tuple, or a union (its tag and arm descriptor),
-    /// inline.
-    Inline(Box<Head>),
+    /// inline. `of` says which type the head is the layout of.
+    Inline {
+        head: Box<Head>,
+        of: Inlined,
+    },
     /// An exact-length array `[T; N]` or exact-length `bytes`, inline with
     /// no length.
     InlineArray {
@@ -135,6 +138,17 @@ pub enum Form {
     },
     /// A descriptor to data in the tail.
     Descriptor(DescriptorKind),
+}
+
+/// The type an inline head lays out. Two declarations with the same layout
+/// are two identities.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Inlined {
+    /// A struct or a union: the package that declares it and its name.
+    Declaration { package: String, name: String },
+    /// A tuple written at the field. A tuple has no name; its structure is its
+    /// identity.
+    Tuple,
 }
 
 /// What a descriptor points at.
@@ -309,7 +323,7 @@ pub fn elem_size(form: &Form) -> u32 {
             int_bytes(*width)
         }
         Form::Float(width) => float_bytes(*width),
-        Form::Inline(head) => head.size,
+        Form::Inline { head, .. } => head.size,
         Form::InlineArray { element, count } => elem_size(element).saturating_mul(*count),
         Form::Descriptor(_) => DESCRIPTOR_SIZE,
     }
@@ -394,7 +408,7 @@ pub fn form_exceeds_descriptor_limits(form: &Form) -> bool {
         | Form::Float(_)
         | Form::Enum { .. }
         | Form::EnumSet { .. } => false,
-        Form::Inline(head) => exceeds_descriptor_limits(head),
+        Form::Inline { head, .. } => exceeds_descriptor_limits(head),
         Form::InlineArray { element, .. } => form_exceeds_descriptor_limits(element),
         Form::Descriptor(kind) => match kind {
             DescriptorKind::Text { .. } | DescriptorKind::Bytes { .. } => false,
@@ -726,9 +740,10 @@ impl<'a> Layout<'a> {
             }
             Some(v2::field_type::Kind::InlineScalar(def)) => scalar_form(def),
             Some(v2::field_type::Kind::Named(reference)) => self.named_form(home, reference),
-            Some(v2::field_type::Kind::Tuple(tuple)) => Ok(Form::Inline(Box::new(
-                self.tuple_head(home, "a tuple", tuple)?,
-            ))),
+            Some(v2::field_type::Kind::Tuple(tuple)) => Ok(Form::Inline {
+                head: Box::new(self.tuple_head(home, "a tuple", tuple)?),
+                of: Inlined::Tuple,
+            }),
             Some(v2::field_type::Kind::Array(array)) => {
                 let element_ty = array.element.as_ref().ok_or_else(|| {
                     error("an array with no element type has no form".to_string())
@@ -790,12 +805,20 @@ impl<'a> Layout<'a> {
         let (decl, declaring) = self.resolve(home, reference)?;
         match &decl.kind {
             Some(v2::decl::Kind::TypeDef(def)) => scalar_form(def),
-            Some(v2::decl::Kind::StructDef(def)) => Ok(Form::Inline(Box::new(
-                self.struct_head(declaring, &decl.name, def)?,
-            ))),
-            Some(v2::decl::Kind::UnionDef(def)) => Ok(Form::Inline(Box::new(
-                self.union_head(declaring, &decl.name, def)?,
-            ))),
+            Some(v2::decl::Kind::StructDef(def)) => Ok(Form::Inline {
+                head: Box::new(self.struct_head(declaring, &decl.name, def)?),
+                of: Inlined::Declaration {
+                    package: declaring.name.clone(),
+                    name: decl.name.clone(),
+                },
+            }),
+            Some(v2::decl::Kind::UnionDef(def)) => Ok(Form::Inline {
+                head: Box::new(self.union_head(declaring, &decl.name, def)?),
+                of: Inlined::Declaration {
+                    package: declaring.name.clone(),
+                    name: decl.name.clone(),
+                },
+            }),
             Some(v2::decl::Kind::EnumDef(def)) => {
                 let (width, signed) = enum_width(def);
                 Ok(Form::Enum {
@@ -922,7 +945,7 @@ fn align_of(form: &Form) -> u32 {
         | Form::Enum { .. }
         | Form::EnumSet { .. }
         | Form::Float(_) => elem_size(form),
-        Form::Inline(_) => HEAD_ALIGN,
+        Form::Inline { .. } => HEAD_ALIGN,
         Form::InlineArray { element, .. } => align_of(element),
         Form::Descriptor(_) => DESCRIPTOR_ALIGN,
     }
@@ -954,7 +977,7 @@ fn form_tail(form: &Form, aligned: u32) -> Option<(u64, u32)> {
         | Form::Float(_)
         | Form::Enum { .. }
         | Form::EnumSet { .. } => Some((0, aligned)),
-        Form::Inline(head) => head_tail(head, aligned),
+        Form::Inline { head, .. } => head_tail(head, aligned),
         Form::InlineArray { element, count } => repeated(u64::from(*count), aligned, |aligned| {
             form_tail(element, aligned)
         }),
@@ -1502,7 +1525,13 @@ mod tests {
 
     #[test]
     fn elem_size_is_a_multiple_of_8_for_a_struct_and_exact_otherwise() {
-        assert_eq!(elem_size(&Form::Inline(Box::new(head(fault_event())))), 24);
+        assert_eq!(
+            elem_size(&Form::Inline {
+                head: Box::new(head(fault_event())),
+                of: Inlined::Tuple,
+            }),
+            24
+        );
         assert_eq!(
             elem_size(&Form::Int {
                 width: v2::IntWidth::U16,
@@ -1726,6 +1755,40 @@ mod tests {
         assert_eq!(offsets(entry), vec![0, 4]);
         assert_eq!(entry.fields[0].source, Source::Key);
         assert_eq!(entry.fields[1].source, Source::Value);
+    }
+
+    /// Two declarations with one layout are two identities, and a tuple
+    /// written at a field is identified by its structure.
+    #[test]
+    fn an_inline_head_records_the_type_it_lays_out() {
+        let h = head(fixture(
+            "Both",
+            vec![
+                struct_decl("A", vec![field("x", 1, byte())]),
+                struct_decl("B", vec![field("x", 1, byte())]),
+                struct_decl(
+                    "Both",
+                    vec![
+                        field("a", 1, named("A")),
+                        field("b", 2, named("B")),
+                        field("t", 3, tuple(vec![("x", byte())])),
+                    ],
+                ),
+            ],
+        ));
+        let of: Vec<_> = h
+            .fields
+            .iter()
+            .map(|placement| match &placement.form {
+                Form::Inline { of, .. } => of.clone(),
+                other => panic!("an inline form, got {other:?}"),
+            })
+            .collect();
+        let declared = |name: &str| Inlined::Declaration {
+            package: "veh".to_string(),
+            name: name.to_string(),
+        };
+        assert_eq!(of, vec![declared("A"), declared("B"), Inlined::Tuple]);
     }
 
     #[test]

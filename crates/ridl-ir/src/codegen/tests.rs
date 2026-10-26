@@ -4531,13 +4531,62 @@ fn the_podbuf_states_of_a_reservation_sum_in_u64() {
     );
 }
 
-/// `Label` has no length bound, so `Tagged` has no podbuf head. The
-/// projection is then left out of the model, and the sizes, which are
-/// computed on their own, are still written.
+/// `Label` has no length bound, so `Tagged` has no podbuf head, and `Wraps`,
+/// which holds a `Tagged`, has none either. `Pair` keeps its head. The sizes
+/// are computed on their own and are still written.
 #[test]
-fn a_head_that_cannot_be_laid_out_leaves_the_projection_out() {
-    let model = lower(&sized_package(), &[]);
-    assert_eq!(model.podbuf, None);
+fn a_head_that_cannot_be_laid_out_is_refused_and_the_others_are_kept() {
+    let mut package = sized_package();
+    package.decls.push(v2::Decl {
+        name: "Wraps".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![member(1, "inner", named("Tagged"))],
+            ..Default::default()
+        })),
+        ..Default::default()
+    });
+    let index = |name: &str| {
+        package
+            .decls
+            .iter()
+            .position(|decl| decl.name == name)
+            .expect("a declaration") as u32
+    };
+    let (pair, tagged, wraps) = (index("Pair"), index("Tagged"), index("Wraps"));
+    let model = lower(&package, &[]);
+    let podbuf = model.podbuf.as_ref().expect("the projection is always set");
+    let sources: Vec<_> = podbuf
+        .heads
+        .iter()
+        .map(|head| head.source.clone())
+        .collect();
+    assert!(sources.contains(&Some(v1::podbuf_head::Source::Declaration(pair))));
+    for refused in [tagged, wraps] {
+        assert!(
+            !sources.contains(&Some(v1::podbuf_head::Source::Declaration(refused))),
+            "a refused declaration has no head"
+        );
+    }
+    let refused: Vec<_> = podbuf
+        .refused
+        .iter()
+        .map(|refused| (refused.source, refused.cause.as_str()))
+        .collect();
+    assert_eq!(refused.len(), 2);
+    assert_eq!(
+        refused[0].0,
+        Some(v1::podbuf_refused::Source::Declaration(tagged))
+    );
+    assert_eq!(
+        refused[1].0,
+        Some(v1::podbuf_refused::Source::Declaration(wraps))
+    );
+    assert!(
+        refused[1].1.contains("Tagged"),
+        "the cause names the refused head: {}",
+        refused[1].1
+    );
     assert!(matches!(
         podbuf_state(&signal_payload(&model, 0).sizes),
         v1::size_state::State::Bounded(_)

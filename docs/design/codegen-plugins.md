@@ -643,12 +643,12 @@ and every reference from one head to another is an index into that list.
   order: a struct and a union each have one head, any other declaration has
   none. The heads of the named induced tuples follow, in `Model.tuples` order.
   The heads reached from those come last, in the order a depth-first walk of the
-  fields reaches them: the entry head of a map, and the head of each arm of a
-  union.
+  fields reaches them: the entry head of a map, the head of each arm of a union,
+  and a struct or union of another package that a field lays out inline.
 - **Source.** `PodbufHead.source` is the declaration index, the tuple index, a
   `MapEntry` whose `path` is the declaration name followed by the names of the
-  fields that lead to the map, or an `ArmHead` that names the union declaration
-  and the arm ordinal.
+  fields that lead to the map, an `ArmHead` that names the union declaration and
+  the arm ordinal, or an index into `Model.foreign`.
 - **Size and alignment.** `size` is a multiple of 8 and `align` is 8 for every
   head. A head with no field has size 0.
 - **Fields.** Each `PodbufField` has the `offset`, `size` and `align` the law
@@ -657,15 +657,21 @@ and every reference from one head to another is an index into that list.
   tuple position, a map key or a map value), the `form`, and, for an optional
   field, the `optional` flag bit. `pads` lists the unused byte runs.
 - **Forms.** A struct, a tuple or a union written as a field is laid out inline
-  as a copy of its own head; the form names the head that has that layout
-  (`inline_head`), and when two declarations share one layout it names the first
-  of them. A descriptor form says what the tail holds: a bounded string or bytes
-  (`min`, `max`), an array (the element form, the stride `elem_size`, `min`,
-  `max`), a map (the entry head, `elem_size`, `min`, `max`) or the arms of a
-  union (the ordinal and head of each arm).
-- **Absence.** The field is absent when a head cannot be laid out: the IR is
-  malformed, or a head is larger than a `u32` offset can address. The podbuf
-  checks report the cause (RIDL-153, RIDL-154).
+  as a copy of its own head. The form names the head of the type it was written
+  with (`inline_head`): the head of that declaration, the foreign head for a
+  type of another package, or for a tuple written at the field the named tuple
+  with the same structure. Two declarations with one layout have two heads. A
+  descriptor form says what the tail holds: a bounded string or bytes (`min`,
+  `max`), an array (the element form, the stride `elem_size`, `min`, `max`), a
+  map (the entry head, `elem_size`, `min`, `max`) or the arms of a union (the
+  ordinal and head of each arm).
+- **Refused heads.** `Model.podbuf` is set whenever the toolchain lowers a
+  package. A struct, a union or a tuple that cannot be laid out (the IR is
+  malformed, or a head is larger than a `u32` offset can address) has no head;
+  it is listed in `refused` with its source and a cause. A head that needs a
+  refused head is refused too, and its cause names that head. Every other head
+  is emitted. The podbuf checks (RIDL-153, RIDL-154) report the same causes as
+  errors when `podbuf` is a selected encoding.
 - **Sizes.** `PayloadSizes.podbuf` and `Reservation.podbuf` are filled by the
   same sizer as the other two encodings. A request of several parameters is
   sized as an induced struct under proto3, FlatBuffers and podbuf alike.

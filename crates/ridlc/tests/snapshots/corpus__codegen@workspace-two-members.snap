@@ -212,7 +212,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
   "foreign": [],
   "tupleCollisions": [],
   "podbuf": {
-    "heads": []
+    "heads": [],
+    "refused": []
   }
 }
 
@@ -461,6 +462,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         ],
         "declaration": 0
       }
-    ]
+    ],
+    "refused": []
   }
 }

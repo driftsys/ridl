@@ -1498,7 +1498,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "pads": [],
         "tuple": 0
       }
-    ]
+    ],
+    "refused": []
   }
 }
 
@@ -1642,7 +1643,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   "foreign": [],
   "tupleCollisions": [],
   "podbuf": {
-    "heads": []
+    "heads": [],
+    "refused": []
   }
 }
 
@@ -3080,6 +3082,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   ],
   "tupleCollisions": [],
   "podbuf": {
-    "heads": []
+    "heads": [],
+    "refused": []
   }
 }

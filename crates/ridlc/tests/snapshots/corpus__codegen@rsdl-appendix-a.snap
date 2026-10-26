@@ -684,7 +684,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   ],
   "tupleCollisions": [],
   "podbuf": {
-    "heads": []
+    "heads": [],
+    "refused": []
   }
 }
 
@@ -1127,7 +1128,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         ],
         "declaration": 3
       }
-    ]
+    ],
+    "refused": []
   }
 }
 
@@ -1474,7 +1476,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "pads": [],
         "tuple": 0
       }
-    ]
+    ],
+    "refused": []
   }
 }
 
@@ -1515,6 +1518,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "foreign": [],
   "tupleCollisions": [],
   "podbuf": {
-    "heads": []
+    "heads": [],
+    "refused": []
   }
 }

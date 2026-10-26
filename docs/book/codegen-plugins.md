@@ -363,10 +363,9 @@ flag bit of an optional field, and the unused byte runs. A form says what the
 bytes are: an integer, a float, an enum, an inline head (an index into
 `podbuf.heads`), an exact-length array, or a descriptor to the tail with the
 element type, the stride and the bounds. A union head lists the head of each
-arm. The model leaves `podbuf` out when a head cannot be laid out; the build
-reports the cause with RIDL-153 or RIDL-154 when `podbuf` is a selected
-encoding. [The codegen plugin record, "The podbuf projection"][podbuf-projection]
-gives the order of the heads and the meaning of each field.
+arm. A struct, union or tuple that cannot be laid out is listed in
+`podbuf.refused` with its cause, and no head is written for it.
+[The codegen plugin record, "The podbuf projection"][podbuf-projection] gives the order of the heads and the meaning of each field.
 
 ## The catalog hash
 

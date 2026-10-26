@@ -3361,7 +3361,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "arm": 2
         }
       }
-    ]
+    ],
+    "refused": []
   }
 }
 
@@ -11782,6 +11783,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "pads": [],
         "tuple": 10
       }
-    ]
+    ],
+    "refused": []
   }
 }

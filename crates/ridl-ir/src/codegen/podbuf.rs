@@ -8,32 +8,39 @@
 //! The order of the list is fixed. The declarations come first, in
 //! `Package.decls` order: a struct and a union each have one head, any other
 //! declaration has none. The named induced tuples follow, in `Model.tuples`
-//! order. The heads reached from those, a map entry and an arm of a union,
-//! come last, in the order a depth-first walk of the fields reaches them.
+//! order. The heads reached from those come last, in the order a depth-first
+//! walk of the fields reaches them: a map entry, an arm of a union, and a
+//! foreign struct or union reached inline.
 //!
 //! A struct, a tuple or a union written as a field is laid out inline as a
 //! copy of its own head. That copy is not stored again: the field names the
-//! head that has the same layout, and when two declarations share one layout
-//! it names the first of them.
+//! head of the type it lays out, by the identity the projection records
+//! ([`Inlined`]): the declaration, or for a tuple, its structure.
+//!
+//! A head that cannot be laid out is not in the list. It is listed in
+//! `refused` with its cause, and so is every head that needs it.
+
+use std::collections::{HashMap, HashSet};
 
 use super::resolve::Scope;
 use super::{flatbuffers, v1};
 use crate::projection::flatbuffers::Packages;
-use crate::projection::podbuf::{self, DescriptorKind, Form, Head, Source};
+use crate::projection::podbuf::{self, DescriptorKind, Form, Head, Inlined, Source};
 use crate::v2;
 
-/// The podbuf heads of the package. An error is a layout the projection
-/// refuses, which is malformed IR or a type too large for a `u32` offset; the
-/// podbuf check reports the cause.
+/// The podbuf heads of the package. A head the projection refuses, which is
+/// malformed IR or a type too large for a `u32` offset, is listed in
+/// `refused` with its cause, and so is each head that needs it.
 pub(crate) fn project(
     scope: Scope<'_>,
     named: &[flatbuffers::NamedTuple<'_>],
-) -> Result<v1::PodbufProjection, String> {
+    foreign_at: &HashMap<(String, String), u32>,
+) -> v1::PodbufProjection {
     let packages = Packages {
         package: scope.package,
         others: scope.others,
     };
-    let mut walk = Walk::default();
+    let mut roots: Vec<Root> = Vec::new();
 
     for (index, decl) in scope.package.decls.iter().enumerate() {
         let head = match &decl.kind {
@@ -41,75 +48,226 @@ pub(crate) fn project(
             Some(v2::decl::Kind::UnionDef(def)) => podbuf::union_head(packages, &decl.name, def),
             _ => continue,
         }
-        .map_err(|error| format!("{}: {error:?}", decl.name))?;
-        let index = index as u32;
-        walk.root(
+        .map_err(|error| error.message);
+        roots.push(Root {
+            source: v1::podbuf_refused::Source::Declaration(index as u32),
+            name: Some(decl.name.clone()),
             head,
-            v1::podbuf_head::Source::Declaration(index),
-            Some(index),
-            vec![decl.name.clone()],
-        );
+        });
     }
     for tuple in named {
         let packages = Packages {
             package: tuple.home,
             others: scope.others,
         };
-        let head = podbuf::tuple_head(packages, tuple.wire, tuple.source)
-            .map_err(|error| format!("{}: {error:?}", tuple.wire))?;
-        walk.root(
+        let head =
+            podbuf::tuple_head(packages, tuple.wire, tuple.source).map_err(|error| error.message);
+        roots.push(Root {
+            source: v1::podbuf_refused::Source::Tuple(tuple.index),
+            name: None,
             head,
-            v1::podbuf_head::Source::Tuple(tuple.index),
-            None,
-            vec![tuple.wire.to_string()],
-        );
-    }
-
-    let roots = std::mem::take(&mut walk.pending);
-    for root in roots {
-        walk.fill(root.index, &root.head, &root.path, root.declaration)?;
-    }
-    Ok(v1::PodbufProjection { heads: walk.heads })
-}
-
-/// A head whose fields are still to be converted.
-struct Root {
-    index: u32,
-    head: Head,
-    path: Vec<String>,
-    declaration: Option<u32>,
-}
-
-#[derive(Default)]
-struct Walk {
-    heads: Vec<v1::PodbufHead>,
-    /// Every head of a declaration or a tuple with its index, the heads an
-    /// inline field is matched against.
-    named: Vec<(Head, u32)>,
-    pending: Vec<Root>,
-}
-
-impl Walk {
-    /// Reserves the slot of a declaration's or a tuple's head. The fields are
-    /// filled in later, after every such head has an index, so that an inline
-    /// field can name any of them.
-    fn root(
-        &mut self,
-        head: Head,
-        source: v1::podbuf_head::Source,
-        declaration: Option<u32>,
-        path: Vec<String>,
-    ) {
-        let index = self.push(source);
-        self.named.push((head.clone(), index));
-        self.pending.push(Root {
-            index,
-            head,
-            path,
-            declaration,
         });
     }
 
+    // A head that fails to lay out names the refused head it needs, when the
+    // declaration it needs is one that failed.
+    let failed: HashSet<String> = roots
+        .iter()
+        .filter(|root| root.head.is_err())
+        .filter_map(|root| root.name.clone())
+        .collect();
+    for root in &mut roots {
+        let (Err(cause), Some(name)) = (&root.head, &root.name) else {
+            continue;
+        };
+        let needed = scope
+            .package
+            .decls
+            .iter()
+            .find(|decl| &decl.name == name)
+            .map(|decl| needs(scope.package, decl))
+            .unwrap_or_default();
+        if let Some(dependency) = needed.iter().find(|n| *n != name && failed.contains(*n)) {
+            root.head = Err(format!("needs the refused head {dependency}: {cause}"));
+        }
+    }
+
+    // A head whose fields cannot all be named is refused too, and the walk
+    // starts again without it, so that no index of the list moves after the
+    // fact. Each pass refuses at least one more root, so the loop ends.
+    let mut excluded: HashSet<usize> = HashSet::new();
+    let mut causes: HashMap<usize, String> = HashMap::new();
+    loop {
+        match attempt(scope, &roots, &excluded, foreign_at) {
+            Ok(heads) => {
+                let refused = roots
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(at, root)| {
+                        let cause = match &root.head {
+                            Err(cause) => cause.clone(),
+                            Ok(_) => causes.get(&at)?.clone(),
+                        };
+                        Some(v1::PodbufRefused {
+                            source: Some(root.source),
+                            cause,
+                        })
+                    })
+                    .collect();
+                return v1::PodbufProjection { heads, refused };
+            }
+            Err((at, cause)) => {
+                excluded.insert(at);
+                causes.insert(at, cause);
+            }
+        }
+    }
+}
+
+/// The declarations of the package that `decl` names in its fields or arms.
+fn needs(package: &v2::Package, decl: &v2::Decl) -> Vec<String> {
+    let mut out = Vec::new();
+    match &decl.kind {
+        Some(v2::decl::Kind::StructDef(def)) => {
+            for member in &def.members {
+                if let Some(v2::struct_member::Member::Field(field)) = &member.member
+                    && let Some(ty) = field.r#type.as_ref()
+                {
+                    names_in(package, ty, &mut out);
+                }
+            }
+        }
+        Some(v2::decl::Kind::UnionDef(def)) => {
+            for arm in &def.arms {
+                out.push(local_name(package, &arm.type_ref));
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+fn names_in(package: &v2::Package, ty: &v2::FieldType, out: &mut Vec<String>) {
+    match ty.kind.as_ref() {
+        Some(v2::field_type::Kind::Named(reference)) => out.push(local_name(package, reference)),
+        Some(v2::field_type::Kind::Tuple(tuple)) => {
+            for field in &tuple.fields {
+                if let Some(ty) = field.r#type.as_ref() {
+                    names_in(package, ty, out);
+                }
+            }
+        }
+        Some(v2::field_type::Kind::Array(array)) => {
+            if let Some(element) = array.element.as_deref() {
+                names_in(package, element, out);
+            }
+        }
+        Some(v2::field_type::Kind::Map(map)) => {
+            for ty in [map.key.as_deref(), map.value.as_deref()]
+                .into_iter()
+                .flatten()
+            {
+                names_in(package, ty, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The bare name of a reference into `package`.
+fn local_name(package: &v2::Package, reference: &str) -> String {
+    reference
+        .strip_prefix(&format!("{}.", package.name))
+        .unwrap_or(reference)
+        .to_string()
+}
+
+/// A declaration or a tuple, and what the projection computed for it.
+struct Root {
+    source: v1::podbuf_refused::Source,
+    /// The declared name; `None` for a tuple.
+    name: Option<String>,
+    head: Result<Head, String>,
+}
+
+/// A root to fill: its position, its head slot, its layout, the path to it and
+/// the declaration index it belongs to.
+type Pending<'a> = (usize, u32, &'a Head, Vec<String>, Option<u32>);
+
+/// One walk over every root that is not excluded. An error names the root
+/// whose fields cannot all be named and the cause.
+fn attempt(
+    scope: Scope<'_>,
+    roots: &[Root],
+    excluded: &HashSet<usize>,
+    foreign_at: &HashMap<(String, String), u32>,
+) -> Result<Vec<v1::PodbufHead>, (usize, String)> {
+    let mut walk = Walk {
+        package: scope.package.name.clone(),
+        foreign_at,
+        heads: Vec::new(),
+        declared: HashMap::new(),
+        tuples: Vec::new(),
+        foreign: HashMap::new(),
+        refused: roots
+            .iter()
+            .enumerate()
+            .filter(|(at, root)| root.head.is_err() || excluded.contains(at))
+            .filter_map(|(_, root)| root.name.clone())
+            .collect(),
+    };
+    let mut pending: Vec<Pending<'_>> = Vec::new();
+    for (at, root) in roots.iter().enumerate() {
+        let Ok(head) = &root.head else { continue };
+        if excluded.contains(&at) {
+            continue;
+        }
+        let (source, declaration, path) = match &root.source {
+            v1::podbuf_refused::Source::Declaration(index) => (
+                v1::podbuf_head::Source::Declaration(*index),
+                Some(*index),
+                root.name.clone().unwrap_or_default(),
+            ),
+            v1::podbuf_refused::Source::Tuple(index) => (
+                v1::podbuf_head::Source::Tuple(*index),
+                None,
+                format!("tuple {index}"),
+            ),
+        };
+        let index = walk.push(source);
+        match (&root.source, &root.name) {
+            (v1::podbuf_refused::Source::Declaration(_), Some(name)) => {
+                walk.declared.insert(name.clone(), index);
+            }
+            _ => walk.tuples.push((head.clone(), index)),
+        }
+        pending.push((at, index, head, vec![path], declaration));
+    }
+    for (at, index, head, path, declaration) in pending {
+        walk.fill(index, head, &path, declaration)
+            .map_err(|cause| (at, cause))?;
+    }
+    Ok(walk.heads)
+}
+
+struct Walk<'a> {
+    /// The name of the package lowered.
+    package: String,
+    foreign_at: &'a HashMap<(String, String), u32>,
+    heads: Vec<v1::PodbufHead>,
+    /// The head of each local struct or union, by name.
+    declared: HashMap<String, u32>,
+    /// The head of each named tuple, the heads a tuple written at a field is
+    /// matched against by structure.
+    tuples: Vec<(Head, u32)>,
+    /// The head of each foreign struct or union reached inline, by package and
+    /// name.
+    foreign: HashMap<(String, String), u32>,
+    /// The local declarations with no head.
+    refused: HashSet<String>,
+}
+
+impl Walk<'_> {
     fn push(&mut self, source: v1::podbuf_head::Source) -> u32 {
         self.heads.push(v1::PodbufHead {
             source: Some(source),
@@ -189,18 +347,7 @@ impl Walk {
                 width: *width as i32,
                 reference: reference.clone(),
             }),
-            Form::Inline(head) => {
-                let found = self.named.iter().find(|(named, _)| named == &**head);
-                match found {
-                    Some((_, index)) => Kind::InlineHead(*index),
-                    None => {
-                        return Err(format!(
-                            "{}: an inline head with no declaration",
-                            path.join(".")
-                        ));
-                    }
-                }
-            }
+            Form::Inline { head, of } => Kind::InlineHead(self.inline(head, of, path)?),
             Form::InlineArray { element, count } => {
                 Kind::InlineArray(Box::new(v1::PodbufInlineArray {
                     element: Some(Box::new(self.form(element, path, declaration)?)),
@@ -212,6 +359,42 @@ impl Walk {
             }
         };
         Ok(v1::PodbufForm { kind: Some(kind) })
+    }
+
+    /// The index of the head an inline field lays out.
+    fn inline(&mut self, head: &Head, of: &Inlined, path: &[String]) -> Result<u32, String> {
+        let at = path.join(".");
+        match of {
+            Inlined::Tuple => self
+                .tuples
+                .iter()
+                .find(|(named, _)| named == head)
+                .map(|(_, index)| *index)
+                .ok_or_else(|| format!("{at}: a tuple with no head")),
+            Inlined::Declaration { package, name } if *package == self.package => {
+                match self.declared.get(name) {
+                    Some(index) => Ok(*index),
+                    None if self.refused.contains(name) => {
+                        Err(format!("{at}: needs the refused head {name}"))
+                    }
+                    None => Err(format!("{at}: {name} has no head")),
+                }
+            }
+            Inlined::Declaration { package, name } => {
+                let key = (package.clone(), name.clone());
+                if let Some(index) = self.foreign.get(&key) {
+                    return Ok(*index);
+                }
+                let declaration = *self
+                    .foreign_at
+                    .get(&key)
+                    .ok_or_else(|| format!("{at}: {package}.{name} is not in the foreign list"))?;
+                let index = self.push(v1::podbuf_head::Source::Foreign(declaration));
+                self.foreign.insert(key, index);
+                self.fill(index, head, &[format!("{package}.{name}")], None)?;
+                Ok(index)
+            }
+        }
     }
 
     fn descriptor(

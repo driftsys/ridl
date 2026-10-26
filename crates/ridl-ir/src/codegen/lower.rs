@@ -115,9 +115,8 @@ pub fn lower_with(
     let projected = flatbuffers::project(scope, &named, &lowering.foreign_at);
     patch_flatbuffers(&mut model, &projected);
     model.flatbuffers = Some(projected.projection);
-    // The podbuf projection is left out when a head cannot be laid out; the
-    // podbuf check reports the cause.
-    model.podbuf = super::podbuf::project(scope, &named).ok();
+    // A head that cannot be laid out is listed in `refused` with its cause.
+    model.podbuf = Some(super::podbuf::project(scope, &named, &lowering.foreign_at));
     model
 }
 
