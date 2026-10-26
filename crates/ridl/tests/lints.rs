@@ -1343,3 +1343,151 @@ fn missing_docs_at_allow_is_silent() {
         "a lint at allow is not reported:\n{stderr}"
     );
 }
+
+// ==========================================================================
+// podbuf-padding-order (RIDL-156)
+// ==========================================================================
+
+const PODBUF_MANIFEST: &str = "[backend.rust]\nencodings = [\"podbuf\"]\n";
+const FLATBUFFERS_MANIFEST: &str = "[backend.rust]\nencodings = [\"flatbuffers\"]\n";
+
+/// `a` is one byte, `b` is eight bytes at alignment 8, `c` is twelve bytes at
+/// alignment 4. The declared order places `a` at 0, `b` at 8 and `c` at 16, a
+/// head of 32 bytes; the order `b, c, a` is a head of 24 bytes.
+const TYPES: &str = "package demo\n\ntype Byte: integer [0..255]\n\
+    type Half: integer [0..65535]\n\
+    type Word: integer [0..4294967295]\n\
+    type Wide: integer [-9223372036854775808..9223372036854775807]\n\n";
+
+const PADDED: &str = "struct Padded {\n  a: Byte\n  b: Wide\n  c: [Word; 3]\n}\n";
+
+/// 18 data bytes in every order, so every order is a head of 24 bytes.
+const FAULT_EVENT: &str = "struct FaultEvent {\n  code: Half\n  \
+    message: string [0..256]\n  timestamp: Wide\n}\n";
+
+/// A one-member workspace whose root manifest ends with `root_extra` and whose
+/// member manifest ends with `member_extra`. Returns the workspace root.
+fn podbuf_workspace(dir: &TempDir, source: &str, root_extra: &str, member_extra: &str) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        &format!("[workspace]\nmembers = [\"demo\"]\n{root_extra}"),
+    );
+    dir.write(
+        "demo/ridl.toml",
+        &format!(
+            "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n{member_extra}\n\
+             [lints]\nmissing-docs = \"allow\"\nno-init-value = \"allow\"\n"
+        ),
+    );
+    dir.write("demo/m.ridl", &format!("{TYPES}{source}"));
+    dir.path().to_path_buf()
+}
+
+/// The RIDL-156 elements of `ridl check --format json` over `root`, with the
+/// exit code.
+fn padding_diagnostics(root: &Path, extra: &[&OsStr]) -> (i32, Vec<serde_json::Value>) {
+    let mut args: Vec<&OsStr> = vec!["check".as_ref(), "--format".as_ref(), "json".as_ref()];
+    args.extend_from_slice(extra);
+    args.push(root.as_os_str());
+    let (code, stdout, stderr) = ridl(&args);
+    let all: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|err| panic!("stdout is JSON ({err}):\n{stdout}\n{stderr}"));
+    let found = all
+        .as_array()
+        .expect("a JSON array")
+        .iter()
+        .filter(|diagnostic| diagnostic["code"] == "RIDL-156")
+        .cloned()
+        .collect();
+    (code, found)
+}
+
+#[test]
+fn a_struct_whose_order_wastes_padding_draws_ridl_156_with_both_sizes_and_the_saving_order() {
+    let dir = TempDir::new("padding-draws");
+    let root = podbuf_workspace(&dir, PADDED, PODBUF_MANIFEST, "");
+    let (code, found) = padding_diagnostics(&root, &[]);
+    assert_eq!(code, 0, "an info lint does not move the exit code");
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0]["severity"], "info", "{}", found[0]);
+    assert_eq!(found[0]["lint"], "podbuf-padding-order", "{}", found[0]);
+    let message = found[0]["message"].as_str().expect("a message");
+    assert!(message.contains("demo.Padded"), "{message}");
+    assert!(message.contains("32 bytes"), "{message}");
+    assert!(message.contains("24 bytes"), "{message}");
+    assert!(message.contains("b, c, a"), "{message}");
+}
+
+#[test]
+fn a_struct_that_no_order_improves_draws_nothing() {
+    let dir = TempDir::new("padding-fault-event");
+    let root = podbuf_workspace(&dir, FAULT_EVENT, PODBUF_MANIFEST, "");
+    assert!(padding_diagnostics(&root, &[]).1.is_empty());
+}
+
+#[test]
+fn the_padding_lint_is_silent_when_no_backend_names_podbuf() {
+    let dir = TempDir::new("padding-no-podbuf");
+    let root = podbuf_workspace(&dir, PADDED, FLATBUFFERS_MANIFEST, "");
+    assert!(padding_diagnostics(&root, &[]).1.is_empty());
+    let dir = TempDir::new("padding-no-backend");
+    let root = podbuf_workspace(&dir, PADDED, "", "");
+    assert!(padding_diagnostics(&root, &[]).1.is_empty());
+}
+
+#[test]
+fn a_struct_declared_in_the_baseline_draws_nothing() {
+    let dir = TempDir::new("padding-released");
+    let root = podbuf_workspace(&dir, PADDED, PODBUF_MANIFEST, "");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(padding_diagnostics(&root, &[]).1.is_empty());
+}
+
+#[test]
+fn a_struct_absent_from_the_explicit_baseline_still_draws_ridl_156() {
+    let dir = TempDir::new("padding-new-struct");
+    let root = podbuf_workspace(&dir, PADDED, PODBUF_MANIFEST, "");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    // A second struct, declared after the baseline was published.
+    dir.write(
+        "demo/m.ridl",
+        &format!("{TYPES}{PADDED}\nstruct Fresh {{\n  a: Byte\n  b: Wide\n  c: [Word; 3]\n}}\n"),
+    );
+    let baseline = root.join(".ridl/baseline");
+    let (_, found) = padding_diagnostics(&root, &["--baseline".as_ref(), baseline.as_os_str()]);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0]["message"]
+            .as_str()
+            .expect("a message")
+            .contains("demo.Fresh")
+    );
+}
+
+#[test]
+fn the_padding_lint_takes_its_level_from_the_lints_table() {
+    let dir = TempDir::new("padding-levels");
+    let root = podbuf_workspace(&dir, PADDED, PODBUF_MANIFEST, "");
+    // The member manifest already holds a `[lints]` table; set the level in
+    // the root's own table instead.
+    dir.write(
+        "ridl.toml",
+        &format!(
+            "[workspace]\nmembers = [\"demo\"]\n{PODBUF_MANIFEST}\n\
+             [lints]\npodbuf-padding-order = \"deny\"\n"
+        ),
+    );
+    let (code, found) = padding_diagnostics(&root, &[]);
+    assert_eq!(code, 1, "a lint at deny exits 1");
+    assert_eq!(found[0]["severity"], "error", "{}", found[0]);
+    dir.write(
+        "ridl.toml",
+        &format!(
+            "[workspace]\nmembers = [\"demo\"]\n{PODBUF_MANIFEST}\n\
+             [lints]\npodbuf-padding-order = \"allow\"\n"
+        ),
+    );
+    assert!(padding_diagnostics(&root, &[]).1.is_empty());
+}

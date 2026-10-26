@@ -49,6 +49,7 @@ use std::process::ExitCode;
 
 mod catalogs;
 mod lock;
+mod podbuf_padding;
 mod property;
 mod scaffold;
 mod vendor;
@@ -724,14 +725,17 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
         .iter()
         .filter(|diagnostic| lint_of(diagnostic.code).is_none());
     if lock::only_lock_orphans(compile_diagnostics) {
-        match baseline_location(path, baseline) {
-            Ok(Some(location)) => {
-                if let Err(code) = desk_check(path, &location, baseline.is_some(), &mut run) {
-                    return code;
-                }
-            }
-            Ok(None) => {}
+        let location = match baseline_location(path, baseline) {
+            Ok(location) => location,
             Err(code) => return code,
+        };
+        if let Some(location) = &location
+            && let Err(code) = desk_check(path, location, baseline.is_some(), &mut run)
+        {
+            return code;
+        }
+        if let Err(code) = padding_check(path, location.as_deref(), baseline.is_some(), &mut run) {
+            return code;
         }
     }
 
@@ -1590,6 +1594,103 @@ fn desk_check(
     ridlc::retain_in_report_scope(&mut warnings, &run.sources, report_scope.as_deref(), &[]);
     run.diagnostics.extend(warnings);
     rename_labels(&baseline, &current, &index, run);
+    Ok(())
+}
+
+/// Whether the manifest at the root of the workspace around `entry` lists
+/// `podbuf` in the `encodings` of a `[backend.<name>]` table. A manifest that
+/// cannot be read or parsed counts as not listing it: the compile reports it.
+fn manifest_enables_podbuf(entry: &Path) -> bool {
+    let Some(root) = ridl_core::find_root(&index_root(entry)) else {
+        return false;
+    };
+    let Ok(text) = std::fs::read_to_string(root.join("ridl.toml")) else {
+        return false;
+    };
+    let mut scratch = SourceMap::default();
+    let file = scratch.file_id("ridl.toml", &text);
+    ridl_core::manifest::parse_manifest(file, &text)
+        .0
+        .is_some_and(|manifest| {
+            manifest.backends.values().any(|table| {
+                table
+                    .encodings
+                    .iter()
+                    .any(|(encoding, _)| encoding == "podbuf")
+            })
+        })
+}
+
+/// RIDL-156 (`podbuf-padding-order`) over the checked workspace, appended to
+/// `run`. It runs when a `[backend.<name>]` table enables `podbuf` and the
+/// compile produced no error other than RIDL-409, and it only ever adds
+/// diagnostics. A struct is released when a snapshot under `location` declares
+/// it; with no baseline every struct is unreleased. `ridlc` reads no baseline
+/// (ADR-0008 decisions 9 and 14), so the lint belongs to `ridl check`.
+fn padding_check(
+    entry: &Path,
+    location: Option<&Path>,
+    explicit: bool,
+    run: &mut CliRun,
+) -> Result<(), ExitCode> {
+    if !manifest_enables_podbuf(entry) {
+        return Ok(());
+    }
+    let released: BTreeSet<(String, String)> = match location {
+        Some(location) => load_baseline(location, explicit)?
+            .iter()
+            .flat_map(|package| {
+                package
+                    .decls
+                    .iter()
+                    .filter(|declaration| {
+                        matches!(
+                            declaration.kind,
+                            Some(ridl_ir::v2::decl::Kind::StructDef(_))
+                        )
+                    })
+                    .map(|declaration| (package.name.clone(), declaration.name.clone()))
+            })
+            .collect(),
+        None => BTreeSet::new(),
+    };
+    let mut db = ridl_core::RidlDatabase::default();
+    let output = match ridlc::compile_workspace(&mut db, entry) {
+        Ok(output) => output,
+        Err(err) => {
+            eprintln!("error: {}: {err}", entry.display());
+            return Err(ExitCode::from(2));
+        }
+    };
+    if !lock::only_lock_orphans(&output.diagnostics) {
+        return Ok(());
+    }
+    let all: Vec<&ridl_ir::v2::Package> =
+        output.checked.iter().map(|checked| &checked.ir).collect();
+    // A remote unit is its owner's contract, so it is a target of references
+    // and never a subject.
+    let subjects: Vec<&ridl_ir::v2::Package> = all
+        .iter()
+        .copied()
+        .filter(|package| !ridlc::is_remote(package, &output.remote_units))
+        .collect();
+    let std = ridlc::std_ir();
+    let index = DeclIndex::build(entry);
+    let mut findings = podbuf_padding::check(
+        &all,
+        &std,
+        &subjects,
+        &released,
+        &mut run.sources,
+        |package, name, sources| index.shape_span(package, name, sources),
+    );
+    ridlc::retain_in_report_scope(
+        &mut findings,
+        &run.sources,
+        output.report_scope.as_deref(),
+        &[],
+    );
+    run.diagnostics.extend(findings);
     Ok(())
 }
 

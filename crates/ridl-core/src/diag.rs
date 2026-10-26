@@ -863,6 +863,16 @@ diag_codes! {
         RIDL_155 = "RIDL-155", Error,
             "deprecated field has no valid podbuf value";
 
+        /// A struct whose declared field order lays out in a larger podbuf
+        /// head than the same fields sorted by descending alignment, and that
+        /// no published baseline declares. Info. Raised by `ridl check` only
+        /// when a `[backend.<name>]` table enables `podbuf`. The message names
+        /// both head sizes and the saving order. A field order is wire
+        /// identity once published, so the lint speaks before the first
+        /// release.
+        RIDL_156 = "RIDL-156", Info,
+            "struct field order wastes podbuf padding", lint = "podbuf-padding-order";
+
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker.
         RIDL_201 = "RIDL-201", Error,
@@ -2428,6 +2438,7 @@ mod tests {
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),
             ("RIDL-150", "payload-above-ceiling"),
+            ("RIDL-156", "podbuf-padding-order"),
             ("RIDL-304", "error-typed-parameter"),
             ("RIDL-305", "ensure-without-result"),
             ("RIDL-307", "contract-error-name-in-enum"),
