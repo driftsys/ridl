@@ -171,3 +171,24 @@ struct Blob {
   data  : bytes [0..8]
   marks : [integer [0..255]; 1..4]
 }
+
+/// A constrained map value.
+type Score : integer [0..100]
+
+/// An eight-byte integer first, then a constrained byte at 8: a 16-byte
+/// head whose second half holds the constrained field, so a producer that
+/// wrote only the first half leaves that field past its size.
+struct Tall {
+  big   : integer [-9223372036854775808..9223372036854775807]
+  small : integer [0..15]
+}
+
+/// An array of `Tall` heads: the stride is 16.
+struct Talls {
+  items : [Tall; 0..4]
+}
+
+/// A map whose value is constrained below its byte width.
+struct Ranked {
+  byName : [Name : Score; 0..8]
+}

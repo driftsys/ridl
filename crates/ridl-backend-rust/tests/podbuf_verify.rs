@@ -534,6 +534,107 @@ fn decode_builds_the_domain_value_from_the_view() {
     assert_eq!(out, vec!["true"; 15]);
 }
 
+/// §8.1 in `verify`, not only in the view: a constrained field past the
+/// producer's size reads as 0 whatever the bytes there hold, for an array
+/// element (its `elem_size`), a union arm (its descriptor `len`) and the
+/// root head (`head_size`). Each case lays a byte above `[0..15]` where the
+/// reader's `small` or `sensorId` would be, and expects acceptance and a
+/// read of 0.
+#[test]
+fn a_constrained_field_past_the_producer_size_reads_as_zero_in_verify() {
+    let out = run(
+        "podbuf_producer_size",
+        &[
+            // `Talls` with one element of `elem_size` 8: `big` at 16..24,
+            // then eight 0xff bytes where `small` (offset 8) would be.
+            r#"{
+                let mut bytes = vec![8, 0, 0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 1, 0, 8, 0];
+                bytes.extend_from_slice(&[0; 8]);
+                bytes.extend_from_slice(&[0xff; 8]);
+                let buf = aligned(&bytes);
+                match Talls::__ridl_podbuf_verify(&buf.0[..bytes.len()]) {
+                    Ok(v) => format!("OK {}", v.items().map(|t| t.small()).sum::<i64>()),
+                    Err(e) => verdict::<()>(Err(e)),
+                }
+            }"#,
+            // `Outcome::Ok` with the arm descriptor zeroed (`len` 0): the
+            // arm reads as all zero although the tail still holds the door
+            // and the buffer starts with a preamble byte of 16.
+            r#"{
+                let bytes = patch_u32(patch_u32(enc!(Outcome::Ok(door(7, true))), 12, 0), 16, 0);
+                let buf = aligned(&bytes);
+                match Outcome::__ridl_podbuf_verify(&buf.0[..bytes.len()]) {
+                    Ok(v) => match v.arm() {
+                        OutcomePodbufArm::Ok(d) => format!("OK {} {}", d.sensor_id(), d.is_open()),
+                        OutcomePodbufArm::Bad(h) => format!("OK {h:?}"),
+                    },
+                    Err(e) => verdict::<()>(Err(e)),
+                }
+            }"#,
+            // `Tall` with an 8-byte head: `small` lies past it, over 0xff.
+            r#"{
+                let mut bytes = vec![8, 0, 0, 0, 0, 0, 0, 0];
+                bytes.extend_from_slice(&[0; 8]);
+                bytes.extend_from_slice(&[0xff; 8]);
+                let buf = aligned(&bytes);
+                match Tall::__ridl_podbuf_verify(&buf.0[..bytes.len()]) {
+                    Ok(v) => format!("OK {} {}", v.big(), v.small()),
+                    Err(e) => verdict::<()>(Err(e)),
+                }
+            }"#,
+        ],
+    );
+    assert_eq!(out, ["OK 0", "OK 0 false", "OK 0 0"]);
+}
+
+/// §7 rule 9: a nested inline head, a struct arm, a map value, a present
+/// optional and an array element are each checked with the same rules.
+#[test]
+fn rule_9_checks_nested_heads_arms_entries_optionals_and_elements() {
+    let out = run(
+        "podbuf_rule_9",
+        &[
+            // `Nested.door.isOpen` at head offset 1 -> byte 9.
+            r#"check!(Nested, patch(enc!(Nested { door: door(3, false), health: Health::Fail, span: NestedSpan { lo: 1, hi: 2 }, readings: [1, 2] }), 9, 2))"#,
+            // The `Ok` arm's head at 24: `isOpen` at byte 25.
+            r#"check!(Outcome, patch(enc!(Outcome::Ok(door(7, true))), 25, 2))"#,
+            // One entry at 16: the key's descriptor at 16..24, the `Score`
+            // byte at 24; 200 is above 100.
+            r#"check!(Ranked, patch(enc!(Ranked { by_name: vec![(Name::new_unchecked("a".into()), Score::new_unchecked(1))] }), 24, 200))"#,
+            // The present `category` is `x ` at 24: a byte that is not
+            // UTF-8.
+            r#"check!(DiagFilter, patch(enc!(DiagFilter { severity: 2, category: Some("x".into()) }), 24, 0xff))"#,
+            // The one element's string `a ` at 40.
+            r#"check!(FaultPage, patch(enc!(FaultPage { faults: vec![ev(1, "a", 0)] }), 40, 0xff))"#,
+        ],
+    );
+    assert_eq!(out, ["Contract", "Contract", "Contract", "Utf8", "Utf8"]);
+}
+
+/// §7 rules 4 and 5 on a block's placement: a block or an arm at an offset
+/// that is not a multiple of its alignment, an empty array whose
+/// descriptor is not all zero, and a map entry stride that is not a
+/// multiple of 8.
+#[test]
+fn rule_4_and_5_block_placement_is_checked() {
+    let out = run(
+        "podbuf_block_placement",
+        &[
+            // The element's 9-byte string leaves room for the 24-byte block
+            // at 20 instead of 16: in bounds, not 8-aligned.
+            r#"check!(FaultPage, patch_u32(enc!(FaultPage { faults: vec![ev(1, "abcdefgh", 0)] }), 8, 20))"#,
+            // `Wrapped`: the arm at 40..48 of 48 bytes, moved to 36 (above
+            // the tail start 24, in bounds, not 8-aligned).
+            r#"check!(Wrapped, patch_u32(enc!(Wrapped { label: "ab".into(), outcome: Outcome::Bad(Health::Warn) }), 20, 36))"#,
+            // An empty array whose `elem_size` is 8.
+            r#"check!(FaultPage, patch_u16(enc!(FaultPage { faults: Vec::new() }), 14, 8))"#,
+            // A map entry stride of 12.
+            r#"check!(Labels, patch_u16(enc!(Labels { by_name: map(&[("a", 1)]) }), 14, 12))"#,
+        ],
+    );
+    assert_eq!(out, ["Unaligned", "Unaligned", "OutOfBounds", "Stride"]);
+}
+
 /// §14 "Generated Rust": `verify` and the in-place reads allocate nothing.
 /// The program installs a counting global allocator and asserts zero
 /// allocations across `verify` and every accessor of the view.
