@@ -182,6 +182,11 @@ message Declaration {
   // scalar, an enum and an enum set. Absent on a constant, which has no
   // message.
   SizeState proto3 = 24;
+  // The podbuf size state of the declaration as a payload root: its own head
+  // for a struct or a union, the one-field head a union arm of that type gets
+  // for a named scalar, an enum and an enum set. Absent on a constant, which
+  // has no payload.
+  SizeState podbuf = 25;
 }
 
 // A named scalar, and the shape of an inline one.
@@ -1262,6 +1267,20 @@ message PodbufProjection {
   // order of `heads`. A head that needs a refused head is refused too, and
   // its cause names it.
   repeated PodbufRefused refused = 2;
+  // The one-field head of each named scalar, enum and enum set that can be
+  // laid out, in `Model.declarations` order. Such a type is carried as a
+  // payload root by itself in a buffer: the value at offset 0 of this head.
+  // The heads of `heads` do not hold it, so no index of `heads` depends on it.
+  repeated PodbufBox boxes = 3;
+}
+
+// The head of a named scalar, an enum or an enum set as a payload root.
+message PodbufBox {
+  // Index into `Model.declarations`.
+  uint32 declaration = 1;
+  // The head: its `source` is unset, because the box belongs to no entry of
+  // `PodbufProjection.heads`, and its one field has the source `arm`.
+  PodbufHead head = 2;
 }
 
 // A struct, a union or a tuple that cannot be laid out. A valid workspace

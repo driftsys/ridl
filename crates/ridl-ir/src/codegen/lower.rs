@@ -370,6 +370,14 @@ impl<'a> Lowering<'a> {
                     Encoding::Proto3,
                 )
             }),
+            podbuf: (!is_constant).then(|| {
+                self.size_state(
+                    home,
+                    &PayloadShape::Named(&decl.name),
+                    Some(&decl.name),
+                    Encoding::Podbuf,
+                )
+            }),
             kind: self.declaration_kind(home, decl, path),
         }
     }

@@ -191,8 +191,8 @@ per core encoding, which the Rust backend filled in its `flatbuffers` column
 only, so a reservation in any other encoding was a run-time `Unsized`. The table
 replaced the row so that an encoding the package does not carry is a compile
 error instead. A consumer that needs to know which encodings a payload has asks
-the catalog descriptor. The `podbuf` layout is still undefined
-(driftsys/ridl#317), so no backend emits a `Sizes<Podbuf>` table.
+the catalog descriptor. The Rust backend emits a `Sizes<Podbuf>` table for a
+package whose `encodings` list names `podbuf`.
 
 Not carried by a descriptor: the toolchain version (not identity), retired
 interfaces and reserved ordinals (a runtime answers
@@ -331,8 +331,8 @@ pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64;
   Every item is a const expression over `<T as Payload<E>>::MAX_SIZE`, never a
   number, so a table cannot drift from its codec; an encoding the package does
   not carry has no table, so naming it is a compile error at the call site
-  (`Cabin: Sizes<Podbuf>` is not satisfied, because no backend emits a `podbuf`
-  codec), not a run-time error. `RESERVATIONS` is one row per member of
+  (`Cabin: Sizes<Podbuf>` is not satisfied, because the package does not list
+  `podbuf`), not a run-time error. `RESERVATIONS` is one row per member of
   `Interface::MEMBERS`, in order: the sum, as a `u64`, of `MAX_SIZE` over the
   member's payloads — the request then the reply for a query, `0` for a fixed,
   which is never in flight. The codegen model's `Interaction.reservation` and

@@ -20,8 +20,8 @@
 //! __ridl_podbuf_verify, __ridl_podbuf_verify_at, __ridl_podbuf_decode }`.
 //! The `_at` forms work at a given head offset, which is how a nested struct,
 //! an array element and a union arm are written and checked in place. The
-//! `Payload<Podbuf>` implementation over them is not emitted yet
-//! (driftsys/ridl#317).
+//! `Payload<Podbuf>` implementation (`Self::BUFFER` an
+//! 8-aligned zeroed array of `MAX_SIZE` bytes) calls them.
 //!
 //! `verify` checks the rules of §7 in one pass over the data present: the
 //! preamble, each boolean, enum, enum set and flags byte, each typl
@@ -82,6 +82,9 @@ pub(crate) enum HeadOwner {
     Declaration(u32),
     /// Index into `Model.tuples`: a named induced tuple.
     Tuple(u32),
+    /// Index into `Model.declarations`: a named scalar, an enum or an enum
+    /// set carried as a payload root, which has a view but no head struct.
+    Boxed(u32),
 }
 
 /// The owners of the heads [`package_items`] emits, in head order, which the
@@ -102,6 +105,12 @@ pub(crate) fn head_owners(ctx: &Ctx) -> Vec<HeadOwner> {
             }
             _ => None,
         })
+        .chain(
+            projection
+                .boxes
+                .iter()
+                .map(|boxed| HeadOwner::Boxed(boxed.declaration)),
+        )
         .collect()
 }
 
@@ -283,6 +292,7 @@ struct Slot<'a> {
 struct Codec<'a> {
     ctx: &'a Ctx<'a>,
     heads: &'a [v1::PodbufHead],
+    boxes: &'a [v1::PodbufBox],
 }
 
 impl<'a> Codec<'a> {
@@ -316,6 +326,7 @@ impl<'a> Codec<'a> {
         Ok(Codec {
             ctx,
             heads: &projection.heads,
+            boxes: &projection.boxes,
         })
     }
 
@@ -352,22 +363,311 @@ impl<'a> Codec<'a> {
     fn items(&self) -> Result<(Vec<TokenStream>, Vec<PayloadOwner>), GenerateError> {
         let mut items = Vec::new();
         let mut owners = Vec::new();
+        let roots = crate::codec_proto3::tuple_roots(self.ctx, |sizes| sizes.podbuf.as_ref());
         for (at, shape) in self.shapes() {
             let head_struct = self.head_struct(at, &shape)?;
             let encoder = self.encoder(at, &shape)?;
             let view = self.view(at, &shape)?;
             let verifier = self.verifier(at, &shape)?;
             let decoder = self.decoder(at, &shape)?;
-            items.push(allow_dead_code_if_internal(
-                shape.visibility(),
-                quote! { #head_struct #encoder #view #verifier #decoder },
-            ));
-            owners.push(PayloadOwner {
-                name: shape.name().to_string(),
-                visibility: shape.visibility(),
+            // A tuple that no interaction sends on its own crosses the wire
+            // in no encoding and gets no `Payload` implementation; only
+            // another head's codec calls its functions.
+            let bound = self.bound(&shape, &roots)?;
+            let payload = match bound {
+                Some(bound) => self.payload_impl(at, &shape, bound),
+                None => quote! {},
+            };
+            let item = quote! { #head_struct #encoder #view #verifier #decoder #payload };
+            items.push(match (&shape, bound) {
+                (Shape::Tuple(_), None) => {
+                    allow_dead_code_if_internal(v1::Visibility::Internal as i32, item)
+                }
+                _ => allow_dead_code_if_internal(shape.visibility(), item),
             });
+            if bound.is_some() {
+                owners.push(PayloadOwner {
+                    name: shape.name().to_string(),
+                    visibility: shape.visibility(),
+                });
+            }
+        }
+        for boxed in self.boxes {
+            if let Some((item, owner)) = self.boxed(boxed)? {
+                items.push(item);
+                owners.push(owner);
+            }
         }
         Ok((items, owners))
+    }
+
+    /// The largest podbuf buffer any legal value of `shape` encodes to: the
+    /// podbuf size state the lowered model carries for a declaration, or for
+    /// the interaction whose payload a tuple is. `None` for a tuple no
+    /// interaction sends on its own.
+    fn bound(
+        &self,
+        shape: &Shape<'a>,
+        roots: &std::collections::HashMap<u32, u32>,
+    ) -> Result<Option<u32>, GenerateError> {
+        match shape {
+            Shape::Struct(decl, _) | Shape::Union(decl, _) => {
+                match decl.podbuf.as_ref().and_then(|state| state.state.as_ref()) {
+                    Some(v1::size_state::State::Bounded(bound)) => Ok(Some(*bound)),
+                    _ => fail(format!(
+                        "`{}.{}` has no finite podbuf bound: its largest buffer does not fit a \
+                         u32 offset, or an array or map of it passes a descriptor limit",
+                        self.ctx.package_name(),
+                        declared(decl.name.as_ref())
+                    )),
+                }
+            }
+            Shape::Tuple(tuple) => Ok(self
+                .tuple_index(tuple)
+                .and_then(|index| roots.get(&index).copied())),
+        }
+    }
+
+    /// The index in `Model.tuples` of `tuple`.
+    fn tuple_index(&self, tuple: &v1::InducedTuple) -> Option<u32> {
+        self.ctx
+            .model
+            .tuples
+            .iter()
+            .position(|candidate| std::ptr::eq(candidate, tuple))
+            .map(|index| index as u32)
+    }
+
+    /// `impl Payload<Podbuf> for T`: the bound, the aligned buffer, and the
+    /// three operations over the encoder, the verifier and the decoder.
+    fn payload_impl(&self, at: usize, shape: &Shape<'a>, bound: u32) -> TokenStream {
+        let owner = shape.name();
+        self.payload_for(
+            owner,
+            &ident(owner),
+            &view_ident(owner),
+            self.heads[at].size as usize,
+            bound,
+        )
+    }
+
+    /// [`Self::payload_impl`] over the type `ty` named `owner`, whose view
+    /// is `view` and whose head is `head_size` bytes.
+    fn payload_for(
+        &self,
+        owner: &str,
+        ty: &Ident,
+        view: &Ident,
+        head_size: usize,
+        bound: u32,
+    ) -> TokenStream {
+        let max = Literal::usize_suffixed(bound as usize);
+        let head = Literal::usize_suffixed(head_size);
+        let max_doc =
+            format!(" The largest podbuf buffer any legal `{owner}` encodes to: {bound} bytes.");
+        quote! {
+            #[allow(deprecated)]
+            impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for #ty {
+                // `ridl_ir::projection::podbuf::max_size` computed the bound,
+                // which is the one implementation of it: the preamble, the
+                // head and the largest tail, with the gap before each
+                // aligned block.
+                #[doc = #max_doc]
+                const MAX_SIZE: ::core::primitive::usize = #max;
+
+                type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; #max]>;
+
+                const BUFFER: Self::Buffer =
+                    ::ridl_rt::podbuf::Aligned::<[::core::primitive::u8; #max]>::zeroed();
+
+                type View<'a> = #view<'a>;
+
+                // The concrete view type, not `Self::View`: an enum value or
+                // a union arm named `View` would make that path ambiguous
+                // (rustc `ambiguous_associated_items`, deny by default).
+                fn encode<'o>(
+                    &self,
+                    out: &'o mut [::core::primitive::u8],
+                ) -> ::core::result::Result<
+                    ::ridl_rt::payload::Encoded<'o, #view<'o>>,
+                    ::ridl_rt::payload::EncodeError,
+                > {
+                    let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+                    self.__ridl_podbuf_encode(&mut __w)?;
+                    let bytes = __w.finish()?;
+                    ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+                        bytes,
+                        view: #view {
+                            buf: bytes,
+                            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                            size: #head,
+                        },
+                    })
+                }
+
+                fn verify(
+                    buf: &[::core::primitive::u8],
+                ) -> ::core::result::Result<#view<'_>, ::ridl_rt::payload::VerifyError> {
+                    if buf.len()
+                        > <Self as ::ridl_rt::payload::Payload<
+                            ::ridl_rt::encoding::Podbuf,
+                        >>::MAX_SIZE
+                    {
+                        return ::core::result::Result::Err(
+                            ::ridl_rt::payload::VerifyError::Structure(
+                                ::ridl_rt::payload::Malformed::TooLarge,
+                            ),
+                        );
+                    }
+                    Self::__ridl_podbuf_verify(buf)
+                }
+
+                fn decode(
+                    r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+                ) -> Self {
+                    Self::__ridl_podbuf_decode(r.into_view())
+                }
+            }
+        }
+    }
+
+    /// The codec of a named scalar, an enum or an enum set carried as a
+    /// payload root: the value alone at offset 0 of its one-field head
+    /// (`Model.podbuf.boxes`). It has the view, the verifier, the decoder and
+    /// the `Payload<Podbuf>` implementation of any other root; its view has
+    /// one accessor, `value`.
+    fn boxed(
+        &self,
+        boxed: &'a v1::PodbufBox,
+    ) -> Result<Option<(TokenStream, PayloadOwner)>, GenerateError> {
+        let Some(decl) = self.ctx.declaration(boxed.declaration) else {
+            return Ok(None);
+        };
+        let Some(head) = boxed.head.as_ref() else {
+            return Ok(None);
+        };
+        let owner = declared(decl.name.as_ref());
+        let bound = match decl.podbuf.as_ref().and_then(|state| state.state.as_ref()) {
+            Some(v1::size_state::State::Bounded(bound)) => *bound,
+            _ => {
+                return fail(format!(
+                    "`{}.{owner}` has no finite podbuf bound",
+                    self.ctx.package_name()
+                ));
+            }
+        };
+        let field = head.fields.first().ok_or_else(|| GenerateError {
+            message: format!("the podbuf box of `{owner}` has no field"),
+        })?;
+        let form = Self::form_of(field, owner)?;
+        let ty_ref = v1::TypeRef {
+            reference: owner.to_string(),
+            resolved: true,
+            package: self.ctx.package_name().to_string(),
+            foreign: false,
+            index: boxed.declaration,
+            kind: 0,
+        };
+        let ty_pos = v1::Type {
+            optional: false,
+            kind: Some(v1::r#type::Kind::Named(ty_ref)),
+        };
+        let ty = ident(owner);
+        let view = view_ident(owner);
+        let vis = vis_tokens(decl.visibility);
+        let size = Literal::u32_suffixed(head.size);
+        let base = format_ident!("__at");
+        let write = self.write_form(
+            form,
+            &ty_pos,
+            &Operand::borrowed(quote! { self }),
+            offset_at(&base, field.offset),
+            owner,
+        )?;
+        let place = Place::new(quote! { buf }, quote! { __head }, quote! { __size });
+        let check = self.verify_form(form, &ty_pos, &place, &Off::Lit(field.offset), owner)?;
+        let read_place = Place::new(quote! { __b }, quote! { __a }, quote! { __z });
+        let read = self.view_expr(form, &ty_pos, &read_place, &Off::Lit(field.offset))?;
+        let read_type = self.view_type(form, &ty_pos)?;
+        let decoded = self.decode_expr(form, &ty_pos, &read_place, &Off::Lit(field.offset))?;
+        let doc = format!(
+            " A `{owner}` value in podbuf bytes, read in place without copying it. The value \
+             is a bounds-checked load; a value past the size the producer wrote reads as 0."
+        );
+        let value_doc = format!(" Reads the `{owner}` value in place.");
+        let item = quote! {
+            #[doc = #doc]
+            #[derive(Debug, Clone, Copy)]
+            #[allow(deprecated)]
+            #vis struct #view<'a> {
+                // `pub(crate)`, as the view of every other root.
+                pub(crate) buf: &'a [::core::primitive::u8],
+                pub(crate) at: ::core::primitive::usize,
+                pub(crate) size: ::core::primitive::usize,
+            }
+
+            #[allow(deprecated)]
+            impl<'a> ::ridl_rt::payload::View<'a> for #view<'a> {
+                fn bytes(&self) -> &'a [::core::primitive::u8] {
+                    self.buf
+                }
+            }
+
+            #[allow(deprecated)]
+            impl<'a> #view<'a> {
+                #[doc = #value_doc]
+                #vis fn value(&self) -> #read_type {
+                    let __b = self.buf;
+                    let __a = self.at;
+                    let __z = self.size;
+                    #read
+                }
+            }
+
+            #[allow(deprecated)]
+            impl #ty {
+                // Writes the preamble, the head and the tail into `w`. An
+                // internal of the podbuf codec: no doc.
+                pub(crate) fn __ridl_podbuf_encode(
+                    &self,
+                    w: &mut ::ridl_rt::podbuf::Writer<'_>,
+                ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+                    let #base = w.reserve_head(#size)?;
+                    #write
+                    ::core::result::Result::Ok(())
+                }
+
+                // Checks the preamble and the head of `buf` and returns the
+                // view. An internal of the podbuf codec: no doc.
+                pub(crate) fn __ridl_podbuf_verify(
+                    buf: &[::core::primitive::u8],
+                ) -> ::core::result::Result<#view<'_>, ::ridl_rt::payload::VerifyError> {
+                    let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+                    let __head = ::ridl_rt::podbuf::PREAMBLE_SIZE;
+                    let __size = __p.head_size as ::core::primitive::usize;
+                    #[allow(unused_variables)]
+                    let __tail = __head + __size;
+                    #check
+                    ::core::result::Result::Ok(#view { buf, at: __head, size: __size })
+                }
+
+                // Builds the value from a view `verify` returned. An
+                // internal of the podbuf codec: no doc.
+                pub(crate) fn __ridl_podbuf_decode(view: #view<'_>) -> Self {
+                    let (__b, __a, __z) = (view.buf, view.at, view.size);
+                    #decoded
+                }
+            }
+        };
+        let payload = self.payload_for(owner, &ty, &view, head.size as usize, bound);
+        let item = allow_dead_code_if_internal(decl.visibility, quote! { #item #payload });
+        Ok(Some((
+            item,
+            PayloadOwner {
+                name: owner.to_string(),
+                visibility: decl.visibility,
+            },
+        )))
     }
 
     fn layouts(&self) -> Result<Vec<HeadLayout>, GenerateError> {
@@ -1150,10 +1450,13 @@ impl<'a> Codec<'a> {
                 }
                 if !__s.is_empty() {
                     let __n = __s.len();
-                    let __off = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
-                    w.put_bytes(__off, __s.as_bytes());
+                    // `__data`, not `__off`: `at` may name the `__off` of a
+                    // union arm, and a shadowing binding would move the
+                    // descriptor.
+                    let __data = w.tail(__n as ::core::primitive::u64 + 1u64, 1usize)?;
+                    w.put_bytes(__data, __s.as_bytes());
                     w.put_desc(#at, ::ridl_rt::podbuf::Desc {
-                        off: __off as ::core::primitive::u32,
+                        off: __data as ::core::primitive::u32,
                         len: __n as ::core::primitive::u32,
                     });
                 }
@@ -1178,10 +1481,10 @@ impl<'a> Codec<'a> {
                 #length
                 if !__s.is_empty() {
                     let __n = __s.len();
-                    let __off = w.tail(__n as ::core::primitive::u64, 1usize)?;
-                    w.put_bytes(__off, __s);
+                    let __data = w.tail(__n as ::core::primitive::u64, 1usize)?;
+                    w.put_bytes(__data, __s);
                     w.put_desc(#at, ::ridl_rt::podbuf::Desc {
-                        off: __off as ::core::primitive::u32,
+                        off: __data as ::core::primitive::u32,
                         len: __n as ::core::primitive::u32,
                     });
                 }
@@ -2205,7 +2508,15 @@ impl<'a> Codec<'a> {
                     None => {
                         let region = place.region();
                         let off = off.tokens();
-                        quote! { #region.bytes_at(#off, #count) }
+                        // The region is moved into the iterator: `bytes_at`
+                        // borrows it, and the view's accessor returns the
+                        // iterator.
+                        quote! {
+                            {
+                                let __r = #region;
+                                (0..#count).map(move |__i| __r.u8_at((#off).saturating_add(__i)))
+                            }
+                        }
                     }
                 }
             }

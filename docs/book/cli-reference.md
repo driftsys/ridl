@@ -862,8 +862,9 @@ encodings = ["flatbuffers"]
 
 The names are `flatbuffers`, `proto3` and `podbuf`. An absent table, an absent
 key and an empty list all mean types only. The Rust backend builds
-`flatbuffers` and `proto3`, alone or together, and refuses `podbuf`
-([driftsys/ridl#317][i317]). The generated `Cargo.toml` enables one `ridl-rt`
+each of the three, alone or together. A `podbuf` codec buffer starts on an
+8-byte boundary, and the generated size tables hold `Aligned` buffers for it.
+The generated `Cargo.toml` enables one `ridl-rt`
 feature per named encoding, and none for types only. A single-file build has no
 manifest, so it is types only. Each emitted codec names its encoding, as
 `::ridl_rt::encoding::FlatBuffers` or `::ridl_rt::encoding::Proto3`; the face
@@ -2661,7 +2662,6 @@ argument.
 
 [adr-0007]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0007-e1-execution.md
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md
-[i317]: https://github.com/driftsys/ridl/issues/317
 [adr-0014]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0014-ir-encodings.md
 [adr-0020]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
 [issue-196]: https://github.com/driftsys/ridl/issues/196

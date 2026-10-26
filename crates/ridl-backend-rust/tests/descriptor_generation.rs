@@ -1237,16 +1237,29 @@ fn proto3_is_accepted_through_the_contract() {
     assert!(both.contains("pub mod valve"));
 }
 
-/// `podbuf` is accepted: the package carries the podbuf head structs and
-/// encoders, and no `Sizes<Podbuf>` table until the `Payload<Podbuf>`
-/// implementation lands.
+/// `podbuf` is accepted: the package carries the podbuf codec, the
+/// `Payload<Podbuf>` implementations and the `Sizes<Podbuf>` table of its
+/// interface, whose claim and event buffers are 8-aligned.
 #[test]
 fn podbuf_is_accepted() {
     let source = backend_response(vec![encodings_option("podbuf")]).expect("a file is written");
+    let d = dense(&source);
     assert!(source.contains("PodbufHead"), "got: {source}");
     assert!(
-        !source.contains("Sizes<::ridl_rt::encoding::Podbuf>"),
+        d.contains("Payload<::ridl_rt::encoding::Podbuf>for"),
         "got: {source}"
+    );
+    assert!(
+        d.contains("Sizes<::ridl_rt::encoding::Podbuf>for"),
+        "got: {source}"
+    );
+    assert!(
+        d.contains("typeClaimBuffer=::ridl_rt::podbuf::Aligned<"),
+        "got: {source}"
+    );
+    assert!(
+        !d.contains("encoding::FlatBuffers") && !d.contains("encoding::Proto3"),
+        "nothing of the other encodings without them, got: {source}"
     );
 }
 

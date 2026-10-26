@@ -704,14 +704,13 @@ The codecs a package carries are listed in the manifest:
 encodings = [...]` (MANI-015), which `ridl build` sends the
 backend as the request option `encodings`. `ridl_backend_rust::WireEncoding` is
 the parsed element and has two variants, `FlatBuffers` and, since 2026-10-20,
-`Proto3`, one per codec this backend emits. The option reaches the entry points
-as a slice, `generate_face_with(package, encodings)` and `generate_pipeline`,
-and a slice that is empty emits the domain types alone, with no codec, no
-descriptor and no face. A slice that names either encoding, or both, emits the
-descriptors and the same face, because the face reads its encoding from the
-port. `podbuf` joins the enum when the Rust backend emits its codec; until then
-the backend refuses that name, so it cannot produce a face over implementations
-that do not exist.
+`Proto3` and `Podbuf`, one per codec this backend emits. The option reaches the
+entry points as a slice, `generate_face_with(package, encodings)` and
+`generate_pipeline`, and a slice that is empty emits the domain types alone,
+with no codec, no descriptor and no face. A slice that names any of the
+encodings emits the descriptors and the same face, because the face reads its
+encoding from the port. A `Podbuf` size table holds `Aligned` claim and event
+buffers, because a podbuf buffer starts on an 8-byte boundary.
 
 `generate_face_with` with a non-empty list emits the codec, the descriptors and
 the face beside the items `generate` emits, and `generate_pipeline` does the
@@ -1087,11 +1086,10 @@ is built.
 
 ## What is provisional
 
-| Placeholder                                                                                             | Replaced by                                  |
-| ------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| The `podbuf` `Sizes<E>` table (`flatbuffers` and `proto3` are built; this backend emits no other codec) | driftsys/ridl#317                            |
-| The narrow contract-clause translator (`src/clauses.rs`)                                                | driftsys/ridl#704                            |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion          | a test over `ridl-loopback`, not yet written |
+| Placeholder                                                                                    | Replaced by                                  |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| The narrow contract-clause translator (`src/clauses.rs`)                                       | driftsys/ridl#704                            |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written |
 
 **The hand-written payload row was retired on 2026-09-21**, by design note D-11
 of [the FlatBuffers codec record](flatbuffers-codec.md). It read "the

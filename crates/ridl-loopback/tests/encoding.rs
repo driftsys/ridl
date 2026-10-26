@@ -98,3 +98,23 @@ fn the_encoding_is_a_type_and_not_a_value() {
     let podbuf = Loopback::<Podbuf>::with_encoding(catalog());
     assert_eq!(encoding_of(&podbuf), "podbuf");
 }
+
+/// A podbuf loopback stores a podbuf buffer as the bytes it was given: the
+/// runtime reads no encoding of the payload, so a sample round trips whole.
+/// The buffer is a podbuf one: an 8-byte preamble (`head_size` 8) and a head
+/// of two one-byte fields padded to eight.
+#[test]
+fn a_podbuf_loopback_round_trips_a_podbuf_payload() {
+    let mut rt = Loopback::<Podbuf>::with_encoding(catalog());
+    let payload = [8u8, 0, 0, 0, 0, 0, 0, 0, 7, 1, 0, 0, 0, 0, 0, 0];
+    rt.set(InterfaceNo(1), Ordinal(1), &payload)
+        .expect("staged");
+    rt.commit();
+
+    let mut out = [0u8; 32];
+    let sample = rt
+        .read(InterfaceNo(1), Ordinal(1), &mut out)
+        .expect("read back");
+    assert_eq!(sample.len, payload.len());
+    assert_eq!(&out[..sample.len], &payload);
+}

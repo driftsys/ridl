@@ -170,7 +170,8 @@ pub(crate) fn check(ctx: &Ctx, interfaces: &[&v1::Interface]) -> Result<(), Gene
     if ctx.encodings.contains(&WireEncoding::Podbuf) {
         for owner in codec_podbuf::head_owners(ctx) {
             let (name, source) = match owner {
-                codec_podbuf::HeadOwner::Declaration(index) => {
+                codec_podbuf::HeadOwner::Declaration(index)
+                | codec_podbuf::HeadOwner::Boxed(index) => {
                     let Some(decl) = ctx.declaration(index) else {
                         continue;
                     };
@@ -184,10 +185,13 @@ pub(crate) fn check(ctx: &Ctx, interfaces: &[&v1::Interface]) -> Result<(), Gene
                     (tuple_name(tuple), tuple_source(ctx, tuple))
                 }
             };
-            types.claim(
-                &codec_podbuf::head_ident(name),
-                format!("the podbuf head of {source} (the suffix `PodbufHead`)"),
-            )?;
+            // A boxed scalar has a view and no head struct.
+            if !matches!(owner, codec_podbuf::HeadOwner::Boxed(_)) {
+                types.claim(
+                    &codec_podbuf::head_ident(name),
+                    format!("the podbuf head of {source} (the suffix `PodbufHead`)"),
+                )?;
+            }
             types.claim(
                 &codec_podbuf::view_ident(name),
                 format!("the podbuf view of {source} (the suffix `PodbufView`)"),

@@ -114,7 +114,12 @@ pub(crate) fn project(
                         })
                     })
                     .collect();
-                return v1::PodbufProjection { heads, refused };
+                let boxes = boxes(scope);
+                return v1::PodbufProjection {
+                    heads,
+                    refused,
+                    boxes,
+                };
             }
             Err((at, cause)) => {
                 excluded.insert(at);
@@ -122,6 +127,42 @@ pub(crate) fn project(
             }
         }
     }
+}
+
+/// The one-field head of each named scalar, enum and enum set of the package
+/// that can be laid out, in declaration order.
+fn boxes(scope: Scope<'_>) -> Vec<v1::PodbufBox> {
+    let packages = Packages {
+        package: scope.package,
+        others: scope.others,
+    };
+    let no_heads = HashMap::new();
+    let mut out = Vec::new();
+    for (index, decl) in scope.package.decls.iter().enumerate() {
+        let Some(head) = podbuf::boxed_head_of(packages, decl) else {
+            continue;
+        };
+        let mut walk = Walk {
+            package: scope.package.name.clone(),
+            foreign_at: &no_heads,
+            heads: vec![v1::PodbufHead::default()],
+            declared: HashMap::new(),
+            tuples: Vec::new(),
+            nested: Vec::new(),
+            foreign: HashMap::new(),
+            refused: HashSet::new(),
+        };
+        if walk
+            .fill(0, &head, std::slice::from_ref(&decl.name), Owner::None)
+            .is_ok()
+        {
+            out.push(v1::PodbufBox {
+                declaration: index as u32,
+                head: walk.heads.pop(),
+            });
+        }
+    }
+    out
 }
 
 /// The declarations of the package that `decl` names in its fields or arms.

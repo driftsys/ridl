@@ -112,14 +112,19 @@ struct EmittedCabin {
 /// proofs below start here: one links a program that runs, the other compiles
 /// a program that must be refused.
 fn emit_and_compile_cabin() -> EmittedCabin {
+    emit_and_compile_cabin_from(&example_dir())
+}
+
+/// [`emit_and_compile_cabin`] over the package in `package_dir`.
+fn emit_and_compile_cabin_from(package_dir: &Path) -> EmittedCabin {
     let out_dir = tempfile::tempdir().expect("a temp dir is created");
     let libs_dir = tempfile::tempdir().expect("a temp dir is created");
     let out = out_dir.path().to_path_buf();
     let libs = libs_dir.path().to_path_buf();
 
     // 1 — the build under test, through the same entry point the CLI calls.
-    let run = ridlc::run_build(&example_dir(), &out, &[Emit::Rust], false.into())
-        .expect("the build runs");
+    let run =
+        ridlc::run_build(package_dir, &out, &[Emit::Rust], false.into()).expect("the build runs");
     assert!(
         !run.has_error(),
         "the example must compile clean, diagnostics: {:?}",
@@ -549,6 +554,49 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
     assert!(
         accepted.status.success(),
         "the same program over proto3, the package's second encoding, must compile, rustc said:\n{}",
+        String::from_utf8_lossy(&accepted.stderr)
+    );
+}
+
+/// The counterpart of the refusal above: a package whose manifest lists
+/// `podbuf` carries the `Sizes<Podbuf>` table of its interface, so the same
+/// binding over a podbuf loopback compiles, and the table's claim buffer is
+/// 8-aligned.
+///
+/// The package is a copy of `examples/cabin/` with `podbuf` added to the
+/// encodings list, so the schema is the one the refusal test builds.
+#[test]
+fn a_package_that_lists_podbuf_carries_its_size_table() {
+    let package = tempfile::tempdir().expect("a temp dir is created");
+    for file in ["cabin.ridl", "system.rsdl"] {
+        std::fs::copy(example_dir().join(file), package.path().join(file))
+            .expect("the example file is copied");
+    }
+    let manifest = std::fs::read_to_string(example_dir().join("ridl.toml"))
+        .expect("the example manifest is readable");
+    let with_podbuf = manifest.replace(
+        r#"encodings = ["flatbuffers", "proto3"]"#,
+        r#"encodings = ["flatbuffers", "proto3", "podbuf"]"#,
+    );
+    assert_ne!(with_podbuf, manifest, "the manifest names the encodings");
+    std::fs::write(package.path().join("ridl.toml"), with_podbuf).expect("the manifest is written");
+
+    let built = emit_and_compile_cabin_from(package.path());
+    let program = format!(
+        "{}\nfn aligned() {{\n    use ridl_rt::contract::Sizes;\n    \
+         assert_eq!(core::mem::align_of::<<api::Cabin as Sizes<Podbuf>>::ClaimBuffer>(), 8);\n    \
+         assert!(<api::Cabin as Sizes<Podbuf>>::MAX_BUFFER_SIZE > 0);\n}}\n",
+        binding_program("Loopback::<Podbuf>::with_encoding(CATALOG)")
+    );
+    let accepted = compile_against_cabin(
+        &built,
+        "the_encoding_the_package_lists",
+        &program,
+        ErrorFormat::Human,
+    );
+    assert!(
+        accepted.status.success(),
+        "a face bound over a podbuf port must compile when the package lists podbuf, rustc said:\n{}",
         String::from_utf8_lossy(&accepted.stderr)
     );
 }

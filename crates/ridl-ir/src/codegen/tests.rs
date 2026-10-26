@@ -4592,3 +4592,52 @@ fn a_head_that_cannot_be_laid_out_is_refused_and_the_others_are_kept() {
         v1::size_state::State::Bounded(_)
     ));
 }
+
+/// A named scalar is carried as a payload root in a one-field box: the value
+/// at offset 0 of an 8-byte head. A struct has a head and no box, and the
+/// declaration's podbuf size state is its bound.
+#[test]
+fn a_named_scalar_has_a_podbuf_box_and_a_struct_does_not() {
+    let mut package = sized_package();
+    package.decls.push(v2::Decl {
+        name: "Count".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Integer as i32,
+                )),
+            }),
+            width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
+            ..Default::default()
+        })),
+        ..Default::default()
+    });
+    let index = |name: &str| {
+        package
+            .decls
+            .iter()
+            .position(|decl| decl.name == name)
+            .expect("a declaration") as u32
+    };
+    let (label, pair) = (index("Count"), index("Pair"));
+    let model = lower(&package, &[]);
+    let podbuf = model.podbuf.as_ref().expect("the projection is always set");
+    let boxed = podbuf
+        .boxes
+        .iter()
+        .find(|boxed| boxed.declaration == label)
+        .expect("`Count` has a box");
+    let head = boxed.head.as_ref().expect("a box holds its head");
+    assert_eq!(head.size, 8);
+    assert_eq!(head.fields.len(), 1);
+    assert_eq!(head.fields[0].offset, 0);
+    assert!(podbuf.boxes.iter().all(|boxed| boxed.declaration != pair));
+    assert!(matches!(
+        model.declarations[label as usize]
+            .podbuf
+            .as_ref()
+            .and_then(|state| state.state.as_ref()),
+        Some(v1::size_state::State::Bounded(_))
+    ));
+}

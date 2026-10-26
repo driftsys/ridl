@@ -366,6 +366,22 @@ pub fn max_size(packages: Packages<'_>, decl: &v2::Decl) -> Option<u64> {
     head_bound(&head)
 }
 
+/// The one-field head a named scalar, an enum or an enum set is carried in as
+/// a payload root: the head [`max_size`] bounds for such a declaration. `None`
+/// for a declaration of any other kind, and when the head cannot be laid out.
+#[must_use]
+pub fn boxed_head_of(packages: Packages<'_>, decl: &v2::Decl) -> Option<Head> {
+    match &decl.kind {
+        Some(
+            v2::decl::Kind::TypeDef(_) | v2::decl::Kind::EnumDef(_) | v2::decl::Kind::EnumSetDef(_),
+        ) => {
+            let mut layout = Layout::new(packages);
+            boxed_head(layout.named_form(packages.package, &decl.name).ok()?).ok()
+        }
+        _ => None,
+    }
+}
+
 /// The largest podbuf buffer any legal value of `tuple` encodes to, as
 /// [`max_size`] bounds a struct: the induced argument or reply struct of an
 /// interaction. `None` for the same causes.

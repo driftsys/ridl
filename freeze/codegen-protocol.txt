@@ -138,6 +138,7 @@ ridl.codegen.v1.Declaration.is_error = 3 singular bool
 ridl.codegen.v1.Declaration.labels = 5 repeated string
 ridl.codegen.v1.Declaration.links = 20 repeated ridl.codegen.v1.DocLink
 ridl.codegen.v1.Declaration.name = 1 singular ridl.codegen.v1.Spellings
+ridl.codegen.v1.Declaration.podbuf = 25 singular ridl.codegen.v1.SizeState
 ridl.codegen.v1.Declaration.proto3 = 24 singular ridl.codegen.v1.SizeState
 ridl.codegen.v1.Declaration.rules = 23 repeated ridl.codegen.v1.Rule
 ridl.codegen.v1.Declaration.scalar = 10 singular ridl.codegen.v1.Scalar oneof=kind
@@ -420,6 +421,8 @@ ridl.codegen.v1.PodbufArray.max = 4 singular uint64
 ridl.codegen.v1.PodbufArray.min = 3 singular uint64
 ridl.codegen.v1.PodbufBound.max = 2 singular uint64
 ridl.codegen.v1.PodbufBound.min = 1 singular uint64
+ridl.codegen.v1.PodbufBox.declaration = 1 singular uint32
+ridl.codegen.v1.PodbufBox.head = 2 singular ridl.codegen.v1.PodbufHead
 ridl.codegen.v1.PodbufDescriptor.arms = 14 singular ridl.codegen.v1.PodbufArms oneof=kind
 ridl.codegen.v1.PodbufDescriptor.array = 12 singular ridl.codegen.v1.PodbufArray oneof=kind
 ridl.codegen.v1.PodbufDescriptor.bytes = 11 singular ridl.codegen.v1.PodbufBound oneof=kind
@@ -468,6 +471,7 @@ ridl.codegen.v1.PodbufNamedField.name = 1 singular string
 ridl.codegen.v1.PodbufNamedField.ordinal = 2 singular uint32
 ridl.codegen.v1.PodbufPad.offset = 1 singular uint32
 ridl.codegen.v1.PodbufPad.size = 2 singular uint32
+ridl.codegen.v1.PodbufProjection.boxes = 3 repeated ridl.codegen.v1.PodbufBox
 ridl.codegen.v1.PodbufProjection.heads = 1 repeated ridl.codegen.v1.PodbufHead
 ridl.codegen.v1.PodbufProjection.refused = 2 repeated ridl.codegen.v1.PodbufRefused
 ridl.codegen.v1.PodbufRefused.cause = 2 singular string
