@@ -1491,3 +1491,67 @@ fn the_padding_lint_takes_its_level_from_the_lints_table() {
     );
     assert!(padding_diagnostics(&root, &[]).1.is_empty());
 }
+
+#[test]
+fn the_suggested_order_keeps_declaration_order_among_fields_of_equal_alignment() {
+    // `c` and `d` both have alignment 4. The declared order is 40 bytes; the
+    // saving order `b, c, d, a` is 32 bytes and lists `c` before `d`, as
+    // declared.
+    let source = "struct Ties {\n  a: Byte\n  b: Wide\n  c: [Word; 3]\n  d: [Word; 2]\n}\n";
+    let dir = TempDir::new("padding-ties");
+    let root = podbuf_workspace(&dir, source, PODBUF_MANIFEST, "");
+    let (_, found) = padding_diagnostics(&root, &[]);
+    assert_eq!(found.len(), 1, "{found:?}");
+    let message = found[0]["message"].as_str().expect("a message");
+    assert!(message.contains("40 bytes"), "{message}");
+    assert!(message.contains("32 bytes"), "{message}");
+    assert!(message.contains("`b, c, d, a`"), "{message}");
+}
+
+#[test]
+fn a_struct_released_in_one_package_is_still_reported_in_another_package_of_the_same_name() {
+    let dir = TempDir::new("padding-two-packages");
+    let member = |name: &str| {
+        dir.write(
+            &format!("{name}/ridl.toml"),
+            &format!(
+                "[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n\n\
+                 [lints]\nmissing-docs = \"allow\"\n"
+            ),
+        );
+        dir.write(
+            &format!("{name}/m.ridl"),
+            &format!("package {name}\n\n{}", PADDED_BODY),
+        );
+    };
+    dir.write(
+        "ridl.toml",
+        &format!("[workspace]\nmembers = [\"x\"]\n{PODBUF_MANIFEST}"),
+    );
+    member("x");
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    // Package `y` declares a struct of the same name after the baseline.
+    dir.write(
+        "ridl.toml",
+        &format!("[workspace]\nmembers = [\"x\", \"y\"]\n{PODBUF_MANIFEST}"),
+    );
+    member("y");
+    let (_, found) = padding_diagnostics(&root, &[]);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert!(
+        found[0]["message"]
+            .as_str()
+            .expect("a message")
+            .contains("`y.Padded`"),
+        "{}",
+        found[0]
+    );
+}
+
+/// The types and the struct of [`PADDED`], with no `package` line.
+const PADDED_BODY: &str = "type Byte: integer [0..255]\n\
+    type Word: integer [0..4294967295]\n\
+    type Wide: integer [-9223372036854775808..9223372036854775807]\n\n\
+    struct Padded {\n  a: Byte\n  b: Wide\n  c: [Word; 3]\n}\n";
