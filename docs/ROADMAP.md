@@ -184,6 +184,11 @@ TypeScript WebSocket transport package (driftsys/ridl#982), was filed as a new
 story, because no story held the transport package that the TypeScript framework
 names.
 
+**Filed 2026-10-26, with exact numerics.** Epic 18 is new, with its own
+milestone; its stories are driftsys/ridl#1087 (E18.1, first filed as E10.12
+before the epic was split out, and retitled) and driftsys/ridl#1089 to
+driftsys/ridl#1091. Its carried defect is driftsys/ridl#1092.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
@@ -1253,8 +1258,8 @@ a regex literal (typl §15), so its spelling is part of that question.
 
 **Carried defect.** A float `require` or `ensure` clause is evaluated in IEEE
 binary64 arithmetic, against expr-core §7: `require x <= 0.1` becomes
-`args.0 <= 0.1f64`. E18.1 removes it for a float with a step. The issue is not
-filed yet.
+`args.0 <= 0.1f64`. E18.1 removes it for a float with a step. Tracked as
+driftsys/ridl#1092.
 
 ---
 
