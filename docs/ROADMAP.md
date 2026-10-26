@@ -736,61 +736,17 @@ Design and plan of record:
 [`typl-value-objects-design.md`](wip/typl-value-objects-design.md) and
 [`typl-value-objects-plan.md`](wip/typl-value-objects-plan.md).
 
-| ID     | Story                                                                                                                                                                    | Done when                                                                                                                                                                                                                                                                                    | Size |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E10.1  | The shared vacuous-constraint classifier — one definition of "constrains nothing"                                                                                        | both backends agree on which types need a fallible constructor                                                                                                                                                                                                                               | M    |
-| E10.2  | The Rust `ConstraintError` vocabulary                                                                                                                                    | one error type carries every constraint failure                                                                                                                                                                                                                                              | S    |
-| E10.3  | Constrained named scalars — private inner, `new`, `TryFrom`                                                                                                              | an out-of-range value is unconstructible                                                                                                                                                                                                                                                     | L    |
-| E10.4  | Vacuous named scalars — infallible construction                                                                                                                          | a type that constrains nothing takes no fallible path                                                                                                                                                                                                                                        | M    |
-| E10.5  | `TryFrom<i64>` for enum and enum set                                                                                                                                     | an undefined discriminant is rejected                                                                                                                                                                                                                                                        | M    |
-| E10.6  | Sound derives — no derive that could reconstruct an invalid value                                                                                                        | no path bypasses the validating seam                                                                                                                                                                                                                                                         | M    |
-| E10.7  | `--emit rust` writes a compiling crate                                                                                                                                   | the emitted crate builds standalone                                                                                                                                                                                                                                                          | M    |
-| E10.8  | Pattern validation behind a `validate-pattern` feature                                                                                                                   | regex constraints check without forcing the dependency                                                                                                                                                                                                                                       | M    |
-| E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification                                                                                                      | the decision is recorded and a constraint change classifies right                                                                                                                                                                                                                            | S    |
-| E10.12 | A quantized float is carried as its raw grid index — the generated type stores `raw`, every encoding carries `raw`, and the API offers the raw value and the float value | with the float view off, a quantized float's type constructs, validates and round-trips a payload with no floating-point operation, checked on a soft-float target, and every emitted schema states the step and origin of each raw field in a form a reader without the typl source can use | L    |
-
-**E10.12, filed 2026-10-26.** A quantized float is a float declared with a range
-and a `step` (typl §4.3). Its valid values are `origin + n·step`, and `raw` is
-the integer `n = (value − origin) / step`, the value that a CAN/DBC signal and
-an AUTOSAR `LINEAR` CompuMethod carry. Today the generated Rust type stores an
-`f64` and checks the grid with binary64 arithmetic, which on a core with no
-floating-point unit (a Cortex-R52 configured without one) compiles to software
-floating-point calls. The story changes three things:
-
-- The generated type stores `raw`, in the unsigned or signed integer of the
-  width that the value count gives (typl §4.2), and checks validity on that
-  integer only.
-- Every payload encoding carries `raw`. This reverses ADR-0013 decision 4, which
-  keeps the native `float`/`double` on proto3 and FlatBuffers, so the emitted
-  `.proto` and `.fbs` schemas change, and the TypeScript codec of step 2 follows
-  the same wire.
-- The meaning travels with the wire. A raw field is a plain integer to a reader
-  such as a `prost`-generated client or the Kotlin plugin, so each emitted
-  schema states the field's step and origin in a form a tool can read (a custom
-  field option in proto3, a user attribute in FlatBuffers), and the catalog
-  descriptor carries them as well. The design chooses the exact form.
-- The API offers `raw` construction and access always, and the float value
-  (`raw × step + origin`) behind a Cargo feature, so a soft-float target turns
-  the float view off.
-
-It is a breaking change to the generated API and to the wire, so it belongs in a
-release marked breaking. Its design records the amendments of typl §4.3 (the
-language layer is no longer always `float64` in memory, and proto3 and
-FlatBuffers no longer keep a native float), of ADR-0013 decision 4, and of the
-projection rules of ADR-0017 and ADR-0019, and verifies the `ridl-diff`
-classification of a change to `step` or to the lower bound, which changes what a
-`raw` value means. A float without a `step` keeps its `f64` representation.
-Related: typl §17.12, integer-backed unit types, deferred to v0.2, which covers
-the values whose unit makes them integers.
-
-**One language question is open for E10.12's design: a step that is not a
-decimal.** A `step` is a decimal literal (typl §2.5). A binary step is exact as
-a decimal but long (`2⁻¹⁵` is `0.000030517578125`), and a step whose denominator
-has a prime factor other than 2 and 5 (`1/3`, `1/60`) cannot be written at all.
-AUTOSAR's `LINEAR` CompuMethod has a denominator (`d0`) for this case. With
-`raw` stored, the grid check is exact for any step, so only the literal and the
-float view depend on the step's form. The design decides whether `step` gains a
-rational or a power-of-two form, and records the contract that needs it.
+| ID     | Story                                                                             | Done when                                                         | Size |
+| ------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |
+| E10.1  | The shared vacuous-constraint classifier — one definition of "constrains nothing" | both backends agree on which types need a fallible constructor    | M    |
+| E10.2  | The Rust `ConstraintError` vocabulary                                             | one error type carries every constraint failure                   | S    |
+| E10.3  | Constrained named scalars — private inner, `new`, `TryFrom`                       | an out-of-range value is unconstructible                          | L    |
+| E10.4  | Vacuous named scalars — infallible construction                                   | a type that constrains nothing takes no fallible path             | M    |
+| E10.5  | `TryFrom<i64>` for enum and enum set                                              | an undefined discriminant is rejected                             | M    |
+| E10.6  | Sound derives — no derive that could reconstruct an invalid value                 | no path bypasses the validating seam                              | M    |
+| E10.7  | `--emit rust` writes a compiling crate                                            | the emitted crate builds standalone                               | M    |
+| E10.8  | Pattern validation behind a `validate-pattern` feature                            | regex constraints check without forcing the dependency            | M    |
+| E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification               | the decision is recorded and a constraint change classifies right | S    |
 
 **Validation amendments (2026-10-02).** driftsys/ridl#421 settles NaN's
 membership in a numeric domain (typl §5.5). driftsys/ridl#469 makes step a
@@ -1216,6 +1172,89 @@ needed for the first Kotlin demo.
 
 ---
 
+# Epic 18 — exact numerics
+
+**Not scheduled.** Filed 2026-10-26; the step that takes it is not chosen yet.
+
+**Milestone:** a quantized float is an integer in units of its step, in storage
+and on every wire, and a float is an optional view of it. **Value:** a
+contract's numeric semantics are exact (expr-core §7 evaluates exact rationals,
+with no IEEE-754 arithmetic in the contract plane), but the generated Rust type
+stores an `f64` and checks its grid with binary64 arithmetic. On a core with no
+floating-point unit, such as a Cortex-R52 configured without one, every such
+operation compiles to software floating-point calls; on any core, the IEEE
+result can differ from the contract, and integer bounds are much easier to prove
+than float ones (Kani, Creusot, Prusti). **Exit criteria:** a package that
+declares the exact-numerics policy generates Rust that uses no floating-point
+operation on a soft-float target, and its payloads carry integers whose step,
+unit and lower bound a reader without the typl source can recover.
+
+**The model.** typl is unchanged: `float [min..max step s]` already declares an
+exact set of values. Three layers are separated:
+
+- **Maths** — the contract: the range and the `step`.
+- **Storage and computation** — local to each backend: the integer
+  `n = value / step`, counted in units of the step from zero. The scale is
+  inferred from the step and the lower bound: binary (`2⁻ᵏ`) when both are
+  multiples of a power of two, decimal (`10⁻ᵏ`) when either needs a factor of 5.
+  When the lower bound is not a multiple of the step, the coarsest scale of that
+  base that holds both is used.
+- **Wire** — the same integer on every encoding, so two peers that compute
+  differently (a Rust node with no float, a TypeScript UI with a float view)
+  exchange the same bytes. Decimal and binary scales are not different wire
+  forms: the scale is schema metadata, not per-message data.
+
+A float without a `step` has no grid, so it has no exact integer form. It stays
+an `f64` in storage and a native float on the wire, and a package with the
+exact-numerics policy refuses it.
+
+| ID    | Story                                                                                                                                                                                                                                                                                                                                                                                                                                            | Done when                                                                                                                                                                                                           | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E18.1 | The Rust generated type: a quantized float is stored as an integer in units of its step, with the scale inferred from the step and the lower bound; the rounding mode of every conversion is specified; `require` and `ensure` translate to exact integer bounds; the float view (`new(f64)`, `get()`) and floats without a step are behind a `float` Cargo feature, with a `no-float` feature that fails the build when `float` is also enabled | with `float` off, a quantized float's type constructs, validates and evaluates its clauses with no floating-point operation, checked by linking for a soft-float target with no `__aeabi_f*` or `__aeabi_d*` symbol | L    |
+| E18.2 | The encodings: proto3, FlatBuffers and `repr(C)` carry the integer; each emitted schema and the catalog descriptor state the step, the unit and the lower bound of the field; a transport binding whose convention uses an offset (CAN/DBC, SOME/IP per deployment) applies it; ADR-0013 decision 4, ADR-0017 and ADR-0019 are amended                                                                                                           | a payload round-trips on each encoding carrying the integer, and a reader given only the emitted schema recovers the physical value                                                                                 | L    |
+| E18.3 | The exact-numerics package policy in `ridl.toml`: every float that the package uses, declared in it or in a dependency, has a range and a `step`; the policy is recorded in the IR and the catalog, and `ridl diff` reports its removal; the Rust crate of such a package does not enable `float` by default; ADR-0002 is amended                                                                                                                | a policy package that uses a float without a step is rejected, and `ridl diff` reports the removal of the policy                                                                                                    | M    |
+| E18.4 | A book chapter on numeric representation: how the step selects the scale, how to choose a decimal or a binary step, the float view and its features, and the policy                                                                                                                                                                                                                                                                              | the chapter is in the book, and its examples compile                                                                                                                                                                | S    |
+
+**Sequence.** E18.1, then E18.2: the wire carries the integer that E18.1 stores.
+E18.3 needs only the IR and can run beside them. E18.4 follows the three. All
+three code stories change the generated API or the wire, so they belong in a
+release marked breaking. The TypeScript codec follows the wire of E18.2; the
+TypeScript value layer, which stores the integer and always offers the float
+view, is part of the TypeScript work of step 2.
+
+**Choosing a decimal or a binary step** is guidance for authors, not a rule the
+compiler enforces, and E18.4 states it. A grid fixed outside the contract (a
+regulation, a DBC factor) fixes the step. Otherwise the base whose prime factors
+cover the constants of the computation makes its rescales exact: binary for
+gains, filters and Q-format products, decimal for SI conversions. When neither
+decides, binary gives the most precision per bit and the cheapest rescale (a
+shift).
+
+**Companion library, outside this repository.** Application arithmetic on these
+integers — products with a double-width intermediate, rescales with a declared
+rounding mode, saturating and checked operations, conversions — belongs in a
+library of its own, proposed as `safemath` beside
+[safeio](https://github.com/driftsys/safeio). A library of floating-point
+operations with proved error bounds is the alternative it could also hold. The
+generated code depends only on `ridl-rt`, because its own conversions are a few
+integer operations; once `safemath` exists, a story here makes the generated
+types implement its traits behind a feature.
+
+**Open language question: a step that is not a decimal.** A `step` is a decimal
+literal (typl §2.5). A binary step is exact as a decimal but long (`2⁻¹⁵` is
+`0.000030517578125`), and a step whose denominator has a prime factor other than
+2 and 5 (`1/3`, `1/60`) cannot be written. Such a grid almost always comes from
+an external standard, which a transport binding records. A rational step in typl
+waits for a contract that must own such a grid itself; the slash already starts
+a regex literal (typl §15), so its spelling is part of that question.
+
+**Carried defect.** A float `require` or `ensure` clause is evaluated in IEEE
+binary64 arithmetic, against expr-core §7: `require x <= 0.1` becomes
+`args.0 <= 0.1f64`. E18.1 removes it for a float with a step. The issue is not
+filed yet.
+
+---
+
 # Parked, and what reopens each
 
 Every parked story keeps its row, its `Done when` and its size under "Parked
@@ -1261,6 +1300,7 @@ reopening is an observation rather than an argument.
 | E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                       |
 | E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                              |
 | none | Kotlin, the first plugin        | after step 2                                                                       |
+| E18  | exact numerics                  | not scheduled — a quantized float is an integer in storage and on the wire         |
 
 Rows are in step order, not numeric order — the numbering is identity, as the
 tracker section above explains. Two rows have no epic: the Rust codegen section
