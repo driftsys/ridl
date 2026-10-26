@@ -1180,9 +1180,9 @@ needed for the first Kotlin demo.
 
 # Proposed, awaiting a decision
 
-Each row below has a design on record but no decision to build it, so neither is
-in a step. A row joins a step when the maintainer takes its decision, and the
-row says which decision that is.
+Each row below has a design or a recorded shape, but no decision to build it, so
+neither is in a step. A row joins a step when the maintainer takes its decision,
+and the row says which decision that is.
 
 | ID    | Story                                                                                                                                                                                                                                        | Done when                                                                                                                                                                        | Size |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
@@ -1205,9 +1205,10 @@ grouping noun: a consumer whose safety argument needs a mixed-level placement
 rejected at design time. The rsdl reference §12 states the same shape. The
 partition should be designed against ARINC 653's time and space partitioning
 rather than invented, as the section "What this repository is, and is not" says.
-It needs the assurance levels to be comparable, which the `labels` promotion of
-ADR-0008 decision 3 provides. It carries no pump kind and no priority, because
-D-2 leaves scheduling to the backend and the engine.
+The rejection compares levels on the ordered `0..N` assurance scale of ADR-0018
+decision 9. An rsdl `labels` value is a list of names with no defined order, so
+the story also defines how a label maps to a level. It carries no pump kind and
+no priority, because D-2 leaves scheduling to the backend and the engine.
 
 ---
 
@@ -1256,9 +1257,11 @@ reopening is an observation rather than an argument.
 | E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                       |
 | E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                              |
 | none | Kotlin, the first plugin        | after step 2                                                                       |
+| none | proposed, awaiting a decision   | not in a step — E2.14 and E6.20                                                    |
 
 Rows are in step order, not numeric order — the numbering is identity, as the
-tracker section above explains. Two rows have no epic: the Rust codegen section
-is a section of this page holding three Epic 11 stories (E11.7, E11.8, E11.12),
-and Kotlin is a plugin written outside this workspace with no story identifier
-here.
+tracker section above explains. Three rows have no epic: the Rust codegen
+section is a section of this page holding three Epic 11 stories (E11.7, E11.8,
+E11.12), and Kotlin is a plugin written outside this workspace with no story
+identifier here, and the proposed row groups two stories, of Epics 2 and 6, that
+are in no step.
