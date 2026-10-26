@@ -1260,6 +1260,7 @@ fn a_union_head_carries_its_tag_and_one_head_per_arm() {
             head.source,
             Some(v1::podbuf_head::Source::Arm(v1::ArmHead {
                 declaration: shape_decl,
+                foreign: None,
                 arm: arm.ordinal,
             }))
         );
@@ -1504,10 +1505,9 @@ fn two_declarations_with_one_layout_keep_their_own_heads() {
     );
 }
 
-/// A struct of another package, written inline, has a head of its own that
-/// points into `Model.foreign`.
-#[test]
-fn a_foreign_struct_written_inline_gets_a_foreign_head() {
+/// The model of package `p.b`, which imports from `p.a`, in a two-member
+/// workspace.
+fn two_package_model(a: &str, b: &str) -> v1::Model {
     let root = tempfile::tempdir().expect("a temp dir");
     let write = |path: &str, text: &str| {
         let path = root.path().join(path);
@@ -1519,18 +1519,12 @@ fn a_foreign_struct_written_inline_gets_a_foreign_head() {
         "a/ridl.toml",
         "[package]\nname = \"p.a\"\nversion = \"1.0.0\"\n",
     );
-    write(
-        "a/a.typl",
-        "package p.a\n\nstruct Remote {\n  x : integer [0..255]\n  y : integer [0..65535]\n}\n",
-    );
+    write("a/a.typl", a);
     write(
         "b/ridl.toml",
         "[package]\nname = \"p.b\"\nversion = \"1.0.0\"\n",
     );
-    write(
-        "b/b.typl",
-        "package p.b\n\nimport p.a.Remote\n\nstruct Local {\n  r : Remote\n}\n",
-    );
+    write("b/b.typl", b);
     let mut db = RidlDatabase::default();
     let output = ridlc::compile_workspace(&mut db, root.path()).expect("the workspace loads");
     let mut packages: Vec<v2::Package> = output
@@ -1541,7 +1535,17 @@ fn a_foreign_struct_written_inline_gets_a_foreign_head() {
     packages.push(output.std_ir.clone());
     let others: Vec<&v2::Package> = packages.iter().collect();
     let local = packages.iter().find(|p| p.name == "p.b").expect("p.b");
-    let model = codegen::lower(local, &others);
+    codegen::lower(local, &others)
+}
+
+/// A struct of another package, written inline, has a head of its own that
+/// points into `Model.foreign`.
+#[test]
+fn a_foreign_struct_written_inline_gets_a_foreign_head() {
+    let model = two_package_model(
+        "package p.a\n\nstruct Remote {\n  x : integer [0..255]\n  y : integer [0..65535]\n}\n",
+        "package p.b\n\nimport p.a.Remote\n\nstruct Local {\n  r : Remote\n}\n",
+    );
     let projection = model.podbuf.as_ref().expect("a podbuf projection");
     assert!(projection.refused.is_empty(), "{:?}", projection.refused);
     let (_, head) = declaration_head(&model, "Local");
@@ -1571,4 +1575,77 @@ fn a_foreign_struct_written_inline_gets_a_foreign_head() {
             .collect::<Vec<_>>(),
         vec![(0, 1), (2, 2)]
     );
+}
+
+/// A union of another package, written inline, has its arms indexed through
+/// `Model.foreign`, and a tuple inside a struct of another package has a head
+/// of its own.
+#[test]
+fn a_foreign_union_and_a_foreign_tuple_keep_their_heads() {
+    let model = two_package_model(
+        "package p.a\n\ntype Code : integer [0..65535]\n\nstruct Leaf {\n  x : integer [0..255]\n}\n\n\
+         union Pick {\n  leaf : Leaf\n  code : Code\n}\n\n\
+         struct Holder {\n  t : (a: integer [0..255], b: integer [0..65535])\n  inner : Leaf\n}\n",
+        "package p.b\n\nimport p.a.Pick\nimport p.a.Holder\n\nstruct Local {\n  p : Pick\n  h : Holder\n}\n",
+    );
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (_, local) = declaration_head(&model, "Local");
+    let foreign_name = |source: &Option<v1::podbuf_head::Source>| match source {
+        Some(v1::podbuf_head::Source::Foreign(index)) => model.foreign[*index as usize]
+            .declaration
+            .as_ref()
+            .and_then(|d| d.name.as_ref())
+            .map(|n| n.declared.clone()),
+        _ => None,
+    };
+    let v1::podbuf_form::Kind::InlineHead(pick_at) = form_kind(field(local, "p")) else {
+        panic!("an inline head");
+    };
+    let pick = &projection.heads[*pick_at as usize];
+    assert_eq!(foreign_name(&pick.source).as_deref(), Some("Pick"));
+    let v1::podbuf_form::Kind::Descriptor(descriptor) = pick.fields[1]
+        .form
+        .as_ref()
+        .and_then(|f| f.kind.as_ref())
+        .expect("a form")
+    else {
+        panic!("the active arm is a descriptor");
+    };
+    let Some(v1::podbuf_descriptor::Kind::Arms(arms)) = descriptor.kind.as_ref() else {
+        panic!("arms");
+    };
+    let pick_foreign = match &pick.source {
+        Some(v1::podbuf_head::Source::Foreign(index)) => *index,
+        _ => unreachable!(),
+    };
+    for arm in &arms.arms {
+        let head = &projection.heads[arm.head as usize];
+        assert_eq!(
+            head.source,
+            Some(v1::podbuf_head::Source::Arm(v1::ArmHead {
+                declaration: 0,
+                arm: arm.ordinal,
+                foreign: Some(pick_foreign),
+            }))
+        );
+    }
+
+    let v1::podbuf_form::Kind::InlineHead(holder_at) = form_kind(field(local, "h")) else {
+        panic!("an inline head");
+    };
+    let holder = &projection.heads[*holder_at as usize];
+    assert_eq!(foreign_name(&holder.source).as_deref(), Some("Holder"));
+    let v1::podbuf_form::Kind::InlineHead(tuple_at) = form_kind(field(holder, "t")) else {
+        panic!("an inline head");
+    };
+    let tuple = &projection.heads[*tuple_at as usize];
+    assert_eq!(
+        tuple.source,
+        Some(v1::podbuf_head::Source::NestedTuple(v1::NestedTuple {
+            path: vec!["p.a.Holder".to_string(), "t".to_string()],
+        }))
+    );
+    assert_eq!(tuple.size, 8);
+    assert_eq!(tuple.fields.len(), 2);
 }

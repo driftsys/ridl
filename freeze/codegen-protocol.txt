@@ -20,6 +20,7 @@ ridl.codegen.v1.ArmBox.arm = 2 singular uint32
 ridl.codegen.v1.ArmBox.declaration = 1 singular uint32
 ridl.codegen.v1.ArmHead.arm = 2 singular uint32
 ridl.codegen.v1.ArmHead.declaration = 1 singular uint32
+ridl.codegen.v1.ArmHead.foreign = 3 optional uint32
 ridl.codegen.v1.ArrayType.element = 1 singular ridl.codegen.v1.Type
 ridl.codegen.v1.ArrayType.max = 3 singular uint64
 ridl.codegen.v1.ArrayType.min = 2 singular uint64
@@ -396,6 +397,7 @@ ridl.codegen.v1.Model.scope = 2 singular ridl.codegen.v1.Scope
 ridl.codegen.v1.Model.services = 6 repeated ridl.codegen.v1.Service
 ridl.codegen.v1.Model.tuple_collisions = 10 repeated ridl.codegen.v1.TupleCollision
 ridl.codegen.v1.Model.tuples = 4 repeated ridl.codegen.v1.InducedTuple
+ridl.codegen.v1.NestedTuple.path = 1 repeated string
 ridl.codegen.v1.Param.doc = 3 singular string
 ridl.codegen.v1.Param.links = 4 repeated ridl.codegen.v1.DocLink
 ridl.codegen.v1.Param.name = 1 singular ridl.codegen.v1.Spellings
@@ -450,6 +452,7 @@ ridl.codegen.v1.PodbufHead.declaration = 10 singular uint32 oneof=source
 ridl.codegen.v1.PodbufHead.fields = 4 repeated ridl.codegen.v1.PodbufField
 ridl.codegen.v1.PodbufHead.foreign = 14 singular uint32 oneof=source
 ridl.codegen.v1.PodbufHead.map_entry = 12 singular ridl.codegen.v1.MapEntry oneof=source
+ridl.codegen.v1.PodbufHead.nested_tuple = 15 singular ridl.codegen.v1.NestedTuple oneof=source
 ridl.codegen.v1.PodbufHead.pads = 5 repeated ridl.codegen.v1.PodbufPad
 ridl.codegen.v1.PodbufHead.size = 2 singular uint32
 ridl.codegen.v1.PodbufHead.tuple = 11 singular uint32 oneof=source

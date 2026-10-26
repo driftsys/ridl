@@ -190,9 +190,20 @@ struct Root {
     head: Result<Head, String>,
 }
 
+/// What a head belongs to, which names the arms of a union.
+#[derive(Clone, Copy)]
+enum Owner {
+    /// A tuple, which has no union.
+    None,
+    /// The declaration of this package at that index.
+    Declaration(u32),
+    /// The foreign declaration at that index of `Model.foreign`.
+    Foreign(u32),
+}
+
 /// A root to fill: its position, its head slot, its layout, the path to it and
 /// the declaration index it belongs to.
-type Pending<'a> = (usize, u32, &'a Head, Vec<String>, Option<u32>);
+type Pending<'a> = (usize, u32, &'a Head, Vec<String>, Owner);
 
 /// One walk over every root that is not excluded. An error names the root
 /// whose fields cannot all be named and the cause.
@@ -208,6 +219,7 @@ fn attempt(
         heads: Vec::new(),
         declared: HashMap::new(),
         tuples: Vec::new(),
+        nested: Vec::new(),
         foreign: HashMap::new(),
         refused: roots
             .iter()
@@ -225,12 +237,12 @@ fn attempt(
         let (source, declaration, path) = match &root.source {
             v1::podbuf_refused::Source::Declaration(index) => (
                 v1::podbuf_head::Source::Declaration(*index),
-                Some(*index),
+                Owner::Declaration(*index),
                 root.name.clone().unwrap_or_default(),
             ),
             v1::podbuf_refused::Source::Tuple(index) => (
                 v1::podbuf_head::Source::Tuple(*index),
-                None,
+                Owner::None,
                 format!("tuple {index}"),
             ),
         };
@@ -260,6 +272,8 @@ struct Walk<'a> {
     /// The head of each named tuple, the heads a tuple written at a field is
     /// matched against by structure.
     tuples: Vec<(Head, u32)>,
+    /// The heads of the tuples reached inside a foreign aggregate.
+    nested: Vec<(Head, u32)>,
     /// The head of each foreign struct or union reached inline, by package and
     /// name.
     foreign: HashMap<(String, String), u32>,
@@ -285,7 +299,7 @@ impl Walk<'_> {
         index: u32,
         head: &Head,
         path: &[String],
-        declaration: Option<u32>,
+        declaration: Owner,
     ) -> Result<(), String> {
         let mut fields = Vec::with_capacity(head.fields.len());
         for placement in &head.fields {
@@ -324,7 +338,7 @@ impl Walk<'_> {
         &mut self,
         form: &Form,
         path: &[String],
-        declaration: Option<u32>,
+        declaration: Owner,
     ) -> Result<v1::PodbufForm, String> {
         use v1::podbuf_form::Kind;
         let kind = match form {
@@ -347,7 +361,9 @@ impl Walk<'_> {
                 width: *width as i32,
                 reference: reference.clone(),
             }),
-            Form::Inline { head, of } => Kind::InlineHead(self.inline(head, of, path)?),
+            Form::Inline { head, of } => {
+                Kind::InlineHead(self.inline(head, of, path, declaration)?)
+            }
             Form::InlineArray { element, count } => {
                 Kind::InlineArray(Box::new(v1::PodbufInlineArray {
                     element: Some(Box::new(self.form(element, path, declaration)?)),
@@ -362,15 +378,30 @@ impl Walk<'_> {
     }
 
     /// The index of the head an inline field lays out.
-    fn inline(&mut self, head: &Head, of: &Inlined, path: &[String]) -> Result<u32, String> {
+    fn inline(
+        &mut self,
+        head: &Head,
+        of: &Inlined,
+        path: &[String],
+        declaration: Owner,
+    ) -> Result<u32, String> {
         let at = path.join(".");
         match of {
-            Inlined::Tuple => self
-                .tuples
-                .iter()
-                .find(|(named, _)| named == head)
-                .map(|(_, index)| *index)
-                .ok_or_else(|| format!("{at}: a tuple with no head")),
+            Inlined::Tuple => {
+                // A tuple of this package's tuple list, or one reached inside
+                // a foreign aggregate, which the list does not hold: it gets
+                // a head of its own, found again by structure.
+                let known = self.tuples.iter().chain(&self.nested);
+                if let Some((_, index)) = known.into_iter().find(|(named, _)| named == head) {
+                    return Ok(*index);
+                }
+                let index = self.push(v1::podbuf_head::Source::NestedTuple(v1::NestedTuple {
+                    path: path.to_vec(),
+                }));
+                self.nested.push((head.clone(), index));
+                self.fill(index, head, path, declaration)?;
+                Ok(index)
+            }
             Inlined::Declaration { package, name } if *package == self.package => {
                 match self.declared.get(name) {
                     Some(index) => Ok(*index),
@@ -391,7 +422,12 @@ impl Walk<'_> {
                     .ok_or_else(|| format!("{at}: {package}.{name} is not in the foreign list"))?;
                 let index = self.push(v1::podbuf_head::Source::Foreign(declaration));
                 self.foreign.insert(key, index);
-                self.fill(index, head, &[format!("{package}.{name}")], None)?;
+                self.fill(
+                    index,
+                    head,
+                    &[format!("{package}.{name}")],
+                    Owner::Foreign(declaration),
+                )?;
                 Ok(index)
             }
         }
@@ -401,7 +437,7 @@ impl Walk<'_> {
         &mut self,
         descriptor: &DescriptorKind,
         path: &[String],
-        declaration: Option<u32>,
+        declaration: Owner,
     ) -> Result<v1::PodbufDescriptor, String> {
         use v1::podbuf_descriptor::Kind;
         let kind = match descriptor {
@@ -442,17 +478,22 @@ impl Walk<'_> {
                 })
             }
             DescriptorKind::Arm { arms } => {
-                let union = declaration.ok_or_else(|| {
-                    format!(
-                        "{}: a union arm outside a union declaration",
-                        path.join(".")
-                    )
-                })?;
+                let (union, foreign) = match declaration {
+                    Owner::Declaration(index) => (index, None),
+                    Owner::Foreign(index) => (0, Some(index)),
+                    Owner::None => {
+                        return Err(format!(
+                            "{}: a union arm outside a union declaration",
+                            path.join(".")
+                        ));
+                    }
+                };
                 let mut out = Vec::with_capacity(arms.len());
                 for (ordinal, head) in arms {
                     let index = self.push(v1::podbuf_head::Source::Arm(v1::ArmHead {
                         declaration: union,
                         arm: *ordinal,
+                        foreign,
                     }));
                     let mut at = path.to_vec();
                     at.push(ordinal.to_string());

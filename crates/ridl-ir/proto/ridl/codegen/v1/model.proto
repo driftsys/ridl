@@ -1264,9 +1264,11 @@ message PodbufProjection {
   repeated PodbufRefused refused = 2;
 }
 
-// A struct, a union or a tuple that cannot be laid out: malformed IR, or a
-// head larger than a `u32` offset can address. The podbuf checks report the
-// causes of RIDL-153 and RIDL-154 for a selected encoding.
+// A struct, a union or a tuple that cannot be laid out. A valid workspace
+// reaches this only for a head larger than a `u32` offset can address, an
+// inline array of such a head included; the other causes are malformed IR
+// (a string or bytes with no bound, a stream field, an unresolved name, a type
+// that reaches itself). A head that needs a refused head is refused too.
 message PodbufRefused {
   oneof source {
     // Index into `Model.declarations`.
@@ -1292,6 +1294,9 @@ message PodbufHead {
     // Index into `Model.foreign`: a struct or a union of another package that
     // a field of this package lays out inline.
     uint32 foreign = 14;
+    // A tuple written inside a struct of another package, which no entry of
+    // `Model.tuples` stands for.
+    NestedTuple nested_tuple = 15;
   }
   // The head size in bytes, a multiple of `align`; 0 for a head with no field.
   uint32 size = 2;
@@ -1305,10 +1310,19 @@ message PodbufHead {
 
 // One arm of a union: the declaration and the arm ordinal.
 message ArmHead {
-  // Index into `Model.declarations`.
+  // Index into `Model.declarations`; unused (0) when `foreign` is set.
   uint32 declaration = 1;
   // `Arm.ordinal`.
   uint32 arm = 2;
+  // Index into `Model.foreign` when the union is declared by another package.
+  optional uint32 foreign = 3;
+}
+
+// A tuple reached inside a foreign aggregate. Equal tuples share one head.
+message NestedTuple {
+  // The qualified name of the foreign declaration, then the names of the
+  // fields that lead to the tuple.
+  repeated string path = 1;
 }
 
 // One field of a head and where the layout law put it.

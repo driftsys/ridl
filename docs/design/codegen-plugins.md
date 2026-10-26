@@ -648,7 +648,9 @@ and every reference from one head to another is an index into that list.
 - **Source.** `PodbufHead.source` is the declaration index, the tuple index, a
   `MapEntry` whose `path` is the declaration name followed by the names of the
   fields that lead to the map, an `ArmHead` that names the union declaration and
-  the arm ordinal, or an index into `Model.foreign`.
+  the arm ordinal (and, for a union of another package, the index into
+  `Model.foreign`), an index into `Model.foreign`, or a `NestedTuple`, a tuple
+  written inside a struct of another package.
 - **Size and alignment.** `size` is a multiple of 8 and `align` is 8 for every
   head. A head with no field has size 0.
 - **Fields.** Each `PodbufField` has the `offset`, `size` and `align` the law
@@ -666,12 +668,14 @@ and every reference from one head to another is an index into that list.
   map (the entry head, `elem_size`, `min`, `max`) or the arms of a union (the
   ordinal and head of each arm).
 - **Refused heads.** `Model.podbuf` is set whenever the toolchain lowers a
-  package. A struct, a union or a tuple that cannot be laid out (the IR is
-  malformed, or a head is larger than a `u32` offset can address) has no head;
-  it is listed in `refused` with its source and a cause. A head that needs a
-  refused head is refused too, and its cause names that head. Every other head
-  is emitted. The podbuf checks (RIDL-153, RIDL-154) report the same causes as
-  errors when `podbuf` is a selected encoding.
+  package. A struct, a union or a tuple that cannot be laid out has no head; it
+  is listed in `refused` with its source and a cause. A valid workspace reaches
+  that only when a head is larger than a `u32` offset can address (an inline
+  array of such a head included); the other causes are malformed IR: a string or
+  bytes with no bound, a stream field, a name that does not resolve, or a type
+  that reaches itself. A head that needs a refused head is refused too, and its
+  cause names that head. Every other head is emitted. The podbuf checks report
+  the too-large head (RIDL-153) when `podbuf` is a selected encoding.
 - **Sizes.** `PayloadSizes.podbuf` and `Reservation.podbuf` are filled by the
   same sizer as the other two encodings. A request of several parameters is
   sized as an induced struct under proto3, FlatBuffers and podbuf alike.
