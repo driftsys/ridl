@@ -59,6 +59,12 @@ expression: stdout
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
                   "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
+                  "state": "Bounded"
                 }
               ],
               "role": "value",
@@ -88,6 +94,12 @@ expression: stdout
                   "bytes": 43,
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
                   "state": "Bounded"
                 }
               ],
@@ -119,6 +131,12 @@ expression: stdout
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
                   "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
+                  "state": "Bounded"
                 }
               ],
               "role": "occurrence",
@@ -149,6 +167,12 @@ expression: stdout
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
                   "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
+                  "state": "Bounded"
                 }
               ],
               "role": "occurrence",
@@ -178,6 +202,12 @@ expression: stdout
                   "bytes": 46,
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
                   "state": "Bounded"
                 }
               ],
@@ -217,6 +247,12 @@ expression: stdout
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
                   "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
+                  "state": "Bounded"
                 }
               ],
               "role": "value",
@@ -246,6 +282,12 @@ expression: stdout
                   "bytes": 43,
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
                   "state": "Bounded"
                 }
               ],

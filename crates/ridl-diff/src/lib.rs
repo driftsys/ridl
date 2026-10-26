@@ -260,15 +260,21 @@ declare_categories! {
         /// A struct field appended, compatible under the generic rule, to a
         /// struct that another head of the new side holds inline: as a struct
         /// field, a tuple member, or an element of an exact-length array,
-        /// anywhere in the workspace. The inline copy cannot grow without
+        /// anywhere in the workspace, the argument struct a call with several
+        /// parameters induces, a tuple reply and a fixed payload included.
+        /// The inline copy cannot grow without
         /// moving the fields after it, so the append is breaking when the
         /// comparison is judged for the `podbuf` encoding, and compatible
         /// otherwise, listed under the heading "breaking under podbuf"
         /// ([`heading`]). The path is the appended field's; the detail names
-        /// each inline use. A struct used only behind a descriptor — the
+        /// each inline use, a struct field as `<package>/<struct>/<field>`
+        /// and an interaction's request, reply or fixed payload as
+        /// `<package>/<interface>/<interaction>`. A struct used only as a
+        /// root of its own — a single named parameter, a named reply, a
+        /// signal or event payload — or only behind a descriptor — the
         /// element of a bounded array, the key or value of a map entry, a
-        /// union arm — is not reported: the descriptor's stride gives the
-        /// producer's size, and the fields past it read as 0.
+        /// union arm — is not reported: the root or the descriptor's stride
+        /// gives the producer's size, and the fields past it read as 0.
         PodbufInlineAppend,
     }
 }

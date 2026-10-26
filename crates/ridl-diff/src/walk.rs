@@ -1963,10 +1963,13 @@ pub(crate) fn podbuf_inline_appends(pair: &[Change], scope: &[&v2::Package]) -> 
     changes
 }
 
-/// Every struct field of `scope` whose podbuf form holds the struct
-/// `package.name` inline, as `<package>/<struct>/<field>`, sorted. A field
-/// whose form the layout law refuses — a stream, a type it cannot resolve — is
-/// skipped: the podbuf checks of `ridl check` report it.
+/// Every head of `scope` whose podbuf form holds the struct `package.name`
+/// inline, sorted: a struct field, as `<package>/<struct>/<field>`, and an
+/// interaction's request, reply or fixed payload, as
+/// `<package>/<interface>/<interaction>` (the path the walk gives the
+/// interaction; a service's inline shape is named by the service). A form the
+/// layout law refuses — a stream, a type it cannot resolve — is skipped: the
+/// podbuf checks of `ridl check` report it.
 fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String> {
     use ridl_ir::projection::flatbuffers::Packages;
     use ridl_ir::projection::podbuf::field_form;
@@ -1987,6 +1990,9 @@ fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String>
             package: home,
             others: &others,
         };
+        let holds = |ty: &v2::FieldType, fixed: bool| {
+            field_form(packages, ty).is_ok_and(|form| holds_inline(&form, &target, fixed))
+        };
         for decl in &home.decls {
             let Some(v2::decl::Kind::StructDef(def)) = &decl.kind else {
                 continue;
@@ -1995,21 +2001,71 @@ fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String>
                 let Some(v2::struct_member::Member::Field(field)) = &slot.member else {
                     continue;
                 };
-                let Some(ty) = field.r#type.as_ref() else {
-                    continue;
-                };
-                let Ok(form) = field_form(packages, ty) else {
-                    continue;
-                };
-                if holds_inline(&form, &target, true) {
+                if field.r#type.as_ref().is_some_and(|ty| holds(ty, true)) {
                     uses.push(format!("{}/{}/{}", home.name, decl.name, field.name));
+                }
+            }
+        }
+        for shape in home.shapes() {
+            for decl in &shape.interface.interactions {
+                if interaction_payloads(decl).iter().any(|ty| holds(ty, false)) {
+                    uses.push(format!("{}/{}/{}", home.name, shape.name, decl.name));
                 }
             }
         }
     }
     uses.sort();
-    uses.dedup();
     uses
+}
+
+/// The types an interaction puts on the wire as podbuf heads of their own,
+/// each a root that may grow: a call's request — the argument struct the
+/// lowering induces from several parameters, written here as the tuple
+/// `params_as_tuple` gives, or the single named parameter sent as it is — a
+/// query's reply (a value as declared; the two arms of a fallible reply), and
+/// a fixed payload. A signal or event payload is a named type, a root on its
+/// own, and holds nothing at a fixed offset of another head, so it is not
+/// listed. A request with a stream parameter induces no struct.
+fn interaction_payloads(decl: &v2::Decl) -> Vec<v2::FieldType> {
+    use v2::decl::Kind;
+
+    fn named(reference: &str) -> v2::FieldType {
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Named(reference.to_string())),
+        }
+    }
+    fn request(params: &[v2::Param]) -> Option<v2::FieldType> {
+        if let [param] = params
+            && let Some(ty) = param.r#type.as_ref()
+            && matches!(ty.kind, Some(v2::field_type::Kind::Named(_)))
+        {
+            return Some(ty.clone());
+        }
+        ridl_ir::codegen::params_as_tuple(params).map(|tuple| v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Tuple(tuple)),
+        })
+    }
+
+    let mut payloads = Vec::new();
+    match &decl.kind {
+        Some(Kind::CommandDef(def)) => payloads.extend(request(&def.params)),
+        Some(Kind::QueryDef(def)) => {
+            payloads.extend(request(&def.params));
+            match def.return_type.as_ref().and_then(|ret| ret.kind.as_ref()) {
+                Some(v2::return_type::Kind::Value(ty)) => payloads.push(ty.clone()),
+                Some(v2::return_type::Kind::Fallible(fallible)) => {
+                    payloads.push(named(&fallible.ok));
+                    payloads.push(named(&fallible.err));
+                }
+                None => {}
+            }
+        }
+        Some(Kind::FixedDef(def)) => payloads.extend(def.payload.clone()),
+        _ => {}
+    }
+    payloads
 }
 
 /// Whether `form` holds the struct `target` at a fixed offset of a head that

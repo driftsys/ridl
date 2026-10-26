@@ -1537,14 +1537,20 @@ names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
 the encodings a workspace builds, so the command does not read them from a
 manifest. Only `podbuf` has a rule of its own: a struct field appended to a
 struct that another struct, a tuple or an exact-length array holds inline
-anywhere in the new side is `podbuf_inline_append`, breaking with
-`--encoding podbuf` and compatible without it, because the inline copy cannot
-grow without moving the fields after it. The line names each inline use and
-sits under the heading `breaking under podbuf` either way, so that a workspace
-that does not build podbuf still sees it. A struct used only behind a
-descriptor — the element of a bounded array, the key or value of a map entry,
-a union arm — draws no such line: the descriptor's stride gives the producer's
-size. A name outside the three is a usage error, exit 2. With `Reading` held
+anywhere in the new side — in a struct, or in the argument struct a call with
+several parameters induces, a tuple reply or a fixed payload — is
+`podbuf_inline_append`, breaking with `--encoding podbuf` and compatible
+without it, because the inline copy cannot grow without moving the fields
+after it. The line names each inline use, a struct field as
+`<package>/<struct>/<field>` and an interaction's request, reply or fixed
+payload as `<package>/<interface>/<interaction>`, and sits under the heading
+`breaking under podbuf` either way, so that a workspace that does not build
+podbuf still sees it. A struct that is a root of its own — a single named
+parameter, a named reply, a signal or event payload — or that is used only
+behind a descriptor — the element of a bounded array, the key or value of a
+map entry, a union arm — draws no such line: the root or the descriptor's
+stride gives the producer's size. A name outside the three is a usage error,
+exit 2. With `Reading` held
 inline by `Bounds` and a field appended to it:
 
 ```sh

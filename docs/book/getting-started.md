@@ -924,7 +924,7 @@ ridl build --emit rust --out-dir out
 `ridl build` compiles a workspace and writes one artifact per package for each
 emit target, except that `catalog` writes one per unit and none for a unit that
 declares no interface and no service with an inline body.
-Ten emit targets exist today:
+Eleven emit targets exist today:
 
 | `--emit`          | Output                           | Contents                                                                      |
 | ----------------- | -------------------------------- | ----------------------------------------------------------------------------- |
@@ -935,6 +935,7 @@ Ten emit targets exist today:
 | `typescript`      | `<package>.ts`                   | idiomatic TypeScript source, and `<package>.codec.ts` under `codec = true` for a package with a payload root that gets a codec |
 | `proto`           | `<package>.proto`                | the proto3 schema — types and the ordinals                                    |
 | `flatbuffers`     | `<package>.fbs`                  | the FlatBuffers schema — types and the ordinals                               |
+| `podbuf`          | `<package>.h`                    | the podbuf C header — the head structs and the accessors a C consumer reads a verified buffer through |
 | `codegen-model`   | `<package>.codegen.json`         | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON      |
 | `codegen-request` | `<package>.codegen-request.json` | the whole codegen request a build hands a backend, as canonical protobuf JSON |
 | `catalog`         | `<unit>.catalog.binfb`           | the catalog descriptor an engine reads — interfaces, numbers, members, sizes  |

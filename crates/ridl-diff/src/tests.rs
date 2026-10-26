@@ -2897,6 +2897,265 @@ mod podbuf {
         );
     }
 
+    /// A struct nested in the value of a map entry — inside a tuple there —
+    /// sits at a fixed offset of the entry's head.
+    #[test]
+    fn a_struct_inside_a_tuple_map_value_is_an_inline_use() {
+        let with_index = |reading: v2::Decl| {
+            package(
+                "veh.common",
+                vec![
+                    int_type("Level", "0", "100"),
+                    string_type("Label"),
+                    reading,
+                    struct_decl(
+                        "Index",
+                        vec![field(
+                            "by_label",
+                            1,
+                            map(
+                                named("Label"),
+                                tuple(vec![
+                                    ("at", named("Level")),
+                                    ("reading", named("SensorReading")),
+                                ]),
+                            ),
+                        )],
+                    ),
+                ],
+            )
+        };
+        let report = diff(
+            &with_index(reading_v1()),
+            &with_index(reading_v2()),
+            &["podbuf"],
+        );
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .expect("the use inside the map value is found");
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(
+            change.after.as_deref(),
+            Some("nested inline in veh.common/Index/by_label")
+        );
+    }
+
+    /// An exact-length array of the struct as the element of a bounded array:
+    /// the element may grow, the struct inside the inline array may not.
+    #[test]
+    fn a_struct_in_an_exact_array_element_of_a_bounded_array_is_an_inline_use() {
+        let with_log = |reading: v2::Decl| {
+            package(
+                "veh.common",
+                vec![
+                    int_type("Level", "0", "100"),
+                    reading,
+                    struct_decl(
+                        "Log",
+                        vec![field(
+                            "windows",
+                            1,
+                            array(array(named("SensorReading"), 2, 2), 0, 8),
+                        )],
+                    ),
+                ],
+            )
+        };
+        let report = diff(
+            &with_log(reading_v1()),
+            &with_log(reading_v2()),
+            &["podbuf"],
+        );
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .expect("the use inside the inline array is found");
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(
+            change.after.as_deref(),
+            Some("nested inline in veh.common/Log/windows")
+        );
+    }
+
+    // ----------------------------------------------------------------------
+    // Interaction-level heads: the induced argument struct, a reply, a fixed
+    // payload.
+    // ----------------------------------------------------------------------
+
+    fn param(name: &str, ty: v2::FieldType) -> v2::Param {
+        v2::Param {
+            name: name.to_string(),
+            r#type: Some(ty),
+            doc: String::new(),
+            links: Vec::new(),
+            see: Vec::new(),
+            since: Vec::new(),
+        }
+    }
+
+    fn command(name: &str, ordinal: u32, params: Vec<v2::Param>) -> v2::Decl {
+        super::interaction(
+            name,
+            ordinal,
+            v2::decl::Kind::CommandDef(v2::CommandDef {
+                params,
+                contracts: Vec::new(),
+                timing: None,
+                family: v2::Family::Dispatch as i32,
+                shape: v2::Shape::None as i32,
+            }),
+        )
+    }
+
+    fn query(name: &str, ordinal: u32, params: Vec<v2::Param>, reply: v2::FieldType) -> v2::Decl {
+        super::interaction(
+            name,
+            ordinal,
+            v2::decl::Kind::QueryDef(v2::QueryDef {
+                params,
+                return_type: Some(v2::ReturnType {
+                    kind: Some(v2::return_type::Kind::Value(reply)),
+                }),
+                contracts: Vec::new(),
+                timing: None,
+                family: v2::Family::Dispatch as i32,
+            }),
+        )
+    }
+
+    fn fixed(name: &str, ordinal: u32, payload: v2::FieldType) -> v2::Decl {
+        super::interaction(
+            name,
+            ordinal,
+            v2::decl::Kind::FixedDef(v2::FixedDef {
+                payload: Some(payload),
+            }),
+        )
+    }
+
+    /// `veh.common` with `SensorReading` as given, no struct use, and the
+    /// interface `Ctl` holding `interactions`.
+    fn interface_package(reading: v2::Decl, interactions: Vec<v2::Decl>) -> v2::Package {
+        let mut package = package("veh.common", vec![int_type("Level", "0", "100"), reading]);
+        package.interfaces = vec![super::interface("Ctl", interactions)];
+        package
+    }
+
+    #[track_caller]
+    fn assert_interaction_use(interactions: impl Fn() -> Vec<v2::Decl>, expected: &str) {
+        let report = diff(
+            &interface_package(reading_v1(), interactions()),
+            &interface_package(reading_v2(), interactions()),
+            &["podbuf"],
+        );
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .unwrap_or_else(|| panic!("the use is found: {:?}", report.changes));
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(change.after.as_deref(), Some(expected));
+    }
+
+    #[track_caller]
+    fn assert_no_interaction_use(interactions: impl Fn() -> Vec<v2::Decl>) {
+        let report = diff(
+            &interface_package(reading_v1(), interactions()),
+            &interface_package(reading_v2(), interactions()),
+            &["podbuf"],
+        );
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+    }
+
+    /// A call with several parameters sends the argument struct the lowering
+    /// induces: each parameter is a member of that head, at a fixed offset.
+    #[test]
+    fn a_two_parameter_call_holds_the_struct_in_its_argument_struct() {
+        assert_interaction_use(
+            || {
+                vec![command(
+                    "set",
+                    1,
+                    vec![
+                        param("a", named("SensorReading")),
+                        param("b", named("Level")),
+                    ],
+                )]
+            },
+            "nested inline in veh.common/Ctl/set",
+        );
+    }
+
+    /// A tuple parameter is a tuple head inside the argument struct.
+    #[test]
+    fn a_tuple_parameter_holds_the_struct_inline() {
+        assert_interaction_use(
+            || {
+                vec![command(
+                    "set",
+                    1,
+                    vec![param(
+                        "p",
+                        tuple(vec![
+                            ("reading", named("SensorReading")),
+                            ("at", named("Level")),
+                        ]),
+                    )],
+                )]
+            },
+            "nested inline in veh.common/Ctl/set",
+        );
+    }
+
+    /// A fixed payload that is an exact-length array of the struct.
+    #[test]
+    fn an_exact_array_fixed_payload_holds_the_struct_inline() {
+        assert_interaction_use(
+            || vec![fixed("window", 1, array(named("SensorReading"), 2, 2))],
+            "nested inline in veh.common/Ctl/window",
+        );
+    }
+
+    /// A tuple reply is a head of its own with the struct at a fixed offset.
+    #[test]
+    fn a_tuple_reply_holds_the_struct_inline() {
+        assert_interaction_use(
+            || {
+                vec![query(
+                    "read",
+                    1,
+                    vec![param("at", named("Level"))],
+                    tuple(vec![
+                        ("reading", named("SensorReading")),
+                        ("at", named("Level")),
+                    ]),
+                )]
+            },
+            "nested inline in veh.common/Ctl/read",
+        );
+    }
+
+    /// A single named parameter is sent as it is, and a named reply is a root
+    /// of its own: each may grow, so neither is a use.
+    #[test]
+    fn a_single_named_parameter_and_a_named_reply_are_roots_not_uses() {
+        assert_no_interaction_use(|| {
+            vec![
+                command("set", 1, vec![param("reading", named("SensorReading"))]),
+                query(
+                    "read",
+                    2,
+                    vec![param("at", named("Level"))],
+                    named("SensorReading"),
+                ),
+                fixed("last", 3, named("SensorReading")),
+            ]
+        });
+    }
+
     /// `diff_refs_in` is `diff_refs_with` under no encoding.
     #[test]
     fn diff_refs_in_judges_under_no_encoding() {
