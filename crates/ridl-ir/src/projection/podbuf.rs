@@ -177,11 +177,11 @@ pub struct Pad {
 /// already placed. The offset of an item depends only on the items before
 /// it, so an appended item never moves an existing one.
 ///
-/// Every `align` is at least 1, and the sizes sum to less than
-/// `u32::MAX - 16`, which [`struct_head`] and its siblings check before they
-/// call this; no offset can then exceed `u32`.
+/// Every `align` is at least 1. The offsets are `u64` because the alignment
+/// gaps can push an end past `u32::MAX` even when the sizes sum to less;
+/// [`struct_head`] and its siblings refuse such a head instead of wrapping.
 #[must_use]
-pub fn place(items: &[(u32, u32)]) -> Vec<u32> {
+pub fn place(items: &[(u32, u32)]) -> Vec<u64> {
     // (start, end) of each item placed.
     let mut placed: Vec<(u64, u64)> = Vec::with_capacity(items.len());
     let mut offsets = Vec::with_capacity(items.len());
@@ -196,7 +196,7 @@ pub fn place(items: &[(u32, u32)]) -> Vec<u32> {
             }
         }
         placed.push((off, off + size));
-        offsets.push(u32::try_from(off).expect("the sizes sum to less than u32::MAX - 16"));
+        offsets.push(off);
     }
     offsets
 }
@@ -433,34 +433,40 @@ fn lay_out(items: Vec<Item>) -> Result<Head, ProjectionError> {
         .iter()
         .map(|item| (elem_size(&item.form), align_of(&item.form)))
         .collect();
-    let total: u64 = sizes.iter().map(|&(size, _)| u64::from(size)).sum();
-    if total >= u64::from(u32::MAX) - 16 {
-        return Err(error(format!(
-            "a head of {total} bytes is larger than a u32 offset can address"
-        )));
-    }
     let offsets = place(&sizes);
+    // Ends and the rounded size in u64: a head a u32 offset cannot address
+    // is refused here, so every offset below fits a u32.
+    let end = offsets
+        .iter()
+        .zip(&sizes)
+        .map(|(offset, &(size, _))| offset + u64::from(size))
+        .max()
+        .unwrap_or(0);
+    let size = end.div_ceil(u64::from(HEAD_ALIGN)) * u64::from(HEAD_ALIGN);
+    let size = u32::try_from(size).map_err(|_| {
+        error(format!(
+            "a head of {size} bytes is larger than a u32 offset can address"
+        ))
+    })?;
     let mut fields: Vec<Placement> = items
         .into_iter()
         .zip(sizes)
         .zip(offsets)
-        .map(|((item, (size, align)), offset)| Placement {
-            source: item.source,
-            offset,
-            size,
-            align,
-            form: item.form,
-            optional: item.optional,
+        .map(|((item, (size, align)), offset)| {
+            // Every offset is below the head size, which is a u32.
+            let offset = u32::try_from(offset)
+                .map_err(|_| error(format!("offset {offset} does not fit a u32")))?;
+            Ok(Placement {
+                source: item.source,
+                offset,
+                size,
+                align,
+                form: item.form,
+                optional: item.optional,
+            })
         })
-        .collect();
+        .collect::<Result<_, ProjectionError>>()?;
     fields.sort_by_key(|placement| placement.offset);
-    // The sum check above keeps every end below u32::MAX - 8.
-    let end = fields
-        .iter()
-        .map(|placement| placement.offset + placement.size)
-        .max()
-        .unwrap_or(0);
-    let size = end.div_ceil(HEAD_ALIGN) * HEAD_ALIGN;
     let mut pads = Vec::new();
     let mut cursor = 0u32;
     for placement in &fields {
@@ -1504,6 +1510,89 @@ mod tests {
             )],
         );
         assert_eq!(max_size_of(ordered), Some(8 + 16 + 4 * 8 + (4 * 16 + 1)));
+    }
+
+    #[test]
+    fn every_array_element_pays_its_tail_at_the_worst_alignment() {
+        // Rec head: two descriptors, 16 bytes. Recs head: one descriptor.
+        // Tail: the block of 2 Rec heads (32 bytes, 8-aligned), then each
+        // element's tail: its stamps block (8 bytes at alignment 8) and its
+        // string (4 + 1 bytes). The real worst case is 81: the first element
+        // follows the block at alignment 8 (0 + 8 + 5), the second follows
+        // the first string at alignment 1 (7 + 8 + 5). The bound charges
+        // every element at alignment 1 (7 + 8 + 5 = 20), so 8 + 8 + 32 + 40.
+        let recs = fixture(
+            "Recs",
+            vec![
+                struct_decl(
+                    "Rec",
+                    vec![
+                        field("stamps", 1, array(int(v2::IntWidth::I64), 0, 1)),
+                        field("name", 2, string(1)),
+                    ],
+                ),
+                struct_decl("Recs", vec![field("items", 1, array(named("Rec"), 0, 2))]),
+            ],
+        );
+        assert_eq!(max_size_of(recs), Some(88));
+    }
+
+    #[test]
+    fn a_union_pays_its_largest_arm_whatever_the_arm_order() {
+        // Each arm head is one descriptor, 8 bytes; the union head is 16.
+        // Big's string is 4 * 100 + 1 bytes, Small's 4 + 1: the union pays
+        // 8 + 16 + 8 + 401.
+        let either = |first: (&str, u32, &str), second: (&str, u32, &str)| {
+            fixture(
+                "Either",
+                vec![
+                    struct_decl("Big", vec![field("s", 1, string(100))]),
+                    struct_decl("Small", vec![field("s", 1, string(1))]),
+                    union_decl(
+                        "Either",
+                        vec![
+                            arm(first.0, first.1, first.2),
+                            arm(second.0, second.1, second.2),
+                        ],
+                    ),
+                ],
+            )
+        };
+        assert_eq!(
+            max_size_of(either(("big", 1, "Big"), ("small", 2, "Small"))),
+            Some(433)
+        );
+        assert_eq!(
+            max_size_of(either(("small", 1, "Small"), ("big", 2, "Big"))),
+            Some(433)
+        );
+    }
+
+    #[test]
+    fn a_head_whose_padded_end_passes_u32_is_refused() {
+        // The sizes sum to 4_294_967_277, under u32::MAX, but the alignment
+        // gaps the law leaves push the last field's end to 4_294_967_296.
+        let huge = fixture(
+            "Huge",
+            vec![struct_decl(
+                "Huge",
+                vec![
+                    field("a", 1, array(byte(), 4_294_967_235, 4_294_967_235)),
+                    field("b", 2, int(v2::IntWidth::I64)),
+                    field("c", 3, array(byte(), 9, 9)),
+                    field("d", 4, int(v2::IntWidth::I64)),
+                    field("e", 5, array(byte(), 9, 9)),
+                    field("f", 6, int(v2::IntWidth::I64)),
+                ],
+            )],
+        );
+        let decl = subject(&huge);
+        let Some(v2::decl::Kind::StructDef(def)) = &decl.kind else {
+            unreachable!()
+        };
+        let error = struct_head(packages(&huge), "Huge", def).expect_err("too large");
+        assert!(error.message.contains("u32"), "{}", error.message);
+        assert_eq!(max_size_of(huge), None);
     }
 
     #[test]
