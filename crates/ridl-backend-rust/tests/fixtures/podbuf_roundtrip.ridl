@@ -197,3 +197,11 @@ struct Talls {
 struct Ranked {
   byName : [Name : Score; 0..8]
 }
+
+/// `cabin` at 0, `setpoint` at 2, `fan` at 4, pad 5..8: the head of the
+/// design's worked example, in 16-bit raw values.
+struct ClimateReport {
+  cabin    : integer [0..65535]
+  setpoint : integer [0..65535]
+  fan      : integer [0..255]
+}

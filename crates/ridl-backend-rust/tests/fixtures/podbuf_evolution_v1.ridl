@@ -1,0 +1,31 @@
+// The first version of the podbuf evolution fixture.
+//
+// `podbuf_evolution_v2.ridl` appends fields to `FaultEvent` and to `Entry`.
+// The conformance test writes each version's bytes by hand from the
+// first-fit law and reads them with the other version's codec, in both
+// directions.
+
+package podbuf.evolution
+
+/// `code` at 0, pad 2..4, the descriptor of `message` at 4..12, pad 12..16,
+/// `timestamp` at 16..24: a head of 24 bytes.
+struct FaultEvent {
+  code      : integer [0..65535]
+  message   : string [0..256]
+  timestamp : integer [-9223372036854775808..9223372036854775807]
+}
+
+/// One descriptor at 0..8 with an element size of 24.
+struct FaultPage {
+  faults : [FaultEvent; 0..8]
+}
+
+/// `id` at 0, pad 1..8: a head of 8 bytes.
+struct Entry {
+  id : integer [0..255]
+}
+
+/// One descriptor at 0..8 with an element size of 8.
+struct Entries {
+  items : [Entry; 0..8]
+}
