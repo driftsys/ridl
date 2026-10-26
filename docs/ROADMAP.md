@@ -184,11 +184,10 @@ TypeScript WebSocket transport package (driftsys/ridl#982), was filed as a new
 story, because no story held the transport package that the TypeScript framework
 names.
 
-**Filed 2026-10-26, as proposals.** E2.14, nested interface members
-(driftsys/ridl#1084), and E6.20, a partition under `machine`
-(driftsys/ridl#1085), are new rows under "Proposed, awaiting a decision". Each
-takes the next free identifier in its epic, and each waits for a decision that
-its row names.
+**Filed 2026-10-26.** E2.14, nested interface members (driftsys/ridl#1084), and
+E6.20, a partition under `machine` (driftsys/ridl#1085), are new rows under "The
+next breaking release", beside LIM3 (driftsys/ridl#1059). Each takes the next
+free identifier in its epic.
 
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
@@ -1178,38 +1177,50 @@ needed for the first Kotlin demo.
 
 ---
 
-# Proposed, awaiting a decision
+# The next breaking release
 
-Each row below has a design or a recorded shape, but no decision to build it, so
-neither is in a step. A row joins a step when the maintainer takes its decision,
-and the row says which decision that is.
+**Scheduled on 2026-10-26 by the maintainer.** The next release marked breaking,
+the first after 0.14.0, carries three items, and it is cut when all three have
+landed:
+
+- **LIM3, the transport's limits** (driftsys/ridl#1059): `ridl-transport-ws`
+  gets a fixed message limit and a per-request limit check. It is the last stage
+  of the limits lane, whose driver is
+  [`2026-10-24-lane-limits-driver.md`](wip/2026-10-24-lane-limits-driver.md).
+  LIM1 and LIM2 shipped in 0.14.0. LIM4, which gardens the lane's working
+  memory, follows LIM3 and lands before the release is cut.
+- **E2.14, nested interface members** (driftsys/ridl#1084).
+- **E6.20, a partition under `machine`** (driftsys/ridl#1085).
 
 | ID    | Story                                                                                                                                                                                                                                        | Done when                                                                                                                                                                        | Size |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
 | E2.14 | Nested interface members: an interface member, or a member of an inline service shape, names another interface in a named form (`slot0 : Widget`) or an indexed form (`slots : [Widget; 5]`), and each instance has its own interface number | a contract with a named and an indexed nested member is checked, locked and diffed, and a backend that meets a nested member emits one diagnostic saying it is not generated yet | L    |
 | E6.20 | A partition under `machine`: an optional grouping that carries an assurance level, with one implicit partition when a machine declares none, and a mixed-level placement rejected at check                                                   | a component whose `labels` demand a higher level than its partition is rejected, and a machine that declares no partition lowers with one implicit partition                     | M    |
 
-**E2.14 waits for the nested-interface design note to be accepted.** The note is
-[`2026-09-21-nested-interface-design.md`](wip/2026-09-21-nested-interface-design.md).
-Accepting it means an ADR that amends ADR-0015 decisions 16 and 17, and the
-note's three open questions answered: the lock key spelling for an index, the
-book's guidance on a per-instance command, and how `ridl diff` presents the
-instances of an indexed member. The row is the note's first step, the language
-and the IR. Its second step, the Rust face over the per-instance numbers, and
-its third, the bounded form, become their own rows when this one lands.
+**E2.14 starts with its decision record.** The maintainer took the
+nested-interface design note,
+[`2026-09-21-nested-interface-design.md`](wip/2026-09-21-nested-interface-design.md),
+on 2026-10-26. The story's first task is the ADR that amends ADR-0015 decisions
+16 and 17 and answers the note's three open questions: the lock key spelling for
+an index, the book's guidance on a per-instance command, and how `ridl diff`
+presents the instances of an indexed member. The row is the note's first step,
+the language and the IR. Its second step, the Rust face over the per-instance
+numbers, and its third, the bounded form, become their own rows when this one
+lands, and they are not in this release.
 
-**E6.20 waits for decision D-2 to be reopened.** D-2 of
+**E6.20 reopens decision D-2.** D-2 of
 [`2026-09-12-rsdl-rewrite-decisions.md`](wip/2026-09-12-rsdl-rewrite-decisions.md)
-says rsdl declares no process, and it names the observation that reopens a
-grouping noun: a consumer whose safety argument needs a mixed-level placement
-rejected at design time. The rsdl reference §12 states the same shape. The
-partition should be designed against ARINC 653's time and space partitioning
-rather than invented, as the section "What this repository is, and is not" says.
-The rejection compares levels on the ordered `0..N` scales of ADR-0018 decision
-9, one dimension at a time, because its three dimensions do not compare in the
-same direction. An rsdl `labels` value is a list of names with no defined order,
-so the story also defines how a label maps to a level. It carries no pump kind
-and no priority, because D-2 leaves scheduling to the backend and the engine.
+says rsdl declares no process, and it names the shape a grouping noun would
+take; the maintainer reopened it on 2026-10-26. The rsdl reference §12 states
+the same shape, and the story amends that section when it lands. The partition
+is designed against ARINC 653's time and space partitioning rather than
+invented, as the section "What this repository is, and is not" says. The
+rejection compares levels on the ordered `0..N` scales of ADR-0018 decision 9,
+one dimension at a time, because its three dimensions do not compare in the same
+direction. An rsdl `labels` value is a list of names with no defined order, so
+the story also defines how a label maps to a level. The partition carries no
+pump kind and no priority, because D-2 leaves scheduling to the backend and the
+engine.
 
 ---
 
@@ -1258,11 +1269,11 @@ reopening is an observation rather than an argument.
 | E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                       |
 | E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                              |
 | none | Kotlin, the first plugin        | after step 2                                                                       |
-| none | proposed, awaiting a decision   | not in a step — E2.14 and E6.20                                                    |
+| none | the next breaking release       | after 0.14.0 — LIM3, E2.14 and E6.20                                               |
 
 Rows are in step order, not numeric order — the numbering is identity, as the
 tracker section above explains. Three rows have no epic: the Rust codegen
 section is a section of this page holding three Epic 11 stories (E11.7, E11.8,
 E11.12), and Kotlin is a plugin written outside this workspace with no story
-identifier here, and the proposed row groups two stories, of Epics 2 and 6, that
-are in no step.
+identifier here, and the row for the next breaking release groups the last
+limits stage and two stories, of Epics 2 and 6.

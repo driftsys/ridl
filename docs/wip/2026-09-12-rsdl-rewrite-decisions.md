@@ -189,6 +189,10 @@ member outside a catalog no longer exists.
 
 ### D-2 No process declaration, no scheduling facts
 
+**Reopened 2026-10-26.** The maintainer scheduled the partition grouping named
+under "Rejected" below as E6.20 (driftsys/ridl#1085), in the next release marked
+breaking. This decision stands until that story lands and amends it.
+
 **Decision.** rsdl declares no process and carries no pump kind, priority or
 other scheduling fact. Placement is an instance of a component on a machine,
 nothing finer. Crossing kinds in rsdl are three: same machine, different

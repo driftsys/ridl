@@ -7,6 +7,10 @@ list. Nothing here is implemented. It graduates into an ADR that amends
 [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decisions 16
 and 17, or is archived if the proposal is not taken.
 
+Taken on 2026-10-26: the maintainer scheduled the first step of section 7 as
+E2.14 (driftsys/ridl#1084) in the next release marked breaking. The ADR is that
+story's first task.
+
 ## 1. The gap
 
 A contract sometimes needs the same interaction set several times under one

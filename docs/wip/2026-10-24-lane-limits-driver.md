@@ -31,7 +31,8 @@ of stage LIM3 on 2026-10-24. Rulings the lane takes are recorded under
 The stages are sequential: LIM2 lowers the limit that LIM1 resolves, and LIM3
 reads the column that LIM2 adds. LIM1 and LIM2 are additive (a unit with no
 `[limits]` table behaves as today and keeps its catalog hash), so they ship in
-the non-breaking release. LIM3 ships in the next release marked breaking.
+the non-breaking release. LIM3 ships in the next release marked breaking, which
+also carries E2.14 and E6.20 (scheduled 2026-10-26, `docs/ROADMAP.md`).
 
 ## Stage briefs
 
