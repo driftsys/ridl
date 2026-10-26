@@ -181,7 +181,7 @@ jobs:
               return 0
             fi
             echo "$output"
-            if echo "$output" | grep -q "already exists on crates.io index"; then
+            if echo "$output" | grep -qE "already exists on crates\.io index|is already uploaded"; then
               echo "==> $crate $pkg_version already published, skipping"
               return 0
             fi
