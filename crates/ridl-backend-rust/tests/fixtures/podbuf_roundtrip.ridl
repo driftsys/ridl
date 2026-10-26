@@ -1,0 +1,84 @@
+// The podbuf encoder fixture.
+//
+// One declaration per shape whose bytes the encoder test pins against the
+// first-fit law: a head of two bytes padded to eight, a descriptor with pads
+// around it and a field pushed past it, an optional field with its flags
+// byte, an array of struct heads with their strings after the block, a map
+// whose entries are sorted by key, and a deprecated field written as its init
+// value. The measured layouts are the worked examples of the design.
+//
+// Kept self-contained, with no cross-package import: the compile path this
+// fixture is read through (`ridlc::compile`) wraps one file as a single-file
+// synthetic package.
+
+package podbuf.demo
+
+/// A map key.
+type Name : string [0..16]
+
+/// A map value.
+type Weight : integer [0..255]
+
+/// Two bytes: `sensorId` at 0, `isOpen` at 1, pad 2..8.
+struct DoorPayload {
+  sensorId : integer [0..15]
+  isOpen   : boolean
+}
+
+/// `code` at 0, pad 2..4, the descriptor of `message` at 4..12, pad 12..16,
+/// `timestamp` at 16..24: the descriptor keeps `timestamp` out of 8..16.
+struct FaultEvent {
+  code      : integer [0..65535]
+  message   : string [0..256]
+  timestamp : integer [-9223372036854775808..9223372036854775807]
+}
+
+/// `severity` at 0, the flags byte at 1, pad 2..4, the descriptor of
+/// `category` at 4..12, pad 12..16.
+struct DiagFilter {
+  severity : integer [0..255]
+  category : string [0..32]?
+}
+
+/// One descriptor at 0..8 with an element size of 24, the size of a
+/// `FaultEvent` head.
+struct FaultPage {
+  faults : [FaultEvent; 0..64]
+}
+
+/// One descriptor at 0..8 to entries of `{ key, value }`, sorted by key.
+struct Labels {
+  byName : [Name : Weight; 0..8]
+}
+
+/// A deprecated field: the encoder writes its init value, 5, whatever the
+/// domain value holds.
+struct Legacy {
+  /// The retired field.
+  /// @deprecated "no longer read"
+  legacy : integer [1..9] = 5
+}
+
+/// An enum, one byte wide.
+enum Health {
+  OK   = 0
+  WARN = 1
+  FAIL = 2
+}
+
+/// A union: the tag at 0, the arm descriptor at 4..12, pad 1..4 and 12..16.
+/// `ok` writes a `DoorPayload` head; `bad` writes a one-field head.
+union Outcome {
+  ok  : DoorPayload
+  bad : Health
+}
+
+/// `door` at 0..8 (an inline head, at alignment 8), `health` at 8,
+/// `readings` at 10..14 (a later small field fills the gap), `span` at
+/// 16..24 (a tuple is an inline struct rounded to 8); pads 9..10 and 14..16.
+struct Nested {
+  door     : DoorPayload
+  health   : Health
+  span     : (lo: integer [0..15], hi: integer [0..65535])
+  readings : [integer [0..65535]; 2]
+}

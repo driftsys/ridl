@@ -170,7 +170,11 @@ impl<'a> Region<'a> {
 
 /// The descriptor of a string, bytes or union field:
 /// `{ off: u32, len: u32 }`.
+///
+/// `repr(C)`, so that a generated head struct can hold one as a field and
+/// state its offset with the layout the law gives it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
 pub struct Desc {
     /// The offset of the data from the start of the buffer.
     pub off: u32,
@@ -196,7 +200,10 @@ impl Desc {
 
 /// The descriptor of an array or map field:
 /// `{ off: u32, len: u16, elem_size: u16 }`.
+///
+/// `repr(C)`, for the reason [`Desc`] is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
 pub struct ArrayDesc {
     /// The offset of the first element from the start of the buffer.
     pub off: u32,
@@ -379,6 +386,12 @@ impl<'o> Writer<'o> {
         self.store(at, &[v]);
     }
 
+    /// Stores `bytes` at `at`: the data of a string or a bytes field, which
+    /// the encoder has reserved with [`Writer::tail`].
+    pub fn put_bytes(&mut self, at: usize, bytes: &[u8]) {
+        self.store(at, bytes);
+    }
+
     /// Stores the signed byte `v` at `at`.
     pub fn put_i8(&mut self, at: usize, v: i8) {
         self.store(at, &v.to_le_bytes());
@@ -525,6 +538,18 @@ mod tests {
             Err(EncodeError::Layout { at: 12 })
         ));
         assert!(w.reserve_head(16).is_ok());
+    }
+
+    #[test]
+    fn put_bytes_stores_a_slice_inside_the_reserved_tail() {
+        let mut out = Aligned([0xaau8; 32]);
+        let mut w = Writer::new(&mut out.0);
+        w.reserve_head(8).unwrap();
+        let at = w.tail(3, 1).unwrap();
+        w.put_bytes(at, b"ab");
+        let bytes = w.finish().unwrap();
+        assert_eq!(&bytes[16..19], b"ab\0");
+        assert_eq!(bytes.len(), 19);
     }
 
     #[test]

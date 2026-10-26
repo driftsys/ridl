@@ -233,6 +233,7 @@ fn encoding_path(encoding: WireEncoding) -> TokenStream {
     match encoding {
         WireEncoding::FlatBuffers => quote! { ::ridl_rt::encoding::FlatBuffers },
         WireEncoding::Proto3 => quote! { ::ridl_rt::encoding::Proto3 },
+        WireEncoding::Podbuf => quote! { ::ridl_rt::encoding::Podbuf },
     }
 }
 

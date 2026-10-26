@@ -646,8 +646,8 @@ fn bound_state_gives_a_codec_only_to_a_bounded_type() {
     assert!(super::codec_proto3::bound_state(Some(&unbounded)).is_err());
 }
 
-/// The contract accepts `proto3`, alone and beside `flatbuffers`, and still
-/// refuses `podbuf` with the issue that builds its codec.
+/// The contract accepts `proto3`, alone and beside `flatbuffers`, and
+/// `podbuf`, whose encoder is emitted beside the domain types.
 #[test]
 fn the_contract_accepts_proto3() {
     use ridl_ir::codegen::v1::{BackendOption, CodegenRequest};
@@ -697,14 +697,113 @@ fn the_contract_accepts_proto3() {
         );
     }
     let response = respond("podbuf");
-    assert_eq!(response.diagnostics.len(), 1);
     assert!(
-        response.diagnostics[0]
-            .message
-            .contains("driftsys/ridl#317"),
-        "got: {}",
-        response.diagnostics[0].message
+        response.diagnostics.is_empty(),
+        "`podbuf` builds, got: {:?}",
+        response.diagnostics
     );
+}
+
+// ---------------------------------------------------------------------------
+// The podbuf head struct and encoder.
+// ---------------------------------------------------------------------------
+
+/// The podbuf encoder fixture of `tests/fixtures/`, generated with the
+/// podbuf codec alone.
+fn generate_podbuf_fixture() -> String {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/podbuf_roundtrip.ridl");
+    let text = std::fs::read_to_string(&path).expect("read the fixture");
+    let output = ridlc::compile(&path.display().to_string(), &text);
+    generate_pipeline(&output.package, &[WireEncoding::Podbuf], false, &[])
+        .expect("the fixture generates")
+        .rust_source
+}
+
+/// Every read and write of the generated podbuf code is a bounds-checked
+/// little-endian store through `ridl_rt::podbuf`; no emitted line holds
+/// `unsafe`.
+#[test]
+fn the_emitted_podbuf_items_hold_no_unsafe() {
+    let src = generate_podbuf_fixture();
+    assert!(src.contains("FaultEventPodbufHead"), "got:\n{src}");
+    assert!(!src.contains("unsafe"), "got:\n{src}");
+}
+
+/// The head struct is `#[repr(C, align(8))]`, lists its fields and pads by
+/// offset, and carries one `const` assertion per size and offset, so that
+/// rustc checks the law's numbers on every target.
+#[test]
+fn the_podbuf_head_struct_is_repr_c_with_pads_and_assertions() {
+    let src = generate_podbuf_fixture();
+    let head = src
+        .split("pub struct FaultEventPodbufHead {")
+        .nth(1)
+        .expect("the head struct")
+        .split('}')
+        .next()
+        .expect("the body");
+    let members: Vec<&str> = head
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.starts_with("pub "))
+        .collect();
+    assert_eq!(
+        members,
+        [
+            "pub code: ::core::primitive::u16,",
+            "pub _pad2: [::core::primitive::u8; 2],",
+            "pub message: ::ridl_rt::podbuf::Desc,",
+            "pub _pad12: [::core::primitive::u8; 4],",
+            "pub timestamp: ::core::primitive::i64,",
+        ]
+    );
+    let dense: String = src.chars().filter(|c| !c.is_whitespace()).collect();
+    assert!(
+        dense.contains("#[repr(C,align(8))]pubstructFaultEventPodbufHead"),
+        "got:\n{src}"
+    );
+    assert!(
+        dense.contains("assert!(::core::mem::size_of::<FaultEventPodbufHead>()==24usize)"),
+        "got:\n{src}"
+    );
+    assert!(
+        dense.contains("assert!(::core::mem::offset_of!(FaultEventPodbufHead,timestamp)==16usize)"),
+        "got:\n{src}"
+    );
+    assert!(
+        dense.contains("assert!(::core::mem::offset_of!(FaultEventPodbufHead,_pad12)==12usize)"),
+        "got:\n{src}"
+    );
+}
+
+/// The layout the codec emitted from, as the drift test reads it: one entry
+/// per head struct, with the numbers the `const` assertions carry.
+#[test]
+fn podbuf_layout_lists_each_head_with_its_offsets() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/podbuf_roundtrip.ridl");
+    let text = std::fs::read_to_string(&path).expect("read the fixture");
+    let output = ridlc::compile(&path.display().to_string(), &text);
+    let layouts = super::podbuf_layout(&output.package, &[]).expect("the fixture lays out");
+    let fault = layouts
+        .iter()
+        .find(|layout| layout.name == "FaultEventPodbufHead")
+        .expect("FaultEvent has a head");
+    assert_eq!(fault.size, 24);
+    assert_eq!(
+        fault.fields,
+        vec![
+            ("code".to_string(), 0, 2),
+            ("_pad2".to_string(), 2, 2),
+            ("message".to_string(), 4, 8),
+            ("_pad12".to_string(), 12, 4),
+            ("timestamp".to_string(), 16, 8),
+        ]
+    );
+    let names: Vec<&str> = layouts.iter().map(|layout| layout.name.as_str()).collect();
+    assert!(names.contains(&"NestedSpanPodbufHead"), "got {names:?}");
+    assert!(names.contains(&"OutcomePodbufHead"), "got {names:?}");
 }
 
 /// The range and step table is `ridl_ir::zero`'s; this pins only that the

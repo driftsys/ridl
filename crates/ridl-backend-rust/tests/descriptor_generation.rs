@@ -1237,15 +1237,16 @@ fn proto3_is_accepted_through_the_contract() {
     assert!(both.contains("pub mod valve"));
 }
 
-/// An encoding this backend has no codec for yet is refused with the issue
-/// that builds the codec, so a manifest author knows the name is right and
-/// the codec is pending.
+/// `podbuf` is accepted: the package carries the podbuf head structs and
+/// encoders, and no `Sizes<Podbuf>` table until the `Payload<Podbuf>`
+/// implementation lands.
 #[test]
-fn podbuf_is_refused_naming_its_issue() {
-    let message = refused_options(vec![encodings_option("podbuf")]);
+fn podbuf_is_accepted() {
+    let source = backend_response(vec![encodings_option("podbuf")]).expect("a file is written");
+    assert!(source.contains("PodbufHead"), "got: {source}");
     assert!(
-        message.contains("`podbuf`") && message.contains("driftsys/ridl#317"),
-        "got: {message}"
+        !source.contains("Sizes<::ridl_rt::encoding::Podbuf>"),
+        "got: {source}"
     );
 }
 

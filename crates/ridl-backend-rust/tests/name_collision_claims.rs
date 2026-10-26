@@ -297,6 +297,43 @@ struct LevelFbView {
     );
 }
 
+/// The podbuf head of `Level` is `LevelPodbufHead`, and its view is
+/// `LevelPodbufView`; a declaration that names either is refused when the
+/// package lists `podbuf`, and builds when it does not, because the names
+/// are claimed only for the codec that emits them.
+#[test]
+fn a_podbuf_head_or_view_named_like_a_declaration_is_refused_with_podbuf_listed() {
+    for suffix in ["PodbufHead", "PodbufView"] {
+        let source = format!(
+            "package probe.podbuf
+
+struct Level {{
+  value : integer [0..100]
+}}
+
+struct Level{suffix} {{
+  level : Level
+}}
+"
+        );
+        let path = "podbuf_claim.ridl";
+        let output = ridlc::compile(path, &source);
+        let err = generate_pipeline(&output.package, &[WireEncoding::Podbuf], false, &[])
+            .expect_err("the pair is refused when podbuf is listed");
+        names_all(
+            &err.message,
+            &[
+                &format!("`Level{suffix}`"),
+                &format!("declaration `Level{suffix}`"),
+                "declaration `Level`",
+                &format!("`{suffix}`"),
+            ],
+        );
+        generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
+            .unwrap_or_else(|err| panic!("the pair builds without podbuf, got: {}", err.message));
+    }
+}
+
 /// X-11: the tuple at `Reading.bounds` is `ReadingBounds`, which a declaration
 /// already names. The refusal comes from the claim table, before the codec,
 /// so it does not speak of the FlatBuffers projection.
