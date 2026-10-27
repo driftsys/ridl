@@ -111,6 +111,26 @@ fn a_named_tuple_above_u32_max_bytes_is_ridl_153_naming_the_interaction() {
     );
 }
 
+/// A query with two parameters of `Big`: the induced argument struct is about
+/// 7.8 GB, so the request of a query is checked as the request of a command.
+const TOO_LARGE_QUERY_REQUEST: &str = "package demo\n\
+    type Blob: bytes [60000..60000]\n\
+    struct Big {\n  xs: [Blob; 0..65535]\n}\n\
+    interface Ctl {\n  query lookup(a: Big, b: Big): Big @[..1s]\n}\n";
+
+#[test]
+fn the_request_of_a_query_with_parameters_above_u32_max_bytes_is_ridl_153() {
+    let out = check(TOO_LARGE_QUERY_REQUEST, PODBUF);
+    assert_eq!(codes(&out), vec!["RIDL-153"], "{out:?}");
+    assert!(
+        podbuf_errors(&out)[0]
+            .message
+            .starts_with("the request of `demo.Ctl.lookup` is too large for podbuf"),
+        "{}",
+        podbuf_errors(&out)[0].message
+    );
+}
+
 /// A union whose arm is `Huge`: the union's largest encoding is the arm's,
 /// so both the struct and the union draw RIDL-153, each naming itself.
 const TOO_LARGE_UNION: &str = "package demo\n\
@@ -142,6 +162,25 @@ fn an_array_past_the_limit_inside_a_tuple_field_is_ridl_154() {
     assert_eq!(codes(&out), vec!["RIDL-154"], "{out:?}");
     assert!(
         podbuf_errors(&out)[0].message.contains("`demo.Pair.both`"),
+        "{}",
+        podbuf_errors(&out)[0].message
+    );
+}
+
+/// A field of a tuple reply past the count limit draws RIDL-154 on the
+/// interaction, and no RIDL-153 for the bound the tuple has no longer.
+const INTERACTION_TUPLE_LIMITS: &str = "package demo\n\
+    type Flag: boolean\n\
+    interface Ctl {\n  query q(): (a: [Flag; 0..70000], b: Flag) @[..1s]\n}\n";
+
+#[test]
+fn an_array_past_the_limit_in_a_tuple_reply_is_ridl_154_once() {
+    let out = check(INTERACTION_TUPLE_LIMITS, PODBUF);
+    assert_eq!(codes(&out), vec!["RIDL-154"], "{out:?}");
+    assert!(
+        podbuf_errors(&out)[0]
+            .message
+            .starts_with("the field `a` of the reply of `demo.Ctl.q`"),
         "{}",
         podbuf_errors(&out)[0].message
     );

@@ -11,7 +11,8 @@
 //!   once.
 //! - RIDL-154: a field whose array or map declares more than 65,535 elements,
 //!   or whose element or entry is larger than 65,535 bytes. It is reported on
-//!   the field.
+//!   the field of a struct, or on the interaction for a field of a tuple
+//!   reply.
 //! - RIDL-155: a deprecated, non-optional field that has no declared and no
 //!   derivable init value, and whose type excludes 0. The encoder writes a
 //!   deprecated field's init value, so it has no valid value to write. It is
@@ -150,11 +151,42 @@ pub(crate) fn check(ctx: &Ctx<'_>, std_ir: &v2::Package, encodings: &[String]) -
                         packages,
                         tuple,
                     ));
+                    diagnostics.extend(tuple_field_limits(&owner, site, packages, tuple));
                 }
             }
         }
     }
     diagnostics
+}
+
+/// RIDL-154 for each field of the tuple reply of `owner` that is past a
+/// descriptor limit, reported on the interaction. The parameters of a call are
+/// named types or streams, so the induced argument struct has no inline array
+/// or map to check.
+fn tuple_field_limits<'a>(
+    owner: &'a str,
+    site: Span,
+    packages: Packages<'a>,
+    tuple: &'a v2::TupleType,
+) -> impl Iterator<Item = Diagnostic> + 'a {
+    tuple.fields.iter().filter_map(move |field| {
+        let past = field
+            .r#type
+            .as_ref()
+            .is_some_and(|ty| past_descriptor_limits(packages, ty));
+        past.then(|| {
+            error(
+                DiagCode::RIDL_154,
+                site,
+                format!(
+                    "the field `{}` of the reply of `{owner}` declares an array or map with \
+                     more than {MAX_COUNT} elements, or an element or entry larger than \
+                     {MAX_ELEM_SIZE} bytes, which a podbuf descriptor cannot record",
+                    field.name
+                ),
+            )
+        })
+    })
 }
 
 fn error(code: DiagCode, primary: Span, message: String) -> Diagnostic {
