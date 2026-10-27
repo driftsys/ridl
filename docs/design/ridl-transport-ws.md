@@ -271,16 +271,18 @@ other three methods; `Described::new` compares the table's name and hash with
 table is found on the embedder's thread before `serve` runs.
 
 `MemberTable` holds the unit name, the catalog hash, and a map from
-`(InterfaceNo, Ordinal)` to `(Kind, Option<Duration>)`, the duration being the
-member's `max`. A retired interface and a reserved ordinal have no entry (§6.4).
-The embedder builds it through `new` and `insert`, or, with the `descriptor`
-feature, with `MemberTable::from_descriptor` from the bytes of a
-`<unit>.catalog.binfb` file. `from_descriptor` verifies the buffer with
-`ridl_descriptor::verify`, adds one entry for each member, with its `max_us` as
-the bound, and adds each hash of the descriptor's `compatible` list; it returns
-`DescriptorError` for a buffer that fails verification, a hash that is not 32
-bytes, an interface number or an ordinal of 0, and a `max_us` that is not a
-decimal `u64`.
+`(InterfaceNo, Ordinal)` to the member's kind, its `max` bound and its payload
+limit. `insert` sets an entry with no limit; `set_limit` sets the limit of an
+existing entry and `limit` reads it. A retired interface and a reserved ordinal
+have no entry (§6.4). The embedder builds it through `new` and `insert`, or,
+with the `descriptor` feature, with `MemberTable::from_descriptor` from the
+bytes of a `<unit>.catalog.binfb` file. `from_descriptor` verifies the buffer
+with `ridl_descriptor::verify`, adds one entry for each member, with its
+`max_us` as the bound and its `limit` as the payload limit (an absent `limit`
+gives no limit), and adds each hash of the descriptor's `compatible` list; it
+returns `DescriptorError` for a buffer that fails verification, a hash that is
+not 32 bytes, an interface number or an ordinal of 0, and a `max_us` that is not
+a decimal `u64`.
 
 The ports are an associated type rather than supertraits so that an embedder, or
 a test crate, can serve a runtime type it does not own: the orphan rule forbids

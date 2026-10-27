@@ -91,6 +91,16 @@ fn a_descriptor_gives_the_members_their_kinds_and_bounds_and_no_entry_for_reserv
 }
 
 #[test]
+fn each_members_limit_is_read_and_an_absent_one_is_none() {
+    let bytes = descriptor_with(|c| c.interfaces[0].members[0].limit = Some(64));
+    let t = MemberTable::from_descriptor(&bytes).unwrap();
+    let i = InterfaceNo(1);
+    assert_eq!(t.limit(i, Ordinal(1)), Some(64));
+    assert_eq!(t.limit(i, Ordinal(2)), None);
+    assert_eq!(t.limit(InterfaceNo(9), Ordinal(1)), None);
+}
+
+#[test]
 fn a_malformed_buffer_is_a_verify_error() {
     let mut bytes = descriptor();
     bytes.truncate(12);
