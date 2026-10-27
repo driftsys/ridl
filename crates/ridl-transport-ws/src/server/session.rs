@@ -738,8 +738,8 @@ impl<B: Backend> Session<B> {
     /// sent to the backend, with no trace context; a send that fails is
     /// answered at once. A member that the member table does not hold under
     /// the request's kind is answered `contract(UnknownInteraction)`. Arguments
-    /// longer than the payload limit the table gives the member are answered
-    /// `corrupt` without a call to the backend, and no note is recorded; the
+    /// longer than the payload limit the table gives a command or a query are
+    /// answered `corrupt` without a call to the backend, and no note is recorded; the
     /// response is kept like any other. A member with no limit, and a backend
     /// with no member table, leave the message limit as the only bound.
     fn request(
@@ -3819,29 +3819,40 @@ mod tests {
 
     #[test]
     fn a_request_under_another_kind_than_command_or_query_is_unknown_whatever_its_length() {
-        // Ordinal 1 is a signal in the table; a limit on it must not turn the
-        // unknown-interaction answer into `corrupt`.
+        // Ordinals 1, 2 and 5 are a signal, an event and a fixed in the table;
+        // a limit on them must not turn the unknown-interaction answer into
+        // `corrupt`.
+        let kinds = [
+            (Kind::Signal, Ordinal(1)),
+            (Kind::Event, Ordinal(2)),
+            (Kind::Fixed, Ordinal(5)),
+        ];
         let mut t = (*table()).clone();
-        assert!(t.set_limit(IFACE, Ordinal(1), 4));
+        for (_, ord) in kinds {
+            assert!(t.set_limit(IFACE, ord, 4));
+        }
         let (mut s, _p, _n) = described_with(t, |c| c);
         open(&mut s);
-        let target = Target {
-            kind: Kind::Signal,
-            iface: IFACE,
-            ord: Ordinal(1),
-        };
-        let (_, out) = send(&mut s, &request(target, 1, &[1; 5]));
-        assert_eq!(out.len(), 1);
-        assert_eq!(
-            decode(&out[0]).unwrap(),
-            response(
-                target,
-                0,
-                1,
-                1,
-                ResponseOutcome::Contract(Contract::UnknownInteraction)
-            )
-        );
+        for (seq, (kind, ord)) in (1..).zip(kinds) {
+            let target = Target {
+                kind,
+                iface: IFACE,
+                ord,
+            };
+            let (_, out) = send(&mut s, &request(target, seq, &[1; 5]));
+            assert_eq!(out.len(), 1, "{target:?}");
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                response(
+                    target,
+                    0,
+                    seq,
+                    seq,
+                    ResponseOutcome::Contract(Contract::UnknownInteraction)
+                ),
+                "{target:?}"
+            );
+        }
     }
 
     #[test]
