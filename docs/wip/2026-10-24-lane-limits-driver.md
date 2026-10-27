@@ -56,7 +56,11 @@ The plan is `docs/wip/2026-10-24-lane-limits-lim1-plan.md`. One pull request,
   `lower.rs` `member_of`, `describe.rs`), moved here from LIM2 by R-16, and read
   it in the transport's member table.
 - Follow the issue body and the owner comment on #1059.
-- One pull request, `Closes #1059`, with a `BREAKING CHANGE:` footer.
+- Load the `[limits]` table of every materialized remote unit (R-24), which
+  settles driftsys/ridl#1067.
+- The plan is `docs/wip/2026-10-27-lane-limits-lim3-plan.md`.
+- One pull request, `Closes #1059` and `Closes #1067`, with a `BREAKING CHANGE:`
+  footer.
 
 ## Rules every stage follows
 
@@ -162,3 +166,14 @@ Each ruling: what was decided — why — what it costs if wrong.
   #1058 moved to LIM3 (R-16); the pass 2 review raised it. — The stage brief
   fixed the closing keyword. #1059 is commented to own the column. — #1058
   closes with the column undone if #1059 is not followed.
+- **R-24** — Owner ruling 2026-10-27, settling driftsys/ridl#1067 and reversing
+  R-6: LIM3 loads the `[limits]` table of every materialized remote unit, so a
+  consumer records the same limits as the owner and the two catalog hashes
+  agree. A remote unit's limits are recorded, not checked again on the consumer
+  side. — The alternative, a hash that excludes limits, contradicts ADR-0030
+  decision 13 and ADR-0014 decision 15. — A remote unit with a malformed
+  `[limits]` table stops a consumer's build.
+- **R-25** — Owner ruling 2026-10-27: the LIM3 pull request merges once both
+  `/review` passes are done and CI is green, as LIM1 and LIM2 did; the next
+  release from `main` is then marked breaking. — The breaking changes were
+  accepted on driftsys/ridl#1059. — None; no tag and no publish follow.
