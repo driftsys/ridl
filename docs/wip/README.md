@@ -165,6 +165,16 @@ archived on 2026-10-23, once `ridl_rt::payload::transcode` and the generated
 [the generated code chapter](../book/generated-code.md) are their durable
 records.
 
+The lane LIM driver and its three stage plans
+(`2026-10-24-lane-limits-{driver,lim1-plan,lim2-plan}.md` and
+`2026-10-27-lane-limits-lim3-plan.md`) were archived on 2026-10-27, once the
+three stages landed;
+[ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 10 and
+12 to 15, [`../design/ridl-transport-ws.md`](../design/ridl-transport-ws.md),
+[`../design/catalog-descriptor.md`](../design/catalog-descriptor.md), the frame
+specification §11.1 and [the CLI reference](../book/cli-reference.md) are their
+durable records.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)
