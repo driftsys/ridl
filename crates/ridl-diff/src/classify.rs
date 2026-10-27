@@ -1514,6 +1514,8 @@ pub fn explain(category: Category) -> &'static str {
             "only inside an exact-length array that is itself a root (a fixed\n",
             "payload `[S; 2..2]`, which has no head) is not reported: the root or\n",
             "the stride gives the producer's size, and the fields past it read as 0.\n",
+            "A tuple inside such a root is a head, and a struct inside that tuple is\n",
+            "a use.\n",
             "  breaking    with `--encoding podbuf`: the inline copy cannot grow\n",
             "              without moving the fields after it\n",
             "  compatible  otherwise; listed under the heading \"breaking under\n",

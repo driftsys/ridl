@@ -556,10 +556,9 @@ fn package_items(
 /// as the [`ENCODINGS_OPTION`] request option; there is no default, and a
 /// package whose list is empty carries the domain types only.
 ///
-/// Three variants, one per codec `ridl-backend-rust` emits. The FlatBuffers
-/// and proto3 codecs carry a `Payload` implementation each; the podbuf codec
-/// carries the head struct and the encoder today, and its `Payload<Podbuf>`
-/// implementation when the verifier and the decoder land (driftsys/ridl#317).
+/// Three variants, one per codec `ridl-backend-rust` emits. The FlatBuffers,
+/// proto3 and podbuf codecs carry a `Payload` implementation each, and the
+/// podbuf codec also carries the head struct and the read-in-place view.
 /// `#[non_exhaustive]` tells a caller that matches on this that a variant can
 /// still join.
 ///

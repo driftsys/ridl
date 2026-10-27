@@ -202,7 +202,14 @@ member; rsdl is the apex.
                          generated crate, and one generated from the
                          veh-cluster corpus, check with their default features off
                          for thumbv7em-none-eabihf, a target with no standard
-                         library; the corpus crate is also linted with clippy,
+                         library, and with their default features on for
+                         i686-unknown-linux-gnu and
+                         aarch64-unknown-linux-gnu, so that the podbuf layout
+                         assertions are evaluated for a 32-bit and a 64-bit
+                         target; the program also encodes, verifies and decodes
+                         one value through the generated podbuf codec and fails
+                         unless it reports `podbuf round trip: 21.5`; the corpus
+                         crate is also linted with clippy,
                          with its default features and with them off for that
                          target, under -D warnings, so any diagnostic fails
                          it, dead_code included; the lints that its lib.rs

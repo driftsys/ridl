@@ -277,7 +277,9 @@ declare_categories! {
         /// a map entry, a union arm), or only inside an exact-length array
         /// that is itself a root (a fixed payload `[S; 2..2]`, which has no
         /// head) is not reported: the root or the descriptor's stride gives
-        /// the producer's size, and the fields past it read as 0.
+        /// the producer's size, and the fields past it read as 0. A tuple
+        /// inside such a root is a head, and a struct inside that tuple is a
+        /// use.
         PodbufInlineAppend,
     }
 }

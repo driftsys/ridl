@@ -40,8 +40,9 @@
 //! feature, on by default, is what carries the `blocking` module.
 //!
 //! Round trip 7 sends a value through the generated podbuf codec without a
-//! runtime. One runtime for the first six round trips, and every face over it held for the
-//! whole program, which is the shape an application has (driftsys/ridl#488).
+//! runtime. The first six round trips share one runtime, and every face over it
+//! is held for the whole program, which is the shape an application has
+//! (driftsys/ridl#488).
 //! The `Publisher`, the async `Client` and the `blocking::Client` each own an
 //! aggregate from `Loopback::attach`, and the provider side serves over one
 //! handler from `Loopback::handler`. The store is shared, so what one round

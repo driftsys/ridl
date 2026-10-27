@@ -177,7 +177,8 @@ common cases:
   bounded array, the key or value of a map entry, or a union arm, or only
   inside an exact-length array that is itself a root (a fixed payload
   `[S; 2..2]`, which has no head) can grow under podbuf, and such an append is
-  compatible. A field
+  compatible. A tuple inside such a root is a head, and a struct inside that
+  tuple is a use. A field
   removed from a struct, its slot held by a tombstone, is `decl_removed`,
   breaking under every encoding: the type is gone from the source, so its
   bytes cannot be kept.

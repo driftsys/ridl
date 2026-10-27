@@ -442,9 +442,8 @@ fn last_segment(path: &str) -> String {
 /// The generated face reads its payload encoding from its port, and the
 /// generated package carries the encoding tables of the encodings it was
 /// built with. The package of this test lists FlatBuffers and proto3, a copy of
-/// the cabin example without its `podbuf`. So a port that
-/// carries `Podbuf` has no table in that package, and binding a face over it
-/// must be refused.
+/// the cabin example without its `podbuf`. So a port that carries `Podbuf` has
+/// no table in that package, and binding a face over it must be refused.
 ///
 /// What this pins is **where** the refusal lands: at the binding, on the
 /// `Sizes` bound the face declares, and not inside the body of a call that a
