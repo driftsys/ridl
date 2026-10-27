@@ -191,6 +191,61 @@ int main(void) {
     );
 }
 
+/// The presence test of an optional field reads its own bit: a bit above 0 of
+/// the first flags byte, and bit 0 of a second flags byte.
+#[test]
+fn the_presence_tests_read_a_bit_above_zero_and_a_second_flags_byte() {
+    let Some(cc) = host_cc() else {
+        return skip("no C compiler (cc, clang or gcc) on PATH");
+    };
+    let program = r#"
+#include "pod_parts.h"
+
+/* Sparse: the flags byte at 0, o1..o8 at 1..9, the second flags byte at 9,
+   o9 at 10; head 16. o2 = 2, o4 = 4 and o9 = 9 are present: bits 1 and 3 of
+   the first flags byte, bit 0 of the second. */
+static const uint8_t sparse[] = {
+  16, 0, 0, 0, 0, 0, 0, 0,
+  0x0A, 0, 2, 0, 4, 0, 0, 0, 0, 0x01, 9, 0, 0, 0, 0, 0
+};
+
+int main(void) {
+  if (pod_parts_sparse_has_o1(sparse) != 0) return 1;
+  if (pod_parts_sparse_has_o2(sparse) != 1) return 2;
+  if (pod_parts_sparse_o2(sparse) != 2) return 3;
+  if (pod_parts_sparse_has_o3(sparse) != 0) return 4;
+  if (pod_parts_sparse_has_o4(sparse) != 1) return 5;
+  if (pod_parts_sparse_o4(sparse) != 4) return 6;
+  if (pod_parts_sparse_has_o8(sparse) != 0) return 7;
+  if (pod_parts_sparse_has_o9(sparse) != 1) return 8;
+  if (pod_parts_sparse_o9(sparse) != 9) return 9;
+  return 0;
+}
+"#;
+    let dir = with_headers(&two_package_headers(), &[("program.c", program)]);
+    run(
+        cc,
+        &[
+            "-std=c11",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "program.c",
+            "-o",
+            "program",
+        ],
+        dir.path(),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let status = std::process::Command::new(dir.path().join("program"))
+        .status()
+        .expect("run the program");
+    assert!(
+        status.success(),
+        "the presence program exited with {status}"
+    );
+}
+
 /// An accessor over a head of a given size answers 0 for a field past that
 /// size, in the root head and in an array element whose stride is smaller than
 /// the reader's head, and a signed field comes back signed.

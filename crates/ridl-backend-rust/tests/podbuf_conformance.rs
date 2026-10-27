@@ -200,6 +200,18 @@ const VALUE_TABLE: &[Row] = &[
         bytes: "10000000 00000000 | 18000000 03000000 | 1b000000 0200 0100 | 090807 0506",
         build: "build_blob",
     },
+    // §5.1: the first flags byte at 0, `o1` to `o8` at 1..9, the second
+    // flags byte at 9, `o9` at 10, pad 11..16; head 16. `o2`, `o4` and `o9`
+    // are present: bits 1 and 3 of the first flags byte (0x0a) and bit 0 of
+    // the second (0x01). An absent field's byte is zero.
+    Row {
+        name: "Sparse",
+        ty: "Sparse",
+        value: "Sparse { o1: None, o2: Some(2), o3: None, o4: Some(4), o5: None, \
+                o6: None, o7: None, o8: None, o9: Some(9) }",
+        bytes: "10000000 00000000 | 0a 00 02 00 04 00 00 00 00 | 01 09 | 0000000000",
+        build: "build_sparse",
+    },
 ];
 
 /// The values of the table over `podbuf_roundtrip.ridl`.
@@ -265,6 +277,13 @@ fn build_nested(v: &NestedPodbufView<'_>) -> Nested {
 
 fn build_digest(v: &DigestPodbufView<'_>) -> Digest {
     Digest { hash: v.hash().collect() }
+}
+
+fn build_sparse(v: &SparsePodbufView<'_>) -> Sparse {
+    Sparse {
+        o1: v.o1(), o2: v.o2(), o3: v.o3(), o4: v.o4(), o5: v.o5(),
+        o6: v.o6(), o7: v.o7(), o8: v.o8(), o9: v.o9(),
+    }
 }
 
 fn build_blob(v: &BlobPodbufView<'_>) -> Blob {

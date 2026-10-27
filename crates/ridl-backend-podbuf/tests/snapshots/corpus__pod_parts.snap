@@ -190,6 +190,48 @@ _Static_assert(_Alignof(pod_parts_bag_head) == 8, "pod_parts_bag_head alignment"
 _Static_assert(offsetof(pod_parts_bag_head, items) == 0, "pod_parts_bag_head.items offset");
 _Static_assert(sizeof(((pod_parts_bag_head *)0)->items) == 8, "pod_parts_bag_head.items size");
 
+#ifndef POD_PARTS_SPARSE_HEAD_DEFINED
+#define POD_PARTS_SPARSE_HEAD_DEFINED
+typedef struct pod_parts_sparse_head {
+  _Alignas(8) uint8_t _flags0;
+  uint8_t o1;
+  uint8_t o2;
+  uint8_t o3;
+  uint8_t o4;
+  uint8_t o5;
+  uint8_t o6;
+  uint8_t o7;
+  uint8_t o8;
+  uint8_t _flags1;
+  uint8_t o9;
+  uint8_t _pad11[5];
+} pod_parts_sparse_head;
+#endif
+_Static_assert(sizeof(pod_parts_sparse_head) == 16, "pod_parts_sparse_head size");
+_Static_assert(_Alignof(pod_parts_sparse_head) == 8, "pod_parts_sparse_head alignment");
+_Static_assert(offsetof(pod_parts_sparse_head, _flags0) == 0, "pod_parts_sparse_head._flags0 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->_flags0) == 1, "pod_parts_sparse_head._flags0 size");
+_Static_assert(offsetof(pod_parts_sparse_head, o1) == 1, "pod_parts_sparse_head.o1 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->o1) == 1, "pod_parts_sparse_head.o1 size");
+_Static_assert(offsetof(pod_parts_sparse_head, o2) == 2, "pod_parts_sparse_head.o2 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->o2) == 1, "pod_parts_sparse_head.o2 size");
+_Static_assert(offsetof(pod_parts_sparse_head, o3) == 3, "pod_parts_sparse_head.o3 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->o3) == 1, "pod_parts_sparse_head.o3 size");
+_Static_assert(offsetof(pod_parts_sparse_head, o4) == 4, "pod_parts_sparse_head.o4 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->o4) == 1, "pod_parts_sparse_head.o4 size");
+_Static_assert(offsetof(pod_parts_sparse_head, o5) == 5, "pod_parts_sparse_head.o5 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->o5) == 1, "pod_parts_sparse_head.o5 size");
+_Static_assert(offsetof(pod_parts_sparse_head, o6) == 6, "pod_parts_sparse_head.o6 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->o6) == 1, "pod_parts_sparse_head.o6 size");
+_Static_assert(offsetof(pod_parts_sparse_head, o7) == 7, "pod_parts_sparse_head.o7 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->o7) == 1, "pod_parts_sparse_head.o7 size");
+_Static_assert(offsetof(pod_parts_sparse_head, o8) == 8, "pod_parts_sparse_head.o8 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->o8) == 1, "pod_parts_sparse_head.o8 size");
+_Static_assert(offsetof(pod_parts_sparse_head, _flags1) == 9, "pod_parts_sparse_head._flags1 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->_flags1) == 1, "pod_parts_sparse_head._flags1 size");
+_Static_assert(offsetof(pod_parts_sparse_head, o9) == 10, "pod_parts_sparse_head.o9 offset");
+_Static_assert(sizeof(((pod_parts_sparse_head *)0)->o9) == 1, "pod_parts_sparse_head.o9 size");
+
 #ifndef POD_PARTS_TYRE_SLICK_ARM_HEAD_DEFINED
 #define POD_PARTS_TYRE_SLICK_ARM_HEAD_DEFINED
 typedef struct pod_parts_tyre_slick_arm_head {
@@ -304,6 +346,150 @@ static inline const uint8_t *pod_parts_bag_items_at(const uint8_t *buf, const ui
 
 static inline const uint8_t *pod_parts_bag_items(const uint8_t *buf, uint16_t *count, uint16_t *elem_size) {
   return pod_parts_bag_items_at(buf, buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf), count, elem_size);
+}
+
+static inline uint8_t pod_parts_sparse_o1_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 1, 1);
+}
+
+static inline uint8_t pod_parts_sparse_o1(const uint8_t *buf) {
+  return pod_parts_sparse_o1_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline int pod_parts_sparse_has_o1_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 0, 1) >> 0) & 1u);
+}
+
+static inline int pod_parts_sparse_has_o1(const uint8_t *buf) {
+  return pod_parts_sparse_has_o1_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t pod_parts_sparse_o2_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 2, 1);
+}
+
+static inline uint8_t pod_parts_sparse_o2(const uint8_t *buf) {
+  return pod_parts_sparse_o2_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline int pod_parts_sparse_has_o2_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 0, 1) >> 1) & 1u);
+}
+
+static inline int pod_parts_sparse_has_o2(const uint8_t *buf) {
+  return pod_parts_sparse_has_o2_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t pod_parts_sparse_o3_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 3, 1);
+}
+
+static inline uint8_t pod_parts_sparse_o3(const uint8_t *buf) {
+  return pod_parts_sparse_o3_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline int pod_parts_sparse_has_o3_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 0, 1) >> 2) & 1u);
+}
+
+static inline int pod_parts_sparse_has_o3(const uint8_t *buf) {
+  return pod_parts_sparse_has_o3_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t pod_parts_sparse_o4_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 4, 1);
+}
+
+static inline uint8_t pod_parts_sparse_o4(const uint8_t *buf) {
+  return pod_parts_sparse_o4_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline int pod_parts_sparse_has_o4_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 0, 1) >> 3) & 1u);
+}
+
+static inline int pod_parts_sparse_has_o4(const uint8_t *buf) {
+  return pod_parts_sparse_has_o4_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t pod_parts_sparse_o5_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 5, 1);
+}
+
+static inline uint8_t pod_parts_sparse_o5(const uint8_t *buf) {
+  return pod_parts_sparse_o5_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline int pod_parts_sparse_has_o5_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 0, 1) >> 4) & 1u);
+}
+
+static inline int pod_parts_sparse_has_o5(const uint8_t *buf) {
+  return pod_parts_sparse_has_o5_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t pod_parts_sparse_o6_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 6, 1);
+}
+
+static inline uint8_t pod_parts_sparse_o6(const uint8_t *buf) {
+  return pod_parts_sparse_o6_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline int pod_parts_sparse_has_o6_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 0, 1) >> 5) & 1u);
+}
+
+static inline int pod_parts_sparse_has_o6(const uint8_t *buf) {
+  return pod_parts_sparse_has_o6_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t pod_parts_sparse_o7_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 7, 1);
+}
+
+static inline uint8_t pod_parts_sparse_o7(const uint8_t *buf) {
+  return pod_parts_sparse_o7_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline int pod_parts_sparse_has_o7_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 0, 1) >> 6) & 1u);
+}
+
+static inline int pod_parts_sparse_has_o7(const uint8_t *buf) {
+  return pod_parts_sparse_has_o7_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t pod_parts_sparse_o8_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 8, 1);
+}
+
+static inline uint8_t pod_parts_sparse_o8(const uint8_t *buf) {
+  return pod_parts_sparse_o8_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline int pod_parts_sparse_has_o8_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 0, 1) >> 7) & 1u);
+}
+
+static inline int pod_parts_sparse_has_o8(const uint8_t *buf) {
+  return pod_parts_sparse_has_o8_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t pod_parts_sparse_o9_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 10, 1);
+}
+
+static inline uint8_t pod_parts_sparse_o9(const uint8_t *buf) {
+  return pod_parts_sparse_o9_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline int pod_parts_sparse_has_o9_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 9, 1) >> 0) & 1u);
+}
+
+static inline int pod_parts_sparse_has_o9(const uint8_t *buf) {
+  return pod_parts_sparse_has_o9_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
 }
 
 static inline uint8_t pod_parts_tyre_slick_arm_radius_at(const uint8_t *h, uint32_t sz) {

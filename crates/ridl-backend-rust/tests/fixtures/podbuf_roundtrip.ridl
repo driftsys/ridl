@@ -211,3 +211,18 @@ struct ClimateReport {
 struct Grid {
   cells : [[integer [0..255]; 2]; 3]
 }
+
+/// Nine optional bytes: the first flags byte at 0 holds the bits of `o1` to
+/// `o8` (at 1..9), the second flags byte at 9 holds the bit of `o9` (at
+/// 10); pad 11..16. Bits above 0 and a second flags byte are both read.
+struct Sparse {
+  o1 : integer [0..255]?
+  o2 : integer [0..255]?
+  o3 : integer [0..255]?
+  o4 : integer [0..255]?
+  o5 : integer [0..255]?
+  o6 : integer [0..255]?
+  o7 : integer [0..255]?
+  o8 : integer [0..255]?
+  o9 : integer [0..255]?
+}
