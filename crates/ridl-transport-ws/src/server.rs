@@ -15,7 +15,7 @@ use std::net::{Shutdown, TcpStream};
 use std::time::{Duration, Instant};
 
 pub use backend::{Backend, Described, Polling, Scanning, TableMismatch};
-pub use config::{Config, LimitTooSmall, Note, RetainedTooSmall};
+pub use config::{Config, LimitOutOfRange, Note, RetainedTooSmall};
 #[cfg(feature = "descriptor")]
 pub use descriptor::DescriptorError;
 pub use members::MemberTable;
@@ -117,10 +117,9 @@ pub enum Ended {
     /// §11.1 item 4): 1000 after `attached(refused)`, 1001 when the backend
     /// detached, 1002 on a protocol violation, 1003 on a text message, 1009
     /// on a message over [`Config::max_message_bytes`], 1008 when the
-    /// responses the session keeps for a repeated `request` pass the larger
-    /// of [`Config::max_retained_bytes`] and [`Config::max_message_bytes`].
-    /// A violation of the
-    /// frame is also recorded as a [`Note`].
+    /// responses the session keeps for a repeated `request` pass
+    /// [`Config::max_retained_bytes`]. A violation of the frame is also
+    /// recorded as a [`Note`].
     ServerClosed(u16),
     /// The opening handshake was answered `400 Bad Request`, because the
     /// request was malformed, its head passed 8 KiB, it lacked a header the

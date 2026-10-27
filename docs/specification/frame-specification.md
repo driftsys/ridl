@@ -978,11 +978,16 @@ no bytes — and is handed to the generated binding as it is.
 its envelope is 20 bytes (`response`), so a data-plane message is at most 36
 bytes plus the payload bound. The largest header of any message is the `attach`
 at 39 + 255 = 294 bytes; it carries no payload, so a receiver's message size
-limit admits at least 294 bytes. The codegen model carries the data-plane
-numbers as the `websocket` row, binding version `"1"`, `frame_header_max_bytes`
-20, `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is
-derived from this layout: the layout is frozen through the vectors below, and
-the row is a derived value, corrected in a patch release if it is wrong
+limit admits at least 294 bytes. Under the payload ceiling of 16,256 bytes
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 2), the
+largest data-plane message is 36 + 16,256 = 16,292 bytes. The Rust provider
+`ridl-transport-ws` limits a message to 16,292 bytes by default and refuses a
+configured limit above it (ADR-0030 decision 10). The codegen model carries the
+data-plane numbers as the `websocket` row, binding version `"1"`,
+`frame_header_max_bytes` 20, `envelope_bytes` 16
+(`crates/ridl-ir/src/codegen/bindings.rs`). The row is derived from this layout:
+the layout is frozen through the vectors below, and the row is a derived value,
+corrected in a patch release if it is wrong
 ([ADR-0029](../decisions/ADR-0029-stability-policy.md) decision 2).
 
 **3. The encoding tag.** The binding fixes no encoding: a session uses the

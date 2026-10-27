@@ -13,7 +13,7 @@ use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
-    Attached, Caller, Clock, Correlation, Encoded, EventSource, RawOccurrence, RawSample,
+    Attached, Caller, Clock, Correlation, Encoded, EventSource, Handler, RawOccurrence, RawSample,
     ReadError, SendError, SignalReader, SignalWriter, SubscribeError,
 };
 use ridl_rt::sample::{Envelope, Timestamp};
@@ -41,6 +41,11 @@ const COMMAND: Target = Target {
     kind: Kind::Command,
     iface: IFACE,
     ord: Ordinal(3),
+};
+const QUERY: Target = Target {
+    kind: Kind::Query,
+    iface: IFACE,
+    ord: Ordinal(4),
 };
 
 /// An upgrade request this server accepts, for a client without
@@ -1179,25 +1184,26 @@ fn the_answer_to_a_client_close_is_followed_by_the_end_of_the_stream() {
 }
 
 /// Mutation: count frames instead of bytes (the close would then wait for
-/// 1045 responses, which the test never sends).
+/// 16,293 responses, which the test never sends).
 #[test]
 fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
     let (server, client) = pair();
-    let config = config()
-        .with_max_message_bytes(1024)
-        .unwrap()
-        .with_max_retained_bytes(29 * 36)
-        .unwrap();
-    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
+    let config = config().with_max_retained_bytes(16_292).unwrap();
+    let rt = Loopback::new(CATALOG);
+    let mut provider = rt.attach();
+    provider.serve(IFACE, &[QUERY.ord]).unwrap();
+    let handle = spawn(server, Scanning(rt), config);
     let mut ws = connect(client, "ridl-ws-v1").unwrap();
     attach(&mut ws);
-    // Each `request` of a signal kind is answered at once with a 36-byte
-    // `response`; 29 of them are 1044 bytes, the cap, and the 30th passes it.
-    for seq in 1..=30u64 {
+    // Each `request` of the query is settled with 4,037 bytes, and its
+    // `response` is 4,073 bytes; four of them are 16,292 bytes, the cap, and
+    // the fifth passes it.
+    let reply = vec![1u8; 4037];
+    for seq in 1..=5u64 {
         send(
             &mut ws,
             Frame::Request {
-                target: SIGNAL,
+                target: QUERY,
                 envelope: Envelope {
                     stamp: Timestamp(0),
                     seq,
@@ -1205,7 +1211,16 @@ fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
                 payload: &[],
             },
         );
-        assert_eq!(recv(&mut ws).len(), 36, "response {seq}");
+        let start = Instant::now();
+        let claim = loop {
+            assert!(start.elapsed() < TEST_LIMIT, "no claim within the limit");
+            if let Some(claim) = provider.next_claim(&mut [0; 64]).unwrap() {
+                break claim;
+            }
+            thread::sleep(Duration::from_millis(1));
+        };
+        provider.settle(claim.id, Ok(&reply)).unwrap();
+        assert_eq!(recv(&mut ws).len(), 4073, "response {seq}");
     }
     assert_eq!(recv_close(&mut ws), Some(CloseCode::Policy));
     assert_eq!(handle.join().0, Ended::ServerClosed(1008));

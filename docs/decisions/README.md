@@ -531,10 +531,10 @@ other entry below is Accepted.
   decisions: each interaction has its own payload limit, set in a `[limits]`
   table of `ridl.toml` by name, by kind or as a default, never above the ceiling
   (built, with RIDL-151 for a payload above a declared limit and RIDL-152 for an
-  entry that names no interaction); the limit will be covered by the catalog
-  hash, not yet built; the WebSocket message limit will be at most 16,292 bytes,
-  which an embedder can lower but not raise, and a request above its member's
-  limit will be answered `corrupt`.
+  entry that names no interaction); the limit is covered by the catalog hash and
+  carried in a column of the catalog descriptor (built); the WebSocket message
+  limit is at most 16,292 bytes, which an embedder can lower but not raise, and
+  a request above its member's limit is answered `corrupt` (built).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

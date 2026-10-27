@@ -91,7 +91,7 @@ mod server;
 pub use server::DescriptorError;
 #[cfg(feature = "server")]
 pub use server::{
-    serve, Backend, Config, Connection, Described, Ended, LimitTooSmall, MemberTable, Note,
+    serve, Backend, Config, Connection, Described, Ended, LimitOutOfRange, MemberTable, Note,
     Polling, RetainedTooSmall, Scanning, TableMismatch,
 };
 

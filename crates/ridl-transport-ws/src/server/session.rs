@@ -103,7 +103,7 @@ pub(crate) struct Session<B: Backend> {
     /// sends.
     message_limit: usize,
     /// The most bytes the kept responses may hold before the session closes
-    /// with 1008: the larger of the configured cap and the message limit.
+    /// with 1008.
     max_retained_bytes: usize,
     call_abandon_after: Duration,
     record: Option<Record>,
@@ -164,9 +164,7 @@ impl<B: Backend> Session<B> {
             occurrence_cap: limit - empty_occurrence.encoded_len(),
             reply_cap: limit - empty_reply.encoded_len(),
             message_limit: limit,
-            // The effective cap is never below the message limit, so that one
-            // response the limit admits never closes the session on its own.
-            max_retained_bytes: config.max_retained_bytes().max(limit),
+            max_retained_bytes: config.max_retained_bytes(),
             call_abandon_after: config.call_abandon_after,
             record: config.record(),
             attached: false,
@@ -832,8 +830,7 @@ impl<B: Backend> Session<B> {
     /// gives one (frame specification §7), and as one of the last 64
     /// otherwise. A `contract(InvalidValue)` whose rule the frame cannot
     /// carry is sent as `corrupt` and recorded. Returns a close with 1008
-    /// when the kept responses then pass the larger of
-    /// [`Config::max_retained_bytes`] and [`Config::max_message_bytes`]; the
+    /// when the kept responses then pass [`Config::max_retained_bytes`]; the
     /// response is still sent.
     fn respond(
         &mut self,
@@ -1142,8 +1139,7 @@ mod tests {
         Target,
     };
     use crate::server::{
-        Backend, Config, Described, MemberTable, Note, Polling, RetainedTooSmall, Scanning,
-        TableMismatch,
+        Backend, Config, Described, MemberTable, Note, Polling, Scanning, TableMismatch,
     };
 
     const CATALOG: CatalogRef = CatalogRef {
@@ -4115,17 +4111,15 @@ mod tests {
         let notes = Notes::default();
         let rt = Loopback::new(CATALOG);
         let mut p = rt.attach();
-        let limit = 4096;
         let config = config(&notes)
-            .with_max_message_bytes(limit)
-            .unwrap()
-            .with_max_retained_bytes(4 * limit)
+            .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
-        let big = vec![1u8; 4000];
-        // Four replies of 4000 bytes and their headers fit under 16384; the
-        // fifth passes it, long before the ring holds 64.
+        let big = vec![1u8; 4037];
+        // Four replies of 4,037 bytes are 4,073 bytes each with their
+        // headers, 16,292 bytes in all, the cap; the fifth passes it, long
+        // before the ring holds 64.
         for seq in 1..=5 {
             let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
             assert!(out.is_empty());
@@ -4133,7 +4127,7 @@ mod tests {
             p.settle(c.id, Ok(&big)).unwrap();
             let (step, out) = tick(&mut s);
             assert_eq!(out.len(), 1, "reply {seq}");
-            assert!(out[0].len() > 4000, "reply {seq}");
+            assert_eq!(out[0].len(), 4073, "reply {seq}");
             let expected = if seq < 5 {
                 Step::Continue
             } else {
@@ -4148,23 +4142,29 @@ mod tests {
     fn retained_bytes_equal_to_the_cap_do_not_close_and_one_more_byte_closes_1008() {
         let notes = Notes::default();
         let rt = Loopback::new(CATALOG);
-        // A `response` under `contract(UnknownInteraction)` is 36 bytes. The cap
-        // cannot go below the message limit, and the limit cannot go below 294,
-        // so the cap is nine responses, 324 bytes: the ninth reaches the cap
-        // exactly, and the tenth passes it.
+        let mut p = rt.attach();
+        // The cap cannot go below 16,292 bytes. Four `response`s of 4,073
+        // bytes reach it exactly, and the next one passes it.
         let config = config(&notes)
-            .with_max_message_bytes(crate::frame::MIN_MESSAGE_LIMIT)
-            .unwrap()
-            .with_max_retained_bytes(9 * 36)
+            .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
-        for seq in 1..=9 {
-            let (step, out) = send(&mut s, &request(SIGNAL, seq, &[]));
-            assert_eq!((step, out[0].len()), (Step::Continue, 36), "response {seq}");
+        let reply = vec![1u8; 4037];
+        for seq in 1..=4 {
+            let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
+            assert!(out.is_empty());
+            let c = claim(&mut p, QUERY);
+            p.settle(c.id, Ok(&reply)).unwrap();
+            let (step, out) = tick(&mut s);
+            assert_eq!(
+                (step, out.len(), out[0].len()),
+                (Step::Continue, 1, 4073),
+                "response {seq}"
+            );
         }
-        let (step, out) = send(&mut s, &request(SIGNAL, 10, &[]));
-        // The tenth response is still sent, then the session closes.
+        let (step, out) = send(&mut s, &request(SIGNAL, 5, &[]));
+        // The fifth response is still sent, then the session closes.
         assert_eq!((step, out.len()), (Step::Close(1008), 1));
     }
 
@@ -4182,24 +4182,6 @@ mod tests {
             *notes.lock().unwrap(),
             vec![Note::DuplicateDropped { seq: 1 }]
         );
-    }
-
-    /// Mutation: use the raw cap instead of the cap raised to the message
-    /// limit.
-    #[test]
-    fn a_response_above_the_default_cap_within_a_larger_limit_does_not_close() {
-        let (mut s, mut p, _n) = described_with((*table()).clone(), |c| {
-            c.with_max_message_bytes(32 * 1024 * 1024).unwrap()
-        });
-        open(&mut s);
-        let big = vec![1u8; 17 * 1024 * 1024];
-        let (_, out) = send(&mut s, &request(QUERY, 1, &[]));
-        assert!(out.is_empty());
-        let c = claim(&mut p, QUERY);
-        p.settle(c.id, Ok(&big)).unwrap();
-        let (step, out) = tick(&mut s);
-        assert_eq!((step, out.len()), (Step::Continue, 1));
-        assert!(out[0].len() > 16 * 1024 * 1024);
     }
 
     /// Mutation: keep while `now < until` (a zero bound then expires at once).
@@ -4245,25 +4227,6 @@ mod tests {
         tick(&mut s);
         let (_, again) = send(&mut s, &request_at(COMMAND, 1, late, &[]));
         assert_eq!(again, out);
-    }
-
-    #[test]
-    fn a_retained_cap_below_the_message_limit_is_refused() {
-        let config = Config::default().with_max_message_bytes(2048).unwrap();
-        assert_eq!(
-            config.clone().with_max_retained_bytes(2047).err(),
-            Some(RetainedTooSmall {
-                given: 2047,
-                message_limit: 2048
-            })
-        );
-        assert_eq!(
-            config
-                .with_max_retained_bytes(2048)
-                .unwrap()
-                .max_retained_bytes(),
-            2048
-        );
     }
 
     #[test]
