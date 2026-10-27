@@ -564,7 +564,7 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       to the interaction (ADR-0030 decisions 12 and 13). A unit with no
       `[limits]` table hashes as it did before the field existed, and a change
       of an applicable `[limits]` entry changes the unit's hash. The catalog
-      descriptor does not carry the limit yet;
+      descriptor carries the limit in the member's `limit` field;
     - every doc string blank, the doc tags `@labels` and `@deprecated` (the
       `labels` and `deprecated` fields) blank, and `services` and `retired`
       empty.

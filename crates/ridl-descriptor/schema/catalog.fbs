@@ -69,6 +69,10 @@ table Member {
   payloads: [Payload] (required);
   // Absent when the interaction declares none (a fixed never does).
   timing: Timing;
+  // The payload limit in bytes that a `[limits]` entry of the unit's manifest
+  // gives the member (ADR-0030 decisions 12 and 13). Absent when no entry
+  // applies, and in a file written before the field existed.
+  limit: uint32 = null;
 }
 
 table Interface {

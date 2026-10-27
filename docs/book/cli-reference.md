@@ -960,6 +960,10 @@ event = 2048
 "Climate.temperature" = 64      # Interface.member, quoted because of the dot
 ```
 
+The table of a remote unit that `[imports]` names is read too, so its
+interactions record the owner's limits and the consumer computes the owner's
+catalog hash. The consumer reports no RIDL-151 or RIDL-152 for it.
+
 The limit of an interaction is the first that is found of: its entry in
 `[limits.interaction]`, the entry of its kind in `[limits.kind]`, `default`,
 and the payload ceiling of 16,256 bytes. No limit is above the ceiling. A key
@@ -2241,6 +2245,7 @@ ridl describe out/corpus.baseline.catalog.binfb
       "members": [
         {
           "kind": "Signal",
+          "limit": null,
           "name": "currentSpeed",
           "ordinal": 1,
           "payloads": [

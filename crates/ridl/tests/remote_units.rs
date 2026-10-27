@@ -187,6 +187,104 @@ fn build_generates_the_remote_package_but_writes_no_snapshot_or_catalog_for_it()
     );
 }
 
+/// The unit of the build test above, with `limits` appended to its manifest.
+fn probe_unit_with_limits(limits: &str) -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "ridl.toml",
+            format!("{}\n{limits}", COMMON_UNIT[0].1),
+        ),
+        (
+            "common.ridl",
+            "package veh.common\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n\ninterface Probe {\n  signal s: Speed @10ms\n}\n".to_string(),
+        ),
+    ]
+}
+
+/// The table that makes the Rust backend emit descriptors for FlatBuffers.
+const BACKEND_TABLE: &str = "\n[backend.rust]\nencodings = [\"flatbuffers\"]\n";
+
+/// The text between `CatalogHash([` and `])` in a generated module, with
+/// its whitespace removed.
+fn catalog_hash_text(module: &std::path::Path) -> String {
+    let text = std::fs::read_to_string(module).unwrap();
+    let start = text.find("CatalogHash([").expect("the module has a hash") + "CatalogHash([".len();
+    let end = start + text[start..].find("])").expect("the hash ends");
+    text[start..end].split_whitespace().collect()
+}
+
+/// The consumer records the limits of a remote unit, so it computes the same
+/// catalog hash as the owner that builds the unit itself.
+#[test]
+fn a_remote_units_limits_reach_its_catalog_hash() {
+    let files = probe_unit_with_limits("[limits]\ndefault = 64\n");
+    let borrowed: Vec<(&str, &str)> = files.iter().map(|(n, c)| (*n, c.as_str())).collect();
+
+    let owner = TempDir::new("limits-owner");
+    for (name, contents) in &borrowed {
+        owner.write(&format!("unit/{name}"), contents);
+    }
+    // The generated module carries a catalog hash only for a unit that
+    // names an encoding.
+    let owner_manifest = format!("{}{BACKEND_TABLE}", borrowed[0].1);
+    owner.write("unit/ridl.toml", &owner_manifest);
+    let owner_out = TempDir::new("limits-owner-out");
+    let (code, _, stderr) = ridl(
+        &owner.path().join("unit"),
+        owner.path(),
+        &[
+            "build",
+            "--emit",
+            "rust",
+            "--out-dir",
+            owner_out.path().to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, 0, "{stderr}");
+
+    let dir = TempDir::new("limits-consumer");
+    let out = TempDir::new("limits-consumer-out");
+    let stub = Stub::serving(unit_tar(&borrowed));
+    let root = consumer(&dir, stub.url());
+    let consumer_manifest = std::fs::read_to_string(root.join("ridl.toml")).unwrap();
+    dir.write(
+        "app/ridl.toml",
+        &format!("{consumer_manifest}{BACKEND_TABLE}"),
+    );
+    let (code, _, stderr) = ridl(
+        &root,
+        dir.path(),
+        &[
+            "build",
+            "--emit",
+            "rust",
+            "--out-dir",
+            out.path().to_str().unwrap(),
+        ],
+    );
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        catalog_hash_text(&out.path().join("veh.common.rs")),
+        catalog_hash_text(&owner_out.path().join("veh.common.rs")),
+    );
+}
+
+/// The consumer does not check the limits of a remote unit again: a kind
+/// limit of 0 and a key that names no interaction draw nothing.
+#[test]
+fn a_remote_units_limits_are_not_checked_by_the_consumer() {
+    let files = probe_unit_with_limits(
+        "[limits.kind]\nsignal = 0\n\n[limits.interaction]\n\"Nope.x\" = 8\n",
+    );
+    let borrowed: Vec<(&str, &str)> = files.iter().map(|(n, c)| (*n, c.as_str())).collect();
+    let dir = TempDir::new("limits-unchecked");
+    let stub = Stub::serving(unit_tar(&borrowed));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stderr.is_empty(), "a clean run prints nothing: {stderr}");
+}
+
 /// A lockfile written before `tree` existed fails a frozen check with
 /// MANI-108 and is repaired by the next non-frozen check without a fetch.
 #[test]

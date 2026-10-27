@@ -129,6 +129,7 @@ fn nested() -> Vec<u8> {
                     }],
                 }],
                 timing: None,
+                limit: None,
             }],
             reserved_ordinals: vec![],
         }],
@@ -223,6 +224,7 @@ fn full_with(provisional: bool, timing: bool) -> Vec<u8> {
                         kind: Kind::Signal,
                         payloads: vec![],
                         timing: None,
+                        limit: None,
                     },
                     Member {
                         name: "m".to_owned(),
@@ -260,6 +262,7 @@ fn full_with(provisional: bool, timing: bool) -> Vec<u8> {
                                 max_us: Some("2".to_owned()),
                             })
                         }),
+                        limit: Some(7),
                     },
                 ],
                 reserved_ordinals: vec![5, 6],
@@ -298,6 +301,7 @@ const MEMBER_ORDINAL: usize = 1;
 const MEMBER_KIND: usize = 2;
 const MEMBER_PAYLOADS: usize = 3;
 const MEMBER_TIMING: usize = 4;
+const MEMBER_LIMIT: usize = 5;
 const TIMING_MODE: usize = 0;
 const TIMING_MIN_US: usize = 1;
 const TIMING_MAX_US: usize = 2;
@@ -524,6 +528,7 @@ fn every_field_the_walk_reads_is_checked() {
         ("member.kind", Full, member, MEMBER_KIND, Tag),
         ("member.payloads", Full, member, MEMBER_PAYLOADS, Offset),
         ("member.timing", Full, member, MEMBER_TIMING, Offset),
+        ("member.limit", Full, member, MEMBER_LIMIT, Scalar),
         ("timing.mode", Full, timing, TIMING_MODE, Tag),
         ("timing.min_us", Full, timing, TIMING_MIN_US, Offset),
         ("timing.max_us", Full, timing, TIMING_MAX_US, Offset),
@@ -604,6 +609,63 @@ fn a_file_without_the_compatible_field_still_verifies() {
     let bytes = buffer_without_compatible();
     let catalog = verify(&bytes).unwrap();
     assert!(catalog.compatible().unwrap().is_none());
+}
+
+/// A descriptor laid out as a toolchain wrote it before a member's `limit`
+/// field existed: the member's vtable ends at `timing`.
+fn buffer_without_limit() -> Vec<u8> {
+    let bytes = finish(&Catalog {
+        version: SCHEMA_VERSION,
+        name: "p".to_owned(),
+        hash: vec![0u8; 32],
+        toolchain: "0.0.0".to_owned(),
+        interfaces: vec![Interface {
+            name: "I".to_owned(),
+            number: 1,
+            provisional: false,
+            members: vec![Member {
+                name: "m".to_owned(),
+                ordinal: 1,
+                kind: Kind::Signal,
+                payloads: vec![],
+                timing: Some(Box::new(Timing {
+                    mode: TimingMode::StrictPeriodic,
+                    min_us: Some("1".to_owned()),
+                    max_us: Some("1".to_owned()),
+                })),
+                limit: None,
+            }],
+            reserved_ordinals: vec![],
+        }],
+        retired: vec![],
+        compatible: None,
+    });
+    let interface = follow(
+        &bytes,
+        follow(&bytes, field(&bytes, root(&bytes), CATALOG_INTERFACES)) + 4,
+    );
+    let member = follow(
+        &bytes,
+        follow(&bytes, field(&bytes, interface, INTERFACE_MEMBERS)) + 4,
+    );
+    assert!(
+        has_field(&bytes, member, MEMBER_TIMING),
+        "the member must hold its timing"
+    );
+    assert!(
+        try_vtable_entry(&bytes, member, MEMBER_LIMIT).is_none(),
+        "the member's vtable must end before the limit slot"
+    );
+    bytes
+}
+
+#[test]
+fn a_file_without_the_limit_field_still_verifies() {
+    let bytes = buffer_without_limit();
+    let catalog = verify(&bytes).unwrap();
+    let interface = catalog.interfaces().unwrap().get(0).unwrap().unwrap();
+    let member = interface.members().unwrap().get(0).unwrap().unwrap();
+    assert_eq!(member.limit().unwrap(), None);
 }
 
 /// With `std` off the crate still implements `core::error::Error` for
