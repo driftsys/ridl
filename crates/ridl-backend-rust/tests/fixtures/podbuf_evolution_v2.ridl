@@ -1,0 +1,52 @@
+// The second version of the podbuf evolution fixture.
+//
+// `podbuf_evolution_v1.ridl` with fields appended. The first-fit law places
+// each appended field without moving an existing one:
+//
+// - `FaultEvent.priority` fills the pad at offset 2, inside the 24 bytes of
+//   the first version's head. `FaultEvent.extra` cannot fit in 0..24, so it
+//   goes at 24 and the head grows to 32.
+// - `Entry.note` is the first optional field, so a flags byte is placed
+//   first, at offset 1, and the descriptor of `note` follows at 4..12. The
+//   head grows from 8 to 16.
+
+package podbuf.evolution
+
+/// `code` at 0, `priority` at 2, the descriptor of `message` at 4..12,
+/// `timestamp` at 16..24, `extra` at 24..32: a head of 32 bytes.
+struct FaultEvent {
+  code      : integer [0..65535]
+  message   : string [0..256]
+  timestamp : integer [-9223372036854775808..9223372036854775807]
+  priority  : integer [0..9]
+  extra     : integer [-9223372036854775808..9223372036854775807]
+}
+
+/// One descriptor at 0..8 with an element size of 32.
+struct FaultPage {
+  faults : [FaultEvent; 0..8]
+}
+
+/// `id` at 0, the flags byte at 1, the descriptor of `note` at 4..12, pad
+/// 2..4 and 12..16: a head of 16 bytes.
+struct Entry {
+  id   : integer [0..255]
+  note : string [0..8]?
+}
+
+/// One descriptor at 0..8 with an element size of 16.
+struct Entries {
+  items : [Entry; 0..8]
+}
+
+/// `Blank` gained a field: `n` at 0, pad 1..8: a head of 8 bytes.
+struct Blank {
+  n : integer [0..255]
+}
+
+/// The tag at 0, the arm descriptor at 4..12; a head of 16 bytes. The
+/// `none` arm is now an 8-byte head in the tail.
+union Maybe {
+  none : Blank
+  some : Entry
+}

@@ -239,13 +239,13 @@ mod root {
                 /// The variant `FlatBuffers` in the enum `Encoding`
                 FlatBuffers = 1,
 
-                /// The variant `ReprC` in the enum `Encoding`
-                ReprC = 2,
+                /// The variant `Podbuf` in the enum `Encoding`
+                Podbuf = 2,
             }
 
             impl Encoding {
                 /// Array containing all valid variants of Encoding
-                pub const ENUM_VALUES: [Self; 3] = [Self::Proto3, Self::FlatBuffers, Self::ReprC];
+                pub const ENUM_VALUES: [Self; 3] = [Self::Proto3, Self::FlatBuffers, Self::Podbuf];
             }
 
             impl ::core::convert::TryFrom<u8> for Encoding {
@@ -259,7 +259,7 @@ mod root {
                     match value {
                         0 => ::core::result::Result::Ok(Encoding::Proto3),
                         1 => ::core::result::Result::Ok(Encoding::FlatBuffers),
-                        2 => ::core::result::Result::Ok(Encoding::ReprC),
+                        2 => ::core::result::Result::Ok(Encoding::Podbuf),
 
                         _ => ::core::result::Result::Err(::planus::errors::UnknownEnumTagKind {
                             tag: value as i128,

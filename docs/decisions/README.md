@@ -253,7 +253,7 @@ other entry below is Accepted.
   driftsys/ridl#713.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
-  plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a
+  plugin system.** _Proposed._ `podbuf` joins proto3 and FlatBuffers as a
   payload encoding, and the encoding matrix settles the codec-in-wasm boundary
   as FlatBuffers; `ridl-rt` is one `no_std` crate with one cargo feature per
   encoding (a fourth, non-encoding feature `std` is ADR-0021 decision 8's
@@ -536,6 +536,25 @@ other entry below is Accepted.
   WebSocket message limit is at most 16,292 bytes, which an embedder can lower
   but not raise, and a request above its member's limit is answered `corrupt`
   (built).
+
+- **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
+  _Accepted._ The projection record that ADR-0020 decision 4 asks for. Fifteen
+  decisions: the target rule (little-endian, head alignment 8, `const` and
+  `_Static_assert` checks); a buffer of an 8-byte preamble, a head and a tail,
+  with 8-byte descriptors and a `u16` stride; the first-fit placement law with
+  optional flags; the value rules and the totality table, with RIDL-153 to
+  RIDL-155 for a type too large, an array or map past the descriptor limits and
+  a deprecated field with no valid value; the generated names; `verify` as a
+  call tree that checks the data present and never the pads; the encoder's duty
+  to zero every pad; the evolution rules (an append that reads as 0 is
+  compatible, an append to a struct held inline is a break, a field removal
+  breaks under every encoding); strict and open enums, decided, with the typl
+  `open` keyword not built; the `podbuf_inline_append`, `podbuf_width_change`
+  and `podbuf_strict_enum_append` diff categories and RIDL-156
+  `podbuf-padding-order`; and what the backend generates and exposes in the
+  codegen model. It lists where it departs from the design it restates, which is
+  archived, and carries five open items. Amends ADR-0020 decision 4 and closes
+  its open item 1.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

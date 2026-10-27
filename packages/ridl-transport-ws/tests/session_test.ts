@@ -931,7 +931,7 @@ Deno.test("the end of the session clears the held samples", async () => {
 });
 
 Deno.test("the encoding option sets the attach's encoding tag", () => {
-  for (const [encoding, tag] of [["flatbuffers", 1], ["repr-c", 3]] as const) {
+  for (const [encoding, tag] of [["flatbuffers", 1], ["podbuf", 3]] as const) {
     const h = start("veh.cabin", { encoding });
     h.sockets[0].open(SUBPROTOCOL);
     const sent = lastSent(h.sockets[0]);

@@ -18,6 +18,9 @@ ridl.codegen.v1.Arm.since = 9 repeated string
 ridl.codegen.v1.Arm.type = 3 singular ridl.codegen.v1.TypeRef
 ridl.codegen.v1.ArmBox.arm = 2 singular uint32
 ridl.codegen.v1.ArmBox.declaration = 1 singular uint32
+ridl.codegen.v1.ArmHead.arm = 2 singular uint32
+ridl.codegen.v1.ArmHead.declaration = 1 singular uint32
+ridl.codegen.v1.ArmHead.foreign = 3 optional uint32
 ridl.codegen.v1.ArrayType.element = 1 singular ridl.codegen.v1.Type
 ridl.codegen.v1.ArrayType.max = 3 singular uint64
 ridl.codegen.v1.ArrayType.min = 2 singular uint64
@@ -135,6 +138,7 @@ ridl.codegen.v1.Declaration.is_error = 3 singular bool
 ridl.codegen.v1.Declaration.labels = 5 repeated string
 ridl.codegen.v1.Declaration.links = 20 repeated ridl.codegen.v1.DocLink
 ridl.codegen.v1.Declaration.name = 1 singular ridl.codegen.v1.Spellings
+ridl.codegen.v1.Declaration.podbuf = 25 singular ridl.codegen.v1.SizeState
 ridl.codegen.v1.Declaration.proto3 = 24 singular ridl.codegen.v1.SizeState
 ridl.codegen.v1.Declaration.rules = 23 repeated ridl.codegen.v1.Rule
 ridl.codegen.v1.Declaration.scalar = 10 singular ridl.codegen.v1.Scalar oneof=kind
@@ -166,10 +170,10 @@ ridl.codegen.v1.DottedName.dotted = 1 singular string
 ridl.codegen.v1.DottedName.joined_camel = 3 singular string
 ridl.codegen.v1.DottedName.segments = 2 repeated string
 ridl.codegen.v1.DottedName.underscored = 4 singular string
-ridl.codegen.v1.Encoding values ENCODING_FLATBUFFERS ENCODING_PROTO3 ENCODING_REPR_C ENCODING_UNSPECIFIED
+ridl.codegen.v1.Encoding values ENCODING_FLATBUFFERS ENCODING_PODBUF ENCODING_PROTO3 ENCODING_UNSPECIFIED
 ridl.codegen.v1.Encoding.ENCODING_FLATBUFFERS = 2
+ridl.codegen.v1.Encoding.ENCODING_PODBUF = 3
 ridl.codegen.v1.Encoding.ENCODING_PROTO3 = 1
-ridl.codegen.v1.Encoding.ENCODING_REPR_C = 3
 ridl.codegen.v1.Encoding.ENCODING_UNSPECIFIED = 0
 ridl.codegen.v1.Endpoint.component = 1 singular string
 ridl.codegen.v1.Endpoint.instance = 2 singular string
@@ -389,10 +393,12 @@ ridl.codegen.v1.Model.flatbuffers = 8 singular ridl.codegen.v1.FlatBuffersProjec
 ridl.codegen.v1.Model.foreign = 9 repeated ridl.codegen.v1.ForeignDeclaration
 ridl.codegen.v1.Model.interfaces = 5 repeated ridl.codegen.v1.Interface
 ridl.codegen.v1.Model.name = 1 singular ridl.codegen.v1.DottedName
+ridl.codegen.v1.Model.podbuf = 11 singular ridl.codegen.v1.PodbufProjection
 ridl.codegen.v1.Model.scope = 2 singular ridl.codegen.v1.Scope
 ridl.codegen.v1.Model.services = 6 repeated ridl.codegen.v1.Service
 ridl.codegen.v1.Model.tuple_collisions = 10 repeated ridl.codegen.v1.TupleCollision
 ridl.codegen.v1.Model.tuples = 4 repeated ridl.codegen.v1.InducedTuple
+ridl.codegen.v1.NestedTuple.path = 1 repeated string
 ridl.codegen.v1.Param.doc = 3 singular string
 ridl.codegen.v1.Param.links = 4 repeated ridl.codegen.v1.DocLink
 ridl.codegen.v1.Param.name = 1 singular ridl.codegen.v1.Spellings
@@ -404,7 +410,80 @@ ridl.codegen.v1.Payload.flatbuffers_max_size = 2 optional uint32
 ridl.codegen.v1.Payload.sizes = 3 singular ridl.codegen.v1.PayloadSizes
 ridl.codegen.v1.Payload.type = 1 singular ridl.codegen.v1.TypeRef
 ridl.codegen.v1.PayloadSizes.flatbuffers = 2 singular ridl.codegen.v1.SizeState
+ridl.codegen.v1.PayloadSizes.podbuf = 3 singular ridl.codegen.v1.SizeState
 ridl.codegen.v1.PayloadSizes.proto3 = 1 singular ridl.codegen.v1.SizeState
+ridl.codegen.v1.PodbufArm.head = 2 singular uint32
+ridl.codegen.v1.PodbufArm.ordinal = 1 singular uint32
+ridl.codegen.v1.PodbufArms.arms = 1 repeated ridl.codegen.v1.PodbufArm
+ridl.codegen.v1.PodbufArray.elem_size = 2 singular uint32
+ridl.codegen.v1.PodbufArray.element = 1 singular ridl.codegen.v1.PodbufForm
+ridl.codegen.v1.PodbufArray.max = 4 singular uint64
+ridl.codegen.v1.PodbufArray.min = 3 singular uint64
+ridl.codegen.v1.PodbufBound.max = 2 singular uint64
+ridl.codegen.v1.PodbufBound.min = 1 singular uint64
+ridl.codegen.v1.PodbufBox.declaration = 1 singular uint32
+ridl.codegen.v1.PodbufBox.head = 2 singular ridl.codegen.v1.PodbufHead
+ridl.codegen.v1.PodbufDescriptor.arms = 14 singular ridl.codegen.v1.PodbufArms oneof=kind
+ridl.codegen.v1.PodbufDescriptor.array = 12 singular ridl.codegen.v1.PodbufArray oneof=kind
+ridl.codegen.v1.PodbufDescriptor.bytes = 11 singular ridl.codegen.v1.PodbufBound oneof=kind
+ridl.codegen.v1.PodbufDescriptor.map = 13 singular ridl.codegen.v1.PodbufMap oneof=kind
+ridl.codegen.v1.PodbufDescriptor.text = 10 singular ridl.codegen.v1.PodbufBound oneof=kind
+ridl.codegen.v1.PodbufEnum.reference = 3 singular string
+ridl.codegen.v1.PodbufEnum.signed = 2 singular bool
+ridl.codegen.v1.PodbufEnum.width = 1 singular ridl.codegen.v1.IntWidth
+ridl.codegen.v1.PodbufEnumSet.reference = 2 singular string
+ridl.codegen.v1.PodbufEnumSet.width = 1 singular ridl.codegen.v1.IntWidth
+ridl.codegen.v1.PodbufField.align = 4 singular uint32
+ridl.codegen.v1.PodbufField.form = 5 singular ridl.codegen.v1.PodbufForm
+ridl.codegen.v1.PodbufField.offset = 2 singular uint32
+ridl.codegen.v1.PodbufField.optional = 6 optional ridl.codegen.v1.PodbufFlagBit
+ridl.codegen.v1.PodbufField.size = 3 singular uint32
+ridl.codegen.v1.PodbufField.source = 1 singular ridl.codegen.v1.PodbufSource
+ridl.codegen.v1.PodbufFlagBit.bit = 2 singular uint32
+ridl.codegen.v1.PodbufFlagBit.flags = 1 singular uint32
+ridl.codegen.v1.PodbufForm.boolean = 10 singular bool oneof=kind
+ridl.codegen.v1.PodbufForm.descriptor = 17 singular ridl.codegen.v1.PodbufDescriptor oneof=kind
+ridl.codegen.v1.PodbufForm.enum = 13 singular ridl.codegen.v1.PodbufEnum oneof=kind
+ridl.codegen.v1.PodbufForm.enum_set = 14 singular ridl.codegen.v1.PodbufEnumSet oneof=kind
+ridl.codegen.v1.PodbufForm.float = 12 singular ridl.codegen.v1.FloatWidth oneof=kind
+ridl.codegen.v1.PodbufForm.inline_array = 16 singular ridl.codegen.v1.PodbufInlineArray oneof=kind
+ridl.codegen.v1.PodbufForm.inline_head = 15 singular uint32 oneof=kind
+ridl.codegen.v1.PodbufForm.int = 11 singular ridl.codegen.v1.PodbufInt oneof=kind
+ridl.codegen.v1.PodbufHead.align = 3 singular uint32
+ridl.codegen.v1.PodbufHead.arm = 13 singular ridl.codegen.v1.ArmHead oneof=source
+ridl.codegen.v1.PodbufHead.declaration = 10 singular uint32 oneof=source
+ridl.codegen.v1.PodbufHead.fields = 4 repeated ridl.codegen.v1.PodbufField
+ridl.codegen.v1.PodbufHead.foreign = 14 singular uint32 oneof=source
+ridl.codegen.v1.PodbufHead.map_entry = 12 singular ridl.codegen.v1.MapEntry oneof=source
+ridl.codegen.v1.PodbufHead.nested_tuple = 15 singular ridl.codegen.v1.NestedTuple oneof=source
+ridl.codegen.v1.PodbufHead.pads = 5 repeated ridl.codegen.v1.PodbufPad
+ridl.codegen.v1.PodbufHead.size = 2 singular uint32
+ridl.codegen.v1.PodbufHead.tuple = 11 singular uint32 oneof=source
+ridl.codegen.v1.PodbufInlineArray.count = 2 singular uint32
+ridl.codegen.v1.PodbufInlineArray.element = 1 singular ridl.codegen.v1.PodbufForm
+ridl.codegen.v1.PodbufInt.signed = 2 singular bool
+ridl.codegen.v1.PodbufInt.width = 1 singular ridl.codegen.v1.IntWidth
+ridl.codegen.v1.PodbufMap.elem_size = 2 singular uint32
+ridl.codegen.v1.PodbufMap.entry_head = 1 singular uint32
+ridl.codegen.v1.PodbufMap.max = 4 singular uint64
+ridl.codegen.v1.PodbufMap.min = 3 singular uint64
+ridl.codegen.v1.PodbufNamedField.name = 1 singular string
+ridl.codegen.v1.PodbufNamedField.ordinal = 2 singular uint32
+ridl.codegen.v1.PodbufPad.offset = 1 singular uint32
+ridl.codegen.v1.PodbufPad.size = 2 singular uint32
+ridl.codegen.v1.PodbufProjection.boxes = 3 repeated ridl.codegen.v1.PodbufBox
+ridl.codegen.v1.PodbufProjection.heads = 1 repeated ridl.codegen.v1.PodbufHead
+ridl.codegen.v1.PodbufProjection.refused = 2 repeated ridl.codegen.v1.PodbufRefused
+ridl.codegen.v1.PodbufRefused.cause = 2 singular string
+ridl.codegen.v1.PodbufRefused.declaration = 10 singular uint32 oneof=source
+ridl.codegen.v1.PodbufRefused.tuple = 11 singular uint32 oneof=source
+ridl.codegen.v1.PodbufSource.arm = 13 singular bool oneof=kind
+ridl.codegen.v1.PodbufSource.field = 10 singular ridl.codegen.v1.PodbufNamedField oneof=kind
+ridl.codegen.v1.PodbufSource.flags = 11 singular uint32 oneof=kind
+ridl.codegen.v1.PodbufSource.key = 15 singular bool oneof=kind
+ridl.codegen.v1.PodbufSource.position = 14 singular uint32 oneof=kind
+ridl.codegen.v1.PodbufSource.tag = 12 singular bool oneof=kind
+ridl.codegen.v1.PodbufSource.value = 16 singular bool oneof=kind
 ridl.codegen.v1.PrimitiveType values PRIMITIVE_TYPE_BOOLEAN PRIMITIVE_TYPE_BYTES PRIMITIVE_TYPE_FLOAT PRIMITIVE_TYPE_INTEGER PRIMITIVE_TYPE_STRING PRIMITIVE_TYPE_UNSPECIFIED
 ridl.codegen.v1.PrimitiveType.PRIMITIVE_TYPE_BOOLEAN = 1
 ridl.codegen.v1.PrimitiveType.PRIMITIVE_TYPE_BYTES = 5
@@ -432,6 +511,7 @@ ridl.codegen.v1.RegionInterface.service = 5 singular string
 ridl.codegen.v1.Reply.fallible = 11 singular ridl.codegen.v1.Fallible oneof=kind
 ridl.codegen.v1.Reply.value = 10 singular ridl.codegen.v1.Type oneof=kind
 ridl.codegen.v1.Reservation.flatbuffers = 2 singular ridl.codegen.v1.ReservationState
+ridl.codegen.v1.Reservation.podbuf = 3 singular ridl.codegen.v1.ReservationState
 ridl.codegen.v1.Reservation.proto3 = 1 singular ridl.codegen.v1.ReservationState
 ridl.codegen.v1.ReservationState.bytes = 10 singular uint64 oneof=state
 ridl.codegen.v1.ReservationState.unsized = 11 singular string oneof=state

@@ -217,6 +217,7 @@ jobs:
           publish ridl-diff
           publish ridl-fmt
           publish ridl-backend-flatbuffers
+          publish ridl-backend-podbuf
           publish ridl-backend-proto
           publish ridl-backend-rust
           publish ridl-backend-ts

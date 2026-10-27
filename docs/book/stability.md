@@ -22,15 +22,16 @@ promise covers them from the first release that contains them.
   (`Client`, `Provider`, `Publisher`, `Event`, `serve` and `Bind`).
 - **The runtime crates.** The public API of `ridl-rt`, `ridl-rt-conformance`,
   `ridl-loopback`, `ridl-descriptor` and `ridl-transport-ws`, and the names of
-  their cargo features.
+  their cargo features, `podbuf` among them.
 - **The codegen plugin protocol.** The messages `ridl.ir.v2` and
   `ridl.codegen.v1`, as a plugin reads and writes them. An enum of the protocol
   gains a value only in a minor release, such as 0.11, because a plugin rejects
   an enum value that it does not know.
 - **The MCP tools.** The tool names and the input and output schemas.
 - **The wire format.** The frame envelope, the `attach` handshake, the inputs of
-  the catalog hash, the emitted `.proto` and `.fbs` mapping and the encoding
-  names.
+  the catalog hash, the emitted `.proto` and `.fbs` mapping, the encoding names,
+  and the offset and size of every field of the podbuf head of every struct and
+  union of the frozen corpus.
 - **The minimum Rust version.** Rust 1.88 for `ridl-rt`,
   `ridl-rt-conformance`, `ridl-loopback`, `ridl-transport-ws` (with every cargo
   feature) and `ridl-descriptor`, with edition 2021 for the first four and

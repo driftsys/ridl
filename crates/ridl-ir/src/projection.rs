@@ -16,8 +16,11 @@
 //! ADR-0017's scalar table once, for the `.proto` emitter and for [`size`].
 //! [`size`] states the maximum encoded size of a payload under each of those
 //! two encodings, over both of them; it is the one sizer, and the catalog
-//! descriptor and the codegen model both read it.
+//! descriptor and the codegen model both read it. [`podbuf`] computes the
+//! podbuf layout of a type once — the head every placement goes in, and the
+//! size bound — for the emitters and the checks that read it.
 
 pub mod flatbuffers;
+pub mod podbuf;
 pub mod proto3;
 pub mod size;

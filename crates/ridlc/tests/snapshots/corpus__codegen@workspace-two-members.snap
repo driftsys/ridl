@@ -1,5 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
 ---
@@ -72,6 +73,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       "proto3": {
         "bounded": 5
       },
+      "podbuf": {
+        "bounded": 16
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "km/h",
@@ -133,6 +137,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       ],
       "proto3": {
         "bounded": 5
+      },
+      "podbuf": {
+        "bounded": 16
       },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
@@ -209,7 +216,65 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
     ]
   },
   "foreign": [],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [],
+    "refused": [],
+    "boxes": [
+      {
+        "declaration": 0,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "arm": true
+              },
+              "offset": 0,
+              "size": 4,
+              "align": 4,
+              "form": {
+                "float": "FLOAT_WIDTH_F32"
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 4,
+              "size": 4
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 1,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "arm": true
+              },
+              "offset": 0,
+              "size": 4,
+              "align": 4,
+              "form": {
+                "float": "FLOAT_WIDTH_F32"
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 4,
+              "size": 4
+            }
+          ]
+        }
+      }
+    ]
+  }
 }
 
 // ===== package veh.cluster =====
@@ -263,6 +328,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       "rules": [],
       "proto3": {
         "bounded": 5
+      },
+      "podbuf": {
+        "bounded": 16
       },
       "struct": {
         "slots": [
@@ -413,6 +481,9 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "proto3": {
           "bounded": 5
         },
+        "podbuf": {
+          "bounded": 16
+        },
         "scalar": {
           "class": "SCALAR_CLASS_FLOAT",
           "unit": "km/h",
@@ -427,5 +498,38 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
       }
     }
   ],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "speed",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 4,
+            "align": 4,
+            "form": {
+              "float": "FLOAT_WIDTH_F32"
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 4,
+            "size": 4
+          }
+        ],
+        "declaration": 0
+      }
+    ],
+    "refused": [],
+    "boxes": []
+  }
 }

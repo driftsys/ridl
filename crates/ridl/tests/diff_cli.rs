@@ -466,6 +466,267 @@ fn a_narrowed_range_exits_one_and_a_widened_range_exits_zero() {
     );
 }
 
+/// `ridl diff --encoding podbuf` over a field appended to a struct that
+/// another struct holds inline: exit 1 with the flag, exit 0 without it, and
+/// the line sits under the heading "breaking under podbuf" both times. An
+/// encoding the manifest does not name is a usage error, exit 2.
+#[test]
+fn diff_encoding_podbuf_exits_1_on_an_inline_append() {
+    const INLINE_V1: &str = "package veh.cluster
+type Level: integer [0..100]
+struct Reading {
+  value: Level
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+";
+    const INLINE_V2: &str = "package veh.cluster
+type Level: integer [0..100]
+struct Reading {
+  value: Level
+  quality: Level
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+";
+    let dir = TempDir::new("encoding");
+    let v1 = dir.write("v1.typl", INLINE_V1);
+    let v2 = dir.write("v2.typl", INLINE_V2);
+
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "podbuf".as_ref(),
+        v1.as_os_str(),
+        v2.as_os_str(),
+    ]);
+    assert_eq!(
+        code, 1,
+        "an inline append exits 1 under podbuf, stderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains(
+            "breaking under podbuf:\n  [breaking] podbuf_inline_append \
+             veh.cluster/Reading/quality: (absent) -> nested inline in veh.cluster/Bounds/range"
+        ),
+        "stdout:\n{stdout}"
+    );
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), v1.as_os_str(), v2.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "the same append exits 0 without the flag, stderr:\n{stderr}"
+    );
+    assert!(stdout.starts_with("compatible"), "stdout:\n{stdout}");
+    assert!(
+        stdout.contains(
+            "breaking under podbuf:\n  [compatible] podbuf_inline_append veh.cluster/Reading/quality"
+        ),
+        "stdout:\n{stdout}"
+    );
+
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "flatbuffers".as_ref(),
+        "--encoding".as_ref(),
+        "proto3".as_ref(),
+        v1.as_os_str(),
+        v2.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "no other encoding has the rule, stderr:\n{stderr}");
+    assert!(stdout.starts_with("compatible"), "stdout:\n{stdout}");
+
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "podbuff".as_ref(),
+        v1.as_os_str(),
+        v2.as_os_str(),
+    ]);
+    assert_eq!(
+        code, 2,
+        "an unknown encoding is a usage error, stdout:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("invalid value 'podbuff' for '--encoding <ENCODING>'"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("[possible values: flatbuffers, proto3, podbuf]"),
+        "stderr:\n{stderr}"
+    );
+}
+
+/// An enum value appended at 256 widens the enum's podbuf integer from `u8`
+/// to `u16`: `podbuf_width_change`, exit 1 under `--encoding podbuf` and exit
+/// 0 without the flag. A value appended at 255 keeps the width and draws no
+/// such line. The same at the 255/256 arm boundary of a union.
+#[test]
+fn an_appended_enum_value_or_union_arm_that_widens_is_a_podbuf_break() {
+    fn enum_source(count: usize) -> String {
+        let values: String = (0..count)
+            .map(|value| format!("  V{value} = {value}\n"))
+            .collect();
+        format!("package veh.cluster\nenum Mode {{\n{values}}}\n")
+    }
+    fn union_source(count: usize) -> String {
+        let arms: String = (1..=count)
+            .map(|arm| format!("  a{arm}: Level\n"))
+            .collect();
+        format!("package veh.cluster\ntype Level: integer [0..100]\nunion Outcome {{\n{arms}}}\n")
+    }
+    let dir = TempDir::new("width");
+    for (name, old, new, line) in [
+        (
+            "enum",
+            enum_source(256),
+            enum_source(257),
+            "podbuf_width_change veh.cluster/Mode: u8 -> u16",
+        ),
+        (
+            "union",
+            union_source(255),
+            union_source(256),
+            "podbuf_width_change veh.cluster/Outcome: u8 -> u16",
+        ),
+    ] {
+        let v1 = dir.write(&format!("{name}-v1.typl"), &old);
+        let v2 = dir.write(&format!("{name}-v2.typl"), &new);
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            "--encoding".as_ref(),
+            "podbuf".as_ref(),
+            v1.as_os_str(),
+            v2.as_os_str(),
+        ]);
+        assert_eq!(
+            code, 1,
+            "{name}: a width change exits 1 under podbuf, stderr:\n{stderr}"
+        );
+        assert!(
+            stdout.contains(&format!("breaking under podbuf:\n  [breaking] {line}")),
+            "{name} stdout:\n{stdout}"
+        );
+        let (code, stdout, _) = ridl(&["diff".as_ref(), v1.as_os_str(), v2.as_os_str()]);
+        assert_eq!(code, 0, "{name}: the same append exits 0 without the flag");
+        assert!(
+            stdout.contains(&format!("breaking under podbuf:\n  [compatible] {line}")),
+            "{name} stdout:\n{stdout}"
+        );
+    }
+    for (name, old, new) in [
+        ("enum-kept", enum_source(255), enum_source(256)),
+        ("union-kept", union_source(254), union_source(255)),
+    ] {
+        let v1 = dir.write(&format!("{name}-v1.typl"), &old);
+        let v2 = dir.write(&format!("{name}-v2.typl"), &new);
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            "--encoding".as_ref(),
+            "podbuf".as_ref(),
+            v1.as_os_str(),
+            v2.as_os_str(),
+        ]);
+        // A kept width draws no width line; an enum append is still a strict
+        // enum break, a union arm append is not.
+        let expected = i32::from(name == "enum-kept");
+        assert_eq!(code, expected, "{name}: stderr:\n{stderr}");
+        assert!(
+            !stdout.contains("podbuf_width_change"),
+            "{name} stdout:\n{stdout}"
+        );
+    }
+}
+
+/// An enum value or an enum-set flag appended: `podbuf_strict_enum_append`,
+/// exit 1 under `--encoding podbuf` and exit 0 without the flag.
+#[test]
+fn an_appended_enum_value_or_flag_is_a_strict_enum_break_under_podbuf() {
+    let dir = TempDir::new("strict-enum");
+    for (name, old, new, line) in [
+        (
+            "enum",
+            "package veh.cluster\nenum Mode {\n  A = 0\n}\n",
+            "package veh.cluster\nenum Mode {\n  A = 0\n  B = 1\n}\n",
+            "podbuf_strict_enum_append veh.cluster/Mode",
+        ),
+        (
+            "enumset",
+            "package veh.cluster\nenumset Flags {\n  A = 0\n}\n",
+            "package veh.cluster\nenumset Flags {\n  A = 0\n  B = 1\n}\n",
+            "podbuf_strict_enum_append veh.cluster/Flags",
+        ),
+    ] {
+        let v1 = dir.write(&format!("{name}-v1.typl"), old);
+        let v2 = dir.write(&format!("{name}-v2.typl"), new);
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            "--encoding".as_ref(),
+            "podbuf".as_ref(),
+            v1.as_os_str(),
+            v2.as_os_str(),
+        ]);
+        assert_eq!(code, 1, "{name}: exits 1 under podbuf, stderr:\n{stderr}");
+        assert!(
+            stdout.contains(&format!("breaking under podbuf:\n  [breaking] {line}")),
+            "{name} stdout:\n{stdout}"
+        );
+        let (code, stdout, _) = ridl(&["diff".as_ref(), v1.as_os_str(), v2.as_os_str()]);
+        assert_eq!(code, 0, "{name}: exits 0 without the flag");
+        assert!(
+            stdout.contains(&format!("breaking under podbuf:\n  [compatible] {line}")),
+            "{name} stdout:\n{stdout}"
+        );
+    }
+}
+
+/// A fixed payload that is an exact-length array of the struct has no podbuf
+/// head, so an append to the struct is not an inline use: exit 0 under
+/// `--encoding podbuf`, and no `podbuf_inline_append` line.
+#[test]
+fn a_fixed_exact_array_payload_is_not_a_podbuf_inline_use() {
+    const V1: &str = "package veh.cluster
+type Level: integer [0..100]
+struct Reading {
+  value: Level
+}
+interface Ctl {
+  fixed window: [Reading; 2..2]
+}
+";
+    const V2: &str = "package veh.cluster
+type Level: integer [0..100]
+struct Reading {
+  value: Level
+  quality: Level
+}
+interface Ctl {
+  fixed window: [Reading; 2..2]
+}
+";
+    let dir = TempDir::new("fixed-array");
+    let v1 = dir.write("v1.ridl", V1);
+    let v2 = dir.write("v2.ridl", V2);
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--encoding".as_ref(),
+        "podbuf".as_ref(),
+        v1.as_os_str(),
+        v2.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "no head holds the struct, stderr:\n{stderr}");
+    assert!(stdout.starts_with("compatible"), "stdout:\n{stdout}");
+    assert!(
+        !stdout.contains("podbuf_inline_append"),
+        "stdout:\n{stdout}"
+    );
+}
+
 /// A compatible source change (an appended interaction) exits 0.
 #[test]
 fn source_dir_vs_source_dir_compatible_exits_zero() {

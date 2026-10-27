@@ -2319,6 +2319,9 @@ fn a_reservation_sums_in_u64_above_the_u32_range() {
             flatbuffers: Some(v1::SizeState {
                 state: Some(v1::size_state::State::Bounded(size)),
             }),
+            podbuf: Some(v1::SizeState {
+                state: Some(v1::size_state::State::Bounded(size)),
+            }),
         })
     };
     let payloads = [
@@ -2754,7 +2757,11 @@ fn the_deployment_sections_enum_values_are_the_schemas() {
     assert_eq!(v1::Encoding::Unspecified as i32, 0);
     assert_eq!(v1::Encoding::Proto3 as i32, 1);
     assert_eq!(v1::Encoding::Flatbuffers as i32, 2);
-    assert_eq!(v1::Encoding::ReprC as i32, 3);
+    assert_eq!(v1::Encoding::Podbuf as i32, 3);
+    assert_eq!(
+        serde_json::to_value(v1::Encoding::Podbuf).unwrap(),
+        "ENCODING_PODBUF"
+    );
 
     assert_eq!(v1::ValueSource::Unspecified as i32, 0);
     assert_eq!(v1::ValueSource::Derived as i32, 1);
@@ -4416,4 +4423,221 @@ fn a_declaration_with_an_optional_array_has_no_proto3_bound() {
             })),
         })
     );
+}
+
+/// The podbuf state of a payload's sizes.
+fn podbuf_state(sizes: &Option<v1::PayloadSizes>) -> &v1::size_state::State {
+    sizes
+        .as_ref()
+        .and_then(|sizes| sizes.podbuf.as_ref())
+        .and_then(|state| state.state.as_ref())
+        .expect("a podbuf state is written")
+}
+
+/// The podbuf reservation of a member.
+fn podbuf_reserved(reservation: &Option<v1::Reservation>) -> &v1::reservation_state::State {
+    reservation
+        .as_ref()
+        .and_then(|reservation| reservation.podbuf.as_ref())
+        .and_then(|state| state.state.as_ref())
+        .expect("a podbuf reservation is written")
+}
+
+#[test]
+fn a_payload_carries_the_podbuf_size_state() {
+    // `Pair` holds two `SpeedKph` values: an 8-byte preamble and an 8-byte
+    // head.
+    let model = lower(&sized_package(), &[]);
+    assert_eq!(
+        podbuf_state(&signal_payload(&model, 0).sizes),
+        &v1::size_state::State::Bounded(16)
+    );
+}
+
+/// A request of several parameters is sized as an induced struct under every
+/// encoding, so the podbuf state is a number like the other two. The catalog
+/// descriptor writes no podbuf row for such a request; the model does not
+/// follow it.
+#[test]
+fn a_two_parameter_request_is_sized_under_every_encoding() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Command(command) = call_shape(&model, 0) else {
+        panic!("a command");
+    };
+    assert_eq!(
+        state(&command.request_sizes, true),
+        &v1::size_state::State::Bounded(28)
+    );
+    assert_eq!(
+        state(&command.request_sizes, false),
+        &v1::size_state::State::Bounded(147)
+    );
+    assert_eq!(
+        podbuf_state(&command.request_sizes),
+        &v1::size_state::State::Bounded(24)
+    );
+}
+
+#[test]
+fn a_zero_parameter_request_and_an_undefined_reply_have_a_podbuf_state() {
+    let model = lower(&call_package(), &[]);
+    let v1::interaction::Shape::Query(none) = call_shape(&model, 2) else {
+        panic!("a query");
+    };
+    assert_eq!(
+        podbuf_state(&none.request_sizes),
+        &v1::size_state::State::Bounded(8)
+    );
+    let v1::interaction::Shape::Query(risky) = call_shape(&model, 3) else {
+        panic!("a query");
+    };
+    assert_eq!(podbuf_state(&risky.reply_sizes), &undefined());
+}
+
+#[test]
+fn the_podbuf_reservations_follow_the_podbuf_payload_sizes() {
+    let model = lower(&budget_package(), &[]);
+    let tally = interface_named(&model, "Tally");
+    let ask = live_member(tally, "ask");
+    let set = live_member(tally, "set");
+    let table = live_member(tally, "table");
+    assert_eq!(podbuf_reserved(&ask.reservation), &bytes(32));
+    assert_eq!(podbuf_reserved(&set.reservation), &bytes(16));
+    assert_eq!(podbuf_reserved(&table.reservation), &bytes(0));
+    // level (16) + ask (32) + set (16) + table (0)
+    assert_eq!(podbuf_reserved(&tally.table_budget), &bytes(64));
+}
+
+#[test]
+fn the_podbuf_states_of_a_reservation_sum_in_u64() {
+    let bounded = |size: u32| {
+        let state = Some(v1::SizeState {
+            state: Some(v1::size_state::State::Bounded(size)),
+        });
+        Some(v1::PayloadSizes {
+            proto3: state.clone(),
+            flatbuffers: state.clone(),
+            podbuf: state,
+        })
+    };
+    let payloads = [
+        ("request", "Huge".to_string(), bounded(u32::MAX)),
+        ("reply", "Huge".to_string(), bounded(u32::MAX)),
+    ];
+    let reservation = super::lower::reserve("ask", Some(&payloads));
+    assert_eq!(
+        podbuf_reserved(&Some(reservation)),
+        &bytes(u64::from(u32::MAX) * 2)
+    );
+}
+
+/// `Label` has no length bound, so `Tagged` has no podbuf head, and `Wraps`,
+/// which holds a `Tagged`, has none either. `Pair` keeps its head. The sizes
+/// are computed on their own and are still written.
+#[test]
+fn a_head_that_cannot_be_laid_out_is_refused_and_the_others_are_kept() {
+    let mut package = sized_package();
+    package.decls.push(v2::Decl {
+        name: "Wraps".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![member(1, "inner", named("Tagged"))],
+            ..Default::default()
+        })),
+        ..Default::default()
+    });
+    let index = |name: &str| {
+        package
+            .decls
+            .iter()
+            .position(|decl| decl.name == name)
+            .expect("a declaration") as u32
+    };
+    let (pair, tagged, wraps) = (index("Pair"), index("Tagged"), index("Wraps"));
+    let model = lower(&package, &[]);
+    let podbuf = model.podbuf.as_ref().expect("the projection is always set");
+    let sources: Vec<_> = podbuf
+        .heads
+        .iter()
+        .map(|head| head.source.clone())
+        .collect();
+    assert!(sources.contains(&Some(v1::podbuf_head::Source::Declaration(pair))));
+    for refused in [tagged, wraps] {
+        assert!(
+            !sources.contains(&Some(v1::podbuf_head::Source::Declaration(refused))),
+            "a refused declaration has no head"
+        );
+    }
+    let refused: Vec<_> = podbuf
+        .refused
+        .iter()
+        .map(|refused| (refused.source, refused.cause.as_str()))
+        .collect();
+    assert_eq!(refused.len(), 2);
+    assert_eq!(
+        refused[0].0,
+        Some(v1::podbuf_refused::Source::Declaration(tagged))
+    );
+    assert_eq!(
+        refused[1].0,
+        Some(v1::podbuf_refused::Source::Declaration(wraps))
+    );
+    assert!(
+        refused[1].1.contains("Tagged"),
+        "the cause names the refused head: {}",
+        refused[1].1
+    );
+    assert!(matches!(
+        podbuf_state(&signal_payload(&model, 0).sizes),
+        v1::size_state::State::Bounded(_)
+    ));
+}
+
+/// A named scalar is carried as a payload root in a one-field box: the value
+/// at offset 0 of an 8-byte head. A struct has a head and no box, and the
+/// declaration's podbuf size state is its bound.
+#[test]
+fn a_named_scalar_has_a_podbuf_box_and_a_struct_does_not() {
+    let mut package = sized_package();
+    package.decls.push(v2::Decl {
+        name: "Count".to_string(),
+        visibility: v2::Visibility::Public as i32,
+        kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Integer as i32,
+                )),
+            }),
+            width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
+            ..Default::default()
+        })),
+        ..Default::default()
+    });
+    let index = |name: &str| {
+        package
+            .decls
+            .iter()
+            .position(|decl| decl.name == name)
+            .expect("a declaration") as u32
+    };
+    let (label, pair) = (index("Count"), index("Pair"));
+    let model = lower(&package, &[]);
+    let podbuf = model.podbuf.as_ref().expect("the projection is always set");
+    let boxed = podbuf
+        .boxes
+        .iter()
+        .find(|boxed| boxed.declaration == label)
+        .expect("`Count` has a box");
+    let head = boxed.head.as_ref().expect("a box holds its head");
+    assert_eq!(head.size, 8);
+    assert_eq!(head.fields.len(), 1);
+    assert_eq!(head.fields[0].offset, 0);
+    assert!(podbuf.boxes.iter().all(|boxed| boxed.declaration != pair));
+    assert!(matches!(
+        model.declarations[label as usize]
+            .podbuf
+            .as_ref()
+            .and_then(|state| state.state.as_ref()),
+        Some(v1::size_state::State::Bounded(_))
+    ));
 }

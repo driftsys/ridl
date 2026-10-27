@@ -159,6 +159,7 @@ regex = "1.13.1"
 # 2026-09-21 amendment). Each consumer below writes `{ workspace = true }`
 # rather than repeating the path and version by hand.
 ridl-backend-flatbuffers = { path = "crates/ridl-backend-flatbuffers", version = "0.14.0" }
+ridl-backend-podbuf = { path = "crates/ridl-backend-podbuf", version = "0.14.0" }
 ridl-backend-proto = { path = "crates/ridl-backend-proto", version = "0.14.0" }
 ridl-backend-rust = { path = "crates/ridl-backend-rust", version = "0.14.0" }
 ridl-backend-ts = { path = "crates/ridl-backend-ts", version = "0.14.0" }

@@ -149,6 +149,9 @@ ridl_describe_type output /properties/workspace/properties/warnings minimum 0
 ridl_describe_type output /properties/workspace/properties/warnings required
 ridl_diff
 ridl_diff input  required-set new old
+ridl_diff input /properties/encodings array|null
+ridl_diff input /properties/encodings optional
+ridl_diff input /properties/encodings/items string
 ridl_diff input /properties/new required
 ridl_diff input /properties/new string
 ridl_diff input /properties/old required

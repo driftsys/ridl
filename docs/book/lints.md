@@ -145,6 +145,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `degenerate-timing-range` | RIDL-108 | warn | degenerate timing range `@[X..X]` |
 | `missing-response-bound` | RIDL-112 | warn | `command` or `query` takes the default response bound |
 | `payload-above-ceiling` | RIDL-150 | warn | payload above the payload ceiling or with no finite bound |
+| `podbuf-padding-order` | RIDL-156 | info | struct field order wastes podbuf padding |
 | `error-typed-parameter` | RIDL-304 | warn | `error`-typed or result-union parameter on a `command` or `query` |
 | `ensure-without-result` | RIDL-305 | warn | `ensure` clause that never references `result` |
 | `contract-error-name-in-enum` | RIDL-307 | warn | contract-error category name declared in an `error` enum |
@@ -201,6 +202,19 @@ a package that has one, and still reports on the other packages of the
 workspace. An RSDL-7xx error does not count, because a build still writes code
 after it. An error in no package source file, such as a manifest error, skips
 every package.
+
+`podbuf-padding-order` (RIDL-156) reports a struct whose declared field order
+lays out in a larger podbuf head than the same fields sorted by descending
+alignment, with declaration order kept among fields of equal alignment. The
+message names both head sizes and the saving order. It runs only when a
+`[backend.<name>]` table of the workspace manifest lists `podbuf` in its
+`encodings`, and only in `ridl check`, because it reads the published baseline
+and `ridlc` does not. A struct is released when a snapshot under
+`.ridl/baseline/` (or under the `--baseline` path) declares it, and a released
+struct is never reported, because its order is part of its wire format. With no
+baseline, every struct is unreleased. The order is reported only when it is
+strictly smaller than the declared order, so a struct that no order improves
+draws nothing. The level is `info` by default.
 
 Setting `ordinal-changed` to `allow` makes `ridl check --baseline` report
 nothing for ordinal changes, so the baseline desk check no longer warns about

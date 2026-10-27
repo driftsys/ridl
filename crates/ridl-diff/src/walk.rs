@@ -44,10 +44,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use ridl_ir::v2;
+use ridl_ir::{projection, v2};
 
 use crate::classify::{struct_slots, union_slots, value_slots};
-use crate::{Category, Change, emit, frozen};
+use crate::{Category, Change, Verdict, emit, frozen};
 
 /// Walks two matched packages, appending every difference to `changes`.
 /// `matching` is the unit-wide pass 1 of the interface walk over the two
@@ -1899,5 +1899,369 @@ fn signal_init_str(def: &v2::SignalDef) -> String {
     match def.init.as_ref().and_then(|init| init.value.as_ref()) {
         Some(value) => value.clone(),
         None => "(none)".to_string(),
+    }
+}
+
+// ==========================================================================
+// The podbuf break rule: an append to a struct nested inline in a head.
+// ==========================================================================
+
+/// The [`Category::PodbufInlineAppend`] changes of one walked and classified
+/// package pair: one per struct field appended compatibly, in `pair`, to a
+/// struct that a head of `scope` — every package of the new side, the context
+/// packages included — holds inline. The verdict is the placeholder
+/// [`emit`] stamps; the classifier settles it from the encodings.
+///
+/// Only an append the generic rule accepts is read: a [`Category::DeclAdded`]
+/// at `<package>/<struct>/<field>` whose verdict is compatible. An append the
+/// generic rule refuses is breaking already, and a second line for the same
+/// field would say nothing new. The struct's inline uses are found with the
+/// podbuf layout law ([`projection::podbuf::field_form`]), so what the rule
+/// calls inline is what the encoder lays out inline.
+pub(crate) fn podbuf_inline_appends(pair: &[Change], scope: &[&v2::Package]) -> Vec<Change> {
+    let mut changes = Vec::new();
+    for change in pair {
+        if change.category != Category::DeclAdded || change.verdict != Verdict::Compatible {
+            continue;
+        }
+        let mut segments = change.path.split('/');
+        let (Some(package), Some(name), Some(field), None) = (
+            segments.next(),
+            segments.next(),
+            segments.next(),
+            segments.next(),
+        ) else {
+            continue;
+        };
+        let Some(home) = scope.iter().copied().find(|pkg| pkg.name == package) else {
+            continue;
+        };
+        let is_struct_field = home.decls.iter().any(|decl| {
+            decl.name == name
+                && match &decl.kind {
+                    Some(v2::decl::Kind::StructDef(def)) => def.members.iter().any(|slot| {
+                        matches!(&slot.member, Some(v2::struct_member::Member::Field(f)) if f.name == field)
+                    }),
+                    _ => false,
+                }
+        });
+        if !is_struct_field {
+            continue;
+        }
+        let uses = inline_uses(scope, package, name);
+        if uses.is_empty() {
+            continue;
+        }
+        emit(
+            &mut changes,
+            change.path.clone(),
+            Category::PodbufInlineAppend,
+            None,
+            Some(format!("nested inline in {}", uses.join(", "))),
+        );
+    }
+    changes
+}
+
+/// The [`Category::PodbufWidthChange`] changes of one walked and classified
+/// package pair: one per enum or union of `new` to which `pair` appends a
+/// value or an arm compatibly, when the podbuf width of the enum's integer or
+/// of the union's tag differs between `old` and `new`. The width is read from
+/// the layout law ([`projection::podbuf::enum_width`] and
+/// [`projection::podbuf::union_tag_width`]), so what the rule calls a width
+/// is what the encoder lays out. The verdict is the placeholder [`emit`]
+/// stamps; the classifier settles it from the encodings.
+pub(crate) fn podbuf_width_changes(
+    pair: &[Change],
+    old: &v2::Package,
+    new: &v2::Package,
+) -> Vec<Change> {
+    use ridl_ir::projection::podbuf::{enum_width, union_tag_width};
+
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    let mut changes = Vec::new();
+    for change in pair {
+        if change.category != Category::DeclAdded || change.verdict != Verdict::Compatible {
+            continue;
+        }
+        let mut segments = change.path.split('/');
+        let (Some(package), Some(name), Some(_), None) = (
+            segments.next(),
+            segments.next(),
+            segments.next(),
+            segments.next(),
+        ) else {
+            continue;
+        };
+        if package != new.name || !seen.insert(name) {
+            continue;
+        }
+        fn find<'p>(pkg: &'p v2::Package, name: &str) -> Option<&'p v2::Decl> {
+            pkg.decls.iter().find(|decl| decl.name == name)
+        }
+        let (Some(old_decl), Some(new_decl)) = (find(old, name), find(new, name)) else {
+            continue;
+        };
+        let widths = match (&old_decl.kind, &new_decl.kind) {
+            (Some(v2::decl::Kind::EnumDef(old_def)), Some(v2::decl::Kind::EnumDef(new_def))) => {
+                (enum_width(old_def), enum_width(new_def))
+            }
+            (Some(v2::decl::Kind::UnionDef(old_def)), Some(v2::decl::Kind::UnionDef(new_def))) => (
+                (union_tag_width(old_def), false),
+                (union_tag_width(new_def), false),
+            ),
+            _ => continue,
+        };
+        if widths.0 == widths.1 {
+            continue;
+        }
+        emit(
+            &mut changes,
+            format!("{package}/{name}"),
+            Category::PodbufWidthChange,
+            Some(int_width_name(widths.0.0 as i32).to_string()),
+            Some(int_width_name(widths.1.0 as i32).to_string()),
+        );
+    }
+    changes
+}
+
+/// The [`Category::PodbufStrictEnumAppend`] changes of one walked and
+/// classified package pair: one per enum or enum set of `new` to which `pair`
+/// appends a value or a flag compatibly, except an enum that `widths` (the
+/// [`podbuf_width_changes`] of the same pair) already reports, so that one
+/// change draws one line. The verdict is the placeholder [`emit`] stamps; the
+/// classifier settles it from the encodings.
+pub(crate) fn podbuf_strict_enum_appends(
+    pair: &[Change],
+    old: &v2::Package,
+    new: &v2::Package,
+    widths: &[Change],
+) -> Vec<Change> {
+    let mut appended: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for change in pair {
+        if change.category != Category::DeclAdded || change.verdict != Verdict::Compatible {
+            continue;
+        }
+        let mut segments = change.path.split('/');
+        let (Some(package), Some(name), Some(member), None) = (
+            segments.next(),
+            segments.next(),
+            segments.next(),
+            segments.next(),
+        ) else {
+            continue;
+        };
+        if package == new.name {
+            appended.entry(name).or_default().push(member);
+        }
+    }
+    let mut changes = Vec::new();
+    for (name, members) in appended {
+        let path = format!("{}/{name}", new.name);
+        if widths.iter().any(|change| change.path == path) {
+            continue;
+        }
+        let find = |pkg: &v2::Package| {
+            pkg.decls
+                .iter()
+                .find(|decl| decl.name == name)
+                .and_then(|decl| decl.kind.clone())
+        };
+        let strict = matches!(
+            (find(old), find(new)),
+            (
+                Some(v2::decl::Kind::EnumDef(_)),
+                Some(v2::decl::Kind::EnumDef(_))
+            ) | (
+                Some(v2::decl::Kind::EnumSetDef(_)),
+                Some(v2::decl::Kind::EnumSetDef(_))
+            )
+        );
+        if !strict {
+            continue;
+        }
+        emit(
+            &mut changes,
+            path,
+            Category::PodbufStrictEnumAppend,
+            None,
+            Some(members.join(", ")),
+        );
+    }
+    changes
+}
+
+/// Every head of `scope` whose podbuf form holds the struct `package.name`
+/// inline, sorted: a struct field, as `<package>/<struct>/<field>`, and an
+/// interaction's request, reply or fixed payload, as
+/// `<package>/<interface>/<interaction>` (the path the walk gives the
+/// interaction; a service's inline shape is named by the service). A form the
+/// layout law refuses — a stream, a type it cannot resolve — is skipped: the
+/// podbuf checks of `ridl check` report it.
+fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String> {
+    use ridl_ir::projection::flatbuffers::Packages;
+    use ridl_ir::projection::podbuf::field_form;
+
+    let target = projection::podbuf::Inlined::Declaration {
+        package: package.to_string(),
+        name: name.to_string(),
+    };
+    let mut uses = Vec::new();
+    for (index, home) in scope.iter().enumerate() {
+        let others: Vec<&v2::Package> = scope
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != index)
+            .map(|(_, pkg)| *pkg)
+            .collect();
+        let packages = Packages {
+            package: home,
+            others: &others,
+        };
+        let holds = |ty: &v2::FieldType, fixed: bool| {
+            field_form(packages, ty).is_ok_and(|form| holds_inline(&form, &target, fixed))
+        };
+        for decl in &home.decls {
+            let Some(v2::decl::Kind::StructDef(def)) = &decl.kind else {
+                continue;
+            };
+            for slot in &def.members {
+                let Some(v2::struct_member::Member::Field(field)) = &slot.member else {
+                    continue;
+                };
+                if field.r#type.as_ref().is_some_and(|ty| holds(ty, true)) {
+                    uses.push(format!("{}/{}/{}", home.name, decl.name, field.name));
+                }
+            }
+        }
+        for shape in home.shapes() {
+            for decl in &shape.interface.interactions {
+                if interaction_payloads(decl).iter().any(|ty| {
+                    field_form(packages, ty).is_ok_and(|form| root_holds_inline(&form, &target))
+                }) {
+                    uses.push(format!("{}/{}/{}", home.name, shape.name, decl.name));
+                }
+            }
+        }
+    }
+    uses.sort();
+    uses
+}
+
+/// The types an interaction puts on the wire as roots: a call's request — the
+/// argument struct the lowering induces from several parameters, written here
+/// as the tuple `params_as_tuple` gives, or the single named parameter sent
+/// as it is — a query's reply (a value as declared; the two arms of a fallible
+/// reply), and a fixed payload. A signal or event payload is a named type, a
+/// root on its own, and holds nothing at a fixed offset of another head, so it
+/// is not listed. A request with a stream parameter induces no struct.
+/// [`root_holds_inline`] reads each one.
+fn interaction_payloads(decl: &v2::Decl) -> Vec<v2::FieldType> {
+    use v2::decl::Kind;
+
+    fn named(reference: &str) -> v2::FieldType {
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Named(reference.to_string())),
+        }
+    }
+    fn request(params: &[v2::Param]) -> Option<v2::FieldType> {
+        if let [param] = params
+            && let Some(ty) = param.r#type.as_ref()
+            && matches!(ty.kind, Some(v2::field_type::Kind::Named(_)))
+        {
+            return Some(ty.clone());
+        }
+        ridl_ir::codegen::params_as_tuple(params).map(|tuple| v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Tuple(tuple)),
+        })
+    }
+
+    let mut payloads = Vec::new();
+    match &decl.kind {
+        Some(Kind::CommandDef(def)) => payloads.extend(request(&def.params)),
+        Some(Kind::QueryDef(def)) => {
+            payloads.extend(request(&def.params));
+            match def.return_type.as_ref().and_then(|ret| ret.kind.as_ref()) {
+                Some(v2::return_type::Kind::Value(ty)) => payloads.push(ty.clone()),
+                Some(v2::return_type::Kind::Fallible(fallible)) => {
+                    payloads.push(named(&fallible.ok));
+                    payloads.push(named(&fallible.err));
+                }
+                None => {}
+            }
+        }
+        Some(Kind::FixedDef(def)) => payloads.extend(def.payload.clone()),
+        _ => {}
+    }
+    payloads
+}
+
+/// Whether a root — an interaction's request, reply or fixed payload — holds
+/// the struct `target` at a fixed offset of a head. The encoder lays out a
+/// head for a declaration and for a named induced tuple only
+/// (`ridl_ir::codegen` feeds `podbuf::tuple_head` from the tuples the lowering
+/// names), so a root contributes a use only through such a head: the induced
+/// argument tuple, a tuple reply, a tuple written anywhere inside the root.
+/// A root that is itself an exact-length array, such as a fixed payload
+/// `[S; 2..2]`, has no head — its podbuf encoding is undefined — and the
+/// struct directly inside it is not a use; a tuple inside it still is.
+fn root_holds_inline(
+    form: &projection::podbuf::Form,
+    target: &projection::podbuf::Inlined,
+) -> bool {
+    match form {
+        projection::podbuf::Form::InlineArray { element, .. } => root_holds_inline(element, target),
+        _ => holds_inline(form, target, false),
+    }
+}
+
+/// Whether `form` holds the struct `target` at a fixed offset of a head that
+/// cannot grow. `fixed` is whether `form` itself sits at such an offset: true
+/// for a head field, a tuple member and an inline array element; false for
+/// the element of a bounded array, the key or value of a map entry, whose
+/// stride is the producer's and may grow (design: appending to the element
+/// type of an array or to a map entry's types is compatible). Another
+/// declaration held inline is not entered: its own fields are read when the
+/// walk reaches that declaration's struct, and a use is reported once, at the
+/// field that names the struct. A union arm's head is the arm type's own
+/// head, so it is not entered either.
+fn holds_inline(
+    form: &projection::podbuf::Form,
+    target: &projection::podbuf::Inlined,
+    fixed: bool,
+) -> bool {
+    use projection::podbuf::{DescriptorKind, Form, Head, Inlined};
+
+    let any_field = |head: &Head, fixed: bool| {
+        head.fields
+            .iter()
+            .any(|placement| holds_inline(&placement.form, target, fixed))
+    };
+    match form {
+        Form::Inline { of, .. } if of == target => fixed,
+        Form::Inline {
+            of: Inlined::Declaration { .. },
+            ..
+        } => false,
+        Form::Inline {
+            of: Inlined::Tuple,
+            head,
+        } => any_field(head, true),
+        Form::InlineArray { element, .. } => holds_inline(element, target, true),
+        Form::Descriptor(DescriptorKind::Array { element, .. }) => {
+            holds_inline(element, target, false)
+        }
+        Form::Descriptor(DescriptorKind::Map { entry, .. }) => any_field(entry, false),
+        Form::Descriptor(
+            DescriptorKind::Arm { .. } | DescriptorKind::Text { .. } | DescriptorKind::Bytes { .. },
+        )
+        | Form::Bool
+        | Form::Int { .. }
+        | Form::Float(_)
+        | Form::Enum { .. }
+        | Form::EnumSet { .. } => false,
     }
 }

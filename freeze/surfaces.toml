@@ -35,21 +35,11 @@ baseline = "v0.10.0"
 name = "msrv"
 baseline = "016167c90fe1418df512a60330e70b35a55c4a7b"
 
-[[surface]]
-name = "wire"
-baseline = "e5e59bd1"
-
-[[surface]]
-name = "codegen-protocol"
-baseline = "v0.10.0"
 
 [[surface]]
 name = "generated-crate"
 baseline = "v0.10.0"
 
-[[surface]]
-name = "runtime-crates"
-baseline = "bcca636e2302daec7fa7a67be06be9d04b56c439"
 
 [[surface]]
 name = "keywords"

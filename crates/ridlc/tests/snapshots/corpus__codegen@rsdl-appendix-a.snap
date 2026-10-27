@@ -1,5 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
 ---
@@ -59,6 +60,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -92,6 +96,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -130,6 +137,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -163,6 +173,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -200,6 +213,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "50"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -258,6 +274,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 50
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -268,6 +287,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 50
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "shape": "SHAPE_NONE"
@@ -281,6 +303,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         "flatbuffers": {
           "bytes": "139"
+        },
+        "podbuf": {
+          "bytes": "48"
         }
       },
       "links": [],
@@ -328,6 +353,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -361,6 +389,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -380,6 +411,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         "flatbuffers": {
           "bytes": "43"
+        },
+        "podbuf": {
+          "bytes": "16"
         }
       },
       "links": [],
@@ -488,6 +522,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "proto3": {
           "bounded": 2
         },
+        "podbuf": {
+          "bounded": 16
+        },
         "scalar": {
           "class": "SCALAR_CLASS_BOOLEAN",
           "vacuous": true
@@ -546,6 +583,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "proto3": {
           "bounded": 5
         },
+        "podbuf": {
+          "bounded": 16
+        },
         "scalar": {
           "class": "SCALAR_CLASS_FLOAT",
           "unit": "km/h",
@@ -593,6 +633,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "rules": [],
         "proto3": {
           "bounded": 2
+        },
+        "podbuf": {
+          "bounded": 16
         },
         "enum": {
           "values": [
@@ -648,7 +691,12 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       }
     }
   ],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [],
+    "refused": [],
+    "boxes": []
+  }
 }
 
 // ===== package veh.common =====
@@ -722,6 +770,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "proto3": {
         "bounded": 5
       },
+      "podbuf": {
+        "bounded": 16
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "km/h",
@@ -768,6 +819,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "proto3": {
         "bounded": 2
       },
+      "podbuf": {
+        "bounded": 16
+      },
       "scalar": {
         "class": "SCALAR_CLASS_BOOLEAN",
         "vacuous": true
@@ -805,6 +859,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "rules": [],
       "proto3": {
         "bounded": 2
+      },
+      "podbuf": {
+        "bounded": 16
       },
       "enum": {
         "values": [
@@ -890,6 +947,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "rules": [],
       "proto3": {
         "bounded": 6
+      },
+      "podbuf": {
+        "bounded": 16
       },
       "struct": {
         "slots": [
@@ -1057,7 +1117,126 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     ]
   },
   "foreign": [],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "field": {
+                "name": "count",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 1,
+            "size": 7
+          }
+        ],
+        "declaration": 3
+      }
+    ],
+    "refused": [],
+    "boxes": [
+      {
+        "declaration": 0,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "arm": true
+              },
+              "offset": 0,
+              "size": 4,
+              "align": 4,
+              "form": {
+                "float": "FLOAT_WIDTH_F32"
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 4,
+              "size": 4
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 1,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "boolean": true
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 2,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "enum": {
+                  "width": "INT_WIDTH_U8",
+                  "signed": false,
+                  "reference": "LeverCmd"
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      }
+    ]
+  }
 }
 
 // ===== package veh.diag =====
@@ -1146,6 +1325,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "76"
+              },
+              "podbuf": {
+                "bytes": "24"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -1191,6 +1373,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -1201,6 +1386,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
                 }
               },
               "replySizes": {
@@ -1209,6 +1397,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "requestTuple": {
@@ -1225,6 +1416,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         },
         "flatbuffers": {
           "bytes": "76"
+        },
+        "podbuf": {
+          "bytes": "24"
         }
       },
       "links": [],
@@ -1326,6 +1520,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "proto3": {
           "bounded": 6
         },
+        "podbuf": {
+          "bounded": 16
+        },
         "struct": {
           "slots": [
             {
@@ -1378,7 +1575,20 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       }
     }
   ],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 0
+      }
+    ],
+    "refused": [],
+    "boxes": []
+  }
 }
 
 // ===== package veh.topology =====
@@ -1416,5 +1626,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     "tables": []
   },
   "foreign": [],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [],
+    "refused": [],
+    "boxes": []
+  }
 }

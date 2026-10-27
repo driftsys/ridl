@@ -107,16 +107,16 @@ fn a_crate_outside_can_name_an_encoding_and_check_a_ref() {
     let outcome = compile(
         "control",
         r#"
-use ridl_rt::encoding::{Encoding, ReprC};
+use ridl_rt::encoding::{Encoding, Podbuf};
 use ridl_rt::payload::{Payload, Ref, VerifyError};
 
 pub fn name<E: Encoding>() -> &'static str {
     E::NAME
 }
 
-pub fn check<'a, T>(bytes: &'a [u8]) -> Result<Ref<'a, T, ReprC>, VerifyError>
+pub fn check<'a, T>(bytes: &'a [u8]) -> Result<Ref<'a, T, Podbuf>, VerifyError>
 where
-    T: Payload<ReprC, View<'a> = &'a [u8]>,
+    T: Payload<Podbuf, View<'a> = &'a [u8]>,
 {
     Ref::verify(bytes)
 }
@@ -165,12 +165,12 @@ fn a_ref_cannot_be_built_from_its_fields_outside() {
         "E0451",
         r#"
 use core::marker::PhantomData;
-use ridl_rt::encoding::ReprC;
+use ridl_rt::encoding::Podbuf;
 use ridl_rt::payload::{Payload, Ref};
 
-pub fn forge<'a, T>(bytes: &'a [u8]) -> Ref<'a, T, ReprC>
+pub fn forge<'a, T>(bytes: &'a [u8]) -> Ref<'a, T, Podbuf>
 where
-    T: Payload<ReprC, View<'a> = &'a [u8]>,
+    T: Payload<Podbuf, View<'a> = &'a [u8]>,
 {
     Ref { bytes, view: bytes, _e: PhantomData }
 }
@@ -184,10 +184,10 @@ fn the_bytes_field_of_a_ref_is_private() {
         "ref_bytes_read",
         "E0616",
         r#"
-use ridl_rt::encoding::ReprC;
+use ridl_rt::encoding::Podbuf;
 use ridl_rt::payload::{Payload, Ref};
 
-pub fn peek<'a, T: Payload<ReprC>>(r: &Ref<'a, T, ReprC>) -> &'a [u8] {
+pub fn peek<'a, T: Payload<Podbuf>>(r: &Ref<'a, T, Podbuf>) -> &'a [u8] {
     r.bytes
 }
 "#,
@@ -200,10 +200,10 @@ fn the_view_field_of_a_ref_is_private() {
         "ref_view_write",
         "E0616",
         r#"
-use ridl_rt::encoding::ReprC;
+use ridl_rt::encoding::Podbuf;
 use ridl_rt::payload::{Payload, Ref};
 
-pub fn overwrite<'a, T: Payload<ReprC>>(r: &mut Ref<'a, T, ReprC>, v: T::View<'a>) {
+pub fn overwrite<'a, T: Payload<Podbuf>>(r: &mut Ref<'a, T, Podbuf>, v: T::View<'a>) {
     r.view = v;
 }
 "#,

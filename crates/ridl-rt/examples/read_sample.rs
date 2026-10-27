@@ -2,7 +2,7 @@
 //!
 //! This program writes by hand what a code generator and a runtime would
 //! provide: one catalog with one interface, `Drivetrain`; one signal, `speed`;
-//! a `repr(C)` codec for its payload type; an in-memory runtime that
+//! a `podbuf` codec for its payload type; an in-memory runtime that
 //! implements `Clock`, `SignalReader` and `SignalWriter`; and the accessor a
 //! generated client would contain. `main` moves the signal through its
 //! provenance and freshness states and prints the sample read after each
@@ -19,7 +19,7 @@ use ridl_rt::contract::{
     CatalogHash, CatalogRef, Interaction, Interface, InterfaceNo, Kind, Member, Ordinal,
     PayloadInfo, Signal, Timing, TimingMode,
 };
-use ridl_rt::encoding::ReprC;
+use ridl_rt::encoding::Podbuf;
 use ridl_rt::error::Contract;
 use ridl_rt::payload::{
     EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError, Violation,
@@ -37,7 +37,7 @@ use ridl_rt::sample::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Speed(pub u16);
 
-impl Payload<ReprC> for Speed {
+impl Payload<Podbuf> for Speed {
     const MAX_SIZE: usize = 2;
     type Buffer = [u8; 2];
     const BUFFER: [u8; 2] = [0; 2];
@@ -69,7 +69,7 @@ impl Payload<ReprC> for Speed {
         Ok(buf)
     }
 
-    fn decode(r: Ref<'_, Self, ReprC>) -> Self {
+    fn decode(r: Ref<'_, Self, Podbuf>) -> Self {
         let b = r.bytes();
         Speed(u16::from_le_bytes([b[0], b[1]]))
     }
@@ -129,13 +129,13 @@ impl Signal for SpeedSignal {
 /// substitutes the init value. A generated accessor would substitute its own
 /// last good value when it has one.
 pub fn read_speed(port: &dyn SignalReader) -> Result<Sample<Speed>, ReadError> {
-    let mut buf = [0u8; <Speed as Payload<ReprC>>::MAX_SIZE];
+    let mut buf = [0u8; <Speed as Payload<Podbuf>>::MAX_SIZE];
     let raw = port.read(Drivetrain::NUMBER, SpeedSignal::MEMBER.ordinal, &mut buf)?;
     let (value, provenance) = match raw.provenance {
         Provenance::Init | Provenance::Invalid(Cause::Declared) if raw.len == 0 => {
             (SpeedSignal::init(), raw.provenance)
         }
-        _ => match Ref::<Speed, ReprC>::verify(&buf[..raw.len]) {
+        _ => match Ref::<Speed, Podbuf>::verify(&buf[..raw.len]) {
             Ok(proof) => (proof.decode(), raw.provenance),
             Err(VerifyError::Contract(violation)) => (
                 SpeedSignal::init(),
@@ -307,8 +307,8 @@ impl SignalWriter for Memory {
 
 /// Publishes `speed` the way a generated publisher does: encode, stage, commit.
 fn publish(runtime: &mut Memory, speed: Speed) {
-    let mut buf = [0u8; <Speed as Payload<ReprC>>::MAX_SIZE];
-    let proof = Ref::<Speed, ReprC>::encode(&speed, &mut buf).expect("the buffer is MAX_SIZE");
+    let mut buf = [0u8; <Speed as Payload<Podbuf>>::MAX_SIZE];
+    let proof = Ref::<Speed, Podbuf>::encode(&speed, &mut buf).expect("the buffer is MAX_SIZE");
     runtime
         .set(
             Drivetrain::NUMBER,
@@ -324,8 +324,8 @@ fn publish(runtime: &mut Memory, speed: Speed) {
 /// passed; the invalid state the provider declares; a value the accessor's
 /// check rejects; and bytes the accessor cannot decode.
 pub fn walk() -> [Sample<Speed>; 6] {
-    let mut init = [0u8; <Speed as Payload<ReprC>>::MAX_SIZE];
-    let proof = Ref::<Speed, ReprC>::encode(&SpeedSignal::init(), &mut init)
+    let mut init = [0u8; <Speed as Payload<Podbuf>>::MAX_SIZE];
+    let proof = Ref::<Speed, Podbuf>::encode(&SpeedSignal::init(), &mut init)
         .expect("the buffer is MAX_SIZE");
     let mut runtime = Memory::new(Timestamp(1_000_000), proof.bytes());
     let read = |runtime: &Memory| read_speed(runtime).expect("speed is in the catalog");
