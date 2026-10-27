@@ -522,19 +522,20 @@ other entry below is Accepted.
   type with no finite bound will generate; encode will refuse a larger value
   with a new `EncodeError::TooLarge`, which the face will map to the port
   errors' `TooLarge`, and verify will refuse it with `Malformed::TooLarge`;
-  `BUFFER` stays; only the two lints are built so far; TYPL-116
-  `bound-above-transfer` warns on a `string` bound above 4,032 characters or a
-  `bytes` bound above 16,128 bytes, and RIDL-150 `payload-above-ceiling` on a
-  payload above the ceiling, both at `warn` under an amendment of ADR-0029
-  decision 2; the `[0..256]` default stays; larger data is a stream
-  (driftsys/ridl#996). Amended 2026-10-24 (driftsys/ridl#1045), now fifteen
-  decisions: each interaction has its own payload limit, set in a `[limits]`
-  table of `ridl.toml` by name, by kind or as a default, never above the ceiling
-  (built, with RIDL-151 for a payload above a declared limit and RIDL-152 for an
-  entry that names no interaction); the limit is covered by the catalog hash and
-  carried in a column of the catalog descriptor (built); the WebSocket message
-  limit is at most 16,292 bytes, which an embedder can lower but not raise, and
-  a request above its member's limit is answered `corrupt` (built).
+  `BUFFER` stays; the `MAX_SIZE` cap and the run-time refusal are not built yet
+  (driftsys/ridl#996); TYPL-116 `bound-above-transfer` warns on a `string` bound
+  above 4,032 characters or a `bytes` bound above 16,128 bytes, and RIDL-150
+  `payload-above-ceiling` on a payload above the ceiling, both at `warn` under
+  an amendment of ADR-0029 decision 2; the `[0..256]` default stays; larger data
+  is a stream (driftsys/ridl#996). Amended 2026-10-24 (driftsys/ridl#1045), now
+  fifteen decisions: each interaction has its own payload limit, set in a
+  `[limits]` table of `ridl.toml` by name, by kind or as a default, never above
+  the ceiling (built, with RIDL-151 for a payload above a declared limit and
+  RIDL-152 for an entry that names no interaction); the limit is covered by the
+  catalog hash and carried in a column of the catalog descriptor (built); the
+  WebSocket message limit is at most 16,292 bytes, which an embedder can lower
+  but not raise, and a request above its member's limit is answered `corrupt`
+  (built).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

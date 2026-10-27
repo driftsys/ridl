@@ -27,6 +27,14 @@ follows in separate issues, and the change to `with_max_message_bytes` is a
 breaking change of the published `ridl-transport-ws` API, released in a version
 marked breaking.
 
+Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
+`[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
+limit in the IR and the catalog hash of decision 13 (driftsys/ridl#1065), and
+the WebSocket limits of decisions 10 and 15 with the descriptor's limit column
+(driftsys/ridl#1098). Decisions 3 and 4 are not built: `MAX_SIZE` is not capped
+at the ceiling, and `ridl-rt` has no `PAYLOAD_CEILING` and no
+`EncodeError::TooLarge` (driftsys/ridl#996).
+
 When accepted, these records gain a dated note or are changed in place:
 
 - ADR-0021: decision 17 and the note of 2026-10-20 say a payload with no finite
