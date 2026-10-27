@@ -27,6 +27,14 @@ follows in separate issues, and the change to `with_max_message_bytes` is a
 breaking change of the published `ridl-transport-ws` API, released in a version
 marked breaking.
 
+Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
+`[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
+limit in the IR and the catalog hash of decision 13 (driftsys/ridl#1065), and
+the WebSocket limits of decisions 10 and 15 with the descriptor's limit column
+(driftsys/ridl#1098). Decisions 3 and 4 are not built: `MAX_SIZE` is not capped
+at the ceiling, and `ridl-rt` has no `PAYLOAD_CEILING` and no
+`EncodeError::TooLarge` (driftsys/ridl#996).
+
 When accepted, these records gain a dated note or are changed in place:
 
 - ADR-0021: decision 17 and the note of 2026-10-20 say a payload with no finite
@@ -225,12 +233,20 @@ When accepted, these records gain a dated note or are changed in place:
     of decision 2. With no `[limits]` table, every interaction's limit is the
     ceiling. The table names only the unit's own interactions, by the
     interface's or inline service's name without its package, then `.`, then the
-    member. An unknown kind and a value above 16,256 are manifest errors with a
-    `MANI-` code (ADR-0002); a name that matches no interaction is a checker
-    error with a `RIDL-` code. The codes are MANI-021 for an unknown kind,
-    MANI-022 for a value above the ceiling, and RIDL-152 for a name that matches
-    no interaction. The ceiling stays the upper bound for every interaction and
-    is changed only by amending this record.
+    member. An inline service `demo.svc` is keyed `svc.member`; a key with the
+    package (`demo.svc.member`, `pkg.Iface.member`) names nothing. When two
+    interfaces or inline services of one unit share a short name, a key that
+    uses the name is ambiguous and is reported with the same code as a key that
+    names nothing. A limit of 0 is valid. The table of a remote unit that the
+    workspace imports is read as well, so a consumer records the same limits as
+    the owner and computes the same catalog hash; a limit of a remote unit is
+    recorded and is not checked again on the consumer side. An unknown kind and
+    a value above 16,256 are manifest errors with a `MANI-` code (ADR-0002); a
+    name that matches no interaction is a checker error with a `RIDL-` code. The
+    codes are MANI-021 for an unknown kind, MANI-022 for a value above the
+    ceiling, and RIDL-152 for a name that matches no interaction. The ceiling
+    stays the upper bound for every interaction and is changed only by amending
+    this record.
 
     The limits are in the manifest, not in an attribute, because a signal, an
     event and a fixed take no attribute block (`family-general-form.md` §4.3),
@@ -272,14 +288,21 @@ When accepted, these records gain a dated note or are changed in place:
     limit is answered with the outcome `corrupt`, as for arguments that do not
     verify (§9.3). This is a check of length against the catalog, not a
     verification of the payload, and it amends §11.1 item 4 for a `request`
-    only. A publish is not checked: the Rust server receives none, and a client
-    receives only what its server sent. A backend with no member table, or a
-    descriptor without the limit column, applies the message limit alone. The
-    retained-bytes cap has the largest message limit, 16,292, as its smallest
-    valid value; the clamp that raises a smaller cap to the message limit
+    only. The server answers a repeated `seq` first, then an unknown member,
+    then checks the length, and records no note for the refusal. A publish is
+    not checked: the Rust server receives none, and a client receives only what
+    its server sent. A backend with no member table, or a descriptor without the
+    limit column, applies the message limit alone. The retained-bytes cap has
+    the largest message limit, 16,292, as its smallest valid value; the clamp
+    that raises a smaller cap to the message limit
     (`crates/ridl-transport-ws/src/server/session.rs`) is removed, and
-    `RetainedTooSmall` states that minimum. `with_max_retained_bytes` keeps its
-    role of sizing the memory an embedder grants a session, above that minimum.
+    `RetainedTooSmall` states that minimum, which is the constant 16,292
+    whatever the configured message limit. `with_max_message_bytes` refuses a
+    value outside 294 to 16,292 with one error, `LimitOutOfRange`. 16,292 is the
+    Rust provider's maximum and default; the frame specification does not make
+    it a rule for every receiver of the binding. `with_max_retained_bytes` keeps
+    its role of sizing the memory an embedder grants a session, above that
+    minimum.
 
 ## Where the rules are stated
 
