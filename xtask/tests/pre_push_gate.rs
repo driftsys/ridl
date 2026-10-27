@@ -3,9 +3,9 @@
 //! git gives a pre-push hook one line per ref on stdin:
 //! `<local ref> <local sha> <remote ref> <remote sha>`, and git-std forwards
 //! them to the command. The script skips `just pre-push` when every remote ref
-//! is a tag, and runs it otherwise, also when there is no line: git sends a
-//! line for every real push, so an empty stdin means the lines were lost, and
-//! the gate runs instead of being skipped without notice. Each test runs
+//! is a tag, and runs it otherwise, also when there is no line: an empty
+//! stdin, from a push with nothing to update or from lines that were lost,
+//! runs the gate instead of skipping it without notice. Each test runs
 //! the script with a fake `just` first on `PATH`, which writes a marker file
 //! and exits 7. The marker holds the arguments `just` was given.
 

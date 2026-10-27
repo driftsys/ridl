@@ -3237,9 +3237,12 @@ verify: lint-commits build
 #
 # It refuses to start unless this is a clean `main` equal to `origin/main`
 # whose `ci` run passed, runs the release check of the freeze gate, lets
-# `git std bump --no-commit` write the version, the `version_files` pins and the changelog, runs
-# `release-sync` for the pins git-std cannot write, and checks the lockfiles and
-# the pins before it commits and tags.
+# `git std bump --no-commit` write the version, the `version_files` pins and
+# the changelog, runs `release-sync` for the pins git-std cannot write, and
+# checks that the lockfiles agree with their manifests and that the pins
+# `release-sync` wrote follow the version, before it commits and tags. The
+# `version_files` pins and the build gate are left to the `ci` run on the
+# release commit, which `release-push` waits for.
 release *ARGS: toolchain-check
     #!/usr/bin/env bash
     set -euo pipefail
@@ -3257,7 +3260,7 @@ release *ARGS: toolchain-check
         exit 1
     fi
     # The tree is taken as sane because ci passed on it; the release does not
-    # rebuild it.
+    # run the build gate.
     # The newest run of any event, so a manual re-run after an infrastructure
     # failure counts.
     ci="$(gh run list --workflow ci --commit "$(git rev-parse HEAD)" \
@@ -3270,8 +3273,10 @@ release *ARGS: toolchain-check
     gh pr list --base main --state open || true
     cargo run --locked --package xtask -- freeze check --release
     # The tree was clean and equal to origin/main before the bump, so a reset
-    # to origin/main discards a failed release, including a commit already made.
-    trap 'echo "release: failed; discard the release with: git reset --hard origin/main" >&2' ERR
+    # to origin/main discards a failed release, including a commit already
+    # made. The trap is on EXIT, so an explicit `exit 1` reports it too.
+    released=false
+    trap '[ "$released" = true ] || echo "release: failed; discard the release with: git reset --hard origin/main, and git tag -d for a v or editor-v tag it created" >&2' EXIT
     git std bump --no-commit {{ ARGS }}
     just release-sync
     # Cheap checks of what the bump and the sync wrote: both lockfiles agree
@@ -3297,6 +3302,7 @@ release *ARGS: toolchain-check
     git commit -m "chore(release): $version"
     git tag -a "v$version" -m "v$version"
     git tag -a "editor-v$version" -m "editor-v$version"
+    released=true
     echo "release: $version is committed and tagged locally. Review the"
     echo "release: changelog, then run: just release-push"
     echo "release: (not the git push --follow-tags that git std bump printed)"
@@ -3304,11 +3310,12 @@ release *ARGS: toolchain-check
 # Update the version pins that `git std bump` cannot write, after the bump:
 # the `ridl-rt` requirement that `ridl build` emits (`<major>.<minor>`, not the
 # full version, except for a pre-release, which only a requirement that names
-# the same pre-release matches), the cabin example's manifests, lockfiles and `deno.lock`, the
-# editor manifest (an `editor-v` tag must equal it), the root `Cargo.lock`
-# (one entry per crate, and a `version_files` entry rewrites only the first
-# match) and the frozen generated manifests. xtask/tests/release_derived_pins.rs
-# fails when one of them does not follow the workspace version.
+# the same pre-release matches), the cabin example's manifests, lockfiles and
+# `deno.lock`, the editor manifest (an `editor-v` tag must equal it), the root
+# `Cargo.lock` (one entry per crate, and a `version_files` entry rewrites only
+# the first match) and the frozen generated manifests.
+# xtask/tests/release_derived_pins.rs fails when one of them does not follow
+# the workspace version.
 release-sync:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -3380,9 +3387,11 @@ release-push:
     if ! gh run watch "$run_id" --exit-status; then
         conclusion="$(gh run view "$run_id" --json conclusion --jq .conclusion || true)"
         echo "release-push: the ci run on $sha did not pass ($conclusion); the tags are not pushed." >&2
-        if [ "$conclusion" = cancelled ] || [ -z "$conclusion" ]; then
-            echo "release-push: a later push to main cancels the run, and an interrupt stops the watch." >&2
-            echo "release-push: re-run it with: gh run rerun $run_id" >&2
+        if [ -z "$conclusion" ]; then
+            echo "release-push: the watch stopped before the run finished; run just release-push again." >&2
+        elif [ "$conclusion" = cancelled ]; then
+            echo "release-push: a later push to main cancels the run. Re-run it with" >&2
+            echo "release-push:   gh run rerun $run_id" >&2
             echo "release-push: then run just release-push again." >&2
         else
             echo "release-push: fix main, then cut the next patch version. Keep the local" >&2

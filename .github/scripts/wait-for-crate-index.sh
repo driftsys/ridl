@@ -35,7 +35,8 @@ while :; do
     # as "not yet".
     # The body is read in full before it is searched: `grep -q` stops at the
     # first match, and under pipefail a curl still writing would then fail.
-    body="$(curl -fsS --connect-timeout 10 --max-time 60 "$index_url/$path" 2>/dev/null || true)"
+    body="$(curl -fsS --connect-timeout 10 --max-time 60 "$index_url/$path" \
+        2>/dev/null || true)"
     if grep -qF "\"vers\":\"$version\"" <<<"$body"; then
         echo "$crate $version is in the index"
         exit 0

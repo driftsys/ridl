@@ -8,8 +8,7 @@
 //! match, and the `ridl-rt` requirement that `ridl build` emits holds
 //! `<major>.<minor>`, not the full version. `just release-sync` updates them
 //! after the bump. This test fails when one of them does not follow the
-//! workspace version, so a release commit that misses one fails `just test`
-//! before it is tagged.
+//! workspace version; `just release` runs it before it commits and tags.
 //!
 //! The pins, with `<mm>` the `<major>.<minor>` of the workspace version, or the
 //! full version for a pre-release, which only a requirement that names the
@@ -293,7 +292,12 @@ fn synthetic_tree(test: &str, version: &str, major_minor: &str) -> std::path::Pa
         CABIN_PATH_CRATES
             .iter()
             .map(|name| format!("[[package]]\nname = \"{name}\"\nversion = \"{version}\"\n\n"))
-            .collect(),
+            .collect::<String>()
+            // A registry `ridl-` package and a path package of the example
+            // itself, which the check must both leave alone.
+            + "[[package]]\nname = \"ridl-x\"\nversion = \"0.1.0\"\n\
+               source = \"registry+https://github.com/rust-lang/crates.io-index\"\n\n\
+               [[package]]\nname = \"cabin-app\"\nversion = \"0.0.0\"\n\n",
     );
     write(
         "crates/ridlc/src/lib.rs",
@@ -504,6 +508,24 @@ fn a_full_version_where_the_major_minor_belongs_is_reported() {
             .iter()
             .all(|e| e.contains("found 0.15.0, expected 0.15")),
         "{errors:#?}"
+    );
+}
+
+#[test]
+fn a_listed_crate_missing_from_the_cabin_lock_is_reported() {
+    let dir = synthetic_tree("listed-missing", "0.15.0", "0.15");
+    replace_in(
+        &dir,
+        "examples/cabin/Cargo.lock",
+        "[[package]]\nname = \"ridl-descriptor\"\nversion = \"0.15.0\"\n\n",
+        "",
+    );
+    assert_eq!(
+        derived_pin_errors(&dir, "0.15.0"),
+        vec![
+            "examples/cabin/Cargo.lock (package ridl-descriptor): \
+             the pin was not found (expected 0.15.0)"
+        ]
     );
 }
 

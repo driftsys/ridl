@@ -62,12 +62,12 @@ without a pull request.
    `just release-sync`, which updates the pins that a `[[version_files]]` entry
    cannot express: the root and cabin lockfiles, the `ridl-rt` requirement that
    `ridl build` emits, the cabin manifests and `deno.lock`, the editor manifest
-   and the frozen generated manifests. The recipe does not rebuild the tree,
-   which `ci` already checked. It checks only what the bump and the sync wrote:
-   that both lockfiles agree with their manifests (`cargo metadata --locked`)
-   and that every derived pin follows the new version. It then commits
-   `chore(release): <version>`, and creates the annotated tags `v<version>` and
-   `editor-v<version>`, all locally.
+   and the frozen generated manifests. The recipe does not run the build gate,
+   which `ci` already ran on that commit. It checks only what the bump and the
+   sync wrote: that both lockfiles agree with their manifests
+   (`cargo metadata --locked`) and that every derived pin follows the new
+   version. It then commits `chore(release): <version>`, and creates the
+   annotated tags `v<version>` and `editor-v<version>`, all locally.
 2. Read the changelog in the release commit.
 3. Run `just release-push`. It pushes `main`, waits for the `ci` run on the
    release commit, and pushes the two tags only if that run passed. A push to

@@ -1388,7 +1388,8 @@ fn ridl_rt_version_requirement_matches_the_crate() {
 
 /// The `ridl-rt` requirement the emitted manifest is expected to carry,
 /// `<major>.<minor>` of the workspace version `crates/ridl-rt/Cargo.toml`
-/// inherits. Every test that pins a `ridl-rt = ...` line reads it from here,
+/// inherits, or the full version for a pre-release (see
+/// `requirement_for_version`). Every test that pins a `ridl-rt = ...` line reads it from here,
 /// so a release moves only the literal in `render_cargo_toml`.
 fn ridl_rt_requirement() -> String {
     #[derive(serde::Deserialize)]
@@ -1441,6 +1442,16 @@ fn ridl_rt_requirement() -> String {
         version: String,
     }
 
+    requirement_for_version(&version)
+}
+
+/// `<major>.<minor>` of `version`, or `version` itself when it is a
+/// pre-release: a `0.15` requirement does not match `0.15.0-rc.1`.
+/// `just release-sync` writes the requirement by the same rule.
+fn requirement_for_version(version: &str) -> String {
+    if version.contains('-') {
+        return version.to_string();
+    }
     let mut segments = version.split('.');
     let major = segments
         .next()
@@ -1449,6 +1460,12 @@ fn ridl_rt_requirement() -> String {
         .next()
         .expect("a semver version has a minor segment");
     format!("{major}.{minor}")
+}
+
+#[test]
+fn the_ridl_rt_requirement_of_a_pre_release_is_the_full_version() {
+    assert_eq!(requirement_for_version("0.15.0"), "0.15");
+    assert_eq!(requirement_for_version("0.15.0-rc.1"), "0.15.0-rc.1");
 }
 
 /// The `regex` requirement in the emitted manifest and the `regex` version the

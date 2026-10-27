@@ -3,9 +3,10 @@ name: crates-io-release
 # Publishes every workspace crate whose manifest does not set `publish = false`
 # to crates.io, on a `v<version>` tag a maintainer pushes — `just release`
 # creates the tag and `just release-push` pushes it; the push itself is the
-# maintainer act (ADR-0007 decision 14, amended 2026-09-21 and 2026-09-22). `xtask`, `ridlc-gen-model` and
-# `ridlc-gen-rust` are the crates left `publish = false`: the first is workspace
-# tooling and the other two are test-only, so none is published. The `ridl`
+# maintainer act (ADR-0007 decision 14, amended 2026-09-21 and 2026-09-22).
+# `xtask`, `ridlc-gen-model` and `ridlc-gen-rust` are the crates left
+# `publish = false`: the first is workspace tooling and the other two are
+# test-only, so none is published. The `ridl`
 # CLI publishes as `ridl-cli` (crates/ridl/Cargo.toml explains the name),
 # alongside `ridl-lsp` and `ridl-mcp`, which it depends on directly — `cargo
 # publish` needs every normal dependency resolvable on the registry, so the
@@ -17,8 +18,8 @@ name: crates-io-release
 # it has no build/smoke matrix — only a gate re-run before the publish step.
 #
 # The `publish` job's shape is driftsys/git-std's and driftsys/prim's own
-# `publish` job: a shell function skips a crate already at its manifest
-# version on crates.io, otherwise runs `cargo publish`. In both cases it then
+# `publish` job: a shell function runs `cargo publish` and skips the crate
+# when cargo answers that the version is already uploaded. In both cases it then
 # waits until the version is in the index that cargo reads
 # (.github/scripts/wait-for-crate-index.sh), so a dependent crate publishes
 # only once the crates it needs are there.
