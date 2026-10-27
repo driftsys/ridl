@@ -3259,6 +3259,7 @@ release *ARGS: toolchain-check
     echo "release: open pull requests on main (for information):"
     gh pr list --base main --state open || true
     cargo run --locked --package xtask -- freeze check --release
+    trap 'echo "release: failed; the tree was clean before the bump, so `git checkout -- .` discards the release changes" >&2' ERR
     git std bump --no-commit {{ ARGS }}
     just release-sync
     cargo check --workspace --locked
@@ -3267,6 +3268,11 @@ release *ARGS: toolchain-check
     cargo test --locked --package ridlc --test rust_crate_emit ridl_rt_version_requirement_matches_the_crate
     version="$(cargo metadata --no-deps --format-version 1 \
         | jq -r '.packages[] | select(.name == "ridl-core") | .version')"
+    if [ -n "$(git ls-files --others --exclude-standard)" ]; then
+        echo "release: the release created untracked files; add them to the sync or ignore them:" >&2
+        git ls-files --others --exclude-standard >&2
+        exit 1
+    fi
     git add -u
     git commit -m "chore(release): $version"
     git tag -a "v$version" -m "v$version"
@@ -3331,7 +3337,7 @@ release-push:
     git push origin HEAD:main
     run_id=""
     for _ in $(seq 30); do
-        run_id="$(gh run list --workflow ci --commit "$sha" --json databaseId --jq '.[0].databaseId // empty')"
+        run_id="$(gh run list --workflow ci --event push --commit "$sha" --json databaseId --jq '.[0].databaseId // empty')"
         [ -n "$run_id" ] && break
         sleep 10
     done
@@ -3340,9 +3346,11 @@ release-push:
         exit 1
     fi
     if ! gh run watch "$run_id" --exit-status; then
-        echo "release-push: ci failed on $sha; fix main and cut the release again." >&2
-        echo "release-push: the tags are not pushed. Delete them locally with:" >&2
+        echo "release-push: the ci run on $sha did not pass, or the watch stopped; the tags are not pushed." >&2
+        echo "release-push: if the watch stopped (a network error or an interrupt), run just release-push again." >&2
+        echo "release-push: if ci failed, fix main, delete the local tags with" >&2
         echo "release-push:   git tag -d v$version editor-v$version" >&2
+        echo "release-push: and cut the next patch version." >&2
         exit 1
     fi
     git push origin "v$version" "editor-v$version"

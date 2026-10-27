@@ -28,7 +28,8 @@ The repository has two independent release trains:
   [R-12 of the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md)); it
   now shares the workspace version and this tag like every other published
   crate. The tag push is still the maintainer act (ADR-0007 decision 14).
-- **`editor-v<version>`**, cut by a maintainer pushing the tag. This builds the
+- **`editor-v<version>`**, created on the same release commit by `just release`
+  and pushed by `just release-push` (see "Cutting a release"). This builds the
   `ridl` binary for five targets and packages one VSIX per target, creates the
   GitHub Release, and holds the Marketplace and Open VSX publishes behind the
   reviewed `marketplace` environment (`.github/workflows/vscode-release.yaml`).
@@ -69,17 +70,20 @@ without a pull request.
 3. Run `just release-push`. It pushes `main`, waits for the `ci` run on the
    release commit, and pushes the two tags only if that run passed. The tags
    start `crates-io-release.yml`, `npm-release.yml` and `vscode-release.yaml`.
-   The Marketplace and Open VSX jobs then wait for approval in the `marketplace`
-   environment.
+   The Marketplace job then waits for approval in the `marketplace` environment.
+   The Open VSX job is turned off until an `OVSX_PAT` secret exists.
 
 A tag is not moved after it is pushed. A publish workflow that starts from a tag
 runs that tag's commit, and a re-run of it also uses the workflow file of that
 commit, so a fix on `main` cannot reach it. A failure in a publish workflow
 before anything is published is fixed on `main` and released as the next patch
-version. Each publish job skips a version that is already on its registry, so a
-re-run after a partial publish continues where the earlier run stopped. The
-crates.io job waits after each crate until the version is in the index that
-cargo reads (`.github/scripts/wait-for-crate-index.sh`).
+version. The crates.io and npm jobs skip a version that is already on their
+registry, so a re-run after a partial publish continues where the earlier run
+stopped. The Marketplace and Open VSX publishes are not idempotent: after a
+partial failure, the remaining targets are published by hand, as
+`vscode-release.yaml` describes. The crates.io job waits after each crate until
+the version is in the index that cargo reads
+(`.github/scripts/wait-for-crate-index.sh`).
 
 ## How the binary learns its version
 
