@@ -77,6 +77,23 @@ fn verdict<T>(result: Result<T, VerifyError>) -> String {
     }
 }
 
+/// `OK`, or the `Rule` name a `Contract` refusal carries, or the variant.
+fn rule_of<T>(result: Result<T, VerifyError>) -> String {
+    match result {
+        Err(VerifyError::Contract(violation)) => format!("{:?}", violation.rule),
+        other => verdict(other),
+    }
+}
+
+/// Verifies `bytes` as a `$ty` and prints the rule of a `Contract` refusal.
+macro_rules! rule {
+    ($ty:ty, $bytes:expr) => {{
+        let bytes: Vec<u8> = $bytes;
+        let buf = aligned(&bytes);
+        rule_of(<$ty>::__ridl_podbuf_verify(&buf.0[..bytes.len()]))
+    }};
+}
+
 /// Verifies `bytes` as a `$ty` and prints the verdict.
 macro_rules! check {
     ($ty:ty, $bytes:expr) => {{
@@ -141,6 +158,30 @@ fn scored(keys: &[f64]) -> Vec<u8> {
 fn swap_entries(mut bytes: Vec<u8>) -> Vec<u8> {
     let (head, tail) = bytes.split_at_mut(32);
     head[16..32].swap_with_slice(&mut tail[..16]);
+    bytes
+}
+
+fn weight(value: i64) -> Weight {
+    Weight::new_unchecked(value)
+}
+
+/// A `Keyed` buffer by hand whose map block starts at 28, 4-aligned but not
+/// 8-aligned: the label "ab" with its NUL at 24..27, one pad byte, then one
+/// entry `{ key: descriptor to "x" at 44, value: 1 }` at 28..44, then "x"
+/// and its NUL at 44..46.
+fn keyed_unaligned_block() -> Vec<u8> {
+    let mut bytes = vec![16, 0, 0, 0, 0, 0, 0, 0];
+    bytes.extend_from_slice(&24u32.to_le_bytes());
+    bytes.extend_from_slice(&2u32.to_le_bytes());
+    bytes.extend_from_slice(&28u32.to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&16u16.to_le_bytes());
+    bytes.extend_from_slice(b"ab\0\0");
+    bytes.extend_from_slice(&44u32.to_le_bytes());
+    bytes.extend_from_slice(&1u32.to_le_bytes());
+    bytes.push(1);
+    bytes.extend_from_slice(&[0; 7]);
+    bytes.extend_from_slice(b"x\0");
     bytes
 }
 "#;
@@ -356,20 +397,121 @@ fn a_float_with_no_range_accepts_nan() {
     assert_eq!(out, ["OK"]);
 }
 
-/// §7 rule 4 for bytes and arrays: the count is checked against the bound
-/// (`Contract`), and a required array with no element is refused.
+/// §7 rule 4 for bytes, arrays and maps: the count is checked against the
+/// bound (`Contract` with the rule `Length`), and a required array with no
+/// element is refused. The over-max cases keep the data inside the buffer,
+/// because a block after it is there to be pointed into, so the bound and
+/// not the buffer end refuses them: `Blob`'s data of 8 bytes is followed by
+/// its `marks` block; `Ordered`'s `xs` block of 4 by its `faults` block;
+/// `Labels`' 8 entries by their 8 key strings, 16 bytes, one entry's worth.
 #[test]
 fn bytes_and_array_counts_are_checked_against_their_bounds() {
     let out = run(
         "podbuf_counts",
         &[
             r#"check!(Blob, enc!(Blob { data: vec![1, 2, 3], marks: vec![4] }))"#,
+            r#"rule!(Blob, patch_u32(enc!(Blob { data: vec![1, 2, 3, 4, 5, 6, 7, 8], marks: vec![5, 6] }), 12, 9))"#,
             r#"check!(Blob, patch_u32(enc!(Blob { data: vec![1, 2, 3], marks: vec![4] }), 12, 9))"#,
-            r#"check!(Blob, patch_u32(patch_u32(enc!(Blob { data: vec![1, 2, 3], marks: vec![4] }), 16, 0), 20, 0))"#,
+            r#"rule!(Blob, patch_u32(patch_u32(enc!(Blob { data: vec![1, 2, 3], marks: vec![4] }), 16, 0), 20, 0))"#,
             r#"check!(Blob, patch_u16(enc!(Blob { data: vec![1, 2, 3], marks: vec![4] }), 20, 5))"#,
+            r#"rule!(Ordered, patch_u16(enc!(Ordered { label: "".into(), xs: vec![1, 2, 3, 4], faults: vec![ev(1, "", 0)] }), 20, 5))"#,
+            r#"rule!(Labels, patch_u16(enc!(Labels { by_name: map(&[("a", 1), ("b", 2), ("c", 3), ("d", 4), ("e", 5), ("f", 6), ("g", 7), ("h", 8)]) }), 12, 9))"#,
         ],
     );
-    assert_eq!(out, ["OK", "OutOfBounds", "Contract", "OutOfBounds"]);
+    assert_eq!(
+        out,
+        [
+            "OK",
+            "Length",
+            "OutOfBounds",
+            "Length",
+            "OutOfBounds",
+            "Length",
+            "Length"
+        ]
+    );
+}
+
+/// §7 rule 4: a descriptor whose `len` is 0 has every other byte 0. A
+/// non-zero `off` on an empty bytes field, an empty array or an empty map,
+/// and a non-zero `elem_size` on an empty array, are `OutOfBounds`. The
+/// descriptor of `Blob.data` is at head 0..8, of `FaultPage.faults` and
+/// `Labels.by_name` at 0..8 (`off` at buffer 8, `elem_size` at 14).
+#[test]
+fn a_zero_length_descriptor_has_no_other_byte_set() {
+    let out = run(
+        "podbuf_zero_descriptor",
+        &[
+            r#"check!(Blob, enc!(Blob { data: vec![], marks: vec![4] }))"#,
+            r#"check!(Blob, patch_u32(enc!(Blob { data: vec![], marks: vec![4] }), 8, 24))"#,
+            r#"check!(FaultPage, patch_u32(enc!(FaultPage { faults: vec![] }), 8, 16))"#,
+            r#"check!(FaultPage, patch_u16(enc!(FaultPage { faults: vec![] }), 14, 24))"#,
+            r#"check!(Labels, patch_u32(enc!(Labels { by_name: vec![] }), 8, 16))"#,
+            r#"check!(Labels, patch_u16(enc!(Labels { by_name: vec![] }), 14, 16))"#,
+        ],
+    );
+    assert_eq!(
+        out,
+        [
+            "OK",
+            "OutOfBounds",
+            "OutOfBounds",
+            "OutOfBounds",
+            "OutOfBounds",
+            "OutOfBounds"
+        ]
+    );
+}
+
+/// §7 rule 4: a map's entry block starts at alignment 8. A hand-written
+/// `Keyed` buffer whose block is at 28, otherwise valid, is `Unaligned`.
+#[test]
+fn a_map_block_must_start_at_alignment_8() {
+    let out = run(
+        "podbuf_map_align",
+        &[r#"check!(Keyed, keyed_unaligned_block())"#],
+    );
+    assert_eq!(out, ["Unaligned"]);
+}
+
+/// §7 rule 8 for integer and boolean keys: a descending pair and a duplicate
+/// are `KeyOrder`. An entry is 8 bytes, so the second key is at buffer 24
+/// when the first is at 16. A duplicate string key, two descriptors to the
+/// same bytes, is `KeyOrder` too: the second entry's key descriptor is at
+/// 32, and the first key's bytes are at 48.
+#[test]
+fn integer_boolean_and_duplicate_string_keys_are_ordered() {
+    let out = run(
+        "podbuf_key_order",
+        &[
+            r#"check!(IntKeyed, enc!(IntKeyed { by_id: vec![(1, weight(1)), (2, weight(2))] }))"#,
+            r#"check!(IntKeyed, patch(enc!(IntKeyed { by_id: vec![(1, weight(1)), (2, weight(2))] }), 24, 1))"#,
+            r#"check!(IntKeyed, patch(enc!(IntKeyed { by_id: vec![(1, weight(1)), (2, weight(2))] }), 24, 0))"#,
+            r#"check!(BoolKeyed, enc!(BoolKeyed { by_flag: vec![(false, weight(1)), (true, weight(2))] }))"#,
+            r#"check!(BoolKeyed, patch(enc!(BoolKeyed { by_flag: vec![(false, weight(1)), (true, weight(2))] }), 24, 0))"#,
+            r#"check!(Labels, patch_u32(enc!(Labels { by_name: map(&[("a", 1), ("b", 2)]) }), 32, 48))"#,
+        ],
+    );
+    assert_eq!(
+        out,
+        ["OK", "KeyOrder", "KeyOrder", "OK", "KeyOrder", "KeyOrder"]
+    );
+}
+
+/// ADR-0031 decision 8: a boolean above 1 is `Contract` with the rule
+/// `Range` (`DoorPayload.is_open` is at buffer 9), and an absent optional
+/// whose bytes are not zero is `Contract` with the rule `Variant` (the
+/// descriptor of `DiagFilter.category` starts at buffer 12).
+#[test]
+fn a_boolean_above_one_is_range_and_a_dirty_absent_optional_is_variant() {
+    let out = run(
+        "podbuf_rule_names",
+        &[
+            r#"rule!(DoorPayload, patch(enc!(door(1, false)), 9, 2))"#,
+            r#"rule!(DiagFilter, patch(enc!(DiagFilter { severity: 3, category: None }), 12, 1))"#,
+        ],
+    );
+    assert_eq!(out, ["Range", "Variant"]);
 }
 
 /// §8.1: a head shorter than the reader's reads its missing fields as 0, and

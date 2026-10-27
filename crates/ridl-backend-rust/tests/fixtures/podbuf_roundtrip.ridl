@@ -226,3 +226,14 @@ struct Sparse {
   o8 : integer [0..255]?
   o9 : integer [0..255]?
 }
+
+/// A map keyed by an integer: the entries are sorted numerically, `key` at
+/// 0 and `value` at 1 of an 8-byte entry.
+struct IntKeyed {
+  byId : [integer [0..255] : Weight; 0..8]
+}
+
+/// A map keyed by a boolean: at most two entries, `false` before `true`.
+struct BoolKeyed {
+  byFlag : [boolean : Weight; 0..2]
+}

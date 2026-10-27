@@ -1482,6 +1482,17 @@ mod tests {
         tuple(vec![("raw", array(byte(), size, size))])
     }
 
+    /// `Holder { items: [byte : byte; 0..max] }`.
+    fn map_of(max: u64) -> Fixture {
+        fixture(
+            "Holder",
+            vec![struct_decl(
+                "Holder",
+                vec![field("items", 1, map(byte(), byte(), 0, max))],
+            )],
+        )
+    }
+
     // --- the law ------------------------------------------------------
 
     #[test]
@@ -1587,6 +1598,49 @@ mod tests {
             vec![1, 2]
         );
         assert!(arms.iter().all(|(_, arm)| arm.size == 8));
+    }
+
+    /// The descriptor limits at their boundary: 65,535 elements or entries
+    /// are inside them, 65,536 are past them, for an array and for a map,
+    /// in the limit check and in the bound.
+    #[test]
+    fn the_descriptor_count_limit_is_inclusive_at_65535() {
+        assert!(!exceeds_descriptor_limits(&head(array_of(65_535, byte()))));
+        assert!(exceeds_descriptor_limits(&head(array_of(65_536, byte()))));
+        assert!(!exceeds_descriptor_limits(&head(map_of(65_535))));
+        assert!(exceeds_descriptor_limits(&head(map_of(65_536))));
+        // An entry `{ key: u8, value: u8 }` is an 8-byte head.
+        assert_eq!(max_size_of(map_of(65_535)), Some(8 + 8 + 65_535 * 8));
+        assert_eq!(max_size_of(map_of(65_536)), None);
+    }
+
+    /// After a union's arm block the alignment is what every arm guarantees:
+    /// `Text`'s tail ends at alignment 1 (a string of at most 4 bytes and a
+    /// NUL after its 8-byte head) and `Plain`'s at 8, so a block of `u64`
+    /// after the union needs a gap of up to 7 bytes, even though the larger
+    /// arm is not the last one. Head 24 (the union inline at 0..16, the
+    /// array descriptor at 16..24); the arm block is 13 bytes at worst.
+    #[test]
+    fn the_alignment_after_a_union_is_the_gcd_over_its_arms() {
+        let holder = fixture(
+            "Holder",
+            vec![
+                struct_decl("Text", vec![field("s", 1, string(1))]),
+                struct_decl("Plain", vec![field("n", 1, byte())]),
+                union_decl(
+                    "Either",
+                    vec![arm("text", 1, "Text"), arm("plain", 2, "Plain")],
+                ),
+                struct_decl(
+                    "Holder",
+                    vec![
+                        field("e", 1, named("Either")),
+                        field("xs", 2, array(int(v2::IntWidth::U64), 0, 1)),
+                    ],
+                ),
+            ],
+        );
+        assert_eq!(max_size_of(holder), Some(8 + 24 + 13 + 7 + 8));
     }
 
     #[test]

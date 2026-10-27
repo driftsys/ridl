@@ -111,6 +111,42 @@ fn a_named_tuple_above_u32_max_bytes_is_ridl_153_naming_the_interaction() {
     );
 }
 
+/// A union whose arm is `Huge`: the union's largest encoding is the arm's,
+/// so both the struct and the union draw RIDL-153, each naming itself.
+const TOO_LARGE_UNION: &str = "package demo\n\
+    type Blob: bytes [60000..60000]\n\
+    type Flag: boolean\n\
+    struct Huge {\n  first: [Blob; 0..65535]\n  second: [Blob; 0..65535]\n}\n\
+    union Pick {\n  huge: Huge\n  flag: Flag\n}\n";
+
+#[test]
+fn a_union_above_u32_max_bytes_is_ridl_153_naming_it() {
+    let out = check(TOO_LARGE_UNION, PODBUF);
+    assert_eq!(codes(&out), vec!["RIDL-153", "RIDL-153"], "{out:?}");
+    assert!(
+        podbuf_errors(&out)[1].message.contains("`demo.Pick`"),
+        "{}",
+        podbuf_errors(&out)[1].message
+    );
+}
+
+/// An array past the count limit inside a tuple field draws RIDL-154 on the
+/// field, and the struct draws no RIDL-153 for the bound it has no longer.
+const TUPLE_LIMITS: &str = "package demo\n\
+    type Flag: boolean\n\
+    struct Pair {\n  both: (count: [Flag; 0..70000], ok: boolean)\n}\n";
+
+#[test]
+fn an_array_past_the_limit_inside_a_tuple_field_is_ridl_154() {
+    let out = check(TUPLE_LIMITS, PODBUF);
+    assert_eq!(codes(&out), vec!["RIDL-154"], "{out:?}");
+    assert!(
+        podbuf_errors(&out)[0].message.contains("`demo.Pair.both`"),
+        "{}",
+        podbuf_errors(&out)[0].message
+    );
+}
+
 #[test]
 fn an_array_past_65535_elements_or_bytes_per_element_is_ridl_154() {
     let out = check(DESCRIPTOR_LIMITS, PODBUF);
