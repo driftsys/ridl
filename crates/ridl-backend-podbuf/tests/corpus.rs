@@ -20,3 +20,33 @@ fn the_two_package_headers_are_pinned() {
     insta::assert_snapshot!("pod_parts", support::header(&packages, "pod.parts"));
     insta::assert_snapshot!("pod_vehicle", support::header(&packages, "pod.vehicle"));
 }
+
+/// A tuple member is named by its typl name in the header of the package that
+/// declares the struct and in the header of the package that lays it out
+/// inline, so the two definitions of the tuple's head are the same text.
+#[test]
+fn a_foreign_nested_tuple_keeps_its_member_names() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/two-packages");
+    let packages = support::workspace(&path);
+    for name in ["pod.parts", "pod.vehicle"] {
+        let header = support::header(&packages, name);
+        let start = header
+            .find("typedef struct pod_parts_hub_size_head {")
+            .unwrap_or_else(|| panic!("{name}: no hub size head"));
+        let end = start + header[start..].find("} pod_parts_hub_size_head;").unwrap();
+        let body = &header[start..end];
+        assert!(
+            body.contains("uint8_t width;"),
+            "{name}: no width in {body}"
+        );
+        assert!(
+            body.contains("uint8_t height;"),
+            "{name}: no height in {body}"
+        );
+        assert!(!body.contains("f1"), "{name}: positional name in {body}");
+        assert!(
+            header.contains("offsetof(pod_parts_hub_size_head, height) == 1"),
+            "{name}: the layout check names the member"
+        );
+    }
+}

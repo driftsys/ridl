@@ -399,11 +399,8 @@ impl<'a> Header<'a> {
         use v1::podbuf_head::Source as Owner;
         use v1::podbuf_source::Kind;
         let head = &self.heads[at];
-        match field
-            .source
-            .as_ref()
-            .and_then(|source| source.kind.as_ref())
-        {
+        let source = field.source.as_ref();
+        match source.and_then(|source| source.kind.as_ref()) {
             Some(Kind::Field(named)) => member_name(&named.name),
             Some(Kind::Flags(index)) => format!("_flags{index}"),
             Some(Kind::Tag(_)) => "tag".to_string(),
@@ -411,10 +408,14 @@ impl<'a> Header<'a> {
                 Some(Owner::Arm(_)) => "value".to_string(),
                 _ => "arm".to_string(),
             },
-            // A tuple member is named by its position, never by its typl
-            // name: a tuple that another package's header defines again has
-            // no name to read, and the two definitions must agree.
-            Some(Kind::Position(position)) => format!("f{position}"),
+            // A tuple member is named by its typl name, which the model
+            // carries next to the position for the tuple of another package
+            // too. A model written before `position_name` existed leaves it
+            // empty, and the member falls back to its position.
+            Some(Kind::Position(position)) => match source.map(|s| s.position_name.as_str()) {
+                Some(name) if !name.is_empty() => member_name(name),
+                _ => format!("f{position}"),
+            },
             Some(Kind::Key(_)) => "key".to_string(),
             Some(Kind::Value(_)) => "value".to_string(),
             None => format!("_field{}", field.offset),

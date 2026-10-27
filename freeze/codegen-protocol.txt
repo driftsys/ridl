@@ -482,6 +482,7 @@ ridl.codegen.v1.PodbufSource.field = 10 singular ridl.codegen.v1.PodbufNamedFiel
 ridl.codegen.v1.PodbufSource.flags = 11 singular uint32 oneof=kind
 ridl.codegen.v1.PodbufSource.key = 15 singular bool oneof=kind
 ridl.codegen.v1.PodbufSource.position = 14 singular uint32 oneof=kind
+ridl.codegen.v1.PodbufSource.position_name = 2 singular string
 ridl.codegen.v1.PodbufSource.tag = 12 singular bool oneof=kind
 ridl.codegen.v1.PodbufSource.value = 16 singular bool oneof=kind
 ridl.codegen.v1.PrimitiveType values PRIMITIVE_TYPE_BOOLEAN PRIMITIVE_TYPE_BYTES PRIMITIVE_TYPE_FLOAT PRIMITIVE_TYPE_INTEGER PRIMITIVE_TYPE_STRING PRIMITIVE_TYPE_UNSPECIFIED

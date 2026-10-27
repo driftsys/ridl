@@ -1375,6 +1375,11 @@ message PodbufSource {
     // A map entry's value.
     bool value = 16;
   }
+  // The typl name of the tuple field `position` names; empty for every other
+  // kind. A tuple field is always named (typl §11), so a backend that spells
+  // the member of a tuple head reads this name, in the package that declares
+  // the tuple and in a package that lays it out inline alike.
+  string position_name = 2;
 }
 
 message PodbufNamedField {

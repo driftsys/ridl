@@ -555,7 +555,7 @@ impl Walk<'_> {
 fn segment(source: &Source) -> Option<String> {
     match source {
         Source::Field { name, .. } => Some(name.clone()),
-        Source::Position(position) => Some(position.to_string()),
+        Source::Position { position, .. } => Some(position.to_string()),
         Source::Key => Some("key".to_string()),
         Source::Value => Some("value".to_string()),
         Source::Flags { .. } | Source::Tag | Source::Arm => None,
@@ -564,6 +564,7 @@ fn segment(source: &Source) -> Option<String> {
 
 fn source(source: &Source) -> v1::PodbufSource {
     use v1::podbuf_source::Kind;
+    let mut position_name = String::new();
     let kind = match source {
         Source::Field { name, ordinal } => Kind::Field(v1::PodbufNamedField {
             name: name.clone(),
@@ -572,9 +573,15 @@ fn source(source: &Source) -> v1::PodbufSource {
         Source::Flags { index } => Kind::Flags(*index),
         Source::Tag => Kind::Tag(true),
         Source::Arm => Kind::Arm(true),
-        Source::Position(position) => Kind::Position(*position),
+        Source::Position { position, name } => {
+            position_name.clone_from(name);
+            Kind::Position(*position)
+        }
         Source::Key => Kind::Key(true),
         Source::Value => Kind::Value(true),
     };
-    v1::PodbufSource { kind: Some(kind) }
+    v1::PodbufSource {
+        kind: Some(kind),
+        position_name,
+    }
 }

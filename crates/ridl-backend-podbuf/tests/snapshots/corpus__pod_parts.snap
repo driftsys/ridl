@@ -122,17 +122,17 @@ _Static_assert(sizeof(((pod_parts_wheel_head *)0)->grip) == 4, "pod_parts_wheel_
 #ifndef POD_PARTS_HUB_SIZE_HEAD_DEFINED
 #define POD_PARTS_HUB_SIZE_HEAD_DEFINED
 typedef struct pod_parts_hub_size_head {
-  _Alignas(8) uint8_t f1;
-  uint8_t f2;
+  _Alignas(8) uint8_t width;
+  uint8_t height;
   uint8_t _pad2[6];
 } pod_parts_hub_size_head;
 #endif
 _Static_assert(sizeof(pod_parts_hub_size_head) == 8, "pod_parts_hub_size_head size");
 _Static_assert(_Alignof(pod_parts_hub_size_head) == 8, "pod_parts_hub_size_head alignment");
-_Static_assert(offsetof(pod_parts_hub_size_head, f1) == 0, "pod_parts_hub_size_head.f1 offset");
-_Static_assert(sizeof(((pod_parts_hub_size_head *)0)->f1) == 1, "pod_parts_hub_size_head.f1 size");
-_Static_assert(offsetof(pod_parts_hub_size_head, f2) == 1, "pod_parts_hub_size_head.f2 offset");
-_Static_assert(sizeof(((pod_parts_hub_size_head *)0)->f2) == 1, "pod_parts_hub_size_head.f2 size");
+_Static_assert(offsetof(pod_parts_hub_size_head, width) == 0, "pod_parts_hub_size_head.width offset");
+_Static_assert(sizeof(((pod_parts_hub_size_head *)0)->width) == 1, "pod_parts_hub_size_head.width size");
+_Static_assert(offsetof(pod_parts_hub_size_head, height) == 1, "pod_parts_hub_size_head.height offset");
+_Static_assert(sizeof(((pod_parts_hub_size_head *)0)->height) == 1, "pod_parts_hub_size_head.height size");
 
 #ifndef POD_PARTS_HUB_HEAD_DEFINED
 #define POD_PARTS_HUB_HEAD_DEFINED
@@ -277,11 +277,11 @@ static inline uint32_t pod_parts_wheel_grip(const uint8_t *buf) {
   return pod_parts_wheel_grip_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
 }
 
-static inline uint8_t pod_parts_hub_size_f1_at(const uint8_t *h, uint32_t sz) {
+static inline uint8_t pod_parts_hub_size_width_at(const uint8_t *h, uint32_t sz) {
   return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
 }
 
-static inline uint8_t pod_parts_hub_size_f2_at(const uint8_t *h, uint32_t sz) {
+static inline uint8_t pod_parts_hub_size_height_at(const uint8_t *h, uint32_t sz) {
   return (uint8_t)ridl_podbuf_load(h, sz, 1, 1);
 }
 
