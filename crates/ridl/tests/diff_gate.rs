@@ -233,11 +233,11 @@ fn every_reported_category_is_explainable() {
 /// disagree. A category whose verdict the classifier reads from the two
 /// bodies prints both labels, one per direction, and is skipped here: its
 /// fixed verdict cannot be read without a pair of bodies, and
-/// `explain_prints_the_rule_row_for_a_category` covers such a row. So is
-/// `podbuf_inline_append`, `podbuf_width_change` and `podbuf_strict_enum_append`,
-/// whose verdict the
-/// classifier reads from the encodings `--encoding` names: each row prints
-/// one label per case, and `diff_cli.rs` covers both.
+/// `explain_prints_the_rule_row_for_a_category` covers such a row. So are
+/// `podbuf_inline_append`, `podbuf_width_change` and
+/// `podbuf_strict_enum_append`, whose verdict the classifier reads from the
+/// encodings `--encoding` names: each row prints one label per case, and
+/// `diff_cli.rs` covers both.
 #[test]
 fn each_fixed_verdict_row_names_the_verdict_the_classifier_gives() {
     use ridl_diff::{Category, Change, Verdict};

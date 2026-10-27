@@ -1966,7 +1966,9 @@ fn emit_enum_set(
     // refuses whole, rather than ignoring the bit it does not know. Whether
     // an enum set is closed or open on the wire is recorded as an open
     // question rather than settled here, because settling it changes that arm
-    // of `ridl-diff` as well as this backend.
+    // of `ridl-diff` as well as this backend. (Under `--encoding podbuf`
+    // `ridl-diff` already reports an appended bit as breaking, as
+    // `podbuf_strict_enum_append`, ADR-0031 decision 10.)
     //
     // A bit outside the int64 domain contributes nothing to the mask rather
     // than shifting by it. `ridl-sem` reports TYPL-111 for a position outside

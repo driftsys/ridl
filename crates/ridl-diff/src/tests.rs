@@ -3437,6 +3437,33 @@ mod podbuf_width {
         assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
     }
 
+    /// A value inserted at a free number is breaking under the generic rule
+    /// (`decl_added`), so it draws no strict-enum line of its own.
+    #[test]
+    fn a_value_inserted_at_a_free_number_draws_no_strict_enum_line() {
+        let package = |numbers: &[i64]| {
+            let values = numbers
+                .iter()
+                .map(|&value| v2::EnumValue {
+                    name: format!("V{value}"),
+                    value,
+                    ..Default::default()
+                })
+                .collect();
+            with_decl(
+                "Mode",
+                v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values,
+                    ..Default::default()
+                }),
+            )
+        };
+        let (old, new) = (package(&[0, 2]), package(&[0, 1, 2]));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Breaking);
+        assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
+    }
+
     /// An appended union arm is not an enum append.
     #[test]
     fn an_appended_union_arm_draws_no_strict_enum_line() {
