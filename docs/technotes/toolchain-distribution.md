@@ -47,6 +47,40 @@ and the extension cannot recover from that: it does not fall back to `PATH`
 while a bundled binary exists. The floor changes neither the target triple nor
 the tarball names, so `install.sh` and the VSIX layout are unaffected.
 
+## Cutting a release
+
+The two trains are cut together. The editor version is the workspace version,
+because `vscode-release.yaml` refuses an `editor-v` tag that differs from
+`editors/vscode/package.json`. The release commit goes to `main` directly,
+without a pull request.
+
+1. On a clean `main` equal to `origin/main`, run
+   `just release --release-as <version>`. Before 1.0, `git std bump` picks a
+   patch release unless it is told the version. The recipe runs the release
+   check of the freeze gate, then `git std bump --no-commit`, then
+   `just release-sync`, which updates the pins that a `[[version_files]]` entry
+   cannot express: the root and cabin lockfiles, the `ridl-rt` requirement that
+   `ridl build` emits, the cabin manifests and `deno.lock`, the editor manifest
+   and the frozen generated manifests. It checks the result
+   (`cargo check --locked` and the pin tests), commits
+   `chore(release): <version>`, and creates the annotated tags `v<version>` and
+   `editor-v<version>`, all locally.
+2. Read the changelog in the release commit.
+3. Run `just release-push`. It pushes `main`, waits for the `ci` run on the
+   release commit, and pushes the two tags only if that run passed. The tags
+   start `crates-io-release.yml`, `npm-release.yml` and `vscode-release.yaml`.
+   The Marketplace and Open VSX jobs then wait for approval in the `marketplace`
+   environment.
+
+A tag is not moved after it is pushed. A publish workflow that starts from a tag
+runs that tag's commit, and a re-run of it also uses the workflow file of that
+commit, so a fix on `main` cannot reach it. A failure in a publish workflow
+before anything is published is fixed on `main` and released as the next patch
+version. Each publish job skips a version that is already on its registry, so a
+re-run after a partial publish continues where the earlier run stopped. The
+crates.io job waits after each crate until the version is in the index that
+cargo reads (`.github/scripts/wait-for-crate-index.sh`).
+
 ## How the binary learns its version
 
 The `ridl` crate shares the workspace version like every other crate, but that

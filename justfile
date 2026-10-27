@@ -3230,11 +3230,125 @@ pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-chec
 # Run before opening a PR.
 verify: lint-commits build
 
-# Cut a release: git-std bumps the version, writes the changelog, tags.
-# The release check of the freeze gate runs first.
-release: toolchain-check
+# Cut a release commit and its two tags, locally; `just release-push` publishes
+# them. Pass the version: `just release --release-as 0.15.0` (before 1.0,
+# git-std picks a patch release unless it is told otherwise). The order is
+# described in docs/technotes/toolchain-distribution.md, "Cutting a release".
+#
+# It refuses to start unless this is a clean `main` equal to `origin/main`,
+# runs the release check of the freeze gate, lets `git std bump --no-commit`
+# write the version, the `version_files` pins and the changelog, runs
+# `release-sync` for the pins git-std cannot write, and checks the result
+# before it commits and tags.
+release *ARGS: toolchain-check
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(git rev-parse --abbrev-ref HEAD)" != main ]; then
+        echo "release: check out main first" >&2
+        exit 1
+    fi
+    if [ -n "$(git status --porcelain)" ]; then
+        echo "release: the working tree is not clean" >&2
+        exit 1
+    fi
+    git fetch origin main --quiet
+    if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+        echo "release: main is not equal to origin/main; pull or push first" >&2
+        exit 1
+    fi
+    echo "release: open pull requests on main (for information):"
+    gh pr list --base main --state open || true
     cargo run --locked --package xtask -- freeze check --release
-    git std bump
+    git std bump --no-commit {{ ARGS }}
+    just release-sync
+    cargo check --workspace --locked
+    cargo test --locked --package xtask --test release_derived_pins
+    cargo test --locked --package ridlc --test prose_version_pins
+    cargo test --locked --package ridlc --test rust_crate_emit ridl_rt_version_requirement_matches_the_crate
+    version="$(cargo metadata --no-deps --format-version 1 \
+        | jq -r '.packages[] | select(.name == "ridl-core") | .version')"
+    git add -u
+    git commit -m "chore(release): $version"
+    git tag -a "v$version" -m "v$version"
+    git tag -a "editor-v$version" -m "editor-v$version"
+    echo "release: $version is committed and tagged locally. Review the"
+    echo "release: changelog, then run: just release-push"
+
+# Update the version pins that `git std bump` cannot write, after the bump:
+# the `ridl-rt` requirement that `ridl build` emits (`<major>.<minor>`, not the
+# full version), the cabin example's manifests, lockfiles and `deno.lock`, the
+# editor manifest (an `editor-v` tag must equal it), the root `Cargo.lock`
+# (one entry per crate, and a `version_files` entry rewrites only the first
+# match) and the frozen generated manifests. xtask/tests/release_derived_pins.rs
+# fails when one of them does not follow the workspace version.
+release-sync:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export VERSION MM
+    VERSION="$(cargo metadata --no-deps --format-version 1 \
+        | jq -r '.packages[] | select(.name == "ridl-core") | .version')"
+    MM="$(echo "$VERSION" | cut -d. -f1-2)"
+    echo "release-sync: workspace version $VERSION, ridl-rt requirement $MM"
+    perl -pi -e 's/(const RIDL_RT_REQUIREMENT: &str = ")[^"]+/${1}$ENV{MM}/; s/(The `ridl-rt = ")[^"]+/${1}$ENV{MM}/' \
+        crates/ridlc/src/lib.rs
+    perl -pi -e 's/(ridl-rt = \{ version = ")[^"]+/${1}$ENV{MM}/' \
+        examples/cabin/consumer/Cargo.toml examples/cabin/server/Cargo.toml
+    perl -pi -e 's/(requires `ridl-rt = ")[^"]+/${1}$ENV{MM}/' examples/cabin/Cargo.toml
+    perl -pi -e 's/(jsr:\@driftsys\/ridl-runtime\@)[^"]+/${1}$ENV{VERSION}/' examples/cabin/web/deno.lock
+    (cd editors/vscode && npm version "$VERSION" --no-git-tag-version --allow-same-version)
+    cargo update --workspace --offline
+    # The generated crate's manifest must carry the new requirement before
+    # the cabin lockfile is updated, or cargo looks for the old ridl-rt on
+    # crates.io.
+    just _cabin-generate
+    (cd examples/cabin && cargo update --workspace --offline)
+    cargo run --locked --package xtask -- freeze update
+
+# Push the release commit that `just release` made, wait for the `ci` run on it
+# to pass, then push its two tags, which start the crates.io, npm and editor
+# release workflows. A tag is pushed only after CI passed on its commit, so a
+# failure is fixed on main before any publish workflow starts.
+release-push:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(git rev-parse --abbrev-ref HEAD)" != main ]; then
+        echo "release-push: check out main first" >&2
+        exit 1
+    fi
+    subject="$(git log -1 --format=%s)"
+    version="${subject#chore(release): }"
+    if [ "$version" = "$subject" ]; then
+        echo "release-push: HEAD is not a release commit ($subject)" >&2
+        exit 1
+    fi
+    sha="$(git rev-parse HEAD)"
+    for tag in "v$version" "editor-v$version"; do
+        if [ "$(git rev-parse --quiet --verify "$tag^{commit}" || true)" != "$sha" ]; then
+            echo "release-push: tag $tag is missing or does not point at HEAD" >&2
+            exit 1
+        fi
+    done
+    git push origin HEAD:main
+    run_id=""
+    for _ in $(seq 30); do
+        run_id="$(gh run list --workflow ci --commit "$sha" --json databaseId --jq '.[0].databaseId // empty')"
+        [ -n "$run_id" ] && break
+        sleep 10
+    done
+    if [ -z "$run_id" ]; then
+        echo "release-push: no ci run for $sha after 5 minutes; the tags are not pushed" >&2
+        exit 1
+    fi
+    if ! gh run watch "$run_id" --exit-status; then
+        echo "release-push: ci failed on $sha; fix main and cut the release again." >&2
+        echo "release-push: the tags are not pushed. Delete them locally with:" >&2
+        echo "release-push:   git tag -d v$version editor-v$version" >&2
+        exit 1
+    fi
+    git push origin "v$version" "editor-v$version"
+    echo "release-push: tags pushed. Watch crates-io-release, npm-release and"
+    echo "release-push: vscode-release; the Marketplace job waits for approval"
+    echo "release-push: in the marketplace environment."
 
 # Set up a clone or worktree: git-std, prim, the git hooks, the Rust toolchain
 # rust-toolchain.toml pins, and a report on any of the three tools the gate
