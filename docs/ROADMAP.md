@@ -24,6 +24,8 @@ system. Kotlin, the first external plugin, follows step 2 because it depends on
 the backend contract. The plugin protocol, E4.5a and E4.5b, runs ahead of the
 two remaining Rust payload codecs, E11.8 and E11.12, and ahead of the TypeScript
 framework, E12; the sequence below states why. E11.8 landed on 2026-10-20.
+E11.12 is built, except open enums and enum sets, which wait for the typl `open`
+keyword (Tasks 13 and 14 of the podbuf plan).
 
 **Supersedes
 [ADR-0004](decisions/ADR-0004-implementation-sequencing-and-stack.md)'s
@@ -251,7 +253,7 @@ E10 value objects, E10.10 last ────────────────�
 
 E14.1 · E10, the typl debt ─→ Rust codegen finalized
       ─→ E11.7 FlatBuffers ─→ E4.5a IR stability ─→ E4.5b plugin protocol
-                                                 ─→ E11.8 proto3, landed · E11.12 podbuf, after #801
+                                                 ─→ E11.8 proto3, landed · E11.12 podbuf, built
 #801 on-request encodings — depends on nothing ─→ E11.8 · E11.9 · E11.12
 
 E6 rsdl finalized and lowered to the IR — beside the lock; E6.17 last, landed
@@ -382,10 +384,10 @@ codegen request's deployment section (ADR-0022 decision 11).
 provisional flag, and the descriptor copies them: plan Task 3, as re-baselined,
 reads the IR's numbers and computes none.
 
-**The `podbuf` column stays empty** until E11.12 defines the C-representable
-layout. The encoding is present in the descriptor's enum from the start, and a
-payload with no entry for it means the toolchain cannot size that payload for
-that encoding.
+**The `podbuf` column is filled** since E11.12 defined the layout
+([ADR-0031](decisions/ADR-0031-podbuf-projection-rules.md)). The encoding was
+present in the descriptor's enum from the start, and a payload with no entry for
+it means the toolchain cannot size that payload for that encoding.
 
 | ID    | Story                                                                                                                                                                                                                                                                                                            | Done when                                                                                                                                                                                                                                                                                                                                                                                                                | Size |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
@@ -410,9 +412,9 @@ and the as-built description is
 [the codegen plugin design](design/codegen-plugins.md) with
 [ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 11.
 
-**`podbuf` joins when E11.12 lands.** The alignment and the layout of a slot for
-the third encoding come from its projection record; until then a channel whose
-encoding is `podbuf` has no slot layout, and the model says so.
+**`podbuf` joined when E11.12 landed.** The alignment and the layout of a slot
+for the third encoding come from its projection record,
+[ADR-0031](decisions/ADR-0031-podbuf-projection-rules.md).
 
 ## Epic 6 — rsdl, rewritten as a language
 
@@ -571,7 +573,7 @@ FlatBuffers codec), test-only ports (retired by E11.15), a zero catalog hash
 column at a time: E16.4, driftsys/ridl#380, filled the `flatbuffers` column from
 the codegen model's bound; the later size table holds one `Sizes<E>`
 implementation per codec the manifest names, so `proto3` has one since E11.8
-landed, and `podbuf` has none until E11.12), and a narrow contract-clause
+landed, and `podbuf` has one since E11.12 landed), and a narrow contract-clause
 translator (E5.1). The as-built record is
 [the interaction-face design record](design/interaction-face.md) and
 [ADR-0023](decisions/ADR-0023-interaction-face-generation.md); its reasoning
@@ -803,7 +805,7 @@ ADR-0018 amendments.
 | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
 | E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a payload round-trips through the library                                                                                                                                                                               | L    |
 | E11.8  | The proto3 payload codec plus byte-level conformance against a `prost`-generated implementation through `protox` (driftsys/ridl#264; the guard that keeps `prost` out of `ridl-rt` and generated packages is part of it); it reads an absent non-optional scalar or enum as its default — 0, or the enum's zero member — unless 0 is not a legal value of the field's type, in which case the field is refused with `MissingRequired`, as the FlatBuffers codec does (driftsys/ridl#472, ADR-0019 decision 9); it arrives as a `Sizes<Proto3>` implementation and a `Payload<Proto3>` with its buffer | our bytes parse there and its bytes parse here                                                                                                                                                                          | L    |
-| E11.12 | The `podbuf` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; it arrives as a `Sizes<Podbuf>` implementation and a `Payload<Podbuf>` with its buffer                                                                                                                                                                                                                                                                                                            | a payload round-trips through the layout struct and the emitted header compiles as C (the removal of `#[repr(C)]` from the generated domain structs landed ahead of this story, ADR-0020 decision 3 amended 2026-10-12) | L    |
+| E11.12 | The `podbuf` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; it arrives as a `Sizes<Podbuf>` implementation and a `Payload<Podbuf>` with its buffer. **Built**; the open-enum tasks wait for the typl `open` keyword                                                                                                                                                                                                                                           | a payload round-trips through the layout struct and the emitted header compiles as C (the removal of `#[repr(C)]` from the generated domain structs landed ahead of this story, ADR-0020 decision 3 amended 2026-10-12) | L    |
 
 **E11.7's `Done when` is met, and every decision of its design note is built.**
 A payload round-trips through the library, and the conformance obligation the

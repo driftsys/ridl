@@ -422,7 +422,7 @@ section carries those facts to a plugin at build time.
 
 - **`podbuf` on a consumer link.** Every payload has a `podbuf` size state and
   the model carries the podbuf layout (see "The podbuf layout" above), but no
-  consumer link carries `ENCODING_PODBUF` yet ([driftsys/ridl#317][i317]).
+  consumer link carries `ENCODING_PODBUF`: no rsdl fact selects it.
 - **Members whose depth or size cannot be derived.** An event's depth is absent
   with the source `UNDERIVABLE` when its timing gives no bound. The build warns
   with RSDL-806 when a consumer link consumes such an event with no declared
@@ -468,5 +468,4 @@ section carries those facts to a plugin at build time.
 [gen-model]: https://github.com/driftsys/ridl/blob/main/crates/ridlc-gen-model/src/main.rs
 [layout]: https://github.com/driftsys/ridl/blob/main/crates/ridlc/tests/layout.rs
 [kotlin]: https://github.com/driftsys/ridlc-gen-kotlin
-[i317]: https://github.com/driftsys/ridl/issues/317
 [i735]: https://github.com/driftsys/ridl/issues/735

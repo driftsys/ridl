@@ -1,4 +1,5 @@
-//! IR v2 package to the podbuf C header (ADR-0017 decision 1).
+//! IR v2 package to the podbuf C header (ADR-0031, the projection record of
+//! this crate).
 //!
 //! The header lets a C consumer read a buffer that the gate has already
 //! verified, with no library. It holds, per package:

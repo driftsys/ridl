@@ -602,10 +602,10 @@ fn rule_9_checks_nested_heads_arms_entries_optionals_and_elements() {
             // One entry at 16: the key's descriptor at 16..24, the `Score`
             // byte at 24; 200 is above 100.
             r#"check!(Ranked, patch(enc!(Ranked { by_name: vec![(Name::new_unchecked("a".into()), Score::new_unchecked(1))] }), 24, 200))"#,
-            // The present `category` is `x ` at 24: a byte that is not
+            // The present `category` is `x\0` at 24: a byte that is not
             // UTF-8.
             r#"check!(DiagFilter, patch(enc!(DiagFilter { severity: 2, category: Some("x".into()) }), 24, 0xff))"#,
-            // The one element's string `a ` at 40.
+            // The one element's string `a\0` at 40.
             r#"check!(FaultPage, patch(enc!(FaultPage { faults: vec![ev(1, "a", 0)] }), 40, 0xff))"#,
         ],
     );

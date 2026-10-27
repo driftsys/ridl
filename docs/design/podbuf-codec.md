@@ -24,7 +24,8 @@ podbuf buffer starts on an 8-byte boundary.
 | What                                                                     | Where                                          |
 | ------------------------------------------------------------------------ | ---------------------------------------------- |
 | The layout law: placements, flags, descriptors, `elem_size`, enum widths | `crates/ridl-ir/src/projection/podbuf.rs`      |
-| The size bound (`max_size`) and the size state of a payload              | `crates/ridl-ir/src/projection/size/podbuf.rs` |
+| The size bound (`max_size`)                                              | `crates/ridl-ir/src/projection/podbuf.rs`      |
+| The size state of a payload, as the sizer reports it                     | `crates/ridl-ir/src/projection/size/podbuf.rs` |
 | The layout carried in the codegen model (`Model.podbuf`)                 | `crates/ridl-ir/src/codegen/podbuf.rs`         |
 | The reading and writing the emitted code calls                           | `crates/ridl-rt/src/podbuf.rs`                 |
 | The Rust codec emitter                                                   | `crates/ridl-backend-rust/src/codec_podbuf.rs` |

@@ -161,13 +161,28 @@ a field is appended.
      upper half of the descriptor's length word. The limits are 65,535 elements
      per array or map and 65,535 bytes per element.
    - **The `elem_size` rule, as built.** For an element or entry that is an
-     inline head — a struct, a tuple or a union — `elem_size` is the head's
-     size, a multiple of 8. For every other element (a scalar, an enum, an enum
-     set, a descriptor, an exact-length array) it is the element's exact size,
-     because such an element cannot grow compatibly. `verify` checks the stride
-     by this rule (decision 8). The design said a tuple's `elem_size` equals its
-     element size; a tuple is laid out as an inline head, as a struct is, so its
-     size is rounded to 8 and the first branch applies.
+     inline head — a struct, a tuple or a union — `elem_size` is a multiple of 8
+     that the producer chooses: the head size it wrote, and larger than a
+     reader's own head size when the producer's type is newer. `verify` checks
+     only that it is a multiple of 8, not that it equals any head size. For
+     every other element (a scalar, an enum, an enum set, a descriptor, an
+     exact-length array) `elem_size` is the element's exact size, because such
+     an element cannot grow compatibly, and `verify` checks that equality. The
+     design said a tuple's `elem_size` equals its element size; a tuple is laid
+     out as an inline head, as a struct is, so its size is rounded to 8 and the
+     first branch applies.
+   - **`elem_size` 0 on an inline head with `len` above 0 is accepted.** 0 is a
+     multiple of 8, and the data is `len·0` = 0 bytes, so the descriptor passes
+     the bounds check when `off` is 8-aligned, at least `8 + head_size` and
+     within the buffer. Every element then starts at `off` and has size 0, so a
+     reader reads every field of every element as 0, in `verify`, the view and
+     `decode` alike. `verify` checks those zeros like any other value: an
+     element whose fields do not all accept 0 is refused with the `Contract`
+     rule of the failing field, and `min ≤ len ≤ max` still applies. A map with
+     such a stride and `len` above 1 is refused with `Malformed::KeyOrder`,
+     because every key reads as 0 and keys must strictly increase. The layout of
+     such a buffer is not one the encoder writes; the rule is stated so that a
+     reader's behaviour is not left to the code.
    - A union arm has no separate stride (author's call): the arm descriptor's
      `len` is the arm head size the producer used, and a field past `len` reads
      as 0. An arm whose type has no field has head size 0, so its descriptor has
@@ -274,11 +289,18 @@ a field is appended.
    `[backend.<name>]` table of the workspace manifest lists `podbuf`, and are
    error codes with no lint name and no level (ADR-0024 decision 1):
 
-   | Code     | Raised when                                                                                                                                                                              |
-   | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | RIDL-153 | the largest podbuf encoding of a struct or union, computed from its declared bounds, is above `u32::MAX` bytes, because a `u32` offset cannot address it                                 |
-   | RIDL-154 | an array or map declares more than 65,535 elements, or its element or entry is larger than 65,535 bytes, because the descriptor's `len` and `elem_size` are `u16`; reported on the field |
-   | RIDL-155 | a non-optional field marked `@deprecated` has an init value that is neither declared nor derivable (typl §5.8) and a type that excludes 0, so the encoder has no valid value to write    |
+   - RIDL-153 `type too large for podbuf`: a struct, tuple or union whose
+     largest encoding is above `u32::MAX` bytes.
+   - RIDL-154 `array or map exceeds the podbuf descriptor limits`: an array or
+     map past 65,535 elements or 65,535 bytes per element; reported on the
+     field.
+   - RIDL-155 `deprecated field has no valid podbuf value`: a `@deprecated`
+     non-optional field whose init value is neither declared nor derivable and
+     whose type excludes 0.
+
+   The ridl reference's diagnostics table
+   ([`../specification/ridl-language-reference.md`](../specification/ridl-language-reference.md))
+   owns the full text of each row.
 
    A type that has no bound only because an array or map inside it passes a
    descriptor limit draws RIDL-154 on the field and not RIDL-153. The codes
@@ -332,8 +354,9 @@ a field is appended.
       `bytes`, an array and a map, `min ≤ len ≤ max`. For a string,
       `len ≤ 4·max`, the largest UTF-8 byte length of `max` scalar values; this
       bounds the work, and rule 3 checks the scalar-value count.
-   5. For each non-empty array or map, `elem_size` follows the rule of decision
-      3.
+   5. For each non-empty array or map, `elem_size` is a multiple of 8 when the
+      element is an inline head, and the element's exact size otherwise
+      (decision 3).
    6. For each non-empty string, the byte after the data is NUL, no NUL is
       inside the data, and the data is valid UTF-8.
    7. For each union, the tag names a declared arm and `len` is a multiple of 8;

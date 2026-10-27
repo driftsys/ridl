@@ -108,7 +108,7 @@ enum Encoding {
   ENCODING_UNSPECIFIED = 0;
   ENCODING_PROTO3 = 1;
   ENCODING_FLATBUFFERS = 2;
-  // No link carries it until driftsys/ridl#317.
+  // No rsdl fact selects it, so no link carries it.
   ENCODING_PODBUF = 3;
 }
 

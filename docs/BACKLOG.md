@@ -89,16 +89,17 @@ These estimates help planning and do not set delivery dates.
    lacked, the rsdl sizing keys and the test plugin that computes the layouts
    have landed, and so has the `websocket` row of #718, from the frame
    specification §11.1. The check of that row's sum against a frame the
-   WebSocket transport writes landed with #265 in PR #990. `podbuf` #317 adds
-   its slot layout when it lands.
+   WebSocket transport writes landed with #265 in PR #990. The `podbuf` slot
+   layout (#317) has landed.
 4. **Language finalization alongside the catalog:** finish constraint-change
    records and diff classification #255, and grammar/attribute work #276.
    Finalize reference status #320 after its prerequisites and remaining
    normative defects are disposed of.
-5. **Remaining Rust release work:** implement `podbuf` #317, with its
-   projection-layout record. The proto3 codec #264 and the WebSocket transport
-   #265 have landed (PR #990 for #265). The frame specification, loopback
-   runtime and plugin protocol are available.
+5. **Remaining Rust release work:** the open enums and enum sets of `podbuf`,
+   which wait for the typl `open` keyword. The `podbuf` codec #317 (with its
+   projection record, ADR-0031), the proto3 codec #264 and the WebSocket
+   transport #265 have landed (PR #990 for #265). The frame specification,
+   loopback runtime and plugin protocol are available.
 6. **Step 2:** deliver the TypeScript/wasm surface #287 and emulator #290. The
    TypeScript WebSocket transport package #982 has landed (PR #993). The
    attribute registry #268, its enforcement #269 and boundary IR #270, plus
