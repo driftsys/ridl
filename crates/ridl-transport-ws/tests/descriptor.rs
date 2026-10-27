@@ -23,6 +23,7 @@ fn member(ordinal: u32, kind: ridl_descriptor::Kind, max_us: Option<&str>) -> Me
                 max_us: Some(max.to_owned()),
             })
         }),
+        limit: None,
     }
 }
 

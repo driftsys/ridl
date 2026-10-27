@@ -608,6 +608,41 @@ fn timing_is_carried_when_declared_and_absent_otherwise() {
     );
 }
 
+/// The limit of the member `name` of the `Vehicle` interface, as the reader
+/// returns it.
+fn limit_of(bytes: &[u8], name: &str) -> Option<u32> {
+    let catalog = verify(bytes).unwrap();
+    let member = vehicle(catalog)
+        .members()
+        .unwrap()
+        .iter()
+        .map(Result::unwrap)
+        .find(|m| m.name().unwrap() == name)
+        .unwrap();
+    member.limit().unwrap()
+}
+
+#[test]
+fn a_declared_limit_reaches_the_member() {
+    let mut package = package();
+    let command = package.interfaces[0]
+        .interactions
+        .iter_mut()
+        .find(|d| d.name == "moveTo")
+        .unwrap();
+    command.limit = Some(64);
+    let bytes = lower_one(&package).unwrap();
+    assert_eq!(limit_of(&bytes, "moveTo"), Some(64));
+    // Only the member the limit was given to carries one.
+    assert_eq!(limit_of(&bytes, "nearest"), None);
+}
+
+#[test]
+fn an_unset_limit_is_absent() {
+    let bytes = lower_one(&package()).unwrap();
+    assert_eq!(limit_of(&bytes, "moveTo"), None);
+}
+
 #[test]
 fn a_stream_response_has_absent_sizes_and_a_spelled_type_name() {
     // Driver §4 answer 10: no `stream` flag, no per-element bound yet (#336).

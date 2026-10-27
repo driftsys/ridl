@@ -200,6 +200,7 @@ fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
                 max_us: t.max_us.clone(),
             })
         }),
+        limit: decl.limit,
     })
 }
 

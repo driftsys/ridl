@@ -2082,6 +2082,8 @@ mod root {
                 pub payloads: ::planus::alloc::vec::Vec<self::Payload>,
                 /// The field `timing` in the table `Member`
                 pub timing: ::core::option::Option<::planus::alloc::boxed::Box<self::Timing>>,
+                /// The field `limit` in the table `Member`
+                pub limit: ::core::option::Option<u32>,
             }
 
             #[allow(clippy::derivable_impls)]
@@ -2093,6 +2095,7 @@ mod root {
                         kind: self::Kind::Signal,
                         payloads: ::core::default::Default::default(),
                         timing: ::core::default::Default::default(),
+                        limit: ::core::default::Default::default(),
                     }
                 }
             }
@@ -2114,14 +2117,16 @@ mod root {
                         ::planus::Offset<[::planus::Offset<self::Payload>]>,
                     >,
                     field_timing: impl ::planus::WriteAsOptional<::planus::Offset<self::Timing>>,
+                    field_limit: impl ::planus::WriteAsOptional<u32>,
                 ) -> ::planus::Offset<Self> {
                     let prepared_name = field_name.prepare(builder);
                     let prepared_ordinal = field_ordinal.prepare(builder, &0);
                     let prepared_kind = field_kind.prepare(builder, &self::Kind::Signal);
                     let prepared_payloads = field_payloads.prepare(builder);
                     let prepared_timing = field_timing.prepare(builder);
+                    let prepared_limit = field_limit.prepare(builder);
 
-                    let mut table_writer: ::planus::table_writer::TableWriter<14> =
+                    let mut table_writer: ::planus::table_writer::TableWriter<16> =
                         ::core::default::Default::default();
                     table_writer.write_entry::<::planus::Offset<str>>(0);
                     if prepared_ordinal.is_some() {
@@ -2131,6 +2136,9 @@ mod root {
                         .write_entry::<::planus::Offset<[::planus::Offset<self::Payload>]>>(3);
                     if prepared_timing.is_some() {
                         table_writer.write_entry::<::planus::Offset<self::Timing>>(4);
+                    }
+                    if prepared_limit.is_some() {
+                        table_writer.write_entry::<u32>(5);
                     }
                     if prepared_kind.is_some() {
                         table_writer.write_entry::<self::Kind>(2);
@@ -2146,6 +2154,9 @@ mod root {
                             object_writer.write::<_, _, 4>(&prepared_payloads);
                             if let ::core::option::Option::Some(prepared_timing) = prepared_timing {
                                 object_writer.write::<_, _, 4>(&prepared_timing);
+                            }
+                            if let ::core::option::Option::Some(prepared_limit) = prepared_limit {
+                                object_writer.write::<_, _, 4>(&prepared_limit);
                             }
                             if let ::core::option::Option::Some(prepared_kind) = prepared_kind {
                                 object_writer.write::<_, _, 1>(&prepared_kind);
@@ -2187,6 +2198,7 @@ mod root {
                         self.kind,
                         &self.payloads,
                         &self.timing,
+                        self.limit,
                     )
                 }
             }
@@ -2284,6 +2296,26 @@ mod root {
             }
 
             impl<T0, T1, T2, T3, T4> MemberBuilder<(T0, T1, T2, T3, T4)> {
+                /// Setter for the [`limit` field](Member#structfield.limit).
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn limit<T5>(self, value: T5) -> MemberBuilder<(T0, T1, T2, T3, T4, T5)>
+                where
+                    T5: ::planus::WriteAsOptional<u32>,
+                {
+                    let (v0, v1, v2, v3, v4) = self.0;
+                    MemberBuilder((v0, v1, v2, v3, v4, value))
+                }
+
+                /// Sets the [`limit` field](Member#structfield.limit) to null.
+                #[inline]
+                #[allow(clippy::type_complexity)]
+                pub fn limit_as_null(self) -> MemberBuilder<(T0, T1, T2, T3, T4, ())> {
+                    self.limit(())
+                }
+            }
+
+            impl<T0, T1, T2, T3, T4, T5> MemberBuilder<(T0, T1, T2, T3, T4, T5)> {
                 /// Finish writing the builder to get an [Offset](::planus::Offset) to a serialized [Member].
                 #[inline]
                 pub fn finish(self, builder: &mut ::planus::Builder) -> ::planus::Offset<Member>
@@ -2300,7 +2332,9 @@ mod root {
                 T2: ::planus::WriteAsDefault<self::Kind, self::Kind>,
                 T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Payload>]>>,
                 T4: ::planus::WriteAsOptional<::planus::Offset<self::Timing>>,
-            > ::planus::WriteAs<::planus::Offset<Member>> for MemberBuilder<(T0, T1, T2, T3, T4)>
+                T5: ::planus::WriteAsOptional<u32>,
+            > ::planus::WriteAs<::planus::Offset<Member>>
+                for MemberBuilder<(T0, T1, T2, T3, T4, T5)>
             {
                 type Prepared = ::planus::Offset<Member>;
 
@@ -2316,8 +2350,9 @@ mod root {
                 T2: ::planus::WriteAsDefault<self::Kind, self::Kind>,
                 T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Payload>]>>,
                 T4: ::planus::WriteAsOptional<::planus::Offset<self::Timing>>,
+                T5: ::planus::WriteAsOptional<u32>,
             > ::planus::WriteAsOptional<::planus::Offset<Member>>
-                for MemberBuilder<(T0, T1, T2, T3, T4)>
+                for MemberBuilder<(T0, T1, T2, T3, T4, T5)>
             {
                 type Prepared = ::planus::Offset<Member>;
 
@@ -2336,12 +2371,13 @@ mod root {
                 T2: ::planus::WriteAsDefault<self::Kind, self::Kind>,
                 T3: ::planus::WriteAs<::planus::Offset<[::planus::Offset<self::Payload>]>>,
                 T4: ::planus::WriteAsOptional<::planus::Offset<self::Timing>>,
-            > ::planus::WriteAsOffset<Member> for MemberBuilder<(T0, T1, T2, T3, T4)>
+                T5: ::planus::WriteAsOptional<u32>,
+            > ::planus::WriteAsOffset<Member> for MemberBuilder<(T0, T1, T2, T3, T4, T5)>
             {
                 #[inline]
                 fn prepare(&self, builder: &mut ::planus::Builder) -> ::planus::Offset<Member> {
-                    let (v0, v1, v2, v3, v4) = &self.0;
-                    Member::create(builder, v0, v1, v2, v3, v4)
+                    let (v0, v1, v2, v3, v4, v5) = &self.0;
+                    Member::create(builder, v0, v1, v2, v3, v4, v5)
                 }
             }
 
@@ -2388,6 +2424,12 @@ mod root {
                 ) -> ::planus::Result<::core::option::Option<self::TimingRef<'a>>> {
                     self.0.access(4, "Member", "timing")
                 }
+
+                /// Getter for the [`limit` field](Member#structfield.limit).
+                #[inline]
+                pub fn limit(&self) -> ::planus::Result<::core::option::Option<u32>> {
+                    self.0.access(5, "Member", "limit")
+                }
             }
 
             impl<'a> ::core::fmt::Debug for MemberRef<'a> {
@@ -2399,6 +2441,9 @@ mod root {
                     f.field("payloads", &self.payloads());
                     if let ::core::option::Option::Some(field_timing) = self.timing().transpose() {
                         f.field("timing", &field_timing);
+                    }
+                    if let ::core::option::Option::Some(field_limit) = self.limit().transpose() {
+                        f.field("limit", &field_limit);
                     }
                     f.finish()
                 }
@@ -2418,6 +2463,11 @@ mod root {
                             ::core::option::Option::Some(::planus::alloc::boxed::Box::new(
                                 ::core::convert::TryInto::try_into(timing)?,
                             ))
+                        } else {
+                            ::core::option::Option::None
+                        },
+                        limit: if let ::core::option::Option::Some(limit) = value.limit()? {
+                            ::core::option::Option::Some(::core::convert::TryInto::try_into(limit)?)
                         } else {
                             ::core::option::Option::None
                         },
@@ -2501,7 +2551,7 @@ mod root {
             /// The table `Interface` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `Interface` in the file `crates/ridl-descriptor/schema/catalog.fbs:74`
+            /// * Table `Interface` in the file `crates/ridl-descriptor/schema/catalog.fbs:78`
             #[derive(
                 Clone,
                 Debug,
@@ -2931,7 +2981,7 @@ mod root {
             /// The table `RetiredInterface` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `RetiredInterface` in the file `crates/ridl-descriptor/schema/catalog.fbs:91`
+            /// * Table `RetiredInterface` in the file `crates/ridl-descriptor/schema/catalog.fbs:95`
             #[derive(
                 Clone,
                 Debug,
@@ -3252,7 +3302,7 @@ mod root {
             /// The table `EarlierCatalog` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `EarlierCatalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:98`
+            /// * Table `EarlierCatalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:102`
             #[derive(
                 Clone,
                 Debug,
@@ -3522,7 +3572,7 @@ mod root {
             /// The table `Catalog` in the namespace `ridl.descriptor`
             ///
             /// Generated from these locations:
-            /// * Table `Catalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:102`
+            /// * Table `Catalog` in the file `crates/ridl-descriptor/schema/catalog.fbs:106`
             #[derive(
                 Clone,
                 Debug,

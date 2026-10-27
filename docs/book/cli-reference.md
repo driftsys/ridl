@@ -2245,6 +2245,7 @@ ridl describe out/corpus.baseline.catalog.binfb
       "members": [
         {
           "kind": "Signal",
+          "limit": null,
           "name": "currentSpeed",
           "ordinal": 1,
           "payloads": [

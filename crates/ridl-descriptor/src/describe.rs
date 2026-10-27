@@ -3,7 +3,8 @@
 //! built by walking the checked accessors. There is no JSON emit; this is a
 //! rendering of the binary. `flatc --json --strict-json --defaults-json` gives
 //! the same view with two differences. First, `flatc`
-//! omits an absent `timing`, `min_us` or `max_us`, which is `null` here.
+//! omits an absent `timing`, `min_us`, `max_us` or `limit`, which is `null`
+//! here.
 //! Second, `flatc` prints keys in schema order, and this view prints them in
 //! alphabetical order (the workspace's `serde_json` stores an object's keys
 //! sorted).
@@ -13,8 +14,9 @@ use serde_json::{Value, json};
 use crate::{CatalogRef, Encoding, Kind, SizeStateTag, TimingMode, UnboundedCause};
 
 /// Renders `catalog` as JSON: the schema's field names as keys, enums by
-/// member name, `hash` as an array of bytes, an absent `timing`, `min_us` or
-/// `max_us` as `null`, and every field of a `MaxSize` row, defaults included.
+/// member name, `hash` as an array of bytes, an absent `timing`, `min_us`,
+/// `max_us` or `limit` as `null`, and every field of a `MaxSize` row, defaults
+/// included.
 /// The serialized object prints its keys in alphabetical order.
 /// A payload's `type_name` is printed as it is stored.
 pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
@@ -57,6 +59,7 @@ pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
                 "kind": kind_name(member.kind()?),
                 "payloads": payloads,
                 "timing": timing,
+                "limit": member.limit()?,
             }));
         }
         interfaces.push(json!({
@@ -175,6 +178,7 @@ mod tests {
                         ],
                     }],
                     timing: None,
+                    limit: None,
                 }],
                 reserved_ordinals: vec![],
             }],
@@ -206,7 +210,8 @@ mod tests {
                                 { "encoding": "FlatBuffers", "bytes": 0, "state": "Unbounded", "cause": "Layout" }
                             ]
                         }],
-                        "timing": null
+                        "timing": null,
+                        "limit": null
                     }],
                     "reserved_ordinals": []
                 }],
@@ -237,6 +242,7 @@ mod tests {
                         min_us: Some("100".to_owned()),
                         max_us: None,
                     })),
+                    limit: None,
                 }],
                 reserved_ordinals: vec![1, 2],
             }],
@@ -264,7 +270,8 @@ mod tests {
                         "ordinal": 3,
                         "kind": "Signal",
                         "payloads": [],
-                        "timing": { "mode": "Range", "min_us": "100", "max_us": null }
+                        "timing": { "mode": "Range", "min_us": "100", "max_us": null },
+                        "limit": null
                     }],
                     "reserved_ordinals": [1, 2]
                 }],
@@ -272,6 +279,40 @@ mod tests {
                 "compatible": []
             })
         );
+    }
+
+    #[test]
+    fn the_view_writes_the_limit_or_null() {
+        let member = |name: &str, ordinal: u32, limit: Option<u32>| Member {
+            name: name.to_owned(),
+            ordinal,
+            kind: Kind::Command,
+            payloads: vec![],
+            timing: None,
+            limit,
+        };
+        let catalog = Catalog {
+            version: SCHEMA_VERSION,
+            name: "p".to_owned(),
+            hash: vec![],
+            toolchain: "0.0.0".to_owned(),
+            interfaces: vec![Interface {
+                name: "I".to_owned(),
+                number: 1,
+                provisional: false,
+                members: vec![member("set", 1, Some(64)), member("reset", 2, None)],
+                reserved_ordinals: vec![],
+            }],
+            retired: vec![],
+            compatible: None,
+        };
+        let bytes = crate::finish(&catalog);
+        let json = to_json(verify(&bytes).unwrap()).unwrap();
+        let members = &json["interfaces"][0]["members"];
+        assert_eq!(members[0]["limit"], serde_json::json!(64));
+        assert_eq!(members[1]["limit"], Value::Null);
+        // A missing key also indexes as null, so check that the key is there.
+        assert!(members[1].as_object().unwrap().contains_key("limit"));
     }
 
     #[test]

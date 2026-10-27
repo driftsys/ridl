@@ -52,6 +52,7 @@ fn sample() -> Catalog {
                     min_us: Some("100000".to_owned()),
                     max_us: None,
                 })),
+                limit: None,
             }],
             reserved_ordinals: vec![5],
         }],

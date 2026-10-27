@@ -129,6 +129,7 @@ fn nested() -> Vec<u8> {
                     }],
                 }],
                 timing: None,
+                limit: None,
             }],
             reserved_ordinals: vec![],
         }],
@@ -223,6 +224,7 @@ fn full_with(provisional: bool, timing: bool) -> Vec<u8> {
                         kind: Kind::Signal,
                         payloads: vec![],
                         timing: None,
+                        limit: None,
                     },
                     Member {
                         name: "m".to_owned(),
@@ -260,6 +262,7 @@ fn full_with(provisional: bool, timing: bool) -> Vec<u8> {
                                 max_us: Some("2".to_owned()),
                             })
                         }),
+                        limit: None,
                     },
                 ],
                 reserved_ordinals: vec![5, 6],
