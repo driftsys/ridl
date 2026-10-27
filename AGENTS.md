@@ -297,9 +297,10 @@ member; rsdl is the apex.
                          vsce-target)
     just package-vscode  build ridl for this machine and package the extension
                          (local testing)
-    just release         freeze check --release, git std bump --no-commit,
-                         release-sync, the pin checks, then the release commit
-                         and the v and editor-v tags, all local
+    just release         on a main commit whose ci passed: freeze check
+                         --release, git std bump --no-commit, release-sync, a
+                         lockfile and derived-pin check, then the release
+                         commit and the v and editor-v tags, all local
     just release-sync    update the version pins git std bump cannot write
     just release-push    push main, wait for ci on the release commit, then
                          push the two tags
