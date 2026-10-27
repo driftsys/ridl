@@ -838,10 +838,12 @@ diag_codes! {
 
         /// A struct, tuple or union whose largest podbuf encoding, computed
         /// from its declared bounds, is above `u32::MAX` bytes, because a
-        /// `u32` offset cannot address all of it. Error; as an error code it
-        /// has no name and no level. Emitted by `ridlc` when a
-        /// `[backend.<name>]` table enables `podbuf`. The message names the
-        /// type.
+        /// `u32` offset cannot address all of it. A tuple is the argument
+        /// struct a call with several parameters induces, or a tuple reply,
+        /// reported on the interaction. Error; as an error code it has no
+        /// name and no level. Emitted by `ridlc` when a `[backend.<name>]`
+        /// table enables `podbuf`. The message names the type, or the
+        /// interaction's request or reply.
         RIDL_153 = "RIDL-153", Error,
             "type too large for podbuf";
 

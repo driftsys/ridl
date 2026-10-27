@@ -2,8 +2,10 @@
 //! encoding. They run only when a `[backend.<name>]` table of the workspace
 //! manifest enables `podbuf`.
 //!
-//! - RIDL-153: a struct or union whose largest podbuf encoding is above
-//!   `u32::MAX` bytes. It is reported on the declaration name. A type that
+//! - RIDL-153: a struct, a union, or a named tuple (the argument struct a
+//!   call with several parameters induces, or a tuple reply) whose largest
+//!   podbuf encoding is above `u32::MAX` bytes. It is reported on the
+//!   declaration name, or on the interaction for a named tuple. A type that
 //!   has no bound only because an array or map inside it is past a descriptor
 //!   limit draws RIDL-154 on that field instead, so each defect is reported
 //!   once.
@@ -19,12 +21,13 @@
 //! the one definition of the layout.
 
 use ridl_core::diag::{DiagCode, Diagnostic, Severity, Span};
+use ridl_ir::codegen;
 use ridl_ir::projection::flatbuffers::Packages;
 use ridl_ir::projection::podbuf::{
     self, DescriptorKind, Form, MAX_COUNT, MAX_ELEM_SIZE, exceeds_descriptor_limits, field_form,
-    max_size, struct_head, union_head,
+    max_size, struct_head, tuple_head, tuple_max_size, union_head,
 };
-use ridl_ir::projection::size::Ctx as SizeCtx;
+use ridl_ir::projection::size::{Ctx as SizeCtx, PayloadShape};
 use ridl_ir::v2::{self, decl, field_type, struct_member};
 
 use super::Ctx;
@@ -107,6 +110,49 @@ pub(crate) fn check(ctx: &Ctx<'_>, std_ir: &v2::Package, encodings: &[String]) -
                 _ => {}
             }
         }
+        // The named tuples the lowering induces: the argument struct of a
+        // call with several parameters, and a tuple reply. Each is a head of
+        // its own, reported on the interaction.
+        for shape in package.shapes() {
+            for interaction in &shape.interface.interactions {
+                let Some(site) = ctx
+                    .sites
+                    .member(&package.name, shape.name, &interaction.name)
+                else {
+                    continue;
+                };
+                let owner = format!("{}.{}.{}", package.name, shape.name, interaction.name);
+                let (params, reply) = match interaction.kind.as_ref() {
+                    Some(decl::Kind::CommandDef(def)) => (&def.params, None),
+                    Some(decl::Kind::QueryDef(def)) => (
+                        &def.params,
+                        match codegen::query_reply_type(def) {
+                            Some(_) => None,
+                            None => codegen::reply_as_tuple(def.return_type.as_ref()),
+                        },
+                    ),
+                    _ => continue,
+                };
+                let induced = codegen::params_as_tuple(params);
+                if let PayloadShape::Tuple(tuple) = codegen::request_shape(params, induced.as_ref())
+                {
+                    diagnostics.extend(tuple_too_large(
+                        &format!("the request of `{owner}`"),
+                        site,
+                        packages,
+                        tuple,
+                    ));
+                }
+                if let Some(tuple) = reply.as_ref() {
+                    diagnostics.extend(tuple_too_large(
+                        &format!("the reply of `{owner}`"),
+                        site,
+                        packages,
+                        tuple,
+                    ));
+                }
+            }
+        }
     }
     diagnostics
 }
@@ -132,15 +178,41 @@ fn too_large(
     declaration: &v2::Decl,
     head: Result<podbuf::Head, ridl_ir::projection::flatbuffers::ProjectionError>,
 ) -> Option<Diagnostic> {
-    let limit_defect = head.as_ref().is_ok_and(exceeds_descriptor_limits);
-    if limit_defect || max_size(packages, declaration).is_some() {
+    ridl_153(
+        &format!("`{name}`"),
+        site,
+        head.as_ref().is_ok_and(exceeds_descriptor_limits),
+        max_size(packages, declaration),
+    )
+}
+
+/// RIDL-153 for a named tuple the lowering induces, described by `what`.
+fn tuple_too_large(
+    what: &str,
+    site: Span,
+    packages: Packages<'_>,
+    tuple: &v2::TupleType,
+) -> Option<Diagnostic> {
+    let head = tuple_head(packages, what, tuple);
+    ridl_153(
+        what,
+        site,
+        head.as_ref().is_ok_and(exceeds_descriptor_limits),
+        tuple_max_size(packages, tuple),
+    )
+}
+
+/// RIDL-153 when `bound` is `None` and the head is not past a descriptor
+/// limit (which RIDL-154 reports on the field instead).
+fn ridl_153(what: &str, site: Span, limit_defect: bool, bound: Option<u64>) -> Option<Diagnostic> {
+    if limit_defect || bound.is_some() {
         return None;
     }
     Some(error(
         DiagCode::RIDL_153,
         site,
         format!(
-            "`{name}` is too large for podbuf: its largest encoding is above {} bytes, which a \
+            "{what} is too large for podbuf: its largest encoding is above {} bytes, which a \
              u32 offset cannot address",
             u32::MAX
         ),

@@ -85,6 +85,32 @@ fn a_type_above_u32_max_bytes_is_ridl_153_naming_it() {
     );
 }
 
+/// `Big` is about 3.9 GB, inside `u32::MAX`; the argument struct a call with
+/// two of them induces, and a tuple reply of two, are about 7.8 GB.
+const TOO_LARGE_TUPLES: &str = "package demo\n\
+    type Blob: bytes [60000..60000]\n\
+    struct Big {\n  xs: [Blob; 0..65535]\n}\n\
+    interface Ctl {\n  command load(a: Big, b: Big) @[..1s]\n  \
+    query pair(): (a: Big, b: Big) @[..1s]\n  query one(): Big @[..1s]\n}\n";
+
+#[test]
+fn a_named_tuple_above_u32_max_bytes_is_ridl_153_naming_the_interaction() {
+    let out = check(TOO_LARGE_TUPLES, PODBUF);
+    assert_eq!(codes(&out), vec!["RIDL-153", "RIDL-153"], "{out:?}");
+    let messages: Vec<&str> = podbuf_errors(&out)
+        .iter()
+        .map(|diagnostic| diagnostic.message.as_str())
+        .collect();
+    assert!(
+        messages[0].starts_with("the request of `demo.Ctl.load` is too large for podbuf"),
+        "{messages:?}"
+    );
+    assert!(
+        messages[1].starts_with("the reply of `demo.Ctl.pair` is too large for podbuf"),
+        "{messages:?}"
+    );
+}
+
 #[test]
 fn an_array_past_65535_elements_or_bytes_per_element_is_ridl_154() {
     let out = check(DESCRIPTOR_LIMITS, PODBUF);

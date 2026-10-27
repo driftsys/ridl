@@ -293,7 +293,10 @@ a field is appended.
    error codes with no lint name and no level (ADR-0024 decision 1):
 
    - RIDL-153 `type too large for podbuf`: a struct, tuple or union whose
-     largest encoding is above `u32::MAX` bytes.
+     largest encoding is above `u32::MAX` bytes. A tuple is a named induced
+     tuple, the argument struct of a call with several parameters or a tuple
+     reply, and is reported on its interaction; a struct or union is reported on
+     its declaration.
    - RIDL-154 `array or map exceeds the podbuf descriptor limits`: an array or
      map past 65,535 elements or 65,535 bytes per element; reported on the
      field.
