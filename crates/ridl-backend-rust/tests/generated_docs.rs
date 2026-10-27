@@ -14,6 +14,8 @@
 
 #[path = "support/ir.rs"]
 mod ir;
+#[path = "support/podbuf.rs"]
+mod podbuf;
 #[path = "support/proto3.rs"]
 mod proto3;
 #[path = "support/rustc.rs"]
@@ -96,7 +98,21 @@ fn assert_clean(label: &str, source: &str) {
 /// other across a package boundary; a single-file compile cannot resolve the
 /// import, so [`generate_over_the_conformance_workspace_cites_no_issue`]
 /// reads them as the workspace `support/proto3.rs` builds.
-const WORKSPACE_MEMBERS: [&str; 2] = ["proto3_conformance.ridl", "proto3_conformance_other.ridl"];
+const PROTO3_WORKSPACE: [&str; 2] = ["proto3_conformance.ridl", "proto3_conformance_other.ridl"];
+
+/// The two members of the podbuf cross-package fixture: the holder imports
+/// the parts, so [`generate_over_the_podbuf_workspace_cites_no_issue`] reads
+/// them as the workspace `support/podbuf.rs` builds.
+const PODBUF_WORKSPACE: [(&str, &str, &str); 2] = [
+    ("parts", "pod.parts", "podbuf_cross_parts.ridl"),
+    ("holder", "pod.holder", "podbuf_cross_holder.ridl"),
+];
+
+/// Whether `name` is a member of a workspace fixture, which a single-file
+/// compile cannot read.
+fn is_workspace_member(name: &str) -> bool {
+    PROTO3_WORKSPACE.contains(&name) || PODBUF_WORKSPACE.iter().any(|(_, _, file)| *file == name)
+}
 
 /// The fixtures the FlatBuffers codec refuses by design, each with the text
 /// its refusal must carry: a string with no length bound.
@@ -125,13 +141,18 @@ const PROTO3_REFUSED: [(&str, &str); 4] = [
     ("proto3_free.ridl", "` has no proto3 codec: "),
 ];
 
+/// The fixtures the podbuf codec refuses by design, each with the text its
+/// refusal must carry: an array with no count bound, whose largest buffer
+/// has no finite podbuf bound.
+const PODBUF_REFUSED: [(&str, &str); 1] = [("proto3_free.ridl", "` has no finite podbuf bound")];
+
 fn fixtures() -> Vec<String> {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let mut names: Vec<String> = std::fs::read_dir(&dir)
         .unwrap_or_else(|error| panic!("read {}: {error}", dir.display()))
         .map(|entry| entry.expect("a fixture entry").file_name())
         .filter_map(|name| name.into_string().ok())
-        .filter(|name| name.ends_with(".ridl") && !WORKSPACE_MEMBERS.contains(&name.as_str()))
+        .filter(|name| name.ends_with(".ridl") && !is_workspace_member(name))
         .collect();
     names.sort();
     assert!(!names.is_empty(), "no fixture in {}", dir.display());
@@ -176,15 +197,20 @@ fn generate_over_every_fixture_cites_no_issue() {
     }
 }
 
-/// `generate_pipeline` over every fixture with FlatBuffers and with proto3,
-/// each for every fixture but the ones that codec refuses by design, which
-/// must refuse with the cause [`FLATBUFFERS_REFUSED`] or [`PROTO3_REFUSED`]
-/// names; a name listed there that is not a fixture is stale and fails.
+/// `generate_pipeline` over every fixture with FlatBuffers, with proto3 and
+/// with podbuf, each for every fixture but the ones that codec refuses by
+/// design, which must refuse with the cause [`FLATBUFFERS_REFUSED`],
+/// [`PROTO3_REFUSED`] or [`PODBUF_REFUSED`] names; a name listed there that
+/// is not a fixture is stale and fails.
 #[test]
 fn generate_pipeline_over_every_fixture_cites_no_issue() {
     use ridl_backend_rust::WireEncoding;
     let names = fixtures();
-    for (refused, _) in FLATBUFFERS_REFUSED.iter().chain(&PROTO3_REFUSED) {
+    for (refused, _) in FLATBUFFERS_REFUSED
+        .iter()
+        .chain(&PROTO3_REFUSED)
+        .chain(&PODBUF_REFUSED)
+    {
         assert!(
             names.iter().any(|name| name == refused),
             "`{refused}` is listed as refused but is not a fixture"
@@ -195,6 +221,7 @@ fn generate_pipeline_over_every_fixture_cites_no_issue() {
         for (encoding, label, refused) in [
             (WireEncoding::FlatBuffers, "", &FLATBUFFERS_REFUSED[..]),
             (WireEncoding::Proto3, ", proto3", &PROTO3_REFUSED[..]),
+            (WireEncoding::Podbuf, ", podbuf", &PODBUF_REFUSED[..]),
         ] {
             let generated = ridl_backend_rust::generate_pipeline(&package, &[encoding], false, &[]);
             if let Some((_, cause)) = refused
@@ -231,7 +258,7 @@ fn generate_over_the_conformance_workspace_cites_no_issue() {
     let (main, others) = proto3::fixture();
     let mut packages = vec![main];
     packages.extend(others);
-    assert_eq!(packages.len(), WORKSPACE_MEMBERS.len());
+    assert_eq!(packages.len(), PROTO3_WORKSPACE.len());
     for (at, package) in packages.iter().enumerate() {
         let others: Vec<&ridl_ir::v2::Package> = packages
             .iter()
@@ -253,6 +280,27 @@ fn generate_over_the_conformance_workspace_cites_no_issue() {
                 &source,
             );
         }
+    }
+}
+
+/// `generate_pipeline` with podbuf over each member of the podbuf
+/// cross-package fixture, each resolved against the other.
+#[test]
+fn generate_over_the_podbuf_workspace_cites_no_issue() {
+    let packages = podbuf::compile_fixture_workspace(&PODBUF_WORKSPACE);
+    assert_eq!(packages.len(), PODBUF_WORKSPACE.len());
+    for (at, package) in packages.iter().enumerate() {
+        let others: Vec<&ridl_ir::v2::Package> = packages
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != at)
+            .map(|(_, other)| other)
+            .collect();
+        let source = podbuf::generated(package, &others);
+        assert_clean(
+            &format!("generate_pipeline({}, Podbuf)", package.name),
+            &source,
+        );
     }
 }
 

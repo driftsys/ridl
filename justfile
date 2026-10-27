@@ -547,11 +547,13 @@ compat-check: toolchain-check
     # `std` is on for both: the emitted crate's `blocking` module is under its
     # `std` feature and names `ridl_rt::task::block_on`, which `ridl-rt`'s
     # `std` feature gates, so the cell covers that module too. `ridl-rt`'s
-    # `flatbuffers` and `proto3` features are the two codecs cabin's manifest
-    # names; the emitted manifest turns both on for `ridl-rt`. The crate has
-    # no feature of that name, and its code carries no `cfg` on either codec.
+    # `flatbuffers`, `proto3` and `podbuf` features are the three codecs
+    # cabin's manifest names; the emitted manifest turns all three on for
+    # `ridl-rt`. The crate has no feature of those names, and its code
+    # carries no `cfg` on any codec.
     rustup run "$minimum" rustc --edition 2021 --crate-type rlib --crate-name ridl_rt \
-        --cfg 'feature="flatbuffers"' --cfg 'feature="proto3"' --cfg 'feature="std"' \
+        --cfg 'feature="flatbuffers"' --cfg 'feature="proto3"' --cfg 'feature="podbuf"' \
+        --cfg 'feature="std"' \
         "$pkg/src/lib.rs" -o "$cabin/libridl_rt.rlib"
     rustup run "$minimum" rustc --edition 2021 --crate-type lib --crate-name veh_cabin \
         --emit=metadata -D warnings --cfg 'feature="std"' \

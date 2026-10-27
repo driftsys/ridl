@@ -265,9 +265,10 @@ fn an_implied_wasm_without_flatbuffers_is_refused_with_the_implied_wording() {
 #[test]
 fn a_written_wasm_without_flatbuffers_keeps_the_written_wording() {
     let manifest = cabin_manifest().replace(
-        "encodings = [\"flatbuffers\", \"proto3\"]",
-        "encodings = [\"proto3\"]",
+        "encodings = [\"flatbuffers\", \"proto3\", \"podbuf\"]",
+        "encodings = [\"proto3\", \"podbuf\"]",
     );
+    assert!(!manifest.contains("flatbuffers"), "{manifest}");
     assert!(manifest.contains("wasm = true"), "{manifest}");
     let work = tempfile::tempdir().expect("a temp dir is created");
     let (run, out) = build_cabin(work.path(), &format!("{manifest}{CODEC_TABLE}"));
