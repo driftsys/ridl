@@ -27,13 +27,27 @@ follows in separate issues, and the change to `with_max_message_bytes` is a
 breaking change of the published `ridl-transport-ws` API, released in a version
 marked breaking.
 
+Amended 2026-10-28 from the owner's decisions of that day: decisions 1, 2, 7,
+11, 12, 13 and 14 are changed in place, and decisions 16 and 17 are added. A
+signal, an event and a fixed have a payload ceiling of 4,032 bytes, one memory
+page of 4,096 bytes minus one cache line of 64 bytes; a command and a query keep
+the ceiling of 16,256 bytes. How a transport moves a payload, whole or split, is
+a rule of each transport binding, not of the language, the catalog, the
+descriptor or `ridl-rt`. The amendment lands as a decision first; the code
+follows in driftsys/ridl#1108. It is a breaking change: a signal, an event or a
+fixed whose payload is larger than 4,032 bytes, and a `[limits]` entry above
+4,032 for one of them, stop compiling. It is released in the next version marked
+breaking, with the transport limits of the amendment of 2026-10-24.
+
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
 limit in the IR and the catalog hash of decision 13 (driftsys/ridl#1065), and
 the WebSocket limits of decisions 10 and 15 with the descriptor's limit column
 (driftsys/ridl#1098). Decisions 3 and 4 are not built: `MAX_SIZE` is not capped
 at the ceiling, and `ridl-rt` has no `PAYLOAD_CEILING` and no
-`EncodeError::TooLarge` (driftsys/ridl#996).
+`EncodeError::TooLarge` (driftsys/ridl#996). The amendment of 2026-10-28 is not
+built: the kind ceiling of decision 16, RIDL-153 of decision 17, and what that
+amendment changes in decisions 7, 12, 13 and 14 (driftsys/ridl#1108).
 
 When accepted, these records gain a dated note or are changed in place:
 
@@ -55,6 +69,24 @@ When accepted, these records gain a dated note or are changed in place:
   `docs/design/ridl-transport-ws.md`, the frame specification §11.1, and the
   records of the `ridl diff` categories (`docs/book/cli-reference.md`,
   `docs/book/evolving-an-interface.md`).
+- From the amendment of 2026-10-28, when its code lands: ADR-0002 (the note of
+  2026-10-24: the range of a `[limits]` value and MANI-022), ADR-0024 (the note
+  of 2026-10-24: the kinds RIDL-150 checks, and the error RIDL-153), the ridl
+  reference's diagnostics table (the RIDL-150 and RIDL-151 rows, and a new
+  RIDL-153 row), the family overview §7 (the MANI-022 row, and the sentence that
+  names MANI-009 as the one manifest code the manifest layer does not raise),
+  the typl reference §4.4 and §4.5 (the advised bounds against the smaller
+  ceiling of a signal, an event and a fixed), `docs/book/lints.md` (the
+  paragraphs on `payload-above-ceiling` and on `[limits]`),
+  `docs/book/cli-reference.md` (the `[limits]` section: the order that resolves
+  a limit, MANI-022, RIDL-150, RIDL-151 and RIDL-153),
+  `docs/design/catalog-descriptor.md` (an absent `limit` means the ceiling of
+  the member's kind), the frame specification §11.1 "The sizes" (the WebSocket
+  binding carries every payload whole, in one message), and the freeze dumps
+  `freeze/diagnostics.txt`, and `freeze/accepted-sources.txt` and
+  `freeze/manifest.txt` where a frozen source or manifest is affected.
+  `docs/design/ridl-transport-ws.md` and `docs/design/ridl-rt.md` do not change:
+  the WebSocket limits stay as built, and `ridl-rt` gains no constant.
 
 ## Context
 
@@ -91,6 +123,9 @@ When accepted, these records gain a dated note or are changed in place:
   no total bound. They are not built (driftsys/ridl#336).
 - The target transport model is shared memory with 4 KiB pages, a seqlock and a
   header of one or two cache lines.
+- On 2026-10-28 the owner set how that model holds a value: a signal, an event
+  and a fixed are each held as one cell, and a cell is one memory page minus one
+  cache line. A command and a query are not held in a cell.
 
 ## Decision
 
@@ -98,14 +133,28 @@ When accepted, these records gain a dated note or are changed in place:
    four 4 KiB pages. A transport reserves at most 128 bytes of it for the header
    of a message that carries a payload. The WebSocket data-plane header is at
    most 36 bytes, so it fits; the `attach` frame carries no payload and is
-   limited by the frame specification alone.
+   limited by the frame specification alone. Amended 2026-10-28: the 16,384
+   bytes size the payload ceiling (decision 2); they do not say how a transport
+   moves a payload. Whether a payload travels whole in one message, or is split
+   and queued page by page, is a rule of each transport binding, not of the
+   language, the catalog, the descriptor or `ridl-rt`. The rule that one payload
+   travels in one transfer is a rule of the WebSocket binding only: its message
+   limit of 36 + 16,256 = 16,292 bytes (decision 10) carries every payload
+   whole, and stays as built. Another binding may split a payload. Nothing about
+   pages, slots or splitting is added to the catalog, the descriptor or
+   `ridl-rt`.
 
 2. **The payload ceiling is 16,256 bytes** (16,384 − 128). It is a platform
    rule, stated in the specifications, and it is the same for every encoding,
    runtime and transport. It counts the encoded payload only. The ceiling is
    changed only by amending this record, because a peer with a lower ceiling
    refuses what a peer with a higher one sends; ADR-0029's rule that size values
-   are not frozen is otherwise unchanged.
+   are not frozen is otherwise unchanged. Amended 2026-10-28: the payload
+   ceiling is the largest payload of any interaction and the ceiling of the
+   kinds `command` and `query`; the kinds `signal`, `event` and `fixed` have the
+   lower ceiling of decision 16. The ceiling of a kind is a platform rule in the
+   same way, changed only by amending this record. The run-time refusal of
+   decision 4 and `ridl-rt`'s `PAYLOAD_CEILING` stay at 16,256 bytes.
 
 3. **`MAX_SIZE` is capped at the ceiling.** The IR size states, the catalog
    descriptor's size rows and the codegen `Model` stay as computed, so they
@@ -172,6 +221,9 @@ When accepted, these records gain a dated note or are changed in place:
      interaction that carries the payload, so a type no interaction carries is
      not reported. Its row goes in the ridl reference's diagnostics table, and
      in the profile codes that the corpus test lists.
+   - Amended 2026-10-28: RIDL-150 checks a `command` and a `query` only. A
+     signal, an event and a fixed are checked against the ceiling of their kind
+     by RIDL-153 (decision 17), an error, so RIDL-150 does not report them.
    - Both messages say that the payload ceiling is 16,256 bytes and that the
      codecs do not yet enforce it; once the codecs refuse a larger value, as
      decision 4 will make them, the messages will say that. A package can raise
@@ -205,7 +257,9 @@ When accepted, these records gain a dated note or are changed in place:
 11. **Data larger than one transfer is a stream.** A firmware image, a file or
     an image larger than 16 KiB is modelled as a stream of bounded elements
     (ridl reference §12). Until streams are built (driftsys/ridl#336) the
-    platform carries no single value larger than one transfer.
+    platform carries no single value larger than one transfer. Amended
+    2026-10-28: "one transfer" here is the ceiling of the payload's kind
+    (decisions 2 and 16), not a property of a transport binding.
 
 12. **Each interaction has its own payload limit, set in the manifest** (added
     2026-10-24). Each kind of interaction may allocate and carry its payload in
@@ -231,22 +285,34 @@ When accepted, these records gain a dated note or are changed in place:
     `[limits.interaction]`, the entry of its kind (`signal`, `fixed`, `event`,
     `command` or `query`) in `[limits.kind]`, `default`, and the payload ceiling
     of decision 2. With no `[limits]` table, every interaction's limit is the
-    ceiling. The table names only the unit's own interactions, by the
-    interface's or inline service's name without its package, then `.`, then the
-    member. An inline service `demo.svc` is keyed `svc.member`; a key with the
-    package (`demo.svc.member`, `pkg.Iface.member`) names nothing. When two
-    interfaces or inline services of one unit share a short name, a key that
-    uses the name is ambiguous and is reported with the same code as a key that
-    names nothing. A limit of 0 is valid. The table of a remote unit that the
-    workspace imports is read as well, so a consumer records the same limits as
-    the owner and computes the same catalog hash; a limit of a remote unit is
-    recorded and is not checked again on the consumer side. An unknown kind and
-    a value above 16,256 are manifest errors with a `MANI-` code (ADR-0002); a
-    name that matches no interaction is a checker error with a `RIDL-` code. The
-    codes are MANI-021 for an unknown kind, MANI-022 for a value above the
-    ceiling, and RIDL-152 for a name that matches no interaction. The ceiling
-    stays the upper bound for every interaction and is changed only by amending
-    this record.
+    ceiling. Amended 2026-10-28: the last step of that order is the ceiling of
+    the interaction's kind (decisions 2 and 16), and with no `[limits]` table
+    every interaction's limit is the ceiling of its kind. `default` applies to a
+    kind up to the ceiling of that kind: a signal, an event or a fixed whose
+    limit comes from a `default` above 4,032 has the limit 4,032. The table
+    names only the unit's own interactions, by the interface's or inline
+    service's name without its package, then `.`, then the member. An inline
+    service `demo.svc` is keyed `svc.member`; a key with the package
+    (`demo.svc.member`, `pkg.Iface.member`) names nothing. When two interfaces
+    or inline services of one unit share a short name, a key that uses the name
+    is ambiguous and is reported with the same code as a key that names nothing.
+    A limit of 0 is valid. The table of a remote unit that the workspace imports
+    is read as well, so a consumer records the same limits as the owner and
+    computes the same catalog hash; a limit of a remote unit is recorded and is
+    not checked again on the consumer side. An unknown kind and a value above
+    16,256 are manifest errors with a `MANI-` code (ADR-0002); a name that
+    matches no interaction is a checker error with a `RIDL-` code. The codes are
+    MANI-021 for an unknown kind, MANI-022 for a value above the ceiling, and
+    RIDL-152 for a name that matches no interaction. The ceiling stays the upper
+    bound for every interaction and is changed only by amending this record.
+    Amended 2026-10-28: MANI-022 is a value above the ceiling of its kind. A
+    `[limits.kind]` entry for `signal`, `event` or `fixed` above 4,032 is
+    MANI-022, raised by the manifest layer as today. A `[limits.interaction]`
+    entry above 4,032 that names a signal, an event or a fixed is MANI-022 as
+    well; the manifest layer does not know the kind of the member a key names,
+    so the pass of `ridlc` that resolves the keys raises it, on the value, as
+    the checker raises MANI-009. A `default` above 4,032 is not an error,
+    because it applies to a command and a query too.
 
     The limits are in the manifest, not in an attribute, because a signal, an
     event and a fixed take no attribute block (`family-general-form.md` §4.3),
@@ -258,12 +324,18 @@ When accepted, these records gain a dated note or are changed in place:
     records it in the IR on the interaction, so the catalog hash covers it. The
     checker and lowering of `ridl-sem` leave the limit unset. An interaction
     whose limit is the ceiling because no entry applies records no limit, so a
-    unit with no `[limits]` table keeps its catalog hash. `ridl diff` reports
-    every change of a limit, a raise or a lowering, as breaking, so a catalog
-    whose limits changed is not on the `compatible` chain of the earlier one.
-    Two peers whose limits differ therefore have different hashes, neither
-    accepts the other, and the attach is refused (frame specification §6.1). The
-    catalog descriptor's member table gains a column with each member's limit.
+    unit with no `[limits]` table keeps its catalog hash. Amended 2026-10-28: an
+    interaction whose limit is the ceiling of its kind because no entry applies
+    records no limit. The ceiling of a kind is a platform constant, not recorded
+    in the IR, so no unit's catalog hash changes; only a limit that a declared
+    `[limits]` entry gives is recorded, as before. An absent limit in the IR and
+    in the descriptor's member table means the ceiling of the member's kind.
+    `ridl diff` reports every change of a limit, a raise or a lowering, as
+    breaking, so a catalog whose limits changed is not on the `compatible` chain
+    of the earlier one. Two peers whose limits differ therefore have different
+    hashes, neither accepts the other, and the attach is refused (frame
+    specification §6.1). The catalog descriptor's member table gains a column
+    with each member's limit.
 
 14. **A payload above a declared limit is an error** (added 2026-10-24). When a
     `[limits]` entry gives an interaction its limit, and the computed bound of
@@ -277,7 +349,12 @@ When accepted, these records gain a dated note or are changed in place:
     stops compiling, and the ros2 corpus is unchanged. A call checks its
     arguments and its reply against its one limit; a signal, a fixed and an
     event check their value. RIDL-150 does not size a `fixed` today, so RIDL-151
-    adds that sizing.
+    adds that sizing. Amended 2026-10-28: where no entry applies, a `command`
+    and a `query` keep RIDL-150 at `warn`, and a signal, an event and a fixed
+    are checked by the error RIDL-153 (decision 17). Where an entry applies,
+    RIDL-151 checks every kind; the entry of a signal, an event or a fixed is at
+    most 4,032 (decision 12), so RIDL-151 also holds such an interaction within
+    the ceiling of its kind.
 
 15. **The transport derives its limits from the catalog** (added 2026-10-24). A
     server whose backend has a member table reads each member's limit from it.
@@ -304,6 +381,36 @@ When accepted, these records gain a dated note or are changed in place:
     its role of sizing the memory an embedder grants a session, above that
     minimum.
 
+16. **A signal, an event and a fixed have a payload ceiling of 4,032 bytes**
+    (added 2026-10-28). Each of them is held as one cell, and a cell is one
+    memory page minus one cache line. The page is 4,096 bytes and the cache line
+    64 bytes on every target; both are fixed constants, not values of the
+    target, so a catalog that is valid on one target is valid on every target.
+    The ceiling of the kinds `signal`, `event` and `fixed` is therefore 4,096 −
+    64 = 4,032 bytes of encoded payload. The ceiling of `command` and `query`
+    stays 16,256 bytes (decision 2). The ceiling of a kind is a constant of the
+    checker, in `ridl_core::limits` beside `PAYLOAD_CEILING`; it is not recorded
+    in the IR (decision 13) and is not added to `ridl-rt` or to a transport.
+    4,032 is also the number decision 6 gives as the largest advised `string`
+    bound. The two are equal in value only: decision 6 counts characters, and a
+    string of 4,032 characters is up to 16,128 bytes of UTF-8, so a signal, an
+    event or a fixed whose payload holds a string at that bound is above the
+    ceiling of its kind.
+
+17. **A signal, an event or a fixed above the ceiling of its kind is an error**
+    (added 2026-10-28). When no `[limits]` entry gives a signal, an event or a
+    fixed its limit, and the computed bound of its payload, in an encoding the
+    workspace enables (the same set as RIDL-150), is larger than 4,032 bytes or
+    has no finite bound, the checker reports a new error, RIDL-153, on the
+    interaction. As an error code it has no name and no level (ADR-0024 decision
+    1), so `[lints]` cannot lower it. It runs in `ridlc` after lowering, where
+    RIDL-150 and RIDL-151 run, and it skips the packages that RIDL-151 skips. It
+    is an error, not RIDL-150's warning, because the cell that holds the value
+    has no room for a larger one. The error is on the interaction, not on the
+    type: a type that a command or a query carries keeps the ceiling of 16,256
+    bytes. Where an entry gives the limit, RIDL-151 reports the same case
+    instead (decision 14), so one interaction draws at most one of the two.
+
 ## Where the rules are stated
 
 - typl reference §4.4 and §4.5: the advised bounds and TYPL-116 (decisions 6 to
@@ -323,8 +430,26 @@ When accepted, these records gain a dated note or are changed in place:
   `docs/book/evolving-an-interface.md`: the `ridl diff` limit change (decision
   13). `docs/design/ridl-transport-ws.md` and the frame specification §11.1: the
   message limit and the request check (decisions 10 and 15).
+- From the amendment of 2026-10-28, once its code lands: the ridl reference's
+  diagnostics table, `docs/book/lints.md` and `docs/book/cli-reference.md`: the
+  ceiling of a kind, MANI-022 and RIDL-153 (decisions 12, 16 and 17). The frame
+  specification §11.1: one payload in one message, a rule of the WebSocket
+  binding (decision 1).
 
 ## Alternatives considered
+
+- **RIDL-150 at level `error` for a signal, an event and a fixed** (2026-10-28).
+  Rejected: a lint has one default level for its code, and an error code is
+  never a lint (ADR-0024 decision 1), so a level per kind cannot be expressed in
+  the registry, and `[lints]` could lower such a level to `allow`. A separate
+  error code keeps RIDL-150 a lint for a command and a query.
+- **The page and the cache line of the target** (2026-10-28). Rejected: a
+  catalog valid on one target would be invalid on a target with smaller pages or
+  larger cache lines, and two peers would disagree on what each may send.
+- **Pages, slots or splitting in the catalog, the descriptor or `ridl-rt`**
+  (2026-10-28). Rejected: how a payload is moved belongs to the transport
+  binding (decision 1 as amended), and the catalog states only how large a
+  payload may be.
 
 - **A ceiling of 4 MiB + 64 KiB**, sized for an uncompressed 1024×1024 RGBA PNG.
   Rejected on 2026-10-21: one transfer of 4 MiB is too large for a seqlock
@@ -402,6 +527,16 @@ When accepted, these records gain a dated note or are changed in place:
   breaking. The new IR field and the new descriptor column are additions to the
   frozen `ir` surface and the descriptor schema under ADR-0029; the freeze dumps
   are updated when the code lands.
+- From the amendment of 2026-10-28: a signal, an event or a fixed whose payload
+  is larger than 4,032 bytes or has no finite bound, which drew RIDL-150 or
+  nothing before, now draws RIDL-153 and fails `ridl check`, and a `[limits]`
+  entry above 4,032 for one of them now draws MANI-022. Both remove accepted
+  sources, a breaking change of the `accepted-sources` surface (ADR-0029),
+  released in the next version marked breaking. The code change measures which
+  sources of the corpus under `evals/`, the test fixtures, the examples and the
+  book it breaks, and bounds them. The diagnostics surface gains RIDL-153. No
+  catalog hash changes, the IR and the descriptor schema do not change, and the
+  WebSocket limits stay as built.
 
 ## References
 
