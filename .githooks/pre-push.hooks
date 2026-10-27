@@ -4,4 +4,4 @@
 #   ?  advisory  run command, never block push
 #
 # Lint and static-check gate before pushing — see `pre-push` in the justfile.
-! just pre-push
+! .githooks/pre-push-gate.sh
