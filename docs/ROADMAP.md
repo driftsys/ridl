@@ -187,7 +187,8 @@ names.
 **Filed 2026-10-26, with exact numerics.** Epic 18 is new, with its own
 milestone; its stories are driftsys/ridl#1087 (E18.1, first filed as E10.12
 before the epic was split out, and retitled) and driftsys/ridl#1089 to
-driftsys/ridl#1091. Its carried defect is driftsys/ridl#1092.
+driftsys/ridl#1091. Its carried defect is driftsys/ridl#1092. E18.0, the design,
+was added on 2026-10-27 with the schedule, as driftsys/ridl#1093.
 
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
@@ -1179,7 +1180,35 @@ needed for the first Kotlin demo.
 
 # Epic 18 — exact numerics
 
-**Not scheduled.** Filed 2026-10-26; the step that takes it is not chosen yet.
+**Scheduled on 2026-10-27 over two releases marked breaking.** Filed 2026-10-26.
+
+| Release                                                          | Epic 18 content                                                                                             |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| the next release marked breaking (beside #1059, E2.14 and E6.20) | E18.0 (the design), E18.3 (the policy), and the fix of driftsys/ridl#1092                                   |
+| the release marked breaking after it                             | E18.1 and E18.2 together, the TypeScript codec on the new wire, and notice to the Kotlin plugin maintainers |
+| after E18.1 and E18.2 land                                       | E18.4, the book chapter, which describes the behaviour as built                                             |
+
+The reasons for the split:
+
+- The next breaking release already holds three breaking items, and adding two L
+  stories would delay them.
+- E18.1 and E18.2 need a design that is approved before code starts: the storage
+  unit, the rounding of every conversion, the translation of clauses, and four
+  ADR amendments. E18.0 is that design.
+- E18.2 changes the bytes on every encoding, so the TypeScript codec, the Kotlin
+  plugin outside this repository, and the frozen dumps of ADR-0029 change with
+  it. The Kotlin maintainers get one release of notice.
+- E18.1 changes the generated API and E18.2 the wire; shipping them in one
+  release breaks consumers once.
+- E18.3 is opt-in, so a package that does not set the policy is not affected,
+  and the policy is useful before E18.1 exists: it guarantees that every float a
+  package uses has a step. Its rule on the `float` feature applies once E18.1
+  adds the feature.
+- driftsys/ridl#1092 is fixed in the next release for every float, by rounding a
+  clause literal toward the side that refuses at generation. E18.1 then replaces
+  that rounding with an exact integer bound for a float with a step.
+- One release of SafeNum before E18.1 leaves room for its MVP, if the generated
+  types are to use its types.
 
 **Milestone:** a quantized float is an integer in units of its step, in storage
 and on every wire, and a float is an optional view of it. **Value:** a
@@ -1219,17 +1248,19 @@ exact-numerics policy refuses it.
 
 | ID    | Story                                                                                                                                                                                                                                                                                                                                                                                                                                            | Done when                                                                                                                                                                                                           | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E18.0 | The design: a design note that settles the storage unit (the step or the scale), the rounding mode of every conversion, the translation of `require` and `ensure`, and the form of the schema annotation on each encoding, and drafts the amendments of ADR-0013 decision 4, ADR-0017, ADR-0019 and ADR-0002 that E18.2 and E18.3 merge                                                                                                          | the design note is approved and merged                                                                                                                                                                              | M    |
 | E18.1 | The Rust generated type: a quantized float is stored as an integer in units of its step, with the scale inferred from the step and the lower bound; the rounding mode of every conversion is specified; `require` and `ensure` translate to exact integer bounds; the float view (`new(f64)`, `get()`) and floats without a step are behind a `float` Cargo feature, with a `no-float` feature that fails the build when `float` is also enabled | with `float` off, a quantized float's type constructs, validates and evaluates its clauses with no floating-point operation, checked by linking for a soft-float target with no `__aeabi_f*` or `__aeabi_d*` symbol | L    |
 | E18.2 | The encodings: proto3, FlatBuffers and `repr(C)` carry the integer; each emitted schema and the catalog descriptor state the step, the unit and the lower bound of the field; a transport binding whose convention uses an offset (CAN/DBC, SOME/IP per deployment) applies it; ADR-0013 decision 4, ADR-0017 and ADR-0019 are amended                                                                                                           | a payload round-trips on each encoding carrying the integer, and a reader given only the emitted schema recovers the physical value                                                                                 | L    |
 | E18.3 | The exact-numerics package policy in `ridl.toml`: every float that the package uses, declared in it or in a dependency, has a range and a `step`; the policy is recorded in the IR and the catalog, and `ridl diff` reports its removal; the Rust crate of such a package does not enable `float` by default; ADR-0002 is amended                                                                                                                | a policy package that uses a float without a step is rejected, and `ridl diff` reports the removal of the policy                                                                                                    | M    |
 | E18.4 | A book chapter on numeric representation: how the step selects the scale, how to choose a decimal or a binary step, the float view and its features, and the policy                                                                                                                                                                                                                                                                              | the chapter is in the book, and its examples compile                                                                                                                                                                | S    |
 
-**Sequence.** E18.1, then E18.2: the wire carries the integer that E18.1 stores.
-E18.3 needs only the IR and can run beside them. E18.4 follows the three. All
-three code stories change the generated API or the wire, so they belong in a
-release marked breaking. The TypeScript codec follows the wire of E18.2; the
-TypeScript value layer, which stores the integer and always offers the float
-view, is part of the TypeScript work of step 2.
+**Sequence.** E18.0 first. Then E18.1, then E18.2: the wire carries the integer
+that E18.1 stores. E18.3 needs only the IR and can run beside E18.0. E18.4
+follows the three code stories. E18.1 and E18.2 change the generated API or the
+wire, so they belong in a release marked breaking; E18.3 is opt-in. The
+TypeScript codec follows the wire of E18.2; the TypeScript value layer, which
+stores the integer and always offers the float view, is part of the TypeScript
+work of step 2.
 
 **Choosing a decimal or a binary step** is guidance for authors, not a rule the
 compiler enforces, and E18.4 states it. A grid fixed outside the contract (a
@@ -1296,27 +1327,27 @@ reopening is an observation rather than an argument.
 
 # Milestone summary
 
-| Epic | Milestone                       | Step                                                                               |
-| ---- | ------------------------------- | ---------------------------------------------------------------------------------- |
-| E0   | walking skeleton                | landed — internal                                                                  |
-| E1   | typl schema language            | landed — **v0.1 preview**                                                          |
-| E2   | ridl contract boundary          | landed — v0.x                                                                      |
-| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
-| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                      |
-| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR             |
-| E17  | layout inputs for plugins       | **step 1**, landed                                                                 |
-| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                           |
-| E11  | the runtime library             | **step 1** — generated code links a library                                        |
-| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                      |
-| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                               |
-| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                             |
-| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                          |
-| E8   | agent enablement                | **step 1** — threads alongside                                                     |
-| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                    |
-| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                       |
-| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                              |
-| none | Kotlin, the first plugin        | after step 2                                                                       |
-| E18  | exact numerics                  | not scheduled — a quantized float is an integer in storage and on the wire         |
+| Epic | Milestone                       | Step                                                                                   |
+| ---- | ------------------------------- | -------------------------------------------------------------------------------------- |
+| E0   | walking skeleton                | landed — internal                                                                      |
+| E1   | typl schema language            | landed — **v0.1 preview**                                                              |
+| E2   | ridl contract boundary          | landed — v0.x                                                                          |
+| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed     |
+| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                          |
+| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR                 |
+| E17  | layout inputs for plugins       | **step 1**, landed                                                                     |
+| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                               |
+| E11  | the runtime library             | **step 1** — generated code links a library                                            |
+| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                          |
+| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                                   |
+| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                                 |
+| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                              |
+| E8   | agent enablement                | **step 1** — threads alongside                                                         |
+| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                        |
+| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                           |
+| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                                  |
+| none | Kotlin, the first plugin        | after step 2                                                                           |
+| E18  | exact numerics                  | the next two breaking releases — the design and the policy, then the type and the wire |
 
 Rows are in step order, not numeric order — the numbering is identity, as the
 tracker section above explains. Two rows have no epic: the Rust codegen section
