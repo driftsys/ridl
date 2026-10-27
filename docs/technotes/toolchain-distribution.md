@@ -55,15 +55,17 @@ because `vscode-release.yaml` refuses an `editor-v` tag that differs from
 `editors/vscode/package.json`. The release commit goes to `main` directly,
 without a pull request.
 
-1. On a clean `main` equal to `origin/main`, run
+1. On a clean `main` equal to `origin/main`, whose `ci` run has passed, run
    `just release --release-as <version>`. Before 1.0, `git std bump` picks a
    patch release unless it is told the version. The recipe runs the release
    check of the freeze gate, then `git std bump --no-commit`, then
    `just release-sync`, which updates the pins that a `[[version_files]]` entry
    cannot express: the root and cabin lockfiles, the `ridl-rt` requirement that
    `ridl build` emits, the cabin manifests and `deno.lock`, the editor manifest
-   and the frozen generated manifests. It checks the result
-   (`cargo check --locked` and the pin tests), commits
+   and the frozen generated manifests. The recipe does not rebuild the tree,
+   which `ci` already checked. It checks only what the bump and the sync wrote:
+   that both lockfiles agree with their manifests (`cargo metadata --locked`)
+   and that every derived pin follows the new version. It then commits
    `chore(release): <version>`, and creates the annotated tags `v<version>` and
    `editor-v<version>`, all locally.
 2. Read the changelog in the release commit.

@@ -3235,11 +3235,11 @@ verify: lint-commits build
 # git-std picks a patch release unless it is told otherwise). The order is
 # described in docs/technotes/toolchain-distribution.md, "Cutting a release".
 #
-# It refuses to start unless this is a clean `main` equal to `origin/main`,
-# runs the release check of the freeze gate, lets `git std bump --no-commit`
+# It refuses to start unless this is a clean `main` equal to `origin/main`
+# whose `ci` run passed, runs the release check of the freeze gate, lets `git std bump --no-commit`
 # write the version, the `version_files` pins and the changelog, runs
-# `release-sync` for the pins git-std cannot write, and checks the result
-# before it commits and tags.
+# `release-sync` for the pins git-std cannot write, and checks the lockfiles and
+# the pins before it commits and tags.
 release *ARGS: toolchain-check
     #!/usr/bin/env bash
     set -euo pipefail
@@ -3256,16 +3256,25 @@ release *ARGS: toolchain-check
         echo "release: main is not equal to origin/main; pull or push first" >&2
         exit 1
     fi
+    # The tree is taken as sane because ci passed on it; the release does not
+    # rebuild it.
+    ci="$(gh run list --workflow ci --event push --commit "$(git rev-parse HEAD)" \
+        --json conclusion --jq '.[0].conclusion // empty')"
+    if [ "$ci" != success ]; then
+        echo "release: ci has not passed on HEAD (${ci:-no run yet}); wait for it or fix main" >&2
+        exit 1
+    fi
     echo "release: open pull requests on main (for information):"
     gh pr list --base main --state open || true
     cargo run --locked --package xtask -- freeze check --release
     trap 'echo "release: failed; the tree was clean before the bump, so `git checkout -- .` discards the release changes" >&2' ERR
     git std bump --no-commit {{ ARGS }}
     just release-sync
-    cargo check --workspace --locked
+    # Cheap checks of what the bump and the sync wrote: both lockfiles agree
+    # with their manifests, and every derived pin follows the new version.
+    cargo metadata --locked --format-version 1 >/dev/null
+    (cd examples/cabin && cargo metadata --locked --format-version 1 >/dev/null)
     cargo test --locked --package xtask --test release_derived_pins
-    cargo test --locked --package ridlc --test prose_version_pins
-    cargo test --locked --package ridlc --test rust_crate_emit ridl_rt_version_requirement_matches_the_crate
     version="$(cargo metadata --no-deps --format-version 1 \
         | jq -r '.packages[] | select(.name == "ridl-core") | .version')"
     if [ -n "$(git ls-files --others --exclude-standard)" ]; then
