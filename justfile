@@ -3385,9 +3385,12 @@ release-push:
         exit 1
     fi
     if ! gh run watch "$run_id" --exit-status; then
-        conclusion="$(gh run view "$run_id" --json conclusion --jq .conclusion || true)"
-        echo "release-push: the ci run on $sha did not pass ($conclusion); the tags are not pushed." >&2
-        if [ -z "$conclusion" ]; then
+        state="$(gh run view "$run_id" --json status,conclusion \
+            --jq 'if .status != "completed" then "unfinished" else .conclusion end' || echo unknown)"
+        echo "release-push: the ci run on $sha did not pass ($state); the tags are not pushed." >&2
+        if [ "$state" = unknown ]; then
+            echo "release-push: gh could not read run $run_id; look at it with: gh run view $run_id" >&2
+        elif [ "$state" = unfinished ]; then
             echo "release-push: the watch stopped before the run finished; run just release-push again." >&2
         elif [ "$conclusion" = cancelled ]; then
             echo "release-push: a later push to main cancels the run. Re-run it with" >&2

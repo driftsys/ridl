@@ -518,7 +518,9 @@ fn a_listed_crate_missing_from_the_cabin_lock_is_reported() {
         &dir,
         "examples/cabin/Cargo.lock",
         "[[package]]\nname = \"ridl-descriptor\"\nversion = \"0.15.0\"\n\n",
-        "",
+        // A registry entry of the same name does not count as the path crate.
+        "[[package]]\nname = \"ridl-descriptor\"\nversion = \"0.15.0\"\n\
+         source = \"registry+https://github.com/rust-lang/crates.io-index\"\n\n",
     );
     assert_eq!(
         derived_pin_errors(&dir, "0.15.0"),
