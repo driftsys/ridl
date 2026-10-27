@@ -540,7 +540,7 @@ a field is appended.
     - **Known gap.** `ridl build` and `ridl check --baseline` do not pass the
       manifest's `[backend.<name>] encodings` to the diff, so a workspace that
       builds podbuf and gates on its baseline accepts an inline-append break
-      until the follow-up lands. It is tracked as a follow-up issue.
+      until the follow-up lands. It is tracked as driftsys/ridl#1095.
 
 14. **What podbuf generates, and what it exposes (Sebastien).** Per type:
     - the head struct with its pad fields and assertions, and the preamble
@@ -689,10 +689,10 @@ stated in the decision above; this list is the index.
    the type declares), or state that an append that raises `max_size` is a
    break.
 3. **`ridl build` and `ridl check --baseline` and the encodings** (decision 13):
-   tracked as a follow-up issue.
+   tracked as driftsys/ridl#1095.
 4. **A C reader for a boxed root.** The header has no reader for a payload root
    that is a named scalar, an enum or an enum set (the box). It is listed in the
-   known gaps of `docs/design/podbuf-codec.md`.
+   known gaps of `docs/design/podbuf-codec.md`, as driftsys/ridl#1096.
 5. **Quantized floats.** The typl reference defines a quantized wire form, a
    float with a range and a step sent as a scaled integer (typl §4.3); the spike
    showed it removes a large software floating-point cost on the R52. It is a

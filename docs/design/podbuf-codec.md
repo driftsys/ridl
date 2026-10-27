@@ -214,10 +214,10 @@ The encoding has no second implementation, so the oracle is the law itself.
 
 | Gap                                                                                                                              | Issue                         |
 | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| `ridl build` and `ridl check --baseline` do not pass the manifest's `[backend.<name>] encodings` to the diff                     | tracked as a follow-up issue  |
+| `ridl build` and `ridl check --baseline` do not pass the manifest's `[backend.<name>] encodings` to the diff                     | driftsys/ridl#1095            |
 | `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                                            | the typl change it depends on |
 | `Payload<Podbuf>::verify` refuses a buffer longer than its own `MAX_SIZE`, which a compatible append can raise (ADR-0031 item 2) | open item of the record       |
-| The C header has no reader for a payload root that is a named scalar, an enum or an enum set                                     | tracked as a follow-up issue  |
+| The C header has no reader for a payload root that is a named scalar, an enum or an enum set                                     | driftsys/ridl#1096            |
 | A string that holds U+0000 cannot be encoded                                                                                     | a limit of the encoding       |
 | TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                      | ADR-0020 decision 2           |
 
