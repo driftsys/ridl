@@ -116,8 +116,7 @@ The member `average`, a query, as it appears in `members`:
 ```
 
 The keys are in alphabetical order, and an absent timing bound or limit is
-`null`. A file
-that is not a valid descriptor, or that has a schema version this toolchain
+`null`. A file that is not a valid descriptor, or that has a schema version this toolchain
 does not read, makes `ridl describe` exit with code 2. The
 [CLI reference](cli-reference.md#ridl-describe) has the details.
 

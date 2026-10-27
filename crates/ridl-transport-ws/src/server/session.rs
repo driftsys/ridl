@@ -778,11 +778,14 @@ impl<B: Backend> Session<B> {
                 out,
             );
         }
-        let over_limit = self
-            .backend
-            .members()
-            .and_then(|table| table.limit(target.iface, target.ord))
-            .is_some_and(|limit| payload.len() > limit as usize);
+        // Only a command or a query is answered; any other kind falls to the
+        // unknown-interaction answer below whatever the length.
+        let over_limit = matches!(target.kind, Kind::Command | Kind::Query)
+            && self
+                .backend
+                .members()
+                .and_then(|table| table.limit(target.iface, target.ord))
+                .is_some_and(|limit| payload.len() > limit as usize);
         if over_limit {
             return self.respond(target, seq, ResponseOutcome::Corrupt, stamp, receipt, out);
         }
@@ -3812,6 +3815,33 @@ mod tests {
                 "{target:?}"
             );
         }
+    }
+
+    #[test]
+    fn a_request_under_another_kind_than_command_or_query_is_unknown_whatever_its_length() {
+        // Ordinal 1 is a signal in the table; a limit on it must not turn the
+        // unknown-interaction answer into `corrupt`.
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, Ordinal(1), 4));
+        let (mut s, _p, _n) = described_with(t, |c| c);
+        open(&mut s);
+        let target = Target {
+            kind: Kind::Signal,
+            iface: IFACE,
+            ord: Ordinal(1),
+        };
+        let (_, out) = send(&mut s, &request(target, 1, &[1; 5]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(
+                target,
+                0,
+                1,
+                1,
+                ResponseOutcome::Contract(Contract::UnknownInteraction)
+            )
+        );
     }
 
     #[test]

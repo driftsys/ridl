@@ -948,10 +948,6 @@ decision 12). A unit sets it in its own `ridl.toml`; the table of a workspace
 root does not apply to its members, and a package of a unit's subdirectory
 takes the unit's table.
 
-The table of a remote unit that `[imports]` names is read too, so its
-interactions record the owner's limits and the consumer computes the owner's
-catalog hash. The consumer reports no RIDL-151 or RIDL-152 for it.
-
 ```toml
 [limits]
 default = 4096                  # every kind with no entry below
@@ -963,6 +959,10 @@ event = 2048
 [limits.interaction]
 "Climate.temperature" = 64      # Interface.member, quoted because of the dot
 ```
+
+The table of a remote unit that `[imports]` names is read too, so its
+interactions record the owner's limits and the consumer computes the owner's
+catalog hash. The consumer reports no RIDL-151 or RIDL-152 for it.
 
 The limit of an interaction is the first that is found of: its entry in
 `[limits.interaction]`, the entry of its kind in `[limits.kind]`, `default`,

@@ -1415,8 +1415,9 @@ impl Loader {
     /// its own
     /// `interfaces.lock`. The ordinary rules apply unchanged: MANI-014 when
     /// a consumer unit or an earlier remote unit already claims a package,
-    /// and the tree is then not loaded. No lint scope is recorded for the
-    /// unit's directory. Returns the unit's name once the manifest gave one.
+    /// and the tree is then not loaded. The unit's `[limits]` table is stored
+    /// in `unit_limits`, so the consumer records the owner's limits. No lint
+    /// scope is recorded for the unit's directory. Returns the unit's name once the manifest gave one.
     #[cfg(feature = "fetch")]
     fn read_remote_unit(
         &mut self,
