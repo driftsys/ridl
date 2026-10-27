@@ -3200,3 +3200,162 @@ mod podbuf {
         );
     }
 }
+
+mod podbuf_width {
+    use ridl_ir::v2;
+
+    use crate::{Category, Verdict, diff_refs_with, render_text};
+
+    /// An enum whose values are `0..count`, named `V<n>`.
+    fn enum_package(count: i64) -> v2::Package {
+        let values = (0..count)
+            .map(|value| v2::EnumValue {
+                name: format!("V{value}"),
+                value,
+                ..Default::default()
+            })
+            .collect();
+        with_decl(
+            "Mode",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values,
+                ..Default::default()
+            }),
+        )
+    }
+
+    /// A union with arms at ordinals `1..=count`, named `a<n>`, each a `Level`.
+    fn union_package(count: u32) -> v2::Package {
+        let arms = (1..=count)
+            .map(|ordinal| v2::UnionArm {
+                name: format!("a{ordinal}"),
+                ordinal,
+                type_ref: "Level".to_string(),
+                ..Default::default()
+            })
+            .collect();
+        let mut package = with_decl(
+            "Outcome",
+            v2::decl::Kind::UnionDef(v2::UnionDef {
+                arms,
+                ..Default::default()
+            }),
+        );
+        package.decls.push(v2::Decl {
+            name: "Level".to_string(),
+            kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                backing: Some(v2::Backing {
+                    kind: Some(v2::backing::Kind::Primitive(
+                        v2::PrimitiveType::Integer as i32,
+                    )),
+                }),
+                constraint: Some(v2::Constraint {
+                    min: Some("0".to_string()),
+                    max: Some("100".to_string()),
+                    ..Default::default()
+                }),
+                declared_init: None,
+                init: None,
+                width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
+            })),
+            ..Default::default()
+        });
+        package
+    }
+
+    fn with_decl(name: &str, kind: v2::decl::Kind) -> v2::Package {
+        v2::Package {
+            name: "veh.cluster".to_string(),
+            decls: vec![v2::Decl {
+                name: name.to_string(),
+                kind: Some(kind),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    fn width_change(report: &crate::DiffReport) -> Option<&crate::Change> {
+        report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufWidthChange)
+    }
+
+    /// Value 256 appended to an enum of `0..=255` widens its podbuf integer
+    /// from `u8` to `u16`: breaking under podbuf, compatible otherwise, and
+    /// listed under the podbuf heading either way.
+    #[test]
+    fn an_appended_enum_value_that_widens_the_integer_is_a_podbuf_break() {
+        let (old, new) = (enum_package(256), enum_package(257));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        let change = width_change(&report).expect("the width change is reported");
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(change.path, "veh.cluster/Mode");
+        assert_eq!(change.before.as_deref(), Some("u8"));
+        assert_eq!(change.after.as_deref(), Some("u16"));
+        assert_eq!(report.verdict, Verdict::Breaking);
+
+        let report = diff_refs_with(&[&old], &[&new], &[], &[]);
+        assert_eq!(report.verdict, Verdict::Compatible);
+        assert_eq!(
+            width_change(&report).map(|change| change.verdict),
+            Some(Verdict::Compatible)
+        );
+        assert!(
+            render_text(&report).contains(
+                "breaking under podbuf:\n  [compatible] podbuf_width_change veh.cluster/Mode: u8 -> u16"
+            ),
+            "{}",
+            render_text(&report)
+        );
+    }
+
+    /// Value 255 appended to an enum of `0..=254` keeps the `u8`: no width
+    /// line, compatible under podbuf.
+    #[test]
+    fn an_appended_enum_value_that_keeps_the_width_is_compatible_under_podbuf() {
+        let (old, new) = (enum_package(255), enum_package(256));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(width_change(&report), None);
+        assert_eq!(report.verdict, Verdict::Compatible);
+    }
+
+    /// Arm 256 appended to a union of 255 arms widens the tag from `u8` to
+    /// `u16`; arm 255 appended to 254 arms keeps it.
+    #[test]
+    fn an_appended_union_arm_past_ordinal_255_widens_the_tag() {
+        let (old, new) = (union_package(255), union_package(256));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        let change = width_change(&report).expect("the width change is reported");
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(change.path, "veh.cluster/Outcome");
+        assert_eq!(change.before.as_deref(), Some("u8"));
+        assert_eq!(change.after.as_deref(), Some("u16"));
+        assert_eq!(report.verdict, Verdict::Breaking);
+        assert_eq!(
+            diff_refs_with(&[&old], &[&new], &[], &[]).verdict,
+            Verdict::Compatible
+        );
+
+        let (old, new) = (union_package(254), union_package(255));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(width_change(&report), None);
+        assert_eq!(report.verdict, Verdict::Compatible);
+    }
+
+    /// Two values appended at once draw one line for the enum.
+    #[test]
+    fn several_appended_values_draw_one_line() {
+        let (old, new) = (enum_package(255), enum_package(258));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(
+            report
+                .changes
+                .iter()
+                .filter(|change| change.category == Category::PodbufWidthChange)
+                .count(),
+            1
+        );
+    }
+}

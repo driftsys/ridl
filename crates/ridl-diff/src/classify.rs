@@ -147,11 +147,11 @@ pub(crate) fn classify_in(
         // 12).
         Category::InteractionClassChanged => Verdict::Breaking,
 
-        // The walk emits this only for an append the generic rule accepts, so
+        // The walk emits both only for an append the generic rule accepts, so
         // the verdict is the encoding's alone: an inline copy of the struct
-        // cannot grow under podbuf, and no other encoding holds a struct
-        // inline.
-        Category::PodbufInlineAppend => {
+        // cannot grow under podbuf, a wider enum integer or union tag moves
+        // every head that holds it, and no other encoding lays either out.
+        Category::PodbufInlineAppend | Category::PodbufWidthChange => {
             if encodings.contains(&"podbuf") {
                 Verdict::Breaking
             } else {
@@ -1518,6 +1518,22 @@ pub fn explain(category: Category) -> &'static str {
             "a use.\n",
             "  breaking    with `--encoding podbuf`: the inline copy cannot grow\n",
             "              without moving the fields after it\n",
+            "  compatible  otherwise; listed under the heading \"breaking under\n",
+            "              podbuf\", so that a workspace that builds podbuf sees it"
+        ),
+        Category::PodbufWidthChange => concat!(
+            "An enum value or a union arm appended, compatible under the generic\n",
+            "rule, that changes the podbuf width of the enum's integer or of the\n",
+            "union's tag. podbuf lays an enum out as the narrowest integer that\n",
+            "holds every declared value, and a union's tag as the narrowest\n",
+            "unsigned integer that holds the largest arm ordinal (ADR-0031\n",
+            "decision 5): a value above 255 or an arm past ordinal 255 widens a\n",
+            "`u8` to a `u16`, and above 65535 a `u16` to a `u32`. The line is\n",
+            "reported once per declaration and carries the old\n",
+            "and the new width. An append that keeps the width draws no such line.\n",
+            "  breaking    with `--encoding podbuf`: every head that holds the enum\n",
+            "              or the union lays out the wider integer and moves the\n",
+            "              fields after it, and an older reader misreads the value\n",
             "  compatible  otherwise; listed under the heading \"breaking under\n",
             "              podbuf\", so that a workspace that builds podbuf sees it"
         ),

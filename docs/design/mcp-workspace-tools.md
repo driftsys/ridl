@@ -110,8 +110,9 @@ The behaviour that is not in the README:
   `encodings` list is `ridl diff --encoding`, one name per element: the names a
   manifest's `[backend.<name>] encodings` list takes
   (`ridl_core::manifest::ENCODING_NAMES`). With `podbuf` among them a
-  `podbuf_inline_append` change is breaking; without it, compatible. A name
-  outside the list is a request error (§5.2) naming the three.
+  `podbuf_inline_append` or a `podbuf_width_change` change is breaking; without
+  it, compatible. A name outside the list is a request error (§5.2) naming the
+  three.
 - **`ridl_explain`** reports, for a diagnostic code, `lint` and `default_level`
   when the code is a lint (ADR-0024 decision 15 and its Consequences). It never
   carries a link to a document.

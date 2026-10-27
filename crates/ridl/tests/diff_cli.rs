@@ -562,6 +562,84 @@ struct Bounds {
     );
 }
 
+/// An enum value appended at 256 widens the enum's podbuf integer from `u8`
+/// to `u16`: `podbuf_width_change`, exit 1 under `--encoding podbuf` and exit
+/// 0 without the flag. A value appended at 255 keeps the width and draws no
+/// such line. The same at the 255/256 arm boundary of a union.
+#[test]
+fn an_appended_enum_value_or_union_arm_that_widens_is_a_podbuf_break() {
+    fn enum_source(count: usize) -> String {
+        let values: String = (0..count)
+            .map(|value| format!("  V{value} = {value}\n"))
+            .collect();
+        format!("package veh.cluster\nenum Mode {{\n{values}}}\n")
+    }
+    fn union_source(count: usize) -> String {
+        let arms: String = (1..=count)
+            .map(|arm| format!("  a{arm}: Level\n"))
+            .collect();
+        format!("package veh.cluster\ntype Level: integer [0..100]\nunion Outcome {{\n{arms}}}\n")
+    }
+    let dir = TempDir::new("width");
+    for (name, old, new, line) in [
+        (
+            "enum",
+            enum_source(256),
+            enum_source(257),
+            "podbuf_width_change veh.cluster/Mode: u8 -> u16",
+        ),
+        (
+            "union",
+            union_source(255),
+            union_source(256),
+            "podbuf_width_change veh.cluster/Outcome: u8 -> u16",
+        ),
+    ] {
+        let v1 = dir.write(&format!("{name}-v1.typl"), &old);
+        let v2 = dir.write(&format!("{name}-v2.typl"), &new);
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            "--encoding".as_ref(),
+            "podbuf".as_ref(),
+            v1.as_os_str(),
+            v2.as_os_str(),
+        ]);
+        assert_eq!(
+            code, 1,
+            "{name}: a width change exits 1 under podbuf, stderr:\n{stderr}"
+        );
+        assert!(
+            stdout.contains(&format!("breaking under podbuf:\n  [breaking] {line}")),
+            "{name} stdout:\n{stdout}"
+        );
+        let (code, stdout, _) = ridl(&["diff".as_ref(), v1.as_os_str(), v2.as_os_str()]);
+        assert_eq!(code, 0, "{name}: the same append exits 0 without the flag");
+        assert!(
+            stdout.contains(&format!("breaking under podbuf:\n  [compatible] {line}")),
+            "{name} stdout:\n{stdout}"
+        );
+    }
+    for (name, old, new) in [
+        ("enum-kept", enum_source(255), enum_source(256)),
+        ("union-kept", union_source(254), union_source(255)),
+    ] {
+        let v1 = dir.write(&format!("{name}-v1.typl"), &old);
+        let v2 = dir.write(&format!("{name}-v2.typl"), &new);
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            "--encoding".as_ref(),
+            "podbuf".as_ref(),
+            v1.as_os_str(),
+            v2.as_os_str(),
+        ]);
+        assert_eq!(code, 0, "{name}: the width is kept, stderr:\n{stderr}");
+        assert!(
+            !stdout.contains("podbuf_width_change"),
+            "{name} stdout:\n{stdout}"
+        );
+    }
+}
+
 /// A fixed payload that is an exact-length array of the struct has no podbuf
 /// head, so an append to the struct is not an inline use: exit 0 under
 /// `--encoding podbuf`, and no `podbuf_inline_append` line.

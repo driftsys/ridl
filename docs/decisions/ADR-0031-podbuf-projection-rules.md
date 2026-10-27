@@ -458,9 +458,13 @@ a field is appended.
     _Breaking (a new type version):_ reordering; widening an integer across a
     width boundary; changing a bound; removing an arm or an enum value; adding a
     value to a strict enum or a flag to a strict enum set **(Sebastien)**;
-    appending a field that cannot read as 0; appending to a struct that is
-    nested inline anywhere in the workspace; changing a strict enum to an open
-    one or the reverse; and removing a field.
+    appending an enum value or a union arm that changes the podbuf width of the
+    enum's integer or of the union's tag (`u8` to `u16` at 256, `u16` to `u32`
+    at 65,536, by the width rule of decision 5), which moves every field placed
+    after it in every head that holds the enum or the union; appending a field
+    that cannot read as 0; appending to a struct that is nested inline anywhere
+    in the workspace; changing a strict enum to an open one or the reverse; and
+    removing a field.
 
     **An append to a struct nested inline is a break** (author's call): the
     inline copy cannot grow without moving the fields after it. The inline uses
@@ -524,12 +528,19 @@ a field is appended.
 
 13. **The checks.**
     - `ridl diff` reports each break of decision 10 as a podbuf break and each
-      compatible change as compatible. The append to an inline struct is the one
-      change judged by encoding: the category `podbuf_inline_append`, listed
-      under the heading "breaking under podbuf", is breaking when `podbuf` is
-      among the encodings the comparison is judged for and compatible otherwise.
-      `ridl diff --encoding <name>` and the `ridl_diff` MCP tool name the
-      encodings, because a snapshot does not record them.
+      compatible change as compatible. Two changes are judged by encoding, both
+      listed under the heading "breaking under podbuf" and breaking when
+      `podbuf` is among the encodings the comparison is judged for, compatible
+      otherwise: the append to an inline struct, the category
+      `podbuf_inline_append`, and an appended enum value or union arm that
+      changes the podbuf width of the enum's integer or of the union's tag, the
+      category `podbuf_width_change`, reported once per declaration with the old
+      and the new width. An appended value or arm that keeps the width is
+      reported as the generic rule judges it, compatible; `ridl diff` does not
+      report the strict-enum break of decision 12 on its own (builder's call,
+      pending the `open` keyword, open item 1). `ridl diff --encoding <name>`
+      and the `ridl_diff` MCP tool name the encodings, because a snapshot does
+      not record them.
     - RIDL-156 `podbuf-padding-order`, a lint at `info`, reports a struct whose
       declared field order lays out in a larger head than the same fields sorted
       by descending alignment (declaration order kept among equal alignments).

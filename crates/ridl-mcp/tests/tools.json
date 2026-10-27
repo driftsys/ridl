@@ -444,7 +444,7 @@
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "properties": {
         "encodings": {
-          "description": "Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). Only podbuf has a rule of its own: with it, a podbuf_inline_append change is breaking; without it, compatible. The same as `ridl diff --encoding`.",
+          "description": "Optional encodings the change is judged for, as a manifest's `[backend.<name>] encodings` names them (flatbuffers, proto3, podbuf). Only podbuf has rules of its own: with it, a podbuf_inline_append or a podbuf_width_change change is breaking; without it, compatible. The same as `ridl diff --encoding`.",
           "items": {
             "type": "string"
           },

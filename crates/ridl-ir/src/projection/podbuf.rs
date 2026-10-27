@@ -259,6 +259,20 @@ pub fn union_head(
     Layout::new(packages).union_head(packages.package, owner, def)
 }
 
+/// The tag of a union: the narrowest unsigned width that holds the largest
+/// arm ordinal. A union with no arm has a `u8` tag.
+#[must_use]
+pub fn union_tag_width(def: &v2::UnionDef) -> v2::IntWidth {
+    let largest = def.arms.iter().map(|arm| arm.ordinal).max().unwrap_or(0);
+    if u8::try_from(largest).is_ok() {
+        v2::IntWidth::U8
+    } else if u16::try_from(largest).is_ok() {
+        v2::IntWidth::U16
+    } else {
+        v2::IntWidth::U32
+    }
+}
+
 /// The integer of an enum: the narrowest width that holds every declared
 /// value, signed when any value is negative. An enum with no value is a `u8`.
 #[must_use]
@@ -686,19 +700,11 @@ impl<'a> Layout<'a> {
             for arm in &def.arms {
                 arms.push((arm.ordinal, layout.arm_head(home, arm)?));
             }
-            let largest = def.arms.iter().map(|arm| arm.ordinal).max().unwrap_or(0);
-            let width = if u8::try_from(largest).is_ok() {
-                v2::IntWidth::U8
-            } else if u16::try_from(largest).is_ok() {
-                v2::IntWidth::U16
-            } else {
-                v2::IntWidth::U32
-            };
             lay_out(vec![
                 Item {
                     source: Source::Tag,
                     form: Form::Int {
-                        width,
+                        width: union_tag_width(def),
                         signed: false,
                     },
                     optional: None,

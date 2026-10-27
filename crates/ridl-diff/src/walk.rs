@@ -1963,6 +1963,69 @@ pub(crate) fn podbuf_inline_appends(pair: &[Change], scope: &[&v2::Package]) -> 
     changes
 }
 
+/// The [`Category::PodbufWidthChange`] changes of one walked and classified
+/// package pair: one per enum or union of `new` to which `pair` appends a
+/// value or an arm compatibly, when the podbuf width of the enum's integer or
+/// of the union's tag differs between `old` and `new`. The width is read from
+/// the layout law ([`projection::podbuf::enum_width`] and
+/// [`projection::podbuf::union_tag_width`]), so what the rule calls a width
+/// is what the encoder lays out. The verdict is the placeholder [`emit`]
+/// stamps; the classifier settles it from the encodings.
+pub(crate) fn podbuf_width_changes(
+    pair: &[Change],
+    old: &v2::Package,
+    new: &v2::Package,
+) -> Vec<Change> {
+    use ridl_ir::projection::podbuf::{enum_width, union_tag_width};
+
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    let mut changes = Vec::new();
+    for change in pair {
+        if change.category != Category::DeclAdded || change.verdict != Verdict::Compatible {
+            continue;
+        }
+        let mut segments = change.path.split('/');
+        let (Some(package), Some(name), Some(_), None) = (
+            segments.next(),
+            segments.next(),
+            segments.next(),
+            segments.next(),
+        ) else {
+            continue;
+        };
+        if package != new.name || !seen.insert(name) {
+            continue;
+        }
+        fn find<'p>(pkg: &'p v2::Package, name: &str) -> Option<&'p v2::Decl> {
+            pkg.decls.iter().find(|decl| decl.name == name)
+        }
+        let (Some(old_decl), Some(new_decl)) = (find(old, name), find(new, name)) else {
+            continue;
+        };
+        let widths = match (&old_decl.kind, &new_decl.kind) {
+            (Some(v2::decl::Kind::EnumDef(old_def)), Some(v2::decl::Kind::EnumDef(new_def))) => {
+                (enum_width(old_def), enum_width(new_def))
+            }
+            (Some(v2::decl::Kind::UnionDef(old_def)), Some(v2::decl::Kind::UnionDef(new_def))) => (
+                (union_tag_width(old_def), false),
+                (union_tag_width(new_def), false),
+            ),
+            _ => continue,
+        };
+        if widths.0 == widths.1 {
+            continue;
+        }
+        emit(
+            &mut changes,
+            format!("{package}/{name}"),
+            Category::PodbufWidthChange,
+            Some(int_width_name(widths.0.0 as i32).to_string()),
+            Some(int_width_name(widths.1.0 as i32).to_string()),
+        );
+    }
+    changes
+}
+
 /// Every head of `scope` whose podbuf form holds the struct `package.name`
 /// inline, sorted: a struct field, as `<package>/<struct>/<field>`, and an
 /// interaction's request, reply or fixed payload, as

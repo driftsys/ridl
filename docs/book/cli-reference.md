@@ -1535,13 +1535,19 @@ category's classification rule without comparing anything.
 names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
 `proto3`, `podbuf`); repeat the flag for several. A snapshot does not record
 the encodings a workspace builds, so the command does not read them from a
-manifest. Only `podbuf` has a rule of its own: a struct field appended to a
-struct that another struct, a tuple or an exact-length array holds inline
-anywhere in the new side — in a struct, in the argument struct a call with
-several parameters induces, or in a tuple reply — is
+manifest. Only `podbuf` has rules of its own, two of them. A struct field
+appended to a struct that another struct, a tuple or an exact-length array
+holds inline anywhere in the new side — in a struct, in the argument struct a
+call with several parameters induces, or in a tuple reply — is
 `podbuf_inline_append`, breaking with `--encoding podbuf` and compatible
 without it, because the inline copy cannot grow without moving the fields
-after it. The line names each inline use, a struct field as
+after it. An enum value or a union arm appended that changes the podbuf width
+of the enum's integer or of the union's tag — a value above 255 or an arm past
+ordinal 255 widens a `u8` to a `u16`, and above 65535 a `u16` to a `u32` — is
+`podbuf_width_change`, reported once per declaration with the old and the new
+width, breaking with `--encoding podbuf` and compatible without it, because
+every head that holds the enum or the union lays out the wider integer and
+moves the fields after it; an append that keeps the width draws no such line. The line names each inline use, a struct field as
 `<package>/<struct>/<field>` and an interaction's request, reply or fixed
 payload as `<package>/<interface>/<interaction>`, and sits under the heading
 `breaking under podbuf` either way, so that a workspace that does not build
@@ -1872,6 +1878,7 @@ the categories `ridl diff` reports are:
   doc_only
   visibility_changed
   podbuf_inline_append
+  podbuf_width_change
 ```
 
 ### `ridl lock`

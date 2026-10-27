@@ -281,6 +281,17 @@ declare_categories! {
         /// inside such a root is a head, and a struct inside that tuple is a
         /// use.
         PodbufInlineAppend,
+        /// An enum value or a union arm appended, compatible under the
+        /// generic rule, that changes the podbuf width of the enum's integer
+        /// or of the union's tag: `u8` to `u16`, or `u16` to `u32` (the
+        /// narrowest integer that holds every declared value or arm ordinal,
+        /// ADR-0031 decision 5). Breaking when `podbuf` is
+        /// among the encodings the comparison is judged for, because every
+        /// head that holds the enum or the union lays out the wider integer
+        /// and moves the fields after it; compatible otherwise. Reported
+        /// once per declaration, at `<package>/<decl>`, with the old and the
+        /// new width. An append that keeps the width draws no such line.
+        PodbufWidthChange,
     }
 }
 
@@ -461,11 +472,13 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 /// encodings` list writes (`flatbuffers`, `proto3`, `podbuf`). A snapshot
 /// does not carry the encodings a workspace builds, so the caller names them.
 ///
-/// Only `podbuf` has a rule of its own: a struct field appended to a struct
-/// that another head holds inline is [`Category::PodbufInlineAppend`],
-/// breaking when `podbuf` is in `encodings` and compatible otherwise. Every
-/// other category is judged the same under every list, and a name that is
-/// not `podbuf` adds no rule. The CLI and the MCP tool refuse a name that is
+/// Only `podbuf` has rules of its own: a struct field appended to a struct
+/// that another head holds inline is [`Category::PodbufInlineAppend`], and an
+/// enum value or a union arm appended that widens the enum's integer or the
+/// union's tag is [`Category::PodbufWidthChange`]; both are breaking when
+/// `podbuf` is in `encodings` and compatible otherwise. Every other category
+/// is judged the same under every list, and a name that is not `podbuf` adds
+/// no rule. The CLI and the MCP tool refuse a name that is
 /// not one of the three before calling this; the engine does not check it.
 /// `new` and `context` must not share a package: the podbuf rule searches
 /// both as one scope and would name a use of a shared package twice.
@@ -501,6 +514,7 @@ pub fn diff_refs_with(
                 // the heads of the whole new side, so it runs after the walk
                 // and the classifier of the pair.
                 let mut podbuf = walk::podbuf_inline_appends(&pair, &scope);
+                podbuf.append(&mut walk::podbuf_width_changes(&pair, old_pkg, new_pkg));
                 classify_all(&mut podbuf, old_pkg, new_pkg, &scope, encodings);
                 pair.append(&mut podbuf);
                 changes.append(&mut pair);
@@ -647,6 +661,7 @@ pub fn category_word(category: Category) -> &'static str {
         Category::DocOnly => "doc_only",
         Category::VisibilityChanged => "visibility_changed",
         Category::PodbufInlineAppend => "podbuf_inline_append",
+        Category::PodbufWidthChange => "podbuf_width_change",
     }
 }
 
@@ -681,7 +696,7 @@ pub fn heading(category: Category) -> Option<&'static str> {
         Category::InterfaceFrozen | Category::EnumReordered => {
             Some("compatible on the wire, may change the catalog hash")
         }
-        Category::PodbufInlineAppend => Some("breaking under podbuf"),
+        Category::PodbufInlineAppend | Category::PodbufWidthChange => Some("breaking under podbuf"),
         Category::DeclAdded
         | Category::DeclRemoved
         | Category::InterfaceRetired
