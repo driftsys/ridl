@@ -136,6 +136,27 @@ fn decode_builds_the_domain_value_from_the_view() {
     );
 }
 
+/// A nested exact-length array: the view and the decoder add the inner
+/// element offset to the row offset, so each cell reads its own byte.
+#[test]
+fn a_nested_exact_length_array_reads_each_cell() {
+    run(
+        "podbuf_roundtrip.ridl",
+        "podbuf_payload_nested_array",
+        r#"
+    let grid = Grid { cells: [[1, 2], [3, 4], [5, 6]] };
+    let mut buf = <Grid as Payload<Podbuf>>::BUFFER;
+    let proof = Ref::<Grid, Podbuf>::encode(&grid, buf.as_mut()).expect("encode");
+    assert_eq!(&proof.bytes()[8..14], &[1, 2, 3, 4, 5, 6]);
+    let verified = Ref::<Grid, Podbuf>::verify(proof.bytes()).expect("verify");
+    let rows: Vec<Vec<i64>> = verified.view().cells().map(|row| row.collect()).collect();
+    assert_eq!(rows, [[1, 2], [3, 4], [5, 6]]);
+    assert_eq!(verified.decode(), grid);
+    round_trip(grid);
+    "#,
+    );
+}
+
 #[test]
 fn max_size_is_pinned_and_holds_the_largest_legal_value() {
     run(

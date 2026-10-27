@@ -2499,14 +2499,22 @@ impl<'a> Codec<'a> {
                 let count = Literal::usize_suffixed(array.count as usize);
                 match Self::array_element(ty) {
                     Some(element_ty) => {
+                        // The element offset is bound to `__o` before the
+                        // element is read: a nested array binds its own
+                        // `__i`, so the outer index must not appear inside
+                        // the inner closure.
                         let stride = self.form_size(element);
+                        let step = off.index(stride).tokens();
                         let item =
-                            self.view_expr(element, element_ty, place, &off.index(stride))?;
+                            self.view_expr(element, element_ty, place, &Off::Expr(quote! { __o }))?;
                         let (buf, at, size) = (&place.buf, &place.at, &place.size);
                         quote! {
                             {
                                 let (__b, __a, __z) = (#buf, #at, #size);
-                                (0..#count).map(move |__i| #item)
+                                (0..#count).map(move |__i| {
+                                    let __o = #step;
+                                    #item
+                                })
                             }
                         }
                     }
@@ -3483,10 +3491,22 @@ impl<'a> Codec<'a> {
                 let count = Literal::usize_suffixed(array.count as usize);
                 match Self::array_element(ty) {
                     Some(element_ty) => {
+                        // `__o` is bound before the element is read, as in
+                        // the view: a nested array rebinds `__i`.
                         let stride = self.form_size(element);
-                        let item =
-                            self.decode_expr(element, element_ty, place, &off.index(stride))?;
-                        quote! { ::core::array::from_fn(|__i| #item) }
+                        let step = off.index(stride).tokens();
+                        let item = self.decode_expr(
+                            element,
+                            element_ty,
+                            place,
+                            &Off::Expr(quote! { __o }),
+                        )?;
+                        quote! {
+                            ::core::array::from_fn(|__i| {
+                                let __o = #step;
+                                #item
+                            })
+                        }
                     }
                     None => {
                         let region = place.region();

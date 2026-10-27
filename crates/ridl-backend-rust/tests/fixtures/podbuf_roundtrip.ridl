@@ -205,3 +205,9 @@ struct ClimateReport {
   setpoint : integer [0..65535]
   fan      : integer [0..255]
 }
+
+/// A nested exact-length array: six bytes inline at offset 0, row by row,
+/// pad 6..8. The element offset of the inner array adds to the row offset.
+struct Grid {
+  cells : [[integer [0..255]; 2]; 3]
+}

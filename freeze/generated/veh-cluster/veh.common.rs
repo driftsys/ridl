@@ -8565,12 +8565,14 @@ impl<'a> SensorBoundsPodbufView<'a> {
         {
             let (__b, __a, __z) = (__b, __a, __z);
             (0..8usize)
-                .map(move |__i| Speed::new_unchecked(
-                    ::core::primitive::f64::from(
-                        ::ridl_rt::podbuf::Region::new(__b, __a, __z)
-                            .f32_at(8usize + __i * 4usize),
-                    ),
-                ))
+                .map(move |__i| {
+                    let __o = 8usize + __i * 4usize;
+                    Speed::new_unchecked(
+                        ::core::primitive::f64::from(
+                            ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(__o),
+                        ),
+                    )
+                })
         }
     }
     /// Reads `SensorBounds`'s `labels` field in place.
@@ -8951,12 +8953,14 @@ impl SensorBounds {
                 at: __a,
                 size: __z,
             }),
-            readings: ::core::array::from_fn(|__i| Speed::new_unchecked(
-                ::core::primitive::f64::from(
-                    ::ridl_rt::podbuf::Region::new(__b, __a, __z)
-                        .f32_at(8usize + __i * 4usize),
-                ),
-            )),
+            readings: ::core::array::from_fn(|__i| {
+                let __o = 8usize + __i * 4usize;
+                Speed::new_unchecked(
+                    ::core::primitive::f64::from(
+                        ::ridl_rt::podbuf::Region::new(__b, __a, __z).f32_at(__o),
+                    ),
+                )
+            }),
             labels: {
                 let __d = ::ridl_rt::podbuf::ArrayDesc::read(
                     &::ridl_rt::podbuf::Region::new(__b, __a, __z),

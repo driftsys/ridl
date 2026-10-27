@@ -8390,10 +8390,13 @@ impl<'a> RawWheelSpanPodbufView<'a> {
         {
             let (__b, __a, __z) = (__b, __a, __z);
             (0..2usize)
-                .map(move |__i| RawWheelSpanBurstsElementPodbufView {
-                    buf: __b,
-                    at: __a + 8usize + __i * 8usize,
-                    size: __z.saturating_sub(8usize + __i * 8usize),
+                .map(move |__i| {
+                    let __o = 8usize + __i * 8usize;
+                    RawWheelSpanBurstsElementPodbufView {
+                        buf: __b,
+                        at: __a + __o,
+                        size: __z.saturating_sub(__o),
+                    }
                 })
         }
     }
@@ -8453,11 +8456,14 @@ impl RawWheelSpan {
                 at: __a,
                 size: __z,
             }),
-            bursts: ::core::array::from_fn(|__i| RawWheelSpanBurstsElement::__ridl_podbuf_decode(RawWheelSpanBurstsElementPodbufView {
-                buf: __b,
-                at: __a + 8usize + __i * 8usize,
-                size: __z.saturating_sub(8usize + __i * 8usize),
-            })),
+            bursts: ::core::array::from_fn(|__i| {
+                let __o = 8usize + __i * 8usize;
+                RawWheelSpanBurstsElement::__ridl_podbuf_decode(RawWheelSpanBurstsElementPodbufView {
+                    buf: __b,
+                    at: __a + __o,
+                    size: __z.saturating_sub(__o),
+                })
+            }),
         }
     }
 }
