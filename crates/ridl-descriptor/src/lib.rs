@@ -158,6 +158,9 @@ fn walk(catalog: CatalogRef<'_>) -> planus::Result<()> {
             member.name()?;
             member.ordinal()?;
             member.kind()?;
+            // Absent when no `[limits]` entry applies, and in a file written
+            // before the field existed.
+            member.limit()?;
             if let Some(timing) = member.timing()? {
                 timing.mode()?;
                 timing.min_us()?;
