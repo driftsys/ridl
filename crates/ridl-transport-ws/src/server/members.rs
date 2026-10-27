@@ -1,5 +1,5 @@
 //! The member table of a catalog: which interactions it holds, under which
-//! kind, and with which bound.
+//! kind, with which bound, and with which payload limit.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -13,16 +13,25 @@ use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal};
 /// [`Described::new`](super::Described::new) can check it against the ports
 /// it is paired with. Each entry maps an interface number and an ordinal to
 /// the member's kind, its `max` bound and its payload limit, the largest
-/// number of argument bytes a `request` to the member may carry. A retired interface and a reserved
-/// ordinal have no entry. The embedder builds the table with [`new`](Self::new)
-/// and [`insert`](Self::insert), or, with the `descriptor` feature, with
-/// `from_descriptor` from the bytes of a catalog descriptor.
+/// number of argument bytes a `request` to the member may carry. A retired
+/// interface and a reserved ordinal have no entry. The embedder builds the
+/// table with [`new`](Self::new) and [`insert`](Self::insert), or, with the
+/// `descriptor` feature, with `from_descriptor` from the bytes of a catalog
+/// descriptor.
 #[derive(Clone, Debug)]
 pub struct MemberTable {
     name: String,
     hash: CatalogHash,
-    members: BTreeMap<(InterfaceNo, Ordinal), (Kind, Option<Duration>, Option<u32>)>,
+    members: BTreeMap<(InterfaceNo, Ordinal), Entry>,
     compatible: Vec<CatalogHash>,
+}
+
+/// One member of the table.
+#[derive(Clone, Copy, Debug)]
+struct Entry {
+    kind: Kind,
+    max: Option<Duration>,
+    limit: Option<u32>,
 }
 
 impl MemberTable {
@@ -46,9 +55,14 @@ impl MemberTable {
         kind: Kind,
         max: Option<Duration>,
     ) -> Option<(Kind, Option<Duration>)> {
+        let entry = Entry {
+            kind,
+            max,
+            limit: None,
+        };
         self.members
-            .insert((iface, ord), (kind, max, None))
-            .map(|(kind, max, _)| (kind, max))
+            .insert((iface, ord), entry)
+            .map(|replaced| (replaced.kind, replaced.max))
     }
 
     /// Sets the payload limit of the entry under `(iface, ord)`; returns
@@ -56,7 +70,7 @@ impl MemberTable {
     pub fn set_limit(&mut self, iface: InterfaceNo, ord: Ordinal, limit: u32) -> bool {
         match self.members.get_mut(&(iface, ord)) {
             Some(entry) => {
-                entry.2 = Some(limit);
+                entry.limit = Some(limit);
                 true
             }
             None => false,
@@ -66,7 +80,9 @@ impl MemberTable {
     /// The payload limit of a member, or `None` for a key the catalog does not
     /// hold and for a member with no limit.
     pub fn limit(&self, iface: InterfaceNo, ord: Ordinal) -> Option<u32> {
-        self.members.get(&(iface, ord)).and_then(|entry| entry.2)
+        self.members
+            .get(&(iface, ord))
+            .and_then(|entry| entry.limit)
     }
 
     /// Adds an earlier catalog hash this catalog is compatible with (§6.1).
@@ -102,7 +118,7 @@ impl MemberTable {
     pub fn member(&self, iface: InterfaceNo, ord: Ordinal) -> Option<(Kind, Option<Duration>)> {
         self.members
             .get(&(iface, ord))
-            .map(|&(kind, max, _)| (kind, max))
+            .map(|entry| (entry.kind, entry.max))
     }
 
     /// The number of members.
