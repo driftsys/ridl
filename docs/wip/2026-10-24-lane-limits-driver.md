@@ -213,3 +213,20 @@ Each ruling: what was decided — why — what it costs if wrong.
   The record's Status is the owner's. — None.
 - **R-36** — The plan commit uses the scope `docs(roadmap)`, as the LIM1 and
   LIM2 plans did. — Consistency with the lane. — None.
+- **R-37** — The retained-cap test of `tests/serve.rs` serves a query with the
+  loopback provider and sends replies of 4,037 bytes at the default message
+  limit, instead of the plan's 452 responses of 36 bytes. — With no member table
+  the session keeps only the last 64 responses (`RETAINED = 64` in
+  `server/calls.rs`), so 36-byte responses can never reach a cap of 16,292
+  bytes. — None; the test pins the same cap.
+- **R-38** — The design record states that an embedder who lowers the
+  retained-bytes cap keeps it at least 64 times the message limit. — At the
+  default limit 64 responses are at most 64 × 16,292 = 1,042,688 bytes, and the
+  review confirmed the arithmetic. — Wording only.
+- **R-39** — The `BREAKING CHANGE:` note of the pull request also names the
+  seventh parameter of the generated `Member::create` and the removal of
+  `LimitTooSmall`. — The `runtime-crates` freeze check reports both. — None.
+- **R-40** — The deletion of the `runtime-crates` freeze row (plan Task 6) is
+  left to the owner: the auto-mode permission check refused it as a CI bypass. —
+  Approving a break of a frozen surface is the owner's act. — The pull request's
+  freeze-check fails until the owner deletes the row.
