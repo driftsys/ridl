@@ -489,6 +489,13 @@ responses kept for duplicates are `server/calls.rs`.
   `corrupt`: arguments larger than the member's capacity are not a well-formed
   encoding of its type, the same reasoning ADR-0021 decision 5 gives for
   `ShortClaim`.
+- A `request` whose arguments are longer than the member's payload limit in the
+  member table is answered `corrupt` without a call to the backend (ADR-0030
+  decision 15). The server places the `seq` first, then checks that the member
+  is known, then checks the length, so a repeat gets the kept response again and
+  an unknown member is `contract(UnknownInteraction)` whatever the length. No
+  note is recorded. With no member table, or a member with no limit, the message
+  limit alone bounds the arguments. A `publish` is not checked.
 - Each tick the server polls `ack` for each command in flight and `reply` for
   each query in flight. A known outcome becomes one `response` with
   `correlation` = the client's `seq`, `seq` = the next value of the server's

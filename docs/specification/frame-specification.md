@@ -29,11 +29,13 @@ Version: 0.2.0
 > of its catalog, which the embedder supplies, it accepts an `attach` naming a
 > listed earlier hash (§6.1); without one it applies the exact-match rule. With
 > a member table it keeps each settled response until its bound has passed (§7);
-> without one, or for a member with no bound, it keeps the last 64. The runtime
-> here, `ridl-loopback`, runs in process: it carries bytes from a provider
-> handle to a consumer handle over one in-memory store, opens no socket, and has
-> no wire format ([its design record](../design/ridl-loopback.md)). Neither the
-> crate nor `ridl-loopback` enforces a timing rule or a contract clause on the
+> without one, or for a member with no bound, it keeps the last 64. With a
+> member table that gives a member a payload limit, it also answers a `request`
+> whose payload is longer than that limit `corrupt` (§11.1). The runtime here,
+> `ridl-loopback`, runs in process: it carries bytes from a provider handle to a
+> consumer handle over one in-memory store, opens no socket, and has no wire
+> format ([its design record](../design/ridl-loopback.md)). Neither the crate
+> nor `ridl-loopback` enforces a timing rule or a contract clause on the
 > provider side, so every sentence below about those describes the
 > specification, not behaviour a shipped runtime performs. The first binding is
 > the WebSocket transport (driftsys/ridl#265); the second is a runtime's own
@@ -999,16 +1001,18 @@ empty or not valid UTF-8, a first provider-to-consumer message that is not
 closes with 1002, and the session ends as §3 states. A `publish` or a `response`
 whose header says it carries no payload and which has bytes after its header is
 discarded and recorded (§9.5). A frame whose header says it carries a payload is
-never answered or discarded for the payload's length: the payload, zero bytes
-included, goes to `Payload::verify`, and a payload that fails to decode follows
-§9 — a `request`'s is answered `corrupt` (§5.3). So the `request` of §9.5 whose
-payload is absent does not occur on this binding. A message above the receiver's
-configured size limit, which admits at least 294 bytes, is closed with 1009.
-Either side ends the session on purpose with 1000, the provider with 1001 when
-it shuts down; after `attached(refused)` the provider closes with 1000, and the
-reason is in the frame. A provider may close with 1008 when a session passes a
-resource limit it states, such as a cap on the responses it keeps for §7. The
-binding defines no close code of its own.
+never answered or discarded for the payload's length, except that a provider
+that holds the member limits of its catalog answers a `request` whose payload is
+longer than its member's limit `corrupt` (ADR-0030 decision 15): the payload,
+zero bytes included, goes to `Payload::verify`, and a payload that fails to
+decode follows §9 — a `request`'s is answered `corrupt` (§5.3). So the `request`
+of §9.5 whose payload is absent does not occur on this binding. A message above
+the receiver's configured size limit, which admits at least 294 bytes, is closed
+with 1009. Either side ends the session on purpose with 1000, the provider with
+1001 when it shuts down; after `attached(refused)` the provider closes with
+1000, and the reason is in the frame. A provider may close with 1008 when a
+session passes a resource limit it states, such as a cap on the responses it
+keeps for §7. The binding defines no close code of its own.
 
 **5. The caller's identity** for §7 is the connection. It does not survive a
 reconnect: a reconnect is a new session, its counters start over, and the calls

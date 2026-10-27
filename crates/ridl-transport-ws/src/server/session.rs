@@ -738,7 +738,12 @@ impl<B: Backend> Session<B> {
     /// a settled call gets its response again, and a `seq` not above the
     /// highest seen that is neither is dropped and recorded. A new `seq` is
     /// sent to the backend, with no trace context; a send that fails is
-    /// answered at once.
+    /// answered at once. A member that the member table does not hold under
+    /// the request's kind is answered `contract(UnknownInteraction)`. Arguments
+    /// longer than the payload limit the table gives the member are answered
+    /// `corrupt` without a call to the backend, and no note is recorded; the
+    /// response is kept like any other. A member with no limit, and a backend
+    /// with no member table, leave the message limit as the only bound.
     fn request(
         &mut self,
         target: Target,
@@ -774,6 +779,14 @@ impl<B: Backend> Session<B> {
                 receipt,
                 out,
             );
+        }
+        let over_limit = self
+            .backend
+            .members()
+            .and_then(|table| table.limit(target.iface, target.ord))
+            .is_some_and(|limit| payload.len() > limit as usize);
+        if over_limit {
+            return self.respond(target, seq, ResponseOutcome::Corrupt, stamp, receipt, out);
         }
         let ports = self.backend.ports();
         let sent = match target.kind {
@@ -3676,6 +3689,120 @@ mod tests {
         let provider = rt.attach();
         let backend = Described::new(Scanning(rt), table()).unwrap();
         (Session::new(backend, &config(&notes)), provider, notes)
+    }
+    // -- The payload limit of a member (ADR-0030 decision 15) ----------------
+
+    /// The test table with a payload limit of `limit` on `COMMAND`, and on
+    /// `QUERY` when `query` is set.
+    fn limited_table(limit: u32, query: bool) -> MemberTable {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, COMMAND.ord, limit));
+        if query {
+            assert!(t.set_limit(IFACE, QUERY.ord, limit));
+        }
+        t
+    }
+
+    /// Sends a request of `target` with `payload` and checks that the one
+    /// frame sent back is `corrupt` and that the backend saw no call.
+    fn assert_answered_corrupt(
+        s: &mut Session<Described<Scanning<Loopback>>>,
+        p: &mut Loopback,
+        target: Target,
+        seq: u64,
+        payload: &[u8],
+    ) -> Vec<u8> {
+        let (step, out) = send(s, &request(target, seq, payload));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(target, 0, 1, seq, ResponseOutcome::Corrupt)
+        );
+        p.serve(target.iface, &[target.ord]).unwrap();
+        let mut buf = [0; 64];
+        assert_eq!(p.next_claim(&mut buf).unwrap(), None);
+        out.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn a_request_above_its_members_limit_is_answered_corrupt() {
+        let (mut s, mut p, notes) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        assert_answered_corrupt(&mut s, &mut p, COMMAND, 1, &[1; 5]);
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_request_at_its_members_limit_reaches_the_backend() {
+        let (mut s, mut p, _n) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        let (step, out) = send(&mut s, &request(COMMAND, 1, &[1; 4]));
+        assert_eq!(step, Step::Continue);
+        assert!(out.is_empty());
+        assert_eq!(claim(&mut p, COMMAND).len, 4);
+    }
+
+    #[test]
+    fn a_query_above_its_members_limit_is_answered_corrupt() {
+        let (mut s, mut p, _n) = described_with(limited_table(4, true), |c| c);
+        open(&mut s);
+        assert_answered_corrupt(&mut s, &mut p, QUERY, 1, &[1; 5]);
+    }
+
+    #[test]
+    fn a_limit_of_zero_admits_only_empty_arguments() {
+        let (mut s, mut p, _n) = described_with(limited_table(0, false), |c| c);
+        open(&mut s);
+        let (_, out) = send(&mut s, &request(COMMAND, 1, &[]));
+        assert!(out.is_empty());
+        assert_eq!(claim(&mut p, COMMAND).len, 0);
+        assert_answered_corrupt(&mut s, &mut p, COMMAND, 2, &[1]);
+    }
+
+    #[test]
+    fn a_member_with_no_limit_checks_no_argument_length() {
+        let (mut s, mut p, _n) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        let (_, out) = send(&mut s, &request(COMMAND_UNBOUNDED, 1, &[1; 5]));
+        assert!(out.is_empty());
+        assert_eq!(claim(&mut p, COMMAND_UNBOUNDED).len, 5);
+    }
+
+    #[test]
+    fn a_repeat_of_a_request_answered_corrupt_for_its_length_gets_the_same_response() {
+        let (mut s, mut p, notes) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        let first = assert_answered_corrupt(&mut s, &mut p, COMMAND, 1, &[1; 5]);
+        let (_, again) = send(&mut s, &request(COMMAND, 1, &[1; 5]));
+        assert_eq!(again, vec![first]);
+        let mut buf = [0; 64];
+        assert_eq!(p.next_claim(&mut buf).unwrap(), None);
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_unknown_member_is_answered_unknown_interaction_whatever_its_length() {
+        let (mut s, _p, _n) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        // Ordinal 1 is a signal in the table, so it is unknown under `Command`.
+        let target = Target {
+            kind: Kind::Command,
+            iface: IFACE,
+            ord: Ordinal(1),
+        };
+        let (_, out) = send(&mut s, &request(target, 1, &[1; 5]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(
+                target,
+                0,
+                1,
+                1,
+                ResponseOutcome::Contract(Contract::UnknownInteraction)
+            )
+        );
     }
 
     #[test]
