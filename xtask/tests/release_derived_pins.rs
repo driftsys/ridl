@@ -55,10 +55,10 @@ const CABIN_PATH_CRATES: [&str; 3] = ["ridl-rt", "ridl-loopback", "ridl-transpor
 /// Returns one message for each pin under `root` that does not follow
 /// `version`, naming the file and the value found.
 fn derived_pin_errors(root: &Path, version: &str) -> Vec<String> {
-    let major_minor = version
-        .rsplit_once('.')
-        .map(|(major_minor, _)| major_minor)
-        .unwrap_or(version);
+    // The first two components, so a pre-release such as `0.15.0-rc.1` gives
+    // `0.15`.
+    let major_minor = version.splitn(3, '.').take(2).collect::<Vec<_>>().join(".");
+    let major_minor = major_minor.as_str();
     let mut errors = Vec::new();
     let mut check = |file: &str, found: Option<String>, expected: &str| match found {
         Some(found) if found == expected => {}
@@ -131,19 +131,33 @@ fn derived_pin_errors(root: &Path, version: &str) -> Vec<String> {
     );
 
     let deno_lock = read_json(root, "examples/cabin/web/deno.lock");
-    let link = deno_lock.as_ref().and_then(|lock| {
-        lock.get("workspace")?
-            .get("links")?
-            .as_object()?
-            .keys()
-            .find_map(|key| key.strip_prefix(RIDL_RUNTIME_LINK_PREFIX))
-            .map(String::from)
-    });
-    check(
-        "examples/cabin/web/deno.lock (ridl-runtime link)",
-        link,
-        version,
-    );
+    // Every ridl-runtime link is checked, so a stale link beside a current one
+    // is reported.
+    let links: Vec<String> = deno_lock
+        .as_ref()
+        .and_then(|lock| lock.get("workspace")?.get("links")?.as_object())
+        .map(|links| {
+            links
+                .keys()
+                .filter_map(|key| key.strip_prefix(RIDL_RUNTIME_LINK_PREFIX))
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default();
+    if links.is_empty() {
+        check(
+            "examples/cabin/web/deno.lock (ridl-runtime link)",
+            None,
+            version,
+        );
+    }
+    for link in links {
+        check(
+            "examples/cabin/web/deno.lock (ridl-runtime link)",
+            Some(link),
+            version,
+        );
+    }
 
     let package = read_json(root, "editors/vscode/package.json");
     check(
@@ -196,8 +210,7 @@ fn lock_packages(lock: Option<&toml::Table>) -> Vec<toml::Table> {
         .collect()
 }
 
-/// The text between `prefix` and the next `"` on the first line that holds
-/// `prefix`.
+/// The text between the first occurrence of `prefix` and the next `"`.
 fn quoted_after(text: &str, prefix: &str) -> Option<String> {
     let start = text.find(prefix)? + prefix.len();
     let rest = &text[start..];
@@ -298,41 +311,137 @@ fn all_pins_current_gives_no_error() {
     assert_eq!(derived_pin_errors(&dir, "0.15.0"), Vec::<String>::new());
 }
 
+/// Each pin, made stale on its own, gives exactly one error that names it.
+/// Every case is a (file, text, replacement, the error's label) row.
 #[test]
-fn stale_pins_are_each_reported() {
-    let dir = synthetic_tree("stale", "0.15.0", "0.15");
-    replace_in(&dir, "editors/vscode/package.json", "0.15.0", "0.14.0");
-    replace_in(
-        &dir,
-        "examples/cabin/consumer/Cargo.toml",
-        "\"0.15\"",
-        "\"0.14\"",
-    );
-    replace_in(
-        &dir,
+fn each_stale_pin_is_reported_alone() {
+    let mut cases: Vec<(String, String, String, String)> = vec![(
+        "Cargo.lock".into(),
+        "name = \"ridl-core\"\nversion = \"0.15.0\"".into(),
+        "name = \"ridl-core\"\nversion = \"0.14.0\"".into(),
+        "Cargo.lock (package ridl-core)".into(),
+    )];
+    for name in CABIN_PATH_CRATES {
+        cases.push((
+            "examples/cabin/Cargo.lock".into(),
+            format!("name = \"{name}\"\nversion = \"0.15.0\""),
+            format!("name = \"{name}\"\nversion = \"0.14.0\""),
+            format!("examples/cabin/Cargo.lock (package {name})"),
+        ));
+    }
+    for manifest in RIDL_RT_MANIFESTS {
+        cases.push((
+            manifest.into(),
+            "\"0.15\"".into(),
+            "\"0.14\"".into(),
+            format!("{manifest} (ridl-rt)"),
+        ));
+    }
+    for (file, from, to, label) in [
+        (
+            "crates/ridlc/src/lib.rs",
+            "\"0.15\"",
+            "\"0.14\"",
+            "crates/ridlc/src/lib.rs",
+        ),
+        (
+            "examples/cabin/Cargo.toml",
+            "\"0.15\"",
+            "\"0.14\"",
+            "examples/cabin/Cargo.toml",
+        ),
+        (
+            "examples/cabin/web/deno.lock",
+            "@0.15.0",
+            "@0.14.0",
+            "examples/cabin/web/deno.lock",
+        ),
+        (
+            "editors/vscode/package.json",
+            "\"0.15.0\"",
+            "\"0.14.0\"",
+            "editors/vscode/package.json (version)",
+        ),
+        (
+            "editors/vscode/package-lock.json",
+            "\"ridl-lang\", \"version\": \"0.15.0\"",
+            "\"ridl-lang\", \"version\": \"0.14.0\"",
+            "editors/vscode/package-lock.json (version)",
+        ),
+        (
+            "editors/vscode/package-lock.json",
+            "{\"\": {\"version\": \"0.15.0\"",
+            "{\"\": {\"version\": \"0.14.0\"",
+            "editors/vscode/package-lock.json (packages[\"\"].version)",
+        ),
+    ] {
+        cases.push((file.into(), from.into(), to.into(), label.into()));
+    }
+    for (index, (file, from, to, label)) in cases.iter().enumerate() {
+        let dir = synthetic_tree(&format!("stale-{index}"), "0.15.0", "0.15");
+        replace_in(&dir, file, from, to);
+        let errors = derived_pin_errors(&dir, "0.15.0");
+        assert_eq!(errors.len(), 1, "{label}: {errors:#?}");
+        assert!(
+            errors[0].starts_with(label.as_str()) && errors[0].contains("found 0.14"),
+            "{label}: {}",
+            errors[0]
+        );
+    }
+}
+
+/// Each pinned file, when it is missing, gives "not found" errors that name
+/// it, and no other error.
+#[test]
+fn each_missing_file_is_reported() {
+    let mut files = vec![
         "Cargo.lock",
-        "version = \"0.15.0\"",
-        "version = \"0.14.0\"",
-    );
-    let errors = derived_pin_errors(&dir, "0.15.0");
-    assert_eq!(errors.len(), 3, "{errors:#?}");
-    assert!(errors[0].starts_with("Cargo.lock (package ridl-core): found 0.14.0"));
-    assert!(errors[1].starts_with("examples/cabin/consumer/Cargo.toml (ridl-rt): found 0.14"));
-    assert!(errors[2].starts_with("editors/vscode/package.json (version): found 0.14.0"));
+        "examples/cabin/Cargo.lock",
+        "crates/ridlc/src/lib.rs",
+        "examples/cabin/Cargo.toml",
+        "examples/cabin/web/deno.lock",
+        "editors/vscode/package.json",
+        "editors/vscode/package-lock.json",
+    ];
+    files.extend(RIDL_RT_MANIFESTS);
+    for (index, file) in files.iter().enumerate() {
+        let dir = synthetic_tree(&format!("missing-{index}"), "0.15.0", "0.15");
+        std::fs::remove_file(dir.join(file)).unwrap();
+        let errors = derived_pin_errors(&dir, "0.15.0");
+        assert!(!errors.is_empty(), "{file}: no error");
+        for error in &errors {
+            assert!(
+                error.starts_with(file) && error.contains("not found"),
+                "{file}: {error}"
+            );
+        }
+    }
 }
 
 #[test]
-fn missing_pattern_is_reported() {
-    let dir = synthetic_tree("missing", "0.15.0", "0.15");
+fn a_stale_ridl_runtime_link_beside_a_current_one_is_reported() {
+    let dir = synthetic_tree("two-links", "0.15.0", "0.15");
     std::fs::write(
         dir.join("examples/cabin/web/deno.lock"),
-        "{\"workspace\": {}}",
+        format!(
+            "{{\"workspace\": {{\"links\": {{\
+             \"{RIDL_RUNTIME_LINK_PREFIX}0.15.0\": {{}}, \
+             \"{RIDL_RUNTIME_LINK_PREFIX}0.14.0\": {{}}}}}}}}"
+        ),
     )
     .unwrap();
     let errors = derived_pin_errors(&dir, "0.15.0");
     assert_eq!(errors.len(), 1, "{errors:#?}");
-    assert!(errors[0].starts_with("examples/cabin/web/deno.lock"));
-    assert!(errors[0].contains("not found"));
+    assert!(errors[0].contains("found 0.14.0"), "{}", errors[0]);
+}
+
+#[test]
+fn pre_release_requirements_use_the_first_two_components() {
+    let dir = synthetic_tree("prerelease", "0.15.0-rc.1", "0.15");
+    assert_eq!(
+        derived_pin_errors(&dir, "0.15.0-rc.1"),
+        Vec::<String>::new()
+    );
 }
 
 #[test]
