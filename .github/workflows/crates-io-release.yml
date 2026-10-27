@@ -2,8 +2,8 @@ name: crates-io-release
 
 # Publishes every workspace crate whose manifest does not set `publish = false`
 # to crates.io, on a `v<version>` tag a maintainer pushes — `just release`
-# creates the tag and `just release-push` pushes it; the push itself is the maintainer act (ADR-0007
-# decision 14, amended 2026-09-21 and 2026-09-22). `xtask`, `ridlc-gen-model` and
+# creates the tag and `just release-push` pushes it; the push itself is the
+# maintainer act (ADR-0007 decision 14, amended 2026-09-21 and 2026-09-22). `xtask`, `ridlc-gen-model` and
 # `ridlc-gen-rust` are the crates left `publish = false`: the first is workspace
 # tooling and the other two are test-only, so none is published. The `ridl`
 # CLI publishes as `ridl-cli` (crates/ridl/Cargo.toml explains the name),

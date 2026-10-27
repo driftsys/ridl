@@ -69,6 +69,16 @@ fn tag_only_push_skips_the_gate() {
     assert_eq!(run_gate("tag", &stdin), (0, None));
 }
 
+/// The two tags `just release-push` pushes together.
+#[test]
+fn release_tag_pair_skips_the_gate() {
+    let stdin = format!(
+        "refs/tags/v0.15.0 {SHA} refs/tags/v0.15.0 {ZEROS}\n\
+         refs/tags/editor-v0.15.0 {SHA} refs/tags/editor-v0.15.0 {ZEROS}\n"
+    );
+    assert_eq!(run_gate("tag-pair", &stdin), (0, None));
+}
+
 #[test]
 fn tag_deletion_skips_the_gate() {
     let stdin = format!("(delete) {ZEROS} refs/tags/v0.15.0 {SHA}\n");

@@ -11,12 +11,16 @@
 //! workspace version, so a release commit that misses one fails `just test`
 //! before it is tagged.
 //!
-//! The pins, with `<mm>` the `<major>.<minor>` of the workspace version:
+//! The pins, with `<mm>` the `<major>.<minor>` of the workspace version, or the
+//! full version for a pre-release, which only a requirement that names the
+//! same pre-release matches:
 //!
 //! - `Cargo.lock`: every package with no `source` (the workspace members) is
 //!   at the workspace version.
-//! - `examples/cabin/Cargo.lock`: `ridl-rt`, `ridl-loopback` and
-//!   `ridl-transport-ws` are at the workspace version.
+//! - `examples/cabin/Cargo.lock`: every `ridl-` package with no `source` (the
+//!   crates of this workspace it resolves by path, `ridl-rt`, `ridl-loopback`,
+//!   `ridl-transport-ws` and `ridl-descriptor` among them) is at the workspace
+//!   version.
 //! - `crates/ridlc/src/lib.rs`: `RIDL_RT_REQUIREMENT` is `<mm>`.
 //! - the cabin consumer and server manifests, and the two manifests under
 //!   `freeze/generated/`: the `ridl-rt` requirement is `<mm>`.
@@ -48,16 +52,25 @@ const RIDL_RT_MANIFESTS: [&str; 4] = [
     "freeze/generated/veh-cluster/Cargo.toml",
 ];
 
-/// The crates of this workspace that `examples/cabin/Cargo.lock` resolves by
-/// path.
-const CABIN_PATH_CRATES: [&str; 3] = ["ridl-rt", "ridl-loopback", "ridl-transport-ws"];
+/// The crates of this workspace that `examples/cabin/Cargo.lock` must resolve
+/// by path. Any other `ridl-` path package there is checked too.
+const CABIN_PATH_CRATES: [&str; 4] = [
+    "ridl-rt",
+    "ridl-loopback",
+    "ridl-transport-ws",
+    "ridl-descriptor",
+];
 
 /// Returns one message for each pin under `root` that does not follow
 /// `version`, naming the file and the value found.
 fn derived_pin_errors(root: &Path, version: &str) -> Vec<String> {
-    // The first two components, so a pre-release such as `0.15.0-rc.1` gives
-    // `0.15`.
-    let major_minor = version.splitn(3, '.').take(2).collect::<Vec<_>>().join(".");
+    // `0.15` for `0.15.0`, but the full version for a pre-release such as
+    // `0.15.0-rc.1`, which a `0.15` requirement does not match.
+    let major_minor = if version.contains('-') {
+        version.to_string()
+    } else {
+        version.splitn(3, '.').take(2).collect::<Vec<_>>().join(".")
+    };
     let major_minor = major_minor.as_str();
     let mut errors = Vec::new();
     let mut check = |file: &str, found: Option<String>, expected: &str| match found {
@@ -89,15 +102,34 @@ fn derived_pin_errors(root: &Path, version: &str) -> Vec<String> {
 
     let cabin_lock = read_toml(root, "examples/cabin/Cargo.lock");
     let cabin_packages = lock_packages(cabin_lock.as_ref());
+    let cabin_path_packages: Vec<(&str, Option<String>)> = cabin_packages
+        .iter()
+        .filter(|package| package.get("source").is_none())
+        .filter_map(|package| {
+            let name = package.get("name")?.as_str()?;
+            let found = package
+                .get("version")
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            name.starts_with("ridl-").then_some((name, found))
+        })
+        .collect();
     for crate_name in CABIN_PATH_CRATES {
-        let found = cabin_packages
+        if !cabin_path_packages
             .iter()
-            .find(|package| package.get("name").and_then(|v| v.as_str()) == Some(crate_name))
-            .and_then(|package| package.get("version").and_then(|v| v.as_str()))
-            .map(String::from);
+            .any(|(name, _)| *name == crate_name)
+        {
+            check(
+                &format!("examples/cabin/Cargo.lock (package {crate_name})"),
+                None,
+                version,
+            );
+        }
+    }
+    for (crate_name, found) in &cabin_path_packages {
         check(
             &format!("examples/cabin/Cargo.lock (package {crate_name})"),
-            found,
+            found.clone(),
             version,
         );
     }
@@ -251,6 +283,7 @@ fn synthetic_tree(test: &str, version: &str, major_minor: &str) -> std::path::Pa
         "Cargo.lock",
         format!(
             "version = 4\n\n[[package]]\nname = \"ridl-core\"\nversion = \"{version}\"\n\n\
+             [[package]]\nname = \"ridl-ir\"\nversion = \"{version}\"\n\n\
              [[package]]\nname = \"serde\"\nversion = \"1.0.0\"\n\
              source = \"registry+https://github.com/rust-lang/crates.io-index\"\n"
         ),
@@ -321,6 +354,14 @@ fn each_stale_pin_is_reported_alone() {
         "name = \"ridl-core\"\nversion = \"0.14.0\"".into(),
         "Cargo.lock (package ridl-core)".into(),
     )];
+    // The second workspace package, because a `version_files` entry rewrites
+    // only the first match.
+    cases.push((
+        "Cargo.lock".into(),
+        "name = \"ridl-ir\"\nversion = \"0.15.0\"".into(),
+        "name = \"ridl-ir\"\nversion = \"0.14.0\"".into(),
+        "Cargo.lock (package ridl-ir)".into(),
+    ));
     for name in CABIN_PATH_CRATES {
         cases.push((
             "examples/cabin/Cargo.lock".into(),
@@ -436,11 +477,46 @@ fn a_stale_ridl_runtime_link_beside_a_current_one_is_reported() {
 }
 
 #[test]
-fn pre_release_requirements_use_the_first_two_components() {
-    let dir = synthetic_tree("prerelease", "0.15.0-rc.1", "0.15");
+fn pre_release_requirements_use_the_full_version() {
+    let dir = synthetic_tree("prerelease", "0.15.0-rc.1", "0.15.0-rc.1");
     assert_eq!(
         derived_pin_errors(&dir, "0.15.0-rc.1"),
         Vec::<String>::new()
+    );
+    let dir = synthetic_tree("prerelease-mm", "0.15.0-rc.1", "0.15");
+    let errors = derived_pin_errors(&dir, "0.15.0-rc.1");
+    assert_eq!(errors.len(), 2 + RIDL_RT_MANIFESTS.len(), "{errors:#?}");
+    assert!(
+        errors
+            .iter()
+            .all(|e| e.contains("found 0.15, expected 0.15.0-rc.1")),
+        "{errors:#?}"
+    );
+}
+
+#[test]
+fn a_full_version_where_the_major_minor_belongs_is_reported() {
+    let dir = synthetic_tree("full-for-mm", "0.15.0", "0.15.0");
+    let errors = derived_pin_errors(&dir, "0.15.0");
+    assert_eq!(errors.len(), 2 + RIDL_RT_MANIFESTS.len(), "{errors:#?}");
+    assert!(
+        errors
+            .iter()
+            .all(|e| e.contains("found 0.15.0, expected 0.15")),
+        "{errors:#?}"
+    );
+}
+
+#[test]
+fn an_unlisted_ridl_path_package_in_the_cabin_lock_is_checked() {
+    let dir = synthetic_tree("unlisted", "0.15.0", "0.15");
+    let lock = dir.join("examples/cabin/Cargo.lock");
+    let mut text = std::fs::read_to_string(&lock).unwrap();
+    text.push_str("[[package]]\nname = \"ridl-new\"\nversion = \"0.14.0\"\n\n");
+    std::fs::write(&lock, text).unwrap();
+    assert_eq!(
+        derived_pin_errors(&dir, "0.15.0"),
+        vec!["examples/cabin/Cargo.lock (package ridl-new): found 0.14.0, expected 0.15.0"]
     );
 }
 

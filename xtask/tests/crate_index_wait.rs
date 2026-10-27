@@ -119,3 +119,17 @@ fn missing_file_is_waited_for_not_fatal() {
         "{stderr}"
     );
 }
+
+/// A large index file whose match is on its first line. The body is read in
+/// full before it is searched; a `curl | grep -q` pipeline under pipefail
+/// fails here, because grep exits while curl is still writing.
+#[test]
+fn a_match_at_the_start_of_a_large_file_is_found() {
+    let index = index_dir("large");
+    let mut versions = vec!["0.15.0".to_string()];
+    versions.extend((0..100_000).map(|n| format!("0.0.{n}")));
+    let versions: Vec<&str> = versions.iter().map(String::as_str).collect();
+    write_entry(&index, "ri/dl/ridl-ir", &versions);
+    let (code, stderr) = wait(&index, "ridl-ir", "0.15.0", "0");
+    assert_eq!(code, 0, "{stderr}");
+}

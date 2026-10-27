@@ -3,8 +3,9 @@
 # pushed ref on stdin, `<local ref> <local sha> <remote ref> <remote sha>`, and
 # git-std forwards them. A push that holds only tags (a release tag, or the
 # deletion of one) changes no branch, so the gate is skipped; any other push
-# runs `just pre-push`. git sends a line for every real push, so an empty
-# stdin means the lines were lost, and the gate runs. xtask/tests/pre_push_gate.rs checks this script.
+# runs `just pre-push`. An empty stdin, from a push with nothing to update or
+# from lines that were lost, also runs the gate. xtask/tests/pre_push_gate.rs
+# checks this script.
 set -euo pipefail
 
 saw_line=false

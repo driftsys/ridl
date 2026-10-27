@@ -3236,8 +3236,8 @@ verify: lint-commits build
 # described in docs/technotes/toolchain-distribution.md, "Cutting a release".
 #
 # It refuses to start unless this is a clean `main` equal to `origin/main`
-# whose `ci` run passed, runs the release check of the freeze gate, lets `git std bump --no-commit`
-# write the version, the `version_files` pins and the changelog, runs
+# whose `ci` run passed, runs the release check of the freeze gate, lets
+# `git std bump --no-commit` write the version, the `version_files` pins and the changelog, runs
 # `release-sync` for the pins git-std cannot write, and checks the lockfiles and
 # the pins before it commits and tags.
 release *ARGS: toolchain-check
@@ -3269,7 +3269,9 @@ release *ARGS: toolchain-check
     echo "release: open pull requests on main (for information):"
     gh pr list --base main --state open || true
     cargo run --locked --package xtask -- freeze check --release
-    trap 'echo "release: failed; the tree was clean before the bump, so `git checkout -- .` discards the release changes" >&2' ERR
+    # The tree was clean and equal to origin/main before the bump, so a reset
+    # to origin/main discards a failed release, including a commit already made.
+    trap 'echo "release: failed; discard the release with: git reset --hard origin/main" >&2' ERR
     git std bump --no-commit {{ ARGS }}
     just release-sync
     # Cheap checks of what the bump and the sync wrote: both lockfiles agree
@@ -3284,16 +3286,25 @@ release *ARGS: toolchain-check
         git ls-files --others --exclude-standard >&2
         exit 1
     fi
+    for tag in "v$version" "editor-v$version"; do
+        if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null \
+            || [ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ]; then
+            echo "release: tag $tag already exists" >&2
+            exit 1
+        fi
+    done
     git add -u
     git commit -m "chore(release): $version"
     git tag -a "v$version" -m "v$version"
     git tag -a "editor-v$version" -m "editor-v$version"
     echo "release: $version is committed and tagged locally. Review the"
     echo "release: changelog, then run: just release-push"
+    echo "release: (not the git push --follow-tags that git std bump printed)"
 
 # Update the version pins that `git std bump` cannot write, after the bump:
 # the `ridl-rt` requirement that `ridl build` emits (`<major>.<minor>`, not the
-# full version), the cabin example's manifests, lockfiles and `deno.lock`, the
+# full version, except for a pre-release, which only a requirement that names
+# the same pre-release matches), the cabin example's manifests, lockfiles and `deno.lock`, the
 # editor manifest (an `editor-v` tag must equal it), the root `Cargo.lock`
 # (one entry per crate, and a `version_files` entry rewrites only the first
 # match) and the frozen generated manifests. xtask/tests/release_derived_pins.rs
@@ -3304,7 +3315,10 @@ release-sync:
     export VERSION MM
     VERSION="$(cargo metadata --no-deps --format-version 1 \
         | jq -r '.packages[] | select(.name == "ridl-core") | .version')"
-    MM="$(echo "$VERSION" | cut -d. -f1-2)"
+    case "$VERSION" in
+        *-*) MM="$VERSION" ;;
+        *) MM="$(echo "$VERSION" | cut -d. -f1-2)" ;;
+    esac
     echo "release-sync: workspace version $VERSION, ridl-rt requirement $MM"
     perl -pi -e 's/(const RIDL_RT_REQUIREMENT: &str = ")[^"]+/${1}$ENV{MM}/; s/(The `ridl-rt = ")[^"]+/${1}$ENV{MM}/' \
         crates/ridlc/src/lib.rs
@@ -3324,7 +3338,9 @@ release-sync:
 # Push the release commit that `just release` made, wait for the `ci` run on it
 # to pass, then push its two tags, which start the crates.io, npm and editor
 # release workflows. A tag is pushed only after CI passed on its commit, so a
-# failure is fixed on main before any publish workflow starts.
+# failure is fixed on main before any publish workflow starts. It can be run
+# again: a release commit already on origin/main is not pushed again, and the
+# newest ci run of any event on it is the one that counts.
 release-push:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -3345,10 +3361,15 @@ release-push:
             exit 1
         fi
     done
-    git push origin HEAD:main
+    git fetch origin main --quiet
+    if git merge-base --is-ancestor "$sha" origin/main; then
+        echo "release-push: $sha is already on origin/main"
+    else
+        git push origin HEAD:main
+    fi
     run_id=""
     for _ in $(seq 30); do
-        run_id="$(gh run list --workflow ci --event push --commit "$sha" --json databaseId --jq '.[0].databaseId // empty')"
+        run_id="$(gh run list --workflow ci --commit "$sha" --json databaseId --jq '.[0].databaseId // empty')"
         [ -n "$run_id" ] && break
         sleep 10
     done
@@ -3357,11 +3378,17 @@ release-push:
         exit 1
     fi
     if ! gh run watch "$run_id" --exit-status; then
-        echo "release-push: the ci run on $sha did not pass, or the watch stopped; the tags are not pushed." >&2
-        echo "release-push: if the watch stopped (a network error or an interrupt), run just release-push again." >&2
-        echo "release-push: if ci failed, fix main, delete the local tags with" >&2
-        echo "release-push:   git tag -d v$version editor-v$version" >&2
-        echo "release-push: and cut the next patch version." >&2
+        conclusion="$(gh run view "$run_id" --json conclusion --jq .conclusion || true)"
+        echo "release-push: the ci run on $sha did not pass ($conclusion); the tags are not pushed." >&2
+        if [ "$conclusion" = cancelled ] || [ -z "$conclusion" ]; then
+            echo "release-push: a later push to main cancels the run, and an interrupt stops the watch." >&2
+            echo "release-push: re-run it with: gh run rerun $run_id" >&2
+            echo "release-push: then run just release-push again." >&2
+        else
+            echo "release-push: fix main, then cut the next patch version. Keep the local" >&2
+            echo "release-push: tags v$version and editor-v$version, so that git std bump starts" >&2
+            echo "release-push: the next changelog section after $version, and never push them." >&2
+        fi
         exit 1
     fi
     git push origin "v$version" "editor-v$version"
