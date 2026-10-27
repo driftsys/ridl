@@ -749,3 +749,14 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
   decision 13, [the `ridl-rt` design record](../design/ridl-rt.md) and
   [the generated code chapter](../book/generated-code.md).
+
+- **2026-10-24-podbuf-design.md** — the design of the third payload encoding,
+  `podbuf`: the intent and trust model, the first-fit layout law, the preamble,
+  the descriptors and the stride, the value rules, `verify`, the evolution
+  rules, strict and open enums, the alternatives and the measured evidence of a
+  spike on a Cortex-R52 model. Archived verbatim, on 2026-10-27, once the codec
+  landed. The durable records are
+  [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md), which restates
+  the design as decisions corrected to the code and lists where it departs from
+  the design, and [the podbuf codec design record](../design/podbuf-codec.md).
+  Its plan stays in `docs/wip/` until Tasks 13 and 14 are built.

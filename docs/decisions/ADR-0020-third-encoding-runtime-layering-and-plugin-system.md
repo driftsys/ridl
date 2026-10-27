@@ -172,6 +172,15 @@ for "plain old data buffer": the head is a plain-old-data `#[repr(C)]` struct,
 and `#[repr(C)]` stays as the description of how the head is laid out. The
 record stays Proposed.
 
+**Amended 2026-10-27 — decision 4 and open item 1, the projection record is
+written.** [ADR-0031](ADR-0031-podbuf-projection-rules.md) is the projection
+record that decision 4 asks for: it fixes the bytes of the `podbuf` encoding
+(the preamble, the first-fit law, the descriptors, `verify`, evolution). Open
+item 1 is closed: `Inline` stays FlatBuffers' struct read in place, and `podbuf`
+is the in-place encoding for a consumer that links no reader library, so
+decision 2's matrix is unchanged. Decision 4 and open item 1 are changed in
+place. The record stays Proposed.
+
 ## Context
 
 Three problems came out of one session, and each has the same shape: a record
@@ -303,7 +312,8 @@ as its public contract.
    [ADR-0019](ADR-0019-flatbuffers-projection-rules.md)'s are, so they take that
    record's shape and are not in this one and not in the ADR-0018 amendments.
    This record fixes the encoding's place in the matrix; that record fixes what
-   the bytes are.
+   the bytes are. That record is [ADR-0031](ADR-0031-podbuf-projection-rules.md)
+   (amended 2026-10-27).
 
 5. **One `ridl-rt` crate, one cargo feature per encoding.** `ridl-rt` is a
    single `no_std` crate holding the six modules the ridl-rt design note's §1.1
@@ -647,12 +657,13 @@ as its public contract.
 
 ## Open
 
-1. **`Inline` versus `podbuf`.** The ridl-rt design note's `Inline` payload is a
-   FlatBuffers struct read in place; a `podbuf` struct read in place is the same
-   operation with a simpler rule and no runtime dependency. Whether `Inline`
-   becomes the `podbuf` encoding, with FlatBuffers keeping only its tables,
-   touches decision 2's matrix and is settled with the projection record of
-   decision 4. That note's RA-X7 and RA-X8 are inputs to it.
+1. **`Inline` versus `podbuf`.** _Closed 2026-10-27._ The ridl-rt design note's
+   `Inline` payload is a FlatBuffers struct read in place; a `podbuf` struct
+   read in place is the same operation with a simpler rule and no runtime
+   dependency. `Inline` stays FlatBuffers' and `podbuf` is the in-place
+   encoding; decision 2's matrix is unchanged. The projection record of decision
+   4, [ADR-0031](ADR-0031-podbuf-projection-rules.md), settles the `podbuf`
+   side. That note's RA-X7 and RA-X8 were inputs to it.
 2. **Where the TypeScript packages live in this workspace, and what the runtime
    package is called.** Decision 6 leaves both open. (Amended 2026-10-20: the
    location is `packages/`, and the first package there is

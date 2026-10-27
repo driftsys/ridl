@@ -3,10 +3,11 @@
 //! the layout law, and the behaviour of `verify` over damaged buffers.
 //!
 //! The bytes of a podbuf value are fully determined by the first-fit law
-//! (`docs/wip/2026-10-24-podbuf-design.md`, §5), so the oracle is the law
-//! itself: every expected buffer below is written by hand, field by field,
-//! from §5.1 to §5.3 and §6, and the codec is held to those bytes. No other
-//! implementation of the encoding exists to compare against.
+//! (ADR-0031 decisions 3 and 4; the `§` numbers in this file are those of the
+//! archived design, `docs/archive/2026-10-24-podbuf-design.md`), so the oracle
+//! is the law itself: every expected buffer below is written by hand, field by
+//! field, from §5.1 to §5.3 and §6, and the codec is held to those bytes. No
+//! other implementation of the encoding exists to compare against.
 //!
 //! Each test that runs generated code compiles a program through
 //! `support::rustc`, as the other podbuf targets do. The table, the

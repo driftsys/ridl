@@ -1,6 +1,7 @@
-//! The podbuf verifier, view and decoder: the rules of §7 of the podbuf
-//! design (`docs/wip/2026-10-24-podbuf-design.md`), the read-in-place view
-//! (§10) and `decode` into the domain value (§14 "Decode").
+//! The podbuf verifier, view and decoder: the rules of ADR-0031 decision 8, the
+//! read-in-place view (decision 14) and `decode` into the domain value
+//! (decision 15). The `§` numbers in this file are those of the archived design,
+//! `docs/archive/2026-10-24-podbuf-design.md`.
 //!
 //! Each test compiles one program over the generated fixture through
 //! `support::rustc`, as `podbuf_encode.rs` does: the program encodes a value,

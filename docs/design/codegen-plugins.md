@@ -488,10 +488,10 @@ decision 2:
 | `off-board`         | proto3      |
 
 A crossing that is unspecified or unknown gives the unspecified encoding. No
-link carries the `podbuf` encoding: the enum value exists in the schema, and
-nothing selects it until driftsys/ridl#317. The choice between a shared-memory
-store and a local socket on one machine stays the plugin's. Both carry
-FlatBuffers, so the choice does not change a size.
+link carries the `podbuf` encoding: the enum value exists in the schema, and no
+rsdl fact selects it. The choice between a shared-memory store and a local
+socket on one machine stays the plugin's. Both carry FlatBuffers, so the choice
+does not change a size.
 
 This rule is also what RSDL-807 (`link-encoding-not-emitted`) compares a
 `[backend.<name>] encodings` list against, once per emitted backend that can

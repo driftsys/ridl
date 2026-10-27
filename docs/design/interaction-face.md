@@ -114,10 +114,13 @@ descriptor has no inherent constant of either name.
   `Sizes<Proto3>`, emitted beside it when `encodings` names `proto3` and built
   from `<T as Payload<Proto3>>::MAX_SIZE` in the same way. A proto3 payload with
   no finite bound is refused or skipped the same way, so a `Sizes<Proto3>` table
-  has no `None` either ([the proto3 codec record](proto3-codec.md)). A `podbuf`
-  table arrives when the backend emits that codec (driftsys/ridl#317). The face
-  reads buffers from `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of
-  its port `P`, and from the `CLAIM_BUFFER` and `EVENT_BUFFER` of
+  has no `None` either ([the proto3 codec record](proto3-codec.md)). The
+  `Sizes<Podbuf>` table is emitted beside them when `encodings` names `podbuf`
+  and is built from `<T as Payload<Podbuf>>::MAX_SIZE` in the same way; a
+  payload with no finite podbuf bound is refused or skipped the same way, so
+  that table has no `None` either ([the podbuf codec record](podbuf-codec.md)).
+  The face reads buffers from `<T as Payload<P::Encoding>>::BUFFER`, in the
+  encoding of its port `P`, and from the `CLAIM_BUFFER` and `EVENT_BUFFER` of
   `Sizes<P::Encoding>`; `reservation::<X, E>()` and `table_budget::<I, E>()` in
   `ridl_rt::contract` serve a runtime that sizes a store.
 

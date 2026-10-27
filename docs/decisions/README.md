@@ -536,6 +536,24 @@ other entry below is Accepted.
   which an embedder can lower but not raise, and a request above its member's
   limit will be answered `corrupt`.
 
+- **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
+  _Accepted._ The projection record that ADR-0020 decision 4 asks for. Fifteen
+  decisions: the target rule (little-endian, head alignment 8, `const` and
+  `_Static_assert` checks); a buffer of an 8-byte preamble, a head and a tail,
+  with 8-byte descriptors and a `u16` stride; the first-fit placement law with
+  optional flags; the value rules and the totality table, with RIDL-153 to
+  RIDL-155 for a type too large, an array or map past the descriptor limits and
+  a deprecated field with no valid value; the generated names; `verify` as a
+  call tree that checks the data present and never the pads; the encoder's duty
+  to zero every pad; the evolution rules (an append that reads as 0 is
+  compatible, an append to a struct held inline is a break, a field removal
+  breaks under every encoding); strict and open enums, decided, with the typl
+  `open` keyword not built; the `podbuf_inline_append` diff category and
+  RIDL-156 `podbuf-padding-order`; and what the backend generates and exposes in
+  the codegen model. It lists where it departs from the design it restates,
+  which is archived, and carries five open items. Amends ADR-0020 decision 4 and
+  closes its open item 1.
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
 constrains it to four family members rather than five.

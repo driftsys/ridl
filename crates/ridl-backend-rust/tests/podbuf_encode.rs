@@ -1,7 +1,7 @@
 //! The podbuf encoder: the bytes `__ridl_podbuf_encode` writes, pinned
-//! against the first-fit law and the value rules of the podbuf design
-//! (`docs/wip/2026-10-24-podbuf-design.md`, §5, §6, §7 "Encoder duty", §8.1
-//! and §14 "Tail order").
+//! against the first-fit law and the value rules of ADR-0031 (decisions 3 to 5,
+//! 9 and 10; the `§` numbers in this file are those of the archived design,
+//! `docs/archive/2026-10-24-podbuf-design.md`).
 //!
 //! The generated code runs as a program through `support::rustc`, as
 //! `flatbuffers_roundtrip.rs` does: a compile proof shows only that the

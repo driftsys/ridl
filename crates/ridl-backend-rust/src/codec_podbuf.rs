@@ -1,8 +1,9 @@
 //! The podbuf codec: the `#[repr(C, align(8))]` head struct of each struct,
 //! union and named tuple, with its pad fields and the `const` assertions that
 //! pin the layout law's numbers, and the encoder that writes the preamble,
-//! the head and the tail (`docs/wip/2026-10-24-podbuf-design.md`, §5, §6, §7
-//! "Encoder duty", §8.1 and §14 "Tail order").
+//! the head and the tail (ADR-0031 decisions 3 to 5, 8 to 10; the `§` numbers
+//! in this file are those of the archived design,
+//! `docs/archive/2026-10-24-podbuf-design.md`).
 //!
 //! The layout is not computed here. It is read from the model's podbuf
 //! projection ([`v1::PodbufProjection`]), which `ridl_ir::projection::podbuf`
@@ -2831,7 +2832,7 @@ impl<'a> Codec<'a> {
             #[allow(deprecated)]
             impl #ty {
                 // Checks the preamble and the root head of `buf` (the rules
-                // of the podbuf design, §7) and returns its view. An
+                // of ADR-0031 decision 8) and returns its view. An
                 // internal of the podbuf codec: no doc.
                 pub(crate) fn __ridl_podbuf_verify(
                     buf: &[::core::primitive::u8],
