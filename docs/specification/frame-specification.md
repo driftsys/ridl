@@ -1001,18 +1001,18 @@ empty or not valid UTF-8, a first provider-to-consumer message that is not
 closes with 1002, and the session ends as §3 states. A `publish` or a `response`
 whose header says it carries no payload and which has bytes after its header is
 discarded and recorded (§9.5). A frame whose header says it carries a payload is
-never answered or discarded for the payload's length, except that a provider
-that holds the member limits of its catalog answers a `request` whose payload is
-longer than its member's limit `corrupt` (ADR-0030 decision 15): the payload,
-zero bytes included, goes to `Payload::verify`, and a payload that fails to
-decode follows §9 — a `request`'s is answered `corrupt` (§5.3). So the `request`
-of §9.5 whose payload is absent does not occur on this binding. A message above
-the receiver's configured size limit, which admits at least 294 bytes, is closed
-with 1009. Either side ends the session on purpose with 1000, the provider with
-1001 when it shuts down; after `attached(refused)` the provider closes with
-1000, and the reason is in the frame. A provider may close with 1008 when a
-session passes a resource limit it states, such as a cap on the responses it
-keeps for §7. The binding defines no close code of its own.
+never answered or discarded for the payload's length: the payload, zero bytes
+included, goes to `Payload::verify`, and a payload that fails to decode follows
+§9 — a `request`'s is answered `corrupt` (§5.3). So the `request` of §9.5 whose
+payload is absent does not occur on this binding. One exception: a provider that
+holds the member limits of its catalog answers a `request` whose payload is
+longer than its member's limit `corrupt` without verifying it (ADR-0030 decision
+15). A message above the receiver's configured size limit, which admits at least
+294 bytes, is closed with 1009. Either side ends the session on purpose with
+1000, the provider with 1001 when it shuts down; after `attached(refused)` the
+provider closes with 1000, and the reason is in the frame. A provider may close
+with 1008 when a session passes a resource limit it states, such as a cap on the
+responses it keeps for §7. The binding defines no close code of its own.
 
 **5. The caller's identity** for §7 is the connection. It does not survive a
 reconnect: a reconnect is a new session, its counters start over, and the calls

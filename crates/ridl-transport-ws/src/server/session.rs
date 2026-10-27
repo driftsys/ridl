@@ -3785,24 +3785,37 @@ mod tests {
     fn an_unknown_member_is_answered_unknown_interaction_whatever_its_length() {
         let (mut s, _p, _n) = described_with(limited_table(4, false), |c| c);
         open(&mut s);
-        // Ordinal 1 is a signal in the table, so it is unknown under `Command`.
-        let target = Target {
-            kind: Kind::Command,
-            iface: IFACE,
-            ord: Ordinal(1),
-        };
-        let (_, out) = send(&mut s, &request(target, 1, &[1; 5]));
-        assert_eq!(out.len(), 1);
-        assert_eq!(
-            decode(&out[0]).unwrap(),
-            response(
-                target,
-                0,
-                1,
-                1,
-                ResponseOutcome::Contract(Contract::UnknownInteraction)
-            )
-        );
+        // Ordinal 1 is a signal in the table, so it is unknown under `Command`
+        // and holds no limit. `COMMAND`'s ordinal is a command with a limit of
+        // 4, so it is unknown under `Query`: the length check must not run
+        // before the member is found to be unknown.
+        let targets = [
+            Target {
+                kind: Kind::Command,
+                iface: IFACE,
+                ord: Ordinal(1),
+            },
+            Target {
+                kind: Kind::Query,
+                iface: IFACE,
+                ord: COMMAND.ord,
+            },
+        ];
+        for (seq, target) in (1..).zip(targets) {
+            let (_, out) = send(&mut s, &request(target, seq, &[1; 5]));
+            assert_eq!(out.len(), 1, "{target:?}");
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                response(
+                    target,
+                    0,
+                    seq,
+                    seq,
+                    ResponseOutcome::Contract(Contract::UnknownInteraction)
+                ),
+                "{target:?}"
+            );
+        }
     }
 
     #[test]
