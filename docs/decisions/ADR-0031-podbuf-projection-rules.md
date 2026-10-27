@@ -261,6 +261,8 @@ a field is appended.
    - An enum's integer is signed when any declared value is negative and
      unsigned otherwise; its width is the narrowest that holds every declared
      value.
+   - A union's tag is unsigned; its width is the narrowest that holds the
+     largest arm ordinal, and a union with no arm has a `u8` tag.
    - Map key order is bytewise for strings and bytes, and numeric for integers
      and floats. `+0.0` and `-0.0` are equal, so both present is a duplicate; a
      NaN key is rejected **(Sebastien)**. The encoder sorts the entries and
@@ -467,12 +469,13 @@ a field is appended.
     _Breaking (a new type version):_ reordering; widening an integer across a
     width boundary; changing a bound; removing an arm or an enum value; adding a
     value to a strict enum or a flag to a strict enum set **(Sebastien)**;
-    appending an enum value or a union arm that changes the podbuf width of the
-    enum's integer or of the union's tag (`u8` to `u16` at 256, `u16` to `u32`
-    at 65,536, by the width rule of decision 5), which moves every field placed
-    after it in every head that holds the enum or the union; appending a field
-    that cannot read as 0; appending to a struct that is nested inline anywhere
-    in the workspace; changing a strict enum to an open one or the reverse; and
+    appending an enum value or a union arm that changes the podbuf integer of
+    the enum or the tag of the union, by width or by signedness (`u8` to `u16`
+    at 256, `u16` to `u32` at 65,536, `u8` to `i8` at the first negative enum
+    value, by the rules of decision 5), which lays out a different integer in
+    every head that holds the enum or the union; appending a field that cannot
+    read as 0; appending to a struct that is nested inline anywhere in the
+    workspace; changing a strict enum to an open one or the reverse; and
     removing a field.
 
     **An append to a struct nested inline is a break** (author's call): the
@@ -528,12 +531,14 @@ a field is appended.
       `enumset`, and not reserved. It is a typl language change, recorded
       separately (typl §8, §9, the backends and `ridl diff`). **That change is a
       prerequisite of the open rules and is not built.** Today every enum and
-      enum set is strict, and the codec, `verify` and `ridl diff` implement only
-      the strict rules. Before the change lands it must check how today's
-      backends and `ridl diff` treat a new enum value, so that defaulting every
-      enum to strict breaks nothing silently. A new value that does not fit the
-      inferred width or signedness of an open enum changes the width, which is a
-      break, as for an integer range (typl §4.2).
+      enum set is strict, and the codec and `verify` implement only the strict
+      rules. `ridl diff` does not report the strict-enum break of an appended
+      value or flag until open enums are built, as decision 13 says. Before the
+      change lands it must check how today's backends and `ridl diff` treat a
+      new enum value, so that defaulting every enum to strict breaks nothing
+      silently. A new value that does not fit the inferred width or signedness
+      of an open enum changes the width, which is a break, as for an integer
+      range (typl §4.2).
 
 13. **The checks.**
     - `ridl diff` reports each break of decision 10 as a podbuf break and each
@@ -542,14 +547,14 @@ a field is appended.
       `podbuf` is among the encodings the comparison is judged for, compatible
       otherwise: the append to an inline struct, the category
       `podbuf_inline_append`, and an appended enum value or union arm that
-      changes the podbuf width of the enum's integer or of the union's tag, the
-      category `podbuf_width_change`, reported once per declaration with the old
-      and the new width. An appended value or arm that keeps the width is
-      reported as the generic rule judges it, compatible; `ridl diff` does not
-      report the strict-enum break of decision 12 on its own (builder's call,
-      pending the `open` keyword, open item 1). `ridl diff --encoding <name>`
-      and the `ridl_diff` MCP tool name the encodings, because a snapshot does
-      not record them.
+      changes the podbuf integer of the enum or the tag of the union, by width
+      or by signedness, the category `podbuf_width_change`, reported once per
+      declaration with the old and the new integer. An appended value or arm
+      that keeps the integer is reported as the generic rule judges it,
+      compatible; `ridl diff` does not report the strict-enum break of decision
+      12 on its own (builder's call, pending the `open` keyword, open item 1).
+      `ridl diff --encoding <name>` and the `ridl_diff` MCP tool name the
+      encodings, because a snapshot does not record them.
     - RIDL-156 `podbuf-padding-order`, a lint at `info`, reports a struct whose
       declared field order lays out in a larger head than the same fields sorted
       by descending alignment (declaration order kept among equal alignments).

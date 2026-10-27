@@ -35,6 +35,7 @@ podbuf buffer starts on an 8-byte boundary.
 | RIDL-153 to RIDL-155, the build-time errors                              | `crates/ridlc/src/design_lints/podbuf.rs`      |
 | RIDL-156 `podbuf-padding-order`                                          | `crates/ridl/src/podbuf_padding.rs`            |
 | `podbuf_inline_append`, the inline-use rule of `ridl diff`               | `crates/ridl-diff/src/walk.rs`                 |
+| `podbuf_width_change`, the integer-change rule of `ridl diff`            | `crates/ridl-diff/src/walk.rs`                 |
 | The `encodings` list (`WireEncoding`) the entry points take              | `crates/ridl-backend-rust/src/lib.rs`          |
 | The marker `Podbuf` and the `Payload`, `View` and `Malformed` it shares  | `crates/ridl-rt/src/encoding.rs`, `payload.rs` |
 
@@ -43,12 +44,12 @@ podbuf buffer starts on an 8-byte boundary.
 A type's head, its placements, its flags fields, its pads, the form of each
 field and the size bound are computed in `ridl_ir::projection::podbuf` and read
 by every consumer: the Rust codec, the C header, the sizer, the
-`podbuf_inline_append` rule of `ridl diff`, the padding lint and the build-time
-errors. They read it from the codegen `Model` (`Model.podbuf`,
-`PodbufProjection`), not from the IR, so that an out-of-tree plugin reads the
-same numbers (ADR-0020 decisions 8 and 9; the model's layout is described in
-[`codegen-plugins.md`](codegen-plugins.md), "The podbuf projection"). Nothing in
-the projection spells a Rust or C name.
+`podbuf_inline_append` and `podbuf_width_change` rules of `ridl diff`, the
+padding lint and the build-time errors. They read it from the codegen `Model`
+(`Model.podbuf`, `PodbufProjection`), not from the IR, so that an out-of-tree
+plugin reads the same numbers (ADR-0020 decisions 8 and 9; the model's layout is
+described in [`codegen-plugins.md`](codegen-plugins.md), "The podbuf
+projection"). Nothing in the projection spells a Rust or C name.
 
 **The model carries two additions beyond the heads.** `Declaration.podbuf` is
 the size state of a declaration as a payload root, which becomes `MAX_SIZE`.

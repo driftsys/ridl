@@ -179,13 +179,14 @@ common cases:
   `[S; 2..2]`, which has no head) can grow under podbuf, and such an append is
   compatible. A tuple inside such a root is a head, and a struct inside that
   tuple is a use. Also breaking under podbuf: an enum value or a union arm
-  appended that changes the podbuf width of the enum's integer or of the
-  union's tag, a value above 255 or an arm past ordinal 255 (`u8` to `u16`)
-  and above 65535 (`u16` to `u32`), reported once per declaration as
-  `podbuf_width_change` with the old and the new width, under the same
-  heading and with the same verdict rule; every head that holds the enum or
-  the union lays out the wider integer and moves the fields after it, and an
-  append that keeps the width draws no such line. A field
+  appended after which the podbuf integer of the enum or the tag of the union
+  is a different integer, by width or by signedness: a value above 255 or an
+  arm past ordinal 255 (`u8` to `u16`), above 65535 (`u16` to `u32`), or a
+  first negative value of an enum (`u8` to `i8`). It is reported once per
+  declaration as `podbuf_width_change` with the old and the new integer,
+  under the same heading and with the same verdict rule; every head that holds
+  the enum or the union lays out a different integer, and an append that keeps
+  the integer draws no such line. A field
   removed from a struct, its slot held by a tombstone, is `decl_removed`,
   breaking under every encoding: the type is gone from the source, so its
   bytes cannot be kept.

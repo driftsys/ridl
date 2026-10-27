@@ -87,10 +87,10 @@ pub(super) struct Entry {
     pub(super) podbuf: Side,
 }
 
-/// The size of `shape` under podbuf. The codegen model carries a podbuf
-/// state per declaration (`Declaration.podbuf`), not per interaction
-/// payload, so the sizer states it here, from the same shape the lowering
-/// sizes for the other encodings. `None` is a payload with no shape.
+/// The size of `shape` under podbuf. The codegen model records the same state
+/// per payload (`PayloadSizes.podbuf` and `Reservation.podbuf`); this lint
+/// works on the IR, so it asks the sizer directly, for the same shape the
+/// lowering sizes for the other encodings. `None` is a payload with no shape.
 fn podbuf_side(
     package: &v2::Package,
     others: &[&v2::Package],

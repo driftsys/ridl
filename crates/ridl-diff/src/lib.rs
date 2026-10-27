@@ -282,15 +282,17 @@ declare_categories! {
         /// use.
         PodbufInlineAppend,
         /// An enum value or a union arm appended, compatible under the
-        /// generic rule, that changes the podbuf width of the enum's integer
-        /// or of the union's tag: `u8` to `u16`, or `u16` to `u32` (the
-        /// narrowest integer that holds every declared value or arm ordinal,
-        /// ADR-0031 decision 5). Breaking when `podbuf` is
-        /// among the encodings the comparison is judged for, because every
-        /// head that holds the enum or the union lays out the wider integer
-        /// and moves the fields after it; compatible otherwise. Reported
-        /// once per declaration, at `<package>/<decl>`, with the old and the
-        /// new width. An append that keeps the width draws no such line.
+        /// generic rule, after which the podbuf integer of the enum or the
+        /// tag of the union is a different integer, by width or by
+        /// signedness: `u8` to `u16`, `u16` to `u32`, or `u8` to `i8` for an
+        /// enum that gains a negative value. The integer is the narrowest
+        /// that holds every declared value (ADR-0031 decision 5) or, for a
+        /// tag, every arm ordinal. Breaking when `podbuf` is among the
+        /// encodings the comparison is judged for, because every head that
+        /// holds the enum or the union lays out a different integer;
+        /// compatible otherwise. Reported once per declaration, at
+        /// `<package>/<decl>`, with the old and the new integer. An append
+        /// that keeps the integer draws no such line.
         PodbufWidthChange,
     }
 }
@@ -474,7 +476,7 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 ///
 /// Only `podbuf` has rules of its own: a struct field appended to a struct
 /// that another head holds inline is [`Category::PodbufInlineAppend`], and an
-/// enum value or a union arm appended that widens the enum's integer or the
+/// enum value or a union arm appended that changes the enum's integer or the
 /// union's tag is [`Category::PodbufWidthChange`]; both are breaking when
 /// `podbuf` is in `encodings` and compatible otherwise. Every other category
 /// is judged the same under every list, and a name that is not `podbuf` adds

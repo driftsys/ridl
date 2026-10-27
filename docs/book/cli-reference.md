@@ -1541,13 +1541,15 @@ holds inline anywhere in the new side — in a struct, in the argument struct a
 call with several parameters induces, or in a tuple reply — is
 `podbuf_inline_append`, breaking with `--encoding podbuf` and compatible
 without it, because the inline copy cannot grow without moving the fields
-after it. An enum value or a union arm appended that changes the podbuf width
-of the enum's integer or of the union's tag — a value above 255 or an arm past
-ordinal 255 widens a `u8` to a `u16`, and above 65535 a `u16` to a `u32` — is
-`podbuf_width_change`, reported once per declaration with the old and the new
-width, breaking with `--encoding podbuf` and compatible without it, because
-every head that holds the enum or the union lays out the wider integer and
-moves the fields after it; an append that keeps the width draws no such line. The line names each inline use, a struct field as
+after it. An enum value or a union arm appended after which the podbuf
+integer of the enum or the tag of the union is a different integer, by width
+or by signedness — a value above 255 or an arm past ordinal 255 widens a `u8`
+to a `u16`, above 65535 a `u16` to a `u32`, and a first negative value of an
+enum turns a `u8` into an `i8` — is `podbuf_width_change`, reported once per
+declaration with the old and the new integer, breaking with `--encoding
+podbuf` and compatible without it, because every head that holds the enum or
+the union lays out a different integer; an append that keeps the integer draws
+no such line. The `podbuf_inline_append` line names each inline use, a struct field as
 `<package>/<struct>/<field>` and an interaction's request, reply or fixed
 payload as `<package>/<interface>/<interaction>`, and sits under the heading
 `breaking under podbuf` either way, so that a workspace that does not build
