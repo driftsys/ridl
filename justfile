@@ -3258,10 +3258,12 @@ release *ARGS: toolchain-check
     fi
     # The tree is taken as sane because ci passed on it; the release does not
     # rebuild it.
-    ci="$(gh run list --workflow ci --event push --commit "$(git rev-parse HEAD)" \
-        --json conclusion --jq '.[0].conclusion // empty')"
+    # The newest run of any event, so a manual re-run after an infrastructure
+    # failure counts.
+    ci="$(gh run list --workflow ci --commit "$(git rev-parse HEAD)" \
+        --json status,conclusion --jq '.[0] | if . == null then "no run" elif .status != "completed" then .status else .conclusion end')"
     if [ "$ci" != success ]; then
-        echo "release: ci has not passed on HEAD (${ci:-no run yet}); wait for it or fix main" >&2
+        echo "release: ci has not passed on HEAD ($ci); wait for it or fix main" >&2
         exit 1
     fi
     echo "release: open pull requests on main (for information):"
