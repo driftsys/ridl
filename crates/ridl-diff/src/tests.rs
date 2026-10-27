@@ -3312,13 +3312,13 @@ mod podbuf_width {
     }
 
     /// Value 255 appended to an enum of `0..=254` keeps the `u8`: no width
-    /// line, compatible under podbuf.
+    /// line; the strict-enum line makes it breaking under podbuf.
     #[test]
-    fn an_appended_enum_value_that_keeps_the_width_is_compatible_under_podbuf() {
+    fn an_appended_enum_value_that_keeps_the_width_draws_no_width_line() {
         let (old, new) = (enum_package(255), enum_package(256));
         let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
         assert_eq!(width_change(&report), None);
-        assert_eq!(report.verdict, Verdict::Compatible);
+        assert_eq!(report.verdict, Verdict::Breaking);
     }
 
     /// Arm 256 appended to a union of 255 arms widens the tag from `u8` to
@@ -3357,5 +3357,91 @@ mod podbuf_width {
                 .count(),
             1
         );
+    }
+
+    fn enum_set_package(count: i64) -> v2::Package {
+        let bits = (0..count)
+            .map(|bit| v2::EnumValue {
+                name: format!("F{bit}"),
+                value: bit,
+                ..Default::default()
+            })
+            .collect();
+        with_decl(
+            "Flags",
+            v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                bits,
+                ..Default::default()
+            }),
+        )
+    }
+
+    fn strict_append(report: &crate::DiffReport) -> Vec<&crate::Change> {
+        report
+            .changes
+            .iter()
+            .filter(|change| change.category == Category::PodbufStrictEnumAppend)
+            .collect()
+    }
+
+    /// A value appended to an enum, with the integer kept, is a strict-enum
+    /// break under podbuf and compatible without it, listed under the podbuf
+    /// heading either way.
+    #[test]
+    fn an_appended_enum_value_is_a_strict_enum_break_under_podbuf() {
+        let (old, new) = (enum_package(3), enum_package(4));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        let changes = strict_append(&report);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].verdict, Verdict::Breaking);
+        assert_eq!(changes[0].path, "veh.cluster/Mode");
+        assert_eq!(changes[0].after.as_deref(), Some("V3"));
+        assert_eq!(report.verdict, Verdict::Breaking);
+
+        let report = diff_refs_with(&[&old], &[&new], &[], &[]);
+        assert_eq!(report.verdict, Verdict::Compatible);
+        assert_eq!(strict_append(&report).len(), 1);
+        assert!(
+            render_text(&report).contains(
+                "breaking under podbuf:\n  [compatible] podbuf_strict_enum_append veh.cluster/Mode"
+            ),
+            "{}",
+            render_text(&report)
+        );
+        let report = diff_refs_with(&[&old], &[&new], &[], &["flatbuffers", "proto3"]);
+        assert_eq!(report.verdict, Verdict::Compatible);
+    }
+
+    /// A flag appended to an enum set is the same break.
+    #[test]
+    fn an_appended_enum_set_flag_is_a_strict_enum_break_under_podbuf() {
+        let (old, new) = (enum_set_package(3), enum_set_package(4));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        let changes = strict_append(&report);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].verdict, Verdict::Breaking);
+        assert_eq!(changes[0].path, "veh.cluster/Flags");
+        assert_eq!(report.verdict, Verdict::Breaking);
+        assert_eq!(
+            diff_refs_with(&[&old], &[&new], &[], &[]).verdict,
+            Verdict::Compatible
+        );
+    }
+
+    /// An append that widens the integer draws the width line alone.
+    #[test]
+    fn an_append_that_widens_the_integer_draws_no_second_line() {
+        let (old, new) = (enum_package(256), enum_package(257));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert!(width_change(&report).is_some());
+        assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
+    }
+
+    /// An appended union arm is not an enum append.
+    #[test]
+    fn an_appended_union_arm_draws_no_strict_enum_line() {
+        let (old, new) = (union_package(2), union_package(3));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
     }
 }

@@ -548,11 +548,12 @@ other entry below is Accepted.
   to zero every pad; the evolution rules (an append that reads as 0 is
   compatible, an append to a struct held inline is a break, a field removal
   breaks under every encoding); strict and open enums, decided, with the typl
-  `open` keyword not built; the `podbuf_inline_append` and `podbuf_width_change`
-  diff categories and RIDL-156 `podbuf-padding-order`; and what the backend
-  generates and exposes in the codegen model. It lists where it departs from the
-  design it restates, which is archived, and carries five open items. Amends
-  ADR-0020 decision 4 and closes its open item 1.
+  `open` keyword not built; the `podbuf_inline_append`, `podbuf_width_change`
+  and `podbuf_strict_enum_append` diff categories and RIDL-156
+  `podbuf-padding-order`; and what the backend generates and exposes in the
+  codegen model. It lists where it departs from the design it restates, which is
+  archived, and carries five open items. Amends ADR-0020 decision 4 and closes
+  its open item 1.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

@@ -234,7 +234,8 @@ fn every_reported_category_is_explainable() {
 /// bodies prints both labels, one per direction, and is skipped here: its
 /// fixed verdict cannot be read without a pair of bodies, and
 /// `explain_prints_the_rule_row_for_a_category` covers such a row. So is
-/// `podbuf_inline_append` and `podbuf_width_change`, whose verdict the
+/// `podbuf_inline_append`, `podbuf_width_change` and `podbuf_strict_enum_append`,
+/// whose verdict the
 /// classifier reads from the encodings `--encoding` names: each row prints
 /// one label per case, and `diff_cli.rs` covers both.
 #[test]
@@ -250,6 +251,7 @@ fn each_fixed_verdict_row_names_the_verdict_the_classifier_gives() {
         Category::ContractChanged,
         Category::PodbufInlineAppend,
         Category::PodbufWidthChange,
+        Category::PodbufStrictEnumAppend,
     ];
     let empty = ridl_ir::v2::Package::default();
     let mut checked = 0;
@@ -341,6 +343,7 @@ fn the_category_spellings_are_pinned() {
             "visibility_changed",
             "podbuf_inline_append",
             "podbuf_width_change",
+            "podbuf_strict_enum_append",
         ],
         "a category word is part of the stable report schema"
     );

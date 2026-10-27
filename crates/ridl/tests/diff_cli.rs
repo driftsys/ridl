@@ -632,9 +632,54 @@ fn an_appended_enum_value_or_union_arm_that_widens_is_a_podbuf_break() {
             v1.as_os_str(),
             v2.as_os_str(),
         ]);
-        assert_eq!(code, 0, "{name}: the width is kept, stderr:\n{stderr}");
+        // A kept width draws no width line; an enum append is still a strict
+        // enum break, a union arm append is not.
+        let expected = i32::from(name == "enum-kept");
+        assert_eq!(code, expected, "{name}: stderr:\n{stderr}");
         assert!(
             !stdout.contains("podbuf_width_change"),
+            "{name} stdout:\n{stdout}"
+        );
+    }
+}
+
+/// An enum value or an enum-set flag appended: `podbuf_strict_enum_append`,
+/// exit 1 under `--encoding podbuf` and exit 0 without the flag.
+#[test]
+fn an_appended_enum_value_or_flag_is_a_strict_enum_break_under_podbuf() {
+    let dir = TempDir::new("strict-enum");
+    for (name, old, new, line) in [
+        (
+            "enum",
+            "package veh.cluster\nenum Mode {\n  A = 0\n}\n",
+            "package veh.cluster\nenum Mode {\n  A = 0\n  B = 1\n}\n",
+            "podbuf_strict_enum_append veh.cluster/Mode",
+        ),
+        (
+            "enumset",
+            "package veh.cluster\nenumset Flags {\n  A = 0\n}\n",
+            "package veh.cluster\nenumset Flags {\n  A = 0\n  B = 1\n}\n",
+            "podbuf_strict_enum_append veh.cluster/Flags",
+        ),
+    ] {
+        let v1 = dir.write(&format!("{name}-v1.typl"), old);
+        let v2 = dir.write(&format!("{name}-v2.typl"), new);
+        let (code, stdout, stderr) = ridl(&[
+            "diff".as_ref(),
+            "--encoding".as_ref(),
+            "podbuf".as_ref(),
+            v1.as_os_str(),
+            v2.as_os_str(),
+        ]);
+        assert_eq!(code, 1, "{name}: exits 1 under podbuf, stderr:\n{stderr}");
+        assert!(
+            stdout.contains(&format!("breaking under podbuf:\n  [breaking] {line}")),
+            "{name} stdout:\n{stdout}"
+        );
+        let (code, stdout, _) = ridl(&["diff".as_ref(), v1.as_os_str(), v2.as_os_str()]);
+        assert_eq!(code, 0, "{name}: exits 0 without the flag");
+        assert!(
+            stdout.contains(&format!("breaking under podbuf:\n  [compatible] {line}")),
             "{name} stdout:\n{stdout}"
         );
     }

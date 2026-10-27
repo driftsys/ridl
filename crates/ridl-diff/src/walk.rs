@@ -2026,6 +2026,72 @@ pub(crate) fn podbuf_width_changes(
     changes
 }
 
+/// The [`Category::PodbufStrictEnumAppend`] changes of one walked and
+/// classified package pair: one per enum or enum set of `new` to which `pair`
+/// appends a value or a flag compatibly, except an enum that `widths` (the
+/// [`podbuf_width_changes`] of the same pair) already reports, so that one
+/// change draws one line. The verdict is the placeholder [`emit`] stamps; the
+/// classifier settles it from the encodings.
+pub(crate) fn podbuf_strict_enum_appends(
+    pair: &[Change],
+    old: &v2::Package,
+    new: &v2::Package,
+    widths: &[Change],
+) -> Vec<Change> {
+    let mut appended: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for change in pair {
+        if change.category != Category::DeclAdded || change.verdict != Verdict::Compatible {
+            continue;
+        }
+        let mut segments = change.path.split('/');
+        let (Some(package), Some(name), Some(member), None) = (
+            segments.next(),
+            segments.next(),
+            segments.next(),
+            segments.next(),
+        ) else {
+            continue;
+        };
+        if package == new.name {
+            appended.entry(name).or_default().push(member);
+        }
+    }
+    let mut changes = Vec::new();
+    for (name, members) in appended {
+        let path = format!("{}/{name}", new.name);
+        if widths.iter().any(|change| change.path == path) {
+            continue;
+        }
+        let find = |pkg: &v2::Package| {
+            pkg.decls
+                .iter()
+                .find(|decl| decl.name == name)
+                .and_then(|decl| decl.kind.clone())
+        };
+        let strict = matches!(
+            (find(old), find(new)),
+            (
+                Some(v2::decl::Kind::EnumDef(_)),
+                Some(v2::decl::Kind::EnumDef(_))
+            ) | (
+                Some(v2::decl::Kind::EnumSetDef(_)),
+                Some(v2::decl::Kind::EnumSetDef(_))
+            )
+        );
+        if !strict {
+            continue;
+        }
+        emit(
+            &mut changes,
+            path,
+            Category::PodbufStrictEnumAppend,
+            None,
+            Some(members.join(", ")),
+        );
+    }
+    changes
+}
+
 /// Every head of `scope` whose podbuf form holds the struct `package.name`
 /// inline, sorted: a struct field, as `<package>/<struct>/<field>`, and an
 /// interaction's request, reply or fixed payload, as

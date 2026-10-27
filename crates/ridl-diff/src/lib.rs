@@ -294,6 +294,17 @@ declare_categories! {
         /// `<package>/<decl>`, with the old and the new integer. An append
         /// that keeps the integer draws no such line.
         PodbufWidthChange,
+        /// An enum value or an enum-set flag appended, compatible under the
+        /// generic rule, to an enum or an enum set that is strict (ADR-0031
+        /// decisions 10 and 12): the `verify` of an older reader refuses a
+        /// value or a bit the declaration it was built from does not name.
+        /// Every enum and enum set is strict today. Breaking when `podbuf`
+        /// is among the encodings the comparison is judged for; compatible
+        /// otherwise. Reported once per declaration, at `<package>/<decl>`,
+        /// with the appended names in the detail. An enum whose append also
+        /// changes the podbuf integer draws only the
+        /// [`Category::PodbufWidthChange`] line.
+        PodbufStrictEnumAppend,
     }
 }
 
@@ -516,7 +527,11 @@ pub fn diff_refs_with(
                 // the heads of the whole new side, so it runs after the walk
                 // and the classifier of the pair.
                 let mut podbuf = walk::podbuf_inline_appends(&pair, &scope);
-                podbuf.append(&mut walk::podbuf_width_changes(&pair, old_pkg, new_pkg));
+                let mut widths = walk::podbuf_width_changes(&pair, old_pkg, new_pkg);
+                podbuf.append(&mut walk::podbuf_strict_enum_appends(
+                    &pair, old_pkg, new_pkg, &widths,
+                ));
+                podbuf.append(&mut widths);
                 classify_all(&mut podbuf, old_pkg, new_pkg, &scope, encodings);
                 pair.append(&mut podbuf);
                 changes.append(&mut pair);
@@ -664,6 +679,7 @@ pub fn category_word(category: Category) -> &'static str {
         Category::VisibilityChanged => "visibility_changed",
         Category::PodbufInlineAppend => "podbuf_inline_append",
         Category::PodbufWidthChange => "podbuf_width_change",
+        Category::PodbufStrictEnumAppend => "podbuf_strict_enum_append",
     }
 }
 
@@ -698,7 +714,9 @@ pub fn heading(category: Category) -> Option<&'static str> {
         Category::InterfaceFrozen | Category::EnumReordered => {
             Some("compatible on the wire, may change the catalog hash")
         }
-        Category::PodbufInlineAppend | Category::PodbufWidthChange => Some("breaking under podbuf"),
+        Category::PodbufInlineAppend
+        | Category::PodbufWidthChange
+        | Category::PodbufStrictEnumAppend => Some("breaking under podbuf"),
         Category::DeclAdded
         | Category::DeclRemoved
         | Category::InterfaceRetired

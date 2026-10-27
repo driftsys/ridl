@@ -150,8 +150,12 @@ pub(crate) fn classify_in(
         // The walk emits both only for an append the generic rule accepts, so
         // the verdict is the encoding's alone: an inline copy of the struct
         // cannot grow under podbuf, a wider enum integer or union tag moves
-        // every head that holds it, and no other encoding lays either out.
-        Category::PodbufInlineAppend | Category::PodbufWidthChange => {
+        // every head that holds it, a value or flag a strict enum does not
+        // name is refused by an older reader's `verify`, and no other
+        // encoding lays any of them out.
+        Category::PodbufInlineAppend
+        | Category::PodbufWidthChange
+        | Category::PodbufStrictEnumAppend => {
             if encodings.contains(&"podbuf") {
                 Verdict::Breaking
             } else {
@@ -1536,6 +1540,21 @@ pub fn explain(category: Category) -> &'static str {
             "  breaking    with `--encoding podbuf`: every head that holds the enum\n",
             "              or the union lays out a different integer, and an older\n",
             "              reader misreads the value\n",
+            "  compatible  otherwise; listed under the heading \"breaking under\n",
+            "              podbuf\", so that a workspace that builds podbuf sees it"
+        ),
+        Category::PodbufStrictEnumAppend => concat!(
+            "An enum value or an enum-set flag appended, compatible under the\n",
+            "generic rule, to an enum or an enum set that is strict. The `verify`\n",
+            "of podbuf refuses a value or a flag the declaration it was built from\n",
+            "does not name, so an older reader refuses a buffer that carries the\n",
+            "appended one. Every enum and enum set is strict today; once the\n",
+            "`open` keyword is built, the rule narrows to the strict ones. The\n",
+            "line is reported once per declaration, at `<package>/<decl>`, and the\n",
+            "detail names the appended values or flags. An enum whose append also\n",
+            "changes the podbuf integer draws only the `podbuf_width_change` line.\n",
+            "  breaking    with `--encoding podbuf`: an older reader refuses the\n",
+            "              appended value or flag\n",
             "  compatible  otherwise; listed under the heading \"breaking under\n",
             "              podbuf\", so that a workspace that builds podbuf sees it"
         ),

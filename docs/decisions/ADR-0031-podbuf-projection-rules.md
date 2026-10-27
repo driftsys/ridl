@@ -478,6 +478,11 @@ a field is appended.
     workspace; changing a strict enum to an open one or the reverse; and
     removing a field.
 
+    **A strict-enum append is reported (builder's call).** `ridl diff` reports
+    an appended enum value or enum-set flag as the category
+    `podbuf_strict_enum_append`, because an older reader's `verify` refuses a
+    value or a bit its declaration does not name (decision 12).
+
     **An append to a struct nested inline is a break** (author's call): the
     inline copy cannot grow without moving the fields after it. The inline uses
     are a struct field, a tuple member and an element of an exact-length array.
@@ -532,27 +537,31 @@ a field is appended.
       separately (typl §8, §9, the backends and `ridl diff`). **That change is a
       prerequisite of the open rules and is not built.** Today every enum and
       enum set is strict, and the codec and `verify` implement only the strict
-      rules. `ridl diff` does not report the strict-enum break of an appended
-      value or flag until open enums are built, as decision 13 says. Before the
-      change lands it must check how today's backends and `ridl diff` treat a
-      new enum value, so that defaulting every enum to strict breaks nothing
+      rules. `ridl diff` reports the strict-enum break of an appended value or
+      flag as decision 13 says; when `open` lands, that rule narrows to strict
+      enums and enum sets, and an append to an open one is compatible. Before
+      the change lands it must check how today's backends and `ridl diff` treat
+      a new enum value, so that defaulting every enum to strict breaks nothing
       silently. A new value that does not fit the inferred width or signedness
       of an open enum changes the width, which is a break, as for an integer
       range (typl §4.2).
 
 13. **The checks.**
     - `ridl diff` reports each break of decision 10 as a podbuf break and each
-      compatible change as compatible. Two changes are judged by encoding, both
+      compatible change as compatible. Three changes are judged by encoding, all
       listed under the heading "breaking under podbuf" and breaking when
       `podbuf` is among the encodings the comparison is judged for, compatible
       otherwise: the append to an inline struct, the category
       `podbuf_inline_append`, and an appended enum value or union arm that
       changes the podbuf integer of the enum or the tag of the union, by width
       or by signedness, the category `podbuf_width_change`, reported once per
-      declaration with the old and the new integer. An appended value or arm
-      that keeps the integer is reported as the generic rule judges it,
-      compatible; `ridl diff` does not report the strict-enum break of decision
-      12 on its own (builder's call, pending the `open` keyword, open item 1).
+      declaration with the old and the new integer. An appended enum value or
+      enum-set flag is the category `podbuf_strict_enum_append`, reported once
+      per declaration, except that an enum whose append changes the integer
+      draws only the `podbuf_width_change` line (builder's call). An appended
+      union arm that keeps the tag is reported as the generic rule judges it,
+      compatible. When the `open` keyword is built (open item 1), the strict
+      enum rule narrows to strict enums and enum sets.
       `ridl diff --encoding <name>` and the `ridl_diff` MCP tool name the
       encodings, because a snapshot does not record them.
     - RIDL-156 `podbuf-padding-order`, a lint at `info`, reports a struct whose

@@ -1535,7 +1535,7 @@ category's classification rule without comparing anything.
 names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
 `proto3`, `podbuf`); repeat the flag for several. A snapshot does not record
 the encodings a workspace builds, so the command does not read them from a
-manifest. Only `podbuf` has rules of its own, two of them. A struct field
+manifest. Only `podbuf` has rules of its own, three of them. A struct field
 appended to a struct that another struct, a tuple or an exact-length array
 holds inline anywhere in the new side — in a struct, in the argument struct a
 call with several parameters induces, or in a tuple reply — is
@@ -1549,7 +1549,12 @@ enum turns a `u8` into an `i8` — is `podbuf_width_change`, reported once per
 declaration with the old and the new integer, breaking with `--encoding
 podbuf` and compatible without it, because every head that holds the enum or
 the union lays out a different integer; an append that keeps the integer draws
-no such line. The `podbuf_inline_append` line names each inline use, a struct field as
+no such line. An enum value or an enum-set flag appended is
+`podbuf_strict_enum_append`, reported once per declaration with the appended
+names, breaking with `--encoding podbuf` and compatible without it, because
+every enum and enum set is strict and the `verify` of an older reader refuses
+a value or a bit its declaration does not name; an enum whose append changes
+the integer draws only the `podbuf_width_change` line. The `podbuf_inline_append` line names each inline use, a struct field as
 `<package>/<struct>/<field>` and an interaction's request, reply or fixed
 payload as `<package>/<interface>/<interaction>`, and sits under the heading
 `breaking under podbuf` either way, so that a workspace that does not build
@@ -1881,6 +1886,7 @@ the categories `ridl diff` reports are:
   visibility_changed
   podbuf_inline_append
   podbuf_width_change
+  podbuf_strict_enum_append
 ```
 
 ### `ridl lock`
