@@ -177,3 +177,39 @@ Each ruling: what was decided — why — what it costs if wrong.
   `/review` passes are done and CI is green, as LIM1 and LIM2 did; the next
   release from `main` is then marked breaking. — The breaking changes were
   accepted on driftsys/ridl#1059. — None; no tag and no publish follow.
+- **R-26** — `with_max_message_bytes` returns one error,
+  `LimitOutOfRange
+  { given }`, for both ends of the range 294 to 16,292; it
+  replaces `LimitTooSmall`. — `LimitTooSmall` is a false name for a value above
+  the range, and one type is simpler than an enum of two. — A rename if the
+  owner prefers two types.
+- **R-27** — The constant is `frame::MAX_MESSAGE_LIMIT = 16_292`, written as a
+  literal with a test that derives it from 36 + 16,256. — `ridl-rt` has no
+  ceiling constant to compute it from. — None.
+- **R-28** — `MemberTable` gains `set_limit` and `limit`; `insert` and `member`
+  keep their signatures. — The member table's API does not break. — Two calls
+  instead of one for a backend that sets a limit.
+- **R-29** — An over-limit request is answered `corrupt` and records no `Note`.
+  — A payload that fails to decode records none either. — An embedder cannot see
+  the cause; an additive `Note` variant can follow.
+- **R-30** — In `request`, a repeated `seq` is answered first, then an unknown
+  member, then the length check. — ADR-0030 decision 15 does not fix the order,
+  and this order keeps the existing answers. — None.
+- **R-31** — `SCHEMA_VERSION` stays 1; the limit column is an optional field
+  appended to `Member`. — An older reader ignores it, and ADR-0030 decision 15
+  treats an absent column as "message limit alone". — None.
+- **R-32** — `from_descriptor` stores any `u32` limit and refuses none above
+  16,256. — The manifest cannot produce one. — A hand-built descriptor sets a
+  limit the message limit already bounds.
+- **R-33** — The retained-bytes minimum is the constant 16,292, not the
+  configured message limit. — ADR-0030 decision 15 and #1059 state the constant.
+  — None.
+- **R-34** — The frame specification states 16,292 as the Rust provider's
+  maximum and default only, not as a rule every receiver of the binding
+  enforces. — ADR-0030 does not decide it. — The owner may make it a binding
+  rule later.
+- **R-35** — ADR-0030 is not edited; only `docs/decisions/README.md` changes.
+  Whether the ADR's Status gains a dated "built" note is left to the owner. —
+  The record's Status is the owner's. — None.
+- **R-36** — The plan commit uses the scope `docs(roadmap)`, as the LIM1 and
+  LIM2 plans did. — Consistency with the lane. — None.
