@@ -29,11 +29,13 @@ Version: 0.2.0
 > of its catalog, which the embedder supplies, it accepts an `attach` naming a
 > listed earlier hash (§6.1); without one it applies the exact-match rule. With
 > a member table it keeps each settled response until its bound has passed (§7);
-> without one, or for a member with no bound, it keeps the last 64. The runtime
-> here, `ridl-loopback`, runs in process: it carries bytes from a provider
-> handle to a consumer handle over one in-memory store, opens no socket, and has
-> no wire format ([its design record](../design/ridl-loopback.md)). Neither the
-> crate nor `ridl-loopback` enforces a timing rule or a contract clause on the
+> without one, or for a member with no bound, it keeps the last 64. With a
+> member table that gives a member a payload limit, it also answers a `request`
+> whose payload is longer than that limit `corrupt` (§11.1). The runtime here,
+> `ridl-loopback`, runs in process: it carries bytes from a provider handle to a
+> consumer handle over one in-memory store, opens no socket, and has no wire
+> format ([its design record](../design/ridl-loopback.md)). Neither the crate
+> nor `ridl-loopback` enforces a timing rule or a contract clause on the
 > provider side, so every sentence below about those describes the
 > specification, not behaviour a shipped runtime performs. The first binding is
 > the WebSocket transport (driftsys/ridl#265); the second is a runtime's own
@@ -976,11 +978,16 @@ no bytes — and is handed to the generated binding as it is.
 its envelope is 20 bytes (`response`), so a data-plane message is at most 36
 bytes plus the payload bound. The largest header of any message is the `attach`
 at 39 + 255 = 294 bytes; it carries no payload, so a receiver's message size
-limit admits at least 294 bytes. The codegen model carries the data-plane
-numbers as the `websocket` row, binding version `"1"`, `frame_header_max_bytes`
-20, `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is
-derived from this layout: the layout is frozen through the vectors below, and
-the row is a derived value, corrected in a patch release if it is wrong
+limit admits at least 294 bytes. Under the payload ceiling of 16,256 bytes
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 2), the
+largest data-plane message is 36 + 16,256 = 16,292 bytes. The Rust provider
+`ridl-transport-ws` limits a message to 16,292 bytes by default and refuses a
+configured limit above it (ADR-0030 decision 10). The codegen model carries the
+data-plane numbers as the `websocket` row, binding version `"1"`,
+`frame_header_max_bytes` 20, `envelope_bytes` 16
+(`crates/ridl-ir/src/codegen/bindings.rs`). The row is derived from this layout:
+the layout is frozen through the vectors below, and the row is a derived value,
+corrected in a patch release if it is wrong
 ([ADR-0029](../decisions/ADR-0029-stability-policy.md) decision 2).
 
 **3. The encoding tag.** The binding fixes no encoding: a session uses the
@@ -1002,13 +1009,15 @@ discarded and recorded (§9.5). A frame whose header says it carries a payload i
 never answered or discarded for the payload's length: the payload, zero bytes
 included, goes to `Payload::verify`, and a payload that fails to decode follows
 §9 — a `request`'s is answered `corrupt` (§5.3). So the `request` of §9.5 whose
-payload is absent does not occur on this binding. A message above the receiver's
-configured size limit, which admits at least 294 bytes, is closed with 1009.
-Either side ends the session on purpose with 1000, the provider with 1001 when
-it shuts down; after `attached(refused)` the provider closes with 1000, and the
-reason is in the frame. A provider may close with 1008 when a session passes a
-resource limit it states, such as a cap on the responses it keeps for §7. The
-binding defines no close code of its own.
+payload is absent does not occur on this binding. One exception: a provider that
+holds the member limits of its catalog answers a `request` whose payload is
+longer than its member's limit `corrupt` without verifying it (ADR-0030 decision
+15). A message above the receiver's configured size limit, which admits at least
+294 bytes, is closed with 1009. Either side ends the session on purpose with
+1000, the provider with 1001 when it shuts down; after `attached(refused)` the
+provider closes with 1000, and the reason is in the frame. A provider may close
+with 1008 when a session passes a resource limit it states, such as a cap on the
+responses it keeps for §7. The binding defines no close code of its own.
 
 **5. The caller's identity** for §7 is the connection. It does not survive a
 reconnect: a reconnect is a new session, its counters start over, and the calls

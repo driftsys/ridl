@@ -56,7 +56,11 @@ The plan is `docs/wip/2026-10-24-lane-limits-lim1-plan.md`. One pull request,
   `lower.rs` `member_of`, `describe.rs`), moved here from LIM2 by R-16, and read
   it in the transport's member table.
 - Follow the issue body and the owner comment on #1059.
-- One pull request, `Closes #1059`, with a `BREAKING CHANGE:` footer.
+- Load the `[limits]` table of every materialized remote unit (R-24), which
+  settles driftsys/ridl#1067.
+- The plan is `docs/wip/2026-10-27-lane-limits-lim3-plan.md`.
+- One pull request, `Closes #1059` and `Closes #1067`, with a `BREAKING CHANGE:`
+  footer.
 
 ## Rules every stage follows
 
@@ -162,3 +166,67 @@ Each ruling: what was decided — why — what it costs if wrong.
   #1058 moved to LIM3 (R-16); the pass 2 review raised it. — The stage brief
   fixed the closing keyword. #1059 is commented to own the column. — #1058
   closes with the column undone if #1059 is not followed.
+- **R-24** — Owner ruling 2026-10-27, settling driftsys/ridl#1067 and reversing
+  R-6: LIM3 loads the `[limits]` table of every materialized remote unit, so a
+  consumer records the same limits as the owner and the two catalog hashes
+  agree. A remote unit's limits are recorded, not checked again on the consumer
+  side. — The alternative, a hash that excludes limits, contradicts ADR-0030
+  decision 13 and ADR-0014 decision 15. — A remote unit with a malformed
+  `[limits]` table stops a consumer's build.
+- **R-25** — Owner ruling 2026-10-27: the LIM3 pull request merges once both
+  `/review` passes are done and CI is green, as LIM1 and LIM2 did; the next
+  release from `main` is then marked breaking. — The breaking changes were
+  accepted on driftsys/ridl#1059. — None; no tag and no publish follow.
+- **R-26** — `with_max_message_bytes` returns one error,
+  `LimitOutOfRange
+  { given }`, for both ends of the range 294 to 16,292; it
+  replaces `LimitTooSmall`. — `LimitTooSmall` is a false name for a value above
+  the range, and one type is simpler than an enum of two. — A rename if the
+  owner prefers two types.
+- **R-27** — The constant is `frame::MAX_MESSAGE_LIMIT = 16_292`, written as a
+  literal with a test that derives it from 36 + 16,256. — `ridl-rt` has no
+  ceiling constant to compute it from. — None.
+- **R-28** — `MemberTable` gains `set_limit` and `limit`; `insert` and `member`
+  keep their signatures. — The member table's API does not break. — Two calls
+  instead of one for a backend that sets a limit.
+- **R-29** — An over-limit request is answered `corrupt` and records no `Note`.
+  — A payload that fails to decode records none either. — An embedder cannot see
+  the cause; an additive `Note` variant can follow.
+- **R-30** — In `request`, a repeated `seq` is answered first, then an unknown
+  member, then the length check. — ADR-0030 decision 15 does not fix the order,
+  and this order keeps the existing answers. — None.
+- **R-31** — `SCHEMA_VERSION` stays 1; the limit column is an optional field
+  appended to `Member`. — An older reader ignores it, and ADR-0030 decision 15
+  treats an absent column as "message limit alone". — None.
+- **R-32** — `from_descriptor` stores any `u32` limit and refuses none above
+  16,256. — The manifest cannot produce one. — A hand-built descriptor sets a
+  limit the message limit already bounds.
+- **R-33** — The retained-bytes minimum is the constant 16,292, not the
+  configured message limit. — ADR-0030 decision 15 and #1059 state the constant.
+  — None.
+- **R-34** — The frame specification states 16,292 as the Rust provider's
+  maximum and default only, not as a rule every receiver of the binding
+  enforces. — ADR-0030 does not decide it. — The owner may make it a binding
+  rule later.
+- **R-35** — ADR-0030 is not edited; only `docs/decisions/README.md` changes.
+  Whether the ADR's Status gains a dated "built" note is left to the owner. —
+  The record's Status is the owner's. — None.
+- **R-36** — The plan commit uses the scope `docs(roadmap)`, as the LIM1 and
+  LIM2 plans did. — Consistency with the lane. — None.
+- **R-37** — The retained-cap test of `tests/serve.rs` serves a query with the
+  loopback provider and sends replies of 4,037 bytes at the default message
+  limit, instead of the plan's 452 responses of 36 bytes. — With no member table
+  the session keeps only the last 64 responses (`RETAINED = 64` in
+  `server/calls.rs`), so 36-byte responses can never reach a cap of 16,292
+  bytes. — None; the test pins the same cap.
+- **R-38** — The design record states that an embedder who lowers the
+  retained-bytes cap keeps it at least 64 times the message limit. — At the
+  default limit 64 responses are at most 64 × 16,292 = 1,042,688 bytes, and the
+  review confirmed the arithmetic. — Wording only.
+- **R-39** — The `BREAKING CHANGE:` note of the pull request also names the
+  seventh parameter of the generated `Member::create` and the removal of
+  `LimitTooSmall`. — The `runtime-crates` freeze check reports both. — None.
+- **R-40** — The deletion of the `runtime-crates` freeze row (plan Task 6) is
+  left to the owner: the auto-mode permission check refused it as a CI bypass. —
+  Approving a break of a frozen surface is the owner's act. — The pull request's
+  freeze-check fails until the owner deletes the row.
