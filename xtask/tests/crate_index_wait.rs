@@ -64,9 +64,9 @@ fn absent_version_times_out() {
 }
 
 #[test]
-fn a_version_prefix_does_not_match() {
+fn only_the_exact_version_matches() {
     let index = index_dir("prefix");
-    write_entry(&index, "ri/dl/ridl-ir", &["0.15.0-rc.1"]);
+    write_entry(&index, "ri/dl/ridl-ir", &["0.15.0-rc.1", "0a15b0"]);
     assert_eq!(wait(&index, "ridl-ir", "0.15.0", "2").0, 1);
 }
 
@@ -84,9 +84,29 @@ fn short_names_use_the_short_paths() {
 
 #[test]
 fn upper_case_names_are_looked_up_in_lower_case() {
+    // The timeout message names the URL, so the lower-case path is checked
+    // even on a case-insensitive file system, where an upper-case path would
+    // also find the file.
     let index = index_dir("case");
-    write_entry(&index, "ri/dl/ridl-ir", &["0.15.0"]);
-    assert_eq!(wait(&index, "Ridl-IR", "0.15.0", "2").0, 0);
+    let (code, stderr) = wait(&index, "Ridl-IR", "0.15.0", "1");
+    assert_eq!(code, 1);
+    assert!(stderr.contains("/ri/dl/ridl-ir after 1 s"), "{stderr}");
+}
+
+#[test]
+fn a_version_that_appears_later_is_waited_for() {
+    let index = index_dir("later");
+    write_entry(&index, "ri/dl/ridl-ir", &["0.14.0"]);
+    let writer = {
+        let index = index.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            write_entry(&index, "ri/dl/ridl-ir", &["0.14.0", "0.15.0"]);
+        })
+    };
+    let (code, stderr) = wait(&index, "ridl-ir", "0.15.0", "30");
+    writer.join().unwrap();
+    assert_eq!(code, 0, "{stderr}");
 }
 
 #[test]

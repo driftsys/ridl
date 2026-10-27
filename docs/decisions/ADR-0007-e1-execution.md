@@ -256,16 +256,19 @@ at epic close) and cites these decisions by number.
     [driftsys/prim](https://github.com/driftsys/prim)'s `publish` job: a shell
     function compares each crate's package version against crates.io's
     `newest_version` and skips it on a match, otherwise runs
-    `cargo publish -p <crate>` and sleeps 30 seconds so the index updates before
-    a dependent crate publishes. Crates publish in dependency order —
-    `ridl-syntax`, `ridl-ir` and `ridl-rt` first, since nothing in the workspace
-    depends on them; `ridlc` last, since it depends on every other published
-    crate. A `verify` job checks the tag's commit is an ancestor of `main`
-    before either job runs, the one check this record's simpler model keeps from
-    git-std's and prim's own release trains, which additionally build, sign and
-    attest binaries — machinery this workspace's crates.io train has no use for,
-    because it ships no binary of its own; the `ridl` binary keeps shipping
-    through the `editor-v*` train instead. Decided by Sebastien on 2026-09-21.
+    `cargo publish -p <crate>`. It then waits until the version is in the index
+    that cargo reads (`.github/scripts/wait-for-crate-index.sh`), so a dependent
+    crate publishes only once the crates it needs are there; until the 0.14.0
+    release it slept a fixed 30 seconds, and the index then lagged the uploads
+    for hours. Crates publish in dependency order — `ridl-syntax`, `ridl-ir` and
+    `ridl-rt` first, since nothing in the workspace depends on them; `ridlc`
+    last, since it depends on every other published crate. A `verify` job checks
+    the tag's commit is an ancestor of `main` before either job runs, the one
+    check this record's simpler model keeps from git-std's and prim's own
+    release trains, which additionally build, sign and attest binaries —
+    machinery this workspace's crates.io train has no use for, because it ships
+    no binary of its own; the `ridl` binary keeps shipping through the
+    `editor-v*` train instead. Decided by Sebastien on 2026-09-21.
 
     _Amended (2026-10-08)._ `ridl-rt-conformance` joins the publish train,
     dropping `publish = false`, so that a runtime outside this repository can

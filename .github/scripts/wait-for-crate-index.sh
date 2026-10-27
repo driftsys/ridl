@@ -33,12 +33,15 @@ deadline=$((SECONDS + timeout))
 while :; do
     # A failed fetch (the file does not exist yet, or a network error) counts
     # as "not yet".
-    if curl -fsS "$index_url/$path" 2>/dev/null | grep -qF "\"vers\":\"$version\""; then
+    # The body is read in full before it is searched: `grep -q` stops at the
+    # first match, and under pipefail a curl still writing would then fail.
+    body="$(curl -fsS "$index_url/$path" 2>/dev/null || true)"
+    if grep -qF "\"vers\":\"$version\"" <<<"$body"; then
         echo "$crate $version is in the index"
         exit 0
     fi
     if [ "$SECONDS" -ge "$deadline" ]; then
-        echo "$crate $version is not in the index after $timeout s" >&2
+        echo "$crate $version is not in the index at $index_url/$path after $timeout s" >&2
         exit 1
     fi
     sleep "$interval"
