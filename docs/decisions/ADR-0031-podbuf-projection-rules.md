@@ -185,8 +185,11 @@ a field is appended.
      reader's behaviour is not left to the code.
    - A union arm has no separate stride (author's call): the arm descriptor's
      `len` is the arm head size the producer used, and a field past `len` reads
-     as 0. An arm whose type has no field has head size 0, so its descriptor has
-     `len` 0 and is all zero; `verify` refuses any other bytes in it.
+     as 0. An arm whose type has no field has head size 0, so the encoder writes
+     an all-zero descriptor for it. `verify` checks that descriptor as it checks
+     every arm descriptor — in bounds, 8-aligned, `len` a multiple of 8 — and
+     reads no content; so a newer producer whose arm type gained a field
+     (decision 10) is accepted, and the all-zero descriptor is still accepted.
    - A considered threshold rule (a bounded field stored inline when its
      capacity is at most 256 bytes) was dropped **(Sebastien)**; see
      "Alternatives considered".
@@ -360,7 +363,8 @@ a field is appended.
    6. For each non-empty string, the byte after the data is NUL, no NUL is
       inside the data, and the data is valid UTF-8.
    7. For each union, the tag names a declared arm and `len` is a multiple of 8;
-      then the arm is verified.
+      then the arm is verified. An arm whose type has no field has no content to
+      verify; its descriptor is checked by rule 4 like any other.
    8. For each map, the keys are strictly increasing in the order of decision 5.
    9. Each array element, union arm and map entry is verified with the same
       rules.

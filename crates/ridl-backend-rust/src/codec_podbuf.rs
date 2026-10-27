@@ -3344,10 +3344,12 @@ impl<'a> Codec<'a> {
         })
     }
 
-    /// §7 rule 7 over a union head: the tag names a declared arm and the arm
-    /// descriptor's `len` is a multiple of 8; an arm with no field is a zero
-    /// descriptor (§14 "Empty union arm"); otherwise the arm is in the tail
-    /// and checked with the same rules.
+    /// ADR-0031 decision 8 rule 7 over a union head: the tag names a
+    /// declared arm and the arm descriptor's `len` is a multiple of 8; the
+    /// descriptor is bounds-checked like any other, and the arm head in the
+    /// tail is checked with the same rules. An arm whose type has no field
+    /// has no content to check, but its descriptor is still bounds-checked,
+    /// so a producer whose arm type gained a field (decision 10) is read.
     fn union_verify(
         &self,
         at: usize,
@@ -3366,10 +3368,6 @@ impl<'a> Codec<'a> {
         for arm in &ud.arms {
             let arm = self.union_arm(arm, arms, owner)?;
             let ordinal = &arm.ordinal;
-            if arm.head.size == 0 {
-                matches.push(quote! { #ordinal => { if !__d.is_zero() { #out_of_bounds } } });
-                continue;
-            }
             let bounds = quote! {
                 if __d.len == 0 {
                     if __d.off != 0 { #out_of_bounds }
@@ -3383,6 +3381,10 @@ impl<'a> Codec<'a> {
                     )?;
                 }
             };
+            if arm.head.size == 0 {
+                matches.push(quote! { #ordinal => { #bounds } });
+                continue;
+            }
             let check = match arm.value {
                 None => {
                     let path = self.encoder_path(&arm.ty)?;

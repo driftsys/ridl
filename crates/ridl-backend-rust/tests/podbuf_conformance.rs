@@ -506,9 +506,20 @@ const V1_EVENT_PAD_5: &str = "18000000 00000000 | 0100 05 00 | 20000000 01000000
 const V1_EVENT_PAD_255: &str = "18000000 00000000 | 0100 ff 00 | 20000000 01000000 | 00000000 \
                                 | 0807060504030201 | 6100";
 
+/// `Maybe::None` as version 1 writes it: tag 1 at 0, a zero arm descriptor
+/// at 4..12 because `Blank` has no field, pad 12..16; head 16 and no tail.
+const V1_MAYBE_NONE: &str = "10000000 00000000 | 01 000000 | 00000000 00000000 | 00000000";
+
+/// `Maybe::None(Blank { n: 0 })` as version 2 writes it: the arm descriptor
+/// names the 8-byte `Blank` head at 24.
+const V2_MAYBE_NONE: &str = "10000000 00000000 | 01 000000 | 18000000 08000000 | 00000000 \
+                             | 00 00000000000000";
+
 /// The constants every evolution program reads.
 fn evolution_consts() -> String {
     [
+        ("V1_MAYBE_NONE", V1_MAYBE_NONE),
+        ("V2_MAYBE_NONE", V2_MAYBE_NONE),
         ("V1_EVENT", V1_EVENT),
         ("V2_EVENT", V2_EVENT),
         ("V1_PAGE", V1_PAGE),
@@ -531,6 +542,44 @@ fn run_evolution(fixture: &str, name: &str, main: &str) {
     rustc::run_program(
         name,
         &podbuf::program(&generated, &evolution_consts(), main),
+    );
+}
+
+/// A union arm whose type had no field in version 1 and gained one in
+/// version 2 (ADR-0031 decision 10): the version 1 reader bounds-checks the
+/// arm descriptor and reads no content, so it accepts the version 2 bytes;
+/// the version 2 reader reads the field of a zero descriptor as 0.
+#[test]
+fn an_arm_type_that_gained_a_field_is_read_by_both_versions() {
+    run_evolution(
+        "podbuf_evolution_v1.ridl",
+        "podbuf_evolution_v1_reads_v2_arm",
+        r#"
+    assert_eq!(encode(&Maybe::None(Blank {})), parse(V1_MAYBE_NONE));
+    aligned_bytes!(v2, V2_MAYBE_NONE);
+    let proof = Ref::<Maybe, Podbuf>::verify(v2).expect("v1 accepts the arm v2 wrote");
+    assert_eq!(proof.decode(), Maybe::None(Blank {}));
+    // A descriptor with `len` 0 and a non-zero `off`, and one whose data
+    // is outside the buffer, are refused as for any other arm.
+    let mut off_only = parse(V1_MAYBE_NONE);
+    off_only[12] = 24;
+    let buf = aligned(&off_only);
+    assert!(Ref::<Maybe, Podbuf>::verify(&buf.0[..off_only.len()]).is_err());
+    let mut past_end = parse(V2_MAYBE_NONE);
+    past_end[16] = 16;
+    let buf = aligned(&past_end);
+    assert!(Ref::<Maybe, Podbuf>::verify(&buf.0[..past_end.len()]).is_err());
+"#,
+    );
+    run_evolution(
+        "podbuf_evolution_v2.ridl",
+        "podbuf_evolution_v2_reads_v1_arm",
+        r#"
+    assert_eq!(encode(&Maybe::None(Blank { n: 0 })), parse(V2_MAYBE_NONE));
+    aligned_bytes!(v1, V1_MAYBE_NONE);
+    let proof = Ref::<Maybe, Podbuf>::verify(v1).expect("v2 accepts the zero arm v1 wrote");
+    assert_eq!(proof.decode(), Maybe::None(Blank { n: 0 }));
+"#,
     );
 }
 

@@ -308,8 +308,9 @@ fn rule_5_stride_mismatch_is_refused() {
 }
 
 /// §7 rules 7 and 8: a tag that names no arm and an arm length that is not a
-/// multiple of 8 are `Union`; an empty arm is a zero descriptor; map keys
-/// are strictly increasing, with `0.0` and `-0.0` one key and NaN refused.
+/// multiple of 8 are `Union`; the zero descriptor of an empty arm is
+/// accepted and one with `len` 0 and a non-zero `off` is not; map keys are
+/// strictly increasing, with `0.0` and `-0.0` one key and NaN refused.
 #[test]
 fn rule_7_and_8_unions_and_maps() {
     let out = run(

@@ -29,3 +29,13 @@ struct Entry {
 struct Entries {
   items : [Entry; 0..8]
 }
+
+/// A struct with no field: a head of size 0 in this version.
+struct Blank {}
+
+/// The tag at 0, the arm descriptor at 4..12; a head of 16 bytes. The
+/// `none` arm is a `Blank`, whose descriptor is all zero in this version.
+union Maybe {
+  none : Blank
+  some : Entry
+}

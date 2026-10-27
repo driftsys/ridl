@@ -38,3 +38,15 @@ struct Entry {
 struct Entries {
   items : [Entry; 0..8]
 }
+
+/// `Blank` gained a field: `n` at 0, pad 1..8: a head of 8 bytes.
+struct Blank {
+  n : integer [0..255]
+}
+
+/// The tag at 0, the arm descriptor at 4..12; a head of 16 bytes. The
+/// `none` arm is now an 8-byte head in the tail.
+union Maybe {
+  none : Blank
+  some : Entry
+}

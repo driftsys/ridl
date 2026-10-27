@@ -124,11 +124,13 @@ gives `EncodeError::Unaligned`; a store outside the bytes written gives
 `__ridl_podbuf_verify_at(buf, at, size, tail)`, and a nested head, an array
 element, a union arm or a map entry is checked by the function of its type. typl
 has no recursive shape, so the depth is bounded by the type. It allocates
-nothing. A boolean above 1 is `Contract` with the rule `Range`; an absent
-optional whose bytes are not zero is `Contract` with the rule `Variant`; the
-structure faults are `Malformed` variants. `Payload<Podbuf>::verify` first
-refuses a buffer longer than the reader's own `MAX_SIZE` with
-`Malformed::TooLarge`
+nothing. A union arm whose type has no field is bounds-checked through its
+descriptor and has no content check, so an older reader accepts the arm a newer
+producer wrote after the arm type gained a field. A boolean above 1 is
+`Contract` with the rule `Range`; an absent optional whose bytes are not zero is
+`Contract` with the rule `Variant`; the structure faults are `Malformed`
+variants. `Payload<Podbuf>::verify` first refuses a buffer longer than the
+reader's own `MAX_SIZE` with `Malformed::TooLarge`
 ([ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md), open item 2). The
 full list of checks, and what is not checked, is ADR-0031 decision 8.
 
