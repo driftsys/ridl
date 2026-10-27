@@ -733,8 +733,8 @@ never refuses a package: every site that named `Wire` writes the full path,
 `refuse_wire_collision` is deleted, and no name is reserved. The codec's free
 functions carry a `__ridl_fb_` prefix, which no typl name can spell.
 
-This was once a placeholder instead: `Podbuf`, with `tests/interaction_face.rs`
-hand-writing `Payload<Podbuf>` for the fixture's types, marked throwaway in its
+This was once a placeholder instead: `ReprC`, with `tests/interaction_face.rs`
+hand-writing `Payload<ReprC>` for the fixture's types, marked throwaway in its
 own module documentation. Both are gone.
 
 **The ports are `ridl-loopback`'s**, the in-process reference runtime (ADR-0020
@@ -755,7 +755,7 @@ deadline or the blocking client's timeout and by nothing else.
 ## The fixture and the round trip
 
 `crates/ridl-backend-rust/tests/fixtures/interaction_face.ridl` is a
-single-file, single-catalog package (`face.demo`) cut to what the `Podbuf`
+single-file, single-catalog package (`face.demo`) cut to what the `ReprC`
 stand-in could carry when it was written — fixed-width named scalars, one enum,
 one all-fixed-size struct, no optional field, sequence, map, union, string or
 bytes. The stand-in is gone and the generated codec carries every typl shape, so
@@ -1096,7 +1096,7 @@ is built.
 
 **The hand-written payload row was retired on 2026-09-21**, by design note D-11
 of [the FlatBuffers codec record](flatbuffers-codec.md). It read "the
-hand-written `Payload<Podbuf>` implementations", and it was blocked twice over:
+hand-written `Payload<ReprC>` implementations", and it was blocked twice over:
 the codec wrote a `Payload<FlatBuffers>` only for a declaration the projection
 minted a root table for, which was a `struct` or a `union`, while this face's
 payloads are four named scalars and one enum beside one struct. ADR-0019

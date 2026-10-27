@@ -550,11 +550,12 @@ compiled to wasm cannot see the violation. The TypeScript runtime package checks
 well-formedness at its boundary, before handing the string to the codec, and
 rejects.
 
-Two rules are an encoding's own rather than this reference's: the fixed-capacity
-form a `string` takes in a packed inline layout, and whether a terminator is
-guaranteed for a C reader. Both belong to the `podbuf` projection record
-([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 4), which is written when that backend is.
+Two rules are an encoding's own rather than this reference's: how a `string` is
+stored in an in-place layout, and whether a terminator is guaranteed for a C
+reader. Both are settled by the `podbuf` projection record
+([ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md) decision 5): the
+tail holds the bytes present followed by one NUL, and the fixed-capacity form is
+a rejected alternative of that record.
 
 ### 4.5 Bytes
 

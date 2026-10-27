@@ -24,10 +24,10 @@ With its default features the crate is `no_std` and allocates nothing; it
 contains no `unsafe` code and has no dependency in any feature combination. It
 declares one cargo feature per payload encoding — `flatbuffers`, which enables
 the FlatBuffers reading and writing helpers, `proto3`, which enables the proto3
-varint, tag, reader and writer helpers, and `podbuf`, which enables nothing in
-this version — and a `std` feature, off by default, that links the standard
-library and enables `task::block_on`, `task::noop_waker` and `task::flag_waker`,
-and the propagation hook of the `trace` module.
+varint, tag, reader and writer helpers, and `podbuf`, which enables the podbuf
+reading and writing helpers — and a `std` feature, off by default, that links
+the standard library and enables `task::block_on`, `task::noop_waker` and
+`task::flag_waker`, and the propagation hook of the `trace` module.
 
 ## Versioning
 

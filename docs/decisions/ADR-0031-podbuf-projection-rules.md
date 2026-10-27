@@ -320,8 +320,10 @@ a field is appended.
    before each aligned tail block. The encoder zero-fills those gaps, so the
    bound has to include them or the buffer would be short. The bound is computed
    once by `ridl_ir::projection::podbuf::max_size` and reaches the codegen model
-   as `Declaration.podbuf`. ADR-0030 decision 3 caps the generated `MAX_SIZE` at
-   the payload ceiling.
+   as `Declaration.podbuf`. ADR-0030 decision 3 asks each backend to cap the
+   generated `MAX_SIZE` at the payload ceiling; the podbuf codec, like the other
+   two, emits the computed bound uncapped (driftsys/ridl#996), and RIDL-150
+   reports a payload above the ceiling at check time.
 
 7. **Generated names (builder's call).** In Rust, per type `T`: `TPodbufHead`
    (the `#[repr(C, align(8))]` struct, for a struct, union or named tuple),
@@ -333,9 +335,11 @@ a field is appended.
    for the preamble, descriptor and load helpers, `<pkg>_<type>_head` for a
    head, `<pkg>_<type>_<field>` and `<pkg>_<type>_<field>_at` for accessors, and
    `<PKG>_<TYPE>_HEAD_DEFINED` for the guard macro. Every name is spelled with
-   the pinned transform of `ridl_ir::name` (ADR-0016). Each generated Rust name
-   has a claim table entry (`ridl-backend-rust/src/claims.rs`), so a ridl name
-   cannot collide with it.
+   the pinned transform of `ridl_ir::name` (ADR-0016). Each generated Rust type
+   name, `TPodbufHead`, `TPodbufView` and `TPodbufArm`, has a claim table entry
+   (`ridl-backend-rust/src/claims.rs`), so a ridl name cannot collide with it;
+   the `__ridl_podbuf_*` functions need none, because no typl name spells a
+   leading `__`, and a view accessor is the field's own name on the view type.
 
 8. **Verify.** `verify(buf) -> Result` is generated per type, in Rust only,
    because the gate is Rust (author's call). It checks, over the data present:
@@ -406,8 +410,10 @@ a field is appended.
    **Verify work bound** (author's call). Overlapping descriptors can make
    `verify` do more work than the buffer length suggests, because two
    descriptors may cover the same bytes. The work is bounded by the maxima the
-   type declares, which is the worst case of a buffer of maximum size. This
-   bound is accepted.
+   type declares: at each nesting level every descriptor can name at most its
+   bound, so the bound is the product of the nested maxima along the deepest
+   path, which can be larger than a buffer of maximum size when descriptors
+   overlap. This bound is accepted.
 
 9. **The encoder's duty (Sebastien).** The encoder writes every pad byte, the
    preamble's `reserved` word and every byte of an absent optional as zero (so
@@ -705,7 +711,7 @@ stated in the decision above; this list is the index.
    them. The answer is one of: relax the length check of
    `Payload<Podbuf>::verify` (decision 8 already bounds the work by the maxima
    the type declares), or state that an append that raises `max_size` is a
-   break.
+   break. Tracked as driftsys/ridl#1099.
 3. **`ridl build` and `ridl check --baseline` and the encodings** (decision 13):
    tracked as driftsys/ridl#1095.
 4. **A C reader for a boxed root.** The header has no reader for a payload root

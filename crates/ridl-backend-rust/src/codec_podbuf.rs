@@ -1,9 +1,8 @@
 //! The podbuf codec: the `#[repr(C, align(8))]` head struct of each struct,
 //! union and named tuple, with its pad fields and the `const` assertions that
 //! pin the layout law's numbers, and the encoder that writes the preamble,
-//! the head and the tail (ADR-0031 decisions 3 to 5, 8 to 10; the `§` numbers
-//! in this file are those of the archived design,
-//! `docs/archive/2026-10-24-podbuf-design.md`).
+//! the head and the tail (ADR-0031 decisions 3 to 5 and 8 to 10; the
+//! decision numbers in this file are those of that record).
 //!
 //! The layout is not computed here. It is read from the model's podbuf
 //! projection ([`v1::PodbufProjection`]), which `ridl_ir::projection::podbuf`
@@ -24,24 +23,27 @@
 //! `Payload<Podbuf>` implementation (`Self::BUFFER` an
 //! 8-aligned zeroed array of `MAX_SIZE` bytes) calls them.
 //!
-//! `verify` checks the rules of §7 in one pass over the data present: the
+//! `verify` checks the rules of ADR-0031 decision 8 in one pass over the
+//! data present: the
 //! preamble, each boolean, enum, enum set and flags byte, each typl
 //! constraint, each descriptor's bounds, stride, terminator and key order,
 //! and each element, entry and arm with the same rules. It is not recursive:
 //! a nested head is checked by that type's own `__ridl_podbuf_verify_at`,
 //! and typl has no recursive shape, so the call depth is bounded by the type
-//! (§14 "Verify depth"). Pad bytes, uncovered tail bytes and overlapping
+//! (decision 8, "Verify is a call tree"). Pad bytes, uncovered tail bytes and
+//! overlapping
 //! descriptors are not checked, by design. The view's accessors and `verify`
 //! read through `ridl_rt::podbuf::Region`, which reads 0 past the size the
-//! producer wrote (§8.1), and allocate nothing; `decode` allocates for a
+//! producer wrote (decision 10), and allocate nothing; `decode` allocates for a
 //! `String`, a `Vec` and a map as the other codecs do.
 //!
-//! The encoder's duties (§7): every pad byte, the preamble's `reserved` word
-//! and every byte of an absent optional are zero, which `Writer` guarantees
-//! by zero-filling what it reserves; the tail holds only the data present, in
-//! field order depth first (§14); a map's entries are sorted by key (§6); a
-//! string holding U+0000, a duplicate map key and a NaN map key are refused;
-//! a deprecated field is written as its init value (§8.1).
+//! The encoder's duties (decision 9): every pad byte, the preamble's
+//! `reserved` word and every byte of an absent optional are zero, which
+//! `Writer` guarantees by zero-filling what it reserves; the tail holds only
+//! the data present, in the order of the head's placements, depth first
+//! (decision 4, "Tail order"); a map's entries are sorted by key (decision
+//! 5); a string holding U+0000, a duplicate map key and a NaN map key are
+//! refused; a deprecated field is written as its init value (decision 10).
 
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::{format_ident, quote};
@@ -202,9 +204,6 @@ impl Prim {
         quote! { ::core::primitive::#name }
     }
 
-    /// `lang`, an `i64` or `f64` of the language layer, as this primitive. An
-    /// `i64` and an `f64` need no cast, and a cast to the same type draws
-    /// `clippy::unnecessary_cast` in a consumer's build.
     /// The literal `value` with this primitive's suffix, so that no cast is
     /// written on a literal (`clippy::unnecessary_cast`).
     fn literal(self, value: u32) -> TokenStream {
@@ -213,6 +212,9 @@ impl Prim {
             .unwrap_or_else(|_| quote! { #value })
     }
 
+    /// `lang`, an `i64` or `f64` of the language layer, as this primitive. An
+    /// `i64` and an `f64` need no cast, and a cast to the same type draws
+    /// `clippy::unnecessary_cast` in a consumer's build.
     fn cast(self, lang: TokenStream) -> TokenStream {
         if self.0 == "i64" || self.0 == "f64" {
             return lang;
@@ -1183,7 +1185,7 @@ impl<'a> Codec<'a> {
                         message: format!("a field of `{owner}` carries no type"),
                     })?;
                     if member.deprecated.is_some() {
-                        // §8.1: a deprecated field is written as its init
+                        // Decision 10: a deprecated field is written as its init
                         // value, so a reader that still reads it sees a
                         // valid value. With no derivable init the bytes stay
                         // zero; the checker refuses that case when the type
@@ -1434,7 +1436,7 @@ impl<'a> Codec<'a> {
 
     /// A bounded string: the descriptor at `at`, the UTF-8 bytes and one NUL
     /// in the tail. An empty string is a zero descriptor with no tail. A
-    /// string holding U+0000 is refused (§6): its NUL terminator could not
+    /// string holding U+0000 is refused (decision 5): its NUL terminator could not
     /// be told from its data.
     fn text_write(
         &self,
@@ -1500,7 +1502,8 @@ impl<'a> Codec<'a> {
     /// A bounded array: the count is checked against its bound, the block
     /// of elements is reserved at the element's alignment, the descriptor is
     /// written, and each element is written at its stride, its own tail
-    /// after the block (§14). An empty array is a zero descriptor.
+    /// after the block (decision 4, "Tail order"). An empty array is a zero
+    /// descriptor.
     fn array_write(
         &self,
         array: &v1::PodbufArray,
@@ -1553,7 +1556,7 @@ impl<'a> Codec<'a> {
     }
 
     /// A map: the count is checked, a NaN key is refused, the entries are
-    /// sorted by key in the order of §6 (bytewise for a string or bytes,
+    /// sorted by key in the order of decision 5 (bytewise for a string or bytes,
     /// numeric otherwise) and a duplicate key is refused, then the block of
     /// entry heads is written at alignment 8, each entry `{ key, value }` at
     /// its stride with its own tail after the block.
@@ -1735,7 +1738,7 @@ impl<'a> Codec<'a> {
                 KeyOrder {
                     // A NaN key is refused first, so the partial order is
                     // total here; `+0.0` and `-0.0` compare equal and are
-                    // one key (§6).
+                    // one key (decision 5).
                     compare: quote! {
                         ::core::cmp::PartialOrd::partial_cmp(&#la, &#lb)
                             .unwrap_or(::core::cmp::Ordering::Equal)
@@ -1766,7 +1769,7 @@ impl<'a> Codec<'a> {
 
     /// The `match` over a union's arms: the tag, then the arm's head in the
     /// tail behind the arm descriptor. An arm whose head has no field is a
-    /// zero descriptor (§14 "Empty union arm").
+    /// zero descriptor (decision 3).
     fn union_body(
         &self,
         at: usize,
@@ -1903,7 +1906,7 @@ impl<'a> Codec<'a> {
 
 /// Where a head's bytes are read from: the buffer, the offset of the head in
 /// it, and the size the producer wrote for it. Every load goes through a
-/// `Region` over the three, which reads 0 past `size` (§8.1).
+/// `Region` over the three, which reads 0 past `size` (decision 10).
 #[derive(Clone)]
 struct Place {
     buf: TokenStream,
@@ -2892,7 +2895,7 @@ impl<'a> Codec<'a> {
             match self.presence(at, field, owner)? {
                 None => checks.push(self.verify_form(form, &ty, place, &off, owner)?),
                 Some((flags, mask)) => {
-                    // §7 rule 2: an absent optional's bytes are zero; a
+                    // Decision 8 rule 2: an absent optional's bytes are zero; a
                     // present one is checked as any value.
                     let present = Self::present_bit(place, flags, &mask);
                     let inner = self.verify_form(form, &Self::present(&ty), place, &off, owner)?;
@@ -2959,7 +2962,7 @@ impl<'a> Codec<'a> {
     }
 
     /// The statements that check a value of `form` at `off` of `place`: the
-    /// rules of §7 for that shape, then its elements, entries or arm with
+    /// rules of decision 8 for that shape, then its elements, entries or arm with
     /// the same rules. Over `__tail`, the first byte of the tail.
     fn verify_form(
         &self,
@@ -3033,7 +3036,7 @@ impl<'a> Codec<'a> {
                         }
                         _ => None,
                     };
-                    // §7 rule 4: a `len` of 0 is a zero descriptor with no
+                    // Decision 8 rule 4: a `len` of 0 is a zero descriptor with no
                     // data; otherwise `len` is at most four bytes per
                     // scalar value of the bound, and the data and its NUL
                     // are in the tail. Rule 6 checks the bytes, then rule 3
@@ -3174,7 +3177,7 @@ impl<'a> Codec<'a> {
         })
     }
 
-    /// §7 rule 5: the condition under which `__d.elem_size` is wrong for
+    /// Decision 8 rule 5: the condition under which `__d.elem_size` is wrong for
     /// `element`: not a multiple of 8 for a head, not the exact size for
     /// anything else.
     fn stride_check(&self, element: &v1::PodbufForm) -> TokenStream {
@@ -3188,7 +3191,7 @@ impl<'a> Codec<'a> {
     }
 
     /// The checks of the block an array or map descriptor at `off` names
-    /// (§7 rules 4, 5 and 9): a `len` of 0 is a zero descriptor; otherwise
+    /// (decision 8 rules 4, 5 and 9): a `len` of 0 is a zero descriptor; otherwise
     /// the stride is checked, the block is in the tail at `align`, the count
     /// is within `min..=max`, and `inner` runs over each element at
     /// `(__b, __es, __ez)`.
@@ -3248,7 +3251,8 @@ impl<'a> Codec<'a> {
         }
     }
 
-    /// §7 rule 8 and §6: over entry `__i` at `(__es, __ez)`, a NaN float
+    /// Decision 8 rule 8 and decision 5: over entry `__i` at `(__es, __ez)`, a
+    /// NaN float
     /// key is refused, and the key is strictly above the previous entry's
     /// key: bytewise for a string or bytes, numeric at its width otherwise.
     fn key_order_check(

@@ -56,3 +56,7 @@ baseline = "v0.10.0"
 [[surface]]
 name = "manifest"
 baseline = "4edf558aa886619b0338b9808d7fcae7514b3cf1"
+
+[[surface]]
+name = "cli"
+baseline = "4edf558aa886619b0338b9808d7fcae7514b3cf1"

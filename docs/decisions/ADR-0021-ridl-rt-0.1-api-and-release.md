@@ -414,7 +414,7 @@ trusted with no `unsafe` and no second verification pass.
    `bytes: &[u8]`. **One consumer in the tree does assume a prefix**, and it is
    named here rather than left to be found: `ridl-backend-rust`'s `encode_into`
    returns `encoded.bytes().len()`, and the face it emits sends `&buf[..len]`.
-   That is correct today, because that code names `Podbuf`, whose encoder writes
+   That is correct today, because that code names `ReprC`, whose encoder writes
    a prefix; it stops being correct the moment the face names an encoding that
    does not, so it changes with the face, in the stage that takes D-11. Passing
    `encoded.bytes()` itself, rather than a length the caller re-slices from the
@@ -434,8 +434,8 @@ trusted with no `unsafe` and no second verification pass.
    The paragraph above expected this to land with D-11, in the stage that moves
    the face onto `Wire`; it landed a stage early instead, because D-11 was then
    blocked: a payload type that mints no root table has no FlatBuffers root at
-   all (driftsys/ridl#470). At the time the emitted code still named `Podbuf`,
-   so nothing observable changed — what changed is that it became
+   all (driftsys/ridl#470). At the time the emitted code still named `ReprC`, so
+   nothing observable changed — what changed is that it became
    encoding-independent, which is the property this amendment asked for. **D-11
    has since landed** (stage K9b): the emitted code names the package's own
    `Wire` alias, which is `::ridl_rt::encoding::FlatBuffers`, and the subslice
@@ -550,8 +550,10 @@ trusted with no `unsafe` and no second verification pass.
    generated `verify` returns. It decides no layout, takes no dependency,
    allocates nothing and has no `unsafe` code, so the three constraints this
    crate holds to are unaffected, and `just wasm-check` and `just compat-check`
-   cover it through their `--all-features` invocations. `podbuf` still enables
-   nothing. Under decision 10 the change is additive.
+   cover it through their `--all-features` invocations. `repr-c`, since renamed
+   `podbuf`, still enabled nothing at the time; it gates the `podbuf` module
+   since [ADR-0031](ADR-0031-podbuf-projection-rules.md). Under decision 10 the
+   change is additive.
 
 9. **`Contract` and `CallError` stay exhaustive; every other error enum stays
    `#[non_exhaustive]`.** `Contract`'s variants are ridl §10.2's fixed

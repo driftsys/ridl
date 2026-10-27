@@ -2724,7 +2724,7 @@ impl<'a> Codec<'a> {
     /// A FlatBuffers root is a table, and each of these three kinds inlines to
     /// a bare scalar at a field position, so before ADR-0019 decision 8 none of
     /// them had a root and none of them carried a codec — which is what left
-    /// the generated face on its `Podbuf` placeholder (driftsys/ridl#470, closed
+    /// the generated face on its `ReprC` placeholder (driftsys/ridl#470, closed
     /// by moving the face onto this codec). The
     /// box is `table <Name>Box { value: <resolved type> (id: 0); }`, the same
     /// table decision 2 gives a non-table union arm, so the three bodies are

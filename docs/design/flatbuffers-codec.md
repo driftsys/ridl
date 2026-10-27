@@ -16,12 +16,12 @@ and its plan
 [`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md).
 
 **Every decision of that note is built.** The last was D-11, the generated
-interaction face moving off its `Podbuf` placeholder and onto this codec,
-landed: the face names `::ridl_rt::encoding::FlatBuffers` at every buffer it
-sizes and every `Ref` it builds (through a per-package `pub type Wire` alias
-until 2026-09-29, when the
+interaction face moving off its `ReprC` placeholder and onto this codec, landed:
+the face names `::ridl_rt::encoding::FlatBuffers` at every buffer it sizes and
+every `Ref` it builds (through a per-package `pub type Wire` alias until
+2026-09-29, when the
 [generated-name collision design](../technotes/rust-backend-name-collisions.md)
-removed it, driftsys/ridl#588), and the hand-written `Payload<Podbuf>`
+removed it, driftsys/ridl#588), and the hand-written `Payload<ReprC>`
 implementations its fixture carried are deleted. The projection decision that
 had blocked it, **driftsys/ridl#470**, is
 [ADR-0019 decision 8](../decisions/ADR-0019-flatbuffers-projection-rules.md):

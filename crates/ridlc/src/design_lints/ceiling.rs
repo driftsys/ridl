@@ -87,8 +87,9 @@ pub(super) struct Entry {
     pub(super) podbuf: Side,
 }
 
-/// The size of `shape` under podbuf. The codegen model carries no podbuf
-/// state, so the sizer states it here, from the same shape the lowering
+/// The size of `shape` under podbuf. The codegen model carries a podbuf
+/// state per declaration (`Declaration.podbuf`), not per interaction
+/// payload, so the sizer states it here, from the same shape the lowering
 /// sizes for the other encodings. `None` is a payload with no shape.
 fn podbuf_side(
     package: &v2::Package,

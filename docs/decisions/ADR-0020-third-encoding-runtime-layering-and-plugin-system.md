@@ -153,13 +153,14 @@ proto3 when the program names none. The row is changed in place.
 
 **Amended 2026-10-12 — decision 3, the `#[repr(C)]` removal landed ahead of the
 backend it was sequenced with.** The decision tied the removal to roadmap story
-E11.12, the `podbuf` backend that replaces the attribute, which is not built. It
-is taken now instead, because [ADR-0029](ADR-0029-stability-policy.md) freezes
-the generated crate and the attribute is part of that surface: removing it
-before the surface's row is added to `freeze/surfaces.toml` costs nothing, and
-removing it after would be a break of a frozen surface. The amendment is written
-into decision 3 in place; what that decision says about the layout belonging to
-decision 1's separate struct is unchanged.
+E11.12, the `repr(C)` backend (since renamed `podbuf`) that replaces the
+attribute, which was not built at the time. It is taken now instead, because
+[ADR-0029](ADR-0029-stability-policy.md) freezes the generated crate and the
+attribute is part of that surface: removing it before the surface's row is added
+to `freeze/surfaces.toml` costs nothing, and removing it after would be a break
+of a frozen surface. The amendment is written into decision 3 in place; what
+that decision says about the layout belonging to decision 1's separate struct is
+unchanged.
 
 **Amended 2026-10-25 — decisions 1, 5 and 9, the encoding is named `podbuf`.**
 Decision 1's encoding is named `podbuf`, where it was named `repr(C)`. Decision
@@ -298,9 +299,10 @@ as its public contract.
 
    **Amendment (2026-10-12) — the removal has landed, ahead of that backend.**
    `emit_struct` emits no layout attribute. The removal was sequenced with the
-   backend that replaces the attribute, which is not built; it is taken earlier
-   because [ADR-0029](ADR-0029-stability-policy.md) freezes the generated crate,
-   and a break of that surface is far cheaper before its row is added to
+   backend that replaces the attribute, which was not built at the time (it is
+   now, as `podbuf`); it was taken earlier because
+   [ADR-0029](ADR-0029-stability-policy.md) freezes the generated crate, and a
+   break of that surface is far cheaper before its row is added to
    `freeze/surfaces.toml` than after. What this decision says about the layout
    belonging to decision 1's separate struct is unchanged.
 

@@ -1,10 +1,12 @@
 # podbuf Implementation Plan
 
 > **Status, 2026-10-27.** Tasks 1 to 12 and 15 are built, and Task 16 is built
-> except its Step 5 (the four freeze rows), which is a follow-up pull request.
-> **Tasks 13 and 14 are open:** both wait for the typl `open` keyword, which is
-> not built, so this plan stays in `docs/wip/`. The design it implements is
-> archived at `docs/archive/2026-10-24-podbuf-design.md`, and its decisions are
+> except its Step 5 (three freeze rows: `wire`, `codegen-protocol` and
+> `runtime-crates`; the `cli` row, whose dump only gained lines, is restored in
+> this pull request), which is a follow-up pull request. **Tasks 13 and 14 are
+> open:** both wait for the typl `open` keyword, which is not built, so this
+> plan stays in `docs/wip/`. The design it implements is archived at
+> `docs/archive/2026-10-24-podbuf-design.md`, and its decisions are
 > [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md); the as-built
 > codec is [`../design/podbuf-codec.md`](../design/podbuf-codec.md). The
 > `docs/wip/2026-10-24-podbuf-design.md` path that the text below cites is now

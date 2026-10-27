@@ -79,8 +79,10 @@ For each struct, union and named induced tuple, the Rust codec emits:
 
 A named scalar, an enum and an enum set used as a payload root has a view with
 one accessor, `value`, the `Payload<Podbuf>` implementation, and no head struct.
-The claim table reserves every generated name, so a ridl name cannot collide
-with one.
+The claim table reserves the generated type names, `TPodbufHead`, `TPodbufView`
+and `TPodbufArm`, so a ridl name cannot collide with one; the `__ridl_podbuf_*`
+functions need no claim, because no typl name spells a leading `__`, and a view
+accessor is the field's own name on the view type.
 
 The generated code holds no `unsafe`. The only access to the buffer is through
 `ridl_rt::podbuf::Region`, which reads a little-endian value over a
@@ -145,7 +147,10 @@ fail after `verify`, and it is the price of generated code with no `unsafe`.
 **`MAX_SIZE`** is the preamble, the head and the largest tail, computed by
 `ridl_ir::projection::podbuf::max_size`, with every optional present and every
 bound at its maximum, and with the worst-case alignment gap before each aligned
-tail block. ADR-0030 decision 3 caps it at the payload ceiling.
+tail block. ADR-0030 decision 3 asks each backend to cap the generated
+`MAX_SIZE` at the payload ceiling; the podbuf codec, like the other two, emits
+the computed bound uncapped (driftsys/ridl#996), and RIDL-150 reports a payload
+above the ceiling at check time.
 
 ## The face names this codec through `Payload<Podbuf>` and `Sizes<Podbuf>`
 
@@ -218,7 +223,7 @@ The encoding has no second implementation, so the oracle is the law itself.
 | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | `ridl build` and `ridl check --baseline` do not pass the manifest's `[backend.<name>] encodings` to the diff                     | driftsys/ridl#1095            |
 | `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                                            | the typl change it depends on |
-| `Payload<Podbuf>::verify` refuses a buffer longer than its own `MAX_SIZE`, which a compatible append can raise (ADR-0031 item 2) | open item of the record       |
+| `Payload<Podbuf>::verify` refuses a buffer longer than its own `MAX_SIZE`, which a compatible append can raise (ADR-0031 item 2) | driftsys/ridl#1099            |
 | The C header has no reader for a payload root that is a named scalar, an enum or an enum set                                     | driftsys/ridl#1096            |
 | A string that holds U+0000 cannot be encoded                                                                                     | a limit of the encoding       |
 | TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                      | ADR-0020 decision 2           |
