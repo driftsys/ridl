@@ -296,7 +296,8 @@ member; rsdl is the apex.
     just pre-push        lint-commits + the static-check members of build,
                          ts-check included; skips freeze-check, compile, lint,
                          test, wasm-check, compat-check, demo, ts-e2e,
-                         cabin-ws-demo, ts-npm-check, and install-check — wired as the pre-push hook
+                         cabin-ws-demo, ts-npm-check, and install-check — wired as the pre-push hook,
+                         which skips it on a push of tags only
     just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
     just book-build      render the book to ./book — what CI publishes to Pages
@@ -308,8 +309,13 @@ member; rsdl is the apex.
                          vsce-target)
     just package-vscode  build ridl for this machine and package the extension
                          (local testing)
-    just release         freeze check --release, then git std bump — version,
-                         changelog, tag
+    just release         on a main commit whose ci passed: freeze check
+                         --release, git std bump --no-commit, release-sync, a
+                         lockfile and derived-pin check, then the release
+                         commit and the v and editor-v tags, all local
+    just release-sync    update the version pins git std bump cannot write
+    just release-push    push main, wait for ci on the release commit, then
+                         push the two tags
     just install         ./bootstrap — toolchain, git hooks, gate requirements
 
 Full recipe set: `justfile`. The toolchain conventions come from

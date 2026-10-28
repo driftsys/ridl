@@ -27,13 +27,36 @@ follows in separate issues, and the change to `with_max_message_bytes` is a
 breaking change of the published `ridl-transport-ws` API, released in a version
 marked breaking.
 
+Amended 2026-10-28 from the owner's decisions of that day: decisions 1, 2, 5, 7,
+10, 11, 12, 13, 14 and 15 are changed in place, and decisions 16, 17 and 18 are
+added. Each kind has a default payload ceiling: 3,840 bytes for a signal and an
+event, 16,128 bytes for a command and a query, and 65,280 bytes for a fixed.
+Each ceiling bounds the longest copy that nothing can interrupt (decision 16).
+The largest payload becomes 65,280 bytes for a fixed and 16,128 bytes for every
+other kind, where it was 16,256, and the WebSocket message limit becomes 36 +
+16,128 = 16,164 bytes, lowered from 16,292. A `[limits.interaction]` entry may
+raise one member above its kind's default, up to 16,128 bytes, or 65,280 for a
+fixed. How a transport moves a payload, whole or split, is a rule of each
+transport binding, not of the language, the catalog, the descriptor or
+`ridl-rt`. The amendment lands as a decision first; the code follows in
+driftsys/ridl#1108. It is a breaking change: a signal or an event whose payload
+is larger than 3,840 bytes with no entry for it, and a `[limits]` entry above
+what decision 12 allows, stop compiling, and the WebSocket binding refuses at
+attach a catalog whose fixed is larger than its message limit. The values 16,256
+and 16,292 are on `main` from driftsys/ridl#1098 and not yet released, so the
+amendment is released in the same version marked breaking as the transport
+limits of the amendment of 2026-10-24.
+
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
 limit in the IR and the catalog hash of decision 13 (driftsys/ridl#1065), and
 the WebSocket limits of decisions 10 and 15 with the descriptor's limit column
 (driftsys/ridl#1098). Decisions 3 and 4 are not built: `MAX_SIZE` is not capped
 at the ceiling, and `ridl-rt` has no `PAYLOAD_CEILING` and no
-`EncodeError::TooLarge` (driftsys/ridl#996).
+`EncodeError::TooLarge` (driftsys/ridl#996). The amendment of 2026-10-28 is not
+built (driftsys/ridl#1108): the code still uses 16,256 as the ceiling, the
+WebSocket limits of decisions 10 and 15 are built at 16,292, and decisions 16 to
+18 are not built.
 
 When accepted, these records gain a dated note or are changed in place:
 
@@ -55,6 +78,31 @@ When accepted, these records gain a dated note or are changed in place:
   `docs/design/ridl-transport-ws.md`, the frame specification §11.1, and the
   records of the `ridl diff` categories (`docs/book/cli-reference.md`,
   `docs/book/evolving-an-interface.md`).
+- From the amendment of 2026-10-28, when its code lands: ADR-0002 (the note of
+  2026-10-24: the range of a `[limits]` value and MANI-022), ADR-0024 (the note
+  of 2026-10-24: the kinds RIDL-150 checks, and the error RIDL-157), the ridl
+  reference's diagnostics table (the RIDL-150 and RIDL-151 rows, and a new
+  RIDL-157 row), the family overview §7 (the MANI-022 row), the typl reference
+  §4.4 and §4.5 (the ceiling of 16,128 bytes, and the smaller default ceiling of
+  a signal and an event), `docs/book/lints.md` (the paragraphs on
+  `payload-above-ceiling` and on `[limits]`, including the sentence that a
+  `fixed` is not checked), `docs/book/cli-reference.md` (the `[limits]` section:
+  the order that resolves a limit, the raise by a `[limits.interaction]` entry,
+  MANI-022, RIDL-150, RIDL-151 and RIDL-157), `docs/design/interaction-face.md`,
+  `docs/design/ridl-rt.md` and `docs/design/flatbuffers-codec.md` (no `BUFFER`
+  above 16,128 bytes on the stack, and a fixed above that read through a view
+  and encoded through the caller-buffer API),
+  `docs/design/catalog-descriptor.md` (an absent `limit` means the default
+  ceiling of the member's kind, and a raised limit of a signal or an event is
+  above 3,840 bytes), `docs/design/ridl-transport-ws.md` (the message limit of
+  16,164 bytes, the smallest retained cap, the arithmetic of the retained bytes,
+  and the refusal at attach of a catalog whose fixed is larger than the message
+  limit), the frame specification §11.1 "The sizes" and item 4 (the ceilings,
+  the largest message of 16,164 bytes, that the WebSocket binding carries one
+  payload per message, and the refusal at attach), and the freeze dumps
+  `freeze/diagnostics.txt` and the `runtime-crates` dump, and
+  `freeze/accepted-sources.txt` and `freeze/manifest.txt` where a frozen source
+  or manifest is affected.
 
 ## Context
 
@@ -91,6 +139,8 @@ When accepted, these records gain a dated note or are changed in place:
   no total bound. They are not built (driftsys/ridl#336).
 - The target transport model is shared memory with 4 KiB pages, a seqlock and a
   header of one or two cache lines.
+- On 2026-10-28 the owner set the ceilings of each kind from how long a copy of
+  the value may block other work (decision 16).
 
 ## Decision
 
@@ -98,14 +148,33 @@ When accepted, these records gain a dated note or are changed in place:
    four 4 KiB pages. A transport reserves at most 128 bytes of it for the header
    of a message that carries a payload. The WebSocket data-plane header is at
    most 36 bytes, so it fits; the `attach` frame carries no payload and is
-   limited by the frame specification alone.
+   limited by the frame specification alone. Amended 2026-10-28: the payload
+   ceiling is no longer this transfer minus its header; it is set for each kind
+   (decision 16). The transfer does not say how a transport moves a payload.
+   Whether a payload travels whole in one message, or is split and queued page
+   by page, is a rule of each transport binding, not of the language, the
+   catalog, the descriptor or `ridl-rt`. The rule that one payload travels in
+   one message is a rule of the WebSocket binding only: its message limit of
+   36 + 16,128 = 16,164 bytes (decision 10) carries every payload of a signal,
+   an event, a command or a query whole. Until that binding can split a payload
+   over several messages, it refuses at attach a catalog whose fixed is larger
+   than its message limit, naming the member (decision 15). Another binding may
+   split a payload. Nothing about pages, slots or splitting is added to the
+   catalog, the descriptor or `ridl-rt`.
 
 2. **The payload ceiling is 16,256 bytes** (16,384 − 128). It is a platform
    rule, stated in the specifications, and it is the same for every encoding,
    runtime and transport. It counts the encoded payload only. The ceiling is
    changed only by amending this record, because a peer with a lower ceiling
    refuses what a peer with a higher one sends; ADR-0029's rule that size values
-   are not frozen is otherwise unchanged.
+   are not frozen is otherwise unchanged. Amended 2026-10-28: the payload
+   ceiling is set for each kind (decision 16). It is 16,128 bytes for a signal,
+   an event, a command and a query after any raise (decision 18), and 65,280
+   bytes for a fixed. 65,280 is the largest payload of any interaction, and
+   `ridl-rt`'s planned `PAYLOAD_CEILING` is 65,280. How the cap of decision 3
+   and the refusal of decision 4, which are not built, apply the smaller ceiling
+   of the other kinds is settled when they are built (driftsys/ridl#996). 16,128
+   is also the largest `bytes` bound that decision 6 advises.
 
 3. **`MAX_SIZE` is capped at the ceiling.** The IR size states, the catalog
    descriptor's size rows and the codegen `Model` stay as computed, so they
@@ -151,7 +220,12 @@ When accepted, these records gain a dated note or are changed in place:
    stack. A call holds an argument buffer and a reply buffer; a client also
    holds its next-event buffer, and a server one interface-wide claim buffer.
    The owner judged that size acceptable. The encode API that takes a caller's
-   buffer stays as the alternative for a target with a smaller stack.
+   buffer stays as the alternative for a target with a smaller stack. Amended
+   2026-10-28: generated code puts no `BUFFER` larger than 16,128 bytes on the
+   stack. A signal, an event, a command and a query are at most 16,128 bytes
+   (decision 2), so their `BUFFER` stays as this decision states. A fixed above
+   16,128 bytes is read through a view, in place, and its provider encodes it
+   through the encode API that takes a caller's buffer.
 
 6. **The largest advised bound is 4,032 characters for `string` and 16,128 bytes
    for `bytes`.** A string at 4,032 characters is at most 16,128 bytes of UTF-8.
@@ -172,6 +246,14 @@ When accepted, these records gain a dated note or are changed in place:
      interaction that carries the payload, so a type no interaction carries is
      not reported. Its row goes in the ridl reference's diagnostics table, and
      in the profile codes that the corpus test lists.
+   - Amended 2026-10-28: RIDL-150 reports a `command` or a `query` whose payload
+     is above 16,128 bytes, and a `fixed` whose payload is above 65,280 bytes,
+     or either with no finite bound, where no `[limits]` entry gives the
+     interaction its limit. It now sizes a `fixed`, which it did not before. A
+     signal and an event are checked by RIDL-157 (decision 17), and an
+     interaction that an entry gives a limit by RIDL-151 (decision 14), so
+     RIDL-150 reports neither. Its message gives the ceiling of the
+     interaction's kind.
    - Both messages say that the payload ceiling is 16,256 bytes and that the
      codecs do not yet enforce it; once the codecs refuse a larger value, as
      decision 4 will make them, the messages will say that. A package can raise
@@ -200,12 +282,17 @@ When accepted, these records gain a dated note or are changed in place:
     withdrawn, because the limit sizes the platform memory. A deployment that
     lowers the limit below what its catalog's limits allow (decision 15) closes
     the session of a peer that stays within them, so a lower value is for a
-    deployment that knows its peers.
+    deployment that knows its peers. Amended 2026-10-28: the largest data-plane
+    message is 36 + 16,128 = 16,164 bytes, so the default and the largest value
+    are 16,164, not 16,292.
 
 11. **Data larger than one transfer is a stream.** A firmware image, a file or
     an image larger than 16 KiB is modelled as a stream of bounded elements
     (ridl reference §12). Until streams are built (driftsys/ridl#336) the
-    platform carries no single value larger than one transfer.
+    platform carries no single value larger than one transfer. Amended
+    2026-10-28: a value larger than 16,128 bytes, or 65,280 bytes for a fixed,
+    is a stream; no `[limits]` entry raises a member above it. A separate
+    record, ADR-0032, drafted in parallel, covers byte streams.
 
 12. **Each interaction has its own payload limit, set in the manifest** (added
     2026-10-24). Each kind of interaction may allocate and carry its payload in
@@ -246,7 +333,21 @@ When accepted, these records gain a dated note or are changed in place:
     codes are MANI-021 for an unknown kind, MANI-022 for a value above the
     ceiling, and RIDL-152 for a name that matches no interaction. The ceiling
     stays the upper bound for every interaction and is changed only by amending
-    this record.
+    this record. Amended 2026-10-28: the last step of that order is the default
+    ceiling of the interaction's kind (decision 16), and with no `[limits]`
+    table every interaction's limit is that default. A `[limits.kind]` entry
+    above the default of its kind (3,840 for `signal` and `event`, 16,128 for
+    `command` and `query`, 65,280 for `fixed`) is MANI-022, which now means a
+    value above what the entry may give. `default` applies to each kind up to
+    that kind's default, with no error: a signal or an event whose limit comes
+    from a `default` above 3,840 has the limit 3,840. A `[limits.interaction]`
+    entry may raise its member above the default of its kind, up to 16,128, or
+    65,280 for a fixed (decision 18). The manifest layer raises MANI-022 for a
+    `[limits.kind]` entry and for a `[limits.interaction]` entry above 65,280.
+    An entry between 16,129 and 65,280 is valid only when it names a fixed, and
+    the manifest layer does not know the kind of the member a key names, so the
+    pass of `ridlc` that resolves the keys raises MANI-022 for it, on the value,
+    as the checker raises MANI-009.
 
     The limits are in the manifest, not in an attribute, because a signal, an
     event and a fixed take no attribute block (`family-general-form.md` §4.3),
@@ -264,6 +365,14 @@ When accepted, these records gain a dated note or are changed in place:
     Two peers whose limits differ therefore have different hashes, neither
     accepts the other, and the attach is refused (frame specification §6.1). The
     catalog descriptor's member table gains a column with each member's limit.
+    Amended 2026-10-28: an interaction whose limit is the default ceiling of its
+    kind because no entry applies records no limit. The default ceiling of a
+    kind is a platform constant, not recorded in the IR, so a unit whose entries
+    are unchanged keeps its catalog hash. A limit that an entry gives is
+    recorded, covered by the hash and carried in the descriptor's limit column,
+    as before, including a limit that an entry raises above the default of its
+    kind (decision 18). An absent limit in the IR and in the descriptor means
+    the default ceiling of the member's kind.
 
 14. **A payload above a declared limit is an error** (added 2026-10-24). When a
     `[limits]` entry gives an interaction its limit, and the computed bound of
@@ -277,7 +386,12 @@ When accepted, these records gain a dated note or are changed in place:
     stops compiling, and the ros2 corpus is unchanged. A call checks its
     arguments and its reply against its one limit; a signal, a fixed and an
     event check their value. RIDL-150 does not size a `fixed` today, so RIDL-151
-    adds that sizing.
+    adds that sizing. Amended 2026-10-28: RIDL-151 checks an interaction of any
+    kind against the limit that an entry gives it, including a raised limit
+    (decision 18). Where no entry applies, a signal and an event are checked by
+    the error RIDL-157 (decision 17), and a fixed, a command and a query by
+    RIDL-150 at `warn` (decision 7). One interaction draws at most one of the
+    three.
 
 15. **The transport derives its limits from the catalog** (added 2026-10-24). A
     server whose backend has a member table reads each member's limit from it.
@@ -302,7 +416,94 @@ When accepted, these records gain a dated note or are changed in place:
     Rust provider's maximum and default; the frame specification does not make
     it a rule for every receiver of the binding. `with_max_retained_bytes` keeps
     its role of sizing the memory an embedder grants a session, above that
-    minimum.
+    minimum. Amended 2026-10-28: every 16,292 in this decision reads 16,164, the
+    largest message of decision 10 as amended. A `request` whose arguments are
+    longer than a limit that an entry raised (decision 18) is still answered
+    against that member's limit in the member table. The binding carries one
+    payload per message, so until it can split a payload over several messages,
+    a provider refuses at attach a catalog that holds a fixed whose payload's
+    largest encoded size, in the session's encoding, does not fit in one message
+    within its message limit, and names the member. A fixed whose payload fits
+    is served as before, whatever its ceiling. Splitting a fixed over several
+    messages is tracked with the stream framing of ADR-0032, drafted in
+    parallel.
+
+16. **Each kind has a default payload ceiling** (added 2026-10-28). The default
+    ceiling of each kind, in bytes of encoded payload, is:
+
+    | Kind               | Default ceiling |
+    | ------------------ | --------------- |
+    | `signal`, `event`  | 3,840 bytes     |
+    | `command`, `query` | 16,128 bytes    |
+    | `fixed`            | 65,280 bytes    |
+
+    The numbers are the same on every target, so a catalog that is valid on one
+    target is valid on every target. The default ceilings are constants of the
+    checker, in `ridl_core::limits` beside the payload ceiling; they are not
+    recorded in the IR (decision 13) and are not added to `ridl-rt` or to a
+    transport.
+
+    A ceiling is compared with the payload's encoded `MAX_SIZE` under each
+    encoding the workspace manifest enables (decision 17), so the framing of a
+    codec counts inside the ceiling. For a signal whose payload is one
+    `string [0..N]`, the largest N that fits 3,840 bytes is 945 characters in
+    FlatBuffers, 959 in proto3 and 955 in podbuf; the sizer counts 4 bytes per
+    character.
+
+    A transport binding should copy at most 4,096 bytes between two scheduling
+    points, so that a large call does not block the transport for longer than
+    the copy of 4,096 bytes.
+
+    Rationale. A ceiling bounds the longest copy that nothing can interrupt. A
+    signal or an event is held as one cell and copied whole under the seqlock,
+    so the size of the cell is the time a reader or a writer blocks. A command
+    or a query is decoded whole by the receiving endpoint, which on a
+    single-threaded embedded executor stalls all other work while it decodes;
+    16,128 bytes take about 40 to 80 microseconds on a Cortex-M7 class target. A
+    fixed is usually memory-mapped and read in place, with no copy, so its
+    ceiling is larger; 65,280 bytes is safe for the address space and fits a
+    `u16` length. A byte stream (ADR-0032, drafted in parallel) bounds one chunk
+    the same way.
+
+    The numbers come from memory pages of 4,096 bytes with 256 bytes of each
+    cell reserved, once per cell: a ceiling is the cell's pages × 4,096 − 256. A
+    signal and an event have one page, a command and a query four, and a fixed
+    sixteen. The 256 bytes leave room for a header before the payload (a
+    sequence counter and the envelope) and for a trailer after it (end markers
+    such as an end version, a checksum or a commit marker), 128 bytes each, so
+    that the payload starts on a line boundary on a target with 128-byte cache
+    lines. This record does not bind an engine to that layout: it fixes the
+    ceilings, and an engine lays out its cells as it chooses. 3,840 is 30 × 128,
+    and 16,128 equals the largest `bytes` bound that decision 6 advises.
+
+    Reserving more now is the safer direction: raising a ceiling later is not a
+    break for sources, because every source that compiled still compiles, and
+    lowering it is.
+
+17. **A signal or an event above its default ceiling is an error** (added
+    2026-10-28). When no `[limits]` entry gives a signal or an event its limit,
+    and the computed bound of its payload, in an encoding the workspace enables
+    (the same set as RIDL-150), is larger than 3,840 bytes or has no finite
+    bound, the checker reports a new error, RIDL-157, on the interaction. As an
+    error code it has no name and no level (ADR-0024 decision 1), so `[lints]`
+    cannot lower it. It runs in `ridlc` after lowering, where RIDL-150 and
+    RIDL-151 run, and it skips the packages that RIDL-151 skips. It is an error,
+    not RIDL-150's warning, because the ceiling bounds the copy that a reader or
+    a writer of the value makes without interruption (decision 16). The error is
+    on the interaction, not on the type: a type that a fixed, a command or a
+    query carries has the default ceiling of its kind.
+
+18. **An entry may raise one member up to 16,128 bytes** (added 2026-10-28). A
+    `[limits.interaction]` entry that names one member, of any kind, may give it
+    a limit above the default ceiling of its kind, up to 16,128 bytes. A fixed
+    may be given up to 65,280 bytes, which is its default, so in effect a fixed
+    is not raised. The entry is the allowlist: `[limits.kind]` and `default`
+    cannot raise a kind above its default (decision 12). The raised limit is
+    recorded in the IR, covered by the catalog hash and carried in the
+    descriptor's limit column (decision 13), so an engine sees each signal or
+    event whose limit is above 3,840 bytes, and either supports it or refuses
+    the catalog, naming the member. Nothing else is raised above 16,128 bytes:
+    larger data is a stream (decision 11).
 
 ## Where the rules are stated
 
@@ -323,9 +524,55 @@ When accepted, these records gain a dated note or are changed in place:
   `docs/book/evolving-an-interface.md`: the `ridl diff` limit change (decision
   13). `docs/design/ridl-transport-ws.md` and the frame specification §11.1: the
   message limit and the request check (decisions 10 and 15).
+- From the amendment of 2026-10-28, once its code lands: the ridl reference's
+  diagnostics table, `docs/book/lints.md` and `docs/book/cli-reference.md`: the
+  default ceilings, the raise, MANI-022 and RIDL-157 (decisions 12 and 16 to
+  18). The frame specification §11.1 and `docs/design/ridl-transport-ws.md`: the
+  ceilings of decision 16, the message limit of 16,164 bytes, and one payload in
+  one message as a rule of the WebSocket binding (decisions 1, 2, 10 and 15).
 
 ## Alternatives considered
 
+- **RIDL-150 at level `error` for a signal and an event, or a wider RIDL-151**
+  (2026-10-28). Rejected in favour of the new code RIDL-157 (decision 17): a
+  lint has one default level for its code, an error code is never a lint
+  (ADR-0024 decision 1), and `[lints]` could lower such a level to `allow`.
+  RIDL-151 keeps its meaning, a payload above a limit that a `[limits]` entry
+  declares.
+- **MANI-022 for a `default` above the default ceiling of a kind** (2026-10-28).
+  Rejected: a `default` applies to every kind, and a manifest that sets one
+  value for every kind would stop compiling. A `default` is applied to each kind
+  up to that kind's default (decision 12).
+- **One memory page minus one 64-byte cache line, a ceiling of 4,032 bytes**
+  (2026-10-28). Rejected: it leaves no reserved room after the payload for an
+  end marker, a 64-byte header does not start the payload on a line boundary on
+  a target with 128-byte cache lines, and a ceiling that is too high can only be
+  lowered by a break of sources.
+- **The page and the cache line of the target** (2026-10-28). Rejected: a
+  catalog valid on one target would be invalid on a target with smaller pages or
+  larger cache lines, and two peers would disagree on what each may send.
+- **Pages, slots or splitting in the catalog, the descriptor or `ridl-rt`**
+  (2026-10-28). Rejected: how a payload is moved belongs to the transport
+  binding (decision 1 as amended), and the catalog states only how large a
+  payload may be.
+- **A fixed at 3,840 bytes, like a signal** (2026-10-28). Rejected: a fixed is
+  usually read in place, so the copy that the signal ceiling bounds is not made,
+  and large constant tables such as calibration maps must stay possible.
+- **A 16-page maximum for a raise of a signal, an event, a command or a query**
+  (2026-10-28), 65,280 bytes. Rejected: a document or a file is a byte stream
+  (ADR-0032, drafted in parallel), not a large value, so a raise stops at 16,128
+  bytes.
+- **A fixed at 16,128 bytes, like a command** (2026-10-28). Rejected: a fixed is
+  usually memory-mapped and read in place, so no copy is made for each read, and
+  a constant table such as a calibration map can be larger than 16,128 bytes.
+- **A ceiling of 65,280 bytes for a command and a query** (2026-10-28).
+  Rejected: the receiving endpoint decodes a call whole, and on a
+  single-threaded embedded executor a decode of 65,280 bytes stalls all other
+  work about four times as long as one of 16,128 bytes. Raising the ceiling
+  later is not a break for sources.
+- **The 16,256-byte ceiling of decision 2 as first written** (2026-10-28).
+  Replaced by the ceilings of decision 16, so that every ceiling follows the
+  copy-time rule of that decision.
 - **A ceiling of 4 MiB + 64 KiB**, sized for an uncompressed 1024×1024 RGBA PNG.
   Rejected on 2026-10-21: one transfer of 4 MiB is too large for a seqlock
   reader, which copies the payload and retries when a writer overwrites it, and
@@ -402,6 +649,34 @@ When accepted, these records gain a dated note or are changed in place:
   breaking. The new IR field and the new descriptor column are additions to the
   frozen `ir` surface and the descriptor schema under ADR-0029; the freeze dumps
   are updated when the code lands.
+- From the amendment of 2026-10-28: a signal or an event whose payload is larger
+  than 3,840 bytes or has no finite bound, with no `[limits]` entry for it,
+  which drew RIDL-150 or nothing before, now draws RIDL-157 and fails
+  `ridl check`; an entry in `[limits.interaction]` that raises it up to 16,128
+  bytes makes it compile again. A `[limits.kind]` entry above its kind's
+  default, and a `[limits.interaction]` entry above 16,128 for a kind other than
+  `fixed` or above 65,280 for a fixed, now draw MANI-022. Both remove accepted
+  sources, a breaking change of the `accepted-sources` surface (ADR-0029). A
+  command or a query between 16,129 and 16,256 bytes now draws the warning
+  RIDL-150, and a fixed above 65,280 bytes or with no finite bound draws it for
+  the first time; a warning does not stop a source compiling. The WebSocket
+  message limit falls from 16,292 to 16,164 bytes, a change of the published
+  `ridl-transport-ws` API, and a WebSocket provider refuses at attach a catalog
+  whose fixed is larger than that limit. The values 16,256 and 16,292 are not
+  yet released, so all of this ships in the next version marked breaking.
+  Measured on `main` at 6d9903db: no shipped schema has a signal or an event
+  near 3,840 bytes. The sources that stop compiling are the two unbounded ROS 2
+  feedback events in `evals/corpus/ros2/nav2_msgs` (`followPathFeedback` and
+  `navigateToPoseFeedback`, RIDL-157) and the TypeScript codec fixture
+  `crates/ridl-backend-ts/tests/fixtures/codec/shape.ridl` (the signals
+  `Sensors.note` and `Sensors.extras`, and the event `Sensors.bounds`);
+  driftsys/ridl#1108 bounds them. The ROS 2 queries and commands are unbounded
+  and keep a RIDL-150 warning. The replies of `VehicleStatus.getFaultPage` in
+  the veh-cluster corpus are 67 to 70 KB, above 16,128 bytes, and keep a warning
+  until the reply becomes a stream (ADR-0032). No fixed is above 16,256 bytes or
+  unbounded. The diagnostics surface gains RIDL-157. A unit whose `[limits]`
+  entries are unchanged keeps its catalog hash, and the IR and the descriptor
+  schema do not change.
 
 ## References
 
