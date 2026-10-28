@@ -1,8 +1,8 @@
 [package]
 name = "ridl-rt-conformance"
 version.workspace = true
-# Edition 2021, as `ridl-rt`'s: edition 2024 cannot build before Rust 1.85, and
-# a port author on `ridl-rt`'s minimum must be able to build this suite.
+# Edition 2021, as `ridl-rt`'s: a port author on `ridl-rt`'s minimum edition
+# and Rust version must be able to build this suite.
 edition = "2021"
 license.workspace = true
 repository.workspace = true
@@ -12,7 +12,7 @@ keywords = ["ridl", "idl", "runtime", "conformance", "testing"]
 categories = ["development-tools::testing"]
 # The oldest Rust this crate supports, the same as `ridl-rt`'s. `just
 # compat-check` builds and tests the crate with that toolchain.
-rust-version = "1.83"
+rust-version = "1.88"
 # The crate is published with every crate whose manifest does not set
 # `publish = false`, at a `v<version>` tag and at the workspace version
 # (ADR-0007 decision 14's 2026-10-08 amendment). Its public surface — the

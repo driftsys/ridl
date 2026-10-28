@@ -25,9 +25,10 @@ fn program(main: &str) -> String {
 }
 
 fn program_over(package: &ridl_ir::v2::Package, main: &str) -> String {
-    let generated = ridl_backend_rust::generate_pipeline(package, &[WireEncoding::Proto3], &[])
-        .expect("the fixture generates")
-        .rust_source;
+    let generated =
+        ridl_backend_rust::generate_pipeline(package, &[WireEncoding::Proto3], false, &[])
+            .expect("the fixture generates")
+            .rust_source;
     format!("#![allow(dead_code)]\n{generated}\n{PRELUDE}\n{main}")
 }
 
@@ -434,7 +435,7 @@ fn main() {{
 #[test]
 fn a_refused_member_is_still_refused() {
     let package = ir::compile_fixture("proto3_unbounded.ridl");
-    let err = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+    let err = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
         .expect_err("a declaration with a refused member is refused");
     assert!(
         err.message.contains("`pb.unbounded.Wide`") && err.message.contains("proto3"),
@@ -449,7 +450,8 @@ fn a_refused_member_is_still_refused() {
     );
     // The same package generates with no encoding, and with FlatBuffers
     // alone: the refusal is the proto3 codec's.
-    ridl_backend_rust::generate_pipeline(&package, &[], &[]).expect("the types alone generate");
+    ridl_backend_rust::generate_pipeline(&package, &[], false, &[])
+        .expect("the types alone generate");
 }
 
 /// A type with no finite proto3 bound — a string with no length bound, and
@@ -464,7 +466,7 @@ fn an_unbounded_type_is_refused_under_proto3() {
     // `Free` and `Note`, which holds it, in declaration order: the first
     // refusal names `Free`.
     let package = ir::compile_fixture("proto3_free.ridl");
-    let err = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+    let err = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
         .expect_err("a string with no length bound is refused");
     assert!(
         err.message
@@ -473,7 +475,8 @@ fn an_unbounded_type_is_refused_under_proto3() {
         "the refusal names the declaration and the cause, got: {}",
         err.message
     );
-    ridl_backend_rust::generate_pipeline(&package, &[], &[]).expect("the types alone generate");
+    ridl_backend_rust::generate_pipeline(&package, &[], false, &[])
+        .expect("the types alone generate");
 
     // The struct first, so that the refusal names the struct that holds the
     // string rather than the string.
@@ -489,8 +492,9 @@ fn an_unbounded_type_is_refused_under_proto3() {
         "the source compiles, got: {:?}",
         output.diagnostics
     );
-    let err = ridl_backend_rust::generate_pipeline(&output.package, &[WireEncoding::Proto3], &[])
-        .expect_err("a struct that holds a string with no length bound is refused");
+    let err =
+        ridl_backend_rust::generate_pipeline(&output.package, &[WireEncoding::Proto3], false, &[])
+            .expect_err("a struct that holds a string with no length bound is refused");
     assert!(
         err.message
             .starts_with("`pb.held.Note` has no proto3 codec: ")
@@ -509,9 +513,10 @@ fn an_unbounded_type_is_refused_under_proto3() {
 #[test]
 fn an_unbounded_induced_call_is_skipped_under_proto3() {
     let package = ir::compile_fixture("proto3_unbounded_call.ridl");
-    let source = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
-        .expect("the package generates with the interface skipped")
-        .rust_source;
+    let source =
+        ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
+            .expect("the package generates with the interface skipped")
+            .rust_source;
     assert!(source.contains("__RIDL_NO_FACE_Probe"), "{source}");
     assert!(!source.contains("Proto3> for ProbeSetParams"), "{source}");
     assert!(!source.contains("__ridl_pb_len_ProbeSetParams"), "{source}");
@@ -521,7 +526,8 @@ fn an_unbounded_induced_call_is_skipped_under_proto3() {
             .iter()
             .any(|message| message.name == "ProbeSetParams")
     );
-    ridl_backend_rust::generate_pipeline(&package, &[], &[]).expect("the types alone generate");
+    ridl_backend_rust::generate_pipeline(&package, &[], false, &[])
+        .expect("the types alone generate");
 }
 
 /// Every declaration that projects a type carries a `Payload<Proto3>`,
@@ -531,9 +537,10 @@ fn an_unbounded_induced_call_is_skipped_under_proto3() {
 #[test]
 fn every_declaration_and_interaction_root_is_emitted() {
     let package = ir::compile_fixture("proto3_roundtrip.ridl");
-    let source = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
-        .expect("the fixture generates")
-        .rust_source;
+    let source =
+        ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
+            .expect("the fixture generates")
+            .rust_source;
     for name in [
         "WithList",
         "ReachesList",
@@ -565,6 +572,7 @@ fn every_declaration_and_interaction_root_is_emitted() {
     let both = ridl_backend_rust::generate_pipeline(
         &package,
         &[WireEncoding::FlatBuffers, WireEncoding::Proto3],
+        false,
         &[],
     )
     .expect("both codecs generate")
@@ -658,9 +666,10 @@ fn main() {
 #[test]
 fn the_generated_proto3_codec_checks_for_wasm32() {
     let package = ir::compile_fixture("proto3_roundtrip.ridl");
-    let generated = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], &[])
-        .expect("the fixture generates")
-        .rust_source;
+    let generated =
+        ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
+            .expect("the fixture generates")
+            .rust_source;
     let source = format!("#![allow(dead_code)]\n{generated}");
     assert!(
         rustc::check_for_wasm32("pb_wasm32", &source),
@@ -1313,20 +1322,21 @@ fn an_optional_array_element_is_refused_at_generation() {
         Some(v2::field_type::Kind::Array(array)) => array.element.as_mut().expect("an element"),
         _ => panic!("an array"),
     });
-    let err = ridl_backend_rust::generate_pipeline(&element, &[WireEncoding::Proto3], &[])
+    let err = ridl_backend_rust::generate_pipeline(&element, &[WireEncoding::Proto3], false, &[])
         .expect_err("an optional array element is refused");
     assert!(
         err.message.contains("an array element is optional"),
         "the refusal names the position, got: {}",
         err.message
     );
-    ridl_backend_rust::generate_pipeline(&element, &[], &[]).expect("the types alone generate");
+    ridl_backend_rust::generate_pipeline(&element, &[], false, &[])
+        .expect("the types alone generate");
 
     let value = with_optional("Maps", "byLabel", |ty| match ty.kind.as_mut() {
         Some(v2::field_type::Kind::Map(map)) => map.value.as_mut().expect("a value"),
         _ => panic!("a map"),
     });
-    let err = ridl_backend_rust::generate_pipeline(&value, &[WireEncoding::Proto3], &[])
+    let err = ridl_backend_rust::generate_pipeline(&value, &[WireEncoding::Proto3], false, &[])
         .expect_err("an optional map value is refused");
     assert!(
         err.message.contains("a map value is optional"),
@@ -1492,7 +1502,7 @@ fn a_struct_of_one_zero_length_array_builds_under_deny_warnings() {
     // The shared prelude names the fixture's types, which this package does
     // not declare, so the program carries its own round trip.
     let generated =
-        ridl_backend_rust::generate_pipeline(&output.package, &[WireEncoding::Proto3], &[])
+        ridl_backend_rust::generate_pipeline(&output.package, &[WireEncoding::Proto3], false, &[])
             .expect("the package generates")
             .rust_source;
     let main = r#"

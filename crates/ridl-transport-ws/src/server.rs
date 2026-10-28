@@ -5,14 +5,20 @@
 mod backend;
 mod calls;
 mod config;
+#[cfg(feature = "descriptor")]
+mod descriptor;
+mod members;
 mod session;
 
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::time::{Duration, Instant};
 
-pub use backend::{Backend, Polling, Scanning};
-pub use config::{Config, LimitTooSmall, Note};
+pub use backend::{Backend, Described, Polling, Scanning, TableMismatch};
+pub use config::{Config, LimitOutOfRange, Note, RetainedTooSmall};
+#[cfg(feature = "descriptor")]
+pub use descriptor::DescriptorError;
+pub use members::MemberTable;
 
 use crate::ws::{self, CloseCode, Event, FrameWriter, Parser, Upgrade};
 use session::{Session, Step};
@@ -110,8 +116,10 @@ pub enum Ended {
     /// The server sent a close frame with this code (frame specification
     /// §11.1 item 4): 1000 after `attached(refused)`, 1001 when the backend
     /// detached, 1002 on a protocol violation, 1003 on a text message, 1009
-    /// on a message over [`Config::max_message_bytes`]. A violation of the
-    /// frame is also recorded as a [`Note`].
+    /// on a message over [`Config::max_message_bytes`], 1008 when the
+    /// responses the session keeps for a repeated `request` pass
+    /// [`Config::max_retained_bytes`]. A violation of the frame is also
+    /// recorded as a [`Note`].
     ServerClosed(u16),
     /// The opening handshake was answered `400 Bad Request`, because the
     /// request was malformed, its head passed 8 KiB, it lacked a header the
@@ -189,6 +197,13 @@ const LINGER: Duration = Duration::from_millis(100);
 /// distinct signals the client names. The embedder's access policy decides
 /// which clients may open a session; it must trust each one for that
 /// growth. A `read` of a signal that was never published keeps no state.
+///
+/// With a member table ([`Backend::members`] returns `Some`, as [`Described`]
+/// does), a `subscribe`, a `read` or a `request` naming an interaction the
+/// table does not hold is refused with `contract(UnknownInteraction)` before
+/// it reaches the backend, so the signal and event state of a session holds
+/// at most one entry per signal or event member of the catalog. Without a
+/// table, nothing bounds it, and the paragraph above applies.
 ///
 /// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and

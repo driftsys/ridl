@@ -102,6 +102,9 @@ pub(crate) struct Session<B: Backend> {
     /// The message limit, which also bounds the occurrence bytes one tick
     /// sends.
     message_limit: usize,
+    /// The most bytes the kept responses may hold before the session closes
+    /// with 1008.
+    max_retained_bytes: usize,
     call_abandon_after: Duration,
     record: Option<Record>,
     /// Whether an `attach` has been accepted.
@@ -161,6 +164,7 @@ impl<B: Backend> Session<B> {
             occurrence_cap: limit - empty_occurrence.encoded_len(),
             reply_cap: limit - empty_reply.encoded_len(),
             message_limit: limit,
+            max_retained_bytes: config.max_retained_bytes(),
             call_abandon_after: config.call_abandon_after,
             record: config.record(),
             attached: false,
@@ -410,8 +414,11 @@ impl<B: Backend> Session<B> {
     /// specification §9.6); either way the call is then forgotten. A call
     /// still unknown `call_abandon_after` after its request arrived is
     /// forgotten and recorded, so that it does not hold a backend slot until
-    /// the client disconnects.
+    /// the client disconnects. The kept responses whose bound has passed by
+    /// the backend's clock are let go first.
     fn poll_calls(&mut self, now: Instant, out: &mut Vec<Vec<u8>>) -> Step {
+        let clock = self.backend.ports().now();
+        self.calls.expire(clock);
         'calls: for call in self.calls.in_flight() {
             let outcome = match call.target.kind {
                 Kind::Command => self
@@ -460,10 +467,21 @@ impl<B: Backend> Session<B> {
                 Outcome::Corrupt => Some(ResponseOutcome::Corrupt),
                 Outcome::Busy => Some(ResponseOutcome::Busy),
             };
-            if let Some(response) = response {
-                self.respond(call.target, call.seq, response, out);
-            }
+            let step = match response {
+                Some(response) => self.respond(
+                    call.target,
+                    call.seq,
+                    response,
+                    call.stamp,
+                    call.receipt,
+                    out,
+                ),
+                None => Step::Continue,
+            };
             self.forget(call.correlation);
+            if step != Step::Continue {
+                return step;
+            }
         }
         Step::Continue
     }
@@ -487,7 +505,13 @@ impl<B: Backend> Session<B> {
             Some(Reason::FrameVersionUnsupported)
         } else if attach.name() != self.catalog.name {
             Some(Reason::UnknownCatalog)
-        } else if *attach.hash() != self.catalog.hash {
+        } else if !self
+            .backend
+            .members()
+            .map_or(*attach.hash() == self.catalog.hash, |t| {
+                t.accepts(attach.hash())
+            })
+        {
             Some(Reason::CatalogMismatch)
         } else if Some(attach.encoding()) != self.encoding {
             Some(Reason::EncodingUnsupported)
@@ -521,7 +545,26 @@ impl<B: Backend> Session<B> {
         push(out, &Frame::Answer { target, outcome });
     }
 
+    /// Whether the frame's identity is in the member table under its kind.
+    /// With no table, every identity is known and only the form check applies.
+    fn known(&self, target: Target) -> bool {
+        self.backend.members().is_none_or(|table| {
+            table
+                .member(target.iface, target.ord)
+                .is_some_and(|(kind, _)| kind == target.kind)
+        })
+    }
+
     fn subscribe(&mut self, target: Target, out: &mut Vec<Vec<u8>>) -> Step {
+        if !self.known(target) {
+            self.note(Note::UnknownInteraction { target });
+            self.answer(
+                target,
+                AnswerOutcome::Contract(Contract::UnknownInteraction),
+                out,
+            );
+            return Step::Continue;
+        }
         match target.kind {
             Kind::Signal => self.subscribe_signal(target, out),
             Kind::Event => self.subscribe_event(target, out),
@@ -598,6 +641,10 @@ impl<B: Backend> Session<B> {
     }
 
     fn unsubscribe(&mut self, target: Target) -> Step {
+        if !self.known(target) {
+            self.note(Note::UnknownInteraction { target });
+            return Step::Continue;
+        }
         match target.kind {
             Kind::Signal => {
                 let key = (target.iface, target.ord);
@@ -622,6 +669,15 @@ impl<B: Backend> Session<B> {
     }
 
     fn read(&mut self, target: Target, out: &mut Vec<Vec<u8>>) -> Step {
+        if !self.known(target) {
+            self.note(Note::UnknownInteraction { target });
+            self.answer(
+                target,
+                AnswerOutcome::Contract(Contract::UnknownInteraction),
+                out,
+            );
+            return Step::Continue;
+        }
         match target.kind {
             Kind::Signal => match self.fetch_signal((target.iface, target.ord)) {
                 Fetch::Sample(sample) => self.publish_signal(target, sample, false, out),
@@ -680,7 +736,12 @@ impl<B: Backend> Session<B> {
     /// a settled call gets its response again, and a `seq` not above the
     /// highest seen that is neither is dropped and recorded. A new `seq` is
     /// sent to the backend, with no trace context; a send that fails is
-    /// answered at once.
+    /// answered at once. A member that the member table does not hold under
+    /// the request's kind is answered `contract(UnknownInteraction)`. Arguments
+    /// longer than the payload limit the table gives a command or a query are
+    /// answered `corrupt` without a call to the backend, and no note is recorded; the
+    /// response is kept like any other. A member with no limit, and a backend
+    /// with no member table, leave the message limit as the only bound.
     fn request(
         &mut self,
         target: Target,
@@ -690,6 +751,11 @@ impl<B: Backend> Session<B> {
         out: &mut Vec<Vec<u8>>,
     ) -> Step {
         let seq = envelope.seq;
+        let stamp = envelope.stamp;
+        // Responses whose bound has passed are let go before the `seq` is
+        // placed, so that a repeat after the bound is not answered from them.
+        let receipt = self.backend.ports().now();
+        self.calls.expire(receipt);
         match self.calls.seen(seq) {
             Seen::New => self.calls.accept(seq),
             Seen::Settled(response) => {
@@ -701,18 +767,41 @@ impl<B: Backend> Session<B> {
                 return Step::Continue;
             }
         }
+        if !self.known(target) {
+            self.note(Note::UnknownInteraction { target });
+            return self.respond(
+                target,
+                seq,
+                ResponseOutcome::Contract(Contract::UnknownInteraction),
+                stamp,
+                receipt,
+                out,
+            );
+        }
+        // Only a command or a query is answered; any other kind falls to the
+        // unknown-interaction answer below whatever the length.
+        let over_limit = matches!(target.kind, Kind::Command | Kind::Query)
+            && self
+                .backend
+                .members()
+                .and_then(|table| table.limit(target.iface, target.ord))
+                .is_some_and(|limit| payload.len() > limit as usize);
+        if over_limit {
+            return self.respond(target, seq, ResponseOutcome::Corrupt, stamp, receipt, out);
+        }
         let ports = self.backend.ports();
         let sent = match target.kind {
             Kind::Command => ports.command(target.iface, target.ord, payload, None),
             Kind::Query => ports.query(target.iface, target.ord, payload, None),
             _ => {
-                self.respond(
+                return self.respond(
                     target,
                     seq,
                     ResponseOutcome::Contract(Contract::UnknownInteraction),
+                    stamp,
+                    receipt,
                     out,
                 );
-                return Step::Continue;
             }
         };
         let outcome = match sent {
@@ -722,6 +811,8 @@ impl<B: Backend> Session<B> {
                     target,
                     seq,
                     sent: now,
+                    stamp,
+                    receipt,
                 });
                 return Step::Continue;
             }
@@ -732,21 +823,27 @@ impl<B: Backend> Session<B> {
             Err(SendError::TooLarge { .. }) => ResponseOutcome::Corrupt,
             Err(_) => return Step::Close(CloseCode::GOING_AWAY.0),
         };
-        self.respond(target, seq, outcome, out);
-        Step::Continue
+        self.respond(target, seq, outcome, stamp, receipt, out)
     }
 
     /// Sends one `response`, under the next response `seq` of the session
     /// and the backend's clock as the stamp, and keeps it for a repeat of
-    /// the request. A `contract(InvalidValue)` whose rule the frame cannot
-    /// carry is sent as `corrupt` and recorded.
+    /// the request: until the request's bound has passed, measured from the
+    /// earlier of the request's `stamp` and `receipt`, when the member table
+    /// gives one (frame specification §7), and as one of the last 64
+    /// otherwise. A `contract(InvalidValue)` whose rule the frame cannot
+    /// carry is sent as `corrupt` and recorded. Returns a close with 1008
+    /// when the kept responses then pass [`Config::max_retained_bytes`]; the
+    /// response is still sent.
     fn respond(
         &mut self,
         target: Target,
         correlation: u64,
         outcome: ResponseOutcome<'_>,
+        stamp: Timestamp,
+        receipt: Timestamp,
         out: &mut Vec<Vec<u8>>,
-    ) {
+    ) -> Step {
         let outcome = match outcome {
             ResponseOutcome::Contract(c) if !carried(c) => {
                 self.note(Note::RuleNotCarried { target });
@@ -755,21 +852,43 @@ impl<B: Backend> Session<B> {
             outcome => outcome,
         };
         self.response_seq += 1;
-        let stamp = self.backend.ports().now();
+        let now = self.backend.ports().now();
         push(
             out,
             &Frame::Response {
                 target,
                 envelope: Envelope {
-                    stamp,
+                    stamp: now,
                     seq: self.response_seq,
                 },
                 correlation,
                 outcome,
             },
         );
+        let until = self.retention(target, stamp, receipt);
         let response = out.last().expect("the response was just pushed");
-        self.calls.settle(correlation, response);
+        self.calls.settle(correlation, response, until);
+        if self.calls.retained_bytes() > self.max_retained_bytes {
+            return Step::Close(CloseCode::POLICY.0);
+        }
+        Step::Continue
+    }
+
+    /// The last instant of the backend's clock at which the response to a
+    /// request is kept: `min(stamp, receipt) + max`, with `max` the member's
+    /// bound from the member table. `None` when the backend gives no table,
+    /// the table gives the member no bound, or the table does not hold the
+    /// identity as a command or query under the request's kind: a refused
+    /// request takes no bound from a member of another kind (a signal's
+    /// `max_us` is not a call bound).
+    fn retention(&self, target: Target, stamp: Timestamp, receipt: Timestamp) -> Option<Timestamp> {
+        let (kind, max) = self.backend.members()?.member(target.iface, target.ord)?;
+        if kind != target.kind || !matches!(kind, Kind::Command | Kind::Query) {
+            return None;
+        }
+        let max = max?;
+        let max_micros = i64::try_from(max.as_micros()).unwrap_or(i64::MAX);
+        Some(Timestamp(stamp.0.min(receipt.0).saturating_add(max_micros)))
     }
 
     /// Reads a signal into the session's buffer, growing it on `Short` up to
@@ -1022,7 +1141,9 @@ mod tests {
         decode, AnswerOutcome, Attach, AttachOutcome, Frame, PublishState, Reason, ResponseOutcome,
         Target,
     };
-    use crate::server::{Backend, Config, Note, Polling, Scanning};
+    use crate::server::{
+        Backend, Config, Described, MemberTable, Note, Polling, Scanning, TableMismatch,
+    };
 
     const CATALOG: CatalogRef = CatalogRef {
         name: "ws.test",
@@ -1083,6 +1204,22 @@ mod tests {
         let rt = Loopback::new(CATALOG);
         let provider = rt.attach();
         (Session::new(Scanning(rt), &config(&notes)), provider, notes)
+    }
+
+    /// A session over a scanning loopback described by `t`, the provider's
+    /// aggregate on the same store, and the notes.
+    fn described_with(
+        t: MemberTable,
+        config: impl FnOnce(Config) -> Config,
+    ) -> (Session<Described<Scanning<Loopback>>>, Loopback, Notes) {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let provider = rt.attach();
+        let backend = Described::new(Scanning(rt), Arc::new(t)).unwrap();
+        let config = config(Config::default());
+        let n = Arc::clone(&notes);
+        let config = config.with_record(move |x| n.lock().unwrap().push(*x));
+        (Session::new(backend, &config), provider, notes)
     }
 
     /// The same over a polling loopback.
@@ -2559,10 +2696,15 @@ mod tests {
     };
 
     fn request(target: Target, seq: u64, payload: &[u8]) -> Vec<u8> {
+        request_at(target, seq, 0, payload)
+    }
+
+    /// The same, with the request stamped at `stamp`.
+    fn request_at(target: Target, seq: u64, stamp: i64, payload: &[u8]) -> Vec<u8> {
         msg(Frame::Request {
             target,
             envelope: Envelope {
-                stamp: Timestamp(0),
+                stamp: Timestamp(stamp),
                 seq,
             },
             payload,
@@ -2598,8 +2740,8 @@ mod tests {
 
     /// Sends a request, settles it on the provider, and returns the frames
     /// of the next tick.
-    fn settled(
-        s: &mut Session<Scanning<Loopback>>,
+    fn settled<B: Backend>(
+        s: &mut Session<B>,
         p: &mut Loopback,
         target: Target,
         seq: u64,
@@ -3514,5 +3656,917 @@ mod tests {
             decode(&out[0]).unwrap(),
             response(COMMAND, 0, 1, 1, ResponseOutcome::Corrupt)
         );
+    }
+
+    // -- The member table (frame specification §6.4) -------------------------
+
+    /// The member table of the test catalog: signal 1, event 2, command 3,
+    /// query 4, fixed 5, and command 7 with no bound; ordinal 6 is reserved
+    /// and has no entry.
+    fn table() -> Arc<MemberTable> {
+        let mut t = MemberTable::new("ws.test", CatalogHash([7; 32]));
+        let bound = Some(std::time::Duration::from_secs(1));
+        t.insert(IFACE, Ordinal(1), Kind::Signal, None);
+        t.insert(IFACE, Ordinal(2), Kind::Event, None);
+        t.insert(IFACE, Ordinal(3), Kind::Command, bound);
+        t.insert(IFACE, Ordinal(4), Kind::Query, bound);
+        t.insert(IFACE, Ordinal(5), Kind::Fixed, None);
+        t.insert(IFACE, COMMAND_UNBOUNDED.ord, Kind::Command, None);
+        Arc::new(t)
+    }
+
+    /// A command the member table gives no bound.
+    const COMMAND_UNBOUNDED: Target = Target {
+        kind: Kind::Command,
+        iface: IFACE,
+        ord: Ordinal(7),
+    };
+
+    fn described_scanning() -> (Session<Described<Scanning<Loopback>>>, Loopback, Notes) {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let provider = rt.attach();
+        let backend = Described::new(Scanning(rt), table()).unwrap();
+        (Session::new(backend, &config(&notes)), provider, notes)
+    }
+    // -- The payload limit of a member (ADR-0030 decision 15) ----------------
+
+    /// The test table with a payload limit of `limit` on `COMMAND`, and on
+    /// `QUERY` when `query` is set.
+    fn limited_table(limit: u32, query: bool) -> MemberTable {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, COMMAND.ord, limit));
+        if query {
+            assert!(t.set_limit(IFACE, QUERY.ord, limit));
+        }
+        t
+    }
+
+    /// Sends a request of `target` with `payload` and checks that the one
+    /// frame sent back is `corrupt` and that the backend saw no call.
+    fn assert_answered_corrupt(
+        s: &mut Session<Described<Scanning<Loopback>>>,
+        p: &mut Loopback,
+        target: Target,
+        seq: u64,
+        payload: &[u8],
+    ) -> Vec<u8> {
+        let (step, out) = send(s, &request(target, seq, payload));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(target, 0, 1, seq, ResponseOutcome::Corrupt)
+        );
+        p.serve(target.iface, &[target.ord]).unwrap();
+        let mut buf = [0; 64];
+        assert_eq!(p.next_claim(&mut buf).unwrap(), None);
+        out.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn a_request_above_its_members_limit_is_answered_corrupt() {
+        let (mut s, mut p, notes) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        assert_answered_corrupt(&mut s, &mut p, COMMAND, 1, &[1; 5]);
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_request_at_its_members_limit_reaches_the_backend() {
+        let (mut s, mut p, _n) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        let (step, out) = send(&mut s, &request(COMMAND, 1, &[1; 4]));
+        assert_eq!(step, Step::Continue);
+        assert!(out.is_empty());
+        assert_eq!(claim(&mut p, COMMAND).len, 4);
+    }
+
+    #[test]
+    fn a_query_above_its_members_limit_is_answered_corrupt() {
+        let (mut s, mut p, _n) = described_with(limited_table(4, true), |c| c);
+        open(&mut s);
+        assert_answered_corrupt(&mut s, &mut p, QUERY, 1, &[1; 5]);
+    }
+
+    #[test]
+    fn a_limit_of_zero_admits_only_empty_arguments() {
+        let (mut s, mut p, _n) = described_with(limited_table(0, false), |c| c);
+        open(&mut s);
+        let (_, out) = send(&mut s, &request(COMMAND, 1, &[]));
+        assert!(out.is_empty());
+        assert_eq!(claim(&mut p, COMMAND).len, 0);
+        assert_answered_corrupt(&mut s, &mut p, COMMAND, 2, &[1]);
+    }
+
+    #[test]
+    fn a_member_with_no_limit_checks_no_argument_length() {
+        let (mut s, mut p, _n) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        let (_, out) = send(&mut s, &request(COMMAND_UNBOUNDED, 1, &[1; 5]));
+        assert!(out.is_empty());
+        assert_eq!(claim(&mut p, COMMAND_UNBOUNDED).len, 5);
+    }
+
+    #[test]
+    fn a_repeat_of_a_request_answered_corrupt_for_its_length_gets_the_same_response() {
+        let (mut s, mut p, notes) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        let first = assert_answered_corrupt(&mut s, &mut p, COMMAND, 1, &[1; 5]);
+        let (_, again) = send(&mut s, &request(COMMAND, 1, &[1; 5]));
+        assert_eq!(again, vec![first]);
+        let mut buf = [0; 64];
+        assert_eq!(p.next_claim(&mut buf).unwrap(), None);
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_unknown_member_is_answered_unknown_interaction_whatever_its_length() {
+        let (mut s, _p, _n) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        // Ordinal 1 is a signal in the table, so it is unknown under `Command`
+        // and holds no limit. `COMMAND`'s ordinal is a command with a limit of
+        // 4, so it is unknown under `Query`: the length check must not run
+        // before the member is found to be unknown.
+        let targets = [
+            Target {
+                kind: Kind::Command,
+                iface: IFACE,
+                ord: Ordinal(1),
+            },
+            Target {
+                kind: Kind::Query,
+                iface: IFACE,
+                ord: COMMAND.ord,
+            },
+        ];
+        for (seq, target) in (1..).zip(targets) {
+            let (_, out) = send(&mut s, &request(target, seq, &[1; 5]));
+            assert_eq!(out.len(), 1, "{target:?}");
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                response(
+                    target,
+                    0,
+                    seq,
+                    seq,
+                    ResponseOutcome::Contract(Contract::UnknownInteraction)
+                ),
+                "{target:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_request_under_another_kind_than_command_or_query_is_unknown_whatever_its_length() {
+        // Ordinals 1, 2 and 5 are a signal, an event and a fixed in the table;
+        // a limit on them must not turn the unknown-interaction answer into
+        // `corrupt`.
+        let kinds = [
+            (Kind::Signal, Ordinal(1)),
+            (Kind::Event, Ordinal(2)),
+            (Kind::Fixed, Ordinal(5)),
+        ];
+        let mut t = (*table()).clone();
+        for (_, ord) in kinds {
+            assert!(t.set_limit(IFACE, ord, 4));
+        }
+        let (mut s, _p, _n) = described_with(t, |c| c);
+        open(&mut s);
+        for (seq, (kind, ord)) in (1..).zip(kinds) {
+            let target = Target {
+                kind,
+                iface: IFACE,
+                ord,
+            };
+            let (_, out) = send(&mut s, &request(target, seq, &[1; 5]));
+            assert_eq!(out.len(), 1, "{target:?}");
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                response(
+                    target,
+                    0,
+                    seq,
+                    seq,
+                    ResponseOutcome::Contract(Contract::UnknownInteraction)
+                ),
+                "{target:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_attach_naming_a_listed_earlier_hash_is_accepted_and_an_unlisted_one_is_catalog_mismatch()
+    {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let mut t = MemberTable::new("ws.test", CatalogHash([7; 32]));
+        t.add_compatible(CatalogHash([6; 32]));
+        let backend = Described::new(Scanning(rt.attach()), Arc::new(t)).unwrap();
+        let mut s = Session::new(backend, &config(&notes));
+        let (step, out) = send(&mut s, &attach_msg(1, 1, [6u8; 32], "ws.test"));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            Frame::Attached(AttachOutcome::Accepted)
+        );
+
+        let backend = Described::new(Scanning(rt.attach()), table()).unwrap();
+        let mut s = Session::new(backend, &config(&notes));
+        refused(
+            &mut s,
+            &attach_msg(1, 1, [5u8; 32], "ws.test"),
+            Reason::CatalogMismatch,
+        );
+    }
+
+    /// A session attached under a compatible earlier hash (§6.4) is served
+    /// from the current table: a request for an ordinal that table no longer
+    /// holds is refused, and a member it holds is sent to the backend. The
+    /// session keeps no record of the hash the `attach` named, so the test
+    /// guards against a later lookup conditioned on that hash.
+    #[test]
+    fn a_request_for_a_retired_ordinal_under_a_compatible_earlier_hash_is_refused() {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let mut p = rt.attach();
+        let mut t = (*table()).clone();
+        t.add_compatible(CatalogHash([6; 32]));
+        let backend = Described::new(Scanning(rt), Arc::new(t)).unwrap();
+        let mut s = Session::new(backend, &config(&notes));
+        let (_, out) = send(&mut s, &attach_msg(1, 1, [6u8; 32], "ws.test"));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            Frame::Attached(AttachOutcome::Accepted)
+        );
+        let retired = target(Kind::Command, 9);
+        let (step, out) = send(&mut s, &request(retired, 1, &[]));
+        assert_eq!((step, out.len()), (Step::Continue, 1));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(
+                retired,
+                0,
+                1,
+                1,
+                ResponseOutcome::Contract(Contract::UnknownInteraction)
+            )
+        );
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: retired }]
+        );
+        let (step, out) = send(&mut s, &request(COMMAND, 2, &[]));
+        assert_eq!((step, out.is_empty()), (Step::Continue, true));
+        assert_eq!(claim(&mut p, COMMAND).ord, COMMAND.ord);
+    }
+
+    /// With a table, a refused `request` is kept like any settled response
+    /// (D-12), so a repeat of its `seq` gets the same bytes and is neither
+    /// refused again nor dropped.
+    ///
+    /// Mutation: send a refused response without keeping it.
+    #[test]
+    fn a_refused_request_is_kept_and_its_repeat_gets_the_same_bytes() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Command, 9);
+        let (_, out) = send(&mut s, &request(t, 1, &[]));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(
+                t,
+                0,
+                1,
+                1,
+                ResponseOutcome::Contract(Contract::UnknownInteraction)
+            )
+        );
+        let (step, again) = send(&mut s, &request(t, 1, &[]));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(again, out);
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+    }
+
+    // -- Retention by bound, and the retained-bytes cap (frame specification §7)
+
+    /// Mutations: never expire; expire at once.
+    #[test]
+    fn a_repeat_within_the_bound_gets_the_response_and_one_after_it_is_dropped() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        // COMMAND's max is 1 s = 1_000_000 us; the request is stamped at the clock, 0.
+        let out = settled(&mut s, &mut p, COMMAND, 1, Ok(&[]));
+        assert_eq!(out.len(), 1);
+        p.advance(Duration(500_000));
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[7]));
+        assert_eq!(again, out);
+        p.advance(Duration(500_001)); // the clock is at max + 1
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[7]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+
+    /// Mutation: keep `RETAINED` for a bounded member.
+    #[test]
+    fn sixty_five_bounded_responses_are_all_kept_within_their_bound() {
+        let (mut s, mut p, _n) = described_scanning();
+        open(&mut s);
+        let first = settled(&mut s, &mut p, COMMAND, 1, Ok(&[]));
+        for seq in 2..=65 {
+            settled(&mut s, &mut p, COMMAND, seq, Ok(&[]));
+        }
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[]));
+        assert_eq!(again, first);
+    }
+
+    /// Mutation: measure from the stamp only.
+    #[test]
+    fn a_request_stamped_an_hour_ahead_expires_at_receipt_plus_max() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        let ahead = 3_600_000_000; // one hour, in microseconds, while the clock is at 0
+        let (_, out) = send(&mut s, &request_at(COMMAND, 1, ahead, &[]));
+        assert!(out.is_empty());
+        let c = claim(&mut p, COMMAND);
+        p.settle(c.id, Ok(&[])).unwrap();
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        p.advance(Duration(1_000_001)); // receipt (0) + max + 1
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, ahead, &[]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+
+    /// Mutation: measure from the receipt only.
+    #[test]
+    fn a_request_stamped_far_behind_the_clock_keeps_its_response_until_stamp_plus_max() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        p.advance(Duration(3_600_000_000)); // the clock is at one hour
+        let out = settled(&mut s, &mut p, COMMAND, 1, Ok(&[])); // stamped 0 by `request`
+        assert_eq!(out.len(), 1);
+        tick(&mut s); // 0 + max is long past: the next tick expires it
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+
+    /// Mutation: drop a response with no bound at once.
+    #[test]
+    fn a_member_with_no_bound_falls_back_to_the_last_64() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        let mut responses = Vec::new();
+        for seq in 1..=65 {
+            responses.push(settled(&mut s, &mut p, COMMAND_UNBOUNDED, seq, Ok(&[])));
+        }
+        p.advance(Duration(3_600_000_000));
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND_UNBOUNDED, 1, 0, &[]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+        let (_, again) = send(&mut s, &request_at(COMMAND_UNBOUNDED, 2, 0, &[]));
+        assert_eq!(again, responses[1]);
+    }
+
+    /// Sends 65 requests of `target`, each refused `UnknownInteraction`,
+    /// over a table that holds ordinal 8 under `eighth` with a bound of one
+    /// hour, and checks that the first response is out of the ring after the
+    /// 65th: the refused response took no bound from the member.
+    fn assert_refused_requests_fall_into_the_last_64(eighth: Kind, target: Target) {
+        let mut t = (*table()).clone();
+        t.insert(
+            IFACE,
+            Ordinal(8),
+            eighth,
+            Some(std::time::Duration::from_secs(3600)),
+        );
+        let (mut s, _p, notes) = described_with(t, |c| c);
+        open(&mut s);
+        let mut responses = Vec::new();
+        for seq in 1..=65 {
+            let (step, out) = send(&mut s, &request(target, seq, &[]));
+            assert_eq!(
+                (step, out.len()),
+                (Step::Continue, 1),
+                "{target:?} request {seq}"
+            );
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                response(
+                    target,
+                    0,
+                    seq,
+                    seq,
+                    ResponseOutcome::Contract(Contract::UnknownInteraction)
+                )
+            );
+            responses.push(out);
+        }
+        notes.lock().unwrap().clear();
+        // The 65th refused response pushed the first out of the ring, within
+        // the bound the member would have given.
+        let (_, again) = send(&mut s, &request(target, 1, &[]));
+        assert!(again.is_empty(), "{target:?}");
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+        let (_, again) = send(&mut s, &request(target, 2, &[]));
+        assert_eq!(again, responses[1]);
+    }
+
+    /// A `request` naming an ordinal the table holds under another kind is
+    /// refused, and its response takes no bound from that member: a signal's
+    /// `max_us` is not a call bound. The refused response is one of the last
+    /// 64.
+    ///
+    /// Mutation: look the bound up by `(interface, ordinal)` without the kind
+    /// (the second case, whose member is a bounded query, catches it alone).
+    #[test]
+    fn a_refused_request_to_a_bounded_ordinal_of_another_kind_falls_into_the_last_64() {
+        assert_refused_requests_fall_into_the_last_64(Kind::Signal, target(Kind::Command, 8));
+        assert_refused_requests_fall_into_the_last_64(
+            Kind::Signal,
+            target(Kind::Command, QUERY.ord.0),
+        );
+        assert_refused_requests_fall_into_the_last_64(
+            Kind::Signal,
+            target(Kind::Query, COMMAND.ord.0),
+        );
+    }
+
+    /// The frame admits a `request` under a kind that is not a call; the
+    /// table holds the identity under that kind, so the form check refuses
+    /// it, and the member's bound is still not a call bound. `Kind` has three
+    /// such kinds, and each is walked.
+    ///
+    /// Mutations: drop the Command-or-Query condition and keep the kind
+    /// comparison; refuse the bound for `Signal` only, or for `Signal` and
+    /// `Event` only.
+    #[test]
+    fn a_refused_request_to_a_bounded_non_call_member_under_its_own_kind_falls_into_the_last_64() {
+        for kind in [Kind::Signal, Kind::Event, Kind::Fixed] {
+            assert_refused_requests_fall_into_the_last_64(kind, target(kind, 8));
+        }
+    }
+
+    /// Mutation: keep the bound for `Kind::Command` only.
+    #[test]
+    fn sixty_five_bounded_query_responses_are_all_kept_within_their_bound() {
+        let (mut s, mut p, _n) = described_scanning();
+        open(&mut s);
+        let first = settled(&mut s, &mut p, QUERY, 1, Ok(&[1]));
+        for seq in 2..=65 {
+            settled(&mut s, &mut p, QUERY, seq, Ok(&[1]));
+        }
+        let (_, again) = send(&mut s, &request_at(QUERY, 1, 0, &[]));
+        assert_eq!(again, first);
+    }
+
+    /// The cap applies to the last-64 ring as well: a server with no table
+    /// whose replies are large closes with 1008 before the ring holds 64.
+    ///
+    /// Mutation: leave a response with no bound out of the byte count.
+    #[test]
+    fn a_server_with_no_table_closes_1008_when_large_replies_pass_the_cap() {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let mut p = rt.attach();
+        let config = config(&notes)
+            .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+            .unwrap();
+        let mut s = Session::new(Scanning(rt), &config);
+        open(&mut s);
+        let big = vec![1u8; 4037];
+        // Four replies of 4,037 bytes are 4,073 bytes each with their
+        // headers, 16,292 bytes in all, the cap; the fifth passes it, long
+        // before the ring holds 64.
+        for seq in 1..=5 {
+            let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
+            assert!(out.is_empty());
+            let c = claim(&mut p, QUERY);
+            p.settle(c.id, Ok(&big)).unwrap();
+            let (step, out) = tick(&mut s);
+            assert_eq!(out.len(), 1, "reply {seq}");
+            assert_eq!(out[0].len(), 4073, "reply {seq}");
+            let expected = if seq < 5 {
+                Step::Continue
+            } else {
+                Step::Close(1008)
+            };
+            assert_eq!(step, expected, "reply {seq}");
+        }
+    }
+
+    /// Mutation: close at `>=`.
+    #[test]
+    fn retained_bytes_equal_to_the_cap_do_not_close_and_one_more_byte_closes_1008() {
+        let notes = Notes::default();
+        let rt = Loopback::new(CATALOG);
+        let mut p = rt.attach();
+        // The cap cannot go below 16,292 bytes. Four `response`s of 4,073
+        // bytes reach it exactly, and the next one passes it.
+        let config = config(&notes)
+            .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
+            .unwrap();
+        let mut s = Session::new(Scanning(rt), &config);
+        open(&mut s);
+        let reply = vec![1u8; 4037];
+        for seq in 1..=4 {
+            let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
+            assert!(out.is_empty());
+            let c = claim(&mut p, QUERY);
+            p.settle(c.id, Ok(&reply)).unwrap();
+            let (step, out) = tick(&mut s);
+            assert_eq!(
+                (step, out.len(), out[0].len()),
+                (Step::Continue, 1, 4073),
+                "response {seq}"
+            );
+        }
+        let (step, out) = send(&mut s, &request(SIGNAL, 5, &[]));
+        // The fifth response is still sent, then the session closes.
+        assert_eq!((step, out.len()), (Step::Close(1008), 1));
+    }
+
+    /// Mutation: remove the expiry at the top of `request`.
+    #[test]
+    fn a_repeat_after_the_bound_with_no_tick_between_is_dropped() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        let out = settled(&mut s, &mut p, COMMAND, 1, Ok(&[]));
+        assert_eq!(out.len(), 1);
+        p.advance(Duration(1_000_001)); // max + 1, and no tick
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+
+    /// Mutation: keep while `now < until` (a zero bound then expires at once).
+    #[test]
+    fn a_bound_of_zero_keeps_the_response_until_the_clock_passes_the_receipt() {
+        let mut t = (*table()).clone();
+        t.insert(
+            IFACE,
+            COMMAND.ord,
+            Kind::Command,
+            Some(std::time::Duration::ZERO),
+        );
+        let (mut s, mut p, notes) = described_with(t, |c| c);
+        open(&mut s);
+        let out = settled(&mut s, &mut p, COMMAND, 1, Ok(&[]));
+        assert_eq!(out.len(), 1);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[]));
+        assert_eq!(again, out);
+        p.advance(Duration(1));
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, 0, &[]));
+        assert!(again.is_empty());
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::DuplicateDropped { seq: 1 }]
+        );
+    }
+
+    /// Mutation: a plain `+` instead of `saturating_add` (it overflows).
+    #[test]
+    fn a_stamp_and_a_clock_near_the_end_of_time_saturate_the_bound() {
+        let (mut s, mut p, _n) = described_scanning();
+        open(&mut s);
+        let late = i64::MAX - 10;
+        p.advance(Duration(late));
+        let (_, out) = send(&mut s, &request_at(COMMAND, 1, late, &[]));
+        assert!(out.is_empty());
+        let c = claim(&mut p, COMMAND);
+        p.settle(c.id, Ok(&[])).unwrap();
+        let (_, out) = tick(&mut s);
+        assert_eq!(out.len(), 1);
+        p.advance(Duration(10)); // the clock is at i64::MAX, the saturated bound
+        tick(&mut s);
+        let (_, again) = send(&mut s, &request_at(COMMAND, 1, late, &[]));
+        assert_eq!(again, out);
+    }
+
+    #[test]
+    fn the_default_retained_cap_is_sixteen_mebibytes() {
+        assert_eq!(Config::default().max_retained_bytes(), 16 * 1024 * 1024);
+    }
+
+    #[test]
+    fn described_new_refuses_a_table_whose_name_or_hash_differs_from_the_ports() {
+        let rt = Loopback::new(CATALOG);
+        let other_name = Arc::new(MemberTable::new("other", CATALOG.hash));
+        let err = Described::new(Scanning(rt.attach()), other_name)
+            .err()
+            .expect("refused");
+        assert_eq!(
+            err,
+            TableMismatch {
+                ports: CATALOG,
+                name: "other".to_owned(),
+                hash: CATALOG.hash
+            }
+        );
+        let other_hash = Arc::new(MemberTable::new("ws.test", CatalogHash([8; 32])));
+        let err = Described::new(Scanning(rt.attach()), other_hash)
+            .err()
+            .expect("refused");
+        assert_eq!(err.hash, CatalogHash([8; 32]));
+        assert!(Described::new(Scanning(rt.attach()), table()).is_ok());
+    }
+
+    /// Mutation: skip the lookup (the loopback answers `Init` for any key).
+    #[test]
+    fn a_subscribe_of_an_ordinal_the_table_lacks_is_unknown_and_a_later_commit_sends_nothing() {
+        let (mut s, mut p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Signal, 9);
+        let (step, out) = send(&mut s, &msg(Frame::Subscribe(t)));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(t));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+        p.set(IFACE, Ordinal(9), &[1]).unwrap();
+        p.commit();
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+    }
+
+    /// Mutation: look the ordinal up without the kind.
+    #[test]
+    fn a_subscribe_of_the_event_ordinal_under_kind_signal_is_unknown() {
+        let (mut s, _p, _n) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Signal, 2);
+        let (_, out) = send(&mut s, &msg(Frame::Subscribe(t)));
+        assert_eq!(decode(&out[0]).unwrap(), unknown(t));
+        // The same ordinal under its own kind is accepted.
+        let (_, out) = send(&mut s, &msg(Frame::Subscribe(target(Kind::Event, 2))));
+        assert_eq!(decode(&out[0]).unwrap(), accepted(target(Kind::Event, 2)));
+    }
+
+    /// Mutation: route by form first (the reserved ordinal would reach the
+    /// backend as a signal read; the signal under `Command` would be refused
+    /// by the form check with the same frame, so the second half checks the
+    /// note too).
+    #[test]
+    fn a_read_of_the_reserved_ordinal_and_a_request_of_the_signal_as_a_command_are_refused_with_the_identity_echoed(
+    ) {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let reserved = target(Kind::Signal, 6);
+        let (_, out) = send(&mut s, &msg(Frame::Read(reserved)));
+        assert_eq!(decode(&out[0]).unwrap(), unknown(reserved));
+        let as_command = target(Kind::Command, 1);
+        let (_, out) = send(&mut s, &request(as_command, 1, &[]));
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(
+                as_command,
+                0,
+                1,
+                1,
+                ResponseOutcome::Contract(Contract::UnknownInteraction)
+            )
+        );
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![
+                Note::UnknownInteraction { target: reserved },
+                Note::UnknownInteraction { target: as_command }
+            ]
+        );
+    }
+
+    /// Mutation: drop without recording.
+    #[test]
+    fn an_unsubscribe_of_an_unknown_key_sends_nothing_and_is_recorded() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Event, 9);
+        let (step, out) = send(&mut s, &msg(Frame::Unsubscribe(t)));
+        assert_eq!((step, out.is_empty()), (Step::Continue, true));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+    }
+
+    /// Mutation: `known` ignores the kind.
+    #[test]
+    fn a_read_of_the_fixed_ordinal_under_kind_signal_is_unknown() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Signal, 5);
+        let (_, out) = send(&mut s, &msg(Frame::Read(t)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(t));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+    }
+
+    /// Mutation: `known` ignores the kind (the form admits `Signal`, so the
+    /// frame would be dropped silently with no note).
+    #[test]
+    fn an_unsubscribe_of_a_known_ordinal_under_the_wrong_kind_is_dropped_and_recorded() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let t = target(Kind::Signal, 2);
+        let (step, out) = send(&mut s, &msg(Frame::Unsubscribe(t)));
+        assert_eq!((step, out.is_empty()), (Step::Continue, true));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::UnknownInteraction { target: t }]
+        );
+    }
+
+    /// Review Focus item 1: the table lists the command, no handler serves it.
+    #[test]
+    fn a_listed_command_no_handler_serves_stays_in_flight() {
+        let (mut s, _p, notes) = described_scanning();
+        open(&mut s);
+        let (_, out) = send(&mut s, &request(COMMAND, 1, &[]));
+        assert!(out.is_empty());
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    /// A loopback whose signal reads are counted. It presents every port the
+    /// two adapters need.
+    struct CountingPorts {
+        inner: Loopback,
+        reads: Rc<Cell<usize>>,
+    }
+
+    impl Attached for CountingPorts {
+        fn catalog(&self) -> &CatalogRef {
+            self.inner.catalog()
+        }
+    }
+
+    impl Encoded for CountingPorts {
+        type Encoding = <Loopback as Encoded>::Encoding;
+    }
+
+    impl Clock for CountingPorts {
+        fn now(&self) -> Timestamp {
+            self.inner.now()
+        }
+    }
+
+    impl SignalReader for CountingPorts {
+        fn read(
+            &self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            out: &mut [u8],
+        ) -> Result<RawSample, ReadError> {
+            self.reads.set(self.reads.get() + 1);
+            self.inner.read(iface, ord, out)
+        }
+    }
+
+    impl ScannableSignals for CountingPorts {
+        fn generation(&self, iface: InterfaceNo) -> u64 {
+            self.inner.generation(iface)
+        }
+
+        fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize {
+            self.inner.scan(marks, out)
+        }
+    }
+
+    impl FixedReader for CountingPorts {
+        fn read_fixed(
+            &self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            out: &mut [u8],
+        ) -> Result<usize, ReadError> {
+            self.inner.read_fixed(iface, ord, out)
+        }
+    }
+
+    impl EventSource for CountingPorts {
+        fn subscribe(
+            &mut self,
+            iface: InterfaceNo,
+            ords: &[Ordinal],
+        ) -> Result<(), SubscribeError> {
+            self.inner.subscribe(iface, ords)
+        }
+        fn unsubscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) {
+            self.inner.unsubscribe(iface, ords);
+        }
+        fn next(&mut self, out: &mut [u8]) -> Result<Option<RawOccurrence>, ReadError> {
+            self.inner.next(out)
+        }
+    }
+
+    impl Caller for CountingPorts {
+        fn command(
+            &mut self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            args: &[u8],
+            trace: Option<TraceContext>,
+        ) -> Result<Correlation, SendError> {
+            self.inner.command(iface, ord, args, trace)
+        }
+        fn query(
+            &mut self,
+            iface: InterfaceNo,
+            ord: Ordinal,
+            args: &[u8],
+            trace: Option<TraceContext>,
+        ) -> Result<Correlation, SendError> {
+            self.inner.query(iface, ord, args, trace)
+        }
+        fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>> {
+            self.inner.ack(c)
+        }
+        fn reply(
+            &mut self,
+            c: Correlation,
+            out: &mut [u8],
+        ) -> Result<Option<Result<usize, CallError>>, ReadError> {
+            self.inner.reply(c, out)
+        }
+        fn forget(&mut self, c: Correlation) {
+            self.inner.forget(c);
+        }
+    }
+
+    /// Subscribes 1000 keys the table lacks, commits a value under each, and
+    /// checks that a tick publishes nothing and reads nothing.
+    fn assert_unknown_subscribes_leave_no_state<B: Backend>(
+        mut s: Session<B>,
+        mut p: Loopback,
+        reads: &Cell<usize>,
+        mode: &str,
+    ) {
+        open(&mut s);
+        for ord in 100..1100u32 {
+            let (_, out) = send(&mut s, &msg(Frame::Subscribe(target(Kind::Signal, ord))));
+            assert_eq!(decode(&out[0]).unwrap(), unknown(target(Kind::Signal, ord)));
+            p.set(IFACE, Ordinal(ord), &[1]).unwrap();
+        }
+        p.commit();
+        reads.set(0);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty(), "{mode}");
+        assert_eq!(reads.get(), 0, "{mode}: a tick read a signal");
+    }
+
+    /// Mutation: insert the signal state before the lookup.
+    #[test]
+    fn a_thousand_unknown_subscribes_leave_no_signal_state_in_either_mode() {
+        for scanning in [false, true] {
+            let rt = Loopback::new(CATALOG);
+            let provider = rt.attach();
+            let reads = Rc::new(Cell::new(0));
+            let ports = CountingPorts {
+                inner: rt,
+                reads: Rc::clone(&reads),
+            };
+            if scanning {
+                let b = Described::new(Scanning(ports), table()).unwrap();
+                let s = Session::new(b, &Config::default());
+                assert_unknown_subscribes_leave_no_state(s, provider, &reads, "scanning");
+            } else {
+                let b = Described::new(Polling(ports), table()).unwrap();
+                let s = Session::new(b, &Config::default());
+                assert_unknown_subscribes_leave_no_state(s, provider, &reads, "polling");
+            }
+        }
     }
 }

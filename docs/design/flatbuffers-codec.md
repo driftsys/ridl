@@ -411,10 +411,11 @@ regenerates it and asserts byte equality. There is no `build.rs` and no `flatc`:
 any of them, or `ridl-backend-flatbuffers`, becomes a normal dependency of
 `ridl-backend-rust` at any distance — the guard walks the normal-edge closure,
 not just the direct edges. The toolchain may depend on planus (`ridl-descriptor`
-does); `ridl-rt` and every generated package must not (ADR-0020 decision 5, as
-amended 2026-10-03). The same file checks `ridl-rt`, and the crate `ridl build`
-generates for `examples/cabin` when `just demo` runs that ignored test. The
-`.fbs` is emitted from the same IR as the codec.
+does, and `ridl-transport-ws` reaches it under its optional `descriptor`
+feature); `ridl-rt` and every generated package must not (ADR-0020 decision 5,
+as amended 2026-10-03). The same file checks `ridl-rt`, and the crate
+`ridl build` generates for `examples/cabin` when `just demo` runs that ignored
+test. The `.fbs` is emitted from the same IR as the codec.
 
 **What "from the same IR" does and does not buy.** It rules out the schema and
 the codec being generated from two different inputs. It does not make the suite

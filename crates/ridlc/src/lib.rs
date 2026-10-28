@@ -178,6 +178,8 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
             // No manifest: no header file.
             codegen_header: None,
             backends: BTreeMap::new(),
+            // No manifest: no `[limits]` table.
+            unit_limits: BTreeMap::new(),
             report_scope: None,
             // A source text has no directory, so no unit is recorded.
             units: BTreeMap::new(),
@@ -620,7 +622,8 @@ pub enum Emit {
     /// 2026-09-22): the compact form, whose reader stops 100 message levels
     /// below the root where the canonical JSON has no such bound.
     IrBinary,
-    /// Idiomatic TypeScript source, written to `<base>.ts`.
+    /// Idiomatic TypeScript source, written to `<base>.ts`, and the codec
+    /// module `<base>.codec.ts` with `[backend.typescript] codec = true`.
     ///
     /// The flag value is spelled `typescript` rather than the derived
     /// `type-script`: the language emits are named after the language, as
@@ -646,6 +649,11 @@ pub enum Emit {
     /// A wire backend: the typl surface plus the interaction identity table,
     /// and nothing above them (ADR-0013 decision 2).
     Flatbuffers,
+    /// The podbuf C header, written to `<base>.h`.
+    ///
+    /// A wire backend: the header a C consumer reads a verified podbuf buffer
+    /// through, with no library.
+    Podbuf,
     /// The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf
     /// JSON, written to `<base>.codegen.json`.
     ///
@@ -729,6 +737,7 @@ impl Emit {
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
+            | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
             // `Catalog` is classed as a code emit although it goes through no
@@ -762,6 +771,7 @@ impl Emit {
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
+            | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
             | Emit::Catalog => None,
@@ -801,6 +811,7 @@ impl Emit {
             Emit::TypeScript => Some("typescript"),
             Emit::Proto => Some("proto"),
             Emit::Flatbuffers => Some("flatbuffers"),
+            Emit::Podbuf => Some("podbuf"),
             Emit::CodegenModel => Some("codegen-model"),
             Emit::CodegenRequest => Some("codegen-request"),
             Emit::Catalog | Emit::IrJson | Emit::IrText | Emit::IrBinary => None,
@@ -814,8 +825,10 @@ impl Emit {
     /// TypeScript and codegen-model backends refuse the option, and the
     /// codegen-request backend writes its options into the request rather
     /// than emitting a codec from them, so a warning naming their table
-    /// would ask for a key the table cannot act on. The
-    /// TypeScript emit joins this arm when its backend emits a codec.
+    /// would ask for a key the table cannot act on. The TypeScript backend
+    /// writes a codec module under `codec = true`, but that module converts
+    /// FlatBuffers only and the backend takes no `encodings` option, so the
+    /// TypeScript emit stays in the false arm.
     pub(crate) fn carries_codec(self) -> bool {
         #[deny(
             clippy::wildcard_enum_match_arm,
@@ -826,6 +839,7 @@ impl Emit {
             Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
+            | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
             | Emit::Catalog
@@ -1110,6 +1124,36 @@ fn run_build_inner<E: From<std::io::Error>>(
         ..
     } = load_and_check(&mut db, entry, &[], RemoteAccess::new(frozen, &cache))
         .map_err(|err| E::from(load_io_error(err)))?;
+    // The backends whose table sets `wasm = true`; only the Rust backend acts
+    // on it, and a backend that takes no such option refuses it.
+    let mut wasm_backends: BTreeSet<String> = backends
+        .iter()
+        .filter(|(_, table)| table.wasm == Some(true))
+        .map(|(language, _)| language.clone())
+        .collect();
+    // The backends whose table sets `codec = true`.
+    let codec_backends: BTreeSet<String> = backends
+        .iter()
+        .filter(|(_, table)| table.codec)
+        .map(|(language, _)| language.clone())
+        .collect();
+    // The backends whose table sets `transcode = true`; only the Rust backend
+    // acts on it, and a backend that takes no such option refuses it.
+    let transcode_backends: BTreeSet<String> = backends
+        .iter()
+        .filter(|(_, table)| table.transcode)
+        .map(|(language, _)| language.clone())
+        .collect();
+    // `codec = true` turns the `wasm` module on when the `rust` table writes no
+    // `wasm` key; a written `wasm = false` or a missing `rust` table is
+    // MANI-019 from the manifest parser.
+    let implied_wasm = !codec_backends.is_empty()
+        && backends
+            .get("rust")
+            .is_some_and(|table| table.wasm.is_none());
+    if implied_wasm {
+        wasm_backends.insert("rust".to_string());
+    }
     // The backends read names only; the spans served the loader's diagnostics.
     let backends: BTreeMap<String, Vec<String>> = backends
         .into_iter()
@@ -1429,7 +1473,7 @@ fn run_build_inner<E: From<std::io::Error>>(
         // names, so this is the check that keeps a build from truncating
         // sources a person wrote.
         if writes_crate_files {
-            let refusals = crate_file_refusals(out_dir)?;
+            let refusals = crate_file_refusals(out_dir, wasm_backends.contains("rust"))?;
             if !refusals.is_empty() {
                 diagnostics.extend(refusals);
                 return Ok(CliRun {
@@ -1474,6 +1518,10 @@ fn run_build_inner<E: From<std::io::Error>>(
                 selected.as_ref(),
                 codegen_header.as_deref(),
                 &backends,
+                &wasm_backends,
+                implied_wasm,
+                &codec_backends,
+                &transcode_backends,
                 &mut diagnostics,
             )?;
         }
@@ -1483,6 +1531,23 @@ fn run_build_inner<E: From<std::io::Error>>(
         }
 
         if let Some(std_ir) = &std_ir {
+            // `ridl.std.codec.ts` is written only when a member's codec
+            // module imports it, for a payload type that is a `ridl.std`
+            // scalar: `flatc` is run on `ridl.std.fbs` for that import and
+            // for nothing else, so a file nothing imports could not be
+            // type-checked.
+            let std_codec = codec_backends.contains("typescript")
+                && code_emits.contains(&Emit::TypeScript)
+                && checked.iter().any(|package| {
+                    let model = codegen::lower(&package.ir, &others);
+                    ridl_backend_ts::codec_imports(&model)
+                        .is_ok_and(|imports| imports.contains("ridl.std"))
+                });
+            let std_codec_backends: BTreeSet<String> = codec_backends
+                .iter()
+                .filter(|language| std_codec || language.as_str() != "typescript")
+                .cloned()
+                .collect();
             write_emits(
                 out_dir,
                 "ridl.std",
@@ -1495,6 +1560,10 @@ fn run_build_inner<E: From<std::io::Error>>(
                 selected.as_ref(),
                 codegen_header.as_deref(),
                 &backends,
+                &wasm_backends,
+                implied_wasm,
+                &std_codec_backends,
+                &transcode_backends,
                 &mut diagnostics,
             )?;
         }
@@ -1517,6 +1586,22 @@ fn run_build_inner<E: From<std::io::Error>>(
             // feature per encoding the backend was asked to emit a codec for,
             // and none when it was asked for none.
             let rust_encodings: &[String] = backends.get("rust").map_or(&[], Vec::as_slice);
+            // The `wasm` module is one per crate, over every package the crate
+            // holds, so it is generated here rather than per package.
+            let wasm_source = if wasm_backends.contains("rust") {
+                let mut members: Vec<&ridl_ir::v2::Package> = packages.clone();
+                members.extend(std_ir.as_ref());
+                wasm_module_source(
+                    &members,
+                    &own,
+                    &others,
+                    compatible,
+                    root_package.as_deref(),
+                    &mut diagnostics,
+                )
+            } else {
+                None
+            };
             write_crate_files(
                 out_dir,
                 &crate_name_for(root_package.as_deref()),
@@ -1524,6 +1609,7 @@ fn run_build_inner<E: From<std::io::Error>>(
                 &package_names,
                 codegen_header.as_deref(),
                 rust_encodings,
+                wasm_source.as_deref(),
                 &diagnostics,
             )?;
         }
@@ -1570,11 +1656,17 @@ const OLD_CARGO_TOML_MARKER: &str = "# Generated by ridlc. Do not edit.";
 const OLD_LIB_RS_MARKER: &str = "// Generated by ridlc. Do not edit.";
 
 /// Writes `<out_dir>/lib.rs` and `<out_dir>/Cargo.toml` for a Rust emit, or
-/// writes neither.
+/// writes neither. With `wasm`, the source of the `wasm` module
+/// (`[backend.rust] wasm = true`, or `codec = true` on another backend
+/// table, which implies it), it also writes that module to
+/// [`WASM_FILE`], and the crate root and the manifest name it. Without
+/// `wasm`, it removes a [`WASM_FILE`] that starts with the generated marker,
+/// which an earlier build with the option on wrote, and leaves any other file
+/// of that name as it is.
 ///
-/// The two files are decided together and refused together, because a crate
-/// root without a manifest and a manifest without a crate root are each worse
-/// than neither. Two conditions stop both writes:
+/// The crate files are decided together and refused together, because a
+/// crate root without a manifest and a manifest without a crate root are each
+/// worse than neither. Two conditions stop every write:
 ///
 /// - **An error-severity diagnostic is present.** [`run_build`] computes its
 ///   emit gate before the per-package write loop, so that gate cannot see a
@@ -1592,8 +1684,12 @@ const OLD_LIB_RS_MARKER: &str = "// Generated by ridlc. Do not edit.";
 /// either one is returned as `Err`, which aborts the build with exit code 2,
 /// and a failure on the manifest therefore leaves the crate root written.
 /// Making the pair atomic would need a temporary directory and a rename, which
-/// buys nothing a re-run does not: the next successful build overwrites both,
-/// because both carry the marker that permits it.
+/// buys nothing a re-run does not: the next successful build overwrites every
+/// crate file, because each carries the marker that permits it.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the crate's facts, passed once from `run_build_inner`"
+)]
 fn write_crate_files(
     out_dir: &Path,
     crate_name: &str,
@@ -1601,6 +1697,7 @@ fn write_crate_files(
     package_names: &[String],
     header: Option<&str>,
     encodings: &[String],
+    wasm: Option<&str>,
     diagnostics: &[Diagnostic],
 ) -> std::io::Result<()> {
     if diagnostics
@@ -1617,6 +1714,7 @@ fn write_crate_files(
         render_lib_rs(
             package_names,
             &codegen::comment_preamble(&marker, header, "//"),
+            wasm.is_some(),
         ),
     )?;
     std::fs::write(
@@ -1625,14 +1723,36 @@ fn write_crate_files(
             crate_name,
             &codegen::comment_preamble(&marker, header, "#"),
             encodings,
+            wasm.is_some(),
         ),
     )?;
+    // A `wasm` module an earlier build wrote, with the option on, is removed
+    // when the option is off: the crate root no longer names it. A file that
+    // does not start with the generated marker is not one ridlc wrote, and is
+    // left as it is.
+    let wasm_path = out_dir.join(WASM_FILE);
+    if wasm.is_none() && wasm_path.is_file() {
+        let marker = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
+        if std::fs::read_to_string(&wasm_path)?.starts_with(&marker) {
+            std::fs::remove_file(&wasm_path)?;
+        }
+    }
+    if let Some(source) = wasm {
+        std::fs::write(
+            out_dir.join(WASM_FILE),
+            format!(
+                "{}{source}",
+                codegen::comment_preamble(&marker, header, "//")
+            ),
+        )?;
+    }
     Ok(())
 }
 
-/// The overwrite gate for the two crate files: one error diagnostic per
-/// destination that exists and was not written by a previous build, and an
-/// empty vector when both are safe to write.
+/// The overwrite gate for the crate files: `lib.rs`, `Cargo.toml`, and
+/// [`WASM_FILE`] when `wasm` is on. One error diagnostic per destination that
+/// exists and was not written by a previous build, and an empty vector when
+/// every one is safe to write.
 ///
 /// `lib.rs` and `Cargo.toml` are not package-scoped names and `--out-dir` is
 /// any directory the caller names, including the root of a hand-written crate.
@@ -1642,15 +1762,21 @@ fn write_crate_files(
 /// marker an earlier release wrote is treated as hand-written and is left
 /// exactly as it is.
 ///
-/// Both destinations are checked even once the first has refused, so a build
+/// Every destination is checked even once the first has refused, so a build
 /// into a hand-written crate reports every file it declined rather than one at
 /// a time.
-fn crate_file_refusals(out_dir: &Path) -> std::io::Result<Vec<Diagnostic>> {
+fn crate_file_refusals(out_dir: &Path, wasm: bool) -> std::io::Result<Vec<Diagnostic>> {
     let mut refusals = Vec::new();
-    for (path, comment, old_marker) in [
-        (out_dir.join("lib.rs"), "//", OLD_LIB_RS_MARKER),
-        (out_dir.join("Cargo.toml"), "#", OLD_CARGO_TOML_MARKER),
-    ] {
+    let mut files = vec![
+        (out_dir.join("lib.rs"), "//", Some(OLD_LIB_RS_MARKER)),
+        (out_dir.join("Cargo.toml"), "#", Some(OLD_CARGO_TOML_MARKER)),
+    ];
+    // The `wasm` module's file, when this build writes it. No earlier release
+    // wrote it under another marker, so it has no old marker.
+    if wasm {
+        files.push((out_dir.join(WASM_FILE), "//", None));
+    }
+    for (path, comment, old_marker) in files {
         if let Some(diagnostic) = refuse_overwrite(&path, comment, old_marker)? {
             refusals.push(diagnostic);
         }
@@ -1660,7 +1786,8 @@ fn crate_file_refusals(out_dir: &Path) -> std::io::Result<Vec<Diagnostic>> {
 
 /// An error diagnostic when `path` exists and was not written by a previous
 /// build, or `None` when the file is absent or begins with the current marker
-/// (`comment` and [`codegen::GENERATED_MARKER_PREFIX`]) or with `old_marker`.
+/// (`comment` and [`codegen::GENERATED_MARKER_PREFIX`]) or with `old_marker`,
+/// when there is one.
 ///
 /// A file this cannot read is neither written nor refused: the read error is
 /// returned as the [`std::io::Error`] it is, so [`run_build`] returns `Err`
@@ -1671,22 +1798,26 @@ fn crate_file_refusals(out_dir: &Path) -> std::io::Result<Vec<Diagnostic>> {
 fn refuse_overwrite(
     path: &Path,
     comment: &str,
-    old_marker: &str,
+    old_marker: Option<&str>,
 ) -> std::io::Result<Option<Diagnostic>> {
     if !path.exists() {
         return Ok(None);
     }
     let marker = format!("{comment} {}", codegen::GENERATED_MARKER_PREFIX);
     let text = std::fs::read_to_string(path)?;
-    if text.starts_with(&marker) || text.starts_with(old_marker) {
+    if text.starts_with(&marker) || old_marker.is_some_and(|old| text.starts_with(old)) {
         return Ok(None);
     }
+    let expected = match old_marker {
+        Some(old) => format!("`{marker}` or with `{old}`"),
+        None => format!("`{marker}`"),
+    };
     Ok(Some(error_diagnostic(
         "",
         format!(
-            "`{}` exists and does not start with `{marker}` or with `{old_marker}`, so ridlc did \
-             not write it: a file that starts with neither marker was not generated by ridlc and \
-             could be a hand-written one. This build wrote nothing at all — no crate root, no \
+            "`{}` exists and does not start with {expected}, so ridlc did not write it: a file \
+             that does not start with the generated marker was not generated by ridlc and could \
+             be a hand-written one. This build wrote nothing at all — no crate root, no \
              generated manifest, and no package sources — and the existing file is unchanged. \
              Remove it, or build into a different --out-dir",
             path.display()
@@ -1731,19 +1862,30 @@ fn refuse_overwrite(
 /// the `regex` version the workspace's `Cargo.lock` resolves, which is the
 /// version the checker links.
 ///
-/// The manifest declares edition 2021 and no `rust-version`. Edition 2021 is
-/// the edition ADR-0029 decision 5 promises the generated crate compiles as
-/// with Rust 1.83, and cargo before 1.85 cannot read a manifest that declares
-/// edition 2024. The compatibility gate builds with every feature on and
-/// with default features off. The backend's compile proofs build the emitted
+/// The manifest declares edition 2021 and `rust-version = "1.88"`, the
+/// edition and the minimum Rust version ADR-0029 decision 5 promises the
+/// generated crate compiles with. The `rust-version` lets a resolver that
+/// reads it select dependency releases that Rust 1.88 builds. The
+/// compatibility gate builds with every feature on and with default features
+/// off. The backend's compile proofs build the emitted
 /// source as edition 2024 as well.
 ///
-/// The `ridl-rt = "0.12"` requirement is a literal, not read from
+/// With `wasm`, which `[backend.rust] wasm = true` sets, or `codec = true`
+/// on another backend table, which implies it, `[features]` also
+/// declares `wasm-exports = ["std"]`, the feature that compiles the exports of
+/// the `wasm` module. The manifest declares no crate type and no profile: the
+/// module is built with
+/// `cargo rustc --release --target wasm32-unknown-unknown --crate-type cdylib --features wasm-exports`,
+/// so a Rust consumer that depends on the crate links an `rlib` with no
+/// exported symbol, and the size settings come from the caller's environment.
+/// Without it the manifest is the one written before the option existed.
+///
+/// The `ridl-rt = "0.14"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
 /// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.
-fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String]) -> String {
-    const RIDL_RT_REQUIREMENT: &str = "0.12";
+fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String], wasm: bool) -> String {
+    const RIDL_RT_REQUIREMENT: &str = "0.14";
     let ridl_rt = if encodings.is_empty() {
         format!(r#"ridl-rt = {{ version = "{RIDL_RT_REQUIREMENT}" }}"#)
     } else {
@@ -1754,11 +1896,21 @@ fn render_cargo_toml(crate_name: &str, preamble: &str, encodings: &[String]) -> 
             .join(", ");
         format!(r#"ridl-rt = {{ version = "{RIDL_RT_REQUIREMENT}", features = [{features}] }}"#)
     };
+    // `[backend.rust] wasm = true`, or `codec = true` on another backend
+    // table, which implies it: the feature that compiles the exports.
+    // Without the option the manifest is unchanged.
+    let wasm_feature = if wasm {
+        "# Export the `wasm` module's functions from a wasm32 cdylib.\n\
+         wasm-exports = [\"std\"]\n"
+    } else {
+        ""
+    };
     format!(
         r#"{preamble}[package]
 name = "{crate_name}"
 version = "0.0.0"
 edition = "2021"
+rust-version = "1.88"
 
 [features]
 default = ["validate-pattern", "std"]
@@ -1767,7 +1919,7 @@ default = ["validate-pattern", "std"]
 # regex dependency; range and length checks are unaffected.
 validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
-
+{wasm_feature}
 [dependencies]
 {ridl_rt}
 regex = {{ version = "1.13", optional = true }}
@@ -1796,7 +1948,7 @@ const NO_STD: &str = r#"not(any(feature = "std", feature = "validate-pattern"))"
 /// reference: a package segment that is a Rust keyword (`veh.mod` is a legal
 /// typl package name) must be escaped identically on both surfaces, or the
 /// crate either does not parse or does not resolve.
-fn render_lib_rs(package_names: &[String], preamble: &str) -> String {
+fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String {
     #[derive(Default)]
     struct Node {
         children: std::collections::BTreeMap<String, Node>,
@@ -1900,7 +2052,109 @@ fn render_lib_rs(package_names: &[String], preamble: &str) -> String {
          extern crate alloc as std;\n\n"
     );
     render(&root, 0, &mut out);
+    if wasm {
+        // The module `[backend.rust] wasm = true`, or `codec = true` on
+        // another backend table, which implies it, adds
+        // (`wasm_module_source`). A package whose first segment is `wasm`
+        // would claim the same
+        // module name, and `wasm_module_source` refuses that build.
+        out.push_str(&format!("#[path = \"{WASM_FILE}\"]\npub mod wasm;\n"));
+    }
     out
+}
+
+/// The file the `wasm` module of the generated crate is written to. No package
+/// writes it: a package file is `<package name>.rs`, and a package name starts
+/// with a letter.
+const WASM_FILE: &str = "__ridl_wasm.rs";
+
+/// The source of the `wasm` module (`[backend.rust] wasm = true`, or
+/// `codec = true` on another backend table, which implies it) for a crate
+/// that holds `members`, or `None` with an error diagnostic pushed when the
+/// build cannot have one.
+///
+/// The payload types are those of every package of the crate, `ridl.std` and
+/// remote units included. The catalog hash is that of one unit of the
+/// workspace's own packages, `own`: the root package's unit when the manifest
+/// names a package, otherwise the one unit the packages share. Each package is
+/// lowered as the per-package Rust emit lowers it, over `others` with the
+/// earlier catalogs of its unit, so the hash is the one every
+/// `Interface::CATALOG` of the unit carries.
+fn wasm_module_source(
+    members: &[&ridl_ir::v2::Package],
+    own: &[&ridl_ir::v2::Package],
+    others: &[&ridl_ir::v2::Package],
+    compatible: &BTreeMap<String, Vec<[u8; 32]>>,
+    root_package: Option<&str>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<String> {
+    let mut refuse = |message: String| {
+        diagnostics.push(error_diagnostic(
+            "",
+            message,
+            FileId::DETACHED,
+            TextRange::default(),
+        ));
+        None
+    };
+    if let Some(package) = members
+        .iter()
+        .find(|package| package.name.split('.').next() == Some("wasm"))
+    {
+        return refuse(format!(
+            "`[backend.rust] wasm = true`, or `codec = true` on another backend table, which \
+             implies it, adds a module `wasm` to the generated crate, and package `{}` already \
+             uses that module name",
+            package.name
+        ));
+    }
+    let root_unit = root_package
+        .and_then(|name| own.iter().find(|package| package.name == name))
+        .map(|package| ridl_ir::v2::unit_of(package));
+    let units: BTreeSet<&str> = own
+        .iter()
+        .map(|package| ridl_ir::v2::unit_of(package))
+        .collect();
+    let unit = match wasm_unit(root_unit, &units) {
+        Ok(unit) => unit,
+        Err(message) => return refuse(message),
+    };
+    let lower = |package: &ridl_ir::v2::Package| {
+        let earlier = compatible
+            .get(ridl_ir::v2::unit_of(package))
+            .map_or(&[][..], Vec::as_slice);
+        codegen::lower_with(package, others, earlier)
+    };
+    let hash = own
+        .iter()
+        .find(|package| ridl_ir::v2::unit_of(package) == unit)
+        .map(|package| lower(package))
+        .and_then(|model| model.catalog)
+        .map(|catalog| catalog.hash)
+        .unwrap_or_default();
+    let models: Vec<v1::Model> = members.iter().map(|package| lower(package)).collect();
+    let models: Vec<&v1::Model> = models.iter().collect();
+    match ridl_backend_rust::generate_wasm_module(&hash, &models) {
+        Ok(generated) => Some(generated.rust_source),
+        Err(err) => refuse(err.message),
+    }
+}
+
+/// The unit whose catalog hash the `wasm` module writes: the root package's
+/// unit when the manifest names a package, otherwise the one unit of `units`,
+/// the units of the workspace's own packages. A remote unit is not in `units`.
+/// Any other build is refused, because the module carries one hash.
+fn wasm_unit<'a>(root_unit: Option<&'a str>, units: &BTreeSet<&'a str>) -> Result<&'a str, String> {
+    match (root_unit, units.len()) {
+        (Some(unit), _) => Ok(unit),
+        (None, 1) => Ok(units.iter().next().copied().expect("one unit")),
+        (None, count) => Err(format!(
+            "`[backend.rust] wasm = true`, or `codec = true` on another backend table, which \
+             implies it, writes the catalog hash of one unit; this build has {count} units and \
+             no root package. Build one package whose manifest is its own root, or set \
+             `wasm = true` in the build of one member"
+        )),
+    }
 }
 
 /// Lowers the workspace's system (rsdl reference §13) and embeds in each region
@@ -2030,6 +2284,8 @@ struct Compiled {
     codegen_header: Option<String>,
     /// The `[backend.<name>]` tables ([`LoadedWorkspace::backends`]).
     backends: BTreeMap<String, ridl_core::BackendTable>,
+    /// Each unit's `[limits]` table ([`LoadedWorkspace::unit_limits`]).
+    limits: BTreeMap<String, ridl_core::UnitLimits>,
     /// The member directory the entry lies in
     /// ([`LoadedWorkspace::report_scope`]).
     report_scope: Option<PathBuf>,
@@ -2071,6 +2327,7 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         lints,
         codegen_header,
         backends,
+        unit_limits,
         report_scope,
         units: _,
         root_package,
@@ -2163,9 +2420,49 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         &resolutions,
         &mut sources,
     ));
+    // RIDL-150 lowers each package to the codegen model, so it skips a package
+    // that has an error, or that depends on one, and still examines the clean
+    // packages of the workspace. The errors that count are the ones that stop
+    // `ridl build` writing any artifact (`blocks_every_artifact`). The
+    // encodings are those of every `[backend.<name>]` table; none named means
+    // FlatBuffers is checked. A workspace with no interface has nothing to
+    // report, so `ridl.std` is not checked for it either.
+    let encodings = enabled_encodings(&backends);
+    // RIDL-153 to RIDL-155 read types, not interactions, so they run for a
+    // workspace with no interface, whenever a backend table enables podbuf.
+    if encodings.iter().any(|name| name == "podbuf") {
+        let blocked =
+            payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
+        let std_ir = check_package(db, workspace, std, std).ir;
+        diagnostics.extend(design_lints::check_podbuf(
+            db,
+            &packages,
+            &checked,
+            &resolutions,
+            &blocked,
+            &std_ir,
+            &encodings,
+            &mut sources,
+        ));
+    }
+    if checked.iter().any(|pkg| pkg.ir.shapes().next().is_some()) {
+        let blocked =
+            payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
+        let std_ir = check_package(db, workspace, std, std).ir;
+        diagnostics.extend(design_lints::check_payload_ceiling(
+            db,
+            &packages,
+            &checked,
+            &resolutions,
+            &blocked,
+            &std_ir,
+            &encodings,
+            &mut sources,
+        ));
+    }
     drop_remote_non_errors(&mut diagnostics, &sources, &remote_units);
 
-    Compiled {
+    let mut compiled = Compiled {
         workspace,
         std,
         checked,
@@ -2177,9 +2474,146 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         lints,
         codegen_header,
         backends,
+        limits: unit_limits,
         report_scope,
         root_package,
         remote_units,
+    };
+    check_unit_limits(db, &packages, &mut compiled);
+    // After the checks, which read the IR without a limit, the limit is
+    // recorded on the interactions for every consumer of the checked IR.
+    design_lints::annotate_payload_limits(db, &packages, &mut compiled.checked, &compiled.limits);
+    compiled
+}
+
+/// The encoding names that every `[backend.<name>]` table enables, as one
+/// sorted set.
+fn enabled_encodings(backends: &BTreeMap<String, ridl_core::BackendTable>) -> Vec<String> {
+    let mut encodings: Vec<String> = backends
+        .values()
+        .flat_map(|table| table.encodings.iter().map(|(name, _)| name.clone()))
+        .collect();
+    encodings.sort();
+    encodings.dedup();
+    encodings
+}
+
+/// RIDL-151 and RIDL-152 over the `[limits]` tables that the load carried in
+/// `compiled.limits` (ADR-0030 decisions 12 and 14). Both are errors, so they
+/// are added after the remote units' non-errors are dropped. A package with an
+/// error, and a package that depends on one, is skipped as for RIDL-150. An
+/// error in a manifest stops the checks of the packages beneath that manifest
+/// only, where it stops RIDL-150 in every package.
+fn check_unit_limits(db: &RidlDatabase, packages: &[Package], compiled: &mut Compiled) {
+    if compiled.limits.is_empty() {
+        return;
+    }
+    let blocked = payload_ceiling_blocked(
+        db,
+        packages,
+        &compiled.checked,
+        &compiled.diagnostics,
+        &compiled.sources,
+        true,
+    );
+    let encodings = enabled_encodings(&compiled.backends);
+    let std_ir = check_package(db, compiled.workspace, compiled.std, compiled.std).ir;
+    let found = design_lints::check_payload_limits(
+        db,
+        packages,
+        &compiled.checked,
+        &compiled.resolutions,
+        &blocked,
+        &std_ir,
+        &encodings,
+        &compiled.limits,
+        &mut compiled.sources,
+    );
+    compiled.diagnostics.extend(found);
+}
+
+/// Per entry of `packages`, whether the payload checks skip it (RIDL-150,
+/// RIDL-151 and RIDL-152): the package has an error that blocks every
+/// artifact, or depends on a package that does. An error that no package's
+/// source file carries blocks every package, except that with `by_manifest` an
+/// error in a file whose directory holds the files of some packages blocks only
+/// those packages: a manifest error of one unit does not stop the checks of
+/// another unit.
+fn payload_ceiling_blocked(
+    db: &RidlDatabase,
+    packages: &[Package],
+    checked: &[CheckedPackage],
+    diagnostics: &[Diagnostic],
+    sources: &SourceMap,
+    by_manifest: bool,
+) -> Vec<bool> {
+    let paths: Vec<BTreeSet<String>> = packages
+        .iter()
+        .map(|package| {
+            package
+                .files(db)
+                .iter()
+                .map(|file| file.path(db).to_string())
+                .collect()
+        })
+        .collect();
+    let mut blocked = vec![false; packages.len()];
+    let mut everywhere = false;
+    for diagnostic in diagnostics.iter().filter(|d| blocks_every_artifact(d)) {
+        let owner = sources
+            .path(diagnostic.primary.file)
+            .and_then(|path| paths.iter().position(|set| set.contains(path)));
+        match owner {
+            Some(index) => blocked[index] = true,
+            None => {
+                let beneath: Vec<usize> = if by_manifest {
+                    sources
+                        .path(diagnostic.primary.file)
+                        .and_then(|path| Path::new(path).parent())
+                        .map(|dir| {
+                            (0..paths.len())
+                                .filter(|index| {
+                                    paths[*index]
+                                        .iter()
+                                        .any(|file| Path::new(file).starts_with(dir))
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                if beneath.is_empty() {
+                    everywhere = true;
+                }
+                for index in beneath {
+                    blocked[index] = true;
+                }
+            }
+        }
+    }
+    if everywhere {
+        return vec![true; packages.len()];
+    }
+    // A dependent of a blocked package is blocked, transitively.
+    loop {
+        let mut changed = false;
+        for index in 0..checked.len() {
+            if blocked[index] {
+                continue;
+            }
+            let referenced = ridl_ir::v2::referenced_packages(&checked[index].ir);
+            let depends = checked.iter().zip(&blocked).any(|(other, other_blocked)| {
+                *other_blocked && referenced.contains(&other.ir.name)
+            });
+            if depends {
+                blocked[index] = true;
+                changed = true;
+            }
+        }
+        if !changed {
+            return blocked;
+        }
     }
 }
 
@@ -2530,6 +2964,10 @@ fn write_emits(
     deployment: Option<&v1::Deployment>,
     header: Option<&str>,
     backends: &BTreeMap<String, Vec<String>>,
+    wasm_backends: &BTreeSet<String>,
+    implied_wasm: bool,
+    codec_backends: &BTreeSet<String>,
+    transcode_backends: &BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
     // One request per package, built only when something reads it: an IR
@@ -2550,7 +2988,14 @@ fn write_emits(
     // options; a table for another backend is not visible to it.
     let request_for = |language: &str| {
         request.as_ref().map(|request| v1::CodegenRequest {
-            options: backend_options(backends, language),
+            options: backend_options(
+                backends,
+                wasm_backends,
+                implied_wasm,
+                codec_backends,
+                transcode_backends,
+                language,
+            ),
             ..request.clone()
         })
     };
@@ -2573,6 +3018,7 @@ fn write_emits(
             Emit::TypeScript => Box::new(ridl_backend_ts::Backend::new(raw)),
             Emit::Proto => Box::new(ridl_backend_proto::Backend::new(raw)),
             Emit::Flatbuffers => Box::new(ridl_backend_flatbuffers::Backend::new(raw)),
+            Emit::Podbuf => Box::new(ridl_backend_podbuf::Backend::new(raw)),
             Emit::CodegenModel => Box::new(codegen::ModelBackend),
             Emit::CodegenRequest => Box::new(codegen::RequestBackend),
             // Written once per build by `write_catalogs`, not per package.
@@ -2675,21 +3121,56 @@ fn write_emits(
     Ok(())
 }
 
-/// The options a backend receives for its `[backend.<name>]` table: none when
-/// the manifest has no table for `language` or the table names no encoding,
-/// otherwise one `encodings` option whose value joins the names with `,` in
-/// manifest order.
+/// The options a backend receives for its `[backend.<name>]` table, sorted by
+/// key as the codegen protocol states: a `codec` option with the value `true`
+/// when `codec_backends` holds `language`, an `encodings` option whose value
+/// joins the names with `,` in manifest order when the table names an
+/// encoding, a `wasm` option with the value `implied` for `rust` when
+/// `implied_wasm`, or `true` when `wasm_backends` holds `language`, and a
+/// `transcode` option with the value `true` when `transcode_backends` holds
+/// `language`, and no other option.
 fn backend_options(
     backends: &BTreeMap<String, Vec<String>>,
+    wasm_backends: &BTreeSet<String>,
+    implied_wasm: bool,
+    codec_backends: &BTreeSet<String>,
+    transcode_backends: &BTreeSet<String>,
     language: &str,
 ) -> Vec<v1::BackendOption> {
-    match backends.get(language) {
-        Some(names) if !names.is_empty() => vec![v1::BackendOption {
+    let mut options = Vec::new();
+    if let Some(names) = backends.get(language).filter(|names| !names.is_empty()) {
+        options.push(v1::BackendOption {
             key: ridl_core::manifest::ENCODINGS_KEY.to_string(),
             value: names.join(","),
-        }],
-        _ => Vec::new(),
+        });
     }
+    let wasm = if implied_wasm && language == "rust" {
+        Some("implied")
+    } else if wasm_backends.contains(language) {
+        Some("true")
+    } else {
+        None
+    };
+    if let Some(value) = wasm {
+        options.push(v1::BackendOption {
+            key: ridl_core::manifest::WASM_KEY.to_string(),
+            value: value.to_string(),
+        });
+    }
+    if codec_backends.contains(language) {
+        options.push(v1::BackendOption {
+            key: ridl_core::manifest::CODEC_KEY.to_string(),
+            value: "true".to_string(),
+        });
+    }
+    if transcode_backends.contains(language) {
+        options.push(v1::BackendOption {
+            key: ridl_core::manifest::TRANSCODE_KEY.to_string(),
+            value: "true".to_string(),
+        });
+    }
+    options.sort_by(|a, b| a.key.cmp(&b.key));
+    options
 }
 
 /// Writes the lowered system (rsdl reference §13) once for each IR dump in
@@ -2713,6 +3194,7 @@ fn write_system_emits(
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
+            | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
             | Emit::Catalog => continue,
@@ -2777,7 +3259,7 @@ mod render_lib_rs_tests {
     #[test]
     fn a_package_name_that_is_a_prefix_of_another_keeps_both_files_reachable() {
         let names = ["veh".to_string(), "veh.common".to_string()];
-        let lib = render_lib_rs(&names, "");
+        let lib = render_lib_rs(&names, "", false);
 
         assert!(
             lib.contains("#[path = \"veh.rs\"]"),
@@ -2891,7 +3373,7 @@ mod render_lib_rs_tests {
     /// The lines themselves, and their order, are pinned as literals.
     #[test]
     fn the_crate_root_is_no_std_exactly_without_std_and_validate_pattern() {
-        let lib = render_lib_rs(&["veh".to_string()], "");
+        let lib = render_lib_rs(&["veh".to_string()], "", false);
         assert!(
             compiles_with(&lib, &[], Some("thumbv7em-none-eabihf")),
             "no feature on, for a target with no standard library: lib.rs was:\n{lib}"
@@ -2930,6 +3412,7 @@ mod emit_table_tests {
         assert_eq!(Emit::TypeScript.backend_table(), Some("typescript"));
         assert_eq!(Emit::Proto.backend_table(), Some("proto"));
         assert_eq!(Emit::Flatbuffers.backend_table(), Some("flatbuffers"));
+        assert_eq!(Emit::Podbuf.backend_table(), Some("podbuf"));
         assert_eq!(Emit::CodegenModel.backend_table(), Some("codegen-model"));
         assert_eq!(
             Emit::CodegenRequest.backend_table(),
@@ -2949,6 +3432,7 @@ mod emit_table_tests {
             Emit::TypeScript,
             Emit::Proto,
             Emit::Flatbuffers,
+            Emit::Podbuf,
             Emit::CodegenModel,
             Emit::CodegenRequest,
             Emit::Catalog,
@@ -2962,8 +3446,41 @@ mod emit_table_tests {
 }
 
 #[cfg(test)]
+mod wasm_unit_tests {
+    use std::collections::BTreeSet;
+
+    use super::wasm_unit;
+
+    #[test]
+    fn the_root_unit_is_chosen_over_the_others() {
+        let units = BTreeSet::from(["a", "b"]);
+        assert_eq!(wasm_unit(Some("b"), &units), Ok("b"));
+    }
+
+    #[test]
+    fn without_a_root_the_one_unit_is_chosen() {
+        assert_eq!(wasm_unit(None, &BTreeSet::from(["a"])), Ok("a"));
+    }
+
+    #[test]
+    fn without_a_root_several_units_or_none_are_refused() {
+        for (units, count) in [(BTreeSet::from(["a", "b"]), 2), (BTreeSet::new(), 0)] {
+            assert_eq!(
+                wasm_unit(None, &units),
+                Err(format!(
+                    "`[backend.rust] wasm = true`, or `codec = true` on another backend table, \
+                     which implies it, writes the catalog hash of one unit; this build has \
+                     {count} units and no root package. Build one package whose manifest is \
+                     its own root, or set `wasm = true` in the build of one member"
+                ))
+            );
+        }
+    }
+}
+
+#[cfg(test)]
 mod backend_options_tests {
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use super::backend_options;
 
@@ -2979,10 +3496,66 @@ mod backend_options_tests {
     }
 
     fn encodings(language: &str) -> Vec<(String, String)> {
-        backend_options(&tables(), language)
-            .into_iter()
-            .map(|option| (option.key, option.value))
-            .collect()
+        backend_options(
+            &tables(),
+            &BTreeSet::new(),
+            false,
+            &BTreeSet::new(),
+            &BTreeSet::new(),
+            language,
+        )
+        .into_iter()
+        .map(|option| (option.key, option.value))
+        .collect()
+    }
+
+    /// `codec = true` sends a `codec` option to its own table only, and an
+    /// implied `wasm` reaches the `rust` request as `implied`, a written one as
+    /// `true`, and neither adds a `wasm` option on its own.
+    #[test]
+    fn backend_options_carries_codec_and_the_implied_wasm() {
+        let options = |wasm: &BTreeSet<String>,
+                       implied: bool,
+                       codec: &BTreeSet<String>,
+                       language: &str|
+         -> Vec<(String, String)> {
+            backend_options(&tables(), wasm, implied, codec, &BTreeSet::new(), language)
+                .into_iter()
+                .map(|option| (option.key, option.value))
+                .collect()
+        };
+        let pair = |key: &str, value: &str| (key.to_string(), value.to_string());
+        let rust_encodings = pair("encodings", "flatbuffers,proto3");
+        let codec = BTreeSet::from(["typescript".to_string()]);
+        let none = BTreeSet::new();
+        assert_eq!(
+            options(&none, true, &codec, "rust"),
+            vec![rust_encodings.clone(), pair("wasm", "implied")]
+        );
+        assert_eq!(
+            options(&none, true, &codec, "typescript"),
+            vec![pair("codec", "true")]
+        );
+        let rust = BTreeSet::from(["rust".to_string()]);
+        assert_eq!(
+            options(&rust, false, &codec, "rust"),
+            vec![rust_encodings.clone(), pair("wasm", "true")]
+        );
+        assert_eq!(
+            options(&none, false, &none, "rust"),
+            vec![rust_encodings.clone()]
+        );
+        assert!(options(&none, false, &none, "typescript").is_empty());
+        // One table with every option: sorted by key, `codec` first.
+        let rust_codec = BTreeSet::from(["rust".to_string()]);
+        assert_eq!(
+            options(&none, true, &rust_codec, "rust"),
+            vec![
+                pair("codec", "true"),
+                rust_encodings,
+                pair("wasm", "implied")
+            ]
+        );
     }
 
     #[test]
@@ -2999,6 +3572,82 @@ mod backend_options_tests {
         assert!(
             encodings("proto").is_empty(),
             "a table that names no encoding sends no option"
+        );
+    }
+
+    /// `wasm = true` adds a `wasm` option to that table's request only, after
+    /// its encodings, and is sent even when the table names no encoding.
+    #[test]
+    fn a_wasm_table_adds_the_wasm_option() {
+        let wasm = BTreeSet::from(["rust".to_string(), "proto".to_string()]);
+        let options = |language: &str| -> Vec<(String, String)> {
+            backend_options(
+                &tables(),
+                &wasm,
+                false,
+                &BTreeSet::new(),
+                &BTreeSet::new(),
+                language,
+            )
+            .into_iter()
+            .map(|option| (option.key, option.value))
+            .collect()
+        };
+        let wasm_option = (
+            ridl_core::manifest::WASM_KEY.to_string(),
+            "true".to_string(),
+        );
+        assert_eq!(
+            options("rust"),
+            vec![
+                (
+                    ridl_core::manifest::ENCODINGS_KEY.to_string(),
+                    "flatbuffers,proto3".to_string()
+                ),
+                wasm_option.clone(),
+            ]
+        );
+        assert_eq!(options("proto"), vec![wasm_option]);
+        assert_eq!(options("kotlin").len(), 1);
+    }
+
+    /// `transcode = true` adds a `transcode` option to that table's request
+    /// only, and no table sends one otherwise.
+    #[test]
+    fn a_transcode_table_adds_the_transcode_option() {
+        let transcode = BTreeSet::from(["rust".to_string()]);
+        let options = |transcode: &BTreeSet<String>, language: &str| -> Vec<(String, String)> {
+            backend_options(
+                &tables(),
+                &BTreeSet::new(),
+                false,
+                &BTreeSet::new(),
+                transcode,
+                language,
+            )
+            .into_iter()
+            .map(|option| (option.key, option.value))
+            .collect()
+        };
+        let option = (
+            ridl_core::manifest::TRANSCODE_KEY.to_string(),
+            "true".to_string(),
+        );
+        assert_eq!(
+            options(&transcode, "rust"),
+            vec![
+                (
+                    ridl_core::manifest::ENCODINGS_KEY.to_string(),
+                    "flatbuffers,proto3".to_string()
+                ),
+                option,
+            ]
+        );
+        assert_eq!(options(&transcode, "kotlin").len(), 1);
+        assert!(
+            !options(&BTreeSet::new(), "rust")
+                .iter()
+                .any(|(key, _)| key == "transcode")
         );
     }
 }

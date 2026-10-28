@@ -7,11 +7,12 @@ computed, and its golden test; and, as amended 2026-10-09, the compatible
 catalogs),
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 5 as amended 2026-10-03 (the toolchain may depend on planus; `ridl-rt`
-and every generated package must not),
-[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 8 (the
-generated face checks the port's catalog and panics on a mismatch),
-[ADR-0010](../decisions/ADR-0010-cli-conventions.md) (the `ridl describe` row of
-the exit-code table) and
+and every generated package must not) and decision 6 as amended 2026-10-24
+(`ridl-transport-ws` depends on this crate under its optional `descriptor`
+feature), [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md)
+decision 8 (the generated face checks the port's catalog and panics on a
+mismatch), [ADR-0010](../decisions/ADR-0010-cli-conventions.md) (the
+`ridl describe` row of the exit-code table) and
 [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 7 and its
 notes (the catalog hash in each region of the lowered system). The projections
 the size states are computed through are
@@ -50,7 +51,7 @@ Sebastien reviews the lane's delegated decisions in the driver's
 | The proto3 state                                                                 | `crates/ridl-ir/src/projection/size/proto3.rs`                                                                 |
 | The FlatBuffers state                                                            | `crates/ridl-ir/src/projection/size/flatbuffers.rs`                                                            |
 | The JSON view                                                                    | `crates/ridl-descriptor/src/describe.rs`                                                                       |
-| The catalog hash (re-exported as `ridl_descriptor::hash`)                        | `crates/ridl-ir/src/catalog_hash.rs`                                                                           |
+| The catalog hash (wrapped as `ridl_descriptor::hash`)                            | `crates/ridl-ir/src/catalog_hash.rs`                                                                           |
 | The proto3 scalar table and field-number limits both sides read                  | `crates/ridl-ir/src/projection/proto3.rs`                                                                      |
 | `Emit::Catalog`, `write_emits`, `lower_workspace_system`, `embed_catalog_hashes` | `crates/ridlc/src/lib.rs`                                                                                      |
 | `ridl describe` (`run_describe`)                                                 | `crates/ridl/src/main.rs`                                                                                      |
@@ -102,12 +103,14 @@ fails when a planus release changes that behaviour, which is when `finish` can
 call planus directly.
 
 **planus stays in the toolchain.** `ridl-descriptor` depends on the `planus`
-runtime, and `ridlc` and `ridl` depend on `ridl-descriptor`. `ridl-rt` and every
-generated package must not depend on any planus crate, through any dependency
-kind (ADR-0020 decision 5, as amended). `xtask/tests/oracle_boundary.rs` checks
-both: `the_runtime_reaches_no_planus_crate` resolves `ridl-rt` with every
-feature on, and `the_generated_crate_reaches_no_planus_crate` reads the resolved
-graph of the crate `ridl build` generates for `examples/cabin`, which runs under
+runtime, and `ridlc` and `ridl` depend on `ridl-descriptor`, as does
+`ridl-transport-ws` under its optional `descriptor` feature, with the default
+features of `ridl-descriptor` off. `ridl-rt` and every generated package must
+not depend on any planus crate, through any dependency kind (ADR-0020 decision
+5, as amended). `xtask/tests/oracle_boundary.rs` checks both:
+`the_runtime_reaches_no_planus_crate` resolves `ridl-rt` with every feature on,
+and `the_generated_crate_reaches_no_planus_crate` reads the resolved graph of
+the crate `ridl build` generates for `examples/cabin`, which runs under
 `just demo`.
 
 `ridl-descriptor` is published to crates.io, after `ridl-ir` and before `ridlc`
@@ -178,9 +181,13 @@ the order given. It returns `Result<Vec<u8>, LowerError>`.
 - **Members.** One `Member` per interaction, in body order: `name`, `ordinal`
   (the position in the body, ridl §11), `kind` (`Signal`, `Event`, `Command`,
   `Query`, `Fixed`), `payloads`, and `timing` (`mode`, `min_us`, `max_us`) when
-  the interaction declares one. A fixed member never has a timing. Timing is the
-  only quality-of-service term the IR carries for an interaction, and contract
-  clauses and a signal's initial value are not carried.
+  the interaction declares one. A fixed member never has a timing. `limit` is
+  the payload limit in bytes that a `[limits]` entry of the unit's manifest
+  gives the interaction, copied from the IR's optional limit, which the catalog
+  hash covers (ADR-0030 decisions 12 and 13). It is an optional scalar appended
+  last to `Member`: absent when no entry applies, and in a file written before
+  the field existed, so `SCHEMA_VERSION` stays 1. Contract clauses and a
+  signal's initial value are not carried.
 - **Payloads.** A signal has one payload with the role `value`, an event one
   with `occurrence`, a command one with `request`, a fixed one with `value`. A
   query has a `request`, and a `response` when the IR carries a return type.
@@ -289,18 +296,19 @@ differing only in the list have the same hash. The rule is
   baseline is not read. When the workspace names `[imports]` and a list is
   computed, the build prints a note that a unit's list covers the workspace's
   own packages only.
-- **No runtime reads the list.** The generated face compares only its own
-  `CATALOG` (ADR-0023 decision 8), and nothing here accepts an `attach` on the
-  strength of the list. The frame specification (its As-built note and §6.1)
+- **One runtime reads the list.** The generated face compares only its own
+  `CATALOG` (ADR-0023 decision 8), and no generated code accepts an `attach` on
+  the strength of the list. The frame specification (its As-built note and §6.1)
   names the descriptor as the source a providing runtime reads the list from;
-  `ridl-transport-ws`, the one crate here that speaks the frame, holds no
-  descriptor and applies the exact-match rule
-  ([its design record](ridl-transport-ws.md); driftsys/ridl#985).
+  `ridl-transport-ws`, the one crate here that speaks the frame, accepts a
+  listed hash when its embedder gives it a member table of the catalog, and
+  applies the exact-match rule otherwise
+  ([its design record](ridl-transport-ws.md), D-11).
 
 It is computed in `ridl-ir`, not in `ridl-descriptor`, because three artifacts
 carry it and `ridl-ir` is below all of them:
 
-- the catalog descriptor, through `ridl_descriptor::hash`, which re-exports
+- the catalog descriptor, through `ridl_descriptor::hash`, which wraps
   `catalog_hash`, `reduced_unit` and `reachable_decls`;
 - the codegen model's `Catalog.hash`, which the Rust backend writes into the
   `CATALOG` of every generated interface descriptor type. The Rust backend
@@ -376,7 +384,9 @@ is sized, through the projection the wire backend emits:
   full list. The proto3 sizer counts tags and varint widths at their maximum,
   and remembers each named struct and union it has sized within one call, so a
   type that several paths share is walked once.
-- **repr(C)** has no row until driftsys/ridl#317 defines the layout.
+- **podbuf** is sized by `ridl_ir::projection::podbuf::max_size`, the one
+  implementation of the bound. A request of several parameters has no row, as in
+  the other two encodings.
 
 **Absent by shape.** A stream payload (`<T>`), a request of zero or of several
 parameters, and an inline `T | E` reply have no rows in any column, until a
@@ -482,7 +492,8 @@ ways:
 - the keys are in alphabetical order, because the workspace's `serde_json` has
   no `preserve_order` feature, and turning it on would change the key order of
   every other JSON writer in the workspace through feature unification;
-- an absent `timing`, `min_us` or `max_us` is `null`, where `flatc` omits it.
+- an absent `timing`, `min_us`, `max_us` or `limit` is `null`, where `flatc`
+  omits it.
 
 An excerpt of the corpus snapshot
 (`crates/ridl/tests/snapshots/describe_cli__corpus_catalog.snap`):
@@ -490,6 +501,7 @@ An excerpt of the corpus snapshot
 ```json
 {
   "kind": "Signal",
+  "limit": null,
   "name": "currentSpeed",
   "ordinal": 1,
   "payloads": [
@@ -583,9 +595,9 @@ the status in the code and the rejected alternatives in short form.
 | D-1 Two descriptors; the system descriptor is self-contained | Half built: a catalog descriptor for every unit with an interface shape. The system descriptor is not built.                                                                                                                                                                                                | A system descriptor that references catalogs by hash only; one file per machine.                                                                                              |
 | D-2 Descriptors are FlatBuffers; the IR stays protobuf       | Built. ADR-0014 is unchanged for the IR.                                                                                                                                                                                                                                                                    | Protobuf descriptors; JSON or TOML as the artifact; both encodings.                                                                                                           |
 | D-3 Hand-written, versioned, append-only schemas             | Built for the one schema, `catalog.fbs`. The CI check that compiles the schemas with both `flatc` and `flatcc` is not built; it waits for a C engine.                                                                                                                                                       | A descriptor schema generated from the IR schema.                                                                                                                             |
-| D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states, including the `compatible` list appended to the catalog table. Of the member's bounds and quality-of-service terms, only the timing is carried, because it is the only one the IR has for an interaction. No `stream` flag (driftsys/ridl#336).                 | —                                                                                                                                                                             |
+| D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states, including the `compatible` list appended to the catalog table. Of the member's bounds and quality-of-service terms, the timing and the optional payload limit are carried. No `stream` flag (driftsys/ridl#336).                                                | —                                                                                                                                                                             |
 | D-5 What the system descriptor contains                      | Not built.                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
-| D-6 A size state per payload and encoding                    | Built for proto3 and FlatBuffers, as "The size states" states. `repr(C)` has no rows (driftsys/ridl#317). The max-size conformance test is built for FlatBuffers and, since 2026-10-20, for proto3.                                                                                                         | One number per payload; a number per type rather than per interaction; an induced message, request message or `ok`/`err` union for a payload that is not a struct or a union. |
+| D-6 A size state per payload and encoding                    | Built for proto3, FlatBuffers and podbuf, as "The size states" states. The max-size conformance test is built for FlatBuffers and, since 2026-10-20, for proto3.                                                                                                                                            | One number per payload; a number per type rather than per interaction; an induced message, request message or `ok`/`err` union for a payload that is not a struct or a union. |
 | D-7 Not in version 1                                         | Holds: no `.bfbs` payload layouts, no transport per crossing, no envelope or framing overhead.                                                                                                                                                                                                              | —                                                                                                                                                                             |
 | D-8 Readers verify before access                             | Built: `verify`, and `ridl describe` exits 2 with the cause named.                                                                                                                                                                                                                                          | —                                                                                                                                                                             |
 | D-9 Emission and inspection                                  | The catalog emit and `ridl describe` are built. The system descriptor's emission is not built. `ridl describe`'s view differs from `flatc`'s in key order and in `null` for an absent field, where the design said the two views are the same.                                                              | —                                                                                                                                                                             |
@@ -618,7 +630,6 @@ For these, the archived design note is the record of the agreed direction.
 | ---------------------------------------------------------------------------------------------------- | ----------------- |
 | Narrow a string's byte capacity from an ASCII-only match pattern, after #597                         | driftsys/ridl#665 |
 | ridl-rt: streams (ridl §12) have no port; the stream flag and per-element bound follow it            | driftsys/ridl#336 |
-| The repr(C) payload codec, which gives the `ReprC` column its rows                                   | driftsys/ridl#317 |
 | debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling              | driftsys/ridl#670 |
 | debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                              | driftsys/ridl#679 |
 | debt: review follow-ups — one name resolver, one proto3 width table                                  | driftsys/ridl#684 |

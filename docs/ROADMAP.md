@@ -24,6 +24,8 @@ system. Kotlin, the first external plugin, follows step 2 because it depends on
 the backend contract. The plugin protocol, E4.5a and E4.5b, runs ahead of the
 two remaining Rust payload codecs, E11.8 and E11.12, and ahead of the TypeScript
 framework, E12; the sequence below states why. E11.8 landed on 2026-10-20.
+E11.12 is built, except open enums and enum sets, which wait for the typl `open`
+keyword (Tasks 13 and 14 of the podbuf plan).
 
 **Supersedes
 [ADR-0004](decisions/ADR-0004-implementation-sequencing-and-stack.md)'s
@@ -93,8 +95,8 @@ out of the ecosystem tail where it sat behind a browser playground — and nothi
 outside this workspace can be generated until it lands.
 
 What stays in core: the payload encodings the re-scope fixes — **proto3** for
-the network, **FlatBuffers** for memory, and **`repr(C)`** as the third, added
-by the 2026-09-12 note §3.3. They are how the runtime talks to itself and to a
+the network, **FlatBuffers** for memory, and **`podbuf`** as the third, added by
+the 2026-09-12 note §3.3. They are how the runtime talks to itself and to a
 generic consumer, not a domain's choice. ADR-0018 decision 3's "two encodings
 and no more" is amended in place by
 [ADR-0020](decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -119,9 +121,9 @@ holds across all of them.
 (ARM Linux, Yocto), FreeRTOS or SAFERTOS, and baremetal under WAMR were listed
 on earlier revisions of this page; none has a confirmed requirement, nothing
 here depends on one, and no story assumes one. They are the rungs where a store
-without an MMU would need `repr(C)` layout and re-attach instead of demand-paged
-growth — which is one reason `repr(C)` is now a payload encoding in its own
-right rather than a contingency.
+without an MMU would need `podbuf` layout and re-attach instead of demand-paged
+growth — which is one reason `podbuf` is now a payload encoding in its own right
+rather than a contingency.
 
 The roadmap-simplification note's S-17 narrowed the ladder to three rungs —
 desktop, embedded Android, QNX 7.1. This page keeps four: mobile stays, because
@@ -184,6 +186,12 @@ TypeScript WebSocket transport package (driftsys/ridl#982), was filed as a new
 story, because no story held the transport package that the TypeScript framework
 names.
 
+**Filed 2026-10-26, with exact numerics.** Epic 18 is new, with its own
+milestone; its stories are driftsys/ridl#1087 (E18.1, first filed as E10.12
+before the epic was split out, and retitled) and driftsys/ridl#1089 to
+driftsys/ridl#1091. Its carried defect is driftsys/ridl#1092. E18.0, the design,
+was added on 2026-10-27 with the schedule, as driftsys/ridl#1093.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
@@ -227,9 +235,9 @@ seqlock, the sans-IO session, the platform traits and the scheduler are outside
 this repository (§3.7) and reopened by rmdl.
 
 **Then the typl debt**, then the Rust codegen finalized with its three payload
-codecs, proto3, FlatBuffers and `repr(C)`. `repr(C)` is the third payload
-encoding (§3.3); its layout rules are decided in a projection record of the
-shape of ADR-0017 and ADR-0019, written when the backend is.
+codecs, proto3, FlatBuffers and `podbuf`. `podbuf` is the third payload encoding
+(§3.3); its layout rules are decided in a projection record of the shape of
+ADR-0017 and ADR-0019, written when the backend is.
 
 **Sequence.**
 
@@ -245,7 +253,7 @@ E10 value objects, E10.10 last ────────────────�
 
 E14.1 · E10, the typl debt ─→ Rust codegen finalized
       ─→ E11.7 FlatBuffers ─→ E4.5a IR stability ─→ E4.5b plugin protocol
-                                                 ─→ E11.8 proto3, landed · E11.12 repr(C), after #801
+                                                 ─→ E11.8 proto3, landed · E11.12 podbuf, built
 #801 on-request encodings — depends on nothing ─→ E11.8 · E11.9 · E11.12
 
 E6 rsdl finalized and lowered to the IR — beside the lock; E6.17 last, landed
@@ -376,10 +384,10 @@ codegen request's deployment section (ADR-0022 decision 11).
 provisional flag, and the descriptor copies them: plan Task 3, as re-baselined,
 reads the IR's numbers and computes none.
 
-**The `repr(C)` column stays empty** until E11.12 defines the C-representable
-layout. The encoding is present in the descriptor's enum from the start, and a
-payload with no entry for it means the toolchain cannot size that payload for
-that encoding.
+**The `podbuf` column is filled** since E11.12 defined the layout
+([ADR-0031](decisions/ADR-0031-podbuf-projection-rules.md)). The encoding was
+present in the descriptor's enum from the start, and a payload with no entry for
+it means the toolchain cannot size that payload for that encoding.
 
 | ID    | Story                                                                                                                                                                                                                                                                                                            | Done when                                                                                                                                                                                                                                                                                                                                                                                                                | Size |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
@@ -404,9 +412,9 @@ and the as-built description is
 [the codegen plugin design](design/codegen-plugins.md) with
 [ADR-0022](decisions/ADR-0022-rsdl-system-in-the-ir.md) decision 11.
 
-**`repr(C)` joins when E11.12 lands.** The alignment and the layout of a slot
-for the third encoding come from its projection record; until then a channel
-whose encoding is `repr(C)` has no slot layout, and the model says so.
+**`podbuf` joined when E11.12 landed.** The alignment and the layout of a slot
+for the third encoding come from its projection record,
+[ADR-0031](decisions/ADR-0031-podbuf-projection-rules.md).
 
 ## Epic 6 — rsdl, rewritten as a language
 
@@ -565,7 +573,7 @@ FlatBuffers codec), test-only ports (retired by E11.15), a zero catalog hash
 column at a time: E16.4, driftsys/ridl#380, filled the `flatbuffers` column from
 the codegen model's bound; the later size table holds one `Sizes<E>`
 implementation per codec the manifest names, so `proto3` has one since E11.8
-landed, and `repr-c` has none until E11.12), and a narrow contract-clause
+landed, and `podbuf` has one since E11.12 landed), and a narrow contract-clause
 translator (E5.1). The as-built record is
 [the interaction-face design record](design/interaction-face.md) and
 [ADR-0023](decisions/ADR-0023-interaction-face-generation.md); its reasoning
@@ -780,11 +788,11 @@ discriminant question, not a naming one.
 **Milestone:** the Rust backend emits a complete, compiling surface with all
 three payload codecs. **Exit criteria:** a generated package links `ridl-rt`,
 constructs and validates its types, and round-trips a payload through
-FlatBuffers, through proto3 and through the `repr(C)` layout, with byte-level
+FlatBuffers, through proto3 and through the `podbuf` layout, with byte-level
 conformance against a `prost`-generated implementation (through `protox`) for
 proto3.
 
-**E11.12 is a new identifier**, the next free one in Epic 11, for the `repr(C)`
+**E11.12 is a new identifier**, the next free one in Epic 11, for the `podbuf`
 payload codec the 2026-09-12 note §3.3 adds. Its layout rules — the
 fixed-capacity layout of a bounded string, optional and collection, the string
 capacity and terminator, alignment and endianness — are its prerequisite, and
@@ -797,7 +805,7 @@ ADR-0018 amendments.
 | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
 | E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a payload round-trips through the library                                                                                                                                                                               | L    |
 | E11.8  | The proto3 payload codec plus byte-level conformance against a `prost`-generated implementation through `protox` (driftsys/ridl#264; the guard that keeps `prost` out of `ridl-rt` and generated packages is part of it); it reads an absent non-optional scalar or enum as its default — 0, or the enum's zero member — unless 0 is not a legal value of the field's type, in which case the field is refused with `MissingRequired`, as the FlatBuffers codec does (driftsys/ridl#472, ADR-0019 decision 9); it arrives as a `Sizes<Proto3>` implementation and a `Payload<Proto3>` with its buffer | our bytes parse there and its bytes parse here                                                                                                                                                                          | L    |
-| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; it arrives as a `Sizes<ReprC>` implementation and a `Payload<ReprC>` with its buffer                                                                                                                                                                                                                                                                                                             | a payload round-trips through the layout struct and the emitted header compiles as C (the removal of `#[repr(C)]` from the generated domain structs landed ahead of this story, ADR-0020 decision 3 amended 2026-10-12) | L    |
+| E11.12 | The `podbuf` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; it arrives as a `Sizes<Podbuf>` implementation and a `Payload<Podbuf>` with its buffer. **Built**; the open-enum tasks wait for the typl `open` keyword                                                                                                                                                                                                                                           | a payload round-trips through the layout struct and the emitted header compiles as C (the removal of `#[repr(C)]` from the generated domain structs landed ahead of this story, ADR-0020 decision 3 amended 2026-10-12) | L    |
 
 **E11.7's `Done when` is met, and every decision of its design note is built.**
 A payload round-trips through the library, and the conformance obligation the
@@ -805,7 +813,7 @@ story's design note took beyond that row — a round trip through an independent
 FlatBuffers implementation rather than byte equality against one, since
 FlatBuffers fixes no canonical encoding — is discharged against `planus` in
 `crates/ridl-backend-rust/tests/flatbuffers_conformance.rs`. The last decision
-to land was **D-11**, the generated interaction face moving off the `ReprC`
+to land was **D-11**, the generated interaction face moving off the `Podbuf`
 placeholder and onto the codec, which needed a `Payload<FlatBuffers>`
 implementation for a named scalar and an enum payload that the projection minted
 no root table for. That projection decision is **driftsys/ridl#470**, ADR-0019
@@ -1172,6 +1180,130 @@ needed for the first Kotlin demo.
 
 ---
 
+# Epic 18 — exact numerics
+
+**Scheduled on 2026-10-27 over two releases marked breaking.** Filed 2026-10-26.
+
+| Release                                                          | Epic 18 content                                                                                             |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| the next release marked breaking (beside #1059, E2.14 and E6.20) | E18.0 (the design), E18.3 (the policy), and the fix of driftsys/ridl#1092                                   |
+| the release marked breaking after it                             | E18.1 and E18.2 together, the TypeScript codec on the new wire, and notice to the Kotlin plugin maintainers |
+| after E18.1 and E18.2 land                                       | E18.4, the book chapter, which describes the behaviour as built                                             |
+
+The reasons for the split:
+
+- The next breaking release already holds three breaking items, and adding two L
+  stories would delay them.
+- E18.1 and E18.2 need a design that is approved before code starts: the storage
+  unit, the rounding of every conversion, the translation of clauses, and four
+  ADR amendments. E18.0 is that design.
+- E18.2 changes the bytes on every encoding, so the TypeScript codec, the Kotlin
+  plugin outside this repository, and the frozen dumps of ADR-0029 change with
+  it. The Kotlin maintainers get one release of notice.
+- E18.1 changes the generated API and E18.2 the wire; shipping them in one
+  release breaks consumers once.
+- E18.3 is opt-in, so a package that does not set the policy is not affected,
+  and the policy is useful before E18.1 exists: it guarantees that every float a
+  package uses has a step. Its rule on the `float` feature applies once E18.1
+  adds the feature.
+- driftsys/ridl#1092 is fixed in the next release for every float, by rounding a
+  clause literal toward the side that refuses at generation. E18.1 then replaces
+  that rounding with an exact integer bound for a float with a step.
+- One release of SafeNum before E18.1 leaves room for its MVP, if the generated
+  types are to use its types.
+
+**Milestone:** a quantized float is an integer in units of its step, in storage
+and on every wire, and a float is an optional view of it. **Value:** a
+contract's numeric semantics are exact (expr-core §7 evaluates exact rationals,
+with no IEEE-754 arithmetic in the contract plane), but the generated Rust type
+stores an `f64` and checks its grid with binary64 arithmetic. On a core with no
+floating-point unit, such as a Cortex-R52 configured without one, every such
+operation compiles to software floating-point calls; on any core, the IEEE
+result can differ from the contract, and integer bounds are much easier to prove
+than float ones (Kani, Creusot, Prusti). **Exit criteria:** a package that
+declares the exact-numerics policy generates Rust that uses no floating-point
+operation on a soft-float target, and its payloads carry integers whose step,
+unit and lower bound a reader without the typl source can recover.
+
+**The model.** typl is unchanged: `float [min..max step s]` already declares an
+exact set of values. Three layers are separated:
+
+- **Maths** — the contract: the range and the `step`.
+- **Storage and computation** — local to each backend: the integer
+  `n = value / step`, counted in units of the step from zero. The scale is
+  inferred from the step and the lower bound: binary (`2⁻ᵏ`) when both are
+  multiples of a power of two, decimal (`10⁻ᵏ`) when either needs a factor of 5.
+  When the lower bound is not a multiple of the step, the coarsest scale of that
+  base that holds both is used. **Open for E18.1's design:** whether storage
+  counts in units of the step (`n = value / step`) or in units of the scale (for
+  a step of 0.3, tenths, with a check that the count is a multiple of 3).
+  SafeNum's types count in units of the scale, and the wire can still carry
+  units of the step where that is narrower.
+- **Wire** — the same integer on every encoding, so two peers that compute
+  differently (a Rust node with no float, a TypeScript UI with a float view)
+  exchange the same bytes. Decimal and binary scales are not different wire
+  forms: the scale is schema metadata, not per-message data.
+
+A float without a `step` has no grid, so it has no exact integer form. It stays
+an `f64` in storage and a native float on the wire, and a package with the
+exact-numerics policy refuses it.
+
+| ID    | Story                                                                                                                                                                                                                                                                                                                                                                                                                                            | Done when                                                                                                                                                                                                           | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E18.0 | The design: a design note that settles the storage unit (the step or the scale), the rounding mode of every conversion, the translation of `require` and `ensure`, and the form of the schema annotation on each encoding, and drafts the amendments of ADR-0013 decision 4, ADR-0017, ADR-0019 and ADR-0002 that E18.2 and E18.3 merge                                                                                                          | the design note is approved and merged                                                                                                                                                                              | M    |
+| E18.1 | The Rust generated type: a quantized float is stored as an integer in units of its step, with the scale inferred from the step and the lower bound; the rounding mode of every conversion is specified; `require` and `ensure` translate to exact integer bounds; the float view (`new(f64)`, `get()`) and floats without a step are behind a `float` Cargo feature, with a `no-float` feature that fails the build when `float` is also enabled | with `float` off, a quantized float's type constructs, validates and evaluates its clauses with no floating-point operation, checked by linking for a soft-float target with no `__aeabi_f*` or `__aeabi_d*` symbol | L    |
+| E18.2 | The encodings: proto3, FlatBuffers and `podbuf` carry the integer; each emitted schema and the catalog descriptor state the step, the unit and the lower bound of the field; a transport binding whose convention uses an offset (CAN/DBC, SOME/IP per deployment) applies it; ADR-0013 decision 4, ADR-0017 and ADR-0019 are amended                                                                                                            | a payload round-trips on each encoding carrying the integer, and a reader given only the emitted schema recovers the physical value                                                                                 | L    |
+| E18.3 | The exact-numerics package policy in `ridl.toml`: every float that the package uses, declared in it or in a dependency, has a range and a `step`; the policy is recorded in the IR and the catalog, and `ridl diff` reports its removal; the Rust crate of such a package does not enable `float` by default; ADR-0002 is amended                                                                                                                | a policy package that uses a float without a step is rejected, and `ridl diff` reports the removal of the policy                                                                                                    | M    |
+| E18.4 | A book chapter on numeric representation: how the step selects the scale, how to choose a decimal or a binary step, the float view and its features, and the policy                                                                                                                                                                                                                                                                              | the chapter is in the book, and its examples compile                                                                                                                                                                | S    |
+
+**Sequence.** E18.0 first. Then E18.1, then E18.2: the wire carries the integer
+that E18.1 stores. E18.3 needs only the IR and can run beside E18.0. E18.4
+follows the three code stories. E18.1 and E18.2 change the generated API or the
+wire, so they belong in a release marked breaking; E18.3 is opt-in. The
+TypeScript codec follows the wire of E18.2; the TypeScript value layer, which
+stores the integer and always offers the float view, is part of the TypeScript
+work of step 2.
+
+**Choosing a decimal or a binary step** is guidance for authors, not a rule the
+compiler enforces, and E18.4 states it. A grid fixed outside the contract (a
+regulation, a DBC factor) fixes the step. Otherwise the base whose prime factors
+cover the constants of the computation makes its rescales exact: binary for
+gains, filters and Q-format products, decimal for SI conversions. When neither
+decides, binary gives the most precision per bit and the cheapest rescale (a
+shift).
+
+**Companion library, outside this repository.** Application arithmetic on these
+integers — products with a double-width intermediate, rescales with a declared
+rounding mode, saturating and checked operations, conversions — belongs in a
+library of its own: SafeNum, in
+[driftsys/safenum](https://github.com/driftsys/safenum), beside
+[SafeIO](https://github.com/driftsys/safeio). The repository and the crate name
+were created on 2026-10-26; version 0.0.1 is a placeholder with no API. Its MVP
+— the two types, explicit rounding, widening operators, a written semantics and
+Kani proofs — is tracked in driftsys/safenum#9. It would also hold fixed-point
+versions of the costly functions — `sin`, `cos`, `atan2`, `sqrt`, `exp` and
+`log` — built from tables with interpolation, CORDIC or minimax polynomials,
+each with a stated error bound and a bounded cycle count. A library of
+floating-point operations with proved error bounds is the alternative it could
+also hold. The generated code depends only on `ridl-rt`, because its own
+conversions are a few integer operations; once SafeNum publishes an API, a story
+here makes the generated types implement its traits behind a feature.
+
+**Open language question: a step that is not a decimal.** A `step` is a decimal
+literal (typl §2.5). A binary step is exact as a decimal but long (`2⁻¹⁵` is
+`0.000030517578125`), and a step whose denominator has a prime factor other than
+2 and 5 (`1/3`, `1/60`) cannot be written. Such a grid almost always comes from
+an external standard, which a transport binding records. A rational step in typl
+waits for a contract that must own such a grid itself; the slash already starts
+a regex literal (typl §15), so its spelling is part of that question.
+
+**Carried defect.** A float `require` or `ensure` clause is evaluated in IEEE
+binary64 arithmetic, against expr-core §7: `require x <= 0.1` becomes
+`args.0 <= 0.1f64`. E18.1 removes it for a float with a step. Tracked as
+driftsys/ridl#1092.
+
+---
+
 # Parked, and what reopens each
 
 Every parked story keeps its row, its `Done when` and its size under "Parked
@@ -1197,26 +1329,27 @@ reopening is an observation rather than an argument.
 
 # Milestone summary
 
-| Epic | Milestone                       | Step                                                                               |
-| ---- | ------------------------------- | ---------------------------------------------------------------------------------- |
-| E0   | walking skeleton                | landed — internal                                                                  |
-| E1   | typl schema language            | landed — **v0.1 preview**                                                          |
-| E2   | ridl contract boundary          | landed — v0.x                                                                      |
-| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
-| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                      |
-| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR             |
-| E17  | layout inputs for plugins       | **step 1**, landed                                                                 |
-| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                           |
-| E11  | the runtime library             | **step 1** — generated code links a library                                        |
-| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                      |
-| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                               |
-| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                             |
-| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                          |
-| E8   | agent enablement                | **step 1** — threads alongside                                                     |
-| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                    |
-| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                       |
-| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                              |
-| none | Kotlin, the first plugin        | after step 2                                                                       |
+| Epic | Milestone                       | Step                                                                                   |
+| ---- | ------------------------------- | -------------------------------------------------------------------------------------- |
+| E0   | walking skeleton                | landed — internal                                                                      |
+| E1   | typl schema language            | landed — **v0.1 preview**                                                              |
+| E2   | ridl contract boundary          | landed — v0.x                                                                          |
+| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed     |
+| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                          |
+| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR                 |
+| E17  | layout inputs for plugins       | **step 1**, landed                                                                     |
+| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                               |
+| E11  | the runtime library             | **step 1** — generated code links a library                                            |
+| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                          |
+| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                                   |
+| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                                 |
+| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                              |
+| E8   | agent enablement                | **step 1** — threads alongside                                                         |
+| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                        |
+| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                           |
+| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                                  |
+| none | Kotlin, the first plugin        | after step 2                                                                           |
+| E18  | exact numerics                  | the next two breaking releases — the design and the policy, then the type and the wire |
 
 Rows are in step order, not numeric order — the numbering is identity, as the
 tracker section above explains. Two rows have no epic: the Rust codegen section

@@ -134,8 +134,10 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-backend-rust/src/tests.rs",
-        lines: 1,
-        why: "a test asserting how many named interfaces one fixture lowers to",
+        lines: 2,
+        why: "a test asserting how many named interfaces one fixture lowers to, \
+              and a transcode test that clears one command's proto3 request \
+              size on a fixture's lowered model",
     },
     Allowed {
         path: "crates/ridl-backend-rust/src/codec_proto3.rs",
@@ -204,11 +206,13 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/lower.rs",
-        lines: 5,
+        lines: 6,
         why: "the `vehicle()` helper and three tests, each reading the catalog \
               descriptor's own `Catalog.interfaces` field back out of a \
-              buffer, and a test that zeroes the number of the one interface \
-              its package declares; the lowering itself walks `shapes()`",
+              buffer, a test that zeroes the number of the one interface its \
+              package declares, and a test that sets a limit on the one \
+              command of the IR package it lowers; the lowering itself walks \
+              `shapes()`",
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/round_trip.rs",
@@ -219,9 +223,22 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/verify.rs",
-        lines: 1,
-        why: "a test case naming the catalog descriptor's own `Catalog.interfaces` \
+        lines: 2,
+        why: "test cases naming the catalog descriptor's own `Catalog.interfaces` \
               field, not a read of `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl-transport-ws/src/server/descriptor.rs",
+        lines: 1,
+        why: "`MemberTable::from_descriptor` walking the catalog descriptor's own \
+              `Catalog.interfaces` field in a verified buffer, not a read of \
+              `Package::interfaces`",
+    },
+    Allowed {
+        path: "crates/ridl-transport-ws/tests/descriptor.rs",
+        lines: 8,
+        why: "a test fixture building and editing the owned descriptor \
+              `Catalog.interfaces` field, not a read of `Package::interfaces`",
     },
     Allowed {
         path: "crates/ridl/tests/describe_cli.rs",
@@ -342,6 +359,42 @@ const ALLOWED: &[Allowed] = &[
               shapes are outside this check's scope",
     },
     Allowed {
+        path: "crates/ridl-backend-ts/src/codec.rs",
+        lines: 4,
+        why: "the reads are of `ridl_ir::codegen::v1::Model::interfaces`, not \
+              of `Package::interfaces`: the model's list is lowered from \
+              `Package::shapes()`, so the codec module's interface tables and \
+              the interaction paths of its induced tuples cover an inline \
+              shape",
+    },
+    Allowed {
+        path: "crates/ridl-backend-ts/tests/codec.rs",
+        lines: 8,
+        why: "a test fixture over `ridl_ir::codegen::v1::Model::interfaces`, \
+              which is lowered from `Package::shapes()` and so holds an inline \
+              shape too: the tests edit and rename the lowered model's \
+              interfaces to build the refused shapes",
+    },
+    Allowed {
+        path: "crates/ridlc/src/design_lints/ceiling.rs",
+        lines: 1,
+        why: "the read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
+              `Package::interfaces`: the model's list is lowered from \
+              `Package::shapes()`, so the lint pairs each shape with the model \
+              interface at the same position and an inline shape is covered",
+    },
+    Allowed {
+        path: "crates/ridlc/src/design_lints/limits.rs",
+        lines: 2,
+        why: "one read is of `ridl_ir::codegen::v1::Model::interfaces`, not of \
+              `Package::interfaces`: the model's list is lowered from \
+              `Package::shapes()`, so the check pairs each shape with the model \
+              interface at the same position and an inline shape is covered. \
+              The other is the mutable walk of `annotate_limits`, which chains \
+              `Package::interfaces` with the inline shapes of the services, \
+              because `Package::shapes()` has no mutable form",
+    },
+    Allowed {
         path: "crates/ridlc/tests/cabin_example.rs",
         lines: 1,
         why: "the read is of the deployment region's interface list \
@@ -389,12 +442,13 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/tests.rs",
-        lines: 6,
+        lines: 7,
         why: "a test mutating one fixture interface, two lines in the \
               name-stability test indexing into the single fixture interface \
-              both the old and new packages share, and three lines in the \
+              both the old and new packages share, three lines in the \
               doc-field tests editing the single fixture interface or its \
-              one interaction",
+              one interaction, and one line in the podbuf inline-use tests \
+              setting a fixture package's named interfaces",
     },
     Allowed {
         path: "crates/ridl-diff/src/unit_verdict.rs",

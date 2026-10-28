@@ -40,6 +40,18 @@ the Positive consequence say that an air-gapped build is `ridl vendor`; §7 gain
 MANI-109 and MANI-110, and states that `ridl lsp` and `ridl mcp` read `vendor/`
 before the cache; the vendor directory open question is resolved.
 
+Amended 2026-10-22 by the TypeScript wasm codec design (slice 1): §4's
+`[backend.<name>]` tables gain the boolean key `wasm`, and MANI-015 covers a
+`wasm` that is not a boolean.
+
+Amended 2026-10-24 by [ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision
+12: §4 gains the `[limits]` table, which both manifest kinds accept. Its keys
+are `default`, the `[limits.kind]` table (`signal`, `fixed`, `event`, `command`,
+`query`) and the `[limits.interaction]` table, whose keys are
+`Interface.member`; each value is a limit in bytes of encoded payload, from 0 to
+16,256. A table applies to its own unit only. An unknown kind is MANI-021, a
+limit above 16,256 is MANI-022, and a value of the wrong type is MANI-015.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -293,10 +305,13 @@ U+2029, other than a tab and a line break); MANI-012 (Error) is raised when the
 manifest of a workspace member sets the key. Single-file mode has no manifest
 and no header.
 
-**The `[backend.<name>]` tables** (amended 2026-10-10, driftsys/ridl#801) hold
-one key per backend, `encodings`: an array of the encoding names the toolchain
-knows, `flatbuffers`, `proto3` and `repr-c`, which the backend named by `<name>`
-emits beside the types:
+**The `[backend.<name>]` tables** (amended 2026-10-10, driftsys/ridl#801;
+amended 2026-10-22) hold two keys per backend. `encodings` is an array of the
+encoding names the toolchain knows, `flatbuffers`, `proto3` and `podbuf`, which
+the backend named by `<name>` emits beside the types. `wasm` is a boolean, false
+when absent, that asks the backend for the `wasm` module of the generated crate;
+the Rust backend reads it and requires `encodings` to name `flatbuffers`, and a
+backend that takes no such option refuses it:
 
 ```toml
 [package]
@@ -315,12 +330,12 @@ absent table, an absent key, and an empty array all mean types only. Only the
 workspace root's manifest, or a standalone package's manifest, may hold a
 `[backend.<name>]` table. MANI-015 (Error) is raised when `backend` or a
 `[backend.<name>]` is not a table, when `encodings` is not an array of strings,
-when an element is not a known name, and when an element repeats; MANI-016
-(Error) is raised when the manifest of a workspace member holds a `backend` key
-or `[backend.<name>]` table; any other key under `[backend.<name>]` is MANI-005.
-These tables are not the `backend.key` attribute namespace of rsdl (RSDL-804,
-which annotates rsdl declarations): the two share the word and nothing else.
-Single-file mode has no manifest and so no encodings.
+when an element is not a known name, when an element repeats, and when `wasm` is
+not a boolean; MANI-016 (Error) is raised when the manifest of a workspace
+member holds a `backend` key or `[backend.<name>]` table; any other key under
+`[backend.<name>]` is MANI-005. These tables are not the `backend.key` attribute
+namespace of rsdl (RSDL-804, which annotates rsdl declarations): the two share
+the word and nothing else. Single-file mode has no manifest and so no encodings.
 
 **Rationale — one file shape.** A second file type for workspaces would double
 the file count and the file's semantic baggage for no real gain. A section-based

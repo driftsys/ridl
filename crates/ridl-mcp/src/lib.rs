@@ -414,6 +414,10 @@ pub async fn serve_stdio_with_version(
         None => RidlMcp::new(),
     };
     let service = server.serve(stdio()).await?;
+    // No test reaches the error of `waiting()`. It is a `JoinError` of the
+    // serve loop task itself, which no input over the transport can cause, and
+    // the function binds this process's own stdin and stdout, so a test cannot
+    // replace the transport either. `outcome` is tested on its own.
     let reason = service.waiting().await?;
     outcome(reason)
 }
@@ -1167,6 +1171,37 @@ mod tests {
         })
         .await
         .expect("the test did not finish within the timeout");
+    }
+
+    // A formatted panic, such as an index out of bounds or `expect`, carries a
+    // `String` payload, not a `&str`: the message must reach the client for
+    // both.
+    #[tokio::test]
+    async fn a_checker_failure_reports_a_formatted_panic_message() {
+        let index = 7;
+        let join_error = tokio::task::spawn_blocking(move || {
+            panic!("formatted panic at index {index}");
+        })
+        .await
+        .expect_err("a panicking task fails to join");
+        let error = checker_failed(join_error);
+        assert_eq!(
+            error.message,
+            "the checker failed on this input: formatted panic at index 7"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_checker_failure_reports_a_literal_panic_message() {
+        let join_error = tokio::task::spawn_blocking(|| {
+            panic!("a literal panic");
+        })
+        .await
+        .expect_err("a panicking task fails to join");
+        assert_eq!(
+            checker_failed(join_error).message,
+            "the checker failed on this input: a literal panic"
+        );
     }
 
     #[test]

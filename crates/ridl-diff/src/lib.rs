@@ -31,7 +31,7 @@ pub mod system;
 pub mod unit_verdict;
 mod walk;
 
-pub use classify::{absence_refused, category_from_word, classify, explain};
+pub use classify::{absence_refused, category_from_word, classify, explain, is_above_high_water};
 // Re-exported under its earlier path (ADR-0008 decision 9).
 pub use ridl_ir::v2::{LoadError, load_ir_json};
 pub use system::{SystemChange, SystemHeading, diff_systems};
@@ -216,6 +216,11 @@ declare_categories! {
         /// `min` inverts: on an RPC it constrains the caller, not the
         /// provider, so the signal/event rule must not be inherited silently.
         RpcBoundChanged,
+        /// The payload limit declared for an interaction changed, was added or
+        /// was removed (ADR-0030 decision 13). Any change is breaking: the
+        /// limit is part of the catalog hash, so peers with different limits
+        /// do not attach.
+        LimitChanged,
         /// A command/query require/ensure clause set changed.
         ContractChanged,
         /// A name-paired interaction's family or operation shape changed
@@ -252,6 +257,54 @@ declare_categories! {
         /// every out-of-package consumer (ADR-0002 §8), so the change has a
         /// direction.
         VisibilityChanged,
+        /// A struct field appended, compatible under the generic rule, to a
+        /// struct that another head of the new side holds inline: as a struct
+        /// field, a tuple member, or an element of an exact-length array,
+        /// anywhere in the workspace, the argument struct a call with several
+        /// parameters induces and a tuple reply included. The inline copy
+        /// cannot grow without
+        /// moving the fields after it, so the append is breaking when the
+        /// comparison is judged for the `podbuf` encoding, and compatible
+        /// otherwise, listed under the heading "breaking under podbuf"
+        /// ([`heading`]). The path is the appended field's; the detail names
+        /// each inline use, a struct field as `<package>/<struct>/<field>`
+        /// and an interaction's request, reply or fixed payload as
+        /// `<package>/<interface>/<interaction>`. The search mirrors the
+        /// heads the encoder lays out — a declaration and a named induced
+        /// tuple — so a struct used only as a root of its own (a single named
+        /// parameter, a named reply, a signal or event payload), only behind
+        /// a descriptor (the element of a bounded array, the key or value of
+        /// a map entry, a union arm), or only inside an exact-length array
+        /// that is itself a root (a fixed payload `[S; 2..2]`, which has no
+        /// head) is not reported: the root or the descriptor's stride gives
+        /// the producer's size, and the fields past it read as 0. A tuple
+        /// inside such a root is a head, and a struct inside that tuple is a
+        /// use.
+        PodbufInlineAppend,
+        /// An enum value or a union arm appended, compatible under the
+        /// generic rule, after which the podbuf integer of the enum or the
+        /// tag of the union is a different integer, by width or by
+        /// signedness: `u8` to `u16`, `u16` to `u32`, or `u8` to `i8` for an
+        /// enum that gains a negative value. The integer is the narrowest
+        /// that holds every declared value (ADR-0031 decision 5) or, for a
+        /// tag, every arm ordinal. Breaking when `podbuf` is among the
+        /// encodings the comparison is judged for, because every head that
+        /// holds the enum or the union lays out a different integer;
+        /// compatible otherwise. Reported once per declaration, at
+        /// `<package>/<decl>`, with the old and the new integer. An append
+        /// that keeps the integer draws no such line.
+        PodbufWidthChange,
+        /// An enum value or an enum-set flag appended, compatible under the
+        /// generic rule, to an enum or an enum set that is strict (ADR-0031
+        /// decisions 10 and 12): the `verify` of an older reader refuses a
+        /// value or a bit the declaration it was built from does not name.
+        /// Every enum and enum set is strict today. Breaking when `podbuf`
+        /// is among the encodings the comparison is judged for; compatible
+        /// otherwise. Reported once per declaration, at `<package>/<decl>`,
+        /// with the appended names in the detail. An enum whose append also
+        /// changes the podbuf integer draws only the
+        /// [`Category::PodbufWidthChange`] line.
+        PodbufStrictEnumAppend,
     }
 }
 
@@ -334,13 +387,20 @@ pub(crate) fn frozen(interface: &ridl_ir::v2::Interface) -> bool {
 
 /// Settles the verdict of every change the walk of one package pair produced.
 /// `scope` is every package a reference to another package's declaration
-/// resolves against ([`classify::classify_in`]).
+/// resolves against ([`classify::classify_in`]); `encodings` is the list the
+/// comparison is judged for ([`diff_refs_with`]).
 ///
 /// A change's new side is in `new`, except for an interface whose number
 /// moved to another package of the unit: the walk puts that package first in
 /// the change's path, and the classifier reads the new side from it, so the
 /// package is taken from `scope`, which holds every package of the new set.
-fn classify_all(changes: &mut [Change], old: &Package, new: &Package, scope: &[&Package]) {
+fn classify_all(
+    changes: &mut [Change],
+    old: &Package,
+    new: &Package,
+    scope: &[&Package],
+    encodings: &[&str],
+) {
     for change in changes {
         let held_by = change.path.split('/').next().unwrap_or_default();
         let new = if held_by == new.name {
@@ -352,7 +412,7 @@ fn classify_all(changes: &mut [Change], old: &Package, new: &Package, scope: &[&
                 .find(|package| package.name == held_by)
                 .unwrap_or(new)
         };
-        change.verdict = classify::classify_in(change, old, new, scope);
+        change.verdict = classify::classify_in(change, old, new, scope, encodings);
     }
 }
 
@@ -382,7 +442,7 @@ pub fn diff_packages(old: &Package, new: &Package) -> DiffReport {
     let matching = walk::Matching::new(&[old], &[new]);
     let mut changes = Vec::new();
     walk::walk_packages(old, new, &matching, &mut changes);
-    classify_all(&mut changes, old, new, &[]);
+    classify_all(&mut changes, old, new, &[], &[]);
     report(changes)
 }
 
@@ -415,8 +475,32 @@ pub fn diff_sets_in(old: &[Package], new: &[Package], context: &[Package]) -> Di
 }
 
 /// [`diff_sets_in`] over borrowed packages, for a caller that holds the
-/// packages by reference and would otherwise clone them.
+/// packages by reference and would otherwise clone them. The comparison is
+/// judged for no encoding: [`diff_refs_with`] with an empty list.
 pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) -> DiffReport {
+    diff_refs_with(old, new, context, &[])
+}
+
+/// [`diff_refs_in`], judged for `encodings`: the names a `[backend.<name>]
+/// encodings` list writes (`flatbuffers`, `proto3`, `podbuf`). A snapshot
+/// does not carry the encodings a workspace builds, so the caller names them.
+///
+/// Only `podbuf` has rules of its own: a struct field appended to a struct
+/// that another head holds inline is [`Category::PodbufInlineAppend`], and an
+/// enum value or a union arm appended that changes the enum's integer or the
+/// union's tag is [`Category::PodbufWidthChange`]; both are breaking when
+/// `podbuf` is in `encodings` and compatible otherwise. Every other category
+/// is judged the same under every list, and a name that is not `podbuf` adds
+/// no rule. The CLI and the MCP tool refuse a name that is
+/// not one of the three before calling this; the engine does not check it.
+/// `new` and `context` must not share a package: the podbuf rule searches
+/// both as one scope and would name a use of a shared package twice.
+pub fn diff_refs_with(
+    old: &[&Package],
+    new: &[&Package],
+    context: &[&Package],
+    encodings: &[&str],
+) -> DiffReport {
     use std::collections::BTreeMap;
 
     use ridl_ir::v2::{members_of_unit, unit_of};
@@ -438,7 +522,18 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
             Some(new_pkg) => {
                 let mut pair = Vec::new();
                 walk::walk_packages(old_pkg, new_pkg, &matching, &mut pair);
-                classify_all(&mut pair, old_pkg, new_pkg, &scope);
+                classify_all(&mut pair, old_pkg, new_pkg, &scope, encodings);
+                // The podbuf rule reads the settled verdicts of the pair and
+                // the heads of the whole new side, so it runs after the walk
+                // and the classifier of the pair.
+                let mut podbuf = walk::podbuf_inline_appends(&pair, &scope);
+                let mut widths = walk::podbuf_width_changes(&pair, old_pkg, new_pkg);
+                podbuf.append(&mut walk::podbuf_strict_enum_appends(
+                    &pair, old_pkg, new_pkg, &widths,
+                ));
+                podbuf.append(&mut widths);
+                classify_all(&mut podbuf, old_pkg, new_pkg, &scope, encodings);
+                pair.append(&mut podbuf);
                 changes.append(&mut pair);
             }
             // A package gone while its unit stays: walked against a package
@@ -453,7 +548,7 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
                 };
                 let mut pair = Vec::new();
                 walk::walk_packages(old_pkg, &gone, &matching, &mut pair);
-                classify_all(&mut pair, old_pkg, &gone, &scope);
+                classify_all(&mut pair, old_pkg, &gone, &scope, encodings);
                 changes.append(&mut pair);
             }
             // A package present on one side only: the change classifies on its
@@ -467,7 +562,7 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
                     Some(format!("package {name}")),
                     None,
                 );
-                classify_all(&mut pair, old_pkg, old_pkg, &[]);
+                classify_all(&mut pair, old_pkg, old_pkg, &[], encodings);
                 changes.append(&mut pair);
             }
         }
@@ -482,7 +577,7 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
                 None,
                 Some(format!("package {name}")),
             );
-            classify_all(&mut pair, new_pkg, new_pkg, &[]);
+            classify_all(&mut pair, new_pkg, new_pkg, &[], encodings);
             changes.append(&mut pair);
         }
     }
@@ -495,7 +590,8 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 /// which carry no verdict. A system on one side only is not compared: there is
 /// nothing to compare it against.
 ///
-/// `context` is passed to [`diff_sets_in`].
+/// `context` is passed to [`diff_sets_in`]. The comparison is judged for no
+/// encoding: [`diff_workspaces_with`] with an empty list.
 pub fn diff_workspaces(
     old: &[Package],
     old_system: Option<&System>,
@@ -503,7 +599,22 @@ pub fn diff_workspaces(
     new_system: Option<&System>,
     context: &[Package],
 ) -> DiffReport {
-    let mut report = diff_sets_in(old, new, context);
+    diff_workspaces_with(old, old_system, new, new_system, context, &[])
+}
+
+/// [`diff_workspaces`], judged for `encodings` ([`diff_refs_with`]).
+pub fn diff_workspaces_with(
+    old: &[Package],
+    old_system: Option<&System>,
+    new: &[Package],
+    new_system: Option<&System>,
+    context: &[Package],
+    encodings: &[&str],
+) -> DiffReport {
+    let old: Vec<&Package> = old.iter().collect();
+    let new: Vec<&Package> = new.iter().collect();
+    let context: Vec<&Package> = context.iter().collect();
+    let mut report = diff_refs_with(&old, &new, &context, encodings);
     if let (Some(old_system), Some(new_system)) = (old_system, new_system) {
         report.system = diff_systems(old_system, new_system);
     }
@@ -554,6 +665,7 @@ pub fn category_word(category: Category) -> &'static str {
         Category::ParamsChanged => "params_changed",
         Category::TimingChanged => "timing_changed",
         Category::RpcBoundChanged => "rpc_bound_changed",
+        Category::LimitChanged => "limit_changed",
         Category::ContractChanged => "contract_changed",
         Category::InteractionClassChanged => "interaction_class_changed",
         Category::WidthChanged => "width_changed",
@@ -565,11 +677,14 @@ pub fn category_word(category: Category) -> &'static str {
         Category::ServiceInterfaceRemoved => "service_interface_removed",
         Category::DocOnly => "doc_only",
         Category::VisibilityChanged => "visibility_changed",
+        Category::PodbufInlineAppend => "podbuf_inline_append",
+        Category::PodbufWidthChange => "podbuf_width_change",
+        Category::PodbufStrictEnumAppend => "podbuf_strict_enum_append",
     }
 }
 
 /// The heading a category's changes are grouped under in the text report, or
-/// `None` for a category listed plainly. Two headings exist. "compatible on
+/// `None` for a category listed plainly. Three headings exist. "compatible on
 /// the wire, visible in source" is for a change that exits 0 but that a
 /// consumer sees in its source — an interface renamed on its number changes
 /// the generated identity-table names in both wire backends, and an interface
@@ -579,9 +694,12 @@ pub fn category_word(category: Category) -> &'static str {
 /// hash, which a generated face compares with its peer's — a number `ridl
 /// lock` froze in place, which always changes it, and an enum or enum-set body
 /// reordered, which changes it when an interface reaches the enum or enum set
-/// (the hash covers only the declarations an interface reaches). Each such
-/// category's `--explain` text states its own consequence; the JSON report
-/// carries the category word and no heading field.
+/// (the hash covers only the declarations an interface reaches). "breaking
+/// under podbuf" is for a change whose verdict depends on the encodings the
+/// comparison is judged for ([`diff_refs_with`]): it exits 0 unless `podbuf`
+/// is among them. Each such category's `--explain` text states its own
+/// consequence; the JSON report carries the category word and no heading
+/// field.
 ///
 /// Wildcard arms are denied for the reason `category_word` gives.
 #[deny(
@@ -596,6 +714,9 @@ pub fn heading(category: Category) -> Option<&'static str> {
         Category::InterfaceFrozen | Category::EnumReordered => {
             Some("compatible on the wire, may change the catalog hash")
         }
+        Category::PodbufInlineAppend
+        | Category::PodbufWidthChange
+        | Category::PodbufStrictEnumAppend => Some("breaking under podbuf"),
         Category::DeclAdded
         | Category::DeclRemoved
         | Category::InterfaceRetired
@@ -612,6 +733,7 @@ pub fn heading(category: Category) -> Option<&'static str> {
         | Category::ParamsChanged
         | Category::TimingChanged
         | Category::RpcBoundChanged
+        | Category::LimitChanged
         | Category::ContractChanged
         | Category::InteractionClassChanged
         | Category::WidthChanged

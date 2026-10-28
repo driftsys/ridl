@@ -13,15 +13,18 @@ mod support;
 use std::io::{self, BufRead, BufReader, ErrorKind, Write};
 use std::net::{SocketAddr, TcpListener};
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use ridl_loopback::Loopback;
-use ridl_transport_ws::{serve, Config, Scanning};
+use ridl_rt::contract::Ordinal;
+use ridl_rt::error::{CallError, Contract};
+use ridl_rt::port::Caller;
+use ridl_transport_ws::{serve, Config, Described, Scanning};
 
 use support::client::WsClient;
-use support::provider::{provider, provider_step, CATALOG};
+use support::provider::{member_table, provider, provider_step, CATALOG, IFACE};
 use support::scenario::{run, Rig};
 
 /// The environment variable that makes `provider_process` serve.
@@ -135,10 +138,32 @@ fn spawn_provider() -> (ChildGuard, SocketAddr) {
 fn the_scenario_runs_over_websocket_to_a_second_process() {
     let (child, addr) = spawn_provider();
     let client = WsClient::connect(addr, CATALOG, 1);
-    run(&mut WsRig {
+    let mut rig = WsRig {
         client,
         _child: child,
-    });
+    };
+    run(&mut rig);
+
+    // The server holds a member table, so a query to ordinal 6, which the
+    // table reserves and does not list, is refused. Without the table the
+    // provider would never answer it.
+    let mut out = [0u8; 64];
+    let call = rig
+        .ports()
+        .query(IFACE, Ordinal(6), &[1, 2, 3], None)
+        .expect("the query is sent");
+    let start = Instant::now();
+    let reply = loop {
+        if let Some(reply) = rig.ports().reply(call, &mut out).expect("reply") {
+            break reply;
+        }
+        assert!(start.elapsed() < Duration::from_secs(2), "a refusal in 2 s");
+        rig.step();
+    };
+    assert_eq!(
+        reply,
+        Err(CallError::Contract(Contract::UnknownInteraction))
+    );
 }
 
 /// The provider's process. It returns at once unless
@@ -159,7 +184,8 @@ fn provider_process() {
         std::process::exit(0);
     });
     let mut rt = provider();
-    let backend = Scanning(rt.attach());
+    let backend = Described::new(Scanning(rt.attach()), Arc::new(member_table()))
+        .expect("the table matches the provider's catalog");
     let listener = TcpListener::bind("127.0.0.1:0").expect("bound");
     let port = listener.local_addr().expect("an address").port();
     println!("port {port}");

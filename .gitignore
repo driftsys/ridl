@@ -16,6 +16,11 @@
 # string, bytes, array, map or pattern.
 /examples/cabin/generated-corpus/
 
+# The schema, the TypeScript and the wasm codec that `just cabin-ws-demo`
+# writes for the cabin web program: `ridl build --emit flatbuffers` and
+# `flatc` output, and veh_cabin.wasm.
+/examples/cabin/web/generated/
+
 # Node (the VS Code extension's own dependencies)
 node_modules/
 
@@ -44,3 +49,9 @@ editors/vscode/skills/
 
 # Raw eval transcripts stay local; the result files are committed.
 evals/results/*/transcripts/
+
+# The npm package `just ts-npm-check` builds with dnt.
+/packages/ridl-transport-ws/npm/
+/packages/ridl-transport-ws/deno.lock
+/packages/ridl-runtime/npm/
+/packages/ridl-runtime/deno.lock

@@ -103,27 +103,30 @@ pub struct Encoded<'a, V> {
 /// constructors. A crate outside `ridl-rt` builds a `Ref` by checking:
 ///
 /// ```
-/// use ridl_rt::encoding::ReprC;
+/// use ridl_rt::encoding::Podbuf;
 /// use ridl_rt::payload::{Payload, Ref, VerifyError};
 ///
-/// fn check<'a, T>(bytes: &'a [u8]) -> Result<Ref<'a, T, ReprC>, VerifyError>
+/// fn check<'a, T>(bytes: &'a [u8]) -> Result<Ref<'a, T, Podbuf>, VerifyError>
 /// where
-///     T: Payload<ReprC, View<'a> = &'a [u8]>,
+///     T: Payload<Podbuf, View<'a> = &'a [u8]>,
 /// {
 ///     Ref::verify(bytes)
 /// }
 /// ```
 ///
-/// and cannot build one from its fields:
+/// and cannot build one from its fields. The error code on the `compile_fail`
+/// block is documentation only, because rustdoc does not check it;
+/// `crates/ridl-rt/tests/seal.rs` asserts E0451 for the forgery and E0616 for
+/// a read of a field:
 ///
 /// ```compile_fail,E0451
 /// use core::marker::PhantomData;
-/// use ridl_rt::encoding::ReprC;
+/// use ridl_rt::encoding::Podbuf;
 /// use ridl_rt::payload::{Payload, Ref};
 ///
-/// fn forge<'a, T>(bytes: &'a [u8]) -> Ref<'a, T, ReprC>
+/// fn forge<'a, T>(bytes: &'a [u8]) -> Ref<'a, T, Podbuf>
 /// where
-///     T: Payload<ReprC, View<'a> = &'a [u8]>,
+///     T: Payload<Podbuf, View<'a> = &'a [u8]>,
 /// {
 ///     Ref { bytes, view: bytes, _e: PhantomData }
 /// }
@@ -210,6 +213,23 @@ pub enum EncodeError {
     /// generated type, so a value longer than its declared bound is
     /// representable, and the encoder is where it is refused.
     Contract(Violation),
+    /// The output buffer does not start at the alignment the encoding
+    /// requires.
+    ///
+    /// A podbuf buffer starts on an 8-byte boundary; an encoding written to an
+    /// output that does not is a buffer its own `verify` refuses.
+    Unaligned,
+    /// The encoder asked for a layout the encoding does not allow, or stored a
+    /// value outside the bytes it had reserved: a defect in the generated
+    /// encoder, not in the value or in the output buffer.
+    ///
+    /// `at` is the offset of the first offending store, or the size the
+    /// encoder asked for when that size is not allowed (a podbuf head size
+    /// that is not a multiple of 8).
+    Layout {
+        /// The offset or the size that broke the layout.
+        at: usize,
+    },
 }
 
 /// A check that failed.
@@ -264,6 +284,19 @@ pub enum Malformed {
     /// three, with this variant, because a payload is one value written once
     /// and no generated writer emits a field twice.
     Duplicate,
+    /// A podbuf buffer is shorter than its 8-byte preamble, or the preamble's
+    /// `head_size` is not a multiple of 8 or reaches past the end of the
+    /// buffer.
+    Preamble,
+    /// A podbuf array or map descriptor states an `elem_size` that the rules
+    /// for its element type do not allow: a multiple of 8 for a struct
+    /// element, the exact element size for any other element.
+    Stride,
+    /// A podbuf string does not end in a NUL byte, or holds a NUL byte before
+    /// its end.
+    Terminator,
+    /// The keys of a podbuf map are not in strictly increasing order.
+    KeyOrder,
 }
 
 /// A value that breaks a typl constraint.
@@ -304,17 +337,70 @@ pub enum Rule {
     Unique,
 }
 
+/// Why a transcode failed.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TranscodeError {
+    /// The input bytes did not verify under the source encoding.
+    Verify(VerifyError),
+    /// The decoded value did not encode under the target encoding.
+    Encode(EncodeError),
+}
+
+impl From<VerifyError> for TranscodeError {
+    fn from(e: VerifyError) -> Self {
+        TranscodeError::Verify(e)
+    }
+}
+
+impl From<EncodeError> for TranscodeError {
+    fn from(e: EncodeError) -> Self {
+        TranscodeError::Encode(e)
+    }
+}
+
+/// Re-encodes the payload `bytes` from the encoding `S` into the encoding `D`.
+///
+/// This is the domain-mediated reference path: it verifies `bytes` under `S`,
+/// decodes the value, and encodes the value under `D`. A generated function
+/// that calls it may later replace its body with a faster one that gives the
+/// same result.
+///
+/// The encoded bytes are a subslice of `out` (a suffix of `out` for
+/// FlatBuffers). An `out` that is too small is [`EncodeError::Capacity`]. The
+/// input has already verified under `S` when the encode runs, so an
+/// [`EncodeError::Contract`] means that the two codecs disagree on a typl
+/// constraint; the function reports it.
+///
+/// `S` cannot be inferred, so a caller writes at least
+/// `transcode::<_, Proto3, _>`.
+pub fn transcode<'o, T, S, D>(
+    bytes: &[u8],
+    out: &'o mut [u8],
+) -> Result<Ref<'o, T, D>, TranscodeError>
+where
+    T: Payload<S> + Payload<D>,
+    S: Encoding,
+    D: Encoding,
+{
+    let value: T = Ref::<T, S>::verify(bytes)?.decode();
+    Ok(Ref::<T, D>::encode(&value, out)?)
+}
+
 #[cfg(test)]
 mod tests {
     use core::marker::PhantomData;
 
-    use super::{EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError};
-    use crate::encoding::ReprC;
+    use super::{
+        transcode, EncodeError, Encoded, Malformed, Payload, Ref, Rule, TranscodeError,
+        VerifyError, Violation,
+    };
+    use crate::encoding::{Podbuf, Proto3};
 
     /// A payload for this test only: its view is the bytes.
     struct Raw;
 
-    impl Payload<ReprC> for Raw {
+    impl Payload<Podbuf> for Raw {
         const MAX_SIZE: usize = 0;
         type Buffer = [u8; 0];
         const BUFFER: [u8; 0] = [];
@@ -329,7 +415,7 @@ mod tests {
             Ok(buf)
         }
 
-        fn decode(_: Ref<'_, Self, ReprC>) -> Self {
+        fn decode(_: Ref<'_, Self, Podbuf>) -> Self {
             Raw
         }
     }
@@ -340,7 +426,7 @@ mod tests {
     #[test]
     fn a_ref_is_built_from_exactly_its_three_fields() {
         let bytes: &[u8] = &[1, 2];
-        let proof: Ref<'_, Raw, ReprC> = Ref {
+        let proof: Ref<'_, Raw, Podbuf> = Ref {
             bytes,
             view: bytes,
             _e: PhantomData,
@@ -378,5 +464,176 @@ mod tests {
             }
             assert_ne!(*a, Malformed::OutOfBounds);
         }
+    }
+
+    /// The four variants the podbuf codec adds exist on every feature set, and
+    /// differ from each other and from the variants that already existed.
+    #[test]
+    fn malformed_has_the_four_podbuf_variants() {
+        let added = [
+            Malformed::Preamble,
+            Malformed::Stride,
+            Malformed::Terminator,
+            Malformed::KeyOrder,
+        ];
+        for (i, a) in added.iter().enumerate() {
+            for (j, b) in added.iter().enumerate() {
+                assert_eq!(a == b, i == j);
+            }
+            assert_ne!(*a, Malformed::OutOfBounds);
+            assert_ne!(*a, Malformed::Utf8);
+        }
+    }
+
+    /// A speed for the transcode tests. Under `Podbuf` it is two little-endian
+    /// bytes at the front of the buffer, and every value is legal. Under
+    /// `Proto3` it is a marker byte then two little-endian bytes at the end
+    /// of the buffer, and a value above 300 is refused.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct Speed(u16);
+
+    const SPEED_MAX: u16 = 300;
+
+    impl Payload<Podbuf> for Speed {
+        const MAX_SIZE: usize = 2;
+        type Buffer = [u8; 2];
+        const BUFFER: [u8; 2] = [0; 2];
+        type View<'a> = &'a [u8];
+
+        fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
+            if out.len() < 2 {
+                return Err(EncodeError::Capacity {
+                    needed: 2,
+                    available: out.len(),
+                });
+            }
+            out[..2].copy_from_slice(&self.0.to_le_bytes());
+            let bytes: &'o [u8] = &out[..2];
+            Ok(Encoded { bytes, view: bytes })
+        }
+
+        fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
+            if buf.len() == 2 {
+                Ok(buf)
+            } else {
+                Err(VerifyError::Structure(Malformed::OutOfBounds))
+            }
+        }
+
+        fn decode(r: Ref<'_, Self, Podbuf>) -> Self {
+            Speed(u16::from_le_bytes([r.bytes()[0], r.bytes()[1]]))
+        }
+    }
+
+    impl Payload<Proto3> for Speed {
+        const MAX_SIZE: usize = 3;
+        type Buffer = [u8; 3];
+        const BUFFER: [u8; 3] = [0; 3];
+        type View<'a> = &'a [u8];
+
+        fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
+            if self.0 > SPEED_MAX {
+                return Err(EncodeError::Contract(Violation {
+                    type_name: Some("Speed"),
+                    rule: Rule::Range,
+                }));
+            }
+            let len = out.len();
+            if len < 3 {
+                return Err(EncodeError::Capacity {
+                    needed: 3,
+                    available: len,
+                });
+            }
+            let le = self.0.to_le_bytes();
+            out[len - 3..].copy_from_slice(&[0x08, le[0], le[1]]);
+            let bytes: &'o [u8] = &out[len - 3..];
+            Ok(Encoded { bytes, view: bytes })
+        }
+
+        fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
+            if buf.len() != 3 || buf[0] != 0x08 {
+                return Err(VerifyError::Structure(Malformed::WireType));
+            }
+            if u16::from_le_bytes([buf[1], buf[2]]) > SPEED_MAX {
+                return Err(VerifyError::Contract(Violation {
+                    type_name: Some("Speed"),
+                    rule: Rule::Range,
+                }));
+            }
+            Ok(buf)
+        }
+
+        fn decode(r: Ref<'_, Self, Proto3>) -> Self {
+            Speed(u16::from_le_bytes([r.bytes()[1], r.bytes()[2]]))
+        }
+    }
+
+    #[test]
+    fn transcode_matches_direct_encode() {
+        let mut source = [0u8; 8];
+        let source = Ref::<Speed, Podbuf>::encode(&Speed(120), &mut source).unwrap();
+
+        let mut out = [0u8; 8];
+        let moved = transcode::<Speed, Podbuf, Proto3>(source.bytes(), &mut out).unwrap();
+
+        let mut direct = [0u8; 8];
+        let direct = Ref::<Speed, Proto3>::encode(&Speed(120), &mut direct).unwrap();
+        assert_eq!(moved.bytes(), direct.bytes());
+        assert_eq!(moved.decode(), Speed(120));
+    }
+
+    #[test]
+    fn transcode_reverse_direction() {
+        let mut source = [0u8; 8];
+        let source = Ref::<Speed, Proto3>::encode(&Speed(250), &mut source).unwrap();
+
+        let mut out = [0u8; 8];
+        let moved = transcode::<Speed, Proto3, Podbuf>(source.bytes(), &mut out).unwrap();
+
+        let mut direct = [0u8; 8];
+        let direct = Ref::<Speed, Podbuf>::encode(&Speed(250), &mut direct).unwrap();
+        assert_eq!(moved.bytes(), direct.bytes());
+        assert_eq!(moved.decode(), Speed(250));
+    }
+
+    #[test]
+    fn transcode_same_encoding_is_identity() {
+        let mut source = [0u8; 8];
+        let source = Ref::<Speed, Proto3>::encode(&Speed(77), &mut source).unwrap();
+
+        let mut out = [0u8; 8];
+        let moved = transcode::<Speed, Proto3, Proto3>(source.bytes(), &mut out).unwrap();
+        assert_eq!(moved.bytes(), source.bytes());
+    }
+
+    #[test]
+    fn transcode_refuses_bad_input() {
+        let mut out = [0u8; 8];
+        let result = transcode::<Speed, Podbuf, Proto3>(&[1, 2, 3], &mut out).map(|r| r.bytes());
+        assert!(matches!(result, Err(TranscodeError::Verify(_))));
+    }
+
+    #[test]
+    fn transcode_reports_contract() {
+        // `Podbuf` accepts 301; `Proto3` refuses it.
+        let mut out = [0u8; 8];
+        let result =
+            transcode::<Speed, Podbuf, Proto3>(&301u16.to_le_bytes(), &mut out).map(|r| r.bytes());
+        assert!(matches!(
+            result,
+            Err(TranscodeError::Encode(EncodeError::Contract(_)))
+        ));
+    }
+
+    #[test]
+    fn transcode_reports_capacity() {
+        let mut out = [0u8; 1];
+        let result =
+            transcode::<Speed, Podbuf, Proto3>(&120u16.to_le_bytes(), &mut out).map(|r| r.bytes());
+        assert!(matches!(
+            result,
+            Err(TranscodeError::Encode(EncodeError::Capacity { .. }))
+        ));
     }
 }

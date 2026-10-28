@@ -123,11 +123,15 @@ test:
         # The workspace build resolves `ridl-rt` with default features, so the
         # encoding features gate code it never compiles: the helpers a
         # generated codec calls, and their tests. `just compat-check` builds
-        # them, but only at rust-version 1.83 and only against the packaged
+        # them, but only at the minimum rust-version and only against the packaged
         # crate, so without this line a break in them reaches CI green. The
         # same line is what builds the `task` module under the `std` feature
         # and runs crates/ridl-rt/tests/task.rs.
         cargo test -p ridl-rt --all-features --locked
+        # No workspace member turns on the `descriptor` feature of
+        # `ridl-transport-ws`, so its test target `descriptor`, which requires
+        # the feature, runs only from this line.
+        cargo test --locked -p ridl-transport-ws --features descriptor
     else
         echo "test: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
@@ -177,7 +181,7 @@ wasm-check:
         rustup target add wasm32-unknown-unknown
         cargo check --target wasm32-unknown-unknown \
             -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir -p ridl-descriptor \
-            -p ridl-backend-proto -p ridl-backend-flatbuffers \
+            -p ridl-backend-proto -p ridl-backend-flatbuffers -p ridl-backend-podbuf \
             -p ridl-backend-rust -p ridl-backend-ts \
             -p ridl-rt -p ridl-fmt \
             --no-default-features
@@ -220,9 +224,7 @@ wasm-check:
 # (ADR-0021 decision 10). Edition 2021 with the rust-toolchain.toml pin is
 # `just test`; this recipe covers what that does not: the packaged manifest
 # as edition 2021 with the minimum supported Rust version, and the packaged
-# manifest edited to edition 2024 with the pin. Edition 2024 did not exist
-# before Rust 1.85, so the minimum (older than that) can only test edition
-# 2021.
+# manifest edited to edition 2024 with the pin.
 #
 # It tests the package, not a hand-copied crate: `cargo package` normalizes
 # the manifest the way crates.io would receive it — `license.workspace = true`
@@ -287,46 +289,49 @@ wasm-check:
 # ridl-transport-ws is held to the same terms: its manifest must set the same
 # rust-version as ridl-rt and edition 2021, and the packaged crate, with its
 # tungstenite dev-dependency table removed and the tables appended, must build
-# with the minimum toolchain with its default features and with none.
+# with the minimum toolchain with its default features, with none, and with
+# the `descriptor` feature. The packaged ridl-descriptor and ridl-ir are
+# patched in, and the lockfile is resolved and the sources fetched the way the
+# ridl-descriptor cell does it.
 #
 # The crate emitted for the veh-cluster corpus is built with cargo, not with
 # rustc as the cabin crate is, with every cargo feature on and with default
 # features off. The recipe reads the edition from the emitted veh-cluster
 # manifest and fails when it is not 2021 (the cabin cell compiles with rustc
-# and does not read its manifest): `ridl build` writes edition 2021, so a Rust 1.83
-# user builds the emitted crate without editing its manifest (ADR-0029
-# decision 5).
+# and does not read its manifest), and when it does not declare the same
+# rust-version as ridl-rt: `ridl build` writes both, so a user on the minimum
+# builds the emitted crate without editing its manifest (ADR-0029 decision 5).
 #
-# ADR-0029 owns the policy; the minimums are frozen by its decisions 1 and 5.
+# ADR-0029 owns the policy; the minimum is frozen by its decisions 1 and 5.
 #
-# ridl-descriptor has its own minimum, the rust-version in its manifest
-# (1.88, the minimum of planus 1.3.0). It is packaged together with ridl-ir,
-# the only workspace crate it depends on, and the packaged manifest is built
+# ridl-descriptor is held to the same minimum, and to edition 2024 (1.88 is
+# also the minimum of planus 1.3.0, which it pins). It is packaged together
+# with ridl-ir, the only workspace crate it depends on, and the packaged
+# manifest is built
 # unchanged apart from the appended tables, in three feature sets: the
 # defaults, none, and only `dedup`. The unit tests and the integration tests
 # lower, round_trip and verify run with the defaults; codec_agreement (it
 # needs a dev-dependency the package drops, and it reads a corpus snapshot
 # under crates/ridl/, outside the package), golden_hash (it reads a file
-# outside the package) and the doctests do not run at that version, and the
+# outside the package) and the doctests do not run at the minimum, and the
 # pin runs all of them in the workspace.
 #
-# The lockfiles of ridl-descriptor and of the veh-cluster crate are resolved
-# with the pin's cargo and CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback,
+# The lockfiles of ridl-descriptor, of ridl-transport-ws and of the veh-cluster
+# crate are resolved with the pin's cargo and CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback,
 # so that a dependency release with a higher minimum is not selected, and the
 # recipe fails unless cargo reports that it resolved for the crate's minimum; the
 # sources are fetched with the cargo of the crate's minimum, and the build is
-# offline and locked. Each of these two cells uses its own empty CARGO_HOME
-# under target/compat-check, so that a warm cache (the CI cache of
-# ~/.cargo) cannot hide a fetch done with the wrong cargo. cargo 1.83 does not see the index and the sources that
-# the pin's cargo downloads (cargo 1.85 renamed their directories), so a fetch
-# by the pin left a build at 1.83 without its dependencies on a cold
-# CARGO_HOME.
+# offline and locked. The ridl-descriptor and ridl-transport-ws cells share
+# one empty CARGO_HOME and the veh-cluster cell has another, under
+# target/compat-check, so that a warm cache (the CI cache of ~/.cargo) cannot
+# hide a missing fetch.
 #
-# The recipe also fails on: a ridl-descriptor manifest without a rust-version
-# line, or one that names a version newer than the pin; a workspace
+# The recipe also fails on: a ridl-rt rust-version newer than the pin; a
+# ridl-descriptor manifest that does not set the same rust-version as ridl-rt
+# and edition 2024; a workspace
 # dependency, other than a dev-dependency, of ridl-rt, ridl-rt-conformance,
-# ridl-loopback or ridl-transport-ws outside those four, or of ridl-ir or
-# ridl-descriptor outside those two; a packaged ridl-descriptor that names
+# ridl-loopback, ridl-transport-ws, ridl-ir or ridl-descriptor outside those
+# six; a packaged ridl-descriptor that names
 # ridl-backend-rust; or a
 # packaged ridl-descriptor test list that differs from the one the recipe
 # expects.
@@ -359,6 +364,15 @@ compat-check: toolchain-check
     manifest="crates/ridl-rt/Cargo.toml"
     minimum="$(read_minimum "$manifest")" || exit 1
     pin="$(rustc --version | cut -d' ' -f2)"
+    # The toolchain that resolves the lockfiles and runs the other checks is
+    # the pin, so a minimum above it cannot be a minimum. This guard runs
+    # before the toolchain is installed, so that its message is printed
+    # instead of a rustup error for a version that does not exist yet.
+    if [ "$(printf '%s\n%s\n' "$minimum" "$pin" | sort -V | tail -n 1)" != "$pin" ]; then
+        echo "compat-check: $manifest sets rust-version = \"$minimum\", which is" >&2
+        echo "compat-check: newer than the pinned toolchain $pin." >&2
+        exit 1
+    fi
 
     if ! command -v rustup >/dev/null 2>&1; then
         echo "compat-check: rustup is required to install the $minimum toolchain." >&2
@@ -406,31 +420,22 @@ compat-check: toolchain-check
         exit 1
     fi
 
-    # ridl-descriptor states its edition as a literal, so that a change to the
-    # workspace edition does not change it.
-    descriptor_edition_manifest="crates/ridl-descriptor/Cargo.toml"
-    if ! grep -qxF 'edition = "2024"' "$descriptor_edition_manifest"; then
-        echo "compat-check: $descriptor_edition_manifest must set edition = \"2024\" as a literal." >&2
-        exit 1
-    fi
-
-    # ridl-descriptor has its own minimum. The toolchain that resolves the
-    # lockfiles and runs the other checks is the pin, so a minimum above it
-    # cannot be a minimum. This guard runs before the toolchain is installed,
-    # so that its message is printed instead of a rustup error for a version
-    # that does not exist yet.
+    # ridl-descriptor is held to the same minimum, and states its edition,
+    # 2024, as a literal, so that a change to the workspace edition does not
+    # change it.
     descriptor_manifest="crates/ridl-descriptor/Cargo.toml"
-    descriptor_minimum="$(read_minimum "$descriptor_manifest")" || exit 1
-    if [ "$(printf '%s\n%s\n' "$descriptor_minimum" "$pin" | sort -V | tail -n 1)" != "$pin" ]; then
-        echo "compat-check: $descriptor_manifest sets rust-version = \"$descriptor_minimum\", which is" >&2
-        echo "compat-check: newer than the pinned toolchain $pin." >&2
+    if ! grep -qxF "rust-version = \"$minimum\"" "$descriptor_manifest" \
+        || ! grep -qxF 'edition = "2024"' "$descriptor_manifest"; then
+        echo "compat-check: $descriptor_manifest must set edition = \"2024\" and" >&2
+        echo "compat-check: rust-version = \"$minimum\", the same as $manifest." >&2
         exit 1
     fi
-    ensure_toolchain "$descriptor_minimum"
 
     # Prints each workspace dependency of the crates named in $1 (a
-    # space-separated list) that is not itself in $1, one per line. Each list
-    # below is the set of crates that are packaged and patched in together, so
+    # space-separated list) that is not itself in $1, one per line. The list
+    # below is the set of crates that are packaged and patched in together
+    # (ridl-transport-ws depends on ridl-descriptor, optionally, and
+    # `cargo metadata` lists an optional dependency as a normal one), so
     # a dependency outside it would be looked up on the registry, where this
     # version is not published yet. `cargo metadata` reads the dependency
     # tables in every form (`ridl-x.workspace = true`, `[dependencies.ridl-x]`,
@@ -451,7 +456,7 @@ compat-check: toolchain-check
                 | select(.name as $name | $crates | any(. == $name) | not)
                 | "\($from) -> \(.name)"'
     }
-    for set in "ridl-rt ridl-rt-conformance ridl-loopback ridl-transport-ws" "ridl-ir ridl-descriptor"; do
+    for set in "ridl-rt ridl-rt-conformance ridl-loopback ridl-transport-ws ridl-ir ridl-descriptor"; do
         extra="$(unpackaged_deps "$set")"
         if [ -n "$extra" ]; then
             echo "compat-check: one of $set now depends on another workspace crate;" >&2
@@ -542,19 +547,21 @@ compat-check: toolchain-check
     # `std` is on for both: the emitted crate's `blocking` module is under its
     # `std` feature and names `ridl_rt::task::block_on`, which `ridl-rt`'s
     # `std` feature gates, so the cell covers that module too. `ridl-rt`'s
-    # `flatbuffers` and `proto3` features are the two codecs cabin's manifest
-    # names; the emitted manifest turns both on for `ridl-rt`. The crate has
-    # no feature of that name, and its code carries no `cfg` on either codec.
+    # `flatbuffers`, `proto3` and `podbuf` features are the three codecs
+    # cabin's manifest names; the emitted manifest turns all three on for
+    # `ridl-rt`. The crate has no feature of those names, and its code
+    # carries no `cfg` on any codec.
     rustup run "$minimum" rustc --edition 2021 --crate-type rlib --crate-name ridl_rt \
-        --cfg 'feature="flatbuffers"' --cfg 'feature="proto3"' --cfg 'feature="std"' \
+        --cfg 'feature="flatbuffers"' --cfg 'feature="proto3"' --cfg 'feature="podbuf"' \
+        --cfg 'feature="std"' \
         "$pkg/src/lib.rs" -o "$cabin/libridl_rt.rlib"
     rustup run "$minimum" rustc --edition 2021 --crate-type lib --crate-name veh_cabin \
         --emit=metadata -D warnings --cfg 'feature="std"' \
         --extern "ridl_rt=$cabin/libridl_rt.rlib" \
         "$cabin/generated/lib.rs" -o "$cabin/libveh_cabin.rmeta"
 
-    # The integration tests that build standalone run at ridl-descriptor's
-    # minimum; two do not. codec_agreement needs ridl-backend-rust, the
+    # The integration tests that build standalone run at the minimum; two do
+    # not. codec_agreement needs ridl-backend-rust, the
     # dev-dependency the package drops, and it also reads a corpus snapshot
     # under crates/ridl/, outside the package. golden_hash reads a corpus
     # snapshot under crates/ridl/ too. The pin runs both in the workspace.
@@ -586,21 +593,16 @@ compat-check: toolchain-check
     for t in $descriptor_tests; do test_args="$test_args --test $t"; done
     append_tables "$pkg_descriptor/Cargo.toml" "ridl-ir=$pkg_ir"
     # The lockfile is resolved with the pin's cargo, which knows the
-    # rust-version-aware fallback (cargo 1.84 and later), so that a dependency
-    # release with a higher minimum is not selected. The sources are
-    # downloaded with the minimum's cargo, so that the offline build below
-    # finds them where that cargo looks: cargo 1.85 renamed the directories of
-    # the crates.io index and of the downloaded sources under CARGO_HOME, so a
-    # cargo before 1.85 does not see what a later cargo downloaded. Resolving
-    # the lockfile (which reads the index) and fetching are the two network
-    # uses of this cell; the build is offline and locked.
+    # rust-version-aware fallback, so that a dependency release with a higher
+    # minimum is not selected. The sources are downloaded with the minimum's
+    # cargo, the cargo that runs the offline build below. Resolving the
+    # lockfile (which reads the index) and fetching are the two network uses
+    # of this cell; the build is offline and locked.
     #
     # The cell has its own CARGO_HOME, emptied with the rest of
     # target/compat-check, so that it always runs cold. With a shared, warm
-    # CARGO_HOME a fetch made with the wrong cargo (cargo 1.85 renamed the
-    # registry directories) would still find the sources a later cargo
-    # downloaded, and the mistake would show only on a machine with a cold
-    # cache. Toolchains come from RUSTUP_HOME, not CARGO_HOME, and the rustup
+    # CARGO_HOME a missing fetch would be hidden by sources downloaded earlier,
+    # and the mistake would show only on a machine with a cold cache. Toolchains come from RUSTUP_HOME, not CARGO_HOME, and the rustup
     # proxies on PATH are unchanged, so `cargo +version` still resolves.
     #
     # resolve_for <cargo home> <manifest> <rust version> <label> resolves the
@@ -623,9 +625,9 @@ compat-check: toolchain-check
         fi
     }
     descriptor_home="$PWD/target/compat-check/cargo-home-descriptor"
-    resolve_for "$descriptor_home" "$pkg_descriptor/Cargo.toml" "$descriptor_minimum" ridl-descriptor
+    resolve_for "$descriptor_home" "$pkg_descriptor/Cargo.toml" "$minimum" ridl-descriptor
     CARGO_HOME="$descriptor_home" \
-        cargo "+$descriptor_minimum" fetch --locked --manifest-path "$pkg_descriptor/Cargo.toml"
+        cargo "+$minimum" fetch --locked --manifest-path "$pkg_descriptor/Cargo.toml"
 
     export CARGO_TARGET_DIR="$PWD/target/compat-check/build"
 
@@ -669,8 +671,14 @@ compat-check: toolchain-check
     # dev-dependency, so building the package does not compile it, but cargo
     # still resolves it, and the offline build cannot: the recipe removes its
     # table first, and fails when the manifest has any other dev-dependency
-    # table. Built with the default features and with none (the codec alone,
-    # with no `std`).
+    # table. Built at the minimum with the default features, with none (the
+    # codec alone, with no `std`), and with the `descriptor` feature.
+    #
+    # The packaged ridl-descriptor and ridl-ir are patched in. A lockfile
+    # lists every optional dependency whatever the features, so the graph
+    # holds planus and serde in every cell and cannot build offline against
+    # the default CARGO_HOME: the lockfile is resolved and the sources are
+    # fetched as for ridl-descriptor, in ridl-descriptor's CARGO_HOME.
     if [ "$(grep -c '^\[dev-dependencies' "$pkg_transport/Cargo.toml")" != 1 ] \
         || ! grep -qxF '[dev-dependencies.tungstenite]' "$pkg_transport/Cargo.toml"; then
         echo "compat-check: the packaged ridl-transport-ws manifest no longer has" >&2
@@ -679,23 +687,29 @@ compat-check: toolchain-check
     fi
     sed -i.bak '/^\[dev-dependencies\.tungstenite\]$/,/^$/d' "$pkg_transport/Cargo.toml"
     rm -f "$pkg_transport/Cargo.toml.bak"
-    append_tables "$pkg_transport/Cargo.toml" "ridl-rt=$pkg"
+    append_tables "$pkg_transport/Cargo.toml" "ridl-rt=$pkg" "ridl-descriptor=$pkg_descriptor" "ridl-ir=$pkg_ir"
+    # The fallback resolver resolves for the crate's own rust-version, the
+    # minimum; planus stays at the 1.3.0 that ridl-descriptor pins.
+    resolve_for "$descriptor_home" "$pkg_transport/Cargo.toml" "$minimum" ridl-transport-ws
+    CARGO_HOME="$descriptor_home" \
+        cargo "+$minimum" fetch --locked --manifest-path "$pkg_transport/Cargo.toml"
     echo "compat-check: $minimum, edition 2021 (packaged ridl-transport-ws, default features)"
-    cargo "+$minimum" build --offline --manifest-path "$pkg_transport/Cargo.toml"
+    CARGO_HOME="$descriptor_home" cargo "+$minimum" build --offline --locked --manifest-path "$pkg_transport/Cargo.toml"
     echo "compat-check: $minimum, edition 2021 (packaged ridl-transport-ws, no default features)"
-    cargo "+$minimum" build --offline --no-default-features --manifest-path "$pkg_transport/Cargo.toml"
+    CARGO_HOME="$descriptor_home" cargo "+$minimum" build --offline --locked --no-default-features --manifest-path "$pkg_transport/Cargo.toml"
+    echo "compat-check: $minimum, edition 2021 (packaged ridl-transport-ws, descriptor feature)"
+    CARGO_HOME="$descriptor_home" cargo "+$minimum" build --offline --locked --features descriptor --manifest-path "$pkg_transport/Cargo.toml"
 
     # The crate `ridl build` emits for the veh-cluster corpus, as edition 2021
     # at the minimum with every feature on, so the regex dependency of
     # `validate-pattern` is built too. The emitted manifest sets edition 2021
-    # and no rust-version; the edition is checked, not rewritten, and a
-    # rust-version line is added after it, so that the fallback resolver
-    # below resolves for the minimum. ridl-rt is the packaged
-    # copy. The lockfile is resolved and the sources are fetched as for
-    # ridl-descriptor: resolved with the pin's cargo and the fallback
-    # resolver, fetched with the minimum's cargo (cargo 1.83 does not see the
-    # index and sources that the pin's cargo downloads), then built offline
-    # and locked, then built again without default features to check no_std.
+    # and the minimum as its rust-version; both are checked, not rewritten,
+    # and the rust-version makes the fallback resolver below resolve for the
+    # minimum. ridl-rt is the packaged copy. The lockfile is resolved and the
+    # sources are fetched as for ridl-descriptor: resolved with the pin's
+    # cargo and the fallback resolver, fetched with the minimum's cargo, then
+    # built offline and locked, then built again without default features to
+    # check no_std.
     # The cell has its own CARGO_HOME for the reason given for ridl-descriptor
     # above.
     corpus_home="$PWD/target/compat-check/cargo-home-corpus"
@@ -707,18 +721,9 @@ compat-check: toolchain-check
         echo "compat-check: (ADR-0029 decision 5); the manifest ridl build wrote does not." >&2
         exit 1
     fi
-    if grep -q '^[[:space:]]*rust-version' "$corpus/generated/Cargo.toml"; then
-        echo "compat-check: the emitted veh-cluster manifest now declares a rust-version;" >&2
-        echo "compat-check: check it instead of adding one here." >&2
-        exit 1
-    fi
-    awk -v minimum="$minimum" '
-        { print }
-        /^edition = "2021"$/ { print "rust-version = \"" minimum "\"" }
-    ' "$corpus/generated/Cargo.toml" > "$corpus/Cargo.toml.new"
-    mv "$corpus/Cargo.toml.new" "$corpus/generated/Cargo.toml"
     if ! grep -qxF "rust-version = \"$minimum\"" "$corpus/generated/Cargo.toml"; then
-        echo "compat-check: could not add rust-version $minimum to the emitted veh-cluster manifest." >&2
+        echo "compat-check: the emitted veh-cluster manifest must set rust-version = \"$minimum\"," >&2
+        echo "compat-check: the same as $manifest (ADR-0029 decision 5); the manifest ridl build wrote does not." >&2
         exit 1
     fi
     append_tables "$corpus/generated/Cargo.toml" "ridl-rt=$pkg"
@@ -730,9 +735,8 @@ compat-check: toolchain-check
     echo "compat-check: $minimum, edition 2021 (the emitted veh-cluster crate, no default features)"
     CARGO_HOME="$corpus_home" cargo "+$minimum" build --no-default-features --offline --locked --manifest-path "$corpus/generated/Cargo.toml"
 
-    # Edition 2024 requires rust-version >= 1.85 (cargo refuses to parse the
-    # manifest otherwise); the pin already satisfies that, so this run's
-    # rust-version becomes the pin rather than the minimum.
+    # This run is at the pin, so its rust-version becomes the pin rather than
+    # the minimum.
     for dir in "$pkg" "$pkg_conformance"; do
         sed -i.bak \
             -e 's/^edition = "2021"$/edition = "2024"/' \
@@ -752,18 +756,38 @@ compat-check: toolchain-check
     echo "compat-check: $pin, edition 2024 (packaged ridl-rt-conformance)"
     cargo "+$pin" test --all-features --offline --manifest-path "$pkg_conformance/Cargo.toml"
 
-    # ridl-descriptor at its own minimum, as published: only the tables above
+    # ridl-descriptor at the minimum, as published: only the tables above
     # were appended. The unit tests and the integration tests that build
     # standalone (see the list above) run with the defaults; the doctests do
     # not run at this version.
-    echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, default features)"
+    echo "compat-check: $minimum (packaged ridl-descriptor, default features)"
     # shellcheck disable=SC2086 # test_args is a list of words
-    CARGO_HOME="$descriptor_home" cargo "+$descriptor_minimum" test --offline --locked --lib \
+    CARGO_HOME="$descriptor_home" cargo "+$minimum" test --offline --locked --lib \
         $test_args --manifest-path "$pkg_descriptor/Cargo.toml"
-    echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, no default features)"
-    CARGO_HOME="$descriptor_home" cargo "+$descriptor_minimum" build --offline --locked --no-default-features --manifest-path "$pkg_descriptor/Cargo.toml"
-    echo "compat-check: $descriptor_minimum (packaged ridl-descriptor, dedup only)"
-    CARGO_HOME="$descriptor_home" cargo "+$descriptor_minimum" build --offline --locked --no-default-features --features dedup --manifest-path "$pkg_descriptor/Cargo.toml"
+    echo "compat-check: $minimum (packaged ridl-descriptor, no default features)"
+    CARGO_HOME="$descriptor_home" cargo "+$minimum" build --offline --locked --no-default-features --manifest-path "$pkg_descriptor/Cargo.toml"
+    echo "compat-check: $minimum (packaged ridl-descriptor, dedup only)"
+    CARGO_HOME="$descriptor_home" cargo "+$minimum" build --offline --locked --no-default-features --features dedup --manifest-path "$pkg_descriptor/Cargo.toml"
+
+# The generation both `demo` and `cabin-ws-demo` start with: the CLI, then the
+# two generated crates of the examples/cabin workspace, which does not resolve
+# without both.
+[private]
+_cabin-generate:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="${CARGO_TARGET_DIR:-target}"
+    cargo build --locked -p ridl-cli
+    # Cleared first: `--out-dir` writes over what it writes and leaves
+    # everything else, so a file the emitter stops writing would survive here
+    # and keep this green while a fresh clone failed.
+    rm -rf examples/cabin/generated examples/cabin/generated-corpus
+    "$target/debug/ridl" build examples/cabin --emit rust --emit catalog \
+        --out-dir examples/cabin/generated
+    # For the `no_std` check and the clippy run in `demo`: cabin's schema has no
+    # string, bytes, array, map or pattern, and this workspace has each of them.
+    "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
+        --out-dir examples/cabin/generated-corpus
 
 # Generate the cabin example's crate and run the program that links it.
 #
@@ -822,10 +846,13 @@ compat-check: toolchain-check
 # failing to compile; the emitted crate failing to check with its default
 # features off for `thumbv7em-none-eabihf`; the crate emitted for the
 # veh-cluster corpus failing to check the same way, or with only
-# `validate-pattern` on; the program exiting non-zero or not reporting all four
-# round trips; the lock being out of date; the consumer being unformatted or
-# drawing a clippy warning; the generated crate drawing a clippy warning that
-# its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
+# `validate-pattern` on; either generated crate failing to check for
+# `i686-unknown-linux-gnu` or `aarch64-unknown-linux-gnu`, which evaluates its
+# podbuf layout assertions for those targets; the program exiting non-zero or
+# not reporting all seven round trips, the last being `podbuf round trip: 21.5`;
+# the lock being out of date; the consumer being unformatted or drawing a
+# clippy warning; the generated crate drawing a clippy warning that its
+# `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
 # corpus drawing a clippy diagnostic, with default features or without them, or
 # cargo finishing no build there; `cargo doc` on either generated crate drawing
@@ -852,20 +879,9 @@ compat-check: toolchain-check
 # a schema change that moves either one fails here with cargo's own `--locked`
 # message, which does not name its remedy: rerun without `--locked` once and
 # commit the new `examples/cabin/Cargo.lock`.
-demo:
+demo: _cabin-generate
     #!/usr/bin/env bash
     set -euo pipefail
-    target="${CARGO_TARGET_DIR:-target}"
-    cargo build --locked -p ridl-cli
-    # Cleared first: `--out-dir` writes over what it writes and leaves
-    # everything else, so a file the emitter stops writing would survive here
-    # and keep this green while a fresh clone failed.
-    rm -rf examples/cabin/generated examples/cabin/generated-corpus
-    "$target/debug/ridl" build examples/cabin --emit rust --out-dir examples/cabin/generated
-    # For the `no_std` check and the clippy run below: cabin's schema has no
-    # string, bytes, array, map or pattern, and this workspace has each of them.
-    "$target/debug/ridl" build crates/ridlc/tests/corpus/veh-cluster --emit rust \
-        --out-dir examples/cabin/generated-corpus
     # This line is the only one that runs the generated crate's planus and
     # prost checks, which are ignored for a plain `cargo test`. A filter that
     # matches no test exits 0, so a renamed test would pass here unseen: the
@@ -913,6 +929,15 @@ demo:
     # the crate links the standard library while `std` stays off.
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
         --no-default-features --target thumbv7em-none-eabihf
+    # The same two crates for a 32-bit and a 64-bit Arm or x86 target: the
+    # podbuf layout assertions (`size_of`, `offset_of!`) are `const` items, so
+    # checking evaluates them for each target without a linker.
+    for target in i686-unknown-linux-gnu aarch64-unknown-linux-gnu; do
+        for crate in veh_cabin ridl_generated; do
+            cargo check --manifest-path examples/cabin/Cargo.toml -p "$crate" --locked \
+                --target "$target"
+        done
+    done
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
         --no-default-features --features validate-pattern
     # The corpus crate is linted as well, with its default features and with
@@ -966,7 +991,8 @@ demo:
     fi
     printf '%s\n' "$output"
     for round_trip in "signal ok 21" "event ok 5" "command ok 42" "query ok 7" \
-            "blocking command ok 43" "blocking query ok 9"; do
+            "blocking command ok 43" "blocking query ok 9" \
+            "podbuf round trip: 21.5"; do
         if ! printf '%s\n' "$output" | grep -qxF "$round_trip"; then
             echo "demo: the consumer did not report \"$round_trip\"" >&2
             exit 1
@@ -1004,6 +1030,9 @@ lint:
         # As in `just test`: the workspace resolves `ridl-rt` with default
         # features, so its feature-gated modules are otherwise never linted.
         cargo clippy -p ridl-rt --all-features --all-targets -- -D warnings
+        # As in `just test`: no workspace member turns on the `descriptor`
+        # feature of `ridl-transport-ws`.
+        cargo clippy -p ridl-transport-ws --features descriptor --all-targets -- -D warnings
     else
         echo "lint: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
@@ -1709,8 +1738,9 @@ link-check root="":
     fi
     run_gate "$root"
 
-# Check that every `docs/…` file path, and every `docs/…` directory path that
-# ends with `/`, named in a tracked file resolves.
+# Check that every `docs/…` file path, every `docs/…` directory path that ends
+# with `/`, and every `docs/…` path with neither an extension nor a trailing
+# slash, named in a tracked file resolves.
 #
 # `link-check` covers Markdown links. This covers the other way a document gets
 # cited: a bare repository-relative path, written in prose, in an inline code
@@ -1730,18 +1760,17 @@ link-check root="":
 # as the end of a sentence or an ellipsis, and the directory is checked. A
 # `...` segment followed by more path (`docs/decisions/.../x.md`) is an omitted
 # segment: the citation is cut there and `docs/decisions/` is checked. A
-# directory written without its trailing slash, such as `docs/book`, has
-# nothing that tells it apart from a word, so it is not checked: cite a
-# directory with the slash for this recipe to check it. The bare `docs/` is not
-# checked either, and neither is a path that continues past a directory with a
-# dot in its name (`docs/v1.2/notes`), which would otherwise read as a file named
-# `v1.2` in docs/. A file cited with a trailing slash (`docs/<file>.md/`) is a
+# path whose last segment has no extension and no trailing slash, such as
+# `docs/book`, is checked as a path that must exist, so it resolves when a file
+# or a directory of that name exists, and is reported when neither does. One to
+# three dots after it are read as the end of a sentence. The bare `docs/` is not
+# checked. A file cited with a trailing slash (`docs/<file>.md/`) is a
 # directory citation, and is reported, because the file is not a directory.
 #
 # Two trees and one file are skipped, for the same reason in all three: a
 # `docs/…` path in them records what was true when it was written, not a claim
 # about the tree now.
-#   docs/archive/ — an archived plan says "Move: docs/wip/X to docs/archive/".
+#   docs/archive/ — an archived plan says "Move: the plan from docs/wip/ to docs/archive/".
 #                   Rewriting that would falsify the record it is kept for.
 #   docs/wip/     — a live plan lists the files it is going to create, which do
 #                   not exist yet by definition.
@@ -1792,14 +1821,18 @@ doc-path-check root="":
     #      kept with its trailing slash. It needs at least one segment, so the
     #      bare `docs/` is left out. The `d` ends the cycle, so a directory
     #      token is never also read as a file path;
-    #   4. any other token gives the file form when what follows the file form
-    #      holds no `/`, which is what keeps `docs/v1.2/notes` from giving the
+    #   4. a token whose last segment holds no dot is a path without an
+    #      extension or a trailing slash: zero to three trailing dots are
+    #      dropped and the path is kept as it is. It needs a last segment with
+    #      at least one character, so four dots after a directory give nothing;
+    #   5. any other token gives the file form when what follows the file form
+    #      holds no `/`, which is what keeps a path through a dotted directory from giving the
     #      file `v1.2` in docs/. The file form needs an extension to know where a
-    #      path ends, so a token with no extension, such as `docs/book`, gives
-    #      nothing, and what follows the extension (`docs/<file>.md.`,
+    #      path ends, and what follows the extension (`docs/<file>.md.`,
     #      `docs/<file>.md-old`) is cut.
     token_re="(^|[^A-Za-z0-9._/-])$d/[A-Za-z0-9._/-]*"
     dir_form="$d/([A-Za-z0-9._-]+/)+"
+    bare_form="$d/([A-Za-z0-9._-]+/)*[A-Za-z0-9_-]+"
     file_form="$d/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\.[A-Za-z0-9]+"
     # `-I` states that a file holding a NUL byte is skipped rather than leaving
     # that to whichever grep is installed. One tracked file is binary today,
@@ -1826,6 +1859,7 @@ doc-path-check root="":
             printf '%s\n' "$matches" \
                 | sed -nE -e 's#^[^d]*##' -e 's#/\.\.\./.*#/#' \
                     -e "\\#^$dir_form\\.{0,3}\$#{s#\\.+\$##;p;d;}" \
+                    -e "\\#^$bare_form\\.{0,3}\$#{s#\\.+\$##;p;d;}" \
                     -e "s#^($file_form)[^/]*\$#\\1#p" \
                 | sort -u
         fi
@@ -1874,7 +1908,7 @@ doc-path-check root="":
         if [ "$broken" -ne 0 ]; then
             echo "doc-path-check: $broken docs/ path(s) above do not resolve." >&2
             echo "doc-path-check: a path with an extension has to exist; a path ending with '/' has to be a directory." >&2
-            echo "doc-path-check: a directory cited without its trailing slash is not checked." >&2
+            echo "doc-path-check: a path with no extension and no trailing slash has to be a file or a directory." >&2
             echo "doc-path-check: $skip_archive, $skip_wip and $skip_changelog are not scanned; a path" >&2
             echo "doc-path-check: belonging to another repository should be written as a URL." >&2
             return 1
@@ -1904,9 +1938,9 @@ doc-path-check root="":
     list_files() {
         git_at "$1" -c core.quotePath=false ls-files "${@:2}"
     }
-    # The gate itself, over the repository at $1: every docs/ file path, and
-    # every docs/ directory path ending with `/`, named in a tracked file
-    # outside the two skipped trees and the changelog has to resolve.
+    # The gate itself, over the repository at $1: every docs/ file path,
+    # every docs/ directory path ending with `/` and every docs/ path with no
+    # extension, named in a tracked file outside the two skipped trees and the changelog has to resolve.
     run_gate() (
         cd "$1"
         # Each skipped pathspec has to match tracked files, so a typo that
@@ -1944,7 +1978,7 @@ doc-path-check root="":
         fi
         tracked="$(printf '%s\n' "$files" | grep -c . || true)"
         printf '%s\n' "$files" | scan_paths .
-        echo "doc-path-check: every docs/ file path, and every docs/ directory path ending with '/', named outside $skip_archive, $skip_wip and $skip_changelog resolves, over $tracked tracked files."
+        echo "doc-path-check: every docs/ file path, directory path ending with '/' and path with no extension, named outside $skip_archive, $skip_wip and $skip_changelog resolves, over $tracked tracked files."
     )
     # The fixtures. Each one builds a case the gate has to pass or fail and
     # fails this recipe when the gate does not. They run in a subshell, so the
@@ -1969,10 +2003,11 @@ doc-path-check root="":
         # nested directory with an uppercase letter and an underscore, a file
         # cited with a trailing slash, which is a directory citation, and one
         # whose name has a dot, which must not also give a file path. Then
-        # the forms that give nothing — a directory without its trailing
-        # slash, a path that continues past a dotted directory, four dots
-        # after a directory, the bare `docs/`, `docs/` followed by an
-        # ellipsis, and a relative or URL directory citation.
+        # the paths without an extension or a trailing slash: one in prose,
+        # one at the end of a sentence, one in a code span, and one that
+        # continues past a dotted directory. Then the forms that give nothing
+        # — four dots after a directory, the bare `docs/`, `docs/` followed
+        # by an ellipsis, and a relative or URL directory citation.
         sample="$work/sample"
         printf '%s\n' \
             "$d/plain.md named in prose" \
@@ -2000,16 +2035,17 @@ doc-path-check root="":
             "a nested directory, $d/Multi_Seg/two-2/, with an uppercase letter and an underscore" \
             "a file cited as a directory, $d/ROADMAP.md/" \
             "a directory whose name has a dot, $d/v1.2/, is not also a file" \
-            "a directory without its slash, $d/book, is not checked" \
-            "past a dotted directory, $d/v1.2/notes, and four dots, $d/four/...., give nothing" \
+            "a path without an extension or a slash, $d/book, is checked" \
+            "one at the end of a sentence, $d/sentence. and in a code span \`$d/Tools/run\`" \
+            "past a dotted directory, $d/v1.2/notes, is checked; four dots, $d/four/...., and a name followed by four dots, $d/name...., give nothing" \
             "the bare $d/ and $d/... give nothing" \
             "a relative directory ../$d/rel/ and a URL https://example.com/$d/web/" > "$sample"
-        expected="$d/Multi_Seg/two-2/ $d/ROADMAP.md $d/ROADMAP.md/ $d/comment.md $d/cut-draft.md $d/cut.md $d/decisions/"
+        expected="$d/Multi_Seg/two-2/ $d/ROADMAP.md $d/ROADMAP.md/ $d/Tools/run $d/book $d/comment.md $d/cut-draft.md $d/cut.md $d/decisions/"
         expected="$expected $d/decisions/ADR-0012-boundary_model.md $d/design/ $d/first/"
         expected="$expected $d/ir/cruise.system.txtpb $d/keep.../kept.md $d/lines.md $d/link.md"
-        expected="$expected $d/omitted/ $d/plain.md"
+        expected="$expected $d/omitted/ $d/plain.md $d/sentence"
         expected="$expected $d/span.md $d/sub/dir/nested.md $d/technotes/ $d/three/ $d/two/"
-        expected="$expected $d/typl-language-reference.markdown $d/v1.2/ "
+        expected="$expected $d/typl-language-reference.markdown $d/v1.2/ $d/v1.2/notes "
         if [ "$(extract_paths "$sample" | tr '\n' ' ')" != "$expected" ]; then
             echo "doc-path-check: the extractor no longer gives the expected paths on the built-in sample:" >&2
             extract_paths "$sample" >&2
@@ -2047,6 +2083,26 @@ doc-path-check root="":
             || ! grep -q -- "src/b.ridl -> $d/design/aa-present.md/" "$report" \
             || ! grep -q -- '^doc-path-check: 6 docs/ path' "$report"; then
             echo "doc-path-check: the scan no longer reports exactly the six broken paths in its fixture:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        # A path without an extension or a trailing slash is checked with
+        # `-e`: it resolves when a directory or a file of that name exists, and
+        # it is reported when neither does. A sentence dot after it is dropped.
+        slashless="$work/slashless"
+        mkdir -p "$slashless/$d/design" "$slashless/src"
+        : > "$slashless/$d/design/ee-file"
+        printf '%s\n' "// $d/design" "// $d/design." "// $d/design/ee-file" \
+            "// $d/design/ee-file." "// $d/design/gone-dir" "// $d/design/gone-dir." > "$slashless/src/c.rs"
+        if printf '%s\n' src/c.rs | scan_paths "$slashless" 2>"$report"; then
+            echo "doc-path-check: the scan returned 0 over a fixture citing a missing path with no extension:" >&2
+            cat "$report" >&2
+            exit 1
+        fi
+        if [ "$(grep -c -- '->' "$report" || true)" -ne 1 ] \
+            || ! grep -q -- "src/c.rs -> $d/design/gone-dir\$" "$report" \
+            || ! grep -q -- '^doc-path-check: 1 docs/ path' "$report"; then
+            echo "doc-path-check: the scan no longer reports only the missing path with no extension:" >&2
             cat "$report" >&2
             exit 1
         fi
@@ -2509,7 +2565,7 @@ gate-parity:
     # the `build:` line, so removing or adding one has to be done twice. Without
     # this list the check would read its expectation from the line under test,
     # and a member removed from that line would only shrink what is checked.
-    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check"
+    expected="toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check"
     removed="$(comm -23 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort) | paste -sd' ' -)"
     added="$(comm -13 <(printf '%s\n' $expected | sort) <(printf '%s\n' $members | sort -u) | paste -sd' ' -)"
     duplicated="$(printf '%s\n' $members | sort | uniq -d | paste -sd' ' -)"
@@ -2587,7 +2643,9 @@ install-check:
         fi
         rm "$reldir/ridl.exe"
 
-        http_port=8971
+        # Ask the operating system for a free port instead of fixing one, so a
+        # busy port on the host does not fail the check.
+        http_port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
         python3 -m http.server "$http_port" --bind 127.0.0.1 --directory "$scratch/release" \
             >"$scratch/http.log" 2>&1 &
         http_pid=$!
@@ -2763,8 +2821,9 @@ install-check:
         echo "install-check: install.ps1 rejects an unknown RIDL_INSTALL_BINARY"
     fi
 
-# Check the TypeScript package packages/ridl-transport-ws with Deno: formatting
-# and lint of its .ts files, a type check for Deno and a second one against the
+# Check the TypeScript packages packages/ridl-runtime and
+# packages/ridl-transport-ws with Deno: formatting and lint of their .ts files,
+# a type check for Deno and a second one against the
 # browser's DOM library (browser.deno.json), the unit tests under tests/, and a
 # dry run of the publish. The unit tests are named by their directory, because
 # a bare `deno test` also runs the end-to-end tests under e2e/, which need the
@@ -2783,6 +2842,17 @@ ts-check:
         echo "ts-check: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
         exit 1
     fi
+    # The tests of ridl-runtime start a local HTTP server and read the test
+    # assembler from the npm cache.
+    (
+        cd packages/ridl-runtime
+        deno fmt --check
+        deno lint
+        deno check mod.ts
+        deno check --config browser.deno.json mod.ts
+        deno test --allow-read --allow-write --allow-net --allow-env tests/
+        deno publish --dry-run --allow-dirty
+    )
     cd packages/ridl-transport-ws
     deno fmt --check
     deno lint
@@ -2790,6 +2860,25 @@ ts-check:
     deno check --config browser.deno.json mod.ts
     deno test --allow-read tests/
     deno publish --dry-run --allow-dirty
+
+# Build the npm packages of packages/ridl-runtime and packages/ridl-transport-ws
+# into their npm/ directories and check each as a consumer would receive it:
+# the built manifest, the files `npm pack` would publish, and an import by name from Node after installing the
+# packed tarball. This is the artifact the `npm-release` workflow publishes, so
+# a build that breaks it fails here and not at the tag. It needs network access,
+# for dnt and the install.
+ts-npm-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for tool in deno node npm; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            echo "ts-npm-check: $tool is required and is not on PATH." >&2
+            exit 1
+        fi
+    done
+    for package in ridl-runtime ridl-transport-ws; do
+        (cd "packages/$package" && deno run -A scripts/verify_npm.ts)
+    done
 
 # Build the loopback server example of `ridl-transport-ws` and run the Deno
 # end-to-end test of packages/ridl-transport-ws against it. The test starts the
@@ -2808,6 +2897,245 @@ ts-e2e:
     server="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/loopback_server"
     cd packages/ridl-transport-ws
     RIDL_TRANSPORT_WS_SERVER="$server" deno test --allow-all e2e/deno_test.ts
+
+# The steps `cabin-ws-demo` and `cabin-browser-demo` share: the `flatc` and
+# `deno` checks, the TypeScript types, codec module and `.fbs` schema that
+# `ridl build --emit typescript --emit flatbuffers` writes
+# (examples/cabin/ridl.toml sets `[backend.typescript] codec = true`), the
+# `flatc` object API that the codec module imports, then the server's format,
+# lint and build, then the wasm codec (`_cabin-wasm`). `name` is the recipe
+# named in each failure message.
+_cabin-web-generate name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    flatc_version="$(tr -d '[:space:]' < .flatc-version)"
+    if ! command -v flatc >/dev/null 2>&1; then
+        echo "{{name}}: flatc is required and is not on PATH." >&2
+        echo "{{name}}: install version $flatc_version from https://github.com/google/flatbuffers/releases" >&2
+        exit 1
+    fi
+    if [ "$(flatc --version)" != "flatc version $flatc_version" ]; then
+        echo "{{name}}: flatc is '$(flatc --version)', and this recipe needs 'flatc version $flatc_version'." >&2
+        exit 1
+    fi
+    if ! command -v deno >/dev/null 2>&1; then
+        echo "{{name}}: deno is required and is not on PATH." >&2
+        echo "{{name}}: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
+        exit 1
+    fi
+    target="${CARGO_TARGET_DIR:-target}"
+    # Cleared first, as `_cabin-generate` does for the crates.
+    rm -rf examples/cabin/web/generated
+    "$target/debug/ridl" build examples/cabin --emit typescript --emit flatbuffers --out-dir examples/cabin/web/generated
+    flatc --ts --gen-object-api -I examples/cabin/web/generated -o examples/cabin/web/generated examples/cabin/web/generated/veh.cabin.fbs
+    cargo fmt --manifest-path examples/cabin/server/Cargo.toml --check
+    cargo clippy --manifest-path examples/cabin/Cargo.toml -p server --locked --all-targets --no-deps -- -D warnings
+    cargo build --manifest-path examples/cabin/Cargo.toml -p server --locked
+    "{{just_executable()}}" _cabin-wasm
+
+# The lint, the type check and the round trip of the codec module over the
+# kinds cabin does not exercise: the fixture
+# crates/ridl-backend-ts/tests/fixtures/codec (the veh-cluster corpus's
+# `common` package plus an interface) is built with `ridl build --emit
+# typescript --emit flatbuffers` into a directory under the target directory,
+# `flatc` writes the object API of both schemas (the fixture names
+# `ridl.std.Name` as a payload, whose codec is `ridl.std.codec.ts`), the
+# fixture's deno.json and roundtrip_test.ts are copied beside the generated
+# files with the path of packages/ridl-runtime made absolute, then `deno lint`
+# reads the two codec modules, `deno check` type-checks them and `deno test`
+# runs the round trips: a union, a tuple, an array, a map, an optional field,
+# an induced tuple, an enum with no zero member, a bytes field, arrays of
+# structs and enums, a 64-bit integer, optional vectors, boxed union arms and
+# keyword field names, each `decode(encode(v))` deep-equal to `v`. The same
+# for the fixture crates/ridl-backend-ts/tests/fixtures/codec-foreign-only,
+# a package whose only payload root is `ridl.std.Name`, so its module holds
+# an interface table over `ridl.std.codec.ts` and imports no barrel of its
+# own. `cabin-ws-demo` runs it once, after `_cabin-web-generate` has checked
+# the `flatc` and `deno` versions.
+[private]
+_codec-ts-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="${CARGO_TARGET_DIR:-target}"
+    cargo build -p ridl-cli --locked
+    tmp="$target/codec-ts-check"
+    rm -rf "$tmp"
+    mkdir -p "$tmp"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec --emit typescript --emit flatbuffers --out-dir "$tmp"
+    flatc --ts --gen-object-api -I "$tmp" -o "$tmp" "$tmp/veh.common.fbs" "$tmp/ridl.std.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec/deno.json > "$tmp/deno.json"
+    cp crates/ridl-backend-ts/tests/fixtures/codec/roundtrip_test.ts "$tmp/roundtrip_test.ts"
+    deno lint --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts"
+    deno check --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts"
+    deno test --config "$tmp/deno.json" "$tmp/roundtrip_test.ts"
+    # The second fixture: a package whose only payload root is a `ridl.std`
+    # scalar, so its module imports `ridl.std.codec.ts` and no barrel of its
+    # own (`flatc` runs on `ridl.std.fbs` alone: the package has no table).
+    foreign="$tmp/foreign-only"
+    mkdir -p "$foreign"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-foreign-only --emit typescript --emit flatbuffers --out-dir "$foreign"
+    flatc --ts --gen-object-api -I "$foreign" -o "$foreign" "$foreign/ridl.std.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-foreign-only/deno.json > "$foreign/deno.json"
+    cp crates/ridl-backend-ts/tests/fixtures/codec-foreign-only/check_test.ts "$foreign/check_test.ts"
+    deno lint --config "$foreign/deno.json" "$foreign/veh.names.codec.ts" "$foreign/ridl.std.codec.ts"
+    deno check --config "$foreign/deno.json" "$foreign/veh.names.codec.ts" "$foreign/ridl.std.codec.ts"
+    deno test --config "$foreign/deno.json" "$foreign/check_test.ts"
+
+# The wasm codec of the cabin demos: the generated cabin crate, which
+# `_cabin-generate` writes with the `wasm` module because
+# examples/cabin/ridl.toml sets `[backend.rust] wasm = true`, compiled as a
+# `cdylib` for `wasm32-unknown-unknown` with the feature `wasm-exports`. The
+# size settings (opt-level z, LTO on, panic abort) come from the environment,
+# not from the generated Cargo.toml, as docs/book/generated-code.md states.
+# The module is copied to examples/cabin/web/generated/veh_cabin.wasm, which
+# main.ts reads and browser.ts serves to the page. It is a build output, not
+# in git. The recipe fails, naming the rustup command, when the wasm32 target
+# is not installed.
+[private]
+_cabin-wasm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    wasm_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
+    if ! rustc --print sysroot >/dev/null || [ ! -d "$(rustc --print sysroot)/lib/rustlib/wasm32-unknown-unknown" ]; then
+        echo "_cabin-wasm: the wasm32-unknown-unknown target is not installed; run 'rustup target add wasm32-unknown-unknown'" >&2
+        exit 1
+    fi
+    CARGO_PROFILE_RELEASE_OPT_LEVEL=z CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_PANIC=abort \
+        cargo rustc --manifest-path examples/cabin/Cargo.toml -p veh_cabin --locked --release \
+        --target wasm32-unknown-unknown --crate-type cdylib --features wasm-exports
+    mkdir -p examples/cabin/web/generated
+    cp "$wasm_target/wasm32-unknown-unknown/release/veh_cabin.wasm" examples/cabin/web/generated/veh_cabin.wasm
+
+# Prove a Deno program can read a value from a Rust server and decode it with
+# code that `flatc` generated from the `ridl build` output. The server is
+# examples/cabin/server, which publishes cabin's `temperature` signal over
+# `ridl-transport-ws` with the member table read from the catalog descriptor
+# that `_cabin-generate` writes. The program is examples/cabin/web/main.ts,
+# which takes the catalog name and hash, the interface number and ordinal of
+# the signal, and the decode function from the generated codec module
+# examples/cabin/web/generated/veh.cabin.codec.ts. It fails when the catalog
+# hash the server announces is not the generated one, attaches with the
+# encoding `flatbuffers`, subscribes, verifies each payload through cabin's
+# wasm codec and fails with the codec's cause on a rejection, decodes each
+# verified payload with the generated codec module, and fails unless every
+# value is inside [-40..85], every received value is 1 to 63 steps ahead of
+# the previous one on the ring of the 126 values (85 is followed by -40; a
+# repeated value is ignored), 85 is reached by such a step, and -40 is seen
+# after 85 (the first sample counts for neither bound). One 30 s deadline
+# covers the whole run, and a server that exits early fails the run at once.
+# It prints the number of samples, the number of wraps, whether 85 was seen,
+# and whether -40 was seen after 85. Before it connects,
+# it loads the codec, examples/cabin/web/generated/veh_cabin.wasm, with the
+# generated catalog hash, payload type names and rule texts, and runs a
+# self-test: the codec must accept 20 and reject -41 and 86 with the range
+# rule.
+#
+# Written in order: the CLI and the generated crates (both members of the
+# examples/cabin workspace, written by the private recipe `_cabin-generate`
+# that `demo` shares, because the workspace does not resolve without both); the
+# TypeScript types, codec module and `.fbs` schema; the `flatc` TypeScript;
+# then the server's format, lint and build, because no other gate reaches the
+# server; then the wasm codec (`_cabin-wasm`, which needs the
+# wasm32-unknown-unknown target); then the lint, type check and round trip of
+# the codec module over the fixture of `crates/ridl-backend-ts`
+# (`_codec-ts-check`); then the
+# type check of the program, the unit tests of the check (`deno test
+# --allow-read check_test.ts`, which loads the wasm codec), and the program.
+# The program closes the server's standard input to stop it.
+#
+# `flatc` has to be the version in .flatc-version (the version whose output the
+# program's imports were written against; CI and `./bootstrap` read the same
+# file); the recipe fails with a message if it is missing or is another
+# version. Deno is the version in .deno-version. The `ridl build` and `flatc`
+# output and veh_cabin.wasm are build outputs under
+# examples/cabin/web/generated/, not in git. Like `demo`, the recipe
+# reads `CARGO_TARGET_DIR` for the CLI; the server is built in the cabin
+# workspace, so its executable is in examples/cabin/target unless the
+# variable is set.
+cabin-ws-demo: _cabin-generate (_cabin-web-generate "cabin-ws-demo") _codec-ts-check
+    #!/usr/bin/env bash
+    set -euo pipefail
+    server_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
+    server="$(cd "$server_target" && pwd)/debug/server"
+    cd examples/cabin/web
+    # `deno run` does not type-check, and `ts-check` covers `packages/` only.
+    deno fmt --check
+    deno lint
+    deno check main.ts
+    deno test --allow-read check_test.ts
+    deno run -A main.ts "$server"
+
+# Prints the path of the browser that `cabin-browser-demo` and
+# `ts-browser-e2e` start, in the order e2e/browser.ts of
+# packages/ridl-transport-ws uses: RIDL_BROWSER, then google-chrome,
+# google-chrome-stable, chromium and chromium-browser on PATH, then the Google
+# Chrome application on macOS. When none is found, or RIDL_BROWSER names no
+# executable file, it fails with a message that names RIDL_BROWSER. `name` is
+# the recipe named in each failure message.
+_find-browser name:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    browser=""
+    if [ -n "${RIDL_BROWSER:-}" ]; then
+        if [ ! -f "$RIDL_BROWSER" ] || [ ! -x "$RIDL_BROWSER" ]; then
+            echo "{{name}}: RIDL_BROWSER is '$RIDL_BROWSER', which is not an executable file." >&2
+            echo "{{name}}: set RIDL_BROWSER to the path of a Chromium-family browser." >&2
+            exit 1
+        fi
+        browser="$RIDL_BROWSER"
+    else
+        for name in google-chrome google-chrome-stable chromium chromium-browser; do
+            if found="$(command -v "$name" 2>/dev/null)"; then
+                browser="$found"
+                break
+            fi
+        done
+        mac_chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        if [ -z "$browser" ] && [ -f "$mac_chrome" ]; then
+            browser="$mac_chrome"
+        fi
+    fi
+    if [ -z "$browser" ]; then
+        echo "{{name}}: no browser found." >&2
+        echo "{{name}}: set RIDL_BROWSER to the path of a Chromium-family browser, or install Google Chrome (https://www.google.com/chrome/) or Chromium (https://www.chromium.org/getting-involved/download-chromium/)." >&2
+        exit 1
+    fi
+    echo "$browser"
+
+# Run the check of `cabin-ws-demo` in a headless browser: the same server and
+# the same check (examples/cabin/web/check.ts), loaded by a page instead of a
+# Deno program. examples/cabin/web/browser.ts starts the server, bundles
+# page.ts with `deno bundle --platform=browser`, serves the page and the wasm
+# codec (generated/veh_cabin.wasm, built by `_cabin-wasm` for the
+# wasm32-unknown-unknown target) from 127.0.0.1, and opens it in the browser.
+# The page loads the codec with the announced catalog hash, runs the same
+# self-test (20 accepted, -41 and 86 rejected with the range rule), attaches
+# with the encoding `flatbuffers`, verifies each payload through the codec
+# (a rejection fails the run with its cause), and decodes each verified
+# payload with the `flatc` code. One 30 s limit
+# covers the page's verdict; the server is then stopped and must exit with
+# status 0. It prints the number of samples and the number of wraps.
+#
+# Not a member of `build`, on purpose, for the reason `ts-browser-e2e` gives:
+# a contributor's build needs no browser. CI's `typescript` job runs it, so
+# `gate-parity` does not cover it and the CI step is checked by reading. The
+# browser is looked up by `_find-browser`, as for `ts-browser-e2e`, before
+# anything is generated or built, and the one found is passed on in
+# RIDL_BROWSER. The generation steps it shares with `cabin-ws-demo` are then
+# run from the body rather than as dependencies, because dependencies would run
+# before the lookup.
+cabin-browser-demo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    browser="$("{{just_executable()}}" _find-browser cabin-browser-demo)"
+    echo "cabin-browser-demo: browser: $browser"
+    "{{just_executable()}}" _cabin-generate
+    "{{just_executable()}}" _cabin-web-generate cabin-browser-demo
+    server_target="${CARGO_TARGET_DIR:-examples/cabin/target}"
+    server="$(cd "$server_target" && pwd)/debug/server"
+    cd examples/cabin/web
+    deno check browser.ts page.ts
+    RIDL_BROWSER="$browser" deno run -A browser.ts "$server"
 
 # Build the same loopback server example and run the browser end-to-end test
 # of packages/ridl-transport-ws: a headless Chromium-family browser opens a
@@ -2833,31 +3161,7 @@ ts-browser-e2e:
         echo "ts-browser-e2e: run ./bootstrap, which installs the version in .deno-version, or see https://docs.deno.com/runtime/getting_started/installation/" >&2
         exit 1
     fi
-    browser=""
-    if [ -n "${RIDL_BROWSER:-}" ]; then
-        if [ ! -f "$RIDL_BROWSER" ] || [ ! -x "$RIDL_BROWSER" ]; then
-            echo "ts-browser-e2e: RIDL_BROWSER is '$RIDL_BROWSER', which is not an executable file." >&2
-            echo "ts-browser-e2e: set RIDL_BROWSER to the path of a Chromium-family browser." >&2
-            exit 1
-        fi
-        browser="$RIDL_BROWSER"
-    else
-        for name in google-chrome google-chrome-stable chromium chromium-browser; do
-            if found="$(command -v "$name" 2>/dev/null)"; then
-                browser="$found"
-                break
-            fi
-        done
-        mac_chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-        if [ -z "$browser" ] && [ -f "$mac_chrome" ]; then
-            browser="$mac_chrome"
-        fi
-    fi
-    if [ -z "$browser" ]; then
-        echo "ts-browser-e2e: no browser found." >&2
-        echo "ts-browser-e2e: set RIDL_BROWSER to the path of a Chromium-family browser, or install Google Chrome (https://www.google.com/chrome/) or Chromium (https://www.chromium.org/getting-involved/download-chromium/)." >&2
-        exit 1
-    fi
+    browser="$("{{just_executable()}}" _find-browser ts-browser-e2e)"
     echo "ts-browser-e2e: browser: $browser"
     cargo build --locked -p ridl-transport-ws --example loopback_server
     server="$(cd "${CARGO_TARGET_DIR:-target}" && pwd)/debug/examples/loopback_server"
@@ -2878,12 +3182,12 @@ ts-browser-e2e:
 # reachable from here, because a member that is not a dependency of `build` is
 # not covered by `gate-parity`'s CI-parity check.
 #
-# The ten members before `compile` do not compile the workspace (freeze-check
+# The eleven members before `compile` do not compile the workspace (freeze-check
 # compiles only xtask), so they run first: a wrong toolchain, an unwired CI job,
 # a formatting regression, an unparseable SUMMARY.md, a broken link or a failing
 # TypeScript check all report before the workspace compiles rather than after a
 # full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check freeze-check compile test lint wasm-check compat-check demo ts-e2e check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check story-id-check ts-check ts-npm-check freeze-check compile test lint wasm-check compat-check demo ts-e2e cabin-ws-demo check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:
@@ -2930,8 +3234,8 @@ lint-commits base="main":
     fi
 
 # Lint and static-check gate before pushing — skips `freeze-check`, `compile`,
-# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-e2e`, and
-# `install-check`.
+# `lint`, `test`, `wasm-check`, `compat-check`, `demo`, `ts-npm-check`,
+# `ts-e2e`, `cabin-ws-demo`, and `install-check`.
 # Wired as the pre-push hook (.githooks/pre-push.hooks). CI (ci.yml) still runs
 # the full `just build` gate on the PR; `just verify` runs that same gate
 # locally before opening one.
@@ -2941,11 +3245,183 @@ pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-chec
 # Run before opening a PR.
 verify: lint-commits build
 
-# Cut a release: git-std bumps the version, writes the changelog, tags.
-# The release check of the freeze gate runs first.
-release: toolchain-check
+# Cut a release commit and its two tags, locally; `just release-push` publishes
+# them. Pass the version: `just release --release-as 0.15.0` (before 1.0,
+# git-std picks a patch release unless it is told otherwise). The order is
+# described in docs/technotes/toolchain-distribution.md, "Cutting a release".
+#
+# It refuses to start unless this is a clean `main` equal to `origin/main`
+# whose `ci` run passed, runs the release check of the freeze gate, lets
+# `git std bump --no-commit` write the version, the `version_files` pins and
+# the changelog, runs `release-sync` for the pins git-std cannot write, and
+# checks that the lockfiles agree with their manifests and that the pins
+# `release-sync` wrote follow the version, before it commits and tags. The
+# `version_files` pins and the build gate are left to the `ci` run on the
+# release commit, which `release-push` waits for.
+release *ARGS: toolchain-check
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(git rev-parse --abbrev-ref HEAD)" != main ]; then
+        echo "release: check out main first" >&2
+        exit 1
+    fi
+    if [ -n "$(git status --porcelain)" ]; then
+        echo "release: the working tree is not clean" >&2
+        exit 1
+    fi
+    git fetch origin main --quiet
+    if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+        echo "release: main is not equal to origin/main; pull or push first" >&2
+        exit 1
+    fi
+    # The tree is taken as sane because ci passed on it; the release does not
+    # run the build gate.
+    # The newest run of any event, so a manual re-run after an infrastructure
+    # failure counts.
+    ci="$(gh run list --workflow ci --commit "$(git rev-parse HEAD)" \
+        --json status,conclusion --jq '.[0] | if . == null then "no run" elif .status != "completed" then .status else .conclusion end')"
+    if [ "$ci" != success ]; then
+        echo "release: ci has not passed on HEAD ($ci); wait for it or fix main" >&2
+        exit 1
+    fi
+    echo "release: open pull requests on main (for information):"
+    gh pr list --base main --state open || true
     cargo run --locked --package xtask -- freeze check --release
-    git std bump
+    # The tree was clean and equal to origin/main before the bump, so a reset
+    # to origin/main discards a failed release, including a commit already
+    # made. The trap is on EXIT, so an explicit `exit 1` reports it too.
+    released=false
+    trap '[ "$released" = true ] || echo "release: failed; discard the release with: git reset --hard origin/main, and git tag -d for a v or editor-v tag it created" >&2' EXIT
+    git std bump --no-commit {{ ARGS }}
+    just release-sync
+    # Cheap checks of what the bump and the sync wrote: both lockfiles agree
+    # with their manifests, and every derived pin follows the new version.
+    cargo metadata --locked --format-version 1 >/dev/null
+    (cd examples/cabin && cargo metadata --locked --format-version 1 >/dev/null)
+    cargo test --locked --package xtask --test release_derived_pins
+    version="$(cargo metadata --no-deps --format-version 1 \
+        | jq -r '.packages[] | select(.name == "ridl-core") | .version')"
+    if [ -n "$(git ls-files --others --exclude-standard)" ]; then
+        echo "release: the release created untracked files; add them to the sync or ignore them:" >&2
+        git ls-files --others --exclude-standard >&2
+        exit 1
+    fi
+    for tag in "v$version" "editor-v$version"; do
+        if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null \
+            || [ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ]; then
+            echo "release: tag $tag already exists" >&2
+            exit 1
+        fi
+    done
+    git add -u
+    git commit -m "chore(release): $version"
+    git tag -a "v$version" -m "v$version"
+    git tag -a "editor-v$version" -m "editor-v$version"
+    released=true
+    echo "release: $version is committed and tagged locally. Review the"
+    echo "release: changelog, then run: just release-push"
+    echo "release: (not the git push --follow-tags that git std bump printed)"
+
+# Update the version pins that `git std bump` cannot write, after the bump:
+# the `ridl-rt` requirement that `ridl build` emits (`<major>.<minor>`, not the
+# full version, except for a pre-release, which only a requirement that names
+# the same pre-release matches), the cabin example's manifests, lockfiles and
+# `deno.lock`, the editor manifest (an `editor-v` tag must equal it), the root
+# `Cargo.lock` (one entry per crate, and a `version_files` entry rewrites only
+# the first match) and the frozen generated manifests.
+# xtask/tests/release_derived_pins.rs fails when one of them does not follow
+# the workspace version.
+release-sync:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export VERSION MM
+    VERSION="$(cargo metadata --no-deps --format-version 1 \
+        | jq -r '.packages[] | select(.name == "ridl-core") | .version')"
+    case "$VERSION" in
+        *-*) MM="$VERSION" ;;
+        *) MM="$(echo "$VERSION" | cut -d. -f1-2)" ;;
+    esac
+    echo "release-sync: workspace version $VERSION, ridl-rt requirement $MM"
+    perl -pi -e 's/(const RIDL_RT_REQUIREMENT: &str = ")[^"]+/${1}$ENV{MM}/; s/(The `ridl-rt = ")[^"]+/${1}$ENV{MM}/' \
+        crates/ridlc/src/lib.rs
+    perl -pi -e 's/(ridl-rt = \{ version = ")[^"]+/${1}$ENV{MM}/' \
+        examples/cabin/consumer/Cargo.toml examples/cabin/server/Cargo.toml
+    perl -pi -e 's/(requires `ridl-rt = ")[^"]+/${1}$ENV{MM}/' examples/cabin/Cargo.toml
+    perl -pi -e 's/(jsr:\@driftsys\/ridl-runtime\@)[^"]+/${1}$ENV{VERSION}/' examples/cabin/web/deno.lock
+    (cd editors/vscode && npm version "$VERSION" --no-git-tag-version --allow-same-version)
+    cargo update --workspace --offline
+    # The generated crate's manifest must carry the new requirement before
+    # the cabin lockfile is updated, or cargo looks for the old ridl-rt on
+    # crates.io.
+    just _cabin-generate
+    (cd examples/cabin && cargo update --workspace --offline)
+    cargo run --locked --package xtask -- freeze update
+
+# Push the release commit that `just release` made, wait for the `ci` run on it
+# to pass, then push its two tags, which start the crates.io, npm and editor
+# release workflows. A tag is pushed only after CI passed on its commit, so a
+# failure is fixed on main before any publish workflow starts. It can be run
+# again: a release commit already on origin/main is not pushed again, and the
+# newest ci run of any event on it is the one that counts.
+release-push:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(git rev-parse --abbrev-ref HEAD)" != main ]; then
+        echo "release-push: check out main first" >&2
+        exit 1
+    fi
+    subject="$(git log -1 --format=%s)"
+    version="${subject#chore(release): }"
+    if [ "$version" = "$subject" ]; then
+        echo "release-push: HEAD is not a release commit ($subject)" >&2
+        exit 1
+    fi
+    sha="$(git rev-parse HEAD)"
+    for tag in "v$version" "editor-v$version"; do
+        if [ "$(git rev-parse --quiet --verify "$tag^{commit}" || true)" != "$sha" ]; then
+            echo "release-push: tag $tag is missing or does not point at HEAD" >&2
+            exit 1
+        fi
+    done
+    git fetch origin main --quiet
+    if git merge-base --is-ancestor "$sha" origin/main; then
+        echo "release-push: $sha is already on origin/main"
+    else
+        git push origin HEAD:main
+    fi
+    run_id=""
+    for _ in $(seq 30); do
+        run_id="$(gh run list --workflow ci --commit "$sha" --json databaseId --jq '.[0].databaseId // empty')"
+        [ -n "$run_id" ] && break
+        sleep 10
+    done
+    if [ -z "$run_id" ]; then
+        echo "release-push: no ci run for $sha after 5 minutes; the tags are not pushed" >&2
+        exit 1
+    fi
+    if ! gh run watch "$run_id" --exit-status; then
+        state="$(gh run view "$run_id" --json status,conclusion \
+            --jq 'if .status != "completed" then "unfinished" else .conclusion end' || echo unknown)"
+        echo "release-push: the ci run on $sha did not pass ($state); the tags are not pushed." >&2
+        if [ "$state" = unknown ]; then
+            echo "release-push: gh could not read run $run_id; look at it with: gh run view $run_id" >&2
+        elif [ "$state" = unfinished ]; then
+            echo "release-push: the watch stopped before the run finished; run just release-push again." >&2
+        elif [ "$conclusion" = cancelled ]; then
+            echo "release-push: a later push to main cancels the run. Re-run it with" >&2
+            echo "release-push:   gh run rerun $run_id" >&2
+            echo "release-push: then run just release-push again." >&2
+        else
+            echo "release-push: fix main, then cut the next patch version. Keep the local" >&2
+            echo "release-push: tags v$version and editor-v$version, so that git std bump starts" >&2
+            echo "release-push: the next changelog section after $version, and never push them." >&2
+        fi
+        exit 1
+    fi
+    git push origin "v$version" "editor-v$version"
+    echo "release-push: tags pushed. Watch crates-io-release, npm-release and"
+    echo "release-push: vscode-release; the Marketplace job waits for approval"
+    echo "release-push: in the marketplace environment."
 
 # Set up a clone or worktree: git-std, prim, the git hooks, the Rust toolchain
 # rust-toolchain.toml pins, and a report on any of the three tools the gate
@@ -2975,6 +3451,7 @@ vscode-verify:
     cd editors/vscode
     npm ci
     npm test
+    bash scripts/publish-vsix.test.sh
     scratch="$(mktemp -d)"
     # A placeholder bin/ridl is staged only when none is present, so a real
     # binary that `just package-vscode` put there is neither overwritten nor

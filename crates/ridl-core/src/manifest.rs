@@ -12,7 +12,10 @@
 //! `MANI-001` invalid TOML, `MANI-002` both sections, `MANI-003` neither
 //! section, `MANI-005` unknown key (warning), `MANI-006` invalid package name,
 //! `MANI-007` invalid import URL, `MANI-010` a `[lints]` entry that names no
-//! lint or whose value is not a level (warning, ADR-0024 decision 11).
+//! lint or whose value is not a level (warning, ADR-0024 decision 11),
+//! `MANI-015` also a `[limits]` value of the wrong type, `MANI-021` an unknown
+//! kind in `[limits.kind]` and `MANI-022` a limit above the payload ceiling
+//! (ADR-0030 decision 12).
 //! `MANI-004` (nested workspace) is defined in
 //! the catalogue but emitted by the package loader, not here: a
 //! manifest read in isolation cannot know it is a workspace member, so a valid
@@ -46,6 +49,7 @@ use serde::Deserialize;
 use toml::Spanned;
 
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
+use crate::limits::PAYLOAD_CEILING;
 use crate::lint::{LintLevel, LintTable, lint_by_name};
 
 /// A parsed `ridl.toml` manifest: its mode-specific [`ManifestKind`], its
@@ -79,18 +83,93 @@ pub struct Manifest {
     pub imports: BTreeMap<String, String>,
     pub defaults: TimingDefaults,
     pub lints: LintTable,
+    pub limits: Limits,
     pub codegen_header_file: Option<(String, Range<usize>)>,
     pub backends: BTreeMap<String, BackendTable>,
     pub backend_span: Option<Range<usize>>,
 }
 
+/// The kinds of interaction a `[limits.kind]` entry can name, spelled in the
+/// manifest as `signal`, `fixed`, `event`, `command` and `query`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LimitKind {
+    Signal,
+    Fixed,
+    Event,
+    Command,
+    Query,
+}
+
+impl LimitKind {
+    /// The kind a manifest spells `name` as, or `None` for any other name.
+    pub fn parse(name: &str) -> Option<LimitKind> {
+        match name {
+            "signal" => Some(LimitKind::Signal),
+            "fixed" => Some(LimitKind::Fixed),
+            "event" => Some(LimitKind::Event),
+            "command" => Some(LimitKind::Command),
+            "query" => Some(LimitKind::Query),
+            _ => None,
+        }
+    }
+}
+
+/// One `[limits.interaction]` entry: the key as written, the byte range of the
+/// key in the manifest text, and the limit in bytes. Whether the key names an
+/// interaction of the unit is checked where the interactions are known.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LimitEntry {
+    pub name: String,
+    pub key: Range<usize>,
+    pub value: u32,
+}
+
+/// The `[limits]` table of one manifest (ADR-0030 decision 12): per-interaction
+/// payload limits in bytes of encoded payload. Every value passed validation
+/// (an integer from 0 to [`PAYLOAD_CEILING`]); an invalid entry is a
+/// diagnostic and is dropped. Each value carries its byte range in the
+/// manifest text. The table is empty when the manifest has no `[limits]`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Limits {
+    /// The `default` key: the limit of every kind with no `[limits.kind]`
+    /// entry.
+    pub default: Option<Spanned<u32>>,
+    /// The `[limits.kind]` entries.
+    pub kinds: BTreeMap<LimitKind, Spanned<u32>>,
+    /// The `[limits.interaction]` entries in key order.
+    pub interactions: Vec<LimitEntry>,
+}
+
+impl Limits {
+    /// True when the manifest declares no limit at all.
+    pub fn is_empty(&self) -> bool {
+        self.default.is_none() && self.kinds.is_empty() && self.interactions.is_empty()
+    }
+}
+
 /// The encoding names the toolchain knows, spelled as the encoding enum of
 /// `ridl-rt` spells them. `[backend.<name>] encodings` accepts only these.
-pub const ENCODING_NAMES: [&str; 3] = ["flatbuffers", "proto3", "repr-c"];
+pub const ENCODING_NAMES: [&str; 3] = ["flatbuffers", "proto3", "podbuf"];
 
 /// The key of a `[backend.<name>]` table that lists encodings, and the key of
 /// the backend request option that carries the same list.
 pub const ENCODINGS_KEY: &str = "encodings";
+
+/// The key of a `[backend.<name>]` table that asks the Rust backend for the
+/// `wasm` module, and the key of the backend request option that carries it.
+pub const WASM_KEY: &str = "wasm";
+
+/// The key of a `[backend.<name>]` table that asks that backend for the codec
+/// file which runs on the Rust `wasm` module, and the key of the backend
+/// request option that carries it. `codec = true` implies `wasm` for the
+/// `rust` table when that table writes no `wasm` key.
+pub const CODEC_KEY: &str = "codec";
+
+/// The key of a `[backend.<name>]` table that asks the Rust backend for the
+/// transcoding functions between the encodings the table lists, and the key of
+/// the backend request option that carries it. `transcode = true` needs at
+/// least two encodings in the same table, which is MANI-020.
+pub const TRANSCODE_KEY: &str = "transcode";
 
 /// One `[backend.<name>]` table (ADR-0002 §4). The table is the same for every
 /// backend name; whether a backend honours it is the backend's concern.
@@ -100,6 +179,18 @@ pub struct BackendTable {
     /// range of its string in the manifest text. Empty for an absent key and
     /// for `encodings = []`, both of which mean types only.
     pub encodings: Vec<(String, Range<usize>)>,
+    /// The written `wasm` value: `Some(true)` asks the Rust backend for the
+    /// `wasm` module of the generated crate. `None` for an absent key and for
+    /// a value that is not a boolean, which is MANI-015.
+    pub wasm: Option<bool>,
+    /// The `codec` value: `true` asks this backend for the codec file that runs
+    /// on the Rust `wasm` module. `false` for an absent key and for a value
+    /// that is not a boolean, which is MANI-015.
+    pub codec: bool,
+    /// The `transcode` value: `true` asks the Rust backend for the transcoding
+    /// functions between the encodings of this table. `false` for an absent
+    /// key and for a value that is not a boolean, which is MANI-015.
+    pub transcode: bool,
 }
 
 /// The raw `[defaults]` timing strings of one manifest, or the merge of
@@ -216,6 +307,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
         })
         .unwrap_or_default();
     let lints = collect_lints(file_id, text, &mut diags);
+    let limits = collect_limits(file_id, text, &mut diags);
     let (backends, backend_span) = collect_backends(file_id, text, &mut diags);
     let codegen_header_file = raw
         .codegen
@@ -259,6 +351,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
             imports,
             defaults,
             lints,
+            limits,
             codegen_header_file,
             backends,
             backend_span,
@@ -369,6 +462,182 @@ fn collect_lints(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> Li
     lints
 }
 
+/// Deserializes as `Some(value)` when the value has the shape `T` and as `None`
+/// otherwise, so that one wrong shape does not fail the typed parse of the
+/// whole table.
+struct Lenient<T>(Option<T>);
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for Lenient<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Lenient(T::deserialize(deserializer).ok()))
+    }
+}
+
+impl<T> Default for Lenient<T> {
+    fn default() -> Self {
+        Lenient(None)
+    }
+}
+
+/// A table of spanned keys and spanned untyped values.
+type SpannedTable = BTreeMap<Spanned<String>, Spanned<toml::Value>>;
+
+/// The `[limits]` table alone, read in a parse of its own so that each key and
+/// value carries its span and a wrong shape is MANI-015 with the rest of the
+/// manifest intact (as for [`RawLints`]). `limits` is not a field of
+/// [`RawManifest`] for the same reason.
+#[derive(Deserialize)]
+struct RawLimits {
+    #[serde(default)]
+    limits: Lenient<RawLimitsTable>,
+}
+
+#[derive(Deserialize)]
+struct RawLimitsTable {
+    #[serde(default)]
+    default: Option<Spanned<toml::Value>>,
+    #[serde(default)]
+    kind: Lenient<SpannedTable>,
+    #[serde(default)]
+    interaction: Lenient<SpannedTable>,
+}
+
+/// The spans of the `kind` and `interaction` values of `[limits]`, whatever
+/// their shape. Used only to place MANI-015 for a wrong shape.
+#[derive(Deserialize)]
+struct RawLimitsSpans {
+    #[serde(default)]
+    limits: Option<RawLimitsInner>,
+}
+
+#[derive(Deserialize)]
+struct RawLimitsInner {
+    #[serde(default)]
+    kind: Option<Spanned<toml::Value>>,
+    #[serde(default)]
+    interaction: Option<Spanned<toml::Value>>,
+}
+
+/// Reads a limit value: an integer from 0 to [`PAYLOAD_CEILING`]. A value that
+/// is not an integer or is negative is MANI-015, and one above the ceiling is
+/// MANI-022; both are on the value and give `None`.
+fn limit_value(
+    file_id: FileId,
+    what: &str,
+    value: &Spanned<toml::Value>,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<u32> {
+    let Some(number) = value.get_ref().as_integer().filter(|n| *n >= 0) else {
+        // An unquoted `Interface.member` key is a dotted key, which TOML reads
+        // as a nested table.
+        let hint = if value.get_ref().is_table() {
+            "; a key that contains a `.` must be quoted, as in `\"Interface.member\" = 64`"
+        } else {
+            ""
+        };
+        diags.push(error(
+            DiagCode::MANI_015,
+            file_id,
+            value.span(),
+            format!("{what} must be an integer number of bytes, 0 or more{hint}"),
+        ));
+        return None;
+    };
+    match u32::try_from(number) {
+        Ok(limit) if limit <= PAYLOAD_CEILING => Some(limit),
+        _ => {
+            diags.push(error(
+                DiagCode::MANI_022,
+                file_id,
+                value.span(),
+                format!("{what} is {number}, above the payload ceiling of {PAYLOAD_CEILING} bytes"),
+            ));
+            None
+        }
+    }
+}
+
+/// Collects the `[limits]` table into [`Limits`] (ADR-0030 decision 12). A
+/// `limits`, `limits.kind` or `limits.interaction` value that is not a table
+/// is one MANI-015 on that value. An invalid entry is a diagnostic on its key
+/// or value and is dropped; the other entries are kept.
+fn collect_limits(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> Limits {
+    let mut limits = Limits::default();
+    let raw: RawLimits = toml::from_str(text).unwrap_or(RawLimits {
+        limits: Lenient(None),
+    });
+    let wrong_shape = |range: Range<usize>, what: &str, diags: &mut Vec<Diagnostic>| {
+        diags.push(error(
+            DiagCode::MANI_015,
+            file_id,
+            range,
+            format!("`{what}` must be a table"),
+        ));
+    };
+    let Some(table) = raw.limits.0 else {
+        // Either there is no `limits` key or its value is not a table.
+        let doc: BTreeMap<String, Spanned<toml::Value>> = toml::from_str(text).unwrap_or_default();
+        if let Some(value) = doc.get("limits") {
+            wrong_shape(value.span(), "[limits]", diags);
+        }
+        return limits;
+    };
+    if let Some(default) = &table.default {
+        limits.default = limit_value(file_id, "`[limits].default`", default, diags)
+            .map(|v| Spanned::new(default.span(), v));
+    }
+    let inner = toml::from_str::<RawLimitsSpans>(text)
+        .ok()
+        .and_then(|s| s.limits);
+    match table.kind.0 {
+        Some(kinds) => {
+            for (key, value) in kinds {
+                let Some(kind) = LimitKind::parse(key.get_ref()) else {
+                    diags.push(error(
+                        DiagCode::MANI_021,
+                        file_id,
+                        key.span(),
+                        format!(
+                            "unknown kind `{}` in `[limits.kind]`; expected `signal`, `fixed`, `event`, `command` or `query`",
+                            key.get_ref()
+                        ),
+                    ));
+                    continue;
+                };
+                let what = format!("`[limits.kind].{}`", key.get_ref());
+                if let Some(v) = limit_value(file_id, &what, &value, diags) {
+                    limits.kinds.insert(kind, Spanned::new(value.span(), v));
+                }
+            }
+        }
+        None => {
+            if let Some(value) = inner.as_ref().and_then(|i| i.kind.as_ref()) {
+                wrong_shape(value.span(), "[limits.kind]", diags);
+            }
+        }
+    }
+    match table.interaction.0 {
+        Some(entries) => {
+            for (key, value) in entries {
+                let what = format!("`[limits.interaction].\"{}\"`", key.get_ref());
+                if let Some(v) = limit_value(file_id, &what, &value, diags) {
+                    limits.interactions.push(LimitEntry {
+                        name: key.get_ref().clone(),
+                        key: key.span(),
+                        value: v,
+                    });
+                }
+            }
+        }
+        None => {
+            if let Some(value) = inner.as_ref().and_then(|i| i.interaction.as_ref()) {
+                wrong_shape(value.span(), "[limits.interaction]", diags);
+            }
+        }
+    }
+    limits
+}
+
 /// The `[backend]` table alone, read in a parse of its own so that each value
 /// carries its span and a wrong shape is MANI-015 with the rest of the manifest
 /// intact, not a failure of the typed manifest parse (as for [`RawLints`]).
@@ -383,6 +652,9 @@ type RawBackendTables = BTreeMap<String, Spanned<Shape<RawBackend>>>;
 #[derive(Default)]
 struct RawBackend {
     encodings: Option<Spanned<Shape<Vec<Spanned<toml::Value>>>>>,
+    wasm: Option<Spanned<toml::Value>>,
+    codec: Option<Spanned<toml::Value>>,
+    transcode: Option<Spanned<toml::Value>>,
 }
 
 /// A value that is either the table or array shape a reader expects (`Right`)
@@ -499,6 +771,12 @@ shape_visitor!(
             }
             if key == ENCODINGS_KEY {
                 table.encodings = Some(map.next_value()?);
+            } else if key == WASM_KEY {
+                table.wasm = Some(map.next_value()?);
+            } else if key == CODEC_KEY {
+                table.codec = Some(map.next_value()?);
+            } else if key == TRANSCODE_KEY {
+                table.transcode = Some(map.next_value()?);
             } else {
                 map.next_value::<serde::de::IgnoredAny>()?;
             }
@@ -560,6 +838,12 @@ fn collect_backends(
         ));
         return (backends, Some(span));
     };
+    // The span of each `codec = true` value, checked against the `rust` table
+    // once every table is read.
+    let mut codec_spans = Vec::new();
+    // The span of each `transcode = true` value, checked against the table's
+    // own encodings once the table is read.
+    let mut transcode_spans = Vec::new();
     for (name, table) in tables {
         let table_span = table.span();
         let Shape::Right(table) = table.into_inner() else {
@@ -572,21 +856,72 @@ fn collect_backends(
             continue;
         };
         let mut entry = BackendTable::default();
+        let mut transcode_span = None;
+        // The count of written `encodings` elements, valid or not: a table
+        // whose list is malformed is MANI-015 already.
+        let mut written_encodings = 0;
+        if let Some(wasm) = table.wasm {
+            match wasm.get_ref() {
+                toml::Value::Boolean(value) => entry.wasm = Some(*value),
+                other => diags.push(error(
+                    DiagCode::MANI_015,
+                    file_id,
+                    wasm.span(),
+                    format!("`[backend.{name}] wasm` holds `{other}`, which is not a boolean"),
+                )),
+            }
+        }
+        if let Some(codec) = table.codec {
+            match codec.get_ref() {
+                toml::Value::Boolean(value) => {
+                    entry.codec = *value;
+                    if *value {
+                        codec_spans.push((name.clone(), codec.span()));
+                    }
+                }
+                other => diags.push(error(
+                    DiagCode::MANI_015,
+                    file_id,
+                    codec.span(),
+                    format!("`[backend.{name}] codec` holds `{other}`, which is not a boolean"),
+                )),
+            }
+        }
+        if let Some(transcode) = table.transcode {
+            match transcode.get_ref() {
+                toml::Value::Boolean(value) => {
+                    entry.transcode = *value;
+                    if *value {
+                        transcode_span = Some(transcode.span());
+                    }
+                }
+                other => diags.push(error(
+                    DiagCode::MANI_015,
+                    file_id,
+                    transcode.span(),
+                    format!("`[backend.{name}] transcode` holds `{other}`, which is not a boolean"),
+                )),
+            }
+        }
         match table.encodings {
             None => {}
             Some(encodings) => {
                 let encodings_span = encodings.span();
                 match encodings.into_inner() {
-                    Shape::Wrong => diags.push(error(
-                        DiagCode::MANI_015,
-                        file_id,
-                        encodings_span,
-                        format!(
-                            "`[backend.{name}] encodings` must be an array of encoding names; {}",
-                            known_encodings()
-                        ),
-                    )),
+                    Shape::Wrong => {
+                        written_encodings = usize::MAX;
+                        diags.push(error(
+                            DiagCode::MANI_015,
+                            file_id,
+                            encodings_span,
+                            format!(
+                                "`[backend.{name}] encodings` must be an array of encoding names; {}",
+                                known_encodings()
+                            ),
+                        ));
+                    }
                     Shape::Right(elements) => {
+                        written_encodings = elements.len();
                         for element in elements {
                             let range = element.span();
                             let message = match element.get_ref().as_str() {
@@ -620,7 +955,42 @@ fn collect_backends(
                 }
             }
         }
+        if let Some(range) = transcode_span {
+            transcode_spans.push((name.clone(), range, written_encodings));
+        }
         backends.insert(name, entry);
+    }
+    // `transcode = true` converts between encodings, so the table needs at
+    // least two written names. A table with a repeated, unknown or malformed
+    // name is MANI-015 already, and that count includes the rejected names so
+    // the table gets one diagnostic.
+    for (name, range, count) in transcode_spans {
+        if count < 2 {
+            diags.push(error(
+                DiagCode::MANI_020,
+                file_id,
+                range,
+                format!(
+                    "`[backend.{name}] transcode = true` needs at least two encodings, and the table lists {count}"
+                ),
+            ));
+        }
+    }
+    // `codec = true` needs the Rust `wasm` module: a `rust` table with no
+    // `wasm` key gets it implied, and a written `wasm = false` or a missing
+    // `rust` table is MANI-019.
+    for (name, range) in codec_spans {
+        let reason = match backends.get("rust") {
+            None => "and there is no `[backend.rust]` table to build it from",
+            Some(rust) if rust.wasm == Some(false) => "but `[backend.rust]` sets `wasm = false`",
+            Some(_) => continue,
+        };
+        diags.push(error(
+            DiagCode::MANI_019,
+            file_id,
+            range,
+            format!("`[backend.{name}] codec = true` needs the wasm codec, {reason}"),
+        ));
     }
     (backends, Some(span))
 }
@@ -702,39 +1072,65 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
 /// loader accepts any backend name, and the keys are the same for each.
 pub const BACKEND_SECTION: &str = "backend.*";
 
-/// The keys the manifest schema defines, as `(section, [(key, value type)])`.
-/// The top level has the section name `""`. `[imports]` and `[lints]` hold
-/// user-chosen names and are not listed as sections. MANI-005 warns on any key
-/// outside these lists.
+/// One entry of [`KNOWN_KEYS`]: the key, its value type and its note.
+pub type KnownKey = (&'static str, &'static str, &'static str);
+
+/// The keys the manifest schema defines, as
+/// `(section, [(key, value type, note)])`. The top level has the section
+/// name `""`. `[imports]` and `[lints]` hold user-chosen names and are not
+/// listed as sections. MANI-005 warns on any key outside these lists.
 ///
 /// The value type is the TOML type the reader accepts for the key: `string`,
 /// `table`, `array<string>` (an array of strings), `table<string>` (a table of
-/// strings) or `table<table>` (a table of tables).
-pub const KNOWN_KEYS: &[(&str, &[(&str, &str)])] = &[
+/// strings), `table<table>` (a table of tables), `table<integer>` (a table of
+/// integers), `integer` or `boolean`. The note is
+/// what the key means beyond its own table, part of the frozen `manifest`
+/// surface, or `""`: `codec` implies `backend.rust.wasm`.
+pub const KNOWN_KEYS: &[(&str, &[KnownKey])] = &[
     (
         "",
         &[
-            ("package", "table"),
-            ("workspace", "table"),
-            ("defaults", "table"),
-            ("codegen", "table"),
-            ("backend", "table<table>"),
-            ("imports", "table<string>"),
-            ("lints", "table<string>"),
+            ("package", "table", ""),
+            ("workspace", "table", ""),
+            ("defaults", "table", ""),
+            ("codegen", "table", ""),
+            ("backend", "table<table>", ""),
+            ("imports", "table<string>", ""),
+            ("lints", "table<string>", ""),
+            ("limits", "table", ""),
         ],
     ),
-    ("package", &[("name", "string"), ("version", "string")]),
-    ("workspace", &[("members", "array<string>")]),
+    (
+        "package",
+        &[("name", "string", ""), ("version", "string", "")],
+    ),
+    ("workspace", &[("members", "array<string>", "")]),
     (
         "defaults",
         &[
-            ("timing", "string"),
-            ("command_timing", "string"),
-            ("query_timing", "string"),
+            ("timing", "string", ""),
+            ("command_timing", "string", ""),
+            ("query_timing", "string", ""),
         ],
     ),
-    ("codegen", &[("header-file", "string")]),
-    (BACKEND_SECTION, &[(ENCODINGS_KEY, "array<string>")]),
+    ("codegen", &[("header-file", "string", "")]),
+    (
+        "limits",
+        &[
+            ("default", "integer", ""),
+            ("kind", "table<integer>", ""),
+            ("interaction", "table<integer>", ""),
+        ],
+    ),
+    (
+        BACKEND_SECTION,
+        &[
+            (ENCODINGS_KEY, "array<string>", ""),
+            (WASM_KEY, "boolean", ""),
+            (CODEC_KEY, "boolean", "implies backend.rust.wasm"),
+            (TRANSCODE_KEY, "boolean", "needs two encodings"),
+        ],
+    ),
 ];
 
 /// The allowed keys of `section` in [`KNOWN_KEYS`]; empty for an unlisted one.
@@ -743,7 +1139,7 @@ fn known_keys(section: &str) -> Vec<&'static str> {
         .iter()
         .find(|(name, _)| *name == section)
         .map_or(Vec::new(), |(_, keys)| {
-            keys.iter().map(|(key, _)| *key).collect()
+            keys.iter().map(|(key, ..)| *key).collect()
         })
 }
 
@@ -1306,6 +1702,206 @@ version = \"1.0.0\"
     }
 
     #[test]
+    fn limits_table_is_read() {
+        let text = format!(
+            "{PACKAGE_HEAD}[limits]\ndefault = 4096\n\n[limits.kind]\nsignal = 256\n\n\
+             [limits.interaction]\n\"Climate.temperature\" = 64\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "a valid `[limits]` table, got {diags:?}");
+        let limits = manifest.expect("the manifest parses").limits;
+        assert_eq!(limits.default.as_ref().map(|v| *v.get_ref()), Some(4096));
+        assert_eq!(
+            limits.kinds.get(&LimitKind::Signal).map(|v| *v.get_ref()),
+            Some(256)
+        );
+        assert_eq!(limits.kinds.len(), 1);
+        assert_eq!(limits.interactions.len(), 1);
+        let entry = &limits.interactions[0];
+        assert_eq!(entry.name, "Climate.temperature");
+        assert_eq!(entry.value, 64);
+        assert_eq!(&text[entry.key.clone()], "\"Climate.temperature\"");
+    }
+
+    #[test]
+    fn absent_limits_table_is_empty() {
+        let (manifest, diags) = parse(STANDALONE);
+        assert!(diags.is_empty());
+        assert!(manifest.expect("parses").limits.is_empty());
+        let text = format!("{PACKAGE_HEAD}[limits]\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "no MANI-005 for `limits`, got {diags:?}");
+        assert!(manifest.expect("parses").limits.is_empty());
+    }
+
+    #[test]
+    fn unknown_limit_kind_is_an_error() {
+        let text = format!("{PACKAGE_HEAD}[limits.kind]\nstream = 1\nsignal = 2\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-021"]);
+        assert_eq!(spanned_text(&text, &diags[0]), "stream");
+        let limits = manifest.expect("parses").limits;
+        assert_eq!(limits.kinds.len(), 1);
+        assert_eq!(
+            limits.kinds.get(&LimitKind::Signal).map(|v| *v.get_ref()),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn a_limit_above_u32_is_an_error_not_zero() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 4294967296\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-022"]);
+        assert!(manifest.expect("parses").limits.default.is_none());
+    }
+
+    #[test]
+    fn a_wrong_limit_value_that_is_not_a_table_gets_no_quoting_hint() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = \"4k\"\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        assert!(!diags[0].message.contains("quoted"), "{diags:?}");
+    }
+
+    #[test]
+    fn an_unquoted_dotted_interaction_key_says_to_quote_it() {
+        let text = format!("{PACKAGE_HEAD}[limits.interaction]\nClimate.temperature = 64\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        assert!(diags[0].message.contains("must be quoted"), "{diags:?}");
+        assert!(manifest.expect("parses").limits.interactions.is_empty());
+    }
+
+    #[test]
+    fn limit_above_the_ceiling_is_an_error() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 16257\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-022"]);
+        assert_eq!(spanned_text(&text, &diags[0]), "16257");
+        assert!(manifest.expect("parses").limits.default.is_none());
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 16256\n");
+        let (manifest, diags) = parse(&text);
+        assert!(
+            diags.is_empty(),
+            "the ceiling itself is valid, got {diags:?}"
+        );
+        assert_eq!(
+            manifest
+                .expect("parses")
+                .limits
+                .default
+                .map(|v| *v.get_ref()),
+            Some(16256)
+        );
+    }
+
+    #[test]
+    fn malformed_limit_value_is_an_error_and_the_manifest_parses() {
+        let text = format!(
+            "{PACKAGE_HEAD}[limits]\ndefault = \"4k\"\n\n[limits.kind]\nsignal = -1\n\n\
+             [limits.interaction]\n\"A.b\" = 1.5\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015", "MANI-015", "MANI-015"]);
+        let spans: Vec<&str> = diags.iter().map(|d| spanned_text(&text, d)).collect();
+        assert_eq!(spans, vec!["\"4k\"", "-1", "1.5"]);
+        let manifest = manifest.expect("the manifest parses");
+        assert!(manifest.limits.is_empty());
+    }
+
+    #[test]
+    fn a_limits_table_of_the_wrong_shape_is_an_error() {
+        for text in [
+            format!("limits = 1\n{PACKAGE_HEAD}"),
+            format!("{PACKAGE_HEAD}[limits]\nkind = 1\n"),
+            format!("{PACKAGE_HEAD}[limits]\ninteraction = [1]\n"),
+        ] {
+            let (manifest, diags) = parse(&text);
+            assert_eq!(codes(&diags), vec!["MANI-015"], "{text}");
+            assert!(manifest.expect("parses").limits.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_malformed_limits_table_keeps_the_rest_of_the_manifest() {
+        let text = format!(
+            "{PACKAGE_HEAD}[limits]\ndefault = \"4k\"\n\n[lints]\nmissing-timing = \"deny\"\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        let manifest = manifest.expect("parses");
+        assert_eq!(manifest.lints.get("missing-timing"), Some(&LintLevel::Deny));
+    }
+
+    #[test]
+    fn an_unknown_key_directly_in_limits_warns() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefalt = 1\n\n[limits.kind]\nstream = 1\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-005", "MANI-021"]);
+        assert!(diags[0].message.contains("defalt"), "{diags:?}");
+        // Keys of the sub-tables are not checked as unknown manifest keys.
+        let text = format!("{PACKAGE_HEAD}[limits.interaction]\n\"Any.thing\" = 1\n");
+        let (_, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn a_zero_limit_is_accepted() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 0\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let default = manifest.expect("parses").limits.default;
+        assert_eq!(default.map(|v| *v.get_ref()), Some(0));
+    }
+
+    #[test]
+    fn limit_values_carry_the_span_of_their_text() {
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 4096\n\n[limits.kind]\nevent = 77\n");
+        let (manifest, _) = parse(&text);
+        let limits = manifest.expect("parses").limits;
+        let default = limits.default.expect("default");
+        assert_eq!(&text[default.span()], "4096");
+        let event = &limits.kinds[&LimitKind::Event];
+        assert_eq!(&text[event.span()], "77");
+    }
+
+    #[test]
+    fn every_kind_name_maps_to_its_kind() {
+        let text = format!(
+            "{PACKAGE_HEAD}[limits.kind]\nsignal = 1\nfixed = 2\nevent = 3\ncommand = 4\nquery = 5\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let kinds = manifest.expect("parses").limits.kinds;
+        let got: Vec<(LimitKind, u32)> = kinds.iter().map(|(k, v)| (*k, *v.get_ref())).collect();
+        assert_eq!(
+            got,
+            vec![
+                (LimitKind::Signal, 1),
+                (LimitKind::Fixed, 2),
+                (LimitKind::Event, 3),
+                (LimitKind::Command, 4),
+                (LimitKind::Query, 5),
+            ]
+        );
+    }
+
+    #[test]
+    fn limits_with_only_interactions_are_not_empty() {
+        let text = format!("{PACKAGE_HEAD}[limits.interaction]\n\"A.b\" = 1\n");
+        let (manifest, _) = parse(&text);
+        assert!(!manifest.expect("parses").limits.is_empty());
+    }
+
+    #[test]
+    fn limits_with_only_kinds_are_not_empty() {
+        let text = format!("{PACKAGE_HEAD}[limits.kind]\nevent = 1\n");
+        let (manifest, _) = parse(&text);
+        assert!(!manifest.expect("parses").limits.is_empty());
+    }
+
+    #[test]
     fn lints_key_is_known() {
         let text = format!("{PACKAGE_HEAD}[lints]\n");
         let (manifest, diags) = parse(&text);
@@ -1459,6 +2055,224 @@ version = \"1.0.0\"
     }
 
     #[test]
+    fn backend_wasm_parses_as_a_boolean() {
+        let text =
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\"]\nwasm = true\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(
+            manifest.expect("the manifest parses").backends["rust"].wasm,
+            Some(true)
+        );
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nwasm = false\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(
+            manifest.expect("the manifest parses").backends["rust"].wasm,
+            Some(false)
+        );
+        let (manifest, _) = parse(&format!("{PACKAGE_HEAD}[backend.rust]\n"));
+        assert_eq!(
+            manifest.expect("the manifest parses").backends["rust"].wasm,
+            None
+        );
+    }
+
+    #[test]
+    fn backend_wasm_not_a_boolean_is_mani_015() {
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\nwasm = \"yes\"\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        let message = &diags[0].message;
+        assert_eq!(
+            message,
+            "`[backend.rust] wasm` holds `\"yes\"`, which is not a boolean"
+        );
+        assert_eq!(span_text(&text, &diags[0]), "\"yes\"");
+        assert_eq!(
+            manifest.expect("the manifest parses").backends["rust"].wasm,
+            None
+        );
+    }
+
+    #[test]
+    fn backend_transcode_parses_as_a_boolean() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\", \"proto3\"]\ntranscode = true\n"
+        );
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        assert!(manifest.expect("the manifest parses").backends["rust"].transcode);
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\ntranscode = false\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        assert!(!manifest.expect("the manifest parses").backends["rust"].transcode);
+    }
+
+    #[test]
+    fn backend_transcode_not_a_boolean_is_mani_015() {
+        let text = format!("{PACKAGE_HEAD}[backend.rust]\ntranscode = \"yes\"\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        assert_eq!(
+            diags[0].message,
+            "`[backend.rust] transcode` holds `\"yes\"`, which is not a boolean"
+        );
+        assert_eq!(span_text(&text, &diags[0]), "\"yes\"");
+        assert!(!manifest.expect("the manifest parses").backends["rust"].transcode);
+    }
+
+    #[test]
+    fn backend_transcode_with_no_encodings_is_mani_020() {
+        for body in ["transcode = true\n", "encodings = []\ntranscode = true\n"] {
+            let text = format!("{PACKAGE_HEAD}[backend.rust]\n{body}");
+            let (_, diags) = parse(&text);
+            assert_eq!(codes(&diags), vec!["MANI-020"], "{body}");
+            assert_eq!(
+                diags[0].message,
+                "`[backend.rust] transcode = true` needs at least two encodings, and the table lists 0"
+            );
+            assert_eq!(span_text(&text, &diags[0]), "true");
+        }
+    }
+
+    #[test]
+    fn backend_transcode_with_one_encoding_is_mani_020() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\"]\ntranscode = true\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-020"]);
+        assert_eq!(span_text(&text, &diags[0]), "true");
+    }
+
+    #[test]
+    fn backend_transcode_with_two_encodings_has_no_diagnostic() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\ntranscode = true\nencodings = [\"flatbuffers\", \"podbuf\"]\n"
+        );
+        let (_, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    #[test]
+    fn backend_transcode_with_a_repeated_encoding_is_mani_015() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\", \"flatbuffers\"]\ntranscode = true\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+    }
+
+    #[test]
+    fn backend_transcode_with_an_unknown_encoding_is_mani_015_only() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\", \"bogus\"]\ntranscode = true\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+    }
+
+    #[test]
+    fn backend_transcode_with_a_single_unknown_encoding_is_mani_015_and_mani_020() {
+        let text =
+            format!("{PACKAGE_HEAD}[backend.rust]\nencodings = [\"bogus\"]\ntranscode = true\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015", "MANI-020"]);
+    }
+
+    #[test]
+    fn backend_transcode_with_a_non_array_encodings_is_mani_015_only() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = \"flatbuffers\"\ntranscode = true\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+    }
+
+    const CODEC_MANIFEST: &str =
+        "[backend.rust]\nencodings = [\"flatbuffers\"]\n[backend.typescript]\ncodec = true\n";
+
+    #[test]
+    fn backend_codec_parses_as_a_boolean() {
+        let text = format!("{PACKAGE_HEAD}{CODEC_MANIFEST}");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let manifest = manifest.expect("the manifest parses");
+        assert!(manifest.backends["typescript"].codec);
+        assert_eq!(manifest.backends["rust"].wasm, None);
+        for tail in ["codec = false\n", ""] {
+            let text = format!("{PACKAGE_HEAD}[backend.typescript]\n{tail}");
+            let (manifest, diags) = parse(&text);
+            assert!(diags.is_empty(), "{diags:?}");
+            assert!(!manifest.expect("the manifest parses").backends["typescript"].codec);
+        }
+    }
+
+    #[test]
+    fn backend_codec_not_a_boolean_is_mani_015() {
+        let text = format!("{PACKAGE_HEAD}[backend.typescript]\ncodec = \"yes\"\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-015"]);
+        assert_eq!(
+            diags[0].message,
+            "`[backend.typescript] codec` holds `\"yes\"`, which is not a boolean"
+        );
+        assert_eq!(span_text(&text, &diags[0]), "\"yes\"");
+        assert!(!manifest.expect("the manifest parses").backends["typescript"].codec);
+    }
+
+    #[test]
+    fn backend_codec_with_wasm_false_is_mani_019() {
+        let text = format!(
+            "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\"]\nwasm = false\n[backend.typescript]\ncodec = true\n"
+        );
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-019"]);
+        assert_eq!(
+            diags[0].message,
+            "`[backend.typescript] codec = true` needs the wasm codec, but `[backend.rust]` sets `wasm = false`"
+        );
+        assert_eq!(span_text(&text, &diags[0]), "true");
+    }
+
+    #[test]
+    fn backend_codec_without_a_rust_table_is_mani_019() {
+        let text = format!("{PACKAGE_HEAD}[backend.typescript]\ncodec = true\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-019"]);
+        assert_eq!(
+            diags[0].message,
+            "`[backend.typescript] codec = true` needs the wasm codec, and there is no `[backend.rust]` table to build it from"
+        );
+        assert_eq!(span_text(&text, &diags[0]), "true");
+    }
+
+    #[test]
+    fn backend_codec_with_wasm_true_or_no_wasm_key_is_accepted() {
+        for text in [
+            format!("{PACKAGE_HEAD}{CODEC_MANIFEST}"),
+            format!(
+                "{PACKAGE_HEAD}[backend.rust]\nencodings = [\"flatbuffers\"]\nwasm = true\n[backend.typescript]\ncodec = true\n"
+            ),
+        ] {
+            let (_, diags) = parse(&text);
+            assert!(diags.is_empty(), "{text}: {diags:?}");
+        }
+    }
+
+    #[test]
+    fn backend_codec_on_any_table_is_checked() {
+        let text = format!("{PACKAGE_HEAD}[backend.kotlin]\ncodec = true\n");
+        let (_, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-019"]);
+        assert_eq!(
+            diags[0].message,
+            "`[backend.kotlin] codec = true` needs the wasm codec, and there is no `[backend.rust]` table to build it from"
+        );
+    }
+
+    #[test]
     fn backend_table_for_any_name_is_accepted() {
         let text = format!("{PACKAGE_HEAD}[backend.kotlin]\n");
         let (manifest, diags) = parse(&text);
@@ -1480,7 +2294,7 @@ version = \"1.0.0\"
         assert_eq!(codes(&diags), vec!["MANI-015"]);
         let message = &diags[0].message;
         assert!(message.contains("FlatBuffers"), "{message}");
-        assert!(message.contains("flatbuffers, proto3, repr-c"), "{message}");
+        assert!(message.contains("flatbuffers, proto3, podbuf"), "{message}");
         let start = usize::from(diags[0].primary.range.start());
         let end = usize::from(diags[0].primary.range.end());
         assert_eq!(&text[start..end], "\"FlatBuffers\"");
@@ -1503,7 +2317,7 @@ version = \"1.0.0\"
         let message = &diags[0].message;
         assert!(message.contains("is named twice"), "{message}");
         assert!(
-            message.ends_with("; known encodings: flatbuffers, proto3, repr-c"),
+            message.ends_with("; known encodings: flatbuffers, proto3, podbuf"),
             "{message}"
         );
     }
@@ -1686,12 +2500,12 @@ version = \"1.0.0\"
         check_unknown_keys(file_id, &text, &mut diags);
         assert!(diags.is_empty(), "{diags:?}");
 
-        // Each listed key is one the reader reads: an integer where a table,
-        // a string or an array is expected draws a diagnostic other than
-        // MANI-005. A key the reader ignores draws none.
+        // Each listed key is one the reader reads: a value of the wrong type
+        // draws a diagnostic other than MANI-005. A key the reader ignores
+        // draws none.
         for (section, keys) in KNOWN_KEYS {
-            for (key, _) in *keys {
-                let text = manifest_with(section, key, "1");
+            for (key, value_type, _) in *keys {
+                let text = manifest_with(section, key, type_samples(value_type).1[0]);
                 let (_, diags) = parse(&text);
                 assert!(
                     diags.iter().any(|d| d.code.as_str() != "MANI-005"),
@@ -1718,6 +2532,9 @@ version = \"1.0.0\"
                 &["1", "{ missing-docs = 1 }"],
             ),
             "table<table>" => (&["{ rust = {} }"], &["1", "{ rust = 1 }"]),
+            "boolean" => (&["true", "false"], &["1", "\"true\""]),
+            "integer" => (&["0", "4096"], &["\"x\"", "-1", "[]"]),
+            "table<integer>" => (&["{ signal = 1 }", "{}"], &["1", "{ signal = \"x\" }"]),
             other => panic!("KNOWN_KEYS names the unknown value type `{other}`"),
         }
     }
@@ -1729,7 +2546,7 @@ version = \"1.0.0\"
     #[test]
     fn known_key_types_are_the_types_the_reader_accepts() {
         for (section, keys) in KNOWN_KEYS {
-            for (key, value_type) in *keys {
+            for (key, value_type, _) in *keys {
                 let (right, wrong) = type_samples(value_type);
                 for value in right {
                     let text = manifest_with(section, key, value);

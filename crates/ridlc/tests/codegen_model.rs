@@ -1050,3 +1050,619 @@ fn the_cabin_deployment_section_is_rendered_end_to_end() {
 }"#
     );
 }
+
+/// The package every podbuf layout test lowers: a struct whose head has pad
+/// bytes, a union with a struct arm and a scalar arm, and a struct with an
+/// optional field, an inline struct, an inline union, a string, a float and a
+/// map.
+const PODBUF_SOURCE: &str = "package demo.pod\n\n\
+    type Name : string [0..8]\n\
+    type Code : integer [0..65535]\n\n\
+    struct Inner {\n  a : integer [0..255]\n  b : integer [0..4294967295]\n}\n\n\
+    union Shape {\n  inner : Inner\n  code : Code\n}\n\n\
+    struct Sample {\n  flag : boolean\n  big : float [0.0..1.0 step 0.5]\n  \
+    name : Name\n  maybe : Code?\n  inner : Inner\n  shape : Shape\n  \
+    table : [string [1..4] : Inner; 0..4]\n}\n\n\
+    struct Flagged {\n  readings : [Code; 1..8]\n  \
+    o1 : integer [0..255]?\n  o2 : integer [0..255]?\n  o3 : integer [0..255]?\n  \
+    o4 : integer [0..255]?\n  o5 : integer [0..255]?\n  o6 : integer [0..255]?\n  \
+    o7 : integer [0..255]?\n  o8 : integer [0..255]?\n  o9 : integer [0..255]?\n}\n\n\
+    struct Twin1 {\n  x : integer [0..255]\n}\n\n\
+    struct Twin2 {\n  x : integer [0..255]\n}\n\n\
+    struct Both {\n  a : Twin1\n  b : Twin2\n}\n";
+
+fn podbuf_model() -> v1::Model {
+    let compiled = ridlc::compile("pod.typl", PODBUF_SOURCE);
+    let errors: Vec<_> = compiled
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == Severity::Error)
+        .map(|diagnostic| format!("{}: {}", diagnostic.code.0, diagnostic.message))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "the source must compile clean: {errors:?}"
+    );
+    codegen::lower(&compiled.package, &[])
+}
+
+/// The index in `Model.declarations` of the declaration called `name`.
+fn declaration_index(model: &v1::Model, name: &str) -> u32 {
+    model
+        .declarations
+        .iter()
+        .position(|declaration| {
+            declaration
+                .name
+                .as_ref()
+                .is_some_and(|n| n.declared == name)
+        })
+        .unwrap_or_else(|| panic!("no declaration {name}")) as u32
+}
+
+/// The head of the declaration called `name`, and its index in `heads`.
+fn declaration_head<'m>(model: &'m v1::Model, name: &str) -> (u32, &'m v1::PodbufHead) {
+    let declaration = declaration_index(model, name);
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    projection
+        .heads
+        .iter()
+        .enumerate()
+        .find(|(_, head)| head.source == Some(v1::podbuf_head::Source::Declaration(declaration)))
+        .map(|(index, head)| (index as u32, head))
+        .unwrap_or_else(|| panic!("no head for {name}"))
+}
+
+fn field<'h>(head: &'h v1::PodbufHead, name: &str) -> &'h v1::PodbufField {
+    head.fields
+        .iter()
+        .find(|field| {
+            matches!(
+                field.source.as_ref().and_then(|s| s.kind.as_ref()),
+                Some(v1::podbuf_source::Kind::Field(f)) if f.name == name
+            )
+        })
+        .unwrap_or_else(|| panic!("no field {name}"))
+}
+
+fn form_kind(field: &v1::PodbufField) -> &v1::podbuf_form::Kind {
+    field
+        .form
+        .as_ref()
+        .and_then(|form| form.kind.as_ref())
+        .expect("a form")
+}
+
+#[test]
+fn the_model_carries_the_podbuf_head_of_every_struct() {
+    let model = podbuf_model();
+    let (_, inner) = declaration_head(&model, "Inner");
+    assert_eq!((inner.size, inner.align), (8, 8));
+    assert_eq!(
+        inner
+            .fields
+            .iter()
+            .map(|f| (f.offset, f.size, f.align))
+            .collect::<Vec<_>>(),
+        vec![(0, 1, 1), (4, 4, 4)]
+    );
+    assert_eq!(
+        inner
+            .pads
+            .iter()
+            .map(|p| (p.offset, p.size))
+            .collect::<Vec<_>>(),
+        vec![(1, 3)]
+    );
+    assert_eq!(
+        form_kind(field(inner, "a")),
+        &v1::podbuf_form::Kind::Int(v1::PodbufInt {
+            width: v1::IntWidth::U8 as i32,
+            signed: false,
+        })
+    );
+
+    let (_, sample) = declaration_head(&model, "Sample");
+    assert_eq!(sample.size, 48);
+    let offsets: Vec<_> = sample
+        .fields
+        .iter()
+        .map(|f| (f.offset, f.size, f.align))
+        .collect();
+    assert_eq!(
+        offsets,
+        vec![
+            (0, 1, 1),
+            (1, 1, 1),
+            (2, 2, 2),
+            (4, 4, 4),
+            (8, 8, 4),
+            (16, 8, 8),
+            (24, 16, 8),
+            (40, 8, 4)
+        ]
+    );
+    assert_eq!(
+        form_kind(field(sample, "name")),
+        &v1::podbuf_form::Kind::Descriptor(Box::new(v1::PodbufDescriptor {
+            kind: Some(v1::podbuf_descriptor::Kind::Text(v1::PodbufBound {
+                min: 0,
+                max: 8
+            })),
+        }))
+    );
+}
+
+#[test]
+fn an_optional_field_names_its_flag_bit_and_the_flags_field_has_a_source() {
+    let model = podbuf_model();
+    let (_, sample) = declaration_head(&model, "Sample");
+    assert_eq!(
+        field(sample, "maybe").optional,
+        Some(v1::PodbufFlagBit { flags: 0, bit: 0 })
+    );
+    assert!(sample.fields.iter().any(|f| f.offset == 1
+        && f.source.as_ref().and_then(|s| s.kind.as_ref())
+            == Some(&v1::podbuf_source::Kind::Flags(0))));
+}
+
+#[test]
+fn an_inline_field_names_the_head_of_its_type() {
+    let model = podbuf_model();
+    let (inner_at, _) = declaration_head(&model, "Inner");
+    let (shape_at, _) = declaration_head(&model, "Shape");
+    let (_, sample) = declaration_head(&model, "Sample");
+    assert_eq!(
+        form_kind(field(sample, "inner")),
+        &v1::podbuf_form::Kind::InlineHead(inner_at)
+    );
+    assert_eq!(
+        form_kind(field(sample, "shape")),
+        &v1::podbuf_form::Kind::InlineHead(shape_at)
+    );
+}
+
+#[test]
+fn a_union_head_carries_its_tag_and_one_head_per_arm() {
+    let model = podbuf_model();
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    let shape_decl = declaration_index(&model, "Shape");
+    let (_, shape) = declaration_head(&model, "Shape");
+    assert_eq!(shape.size, 16);
+    let kinds: Vec<_> = shape
+        .fields
+        .iter()
+        .map(|f| {
+            (
+                f.offset,
+                f.size,
+                f.source.as_ref().and_then(|s| s.kind.clone()),
+            )
+        })
+        .collect();
+    assert_eq!(kinds[0], (0, 1, Some(v1::podbuf_source::Kind::Tag(true))));
+    assert_eq!(kinds[1].0, 4);
+    assert_eq!(kinds[1].1, 8);
+    assert_eq!(kinds[1].2, Some(v1::podbuf_source::Kind::Arm(true)));
+    let Some(v1::podbuf_form::Kind::Descriptor(descriptor)) =
+        shape.fields[1].form.as_ref().and_then(|f| f.kind.clone())
+    else {
+        panic!("the active arm is a descriptor");
+    };
+    let Some(v1::podbuf_descriptor::Kind::Arms(arms)) = descriptor.kind else {
+        panic!("a descriptor to the arms");
+    };
+    assert_eq!(arms.arms.len(), 2);
+    for (position, arm) in arms.arms.iter().enumerate() {
+        assert_eq!(arm.ordinal, position as u32 + 1);
+        let head = &projection.heads[arm.head as usize];
+        assert_eq!(
+            head.source,
+            Some(v1::podbuf_head::Source::Arm(v1::ArmHead {
+                declaration: shape_decl,
+                foreign: None,
+                arm: arm.ordinal,
+            }))
+        );
+    }
+    // The scalar arm is a one-field head whose value is at offset 0.
+    let scalar = &projection.heads[arms.arms[1].head as usize];
+    assert_eq!(scalar.size, 8);
+    assert_eq!(scalar.fields.len(), 1);
+    assert_eq!(scalar.fields[0].offset, 0);
+    assert_eq!(
+        scalar.fields[0]
+            .source
+            .as_ref()
+            .and_then(|s| s.kind.clone()),
+        Some(v1::podbuf_source::Kind::Arm(true))
+    );
+}
+
+#[test]
+fn a_map_field_names_its_entry_head() {
+    let model = podbuf_model();
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    let (inner_at, _) = declaration_head(&model, "Inner");
+    let (_, sample) = declaration_head(&model, "Sample");
+    let v1::podbuf_form::Kind::Descriptor(descriptor) = form_kind(field(sample, "table")) else {
+        panic!("a descriptor");
+    };
+    let Some(v1::podbuf_descriptor::Kind::Map(map)) = descriptor.kind.as_ref() else {
+        panic!("a map");
+    };
+    assert_eq!((map.elem_size, map.min, map.max), (16, 0, 4));
+    let entry = &projection.heads[map.entry_head as usize];
+    assert_eq!(
+        entry.source,
+        Some(v1::podbuf_head::Source::MapEntry(v1::MapEntry {
+            path: vec!["Sample".to_string(), "table".to_string()],
+        }))
+    );
+    assert_eq!(entry.size, 16);
+    let value = &entry.fields[1];
+    assert_eq!(value.offset, 8);
+    assert_eq!(
+        value.source.as_ref().and_then(|s| s.kind.clone()),
+        Some(v1::podbuf_source::Kind::Value(true))
+    );
+    assert_eq!(
+        value.form.as_ref().and_then(|f| f.kind.clone()),
+        Some(v1::podbuf_form::Kind::InlineHead(inner_at))
+    );
+}
+
+#[test]
+fn every_head_index_of_the_corpus_points_inside_the_list() {
+    let mut checked = 0usize;
+    for (entry, packages) in corpus_packages() {
+        for package in &packages {
+            let others: Vec<&v2::Package> = packages.iter().collect();
+            let model = codegen::lower(package, &others);
+            let Some(projection) = model.podbuf.as_ref() else {
+                continue;
+            };
+            let count = projection.heads.len() as u32;
+            for head in &projection.heads {
+                let mut forms: Vec<&v1::PodbufForm> =
+                    head.fields.iter().filter_map(|f| f.form.as_ref()).collect();
+                while let Some(form) = forms.pop() {
+                    match form.kind.as_ref() {
+                        Some(v1::podbuf_form::Kind::InlineHead(at)) => {
+                            assert!(*at < count, "{entry}: an inline head is outside the list");
+                            checked += 1;
+                        }
+                        Some(v1::podbuf_form::Kind::InlineArray(array)) => {
+                            forms.extend(array.element.as_deref());
+                        }
+                        Some(v1::podbuf_form::Kind::Descriptor(descriptor)) => {
+                            match descriptor.kind.as_ref() {
+                                Some(v1::podbuf_descriptor::Kind::Array(array)) => {
+                                    forms.extend(array.element.as_deref());
+                                }
+                                Some(v1::podbuf_descriptor::Kind::Map(map)) => {
+                                    assert!(map.entry_head < count);
+                                    checked += 1;
+                                }
+                                Some(v1::podbuf_descriptor::Kind::Arms(arms)) => {
+                                    for arm in &arms.arms {
+                                        assert!(arm.head < count);
+                                        checked += 1;
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        checked > 0,
+        "the corpus must offer head references to check"
+    );
+}
+
+#[test]
+fn every_corpus_package_that_lays_out_carries_its_podbuf_projection_through_json() {
+    let mut with_heads = 0usize;
+    for (entry, packages) in corpus_packages() {
+        for package in &packages {
+            let others: Vec<&v2::Package> = packages.iter().collect();
+            let model = codegen::lower(package, &others);
+            let json = codegen::to_json_pretty(&model).expect("the model serializes");
+            let decoded = codegen::from_json(&json).expect("the model reads back");
+            assert_eq!(decoded.podbuf, model.podbuf, "{entry}: {}", package.name);
+            let value: serde_json::Value = serde_json::from_str(&json).expect("JSON");
+            if let Some(projection) = &model.podbuf
+                && !projection.heads.is_empty()
+            {
+                with_heads += 1;
+                assert!(
+                    value["podbuf"]["heads"]
+                        .as_array()
+                        .is_some_and(|h| !h.is_empty())
+                );
+            }
+        }
+    }
+    assert!(with_heads > 0, "the corpus must offer a package with heads");
+}
+
+#[test]
+fn the_veh_cluster_fault_event_has_the_head_the_law_gives() {
+    let packages = corpus_packages()
+        .into_iter()
+        .find(|(entry, _)| entry == "veh-cluster")
+        .expect("the veh-cluster corpus")
+        .1;
+    let package = packages
+        .iter()
+        .find(|package| package.name == "veh.cluster")
+        .expect("the veh.cluster package");
+    let others: Vec<&v2::Package> = packages.iter().collect();
+    let model = codegen::lower(package, &others);
+    let (_, event) = declaration_head(&model, "FaultEvent");
+    assert_eq!(event.size, 24);
+    assert_eq!(
+        event.fields.iter().map(|f| f.offset).collect::<Vec<_>>(),
+        vec![0, 4, 16]
+    );
+    assert_eq!(
+        event
+            .pads
+            .iter()
+            .map(|p| (p.offset, p.size))
+            .collect::<Vec<_>>(),
+        vec![(2, 2), (12, 4)]
+    );
+    let json = codegen::to_json_pretty(&model).expect("the model serializes");
+    let value: serde_json::Value = serde_json::from_str(&json).expect("JSON");
+    assert!(
+        value["podbuf"]["heads"]
+            .as_array()
+            .expect("heads")
+            .iter()
+            .any(|head| head["size"] == 24),
+        "the canonical JSON carries the 24-byte head"
+    );
+}
+
+#[test]
+fn a_bounded_array_names_its_stride_and_its_bounds() {
+    let model = podbuf_model();
+    let (_, flagged) = declaration_head(&model, "Flagged");
+    let v1::podbuf_form::Kind::Descriptor(descriptor) = form_kind(field(flagged, "readings"))
+    else {
+        panic!("a descriptor");
+    };
+    let Some(v1::podbuf_descriptor::Kind::Array(array)) = descriptor.kind.as_ref() else {
+        panic!("an array");
+    };
+    assert_eq!((array.elem_size, array.min, array.max), (2, 1, 8));
+    assert_eq!(
+        array.element.as_ref().and_then(|e| e.kind.clone()),
+        Some(v1::podbuf_form::Kind::Int(v1::PodbufInt {
+            width: v1::IntWidth::U16 as i32,
+            signed: false,
+        }))
+    );
+}
+
+#[test]
+fn optional_fields_take_bits_in_order_and_a_ninth_takes_a_second_flags_field() {
+    let model = podbuf_model();
+    let (_, flagged) = declaration_head(&model, "Flagged");
+    let bits: Vec<_> = (1..=9)
+        .map(|n| {
+            let bit = field(flagged, &format!("o{n}")).optional.expect("optional");
+            (bit.flags, bit.bit)
+        })
+        .collect();
+    assert_eq!(
+        bits,
+        vec![
+            (0, 0),
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (0, 5),
+            (0, 6),
+            (0, 7),
+            (1, 0)
+        ]
+    );
+    let flags: Vec<_> = flagged
+        .fields
+        .iter()
+        .filter_map(|f| match f.source.as_ref().and_then(|s| s.kind.as_ref()) {
+            Some(v1::podbuf_source::Kind::Flags(index)) => Some(*index),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(flags, vec![0, 1]);
+}
+
+/// Two declarations with the same layout are two heads, and a field names the
+/// head of the type it was written with.
+#[test]
+fn two_declarations_with_one_layout_keep_their_own_heads() {
+    let model = podbuf_model();
+    let (one, _) = declaration_head(&model, "Twin1");
+    let (two, _) = declaration_head(&model, "Twin2");
+    assert_ne!(one, two);
+    let (_, both) = declaration_head(&model, "Both");
+    assert_eq!(
+        form_kind(field(both, "a")),
+        &v1::podbuf_form::Kind::InlineHead(one)
+    );
+    assert_eq!(
+        form_kind(field(both, "b")),
+        &v1::podbuf_form::Kind::InlineHead(two)
+    );
+}
+
+/// The model of package `p.b`, which imports from `p.a`, in a two-member
+/// workspace.
+fn two_package_model(a: &str, b: &str) -> v1::Model {
+    let root = tempfile::tempdir().expect("a temp dir");
+    let write = |path: &str, text: &str| {
+        let path = root.path().join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    write(
+        "a/ridl.toml",
+        "[package]\nname = \"p.a\"\nversion = \"1.0.0\"\n",
+    );
+    write("a/a.typl", a);
+    write(
+        "b/ridl.toml",
+        "[package]\nname = \"p.b\"\nversion = \"1.0.0\"\n",
+    );
+    write("b/b.typl", b);
+    let mut db = RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, root.path()).expect("the workspace loads");
+    let mut packages: Vec<v2::Package> = output
+        .checked
+        .iter()
+        .map(|checked| checked.ir.clone())
+        .collect();
+    packages.push(output.std_ir.clone());
+    let others: Vec<&v2::Package> = packages.iter().collect();
+    let local = packages.iter().find(|p| p.name == "p.b").expect("p.b");
+    codegen::lower(local, &others)
+}
+
+/// A struct of another package, written inline, has a head of its own that
+/// points into `Model.foreign`.
+#[test]
+fn a_foreign_struct_written_inline_gets_a_foreign_head() {
+    let model = two_package_model(
+        "package p.a\n\nstruct Remote {\n  x : integer [0..255]\n  y : integer [0..65535]\n}\n",
+        "package p.b\n\nimport p.a.Remote\n\nstruct Local {\n  r : Remote\n}\n",
+    );
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (_, head) = declaration_head(&model, "Local");
+    let v1::podbuf_form::Kind::InlineHead(at) = form_kind(field(head, "r")) else {
+        panic!("an inline head");
+    };
+    let remote = &projection.heads[*at as usize];
+    let Some(v1::podbuf_head::Source::Foreign(index)) = remote.source else {
+        panic!("a foreign source, got {:?}", remote.source);
+    };
+    let foreign = &model.foreign[index as usize];
+    assert_eq!(foreign.package, "p.a");
+    assert_eq!(
+        foreign
+            .declaration
+            .as_ref()
+            .and_then(|d| d.name.as_ref())
+            .map(|n| n.declared.as_str()),
+        Some("Remote")
+    );
+    assert_eq!(remote.size, 8);
+    assert_eq!(
+        remote
+            .fields
+            .iter()
+            .map(|f| (f.offset, f.size))
+            .collect::<Vec<_>>(),
+        vec![(0, 1), (2, 2)]
+    );
+}
+
+/// A union of another package, written inline, has its arms indexed through
+/// `Model.foreign`, and a tuple inside a struct of another package has a head
+/// of its own.
+#[test]
+fn a_foreign_union_and_a_foreign_tuple_keep_their_heads() {
+    let model = two_package_model(
+        "package p.a\n\ntype Code : integer [0..65535]\n\nstruct Leaf {\n  x : integer [0..255]\n}\n\n\
+         union Pick {\n  leaf : Leaf\n  code : Code\n}\n\n\
+         struct Holder {\n  t : (a: integer [0..255], b: integer [0..65535])\n  inner : Leaf\n}\n",
+        "package p.b\n\nimport p.a.Pick\nimport p.a.Holder\n\nstruct Local {\n  p : Pick\n  h : Holder\n}\n",
+    );
+    let projection = model.podbuf.as_ref().expect("a podbuf projection");
+    assert!(projection.refused.is_empty(), "{:?}", projection.refused);
+    let (_, local) = declaration_head(&model, "Local");
+    let foreign_name = |source: &Option<v1::podbuf_head::Source>| match source {
+        Some(v1::podbuf_head::Source::Foreign(index)) => model.foreign[*index as usize]
+            .declaration
+            .as_ref()
+            .and_then(|d| d.name.as_ref())
+            .map(|n| n.declared.clone()),
+        _ => None,
+    };
+    let v1::podbuf_form::Kind::InlineHead(pick_at) = form_kind(field(local, "p")) else {
+        panic!("an inline head");
+    };
+    let pick = &projection.heads[*pick_at as usize];
+    assert_eq!(foreign_name(&pick.source).as_deref(), Some("Pick"));
+    let v1::podbuf_form::Kind::Descriptor(descriptor) = pick.fields[1]
+        .form
+        .as_ref()
+        .and_then(|f| f.kind.as_ref())
+        .expect("a form")
+    else {
+        panic!("the active arm is a descriptor");
+    };
+    let Some(v1::podbuf_descriptor::Kind::Arms(arms)) = descriptor.kind.as_ref() else {
+        panic!("arms");
+    };
+    let pick_foreign = match &pick.source {
+        Some(v1::podbuf_head::Source::Foreign(index)) => *index,
+        _ => unreachable!(),
+    };
+    for arm in &arms.arms {
+        let head = &projection.heads[arm.head as usize];
+        assert_eq!(
+            head.source,
+            Some(v1::podbuf_head::Source::Arm(v1::ArmHead {
+                declaration: 0,
+                arm: arm.ordinal,
+                foreign: Some(pick_foreign),
+            }))
+        );
+    }
+
+    let v1::podbuf_form::Kind::InlineHead(holder_at) = form_kind(field(local, "h")) else {
+        panic!("an inline head");
+    };
+    let holder = &projection.heads[*holder_at as usize];
+    assert_eq!(foreign_name(&holder.source).as_deref(), Some("Holder"));
+    let v1::podbuf_form::Kind::InlineHead(tuple_at) = form_kind(field(holder, "t")) else {
+        panic!("an inline head");
+    };
+    let tuple = &projection.heads[*tuple_at as usize];
+    assert_eq!(
+        tuple.source,
+        Some(v1::podbuf_head::Source::NestedTuple(v1::NestedTuple {
+            path: vec!["p.a.Holder".to_string(), "t".to_string()],
+        }))
+    );
+    assert_eq!(tuple.size, 8);
+    assert_eq!(tuple.fields.len(), 2);
+    // The foreign nested tuple carries the typl name of each member next to
+    // its position: a header that defines the head again has a name to read.
+    let members: Vec<(Option<&v1::podbuf_source::Kind>, &str)> = tuple
+        .fields
+        .iter()
+        .map(|field| {
+            let source = field.source.as_ref().expect("a source");
+            (source.kind.as_ref(), source.position_name.as_str())
+        })
+        .collect();
+    assert_eq!(
+        members,
+        vec![
+            (Some(&v1::podbuf_source::Kind::Position(1)), "a"),
+            (Some(&v1::podbuf_source::Kind::Position(2)), "b"),
+        ]
+    );
+}

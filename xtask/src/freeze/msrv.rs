@@ -136,7 +136,7 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let lines = dump(root).unwrap();
         assert!(
-            lines.iter().any(|l| l == "ridl-rt rust-version=1.83"),
+            lines.iter().any(|l| l == "ridl-rt rust-version=1.88"),
             "{lines:?}"
         );
         assert!(

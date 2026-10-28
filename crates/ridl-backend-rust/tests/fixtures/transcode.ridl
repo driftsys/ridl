@@ -1,0 +1,68 @@
+// The transcode equivalence fixture.
+//
+// Structs, an enum and a union, each of which both the FlatBuffers and the
+// proto3 codec carry as a payload root, and `interface Gauge`, whose
+// two-parameter call induces `GaugeSetParams`, which both codecs root as well.
+// `Reading` holds scalars, a string, an enum and a float; `Panel` holds an
+// optional field, an array, a map and a nested struct. The generated
+// `transcode_flatbuffers_to_proto3` and `transcode_proto3_to_flatbuffers`
+// functions exist for each. Kept self-contained, with no cross-package
+// import, because the compile path this fixture is read through
+// (`ridlc::compile`) wraps one file as a single-file synthetic package.
+
+package tx.demo
+
+/// A count with a lower bound of 0 and an upper bound of 200.
+type Count : integer [0..200]
+
+/// A level whose range is negative to positive and includes 0.
+type Level : integer [-5..10]
+
+/// A label.
+type Label : string [0..16]
+
+enum Mode {
+  IDLE   = 0
+  ACTIVE = 1
+  FAULT  = 2
+}
+
+struct Reading {
+  count : Count
+  level : Level
+  label : Label
+  mode  : Mode
+  ratio : float [-1.0..1.0]
+  flag  : boolean
+}
+
+/// A key of the map field.
+type Key : string [1..8]
+
+/// A struct that nests inside `Panel`.
+struct Inner {
+  count : Count
+  label : Label
+}
+
+/// An optional field, an array, a map and a nested struct.
+struct Panel {
+  note   : Label?
+  levels : [Level; 0..4]
+  byKey  : [Key : Count; 0..3]
+  inner  : Inner
+}
+
+union Outcome {
+  number : Count
+  text   : Label
+  mode   : Mode
+  reading : Reading
+}
+
+/// An interface whose multi-parameter call induces a payload type, so the
+/// induced struct gets transcode functions too.
+interface Gauge {
+  /// Two parameters: the request type is an induced struct.
+  command set(count: Count, level: Level) @[..50ms]
+}

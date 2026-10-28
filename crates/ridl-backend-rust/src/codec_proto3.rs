@@ -120,7 +120,13 @@ use crate::{
 };
 
 /// Emits the proto3 codec for the package `ctx` was built over.
-pub(crate) fn package_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
+///
+/// Also returns the types it emits a `Payload<Proto3>` implementation for,
+/// recorded during the same walk, so the transcode functions follow the
+/// codec's own rule.
+pub(crate) fn package_items(
+    ctx: &Ctx,
+) -> Result<(Vec<TokenStream>, Vec<crate::transcode::PayloadOwner>), GenerateError> {
     Codec::new(ctx)?.items()
 }
 
@@ -990,35 +996,7 @@ impl<'a> Codec<'a> {
     /// wire whatever its interface's identity; no name is needed, because
     /// nothing here refuses.
     fn interaction_roots(&self) -> HashMap<u32, u32> {
-        let mut roots: HashMap<u32, u32> = HashMap::new();
-        for interface in &self.ctx.model.interfaces {
-            for (_, interaction) in interactions(interface) {
-                let payloads: Vec<(Option<&v1::TupleRef>, Option<&v1::PayloadSizes>)> =
-                    match interaction.shape.as_ref() {
-                        Some(v1::interaction::Shape::Command(command)) => {
-                            vec![(
-                                command.request_tuple.as_ref(),
-                                command.request_sizes.as_ref(),
-                            )]
-                        }
-                        Some(v1::interaction::Shape::Query(query)) => vec![
-                            (query.request_tuple.as_ref(), query.request_sizes.as_ref()),
-                            (query.reply_tuple.as_ref(), query.reply_sizes.as_ref()),
-                        ],
-                        _ => Vec::new(),
-                    };
-                for (reference, sizes) in payloads {
-                    let Some(reference) = reference else {
-                        continue;
-                    };
-                    let state = sizes.and_then(|sizes| sizes.proto3.as_ref());
-                    if let Ok(bound) = bound_state(state) {
-                        roots.insert(reference.index, bound);
-                    }
-                }
-            }
-        }
-        roots
+        tuple_roots(self.ctx, |sizes| sizes.proto3.as_ref())
     }
 
     /// The induced tuples reachable from the declarations and from the
@@ -1098,8 +1076,11 @@ impl<'a> Codec<'a> {
         found
     }
 
-    fn items(&self) -> Result<Vec<TokenStream>, GenerateError> {
+    fn items(
+        &self,
+    ) -> Result<(Vec<TokenStream>, Vec<crate::transcode::PayloadOwner>), GenerateError> {
         let mut items: Vec<TokenStream> = Vec::new();
+        let mut owners: Vec<crate::transcode::PayloadOwner> = Vec::new();
         for message in self.messages()? {
             // `None`: a tuple encoded only inside its owner, which crosses
             // the wire on its own in no encoding and gets no implementation.
@@ -1124,6 +1105,10 @@ impl<'a> Codec<'a> {
             ];
             if let Some(bound) = bound {
                 functions.push(self.payload_impl(owner, &ty, bound));
+                owners.push(crate::transcode::PayloadOwner {
+                    name: owner.to_string(),
+                    visibility: message.visibility,
+                });
             }
             items.extend(
                 functions
@@ -1131,7 +1116,7 @@ impl<'a> Codec<'a> {
                     .map(|item| allow_dead_code_if_internal(message.visibility, item)),
             );
         }
-        Ok(items)
+        Ok((items, owners))
     }
 
     /// The proto3 bound of the declaration's root message, or the refusal
@@ -2267,7 +2252,8 @@ impl<'a> Codec<'a> {
                 // refused before any element is read. `chunks` and its last
                 // chunk rather than `chunks_exact` and its remainder, and no
                 // `%`: clippy proposes `as_chunks` and `is_multiple_of` for
-                // those, which Rust 1.83 does not have.
+                // those, which Rust before 1.88 does not have (the form was
+                // chosen when the minimum was 1.83).
                 quote! {
                     if __run
                         .chunks(#width)
@@ -2905,6 +2891,45 @@ impl<'a> Codec<'a> {
             }
         }
     }
+}
+
+/// The induced tuples the interactions of a package send on their own, each
+/// with the bound `select` reads from the interaction's payload sizes, when
+/// that state is bounded. The proto3 and podbuf codecs share the walk and
+/// differ in the encoding's state.
+pub(crate) fn tuple_roots(
+    ctx: &Ctx,
+    select: fn(&v1::PayloadSizes) -> Option<&v1::SizeState>,
+) -> HashMap<u32, u32> {
+    let mut roots: HashMap<u32, u32> = HashMap::new();
+    for interface in &ctx.model.interfaces {
+        for (_, interaction) in interactions(interface) {
+            let payloads: Vec<(Option<&v1::TupleRef>, Option<&v1::PayloadSizes>)> =
+                match interaction.shape.as_ref() {
+                    Some(v1::interaction::Shape::Command(command)) => {
+                        vec![(
+                            command.request_tuple.as_ref(),
+                            command.request_sizes.as_ref(),
+                        )]
+                    }
+                    Some(v1::interaction::Shape::Query(query)) => vec![
+                        (query.request_tuple.as_ref(), query.request_sizes.as_ref()),
+                        (query.reply_tuple.as_ref(), query.reply_sizes.as_ref()),
+                    ],
+                    _ => Vec::new(),
+                };
+            for (reference, sizes) in payloads {
+                let Some(reference) = reference else {
+                    continue;
+                };
+                let state = sizes.and_then(select);
+                if let Ok(bound) = bound_state(state) {
+                    roots.insert(reference.index, bound);
+                }
+            }
+        }
+    }
+    roots
 }
 
 /// The bound a proto3 size state carries, or the cause of its absence as

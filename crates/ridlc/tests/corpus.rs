@@ -513,6 +513,82 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-144", Showcase),
     ("RIDL-145", Showcase),
     ("RIDL-149", Showcase),
+    (
+        "RIDL-150",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/payload_ceiling.rs",
+            reason: "the payload ceiling check runs inside the shared check pass, over the codegen \
+                     model and the manifest's `[backend.<name>]` encodings, and the corpus \
+                     runner assembles its own passes, so the showcase compile never reaches \
+                     it. Provoked by \
+                     `a_struct_of_two_strings_at_the_advised_bound_is_above_the_ceiling` \
+                     and the other tests in `crates/ridlc/tests/payload_ceiling.rs`",
+        },
+    ),
+    (
+        "RIDL-151",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/payload_limits.rs",
+            reason: "the payload limits come from the `[limits]` table of a unit's manifest and \
+                     are checked after lowering, and the corpus runner assembles its own passes, \
+                     so the showcase compile never reaches them. Provoked by \
+                     `the_declared_limit_boundary_is_exact` and the other tests in \
+                     `crates/ridlc/tests/payload_limits.rs`",
+        },
+    ),
+    (
+        "RIDL-152",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/payload_limits.rs",
+            reason: "the `[limits]` table is read from a unit's manifest, which the corpus \
+                     runner does not load. Provoked by `an_unmatched_name_is_ridl_152` in \
+                     `crates/ridlc/tests/payload_limits.rs`",
+        },
+    ),
+    (
+        "RIDL-153",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/podbuf_checks.rs",
+            reason: "the podbuf checks run in the shared check pass, over the manifest's \
+                     `[backend.<name>]` encodings, and the corpus runner assembles its own \
+                     passes, so the showcase compile never reaches them. Provoked by \
+                     `a_type_above_u32_max_bytes_is_ridl_153_naming_it` in \
+                     `crates/ridlc/tests/podbuf_checks.rs`",
+        },
+    ),
+    (
+        "RIDL-154",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/podbuf_checks.rs",
+            reason: "the podbuf checks run in the shared check pass, over the manifest's \
+                     `[backend.<name>]` encodings, and the corpus runner assembles its own \
+                     passes, so the showcase compile never reaches them. Provoked by \
+                     `an_array_past_65535_elements_or_bytes_per_element_is_ridl_154` in \
+                     `crates/ridlc/tests/podbuf_checks.rs`",
+        },
+    ),
+    (
+        "RIDL-155",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/podbuf_checks.rs",
+            reason: "the podbuf checks run in the shared check pass, over the manifest's \
+                     `[backend.<name>]` encodings, and the corpus runner assembles its own \
+                     passes, so the showcase compile never reaches them. Provoked by \
+                     `a_deprecated_field_with_no_valid_value_is_ridl_155` in \
+                     `crates/ridlc/tests/podbuf_checks.rs`",
+        },
+    ),
+    (
+        "RIDL-156",
+        Elsewhere {
+            fixture: "crates/ridl/tests/lints.rs",
+            reason: "the lint runs in `ridl check` only, because it reads the published \
+                     baseline and `ridlc` does not, so the showcase compile never reaches it. \
+                     Provoked by \
+                     `a_struct_whose_order_wastes_padding_draws_ridl_156_with_both_sizes_and_the_saving_order` \
+                     in `crates/ridl/tests/lints.rs`",
+        },
+    ),
     ("RIDL-201", Showcase),
     ("RIDL-202", Showcase),
     ("RIDL-301", Showcase),
@@ -1533,7 +1609,12 @@ fn veh_common_generated_rust_compiles_with_rustc() {
 fn generate_rust(
     ir: &ridl_ir::v2::Package,
 ) -> Result<ridl_backend_rust::Generated, ridl_backend_rust::GenerateError> {
-    ridl_backend_rust::generate_pipeline(ir, &[ridl_backend_rust::WireEncoding::FlatBuffers], &[])
+    ridl_backend_rust::generate_pipeline(
+        ir,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+        false,
+        &[],
+    )
 }
 
 /// The generated Rust of every package in the entry rooted at `entry`, as
@@ -1974,7 +2055,7 @@ fn checked_ir(entry: &Path, package: &str) -> ridl_ir::v2::Package {
 /// standard package's own generated TypeScript first — the TypeScript
 /// counterpart of [`generated_packages`]. One file per package, because the
 /// emitted cross-package imports are module specifiers
-/// (`import * as fleet_contracts from './fleet.contracts'`) that only resolve
+/// (`import * as fleet_contracts from './fleet.contracts.js'`) that only resolve
 /// against a file of that name.
 fn generated_typescript_packages(entry: &Path) -> Vec<(String, String)> {
     let mut db = RidlDatabase::default();
@@ -2092,10 +2173,37 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
         .expect("the discovered tsc must be runnable");
 
     let succeeded = status.success();
+
+    // A second run treats the modules as ESM under node16 resolution, which
+    // rejects a relative import without a `.js` suffix (TS2835). The commonjs
+    // run above accepts a bare specifier, so it cannot catch a missing suffix.
+    std::fs::write(dir.join("package.json"), "{\"type\":\"module\"}")
+        .expect("the package manifest is written");
+    let esm_status = std::process::Command::new(&tsc.0)
+        .args(&tsc.1)
+        .args([
+            "--noEmit",
+            "--strict",
+            "--target",
+            "es2020",
+            "--module",
+            "node16",
+            "--moduleResolution",
+            "node16",
+        ])
+        .args(&module_paths)
+        .status()
+        .expect("the discovered tsc must be runnable");
+    let esm_succeeded = esm_status.success();
     std::fs::remove_dir_all(&dir).ok();
     assert!(
         succeeded,
         "the generated TypeScript for {label} must type-check under `tsc --strict`, source:\n{all}"
+    );
+    assert!(
+        esm_succeeded,
+        "the generated TypeScript for {label} must type-check as ESM under node16 resolution, \
+         source:\n{all}"
     );
 }
 

@@ -49,7 +49,7 @@ fn refusal(name: &str, source: &str) -> String {
         "{name}.ridl must check clean, so the refusal is the backend's, got: {errors:?}"
     );
     let output = ridlc::compile(&path, source);
-    match generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[]) {
+    match generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[]) {
         Ok(generated) => panic!(
             "{name}.ridl must be refused by the claim table, but the pipeline emitted:\n{}",
             generated.rust_source
@@ -212,7 +212,7 @@ interface Cabin {
 }
 ";
     let output = ridlc::compile("x08b.ridl", source);
-    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("a skipped face claims nothing, so the package builds");
     assert!(
         generated.rust_source.contains("__RIDL_NO_FACE_Cabin"),
@@ -295,6 +295,87 @@ struct LevelFbView {
             "`FbView`",
         ],
     );
+}
+
+/// The podbuf head of `Level` is `LevelPodbufHead`, and its view is
+/// `LevelPodbufView`; a declaration that names either is refused when the
+/// package lists `podbuf`, and builds when it does not, because the names
+/// are claimed only for the codec that emits them.
+#[test]
+fn a_podbuf_head_or_view_named_like_a_declaration_is_refused_with_podbuf_listed() {
+    for suffix in ["PodbufHead", "PodbufView"] {
+        let source = format!(
+            "package probe.podbuf
+
+struct Level {{
+  value : integer [0..100]
+}}
+
+struct Level{suffix} {{
+  level : Level
+}}
+"
+        );
+        let path = "podbuf_claim.ridl";
+        let output = ridlc::compile(path, &source);
+        let err = generate_pipeline(&output.package, &[WireEncoding::Podbuf], false, &[])
+            .expect_err("the pair is refused when podbuf is listed");
+        names_all(
+            &err.message,
+            &[
+                &format!("`Level{suffix}`"),
+                &format!("declaration `Level{suffix}`"),
+                "declaration `Level`",
+                &format!("`{suffix}`"),
+            ],
+        );
+        generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
+            .unwrap_or_else(|err| panic!("the pair builds without podbuf, got: {}", err.message));
+    }
+}
+
+/// The podbuf codec also emits `<Union>PodbufArm`, the enum of arm views,
+/// for a union alone: a declaration named like it is refused with `podbuf`
+/// listed, and a struct's arm name is not claimed.
+#[test]
+fn a_podbuf_arm_enum_named_like_a_declaration_is_refused_for_a_union_only() {
+    let source = "package probe.podbuf
+
+struct Level {
+  value : integer [0..100]
+}
+
+union Choice {
+  level : Level
+}
+
+struct ChoicePodbufArm {
+  level : Level
+}
+
+struct LevelPodbufArm {
+  level : Level
+}
+";
+    let output = ridlc::compile("podbuf_arm_claim.ridl", source);
+    let err = generate_pipeline(&output.package, &[WireEncoding::Podbuf], false, &[])
+        .expect_err("the union's arm enum name is refused when podbuf is listed");
+    names_all(
+        &err.message,
+        &[
+            "`ChoicePodbufArm`",
+            "declaration `ChoicePodbufArm`",
+            "declaration `Choice`",
+            "`PodbufArm`",
+        ],
+    );
+    assert!(
+        !err.message.contains("`LevelPodbufArm`"),
+        "a struct claims no arm enum, got: {}",
+        err.message
+    );
+    generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
+        .unwrap_or_else(|err| panic!("the pair builds without podbuf, got: {}", err.message));
 }
 
 /// X-11: the tuple at `Reading.bounds` is `ReadingBounds`, which a declaration
@@ -495,7 +576,7 @@ fn builds(name: &str, source: &str) -> String {
         "{name}.ridl must check clean, got: {errors:?}"
     );
     let output = ridlc::compile(&path, source);
-    generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], &[])
+    generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .unwrap_or_else(|err| panic!("{name}.ridl must build, got: {}", err.message))
         .rust_source
 }

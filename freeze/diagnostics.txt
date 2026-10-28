@@ -29,6 +29,10 @@ MANI-015 error
 MANI-016 error
 MANI-017 error
 MANI-018 warning lint=vendor-source-not-loaded default=warn
+MANI-019 error
+MANI-020 error
+MANI-021 error
+MANI-022 error
 MANI-101 error
 MANI-102 error
 MANI-103 error
@@ -57,6 +61,13 @@ RIDL-143 error
 RIDL-144 error
 RIDL-145 error
 RIDL-149 error
+RIDL-150 warning lint=payload-above-ceiling default=warn
+RIDL-151 error
+RIDL-152 error
+RIDL-153 error
+RIDL-154 error
+RIDL-155 error
+RIDL-156 info lint=podbuf-padding-order default=info
 RIDL-201 error
 RIDL-202 error
 RIDL-301 error
@@ -142,6 +153,7 @@ TYPL-109 error
 TYPL-110 error
 TYPL-111 error
 TYPL-115 info lint=no-init-value default=info
+TYPL-116 warning lint=bound-above-transfer default=warn
 TYPL-201 error
 TYPL-202 error
 TYPL-203 error

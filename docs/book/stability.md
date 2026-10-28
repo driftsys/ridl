@@ -22,33 +22,36 @@ promise covers them from the first release that contains them.
   (`Client`, `Provider`, `Publisher`, `Event`, `serve` and `Bind`).
 - **The runtime crates.** The public API of `ridl-rt`, `ridl-rt-conformance`,
   `ridl-loopback`, `ridl-descriptor` and `ridl-transport-ws`, and the names of
-  their cargo features.
+  their cargo features, `podbuf` among them.
 - **The codegen plugin protocol.** The messages `ridl.ir.v2` and
   `ridl.codegen.v1`, as a plugin reads and writes them. An enum of the protocol
   gains a value only in a minor release, such as 0.11, because a plugin rejects
   an enum value that it does not know.
 - **The MCP tools.** The tool names and the input and output schemas.
 - **The wire format.** The frame envelope, the `attach` handshake, the inputs of
-  the catalog hash, the emitted `.proto` and `.fbs` mapping and the encoding
-  names.
-- **The minimum Rust version.** Rust 1.83 and edition 2021 for `ridl-rt`,
-  `ridl-rt-conformance`, `ridl-loopback` and `ridl-transport-ws`, and Rust 1.88
-  and edition 2024 for `ridl-descriptor`. The generated crate compiles as
-  edition 2021 with Rust 1.83 with every cargo feature on, and `ridl build`
-  writes `edition = "2021"` in its manifest, so cargo 1.83 reads that manifest
-  as written. From release 0.11, the generated crate also builds on Rust 1.83
-  with default features off. A 0.10.x release does not raise a minimum.
+  the catalog hash, the emitted `.proto` and `.fbs` mapping, the encoding names,
+  and the offset and size of every field of the podbuf head of every struct and
+  union of the frozen corpus.
+- **The minimum Rust version.** Rust 1.88 for `ridl-rt`,
+  `ridl-rt-conformance`, `ridl-loopback`, `ridl-transport-ws` (with every cargo
+  feature) and `ridl-descriptor`, with edition 2021 for the first four and
+  edition 2024 for `ridl-descriptor`. The generated crate compiles as edition
+  2021 with Rust 1.88 with every cargo feature on and with default features
+  off, and `ridl build` writes `edition = "2021"` and `rust-version = "1.88"`
+  in its manifest. A 0.10.x release does not raise a minimum. Releases before
+  the one that raised it to 1.88 had a minimum of Rust 1.83.
 
 The minimum covers the crates RIDL publishes and emits, not later releases of
 their dependencies. A dependency, such as `regex`, can publish a release that
-requires a later Rust, and cargo 1.83 selects the newest release without reading
-its `rust-version`. To build with Rust 1.83, resolve dependencies with a
-resolver that reads `rust-version`: set `rust-version = "1.83"` in your own
-package, and resolve with cargo 1.84 or later with
-`CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback` set, or build from a
-lockfile resolved that way. `just compat-check` resolves the lockfile of the
-crate it emits for its test corpus this way before it builds that crate with
-Rust 1.83.
+requires a later Rust. Edition 2021 selects resolver 2, which by default
+selects the newest release without reading its `rust-version`. To build with
+Rust 1.88, resolve dependencies with a resolver that reads `rust-version`: set
+`rust-version = "1.88"` in your own package (the emitted manifest of the
+generated crate sets it), and resolve with
+`CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback` set or with resolver 3, or
+build from a lockfile resolved that way. `just compat-check` resolves the
+lockfile of the crate it emits for its test corpus this way before it builds
+that crate with Rust 1.88.
 
 ## What may change in 0.10.x
 
@@ -59,7 +62,10 @@ Rust 1.83.
   required one to an existing subcommand or tool, and does not make an optional
   one required. A new subcommand or tool may have required ones.
 - **New lints.** A new lint starts at the `allow` or `info` level, so it does not
-  fail a build that passed before.
+  fail a build that passed before. TYPL-116 (`bound-above-transfer`) and RIDL-150
+  (`payload-above-ceiling`) are the two exceptions: they start at `warn`, which
+  does not fail `ridl check` either, because a payload above the payload ceiling
+  is a defect, even though the codecs do not yet enforce the ceiling.
 - **Message text.** The text of a diagnostic message, of a doc comment and of
   generated docs.
 - **Size and budget values.** For example the size of a header or the sum that a
@@ -86,9 +92,9 @@ and `occurrence` frames, which no test vector of the frame specification §11.1
 shows, the payload-presence rule of §11.1 for a `publish` under `Init` or
 `Invalid(Declared)` and for a `response` under `reply`, which no vector shows,
 and the codes of §4 and §9.6 that no vector carries, among them the `kind`
-values 2 and 5 and the `attach` encodings 2 and 3, and the `ridl-ir` items
-that `ridl-descriptor` re-exports or takes in its signatures
-([#934](https://github.com/driftsys/ridl/issues/934)). A contributor who
+values 2 and 5 and the `attach` encodings 2 and 3, and the `ridl-ir` types
+that appear in `ridl-descriptor` signatures
+([#1010](https://github.com/driftsys/ridl/issues/1010)). A contributor who
 must change a frozen surface follows the steps in `CONTRIBUTING.md`, "Changing a
 frozen surface". The full policy, with the gate that checks each surface and the
 rules for approving a break, is

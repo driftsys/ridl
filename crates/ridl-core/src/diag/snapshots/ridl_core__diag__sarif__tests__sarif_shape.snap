@@ -334,6 +334,16 @@ expression: log
               }
             },
             {
+              "id": "TYPL-116",
+              "name": "bound-above-transfer",
+              "shortDescription": {
+                "text": "`string`/`bytes` bound above the advised transfer limit"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "TYPL-201",
               "shortDescription": {
                 "text": "array without explicit bounds"
@@ -804,6 +814,71 @@ expression: log
               },
               "defaultConfiguration": {
                 "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-150",
+              "name": "payload-above-ceiling",
+              "shortDescription": {
+                "text": "payload above the payload ceiling or with no finite bound"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "RIDL-151",
+              "shortDescription": {
+                "text": "payload above its declared limit or with no finite bound"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-152",
+              "shortDescription": {
+                "text": "a `[limits]` entry names no interaction of its unit"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-153",
+              "shortDescription": {
+                "text": "type too large for podbuf"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-154",
+              "shortDescription": {
+                "text": "array or map exceeds the podbuf descriptor limits"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-155",
+              "shortDescription": {
+                "text": "deprecated field has no valid podbuf value"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-156",
+              "name": "podbuf-padding-order",
+              "shortDescription": {
+                "text": "struct field order wastes podbuf padding"
+              },
+              "defaultConfiguration": {
+                "level": "note"
               }
             },
             {
@@ -1520,7 +1595,7 @@ expression: log
             {
               "id": "MANI-015",
               "shortDescription": {
-                "text": "`[backend.<name>] encodings` is not an array of encoding names, names an unknown encoding, or names one twice"
+                "text": "a `[backend.<name>]` value has the wrong shape: `encodings` is not an array of known, distinct encoding names, `wasm`, `codec` or `transcode` is not a boolean, or a `[limits]` value is not a non-negative integer or a table"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1552,6 +1627,42 @@ expression: log
               },
               "defaultConfiguration": {
                 "level": "warning"
+              }
+            },
+            {
+              "id": "MANI-019",
+              "shortDescription": {
+                "text": "a backend table sets `codec = true` without a Rust wasm codec to run on"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-020",
+              "shortDescription": {
+                "text": "a backend table sets `transcode = true` with fewer than two encodings"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-021",
+              "shortDescription": {
+                "text": "unknown kind in `[limits.kind]`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-022",
+              "shortDescription": {
+                "text": "payload limit above the payload ceiling of 16,256 bytes"
+              },
+              "defaultConfiguration": {
+                "level": "error"
               }
             },
             {
@@ -1655,7 +1766,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 68,
+          "ruleIndex": 69,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1720,7 +1831,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 167,
+          "ruleIndex": 179,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

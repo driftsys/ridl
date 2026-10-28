@@ -1,0 +1,102 @@
+name: npm-release
+
+# Publishes the npm packages of this repository on a `v<version>` tag, the same
+# tag that starts `crates-io-release`. The packages are
+# `@driftsys/ridl-runtime` and `@driftsys/ridl-transport-ws`, built from
+# packages/ridl-runtime and packages/ridl-transport-ws with dnt
+# (`just ts-npm-check` builds and checks the same packages on every pull request
+# that runs the typescript job).
+#
+# Before it builds, the job confirms that the tag's commit is on main (as
+# `crates-io-release` does) and that the tag version equals the version in the
+# deno.json of each package, so the npm and JSR versions cannot differ. A prerelease version
+# publishes under the `next` dist-tag. The job skips a version that is already
+# on npm, so a re-run of a tag after a partial failure does not fail on a
+# duplicate. Publication uses the
+# organization secret NPM_TOKEN, with provenance from the job's OIDC token.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+env:
+  JUST_VERSION: 1.38.0
+
+jobs:
+  publish:
+    name: publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: confirm the tag's commit is on main and matches deno.json
+        run: |
+          set -euo pipefail
+          release_commit=$(git rev-parse "$GITHUB_REF^{commit}")
+          test "$release_commit" = "$GITHUB_SHA"
+          git fetch origin main --quiet
+          git merge-base --is-ancestor "$release_commit" origin/main
+          tag_version="${GITHUB_REF_NAME#v}"
+          for package in ridl-runtime ridl-transport-ws; do
+            manifest_version="$(node -p "require('./packages/${package}/deno.json').version")"
+            if [ "$tag_version" != "$manifest_version" ]; then
+              echo "tag version ${tag_version} differs from the deno.json version ${manifest_version} of ${package}" >&2
+              exit 1
+            fi
+          done
+      - name: install just
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" just
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # The version is read from .deno-version, the one place it is pinned.
+      - name: install deno
+        run: |
+          set -o pipefail
+          deno_version="$(tr -d '[:space:]' < .deno-version)"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$RUNNER_TEMP/deno.zip" \
+            "https://github.com/denoland/deno/releases/download/v${deno_version}/deno-x86_64-unknown-linux-gnu.zip"
+          unzip -o -q "$RUNNER_TEMP/deno.zip" -d "$HOME/.local/bin"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          registry-url: https://registry.npmjs.org
+      - run: just ts-check
+      # Both packages are built before either is published, so a build
+      # failure cannot leave a partial release. The runtime package comes
+      # first. A version that is already on npm is skipped.
+      - name: build the npm packages at the tag version
+        run: |
+          set -euo pipefail
+          for package in ridl-runtime ridl-transport-ws; do
+            (cd "packages/${package}" && deno run -A scripts/build_npm.ts "${GITHUB_REF_NAME}")
+          done
+      - name: publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          for package in ridl-runtime ridl-transport-ws; do
+            (
+              cd "packages/${package}/npm"
+              name="$(node -p "require('./package.json').name")"
+              version="$(node -p "require('./package.json').version")"
+              if npm view "${name}@${version}" version >/dev/null 2>&1; then
+                echo "${name}@${version} is already on npm; skipping."
+                exit 0
+              fi
+              dist_tag=latest
+              case "$version" in *-*) dist_tag=next ;; esac
+              npm publish --access public --provenance --tag "$dist_tag"
+            )
+          done

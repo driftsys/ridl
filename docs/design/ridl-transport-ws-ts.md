@@ -12,12 +12,14 @@ hands to its caller as it arrived, and sends as the caller gave it.
 
 The Rust crate `ridl-transport-ws` is the providing side of the same binding;
 its as-built record is [`ridl-transport-ws.md`](ridl-transport-ws.md), which
-this record follows in structure. Decoding a payload is the generated binding's,
-through the wasm codec of
+this record follows in structure. Verifying a payload is the wasm codec's, of
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 7, which is not built. ADR-0020 decision 6 places the package; its
-dependency row was amended on 2026-10-20 (D-4). The wire rules are the frame
-specification §3 to §9 and §11.1 (binding version 1).
+decision 7, loaded by `@driftsys/ridl-runtime`, and decoding and encoding one is
+the generated codec module's, `<base>.codec.ts`
+([`ts-codec-table.md`](ts-codec-table.md)); the generated faces over this
+package are not built. ADR-0020 decision 6 places the package; its dependency
+row was amended on 2026-10-20 (D-4). The wire rules are the frame specification
+§3 to §9 and §11.1 (binding version 1).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
@@ -48,7 +50,7 @@ test-harness drivers (driftsys/ridl#291) are planned on top of this package.
 no catalog descriptor: no `kind` check against a catalog, no response bound read
 from one, no compatible-hash list. It is not the providing side, and it has no
 TLS or authentication of its own (`wss://` works because the platform's
-`WebSocket` supports it). It is not published (D-3).
+`WebSocket` supports it). It is not yet published to JSR (D-3).
 
 **What it must never do.** Differ from §11.1 on the wire, so that a client
 written from the specification alone and this one behave differently against the
@@ -73,25 +75,33 @@ scope `ridl-transport-ws`, and `.git-std.toml` lists one scope per crate or
 package.
 
 **D-2. Deno first, and web-standard code only.** The package is TypeScript
-source with explicit `.ts` import specifiers, a `deno.json` and no build step.
-Its own code (`mod.ts` and `src/`) uses only `WebSocket`, `Uint8Array`,
-`DataView`, `ArrayBuffer`, `TextEncoder`, `TextDecoder`, `setTimeout`,
-`clearTimeout`, `BigInt` and `globalThis.reportError`, which Deno and browsers
-both provide; no `Deno.*`. The toolchain is Deno alone: `deno fmt`, `deno lint`,
-`deno check`, `deno test`, `deno bundle` (in the browser test) and
-`deno publish --dry-run`. There is no `package.json` and no `node_modules`; the
-editor extension keeps its own npm toolchain. Node is not a target: Node 22 has
-a global `WebSocket`, so the package may run there, but nothing tests it and the
-README does not claim it. `deno fmt` and `deno lint` cover `.ts` files only
-(`deno.json` `include`), so prim stays the formatter of the Markdown and the
-JSON.
+source with explicit `.ts` import specifiers and a `deno.json`; the source needs
+no build step, and a dnt build step produces the npm package (D-3). Its own code
+(`mod.ts` and `src/`) uses only `WebSocket`, `Uint8Array`, `DataView`,
+`ArrayBuffer`, `TextEncoder`, `TextDecoder`, `setTimeout`, `clearTimeout`,
+`BigInt` and `globalThis.reportError`, which Deno and browsers both provide; no
+`Deno.*`. The source toolchain is Deno: `deno fmt`, `deno lint`, `deno check`,
+`deno test`, `deno bundle` (in the browser test) and `deno publish --dry-run`.
+The source tree has no `package.json`; the build generates an `npm/` directory,
+which git ignores and which holds the `package.json` of the npm package. Node 22
+or later is a tested target: Node 22 has a global `WebSocket`, and
+`ts-npm-check` installs the built package in a temporary directory and imports
+it by name from Node. The editor extension keeps its own npm toolchain.
+`deno fmt` and `deno lint` cover `.ts` files only (`deno.json` `include`), so
+prim stays the formatter of the Markdown and the JSON.
 
-**D-3. Publication is to JSR, later.** `deno.json` carries `name`, `version`,
-`license`, `exports` and the `publish` file list, so `deno publish --dry-run`
-checks the package as JSR would; `just ts-check` runs the dry run. Nothing is
-uploaded. The version is the workspace version (`Cargo.toml`
-`[workspace.package]`), and `tests/version_test.ts` fails when the two differ.
-The publication workflow is driftsys/ridl#992.
+**D-3. Publication is to npm; JSR is later.** `deno.json` carries `name`,
+`version`, `license`, `exports` and the `publish` file list, so
+`deno publish --dry-run` checks the package as JSR would; `just ts-check` runs
+the dry run. Nothing is uploaded to JSR. The workflow
+`.github/workflows/npm-release.yml` publishes `@driftsys/ridl-transport-ws` to
+npm on a `v*` tag, with provenance and the `NPM_TOKEN` organization secret. It
+checks that the tag version equals the `deno.json` version and that the tagged
+commit is on `main`, skips a version already on npm, and uses `--tag next` for a
+prerelease; ADR-0020's 2026-10-21 amendment records npm. The version is the
+workspace version (`Cargo.toml` `[workspace.package]`), and
+`tests/version_test.ts` fails when the two differ. The JSR publication is
+driftsys/ridl#992.
 
 **D-4. No dependency, at run time or in tests.** The package imports nothing
 outside itself. The tests use `node:assert/strict`, which Deno provides, and
@@ -121,7 +131,7 @@ session file at a readable size.
 
 The codec defines `FRAME_VERSION` (1), `SUBPROTOCOL` (`ridl-ws-v1`),
 `MIN_MESSAGE_LIMIT` (294) and `ENVELOPE_BYTES` (16), the `Kind` codes, and
-`encodingTag`, which maps `flatbuffers`, `proto3` and `repr-c` to 1, 2 and 3. As
+`encodingTag`, which maps `flatbuffers`, `proto3` and `podbuf` to 1, 2 and 3. As
 in the crate's D-3, the payload rules are in the types: a `publish` carries a
 `PublishState` (`init`, `live` with a payload, or `invalid`), a `response` a
 `ResponseOutcome` (`accepted`, `reply` with a payload, `contract`, `corrupt` or
@@ -161,7 +171,7 @@ into the message, and the session keeps no reference to it.
 ```ts
 const session = await connect("ws://127.0.0.1:9000", {
   catalog: { name: "veh.cabin", hash }, // hash: Uint8Array, 32 bytes
-  encoding: "flatbuffers", // or "proto3" or "repr-c"; the default is "proto3"
+  encoding: "flatbuffers", // or "proto3" or "podbuf"; the default is "proto3"
   onPublish(target, sample) {}, // each accepted publish of a subscribed signal
   onOccurrence(occurrence) {}, // each accepted occurrence, in arrival order
   onNote(note) {}, // violations, discarded frames and losses
@@ -328,12 +338,14 @@ rule on a request stamp.
 `crates/ridl-transport-ws/examples/loopback_server.rs` serves the crate's test
 catalog (`test.ws`, the provider of `tests/support/provider.rs`, included by
 path so the catalog is defined once) on `127.0.0.1:0`, prints `port <n>`, serves
-each connection on its own thread with its own `Scanning(loopback.attach())`
-backend, steps the provider every 5 ms on its own thread, and exits with status
-0 when its standard input ends. It declares `required-features = ["server"]`,
-and the crate's `exclude` leaves out `examples/`, as it leaves out `tests/`,
-because the example includes a file from `tests/` and uses the dev-dependency
-`ridl-loopback`. The server's code is unchanged. The crate's record lists the
+each connection on its own thread with its own
+`Described::new(Scanning(loopback.attach()), table)` backend, where `table` is
+the hand-built member table of the test catalog, steps the provider every 5 ms
+on its own thread, and exits with status 0 when its standard input ends. It
+declares `required-features = ["server"]`, and the crate's `exclude` leaves out
+`examples/`, as it leaves out `tests/`, because the example includes a file from
+`tests/` and uses the dev-dependency `ridl-loopback`. `serve` is unchanged; the
+example only wraps its backend in a member table. The crate's record lists the
 example under its tests.
 
 **D-14. How the proof runs.** "A Deno program and a browser page each receive a
@@ -397,13 +409,14 @@ bytes are the value the provider set.
 
 ## Gates
 
-**D-16. Three recipes.**
+**D-16. Four recipes.**
 
 | Recipe           | Runs                                                                                                                                                               | Needs                            | In `build` |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- | ---------- |
 | `ts-check`       | `deno fmt --check`, `deno lint`, `deno check mod.ts` for Deno and against the DOM library (`browser.deno.json`), `deno test` of `tests/`, `deno publish --dry-run` | Deno                             | yes        |
 | `ts-e2e`         | `cargo build` of the example, then `e2e/deno_test.ts` against it                                                                                                   | Deno, the pinned Rust            | yes        |
 | `ts-browser-e2e` | `cargo build` of the example, then `e2e/browser_test.ts` against it                                                                                                | Deno, the pinned Rust, a browser | no         |
+| `ts-npm-check`   | dnt build of the package into `npm/`, check of the built manifest and tarball, install of the tarball in a temporary directory, import by name from Node           | Deno, Node, npm, network access  | yes        |
 
 The browser proof runs in CI only, so a contributor's `just build` needs no
 browser; a browser-only regression is first seen in CI. `ts-browser-e2e` is
@@ -412,12 +425,14 @@ step, which is checked by reading; the recipe's comment says so.
 `ts-browser-e2e` looks the browser up before it builds anything and fails, with
 `RIDL_BROWSER` named, when none is found. Each recipe fails with the command
 that installs Deno when `deno` is missing; none skips (ADR-0009 decision 10).
-`ts-check` needs no compilation and is a member of `pre-push`; `ts-e2e` is not.
-The browser proof that runs no browser, type-checking against the DOM library,
-is part of `ts-check`; it shows that the package compiles for a browser, not
-that a page receives a signal.
+`ts-check` needs no compilation and is a member of `pre-push`; `ts-e2e` and
+`ts-npm-check` are not. `ts-npm-check` is a member of `build` and runs in the
+`typescript` job, so a contributor's `just build` needs Node and npm, which
+`bootstrap` does not install. The browser proof that runs no browser,
+type-checking against the DOM library, is part of `ts-check`; it shows that the
+package compiles for a browser, not that a page receives a signal.
 
-In CI the three run in the `typescript` job, which installs the pinned Rust
+In CI the four run in the `typescript` job, which installs the pinned Rust
 toolchain, `just`, and Deno from the release zip of the pinned version. The job
 reads the `rust` path filter, which runs for any path outside the skip list,
 `packages/` included.
@@ -440,9 +455,11 @@ generated code uses it yet.
 
 ## What is not built
 
-- Decoding, verifying and encoding a payload, the wasm codec of ADR-0020
-  decision 7, the TypeScript runtime package of decision 6 and generated faces
-  over this package (driftsys/ridl#287).
+- Generated faces over this package (driftsys/ridl#287). The wasm codec of
+  ADR-0020 decision 7, the runtime package `@driftsys/ridl-runtime` that loads
+  it, and the generated codec module that decodes and encodes a payload are
+  built ([`ts-codec-table.md`](ts-codec-table.md)); the cabin demo joins them to
+  this package by hand.
 - The providing side in TypeScript, an emulator (driftsys/ridl#290), and the
   stand-in roles of the crate's "Adding the stand-in ports later".
 - Reading a catalog descriptor: the `kind` check, the response bound, the
@@ -450,14 +467,14 @@ generated code uses it yet.
 - A close code on a protocol violation and a client liveness timer (D-10, D-11;
   driftsys/ridl#991).
 - Publication to JSR (driftsys/ridl#992).
-- A test under Node.
+- A test of the source under Node; `ts-npm-check` tests the built package.
 
 ## Alternatives considered
 
 | Alternative                                                                                 | Verdict  | Why                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | the package under `editors/` or inside `crates/ridl-transport-ws/`                          | rejected | `editors/` holds editor integrations; a TypeScript package inside a Rust crate's directory would be packaged by cargo or need an exclusion, and the framework will hold several packages |
-| Node first, an npm package with `package.json` and `tsc`                                    | rejected | the roadmap names Deno and the browser; a Node toolchain adds `node_modules` and a lockfile to the gate for no target in scope; JSR produces an npm build when one is wanted             |
+| Node first, an npm package with `package.json` and `tsc`                                    | rejected | the roadmap names Deno and the browser; a Node-first source toolchain adds `node_modules` and a lockfile to the gate; the source stays Deno-first and dnt generates the npm package      |
 | Puppeteer, Playwright or Astral to drive the browser                                        | rejected | each fetches a dependency tree, and Playwright and Astral download a browser; the DevTools Protocol over Deno's `WebSocket` needs none, and CI's image already has Chrome                |
 | the browser proof as type-checking and bundling only                                        | rejected | shows that the package compiles for a browser, not that a page receives a signal (the DOM type check is kept in `ts-check`)                                                              |
 | the browser test in `build`, with a browser required on every contributor's machine         | rejected | a contributor's `just build` must not need a browser (D-16)                                                                                                                              |

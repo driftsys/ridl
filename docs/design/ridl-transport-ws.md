@@ -9,10 +9,12 @@ chose. The server forwards payload bytes without decoding them, and it maps each
 client request's `seq` to the correlation its backend `Caller` returned.
 
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-decision 6 names the crate and fixes `ridl-rt` as its only dependency (amended
-2026-10-19: the row said "`ridl-rt` and a WebSocket crate"). ADR-0020 decision 7
-and [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
-decision 7 place the transport;
+decision 6 names the crate and fixes `ridl-rt` as its only unconditional
+dependency, with `ridl-descriptor` under the `descriptor` feature (amended
+2026-10-19: the row said "`ridl-rt` and a WebSocket crate"; amended 2026-10-24:
+the `descriptor` feature). ADR-0020 decision 7 and
+[ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
+7 place the transport;
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) fixes the port
 contracts the server reads and calls. The wire rules are the frame specification
 §4 to §9 and §11.1 (binding version 1).
@@ -44,11 +46,16 @@ must be right.
   plus `FixedReader` for a `read` of a `fixed`, over WebSocket.
 - Detects changed signals with `ScannableSignals` when the backend has it, and
   by reading each subscribed signal when it does not.
+- Builds the member table, which checks `kind` and gives the response bounds,
+  from the catalog descriptor that `ridl build --emit catalog` writes, under the
+  `descriptor` feature, off by default, so an embedder that passes no table
+  links no planus (driftsys/ridl#985).
 
 **What it does not do.** It serves no stand-in port (`SignalWriter`,
 `EventSink`, `Handler`; see "Adding the stand-in ports later"). It ships no
-public Rust client. It has no TLS and authenticates no one. It reads no catalog
-descriptor.
+public Rust client. It has no TLS and authenticates no one. It reads a catalog
+descriptor only under the `descriptor` feature, and does no I/O: the embedder
+reads or embeds the file.
 
 **What it must never do.** Bind a socket, spawn a thread or start a task on its
 own; pull a dependency into an embedder's build that is not justified in "The
@@ -63,9 +70,9 @@ written from the specification alone does not interoperate with this server.
 - No TLS and no authentication in the crate. The embedder chooses the bind
   address and the access policy; the crate binds nothing, by default or
   otherwise.
-- Edition 2021 and `rust-version = "1.83"`, the same literals as `ridl-rt` and
-  `ridl-loopback`, so the crate builds with the toolchain `ridl-rt` supports.
-  `just compat-check` checks this (see "Gates").
+- Edition 2021 and `rust-version = "1.88"`, the same literals as `ridl-rt` and
+  `ridl-loopback`, so the crate builds with the toolchain `ridl-rt` supports,
+  with every cargo feature. `just compat-check` checks this (see "Gates").
 - The transport does not link `ridl-loopback`. The loopback is a dev-dependency
   only.
 
@@ -73,38 +80,46 @@ written from the specification alone does not interoperate with this server.
 
 **D-1. One crate, two layers.**
 
-| Module         | Needs                   | Feature           | Holds                                                         |
-| -------------- | ----------------------- | ----------------- | ------------------------------------------------------------- |
-| `frame`        | `core` only, no `alloc` | always            | the §11.1 header codec: `Frame`, `decode`, `encode`           |
-| `ws` (private) | `std`                   | `server`, default | the server side of RFC 6455: handshake, message framing, ping |
-| `server`       | `std`                   | `server`, default | the session core, the backend trait, `Config` and `serve`     |
+| Module                              | Needs                   | Feature           | Holds                                                         |
+| ----------------------------------- | ----------------------- | ----------------- | ------------------------------------------------------------- |
+| `frame`                             | `core` only, no `alloc` | always            | the §11.1 header codec: `Frame`, `decode`, `encode`           |
+| `ws` (private)                      | `std`                   | `server`, default | the server side of RFC 6455: handshake, message framing, ping |
+| `server`                            | `std`                   | `server`, default | the session core, the backend trait, `Config` and `serve`     |
+| `descriptor` (private, in `server`) | `std`                   | `descriptor`, off | `MemberTable::from_descriptor` over `ridl-descriptor`         |
 
 `cargo add ridl-transport-ws --no-default-features` gives the codec alone, with
 `ridl-rt` at its default features (`no_std`). The `server` feature turns on
 `std` for this crate and nothing else; it turns on no `ridl-rt` feature. The
-crate root re-exports `serve`, `Backend`, `Config`, `Connection`, `Ended`,
-`LimitTooSmall`, `Note`, `Polling` and `Scanning` under that feature
-(`crates/ridl-transport-ws/src/lib.rs`).
+crate root re-exports `serve`, `Backend`, `Config`, `Connection`, `Described`,
+`Ended`, `LimitOutOfRange`, `MemberTable`, `Note`, `Polling`,
+`RetainedTooSmall`, `Scanning` and `TableMismatch` under that feature, and
+`DescriptorError` under `descriptor` (`crates/ridl-transport-ws/src/lib.rs`).
 
-**D-2. No dependency but `ridl-rt`.** The WebSocket layer is written in this
-crate, and only its server side: parse one HTTP/1.1 upgrade request, answer it
-with `Sec-WebSocket-Accept` (SHA-1 and base64, in `src/ws/sha1.rs` and
-`src/ws/base64.rs`, with their published test vectors), read masked client
-frames, reassemble fragmented messages, answer pings, write unmasked frames, and
-run the close handshake. That is the whole of what the binding needs. The server
-never writes a masked frame, so it needs no random numbers.
+**D-2. No unconditional dependency but `ridl-rt`.** The WebSocket layer is
+written in this crate, and only its server side: parse one HTTP/1.1 upgrade
+request, answer it with `Sec-WebSocket-Accept` (SHA-1 and base64, in
+`src/ws/sha1.rs` and `src/ws/base64.rs`, with their published test vectors),
+read masked client frames, reassemble fragmented messages, answer pings, write
+unmasked frames, and run the close handshake. That is the whole of what the
+binding needs. The server never writes a masked frame, so it needs no random
+numbers.
 
-| Dependency         | Kind   | Why                                                                                                                                |
-| ------------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `ridl-rt`          | normal | the port traits and the vocabulary of frame specification §2; no feature turned on                                                 |
-| `ridl-loopback`    | dev    | the backend of every server test, and the in-process half of the done-when test                                                    |
-| `tungstenite` 0.29 | dev    | an independent WebSocket client, so the hand-written server side is tested against an implementation this repository did not write |
-| `ridl-ir`          | dev    | the `websocket` binding row, for the binding sizes check                                                                           |
+| Dependency         | Kind                   | Why                                                                                                                                                             |
+| ------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ridl-rt`          | normal                 | the port traits and the vocabulary of frame specification §2; no feature turned on                                                                              |
+| `ridl-descriptor`  | optional, `descriptor` | the catalog descriptor's verifier and accessors, default features off: planus and serde (`alloc`, `derive`) only, no `ridl-ir`, no `serde_json`, no `hashbrown` |
+| `ridl-loopback`    | dev                    | the backend of every server test, and the in-process half of the done-when test                                                                                 |
+| `tungstenite` 0.29 | dev                    | an independent WebSocket client, so the hand-written server side is tested against an implementation this repository did not write                              |
+| `ridl-ir`          | dev                    | the `websocket` binding row, for the binding sizes check                                                                                                        |
+
+The workspace entry for `ridl-descriptor` turns its default features off,
+because Cargo ignores `default-features = false` on an inherited entry; `ridl`
+and `ridlc` name `std` and `dedup` themselves.
 
 `tungstenite` keeps its default `handshake` feature, because the client must run
-the handshake the tests check. 0.29 is the newest release whose `rust-version`
-is not above this crate's; 0.30 needs Rust 1.85. A dev-dependency does not reach
-an embedder's build tree.
+the handshake the tests check. 0.29 was the newest release whose `rust-version`
+was not above this crate's minimum of 1.83 when it was chosen. A dev-dependency
+does not reach an embedder's build tree.
 
 The package leaves out `tests/` (`exclude` in `Cargo.toml`): `tests/vectors.rs`
 reads the frame specification from the repository, and the path dev-dependencies
@@ -115,7 +130,7 @@ carry no version, as in `ridl-loopback`.
 The codec is `crates/ridl-transport-ws/src/frame.rs`. It also defines the
 constants `FRAME_VERSION` (1), `SUBPROTOCOL` (`ridl-ws-v1`), `MIN_MESSAGE_LIMIT`
 (294, the largest `attach`) and `ENVELOPE_BYTES` (16), and `encoding_tag`, which
-maps an encoding name to the tag of §3: `flatbuffers` 1, `proto3` 2, `repr-c` 3.
+maps an encoding name to the tag of §3: `flatbuffers` 1, `proto3` 2, `podbuf` 3.
 
 **D-3. One borrowed `Frame` enum, with the payload rules in the types.** A
 decoded frame borrows its payload and its unit name from the message. The
@@ -243,11 +258,31 @@ decided to close, it produces nothing more, whatever it is given.
 
 **D-10. The backend trait.** `Backend` (`server/backend.rs`) has an associated
 type `Ports: Attached + Encoded + Clock + SignalReader + EventSource + Caller`,
-a method `ports(&mut self)`, and two provided methods: `scannable()`, which
-returns `None`, and `read_fixed(iface, ord, out)`, which answers
-`ReadError::Contract(UnknownInteraction)`. Two adapters cover the common cases
-with no code: `Polling<P>` over the six bounds, with no scan and no `fixed`; and
-`Scanning<P>` over the six bounds plus `ScannableSignals` and `FixedReader`.
+a method `ports(&mut self)`, and three provided methods: `scannable()`, which
+returns `None`; `read_fixed(iface, ord, out)`, which answers
+`ReadError::Contract(UnknownInteraction)`; and `members()`, which returns
+`None`: the member table of the catalog, when the embedder supplied one
+(`server/members.rs`). Two adapters cover the common cases with no code:
+`Polling<P>` over the six bounds, with no scan and no `fixed`; and `Scanning<P>`
+over the six bounds plus `ScannableSignals` and `FixedReader`. A third,
+`Described<B>`, wraps any backend with an `Arc<MemberTable>` and forwards the
+other three methods; `Described::new` compares the table's name and hash with
+`ports().catalog()` and returns `TableMismatch` on a difference, so a wrong
+table is found on the embedder's thread before `serve` runs.
+
+`MemberTable` holds the unit name, the catalog hash, and a map from
+`(InterfaceNo, Ordinal)` to the member's kind, its `max` bound and its payload
+limit. `insert` sets an entry with no limit; `set_limit` sets the limit of an
+existing entry and `limit` reads it. A retired interface and a reserved ordinal
+have no entry (§6.4). The embedder builds it through `new` and `insert`, or,
+with the `descriptor` feature, with `MemberTable::from_descriptor` from the
+bytes of a `<unit>.catalog.binfb` file. `from_descriptor` verifies the buffer
+with `ridl_descriptor::verify`, adds one entry for each member, with its
+`max_us` as the bound and its `limit` as the payload limit (an absent `limit`
+gives no limit), and adds each hash of the descriptor's `compatible` list; it
+returns `DescriptorError` for a buffer that fails verification, a hash that is
+not 32 bytes, an interface number or an ordinal of 0, and a `max_us` that is not
+a decimal `u64`.
 
 The ports are an associated type rather than supertraits so that an embedder, or
 a test crate, can serve a runtime type it does not own: the orphan rule forbids
@@ -272,8 +307,10 @@ answers:
 - `frame_version` not 1: `refused(frame_version_unsupported)`;
 - the unit name differs from `Attached::catalog().name`:
   `refused(unknown_catalog)`;
-- the name matches and the hash differs: `refused(catalog_mismatch)`. This is
-  the exact-match rule of §6.1, because the server holds no descriptor;
+- the name matches and the hash is neither the catalog's own nor, with a member
+  table (D-10), one of the table's compatible hashes:
+  `refused(catalog_mismatch)`. Without a table this is the exact-match rule of
+  §6.1;
 - the encoding tag is not the tag of the backend's encoding name (§3's table):
   `refused(encoding_unsupported)`. A backend whose encoding is not in that table
   refuses every `attach` with this reason;
@@ -282,10 +319,17 @@ answers:
 After a refusal the server closes with 1000. The checks run in the order above,
 so one reason is given. A second `attach` on an open session closes with 1002.
 
-**D-12. The server routes on the frame's `kind`.** It holds no catalog
-descriptor, so it cannot check a `kind` against the catalog (§4 "Why `kind` is
-on the frame"); that check is the backend's when it has a member table. What it
-does check is that the form admits the kind:
+**D-12. The server routes on the frame's `kind`.** Without a member table it
+cannot check a `kind` against the catalog (§4 "Why `kind` is on the frame") and
+checks only that the form admits the kind. With one, every `subscribe`, `read`,
+`request` and `unsubscribe` first looks the frame's `(interface, ordinal)` up in
+the table: absent, or present under another `kind`, a `subscribe` or a `read` is
+answered `answer` with `contract(UnknownInteraction)`, a `request` a `response`
+carrying it and the request's `seq` as `correlation`, and an `unsubscribe` is
+dropped and recorded as `Note::UnknownInteraction` (§6.4). Nothing reaches the
+backend and no signal or event state is created; a refused `request` is retained
+like any settled response, for duplicate handling. The form check follows in
+both cases:
 
 | Form          | `kind` admitted   | Any other `kind`                               |
 | ------------- | ----------------- | ---------------------------------------------- |
@@ -355,8 +399,9 @@ lasts as long as the session, with no bound in the crate, because a channel's
 session `seq` never restarts (§7). Per-session memory, and in polling mode the
 work of each tick, grows with the distinct signals the client names. `serve`'s
 rustdoc says so: the embedder's access policy must trust each client for that
-growth. A bound needs a decision, because the frame has no refusal outcome for
-it (driftsys/ridl#984).
+growth. With a member table (D-12) the lookup bounds it: a session holds at most
+one signal channel and one event channel per member of the catalog. Without one
+the growth above stands, and `serve`'s rustdoc says so.
 
 **D-14. Detecting a changed signal.**
 
@@ -444,6 +489,14 @@ responses kept for duplicates are `server/calls.rs`.
   `corrupt`: arguments larger than the member's capacity are not a well-formed
   encoding of its type, the same reasoning ADR-0021 decision 5 gives for
   `ShortClaim`.
+- A `request` for a command or a query whose arguments are longer than the
+  member's payload limit in the member table is answered `corrupt` without a
+  call to the backend (ADR-0030 decision 15). The server places the `seq` first,
+  then checks that the member is known, then checks the length, so a repeat gets
+  the kept response again and an unknown member is
+  `contract(UnknownInteraction)` whatever the length. No note is recorded. With
+  no member table, or a member with no limit, the message limit alone bounds the
+  arguments. A `publish` is not checked.
 - Each tick the server polls `ack` for each command in flight and `reply` for
   each query in flight. A known outcome becomes one `response` with
   `correlation` = the client's `seq`, `seq` = the next value of the server's
@@ -476,16 +529,38 @@ responses kept for duplicates are `server/calls.rs`.
   first poll after the request.
 - **Duplicates.** §11.1 item 5 says the binding never retransmits, so a
   duplicate `request` is a peer defect. The server still follows §7: a `request`
-  whose `seq` is in flight is not sent to the backend again; one whose `seq` is
-  among the last 64 settled responses of the session gets that response again;
-  any other `seq` not greater than the highest seen is recorded
-  (`DuplicateDropped`) and dropped. The 64 kept responses include the responses
-  sent at once, such as a `busy` or a `contract`. §11.1 item 6 asks a provider
-  to keep a settled response until the request's bound has passed; with no
-  descriptor the server does not know the bound, so it keeps a fixed number
-  instead. This deviation is stated in the frame specification's as-built note
-  and in its §7, and is tracked by driftsys/ridl#985 (reading the descriptor)
-  and driftsys/ridl#986 (whether §11.1 states a fallback retention).
+  whose `seq` is in flight is not sent to the backend again; one whose `seq`
+  names a settled response still kept gets that response again; any other `seq`
+  not greater than the highest seen is recorded (`DuplicateDropped`) and
+  dropped. A response is kept, with the responses sent at once (`busy`, a
+  `contract`), until `min(request.stamp, receipt) + max` by the backend's clock,
+  where `receipt` is `Clock::now()` when the request arrived and `max` the
+  member's bound from the member table (D-10); the `min` keeps §7's "measured
+  from the request's `stamp`" when the client's clock is behind, and caps the
+  retention when a client stamps ahead, so stamping requests in the future holds
+  no response. The bound is taken only when the table holds the request's
+  identity as a command or query under the request's `kind`: a request the table
+  refuses (D-12) takes no bound from a member of another kind and is kept as one
+  of the last 64. Expired responses go on each tick. The kept responses are
+  indexed by `seq` and, for those with a bound, by the bound, so a repeat and an
+  expiry pass cost no scan of the kept set (up to the cap, a session may keep
+  hundreds of thousands of small responses). For a member the table gives no
+  bound (a catalog built before the default response bound), or with no table,
+  the server keeps the last 64 as before: a stated deviation from §11.1 item 6
+  (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
+  retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
+  by default, and never below 16,292 bytes, the largest message limit); when a
+  response makes the kept bytes pass the cap, the response is sent, then the
+  session closes with 1008, which `serve` returns as
+  `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
+  server with no table, or one whose members have no bound, closes with 1008
+  when its replies are large enough to pass the cap before the ring holds 64. At
+  the default message limit, 64 replies are at most 64 × 16,292 = 1,042,688
+  bytes, below the 16 MiB default cap; an embedder that lowers the cap keeps it
+  at least 64 times its message limit, lowering the message limit too, so that
+  the ring alone bounds it. Expired responses also go when a `request` arrives,
+  before its `seq` is placed. Closing is observable, where dropping the oldest
+  response would silently break item 6.
 
 **D-17. `fixed`.** A `read` of a `fixed` calls `Backend::read_fixed` and sends
 one `publish` with `kind` `Fixed`, state `Live` with the value, `seq` 0, and
@@ -515,18 +590,23 @@ no hook nothing is recorded and recording costs nothing. A `Note` is one of:
 `Violation` (closes 1002), `MessageBeforeAttach` (closes 1002), `SecondAttach`
 (closes 1002), `UnexpectedDirection` (closes 1002), `KindNotAdmitted` (an
 `unsubscribe` of a kind the form does not admit; dropped), `ValueTooLarge`,
-`DuplicateDropped`, `CallAbandoned` and `RuleNotCarried` (a violation's rule the
-frame has no code for; the outcome is replaced).
+`DuplicateDropped`, `CallAbandoned`, `RuleNotCarried` (a violation's rule the
+frame has no code for; the outcome is replaced) and `UnknownInteraction` (an
+interaction the member table does not hold; dropped or answered as D-12 says).
 
 ### `Config`
 
 `Config` (`server/config.rs`) has four public durations — `poll_interval` (20
 ms), `ping_interval` (5 s), `liveness_timeout` (15 s) and `call_abandon_after`
-(60 s) — and three settings behind methods: `with_max_message_bytes` (1 MiB; a
-value below `MIN_MESSAGE_LIMIT` is refused with `LimitTooSmall`), `with_record`
-and `with_origin_check`. A `ping_interval` at or above `liveness_timeout` ends
-an idle client's session before the first ping, because a client that is not
-pinged sends nothing; the rustdoc says so.
+(60 s) — and four settings behind methods: `with_max_message_bytes` (16,292
+bytes, `MAX_MESSAGE_LIMIT`, the largest data-plane message: the limit can only
+be lowered, and a value outside the range 294 to 16,292 is refused with
+`LimitOutOfRange`), `with_max_retained_bytes` (16 MiB; a value below 16,292 is
+refused with `RetainedTooSmall`, whatever the message limit, and a session
+applies the cap as set), `with_record` and `with_origin_check`. A
+`ping_interval` at or above `liveness_timeout` ends an idle client's session
+before the first ping, because a client that is not pinged sends nothing; the
+rustdoc says so.
 
 ## The WebSocket layer (`ws`)
 
@@ -569,16 +649,16 @@ Fragmented messages are reassembled, also when a frame is split across socket
 reads. A data message whose total size passes `max_message_bytes` closes with
 1009 as soon as the length is known, before it is buffered; the limit applies to
 data messages, not to control frames, which RFC 6455 caps at 125 bytes.
-`max_message_bytes` is at least 294 (§11.1 "The sizes"). Client frames that are
-not masked close with 1002 (RFC 6455 §5.1). A ping is answered with a pong
-carrying its payload.
+`max_message_bytes` is at least 294 and at most 16,292 (§11.1 "The sizes").
+Client frames that are not masked close with 1002 (RFC 6455 §5.1). A ping is
+answered with a pong carrying its payload.
 
 Each frame the server sends, header and payload, is assembled in one buffer the
 session reuses and written with one write call, so that with `TCP_NODELAY` off
 the payload does not wait for the peer's delayed acknowledgement of the header.
 The buffer keeps the capacity of the largest frame sent, which
-`max_message_bytes` bounds (1 MiB by default per idle session after a large
-message).
+`max_message_bytes` bounds (16,292 bytes by default per idle session after a
+large message).
 
 **D-22. Liveness.** The server sends a ping every `ping_interval` and ends the
 session when no message of any kind has arrived for `liveness_timeout`. A
@@ -587,14 +667,15 @@ at a cost of one small frame per 5 s.
 
 **D-23. Close codes.** Exactly §11.1 item 4's: 1000 on purpose and after
 `attached(refused)`, 1001 when the backend detaches, 1002 on a protocol
-violation, 1003 on a text message, 1009 on an oversized message. The server
-answers a client's close frame with a close frame that carries the same code.
-After every close frame it sends, the answer to the client's included, and after
-a handshake `400` or `403`, the server shuts down its write side and lingers for
-up to 100 ms, reading and discarding what the client still sends, so that the
-close frame or the answer reaches the client instead of being lost to a reset of
-the connection. It waits no longer than that for the client to close the
-connection (RFC 6455 §7.1.1 has the client wait for the server to close it).
+violation, 1003 on a text message, 1009 on an oversized message, and 1008 when
+the retained responses pass `max_retained_bytes` (D-16). The server answers a
+client's close frame with a close frame that carries the same code. After every
+close frame it sends, the answer to the client's included, and after a handshake
+`400` or `403`, the server shuts down its write side and lingers for up to 100
+ms, reading and discarding what the client still sends, so that the close frame
+or the answer reaches the client instead of being lost to a reset of the
+connection. It waits no longer than that for the client to close the connection
+(RFC 6455 §7.1.1 has the client wait for the server to close it).
 
 ## Tests
 
@@ -649,7 +730,8 @@ All under `crates/ridl-transport-ws/`.
   argument. It runs twice: in process over `ridl-loopback` with no socket; and
   across processes, where the test re-runs its own executable with the
   environment variable `RIDL_TRANSPORT_WS_PROVIDER=1`, the child serves a
-  loopback on a port of `127.0.0.1` it prints, and the parent runs the scenario
+  loopback, wrapped in `Described` with the hand-built member table of the test
+  catalog, on a port of `127.0.0.1` it prints, and the parent runs the scenario
   over a test-only client in `tests/support/client.rs` — the consuming runtime
   of §5 written once for the test over `tungstenite` and this crate's codec. It
   is not published.
@@ -661,9 +743,10 @@ All under `crates/ridl-transport-ws/`.
   generated face, because a generated face over a WebSocket client needs a
   public Rust client, which the crate does not ship (driftsys/ridl#989).
 - **The loopback server** (`examples/loopback_server.rs`). Serves the scenario's
-  test catalog and provider on `127.0.0.1:0`, one thread and one attachment per
-  connection, prints `port <n>`, and exits when its standard input ends. It
-  serves the TypeScript package's end-to-end tests. The package leaves it out.
+  test catalog and provider, with its member table, on `127.0.0.1:0`, one thread
+  and one attachment per connection, prints `port <n>`, and exits when its
+  standard input ends. It serves the TypeScript package's end-to-end tests. The
+  package leaves it out.
 
 The test targets `serve` and `scenario` require the `server` feature, so
 `--no-default-features` still runs the codec's tests.
@@ -675,17 +758,22 @@ The test targets `serve` and `scenario` require the `server` feature, so
   standard library, which is the proof of the `std` half of D-1's "`core` only".
   The `alloc` half is `tests/constraints.rs`, which asserts that `src/frame.rs`
   and `src/lib.rs` name no `alloc` crate outside comments.
-- `tests/constraints.rs` also asserts D-2 from the manifests: the only normal
-  dependency is `ridl-rt`, through a workspace entry that names no feature, and
-  the `server` feature is empty, so it turns on nothing in `ridl-rt`. The checks
-  are textual.
+- `tests/constraints.rs` also asserts D-2 from the manifests: the one
+  unconditional dependency is `ridl-rt`, through a workspace entry that names no
+  feature; the one optional dependency is `ridl-descriptor`, through a workspace
+  entry with its default features off; the `server` feature is empty, so it
+  turns on nothing in `ridl-rt`, and the `descriptor` feature turns on `server`
+  and `ridl-descriptor` only. The checks are textual.
 - `just compat-check` requires the manifest's `rust-version` and edition to
   equal `ridl-rt`'s, and builds the packaged crate with that minimum toolchain
-  with its default features and with none. The `tungstenite` dev-dependency
-  table is removed from the packaged manifest first, because the offline build
-  cannot resolve it; the recipe fails when the package has any other
-  dev-dependency table. The recipe also fails when the crate gains a workspace
-  dependency outside `ridl-rt`, `ridl-rt-conformance` and `ridl-loopback`.
+  with its default features, with none, and with the `descriptor` feature,
+  against the packaged `ridl-descriptor` and `ridl-ir` patched in by path, a
+  lockfile resolved by the fallback resolver and sources fetched by the
+  minimum's cargo. The `tungstenite` dev-dependency table is removed from the
+  packaged manifest first, because the offline build cannot resolve it; the
+  recipe fails when the package has any other dev-dependency table. The recipe
+  also fails when the crate gains a workspace dependency outside `ridl-rt`,
+  `ridl-rt-conformance`, `ridl-loopback`, `ridl-descriptor` and `ridl-ir`.
 - The crate is published after `ridl-rt` by `crates-io-release.yml`.
 - The crate is in the `runtime-crates` and `msrv` freeze surfaces from 0.12.0,
   its first release, and opts into the `cargo-semver-checks` lint metadata
@@ -717,17 +805,11 @@ What the crate already does so that the addition is local:
 
 ## What is not built
 
-- A bound on the per-session signal state (driftsys/ridl#984).
-- Reading the catalog descriptor: compatible earlier hashes at `attach`
-  (conformance item 1 of §12), the `kind` check against the catalog, and the
-  response bound for duplicate retention (driftsys/ridl#985). It adds
-  `ridl-descriptor` to the embedder's build, which the dependency constraint
-  weighs against.
-- The retention of a settled response for a provider without bounds, a question
-  for the frame specification (driftsys/ridl#986).
 - The stand-in ports (driftsys/ridl#988).
-- A public Rust client, and `examples/cabin` over the transport
-  (driftsys/ridl#989).
+- A public Rust client, and the generated face of `examples/cabin` across the
+  transport (driftsys/ridl#989). `examples/cabin/server` already serves the
+  `temperature` signal to a TypeScript client, with the member table read from
+  the descriptor `ridl build --emit catalog` writes.
 
 ## Alternatives considered
 
@@ -742,6 +824,5 @@ What the crate already does so that the addition is local:
 | waking on `Wakeable` instead of a polling tick                          | rejected | a waker cannot interrupt a blocking socket read without a second thread or a platform poller, both of which grow the crate; the tick bounds the latency to `poll_interval`                                                           |
 | `Invalid(Detected)` sent as `Live` with the last good value             | rejected | hides an invalidity from the client (D-13)                                                                                                                                                                                           |
 | forwarding the backend's `seq`                                          | rejected | a backend counter restarts with a replaced writer and interleaves across writers, so the consumer would discard later publications as stale (D-24)                                                                                   |
-| reading the catalog descriptor to check `kind` and bounds               | deferred | adds `ridl-descriptor` to the embedder's tree and a descriptor to its deployment (driftsys/ridl#985)                                                                                                                                 |
 | a public Rust client                                                    | deferred | not needed by the first consumer, whose client is TypeScript; the test client covers the done-when (driftsys/ridl#989)                                                                                                               |
 | accepting the upgrade without a subprotocol and letting the client fail | rejected | a client that does not check would send `attach` on an unnegotiated connection (D-20)                                                                                                                                                |

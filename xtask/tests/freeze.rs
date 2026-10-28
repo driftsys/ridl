@@ -316,6 +316,34 @@ fn assert_unknown_ref_hint(err: &str, surface: &str) {
     );
 }
 
+#[test]
+fn check_fails_when_the_baseline_is_not_an_ancestor_of_head() {
+    let repo = Repo::new("not-ancestor");
+    repo.write("freeze/surfaces.toml", "");
+    repo.commit();
+    // The tag `base` names a commit on a side branch that HEAD does not
+    // contain, as a commit of an unmerged branch does after a squash merge.
+    repo.git(&["switch", "-q", "-c", "side"]);
+    repo.write("freeze/fixture.txt", "a\n");
+    repo.commit();
+    repo.git(&["tag", "base"]);
+    repo.git(&["switch", "-q", "-"]);
+    repo.write("freeze/surfaces.toml", ROW);
+    repo.write("freeze/fixture.txt", "a\n");
+    repo.commit();
+    let fixture = repo.dir.join("fixture-lines.txt");
+    std::fs::write(&fixture, "a\n").unwrap();
+    let output = repo.check(Some(("fixture", &fixture)));
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("surface `fixture`")
+            && err.contains("(row: name = \"fixture\", baseline = \"base\")")
+            && err.contains("not an ancestor of HEAD"),
+        "{err}"
+    );
+}
+
 const ROW: &str =
     "required = [\"fixture\"]\n\n[[surface]]\nname = \"fixture\"\nbaseline = \"base\"\n";
 
@@ -586,19 +614,26 @@ fn check_fails_when_the_semver_tool_fails() {
 }
 
 /// The crates of the `runtime-crates` surface.
-const RUNTIME_CRATES: [&str; 4] = [
+const RUNTIME_CRATES: [&str; 5] = [
     "ridl-rt",
     "ridl-rt-conformance",
     "ridl-loopback",
     "ridl-descriptor",
+    "ridl-transport-ws",
 ];
 
-/// A repository that holds a workspace of four crates with the names of the
+/// A repository that holds a workspace of five crates with the names of the
 /// runtime crates, each with the fixture crate's source and no dependency.
 /// Its tag `base` holds the crates as they are; HEAD holds the row for
 /// `runtime-crates`, and the working tree holds `ridl-rt` with `lib_rs` as its
 /// source.
 fn repo_with_runtime_baseline(tag: &str, lib_rs: &str) -> Repo {
+    repo_with_runtime_baseline_lock(tag, lib_rs, None)
+}
+
+/// As [`repo_with_runtime_baseline`]. With `base_lock`, the tag `base` holds
+/// that text as `Cargo.lock`, and HEAD holds a correct lockfile.
+fn repo_with_runtime_baseline_lock(tag: &str, lib_rs: &str, base_lock: Option<&str>) -> Repo {
     let repo = Repo::new(tag);
     let members: Vec<String> = RUNTIME_CRATES
         .iter()
@@ -628,10 +663,15 @@ fn repo_with_runtime_baseline(tag: &str, lib_rs: &str) -> Repo {
         .status()
         .unwrap();
     assert!(status.success(), "cargo generate-lockfile failed");
+    let good_lock = std::fs::read_to_string(repo.dir.join("Cargo.lock")).unwrap();
+    if let Some(lock) = base_lock {
+        repo.write("Cargo.lock", lock);
+    }
     repo.write("freeze/surfaces.toml", "");
     repo.write(".gitignore", "/target\n");
     repo.commit();
     repo.git(&["tag", "base"]);
+    repo.write("Cargo.lock", &good_lock);
     repo.write(
         "freeze/surfaces.toml",
         "required = [\"runtime-crates\"]\n\n[[surface]]\nname = \"runtime-crates\"\nbaseline = \"base\"\n",
@@ -666,6 +706,54 @@ fn semver_check_flags_a_break_in_a_runtime_crate() {
     }
 }
 
+#[test]
+fn runtime_check_skips_the_comparison_when_no_input_changed() {
+    // The source is the baseline's, so no runtime input differs.
+    let repo = repo_with_runtime_baseline("runtime-skip", &api_fixture("src/lib.rs"));
+    let output = check_api_semver(&repo, "runtime-crates");
+    assert!(output.status.success(), "{}", stderr(&output));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("`runtime-crates` skipped (")
+            && !stdout.contains("compared with its baseline"),
+        "{stdout}"
+    );
+    // A skipped comparison does not start the semver tool.
+    assert!(!stderr(&output).contains("Checking"), "{}", stderr(&output));
+}
+
+#[test]
+fn runtime_check_with_an_unresolvable_baseline_fails() {
+    let repo = repo_with_runtime_baseline("runtime-bad-ref", &api_fixture("src/lib.rs"));
+    repo.write(
+        "freeze/surfaces.toml",
+        "required = [\"runtime-crates\"]\n\n[[surface]]\nname = \"runtime-crates\"\nbaseline = \"no-such-ref\"\n",
+    );
+    let output = check_api_semver(&repo, "runtime-crates");
+    assert!(!output.status.success());
+    assert_unknown_ref_hint(&stderr(&output), "runtime-crates");
+}
+
+#[test]
+fn runtime_check_fetches_the_baseline_lockfile() {
+    // The baseline's lockfile is out of date for its manifests, so the locked
+    // fetch of the baseline's tree fails before the comparison starts. The
+    // working tree has a correct lockfile and a changed runtime crate.
+    let lib_rs = format!(
+        "{}\n/// Added.\npub fn added() {{}}\n",
+        api_fixture("src/lib.rs")
+    );
+    let repo =
+        repo_with_runtime_baseline_lock("runtime-baseline-fetch", &lib_rs, Some("version = 4\n"));
+    let output = check_api_semver(&repo, "runtime-crates");
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("`cargo fetch --locked` of the baseline `base` failed"),
+        "{err}"
+    );
+}
+
 /// Makes `cargo fetch --locked` fail in `repo` without the network: the root
 /// manifest names a package version that its `Cargo.lock` does not hold, so
 /// the lock file would need an update.
@@ -693,6 +781,28 @@ fn runtime_check_fails_when_the_locked_fetch_fails() {
 }
 
 #[test]
+fn runtime_check_fails_when_a_runtime_crate_is_not_a_package() {
+    let repo = repo_with_runtime_baseline("runtime-renamed", &api_fixture("src/lib.rs"));
+    repo.write(
+        "crates/ridl-transport-ws/Cargo.toml",
+        "[package]\nname = \"ridl-transport-ws-renamed\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    );
+    let status = Command::new("cargo")
+        .args(["generate-lockfile", "--offline", "--manifest-path"])
+        .arg(repo.dir.join("Cargo.toml"))
+        .status()
+        .unwrap();
+    assert!(status.success(), "cargo generate-lockfile failed");
+    let output = check_api_semver(&repo, "runtime-crates");
+    assert!(!output.status.success());
+    let err = stderr(&output);
+    assert!(
+        err.contains("ridl-transport-ws which is not a package of the workspace"),
+        "{err}"
+    );
+}
+
+#[test]
 fn generated_check_fails_when_the_locked_fetch_fails() {
     let repo = repo_with_api_baseline(
         "generated-fetch",
@@ -715,4 +825,9 @@ fn semver_check_passes_runtime_crates_with_an_added_item() {
     let repo = repo_with_runtime_baseline("runtime-added", &lib_rs);
     let output = check_api_semver(&repo, "runtime-crates");
     assert!(output.status.success(), "{}", stderr(&output));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("`runtime-crates` compared with its baseline"),
+        "{stdout}"
+    );
 }

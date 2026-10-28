@@ -302,6 +302,7 @@ mod tests {
                 number: 1,
                 provisional: false,
                 interactions: vec![v2::Decl {
+                    limit: None,
                     name: "call".to_string(),
                     visibility: v2::Visibility::Public as i32,
                     is_error: false,
@@ -349,6 +350,7 @@ mod tests {
 
     fn scalar_decl(name: &str, prim: v2::PrimitiveType) -> v2::Decl {
         v2::Decl {
+            limit: None,
             name: name.to_string(),
             visibility: v2::Visibility::Public as i32,
             is_error: false,

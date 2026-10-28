@@ -12,17 +12,17 @@ not repeat. Built by driftsys/ridl#668 and #677.
 
 ## 1. The tools in one table
 
-| Tool                     | Input besides `path` and `overlays`                                | Result                                                                       |
-| ------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| `ridl_check`             | none; or, instead of `path`, `{source, profile}`                   | `{diagnostics, workspace}`; in source mode `{diagnostics}`                   |
-| `ridl_explain`           | `code`: a diagnostic code or a diff category word; no path         | a diagnostic entry or a diff category entry                                  |
-| `ridl_resolve`           | `name`; optional `from`                                            | package, kind, visibility, location, and `alias` when one was used           |
-| `ridl_describe_type`     | `name`; optional `from`                                            | the IR `Decl` of a declaration that is not an interface                      |
-| `ridl_list_interactions` | `interface`; optional `from`                                       | the interface header and its interactions in source order                    |
-| `ridl_references`        | `name`; optional `from`                                            | each declaration, interaction or component that uses the target              |
-| `ridl_dependencies`      | optional `package`                                                 | each package's imports, dependencies and dependents                          |
-| `ridl_metrics`           | none; takes `path` only                                            | package fan-in, fan-out, instability and interface cohesion groups           |
-| `ridl_diff`              | `old`, `new`: an `.ir.json` file, a snapshot directory or a source | what `ridl diff --format json` prints; overlays apply to a source `new` only |
+| Tool                     | Input besides `path` and `overlays`                                                      | Result                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `ridl_check`             | none; or, instead of `path`, `{source, profile}`                                         | `{diagnostics, workspace}`; in source mode `{diagnostics}`                   |
+| `ridl_explain`           | `code`: a diagnostic code or a diff category word; no path                               | a diagnostic entry or a diff category entry                                  |
+| `ridl_resolve`           | `name`; optional `from`                                                                  | package, kind, visibility, location, and `alias` when one was used           |
+| `ridl_describe_type`     | `name`; optional `from`                                                                  | the IR `Decl` of a declaration that is not an interface                      |
+| `ridl_list_interactions` | `interface`; optional `from`                                                             | the interface header and its interactions in source order                    |
+| `ridl_references`        | `name`; optional `from`                                                                  | each declaration, interaction or component that uses the target              |
+| `ridl_dependencies`      | optional `package`                                                                       | each package's imports, dependencies and dependents                          |
+| `ridl_metrics`           | none; takes `path` only                                                                  | package fan-in, fan-out, instability and interface cohesion groups           |
+| `ridl_diff`              | `old`, `new`: an `.ir.json` file, a snapshot directory or a source; optional `encodings` | what `ridl diff --format json` prints; overlays apply to a source `new` only |
 
 ## 2. Common rules
 
@@ -106,7 +106,13 @@ The behaviour that is not in the README:
 - **`ridl_diff`** accepts what `ridl diff <old> <new>` accepts, through
   `ridlc::load_diff_side`, and returns what `ridl_diff::render_json` writes,
   with the standard IR passed as context (driftsys/ridl#598). A comparison
-  against the published baseline is `old: "<root>/.ridl/baseline"`.
+  against the published baseline is `old: "<root>/.ridl/baseline"`. The optional
+  `encodings` list is `ridl diff --encoding`, one name per element: the names a
+  manifest's `[backend.<name>] encodings` list takes
+  (`ridl_core::manifest::ENCODING_NAMES`). With `podbuf` among them a
+  `podbuf_inline_append`, a `podbuf_width_change` or a
+  `podbuf_strict_enum_append` change is breaking; without it, compatible. A name
+  outside the list is a request error (§5.2) naming the three.
 - **`ridl_explain`** reports, for a diagnostic code, `lint` and `default_level`
   when the code is a lint (ADR-0024 decision 15 and its Consequences). It never
   carries a link to a document.
@@ -220,10 +226,11 @@ given a declaration that is not an interface (the message points to
 `ridl_describe_type`); a `from` or `ridl_dependencies` `package` that names no
 workspace package (the message lists the packages); a declaration with no kind
 (the message advises `ridl_check`); an unknown code or category (the five
-namespaces, and that diff category words are accepted); a `ridl_diff` side that
-cannot be loaded (the `DiffSideError` message, the text the CLI prints); and a
-`ridl_diff` source side that does not compile (the message identifies the old or
-new side, and the diagnostics are in the error's structured content).
+namespaces, and that diff category words are accepted); a `ridl_diff`
+`encodings` name outside the three (the message lists them); a `ridl_diff` side
+that cannot be loaded (the `DiffSideError` message, the text the CLI prints);
+and a `ridl_diff` source side that does not compile (the message identifies the
+old or new side, and the diagnostics are in the error's structured content).
 
 ### 5.3 Notes
 

@@ -707,3 +707,56 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) and
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md). The
   follow-ups are driftsys/ridl#996 and driftsys/ridl#997.
+
+- **2026-10-22-cabin-ws-server-plan.md** — the plan for the cabin WebSocket
+  server and its Deno demo (step 2 of
+  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)).
+  Archived with one edit, the link to the design note. The durable record is the
+  example itself, `examples/cabin/server` and `examples/cabin/web`, run by
+  `just cabin-ws-demo`;
+  [the transport design record](../design/ridl-transport-ws.md) lists what
+  remains (driftsys/ridl#989).
+
+- **2026-10-22-cabin-browser-demo-plan.md** — the plan for the browser demo of
+  the cabin temperature check (step 3 of
+  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)).
+  Archived with one edit, the link to the design note. The durable record is
+  `examples/cabin/web` (`check.ts`, `page.ts`, `browser.ts`), run by
+  `just cabin-browser-demo`.
+
+- **2026-10-22-cabin-wasm-verify-plan.md** — the plan for verifying the cabin
+  temperature through the wasm codec in both demos (step 4 of
+  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)).
+  Archived with one edit, the link to the design note. The durable record is
+  `examples/cabin/web/check.ts` and its tests, the `_cabin-wasm` recipe, and the
+  out-of-memory check in `packages/ridl-runtime`.
+
+- **2026-10-22-ts-codec-table-design.md** and
+  **2026-10-22-ts-codec-table-plan.md** — the design and the plan for the
+  generated TypeScript codec table (step 5 of
+  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)):
+  `<base>.codec.ts`, the `codec` manifest key and MANI-019, and the
+  `ridl_type_id` export. Archived with two edits, the links to that design note.
+  The durable record is
+  [the codec table design record](../design/ts-codec-table.md).
+
+- **2026-10-23-transcode-design.md** and **2026-10-23-transcode-plan.md** — the
+  design and the plan for converting a payload between encodings:
+  `ridl_rt::payload::transcode`, the `[backend.rust] transcode` manifest key and
+  MANI-020, and the generated `transcode_<s>_to_<d>` functions. Archived with
+  one edit, the plan's path to the design. The durable records are the
+  2026-10-23 amendment of
+  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
+  decision 13, [the `ridl-rt` design record](../design/ridl-rt.md) and
+  [the generated code chapter](../book/generated-code.md).
+
+- **2026-10-24-podbuf-design.md** — the design of the third payload encoding,
+  `podbuf`: the intent and trust model, the first-fit layout law, the preamble,
+  the descriptors and the stride, the value rules, `verify`, the evolution
+  rules, strict and open enums, the alternatives and the measured evidence of a
+  spike on a Cortex-R52 model. Archived verbatim, on 2026-10-27, once the codec
+  landed. The durable records are
+  [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md), which restates
+  the design as decisions corrected to the code and lists where it departs from
+  the design, and [the podbuf codec design record](../design/podbuf-codec.md).
+  Its plan stays in `docs/wip/` until Tasks 13 and 14 are built.

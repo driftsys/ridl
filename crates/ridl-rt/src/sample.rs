@@ -313,13 +313,21 @@ mod tests {
             Freshness::Stale { by: Duration(1) },
             Freshness::Unbounded,
         ];
-        for provenance in provenances {
-            for freshness in freshnesses {
-                let expected =
-                    provenance == Provenance::Live && !matches!(freshness, Freshness::Stale { .. });
+        // Rows are provenances in the order above, columns are freshnesses in
+        // the order above: Fresh, Stale, Unbounded. Written out so that the
+        // expectation does not repeat the expression of `usable`.
+        let usable = [
+            [false, false, false], // Init
+            [true, false, true],   // Live
+            [false, false, false], // Invalid(Declared)
+            [false, false, false], // Invalid(Detected(InvalidValue))
+            [false, false, false], // Invalid(Detected(Corrupt))
+        ];
+        for (row, provenance) in provenances.into_iter().enumerate() {
+            for (column, freshness) in freshnesses.into_iter().enumerate() {
                 assert_eq!(
                     sample(provenance, freshness).usable(),
-                    expected,
+                    usable[row][column],
                     "{provenance:?} with {freshness:?}"
                 );
             }

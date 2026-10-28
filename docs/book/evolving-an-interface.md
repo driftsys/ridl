@@ -115,9 +115,12 @@ leaves the hash unchanged makes none.
 The one transport in this workspace is the WebSocket binding. The Rust crate
 `ridl-transport-ws` serves it, and the TypeScript package
 `@driftsys/ridl-transport-ws` (`packages/ridl-transport-ws/`) is its consuming
-side, for Deno and the browser. The crate reads no descriptor and accepts an
-`attach` on an exact match of the hash only, so it refuses an
-earlier hash from the list, which the last column shows as accepted. The last
+side, for Deno and the browser. The crate opens no descriptor file itself. Its
+embedder may supply a member table that lists the compatible hashes, built by
+hand or, with the crate's `descriptor` feature, from the bytes of the catalog
+descriptor: with
+one, the crate accepts an `attach` naming a listed earlier hash, as the last
+column shows; without one, it accepts an exact match of the hash only. The last
 column states what the frame specification
 ([section 6.1](reference/frame.md#61-attach-and-attached)) specifies for an
 older consumer, built against the version before the change.
@@ -153,10 +156,45 @@ common cases:
   `interaction_reordered`); a payload, a parameter list or a return shape
   changed (`payload_changed`, `params_changed`, `return_changed`); a scalar
   constraint narrowed or a width changed (`constraint_changed`,
-  `width_changed`); a signal bound loosened or removed; a struct field, a union
+  `width_changed`); a declared payload limit raised, lowered, added or removed
+  (`limit_changed`); a signal bound loosened or removed; a struct field, a union
   arm or an enum value removed, an enum value renumbered, or an interface
   number changed (`decl_removed`, `member_reordered`,
   `interface_number_changed`).
+- **Breaking under podbuf**: a struct field appended to a struct that another
+  struct, a tuple or an exact-length array holds inline anywhere in the new
+  side, in a struct, in the argument struct a call with several parameters
+  induces, or in a tuple reply (`podbuf_inline_append`). A podbuf head holds such a struct at a
+  fixed offset, so the inline copy cannot grow without moving the fields after
+  it; the other encodings hold no struct inline. The line names each inline
+  use.
+  A snapshot does not record the encodings a workspace builds, so the verdict
+  follows `ridl diff --encoding podbuf`: breaking with it, compatible without
+  it, under the heading `breaking under podbuf` either way. The search mirrors
+  the heads the encoder lays out, a declaration and a named induced tuple: a
+  struct that is a root of its own (a single named parameter, a named reply, a
+  signal, event or fixed payload), that is used only as the element of a
+  bounded array, the key or value of a map entry, or a union arm, or only
+  inside an exact-length array that is itself a root (a fixed payload
+  `[S; 2..2]`, which has no head) can grow under podbuf, and such an append is
+  compatible. A tuple inside such a root is a head, and a struct inside that
+  tuple is a use. Also breaking under podbuf: an enum value or a union arm
+  appended after which the podbuf integer of the enum or the tag of the union
+  is a different integer, by width or by signedness: a value above 255 or an
+  arm past ordinal 255 (`u8` to `u16`), above 65535 (`u16` to `u32`), or a
+  first negative value of an enum (`u8` to `i8`). It is reported once per
+  declaration as `podbuf_width_change` with the old and the new integer,
+  under the same heading and with the same verdict rule; every head that holds
+  the enum or the union lays out a different integer, and an append that keeps
+  the integer draws no such line. Also breaking under podbuf: an enum value or
+  an enum-set flag appended. Every enum and enum set is strict, and the
+  `verify` of an older reader refuses a value or a bit its declaration does not
+  name. It is reported once per declaration as `podbuf_strict_enum_append`,
+  under the same heading and with the same verdict rule, except that an enum
+  whose append changes the integer draws only the `podbuf_width_change` line.
+  A field removed from a struct, its slot held by a tombstone, is `decl_removed`,
+  breaking under every encoding: the type is gone from the source, so its
+  bytes cannot be kept.
 
 An interface that joins the list of a service with a named interface list, or
 leaves it, is not part of the hash input, because the list is not hashed. Such

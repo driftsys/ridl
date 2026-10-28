@@ -56,5 +56,5 @@ and both generated languages are compiled, not merely compared:
 sibling modules and runs `rustc`, and
 `services_workspace_generated_typescript_type_checks` runs the emitted modules
 through `tsc --noEmit --strict`, which is where the cross-package module import
-(`import * as fleet_contracts from './fleet.contracts'`) is actually resolved
+(`import * as fleet_contracts from './fleet.contracts.js'`) is actually resolved
 rather than just observed in a snapshot.

@@ -1,10 +1,9 @@
 [package]
 name = "ridl-transport-ws"
 version.workspace = true
-# Edition 2021 and rust-version 1.83 as literals, the same as `ridl-rt`:
-# edition 2024 cannot build before Rust 1.85.
+# Edition 2021 and rust-version 1.88 as literals, the same as `ridl-rt`.
 edition = "2021"
-rust-version = "1.83"
+rust-version = "1.88"
 license.workspace = true
 repository.workspace = true
 description = "The WebSocket binding of the ridl frame: a no_std codec and a server for ridl-rt ports."
@@ -26,9 +25,17 @@ default = ["server"]
 # The server side of the binding. It turns on `std` for this crate and nothing
 # else; it turns on no `ridl-rt` feature.
 server = []
+# Reads a member table from a catalog descriptor
+# (`MemberTable::from_descriptor`). Off by default because of the weight of
+# its dependencies; it needs no later Rust than the crate's rust-version.
+descriptor = ["server", "dep:ridl-descriptor"]
 
 [dependencies]
 ridl-rt.workspace = true
+# The `no_std` reader of the catalog descriptor: the workspace entry turns its
+# default features off, so planus and serde come without `ridl-ir`,
+# `serde_json` or `hashbrown`.
+ridl-descriptor = { workspace = true, optional = true }
 
 [dev-dependencies]
 # Path only, with no version: the package leaves out `tests/`, the only user.
@@ -39,7 +46,8 @@ ridl-loopback = { path = "../ridl-loopback" }
 # An independent WebSocket client, so that the hand-written server side of
 # RFC 6455 is tested against an implementation this repository did not write.
 # A dev-dependency does not reach the build of a crate that depends on this
-# one. 0.29 is the newest release whose rust-version is not above this crate's.
+# one. 0.29 was the newest release whose rust-version was not above this
+# crate's minimum of 1.83 when it was chosen.
 tungstenite = "0.29.0"
 
 # The two test targets that run `serve` need the `server` feature. With it off,
@@ -51,6 +59,11 @@ required-features = ["server"]
 [[test]]
 name = "scenario"
 required-features = ["server"]
+
+# The descriptor tests need the `descriptor` feature.
+[[test]]
+name = "descriptor"
+required-features = ["descriptor"]
 
 [[example]]
 name = "loopback_server"

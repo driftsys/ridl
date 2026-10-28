@@ -1,5 +1,215 @@
 # Changelog
 
+## [0.14.0] (2026-10-25)
+
+### Refactoring
+
+- **ridl-diff:** share the append rule with the baseline desk check ([#590])
+  ([#1081]) ([ebf7b8f])
+- **ridl-backend-rust:** record payload owners during the single codec walk
+  ([#1046]) ([245ef22]), closes [#1040]
+
+### Documentation
+
+- **ridl-rt:** state that unobserved wakes are the runtime's choice ([#1077])
+  ([4cda629]), refs [#526]
+- **adr:** amend ADR-0030 with per-interaction payload limits from one source
+  ([#1056]) ([d7068fb]), refs [#1045], [#1045], [#1045]
+- **ridl-transport-ws:** archive the catalog descriptor design and plan
+  ([#1053]) ([6cf9fc3])
+
+### Features
+
+- record declared payload limits in the IR and report limit changes in ridl diff
+  ([#1065]) ([d4ac1cc]), refs [#1058]
+- **ridlc:** per-interaction payload limits from the [limits] manifest table
+  ([#1063]) ([f434b58]), refs [#1057]
+- **ridl-rt:** raise the minimum Rust version of the family to 1.88 ([#1048])
+  ([016167c]), refs [#1047], [#1047], [#1047], [#1047]
+- **ridl-transport-ws:** run the examples with a member table read from the
+  descriptor ([#1043]) ([ec8f29e])
+- **ridl-transport-ws:** read the member table from a catalog descriptor under a
+  feature ([#1042]) ([ee1c273])
+- **ridl-transport-ws:** keep a settled response until its bound, under a
+  retained-bytes cap ([#1038]) ([cf907c2])
+- **ridl-backend-rust:** transcode between payload encodings ([#1035])
+  ([980a569])
+- **ridl-transport-ws:** accept a compatible earlier hash at attach ([#1037])
+  ([8668aaa])
+- **ridl-transport-ws:** refuse an unknown interaction through a member table
+  ([#1036]) ([563ff0b])
+
+### Bug Fixes
+
+- **repo:** finish the smaller items of [#347] (install dir, private, line
+  index, tests) ([#1080]) ([0580e94])
+- **ridl-lsp:** exit 1 when the session ends without shutdown ([#347]) ([#1079])
+  ([5ffbaa4])
+- **repo:** check docs paths with no extension and no trailing slash in
+  doc-path-check ([#428]) ([#1078]) ([8524ad4]), closes [#428]
+- **repo:** harden the install scripts, make line_col linear, fix prose drift
+  ([#347] slice 2) ([#1075]) ([4200a06]), refs [#347], [#347], [#347]
+- **xtask:** fail the freeze check when a runtime crate is not a workspace
+  package ([#1062]) ([722ad39]), closes [#1005]
+- **xtask:** require a freeze baseline to be an ancestor of HEAD ([#1061])
+  ([40a9571]), closes [#897]
+- **ridl-core:** skip AppleDouble entries when reading a remote unit ([#1060])
+  ([ae61ff6]), closes [#940]
+- **ridl-backend-rust:** emit no multiplication for a one-byte vector element
+  ([#1055]) ([cb44cb6]), closes [#1052]
+- **ridl-transport-ws:** follow-ups from the member-table review ([#1054])
+  ([de0ba10])
+- **ridl-backend-ts:** emit .js suffixes in the generated module imports
+  ([#1034]) ([d3adcc8])
+- **ci:** guard the editor publish step against an empty token ([#1033])
+  ([2821bec]), refs [#980]
+
+### BREAKING CHANGES
+
+- the runtime crates need Rust 1.88 or later.
+- the generated crate declares a minimum of Rust 1.88.
+- ridl_backend_rust::generate_pipeline takes a transcode: bool parameter after encodings.
+
+[0.14.0]: https://github.com/driftsys/ridl/compare/v0.13.0...v0.14.0
+[ebf7b8f]: https://github.com/driftsys/ridl/commit/ebf7b8f
+[#590]: https://github.com/driftsys/ridl/issues/590
+[#1081]: https://github.com/driftsys/ridl/issues/1081
+[245ef22]: https://github.com/driftsys/ridl/commit/245ef22
+[#1046]: https://github.com/driftsys/ridl/issues/1046
+[#1040]: https://github.com/driftsys/ridl/issues/1040
+[4cda629]: https://github.com/driftsys/ridl/commit/4cda629
+[#1077]: https://github.com/driftsys/ridl/issues/1077
+[#526]: https://github.com/driftsys/ridl/issues/526
+[d7068fb]: https://github.com/driftsys/ridl/commit/d7068fb
+[#1056]: https://github.com/driftsys/ridl/issues/1056
+[#1045]: https://github.com/driftsys/ridl/issues/1045
+[6cf9fc3]: https://github.com/driftsys/ridl/commit/6cf9fc3
+[#1053]: https://github.com/driftsys/ridl/issues/1053
+[d4ac1cc]: https://github.com/driftsys/ridl/commit/d4ac1cc
+[#1065]: https://github.com/driftsys/ridl/issues/1065
+[#1058]: https://github.com/driftsys/ridl/issues/1058
+[f434b58]: https://github.com/driftsys/ridl/commit/f434b58
+[#1063]: https://github.com/driftsys/ridl/issues/1063
+[#1057]: https://github.com/driftsys/ridl/issues/1057
+[016167c]: https://github.com/driftsys/ridl/commit/016167c
+[#1048]: https://github.com/driftsys/ridl/issues/1048
+[#1047]: https://github.com/driftsys/ridl/issues/1047
+[ec8f29e]: https://github.com/driftsys/ridl/commit/ec8f29e
+[#1043]: https://github.com/driftsys/ridl/issues/1043
+[ee1c273]: https://github.com/driftsys/ridl/commit/ee1c273
+[#1042]: https://github.com/driftsys/ridl/issues/1042
+[cf907c2]: https://github.com/driftsys/ridl/commit/cf907c2
+[#1038]: https://github.com/driftsys/ridl/issues/1038
+[980a569]: https://github.com/driftsys/ridl/commit/980a569
+[#1035]: https://github.com/driftsys/ridl/issues/1035
+[8668aaa]: https://github.com/driftsys/ridl/commit/8668aaa
+[#1037]: https://github.com/driftsys/ridl/issues/1037
+[563ff0b]: https://github.com/driftsys/ridl/commit/563ff0b
+[#1036]: https://github.com/driftsys/ridl/issues/1036
+[0580e94]: https://github.com/driftsys/ridl/commit/0580e94
+[#347]: https://github.com/driftsys/ridl/issues/347
+[#1080]: https://github.com/driftsys/ridl/issues/1080
+[5ffbaa4]: https://github.com/driftsys/ridl/commit/5ffbaa4
+[#1079]: https://github.com/driftsys/ridl/issues/1079
+[8524ad4]: https://github.com/driftsys/ridl/commit/8524ad4
+[#428]: https://github.com/driftsys/ridl/issues/428
+[#1078]: https://github.com/driftsys/ridl/issues/1078
+[4200a06]: https://github.com/driftsys/ridl/commit/4200a06
+[#1075]: https://github.com/driftsys/ridl/issues/1075
+[722ad39]: https://github.com/driftsys/ridl/commit/722ad39
+[#1062]: https://github.com/driftsys/ridl/issues/1062
+[#1005]: https://github.com/driftsys/ridl/issues/1005
+[40a9571]: https://github.com/driftsys/ridl/commit/40a9571
+[#1061]: https://github.com/driftsys/ridl/issues/1061
+[#897]: https://github.com/driftsys/ridl/issues/897
+[ae61ff6]: https://github.com/driftsys/ridl/commit/ae61ff6
+[#1060]: https://github.com/driftsys/ridl/issues/1060
+[#940]: https://github.com/driftsys/ridl/issues/940
+[cb44cb6]: https://github.com/driftsys/ridl/commit/cb44cb6
+[#1055]: https://github.com/driftsys/ridl/issues/1055
+[#1052]: https://github.com/driftsys/ridl/issues/1052
+[de0ba10]: https://github.com/driftsys/ridl/commit/de0ba10
+[#1054]: https://github.com/driftsys/ridl/issues/1054
+[d3adcc8]: https://github.com/driftsys/ridl/commit/d3adcc8
+[#1034]: https://github.com/driftsys/ridl/issues/1034
+[2821bec]: https://github.com/driftsys/ridl/commit/2821bec
+[#1033]: https://github.com/driftsys/ridl/issues/1033
+[#980]: https://github.com/driftsys/ridl/issues/980
+
+## [0.13.0] (2026-10-23)
+
+### Features
+
+- **ridl-backend-ts:** generate a plain-object codec table for the wasm codec
+  ([#1027]) ([671d639])
+- **repo:** verify the cabin temperature through the wasm codec in both demos
+  ([#1025]) ([98d2761])
+- **repo:** run the cabin temperature check in a headless browser ([#1023])
+  ([fc338eb])
+- **repo:** serve cabin's temperature over WebSocket and decode it in Deno with
+  flatc code ([#1021]) ([ef31abd])
+- **ridlc:** warn on bounds and payloads above the transfer limits ([#1013])
+  ([c55cd60])
+- **ridlc:** export a wasm codec from the generated crate ([#1018]) ([3c9cce0])
+- **ts-runtime:** load the wasm codec and verify payloads ([#1017]) ([d3e7f1b])
+- **xtask:** freeze ridl-transport-ws as a runtime crate ([#1004]) ([aac0d2e]),
+  closes [#987]
+
+### Bug Fixes
+
+- **repo:** drop the cabin server's hold at -40 and make the demo's check
+  independent of timing ([#1022]) ([85bd01b])
+- **xtask:** close the runtime-crates freeze gaps ([#1011]) ([c079e7b])
+- **xtask:** freeze union mappings in the wire dump ([#1006]) ([e5e59bd]),
+  closes [#917]
+
+### Documentation
+
+- **roadmap:** record the FlatBuffers-first plan for the web session ([#1019])
+  ([6f38ef6])
+- **roadmap:** design the TypeScript wasm codec and the runtime package
+  ([#1016]) ([4955239])
+- **adr:** name the TypeScript runtime package in ADR-0020 ([#1014]) ([4c604f3])
+- **adr:** propose ADR-0030, transfer and bound limits ([#1012]) ([bfeefa7])
+
+### BREAKING CHANGES
+
+- @driftsys/ridl-runtime loadCodec requires the ridl_type_id export, so a wasm module built by ridl 0.12 or earlier must be rebuilt, and the Codec interface gains a required typeId member.
+
+[0.13.0]: https://github.com/driftsys/ridl/compare/v0.12.0...v0.13.0
+[671d639]: https://github.com/driftsys/ridl/commit/671d639
+[#1027]: https://github.com/driftsys/ridl/issues/1027
+[98d2761]: https://github.com/driftsys/ridl/commit/98d2761
+[#1025]: https://github.com/driftsys/ridl/issues/1025
+[fc338eb]: https://github.com/driftsys/ridl/commit/fc338eb
+[#1023]: https://github.com/driftsys/ridl/issues/1023
+[ef31abd]: https://github.com/driftsys/ridl/commit/ef31abd
+[#1021]: https://github.com/driftsys/ridl/issues/1021
+[c55cd60]: https://github.com/driftsys/ridl/commit/c55cd60
+[#1013]: https://github.com/driftsys/ridl/issues/1013
+[3c9cce0]: https://github.com/driftsys/ridl/commit/3c9cce0
+[#1018]: https://github.com/driftsys/ridl/issues/1018
+[d3e7f1b]: https://github.com/driftsys/ridl/commit/d3e7f1b
+[#1017]: https://github.com/driftsys/ridl/issues/1017
+[aac0d2e]: https://github.com/driftsys/ridl/commit/aac0d2e
+[#1004]: https://github.com/driftsys/ridl/issues/1004
+[#987]: https://github.com/driftsys/ridl/issues/987
+[85bd01b]: https://github.com/driftsys/ridl/commit/85bd01b
+[#1022]: https://github.com/driftsys/ridl/issues/1022
+[c079e7b]: https://github.com/driftsys/ridl/commit/c079e7b
+[#1011]: https://github.com/driftsys/ridl/issues/1011
+[e5e59bd]: https://github.com/driftsys/ridl/commit/e5e59bd
+[#1006]: https://github.com/driftsys/ridl/issues/1006
+[#917]: https://github.com/driftsys/ridl/issues/917
+[6f38ef6]: https://github.com/driftsys/ridl/commit/6f38ef6
+[#1019]: https://github.com/driftsys/ridl/issues/1019
+[4955239]: https://github.com/driftsys/ridl/commit/4955239
+[#1016]: https://github.com/driftsys/ridl/issues/1016
+[4c604f3]: https://github.com/driftsys/ridl/commit/4c604f3
+[#1014]: https://github.com/driftsys/ridl/issues/1014
+[bfeefa7]: https://github.com/driftsys/ridl/commit/bfeefa7
+[#1012]: https://github.com/driftsys/ridl/issues/1012
+
 ## [0.12.0] (2026-10-20)
 
 ### Features

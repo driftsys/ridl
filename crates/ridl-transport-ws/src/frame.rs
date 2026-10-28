@@ -24,6 +24,10 @@ pub const SUBPROTOCOL: &str = "ridl-ws-v1";
 /// The smallest message size limit a receiver may configure: the largest
 /// header of any message, an `attach` with a 255-byte name.
 pub const MIN_MESSAGE_LIMIT: usize = 294;
+/// The largest message size limit the Rust provider accepts, and its default:
+/// the largest data-plane message, 36 bytes of header and envelope plus the
+/// 16,256-byte payload ceiling (ADR-0030 decisions 2 and 10).
+pub const MAX_MESSAGE_LIMIT: usize = 16_292;
 /// The size of an encoded [`Envelope`] in bytes.
 pub const ENVELOPE_BYTES: usize = 16;
 
@@ -320,12 +324,12 @@ impl From<ProtocolViolation> for DecodeError {
 }
 
 /// The encoding tag of an encoding name: `flatbuffers` 1, `proto3` 2,
-/// `repr-c` 3.
+/// `podbuf` 3.
 pub fn encoding_tag(name: &str) -> Option<u8> {
     match name {
         "flatbuffers" => Some(1),
         "proto3" => Some(2),
-        "repr-c" => Some(3),
+        "podbuf" => Some(3),
         _ => None,
     }
 }
@@ -795,5 +799,16 @@ impl Frame<'_> {
             }
         }
         Ok(w.at)
+    }
+}
+
+#[cfg(test)]
+mod encoding_tag_tests {
+    use super::encoding_tag;
+
+    #[test]
+    fn the_encoding_tag_of_podbuf_is_3() {
+        assert_eq!(encoding_tag("podbuf"), Some(3));
+        assert_eq!(encoding_tag("repr-c"), None);
     }
 }

@@ -1,0 +1,179 @@
+---
+source: crates/ridl-backend-ts/tests/codec.rs
+assertion_line: 76
+expression: "module(&cabin_model(), \"veh.cabin\")"
+---
+import * as flatbuffers from "flatbuffers";
+import type { PayloadCodec } from "@driftsys/ridl-runtime";
+import type * as t from "./veh.cabin.js";
+// `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
+// of this file.
+import * as fb from "./veh/cabin.js";
+
+/** The name of the catalog unit this package belongs to. */
+export const CATALOG_NAME = "veh.cabin";
+/** The hash of the catalog unit, which the wasm module carries. */
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([89, 185, 249, 36, 131, 82, 68, 160, 215, 181, 151, 232, 10, 255, 27, 31, 234, 139, 7, 172, 241, 146, 116, 74, 247, 242, 3, 62, 203, 41, 66, 222]);
+/** The qualified names of the payload types of this package, which name the wasm type ids. */
+export const PAYLOAD_TYPES = [
+  "veh.cabin.Average",
+  "veh.cabin.Diagnostic",
+  "veh.cabin.Health",
+  "veh.cabin.Level",
+  "veh.cabin.Setpoint",
+  "veh.cabin.Subsystems",
+  "veh.cabin.Temperature",
+  "veh.cabin.Warning",
+  "veh.cabin.Window",
+] as const;
+/** The text of each rule code the wasm module reports, rule code n at index n - 2. */
+export const RULES = ["length", "pattern", "range", "step", "unique", "variant"] as const;
+
+/** Encodes a `veh.cabin.Temperature` payload. */
+export function encodeTemperature(value: t.Temperature): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.TemperatureBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Temperature` payload the codec has verified. */
+export function decodeTemperature(bytes: Uint8Array): t.Temperature {
+  return fb.TemperatureBox.getRootAsTemperatureBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Temperature;
+}
+
+/** Encodes a `veh.cabin.Level` payload. */
+export function encodeLevel(value: t.Level): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.LevelBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Level` payload the codec has verified. */
+export function decodeLevel(bytes: Uint8Array): t.Level {
+  return fb.LevelBox.getRootAsLevelBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Level;
+}
+
+/** Encodes a `veh.cabin.Window` payload. */
+export function encodeWindow(value: t.Window): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.WindowBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Window` payload the codec has verified. */
+export function decodeWindow(bytes: Uint8Array): t.Window {
+  return fb.WindowBox.getRootAsWindowBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Window;
+}
+
+/** Encodes a `veh.cabin.Average` payload. */
+export function encodeAverage(value: t.Average): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.AverageBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Average` payload the codec has verified. */
+export function decodeAverage(bytes: Uint8Array): t.Average {
+  return fb.AverageBox.getRootAsAverageBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Average;
+}
+
+/** Encodes a `veh.cabin.Health` payload. */
+export function encodeHealth(value: t.Health): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.HealthBoxT(BigInt(value)).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Health` payload the codec has verified. */
+export function decodeHealth(bytes: Uint8Array): t.Health {
+  return Number(fb.HealthBox.getRootAsHealthBox(new flatbuffers.ByteBuffer(bytes)).unpack().value) as t.Health;
+}
+
+/** Encodes a `veh.cabin.Warning` payload. */
+export function encodeWarning(value: t.Warning): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packWarning(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Warning` payload the codec has verified. */
+export function decodeWarning(bytes: Uint8Array): t.Warning {
+  return unpackWarning(fb.Warning.getRootAsWarning(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packWarning(value: t.Warning): fb.WarningT {
+  const object = new fb.WarningT();
+  object.code = value.code;
+  object.health = BigInt(value.health);
+  return object;
+}
+function unpackWarning(object: fb.WarningT): t.Warning {
+  return {
+    code: object.code as t.Level,
+    health: Number(object.health) as t.Health,
+  };
+}
+
+/** Encodes a `veh.cabin.Subsystems` payload. */
+export function encodeSubsystems(value: t.Subsystems): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.SubsystemsBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Subsystems` payload the codec has verified. */
+export function decodeSubsystems(bytes: Uint8Array): t.Subsystems {
+  return fb.SubsystemsBox.getRootAsSubsystemsBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Subsystems;
+}
+
+/** Encodes a `veh.cabin.Diagnostic` payload. */
+export function encodeDiagnostic(value: t.Diagnostic): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packDiagnostic(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Diagnostic` payload the codec has verified. */
+export function decodeDiagnostic(bytes: Uint8Array): t.Diagnostic {
+  return unpackDiagnostic(fb.Diagnostic.getRootAsDiagnostic(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packDiagnostic(value: t.Diagnostic): fb.DiagnosticT {
+  const object = new fb.DiagnosticT();
+  object.covers = value.covers;
+  object.health = BigInt(value.health);
+  object.loop = value.loop;
+  return object;
+}
+function unpackDiagnostic(object: fb.DiagnosticT): t.Diagnostic {
+  return {
+    covers: object.covers as t.Subsystems,
+    health: Number(object.health) as t.Health,
+    loop: object.loop as t.Level,
+  };
+}
+
+/** Encodes a `veh.cabin.Setpoint` payload. */
+export function encodeSetpoint(value: t.Setpoint): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.SetpointBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Setpoint` payload the codec has verified. */
+export function decodeSetpoint(bytes: Uint8Array): t.Setpoint {
+  return fb.SetpointBox.getRootAsSetpointBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Setpoint;
+}
+
+const codecTemperature: PayloadCodec<t.Temperature> = { type: "veh.cabin.Temperature", encode: encodeTemperature, decode: decodeTemperature };
+const codecLevel: PayloadCodec<t.Level> = { type: "veh.cabin.Level", encode: encodeLevel, decode: decodeLevel };
+const codecWindow: PayloadCodec<t.Window> = { type: "veh.cabin.Window", encode: encodeWindow, decode: decodeWindow };
+const codecAverage: PayloadCodec<t.Average> = { type: "veh.cabin.Average", encode: encodeAverage, decode: decodeAverage };
+const codecHealth: PayloadCodec<t.Health> = { type: "veh.cabin.Health", encode: encodeHealth, decode: decodeHealth };
+const codecWarning: PayloadCodec<t.Warning> = { type: "veh.cabin.Warning", encode: encodeWarning, decode: decodeWarning };
+
+/** The members of interface `Cabin`, interface number `1`. */
+export const Cabin = {
+  iface: 1,
+  temperature: { iface: 1, ord: 1, kind: "signal", payload: codecTemperature },
+  warning: { iface: 1, ord: 2, kind: "event", payload: codecWarning },
+  setLevel: { iface: 1, ord: 3, kind: "command", request: codecLevel },
+  average: { iface: 1, ord: 4, kind: "query", request: codecWindow, reply: codecAverage },
+} as const;
+
+/** The members of interface `Horn`, interface number `2`. */
+export const Horn = {
+  iface: 2,
+  active: { iface: 2, ord: 1, kind: "signal", payload: codecHealth },
+} as const;

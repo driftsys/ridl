@@ -20,8 +20,9 @@
 //! `ridl baseline` and `ridl check --baseline` are the desk-time half of that
 //! engine (general form §6.3): `baseline` publishes one `.ir.json`
 //! snapshot per package, and `check` compares the workspace against those
-//! snapshots and warns (RIDL-407) when the ordinal of an interaction, a struct
-//! field or a union arm moved. Both live here rather than in
+//! snapshots and warns (RIDL-407) when an interaction's ordinal moved, and
+//! when a struct field or union arm was inserted, removed, moved or appended
+//! in a way `ridl diff` gates on. Both live here rather than in
 //! `ridlc` because reading a workspace-local baseline is not part of the
 //! source→IR function the tool qualification argument covers (ADR-0008
 //! decision 9).
@@ -48,6 +49,7 @@ use std::process::ExitCode;
 
 mod catalogs;
 mod lock;
+mod podbuf_padding;
 mod property;
 mod scaffold;
 mod vendor;
@@ -184,6 +186,13 @@ enum Command {
         /// report prints it, e.g. `timing_changed`.
         #[arg(long, value_name = "CATEGORY")]
         explain: Option<String>,
+        /// An encoding the change is judged for, as `[backend.<name>]
+        /// encodings` names it; repeat the flag for several. A snapshot does
+        /// not record the encodings a workspace builds. Only `podbuf` has a
+        /// rule of its own: with it, a change under the heading "breaking
+        /// under podbuf" is breaking; without it, compatible.
+        #[arg(long, value_enum, value_name = "ENCODING")]
+        encoding: Vec<DiffEncoding>,
     },
     /// Allocate a number to every interface that has none and write each
     /// unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one
@@ -208,8 +217,9 @@ enum Command {
         #[command(subcommand)]
         sub: Option<LockCommand>,
     },
-    /// Run the language server over stdio: exit 0 on a clean shutdown, 2 on a
-    /// transport error. Editors spawn this. Stdio is the only transport.
+    /// Run the language server over stdio: exit 0 after `shutdown` then `exit`,
+    /// 1 when the client ends the session without `shutdown`, 2 on a transport
+    /// error. Editors spawn this. Stdio is the only transport.
     Lsp {
         /// Select the stdio transport. Accepted because editor clients pass
         /// it, as the LSP specification recommends; omitting it changes
@@ -315,6 +325,27 @@ enum DiffFormat {
     Json,
 }
 
+/// An encoding `ridl diff --encoding` judges the change for: the names of
+/// `ridl_core::manifest::ENCODING_NAMES`, so that the flag takes what the
+/// manifest takes. A name outside the list is clap's usage error, exit 2.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+enum DiffEncoding {
+    Flatbuffers,
+    Proto3,
+    Podbuf,
+}
+
+impl DiffEncoding {
+    /// The name as the manifest and `ridl_diff::diff_refs_with` spell it.
+    fn name(self) -> &'static str {
+        match self {
+            DiffEncoding::Flatbuffers => "flatbuffers",
+            DiffEncoding::Proto3 => "proto3",
+            DiffEncoding::Podbuf => "podbuf",
+        }
+    }
+}
+
 /// The `ridl check` output format.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 enum CheckFormat {
@@ -361,10 +392,11 @@ fn main() -> ExitCode {
             new,
             format,
             explain,
+            encoding,
         } => match explain {
             Some(category) => run_explain(&category),
             None => match (old, new) {
-                (Some(old), Some(new)) => run_diff(&old, &new, format),
+                (Some(old), Some(new)) => run_diff(&old, &new, format, &encoding),
                 _ => {
                     eprintln!(
                         "error: `ridl diff` needs both an old and a new input, \
@@ -472,22 +504,32 @@ fn run_describe(path: &Path) -> ExitCode {
 
 /// `ridl lsp`: the language server over stdio. Every behavior lives in
 /// `ridl-lsp`; this wires the transport and maps the outcome onto the exit
-/// codes of ADR-0010 decision 1 — 0 when the client shut the server down, 2
-/// when the transport failed or ended before the handshake, which is the tool
-/// being unable to answer rather than a negative answer.
+/// codes of ADR-0010 decision 1, which follow the LSP specification: 0 only
+/// after the client sent `shutdown` then `exit`; 1 when the client sent `exit`
+/// with no `shutdown`, or closed stdin with no `shutdown`; 2 when the
+/// transport failed or ended before the handshake, which is the tool being
+/// unable to answer rather than a negative answer.
 fn run_lsp() -> ExitCode {
     let (connection, io_threads) = lsp_server::Connection::stdio();
-    if let Err(err) =
-        ridl_lsp::server::run_with_version(connection, Some(env!("RIDL_BUILD_VERSION")))
+    let end = match ridl_lsp::server::run_with_version(connection, Some(env!("RIDL_BUILD_VERSION")))
     {
-        eprintln!("error: {err}");
-        return ExitCode::from(2);
-    }
+        Ok(end) => end,
+        Err(err) => {
+            eprintln!("error: {err}");
+            return ExitCode::from(2);
+        }
+    };
     if let Err(err) = io_threads.join() {
         eprintln!("error: {err}");
         return ExitCode::from(2);
     }
-    ExitCode::SUCCESS
+    match end {
+        ridl_lsp::server::SessionEnd::Shutdown => ExitCode::SUCCESS,
+        ridl_lsp::server::SessionEnd::WithoutShutdown => {
+            eprintln!("error: the client ended the session without a `shutdown` request");
+            ExitCode::from(1)
+        }
+    }
 }
 
 /// `ridl mcp`: the Model Context Protocol server over stdio. `rmcp` is async,
@@ -537,11 +579,11 @@ fn run_explain(category: &str) -> ExitCode {
     }
 }
 
-/// Compares the `old` and `new` inputs and renders the report to stdout,
-/// returning the diff exit code: 2 on an I/O or compile error while loading
-/// either side, 1 when the change is breaking, 0 when it is compatible or the
-/// two are identical.
-fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
+/// Compares the `old` and `new` inputs, judged for `encodings`, and renders
+/// the report to stdout, returning the diff exit code: 2 on an I/O or compile
+/// error while loading either side, 1 when the change is breaking, 0 when it
+/// is compatible or the two are identical.
+fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncoding]) -> ExitCode {
     let mut db = ridl_core::RidlDatabase::default();
     let old_side = match ridlc::load_diff_side(&mut db, old, &[]) {
         Ok(side) => side,
@@ -559,12 +601,14 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
     // field appended with a `ridl.std` type is then judged by that type's
     // declaration rather than reported breaking as unresolved
     // (driftsys/ridl#598).
-    let report = ridl_diff::diff_workspaces(
+    let encodings: Vec<&str> = encodings.iter().map(|encoding| encoding.name()).collect();
+    let report = ridl_diff::diff_workspaces_with(
         &old_side.packages,
         old_side.system.as_ref(),
         &new_side.packages,
         new_side.system.as_ref(),
         &[ridlc::std_ir()],
+        &encodings,
     );
     // `render_text` already terminates every line, so it prints as is; the JSON
     // rendering has no trailing newline and gets one.
@@ -681,14 +725,17 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
         .iter()
         .filter(|diagnostic| lint_of(diagnostic.code).is_none());
     if lock::only_lock_orphans(compile_diagnostics) {
-        match baseline_location(path, baseline) {
-            Ok(Some(location)) => {
-                if let Err(code) = desk_check(path, &location, baseline.is_some(), &mut run) {
-                    return code;
-                }
-            }
-            Ok(None) => {}
+        let location = match baseline_location(path, baseline) {
+            Ok(location) => location,
             Err(code) => return code,
+        };
+        if let Some(location) = &location
+            && let Err(code) = desk_check(path, location, baseline.is_some(), &mut run)
+        {
+            return code;
+        }
+        if let Err(code) = padding_check(path, location.as_deref(), baseline.is_some(), &mut run) {
+            return code;
         }
     }
 
@@ -1550,6 +1597,103 @@ fn desk_check(
     Ok(())
 }
 
+/// Whether the manifest at the root of the workspace around `entry` lists
+/// `podbuf` in the `encodings` of a `[backend.<name>]` table. A manifest that
+/// cannot be read or parsed counts as not listing it: the compile reports it.
+fn manifest_enables_podbuf(entry: &Path) -> bool {
+    let Some(root) = ridl_core::find_root(&index_root(entry)) else {
+        return false;
+    };
+    let Ok(text) = std::fs::read_to_string(root.join("ridl.toml")) else {
+        return false;
+    };
+    let mut scratch = SourceMap::default();
+    let file = scratch.file_id("ridl.toml", &text);
+    ridl_core::manifest::parse_manifest(file, &text)
+        .0
+        .is_some_and(|manifest| {
+            manifest.backends.values().any(|table| {
+                table
+                    .encodings
+                    .iter()
+                    .any(|(encoding, _)| encoding == "podbuf")
+            })
+        })
+}
+
+/// RIDL-156 (`podbuf-padding-order`) over the checked workspace, appended to
+/// `run`. It runs when a `[backend.<name>]` table enables `podbuf` and the
+/// compile produced no error other than RIDL-409, and it only ever adds
+/// diagnostics. A struct is released when a snapshot under `location` declares
+/// it; with no baseline every struct is unreleased. `ridlc` reads no baseline
+/// (ADR-0008 decisions 9 and 14), so the lint belongs to `ridl check`.
+fn padding_check(
+    entry: &Path,
+    location: Option<&Path>,
+    explicit: bool,
+    run: &mut CliRun,
+) -> Result<(), ExitCode> {
+    if !manifest_enables_podbuf(entry) {
+        return Ok(());
+    }
+    let released: BTreeSet<(String, String)> = match location {
+        Some(location) => load_baseline(location, explicit)?
+            .iter()
+            .flat_map(|package| {
+                package
+                    .decls
+                    .iter()
+                    .filter(|declaration| {
+                        matches!(
+                            declaration.kind,
+                            Some(ridl_ir::v2::decl::Kind::StructDef(_))
+                        )
+                    })
+                    .map(|declaration| (package.name.clone(), declaration.name.clone()))
+            })
+            .collect(),
+        None => BTreeSet::new(),
+    };
+    let mut db = ridl_core::RidlDatabase::default();
+    let output = match ridlc::compile_workspace(&mut db, entry) {
+        Ok(output) => output,
+        Err(err) => {
+            eprintln!("error: {}: {err}", entry.display());
+            return Err(ExitCode::from(2));
+        }
+    };
+    if !lock::only_lock_orphans(&output.diagnostics) {
+        return Ok(());
+    }
+    let all: Vec<&ridl_ir::v2::Package> =
+        output.checked.iter().map(|checked| &checked.ir).collect();
+    // A remote unit is its owner's contract, so it is a target of references
+    // and never a subject.
+    let subjects: Vec<&ridl_ir::v2::Package> = all
+        .iter()
+        .copied()
+        .filter(|package| !ridlc::is_remote(package, &output.remote_units))
+        .collect();
+    let std = ridlc::std_ir();
+    let index = DeclIndex::build(entry);
+    let mut findings = podbuf_padding::check(
+        &all,
+        &std,
+        &subjects,
+        &released,
+        &mut run.sources,
+        |package, name, sources| index.shape_span(package, name, sources),
+    );
+    ridlc::retain_in_report_scope(
+        &mut findings,
+        &run.sources,
+        output.report_scope.as_deref(),
+        &[],
+    );
+    run.diagnostics.extend(findings);
+    Ok(())
+}
+
 /// The rename hint (lock design §4; plan decision PD-5). For every RIDL-409
 /// the compile produced, when exactly one declaration without an entry in
 /// the same unit has the orphan entry's shape in the published baseline,
@@ -1775,16 +1919,19 @@ struct CompositeBody {
 }
 
 impl CompositeBody {
-    /// The highest ordinal the body assigns or retires — the classifier's
-    /// mark for an append: a new member above it keeps every ordinal, though
-    /// an appended non-optional struct field whose type excludes 0 is still
-    /// breaking on its own (driftsys/ridl#598).
-    fn high_water(&self) -> Option<u32> {
-        self.live
-            .iter()
-            .map(|(_, ordinal)| *ordinal)
-            .chain(self.reserved.iter().map(|(_, ordinal)| *ordinal))
-            .max()
+    /// Whether `ordinal` is above every ordinal the body assigns or retires,
+    /// by the classifier's append rule ([`ridl_diff::is_above_high_water`]).
+    /// A new member above the mark keeps every ordinal, though an appended
+    /// non-optional struct field whose type excludes 0 is still breaking on
+    /// its own (driftsys/ridl#598).
+    fn is_above_high_water(&self, ordinal: u32) -> bool {
+        ridl_diff::is_above_high_water(
+            i64::from(ordinal),
+            self.live
+                .iter()
+                .map(|(_, held)| i64::from(*held))
+                .chain(self.reserved.iter().map(|(_, held)| i64::from(*held))),
+        )
     }
 
     fn ordinal_of(&self, member: &str) -> Option<u32> {
@@ -1865,7 +2012,9 @@ fn composite_body(
 /// change is, or `None` when the path is not `<package>/<container>/<member>`
 /// with a struct or union at `<container>` on both sides. The one exception
 /// is a removal whose container is no longer a struct or union in the
-/// workspace: it is reported as a bare removal. `std` is the built-in
+/// workspace: it is reported as a bare removal. `ridl diff` does not produce
+/// that input: a container that changes kind is one `kind_changed` change and
+/// a removed container is a two-segment path, so the branch is defensive. `std` is the built-in
 /// `ridl.std`, which a field type may name ([`ridl_diff::absence_refused`]).
 fn member_drift(
     change: &ridl_diff::Change,
@@ -1885,7 +2034,7 @@ fn member_drift(
             let after = composite_body(current, package, container)?;
             let ordinal = after.ordinal_of(member)?;
             let moved = after.moved_since(&before);
-            Some(if before.high_water().is_some_and(|mark| ordinal <= mark) {
+            Some(if !before.is_above_high_water(ordinal) {
                 let holder = before
                     .live
                     .iter()
@@ -1909,7 +2058,7 @@ fn member_drift(
                     .filter(|(name, held)| {
                         name != member
                             && before.ordinal_of(name).is_none()
-                            && before.high_water().is_some_and(|mark| *held <= mark)
+                            && !before.is_above_high_water(*held)
                     })
                     .map(|(name, _)| name.clone())
                     .collect();
@@ -2199,8 +2348,8 @@ fn member_message(change: &ridl_diff::Change, drift: MemberDrift) -> String {
 /// report. It names the member and the shape it is declared in — the words
 /// in the source — rather than the slash-separated diff path, states the one
 /// consequence that makes the warning worth reading (declaration order is the
-/// wire identity, ridl §11), and names the edit that keeps the baseline intact. It used to
-/// read `interaction ordinal changed against the baseline:
+/// wire identity, ridl §11), and names the edit that keeps the baseline
+/// intact. It used to read `interaction ordinal changed against the baseline:
 /// fx.audit/Motion/reset (interaction_reordered)`: "ordinal" is an IR word, the
 /// path is a diff-report word, `interaction_reordered` is the enum variant's
 /// own spelling, and between them they stated neither consequence nor remedy.
@@ -2869,6 +3018,11 @@ fn detached_span() -> Span {
 /// past the declaration reads as if the next one were implicated too. Shared
 /// by every member kind the index spans — an interaction, a struct field, and
 /// a union arm alike.
+///
+/// For a struct field, a union arm and a `reserved` entry the parser's range
+/// already ends at the last token, so the trim changes nothing there. A
+/// declaration followed by spaces, tabs, a comment, a blank line or a CRLF
+/// line ending underlines the same bytes with and without it.
 fn declaration_range(range: TextRange, text: &str) -> TextRange {
     let start = usize::from(range.start());
     let end = usize::from(range.end()).min(text.len());
@@ -3099,6 +3253,23 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `ridl diff --encoding` takes exactly the names a manifest's
+    /// `[backend.<name>] encodings` list takes, spelled the same way, so a
+    /// name added to one list does not compile or pass without the other.
+    #[test]
+    fn the_diff_encoding_flag_takes_the_manifest_encoding_names() {
+        use clap::ValueEnum as _;
+        let flag: Vec<&str> = DiffEncoding::value_variants()
+            .iter()
+            .map(|encoding| encoding.name())
+            .collect();
+        assert_eq!(flag, ridl_core::manifest::ENCODING_NAMES);
+        for encoding in DiffEncoding::value_variants() {
+            let shown = encoding.to_possible_value().unwrap();
+            assert_eq!(shown.get_name(), encoding.name());
+        }
+    }
 
     /// A history rename that fails after the snapshots moved in leaves no
     /// history of the replaced baseline beside the fresh snapshots.

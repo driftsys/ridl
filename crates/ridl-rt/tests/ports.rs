@@ -311,6 +311,80 @@ fn both_extensions_are_usable_as_trait_objects() {
     assert_eq!(coherent.read(IFACE, ORD, &mut out), Ok(RAW));
 }
 
+/// Names the traits among a fixed candidate list that the trait object type
+/// `$t` implements. A trait object implements its own trait and its
+/// supertraits, and nothing else, so the result is the port's supertrait set
+/// whatever the types in this file implement. The inherent constant wins over
+/// the trait constant when the bound holds.
+macro_rules! traits_of {
+    ($t:ty) => {{
+        macro_rules! probe {
+            ($tr:ident) => {{
+                struct Probe<T: ?Sized>(core::marker::PhantomData<T>);
+                // Whichever constant is not chosen is never read.
+                #[allow(dead_code)]
+                trait Fallback {
+                    const HOLDS: bool = false;
+                }
+                impl<T: ?Sized> Fallback for Probe<T> {}
+                #[allow(dead_code)]
+                impl<T: ?Sized + $tr> Probe<T> {
+                    const HOLDS: bool = true;
+                }
+                if Probe::<$t>::HOLDS {
+                    Some(stringify!($tr))
+                } else {
+                    None
+                }
+            }};
+        }
+        [
+            probe!(Attached),
+            probe!(Clock),
+            probe!(SignalReader),
+            probe!(SignalWriter),
+            probe!(EventSource),
+            probe!(EventSink),
+            probe!(Caller),
+            probe!(Handler),
+            probe!(FixedReader),
+            probe!(ScannableSignals),
+            probe!(CoherentSignals),
+            probe!(Wakeable),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<&'static str>>()
+    }};
+}
+
+/// The calls through `dyn` above reach a supertrait method on a stub that
+/// implements every port, so they pin that a supertrait is reachable and not
+/// which one it is. This test names the exact set: an added supertrait, such
+/// as `SignalWriter: SignalReader` or `EventSink: Clock`, and a removed one
+/// both change it.
+#[test]
+fn each_port_has_exactly_its_supertraits() {
+    assert_eq!(traits_of!(dyn Attached), ["Attached"]);
+    assert_eq!(traits_of!(dyn Clock), ["Clock"]);
+    assert_eq!(traits_of!(dyn SignalReader), ["Attached", "SignalReader"]);
+    assert_eq!(traits_of!(dyn SignalWriter), ["Attached", "SignalWriter"]);
+    assert_eq!(traits_of!(dyn EventSource), ["Attached", "EventSource"]);
+    assert_eq!(traits_of!(dyn EventSink), ["Attached", "EventSink"]);
+    assert_eq!(traits_of!(dyn Caller), ["Attached", "Caller"]);
+    assert_eq!(traits_of!(dyn Handler), ["Attached", "Handler"]);
+    assert_eq!(traits_of!(dyn FixedReader), ["Attached", "FixedReader"]);
+    assert_eq!(
+        traits_of!(dyn ScannableSignals),
+        ["Attached", "SignalReader", "ScannableSignals"]
+    );
+    assert_eq!(
+        traits_of!(dyn CoherentSignals),
+        ["Attached", "SignalReader", "CoherentSignals"]
+    );
+    assert_eq!(traits_of!(dyn Wakeable), ["Wakeable"]);
+}
+
 #[test]
 fn an_interest_is_copy_and_compares_by_its_key() {
     fn owns_nothing<T: Copy + Eq + core::fmt::Debug + 'static>() {}

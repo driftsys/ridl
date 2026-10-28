@@ -42,14 +42,16 @@ mod classify_tests;
 /// [`diff_sets_in`](crate::diff_sets_in) resolves such a reference against every
 /// package of the new snapshot and the context packages, such as `ridl.std`.
 pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
-    classify_in(change, old, new, &[])
+    classify_in(change, old, new, &[], &[])
 }
 
 /// [`classify`], with `scope` — every package of the new snapshot, and the
 /// context packages such as `ridl.std` — to resolve a reference to another
-/// package's declaration. Only the appended struct field reads it: whether its
-/// type is legal at 0 is decided by the declaration the new side names
-/// (driftsys/ridl#598).
+/// package's declaration, and `encodings`, the list the comparison is judged
+/// for ([`diff_refs_with`](crate::diff_refs_with)). Only the appended struct
+/// field reads `scope`: whether its type is legal at 0 is decided by the
+/// declaration the new side names (driftsys/ridl#598). Only
+/// [`Category::PodbufInlineAppend`] reads `encodings`.
 // A new variant must be given a real arm here, not swept into a
 // catch-all: rustc forces *an* arm, and the arm its `help:` text
 // proposes is `_ =>`, which classifies the new variant silently. The
@@ -65,6 +67,7 @@ pub(crate) fn classify_in(
     old: &v2::Package,
     new: &v2::Package,
     scope: &[&v2::Package],
+    encodings: &[&str],
 ) -> Verdict {
     match change.category {
         // Shifts or reuses a wire identity, or replaces a wire-carrying type.
@@ -111,6 +114,11 @@ pub(crate) fn classify_in(
         Category::InterfaceFrozen => Verdict::Compatible,
         Category::InterfaceNumberChanged => Verdict::Breaking,
 
+        // A payload limit is part of the catalog hash, so peers with different
+        // limits do not attach. Raising, lowering, adding and removing one are
+        // all breaking (ADR-0030 decision 13).
+        Category::LimitChanged => Verdict::Breaking,
+
         // An enum value or enum-set bit takes its identity from its explicit
         // number (typl §8, §9), so a body that differs only in order moves
         // nothing on the wire. The catalog hash covers that order when an
@@ -138,6 +146,22 @@ pub(crate) fn classify_in(
         // against; a change moves it in both directions (ADR-0012 decision
         // 12).
         Category::InteractionClassChanged => Verdict::Breaking,
+
+        // The walk emits both only for an append the generic rule accepts, so
+        // the verdict is the encoding's alone: an inline copy of the struct
+        // cannot grow under podbuf, a wider enum integer or union tag moves
+        // every head that holds it, a value or flag a strict enum does not
+        // name is refused by an older reader's `verify`, and no other
+        // encoding lays any of them out.
+        Category::PodbufInlineAppend
+        | Category::PodbufWidthChange
+        | Category::PodbufStrictEnumAppend => {
+            if encodings.contains(&"podbuf") {
+                Verdict::Breaking
+            } else {
+                Verdict::Compatible
+            }
+        }
     }
 }
 
@@ -467,22 +491,33 @@ fn appended_slot(old: &[(String, i64)], old_retired: &[i64], new: &[(String, i64
         }
     }
 
-    let high_water = old
-        .iter()
-        .map(|(_, slot)| *slot)
-        .chain(old_retired.iter().copied())
-        .max();
+    let held = || {
+        old.iter()
+            .map(|(_, slot)| *slot)
+            .chain(old_retired.iter().copied())
+    };
     let old_names: Vec<&String> = old.iter().map(|(name, _)| name).collect();
     for (name, slot) in new {
         if old_names.contains(&name) {
             continue;
         }
-        match high_water {
-            Some(mark) if *slot <= mark => return false,
-            _ => {}
+        if !is_above_high_water(*slot, held()) {
+            return false;
         }
     }
     true
+}
+
+/// Whether `slot` is above every slot in `held`, which is the append rule for
+/// one new member: the member keeps every existing ordinal or value, and it
+/// does not reuse a retired one (typl §7.4).
+///
+/// `held` lists every slot the old body assigns or retires, live and
+/// reserved together. When `held` is empty, any `slot` is above it. `ridl
+/// check --baseline` calls this function, so the desk check and the
+/// classifier apply one rule.
+pub fn is_above_high_water(slot: i64, held: impl IntoIterator<Item = i64>) -> bool {
+    held.into_iter().max().is_none_or(|mark| slot > mark)
 }
 
 // ==========================================================================
@@ -1363,6 +1398,11 @@ pub fn explain(category: Category) -> &'static str {
             "              resolved bounds, so editing a default surfaces here on\n",
             "              every defaulted command or query (ridl 9.1)"
         ),
+        Category::LimitChanged => concat!(
+            "The payload limit of the interaction changed; every change of a limit is\n",
+            "breaking, ADR-0030 decision 13.\n",
+            "  breaking    a limit raised, lowered, added where none was, or removed"
+        ),
         Category::ContractChanged => concat!(
             "A command or query require/ensure clause set changed (ridl 13).\n",
             "  compatible  a require removed, or an ensure added\n",
@@ -1463,6 +1503,60 @@ pub fn explain(category: Category) -> &'static str {
             "              consumer's build. The wire layout does not move, but the\n",
             "              consumer-visible guarantee narrows (ADR-0008 d14). Any\n",
             "              direction involving an unset visibility is breaking"
+        ),
+        Category::PodbufInlineAppend => concat!(
+            "A struct field appended, compatible under the generic rule, to a\n",
+            "struct that another head holds inline anywhere in the new side: as a\n",
+            "struct field, a tuple member, or an element of an exact-length\n",
+            "array, in a struct, in the argument struct a call with several\n",
+            "parameters induces, or in a tuple reply. The detail names each\n",
+            "inline use. The search mirrors the heads the encoder lays out, a\n",
+            "declaration and a named induced tuple: a struct that is a root of its\n",
+            "own (a single named parameter, a named reply, a signal, event or\n",
+            "fixed payload), that is used only behind a descriptor (the element of\n",
+            "a bounded array, the key or value of a map entry, a union arm), or\n",
+            "only inside an exact-length array that is itself a root (a fixed\n",
+            "payload `[S; 2..2]`, which has no head) is not reported: the root or\n",
+            "the stride gives the producer's size, and the fields past it read as 0.\n",
+            "A tuple inside such a root is a head, and a struct inside that tuple is\n",
+            "a use.\n",
+            "  breaking    with `--encoding podbuf`: the inline copy cannot grow\n",
+            "              without moving the fields after it\n",
+            "  compatible  otherwise; listed under the heading \"breaking under\n",
+            "              podbuf\", so that a workspace that builds podbuf sees it"
+        ),
+        Category::PodbufWidthChange => concat!(
+            "An enum value or a union arm appended, compatible under the generic\n",
+            "rule, after which the podbuf integer of the enum or the tag of the\n",
+            "union is a different integer, by width or by signedness. podbuf lays\n",
+            "an enum out as the narrowest integer that holds every declared value,\n",
+            "signed when a value is negative (ADR-0031 decision 5), and a union's\n",
+            "tag as the narrowest unsigned integer that holds the largest arm\n",
+            "ordinal: a value above 255 or an arm past ordinal 255 widens a `u8`\n",
+            "to a `u16`, above 65535 a `u16` to a `u32`, and a first negative\n",
+            "value turns a `u8` into an `i8`. The line is reported once per\n",
+            "declaration and carries the old and the new integer. An append that\n",
+            "keeps the integer draws no such line.\n",
+            "  breaking    with `--encoding podbuf`: every head that holds the enum\n",
+            "              or the union lays out a different integer, and an older\n",
+            "              reader misreads the value\n",
+            "  compatible  otherwise; listed under the heading \"breaking under\n",
+            "              podbuf\", so that a workspace that builds podbuf sees it"
+        ),
+        Category::PodbufStrictEnumAppend => concat!(
+            "An enum value or an enum-set flag appended, compatible under the\n",
+            "generic rule, to an enum or an enum set that is strict. The `verify`\n",
+            "of podbuf refuses a value or a flag the declaration it was built from\n",
+            "does not name, so an older reader refuses a buffer that carries the\n",
+            "appended one. Every enum and enum set is strict today; once the\n",
+            "`open` keyword is built, the rule narrows to the strict ones. The\n",
+            "line is reported once per declaration, at `<package>/<decl>`, and the\n",
+            "detail names the appended values or flags. An enum whose append also\n",
+            "changes the podbuf integer draws only the `podbuf_width_change` line.\n",
+            "  breaking    with `--encoding podbuf`: an older reader refuses the\n",
+            "              appended value or flag\n",
+            "  compatible  otherwise; listed under the heading \"breaking under\n",
+            "              podbuf\", so that a workspace that builds podbuf sees it"
         ),
     }
 }

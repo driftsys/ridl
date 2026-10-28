@@ -1,8 +1,11 @@
 //! The wire mapping: the encoding names the manifest accepts, the proto3 and
-//! FlatBuffers schemas that `ridl build` writes for the corpus, the catalog
-//! hash of the cabin example, and the test vectors of the WebSocket binding.
-//! The corpus and the cabin example are read from frozen copies, so an edit to
-//! `examples/` or to `evals/corpus/` does not change the dump.
+//! FlatBuffers schemas that `ridl build` writes for the corpus, the podbuf
+//! offset and size of every field of every head, the catalog hash of the cabin
+//! example, and the test vectors of the WebSocket binding.
+//! The schemas are also written for the frozen veh-cluster copy that the
+//! generated-crate surface reads, the one copy that declares a union. The
+//! corpus, that copy and the cabin example are read from frozen copies, so an
+//! edit to `examples/` or to `evals/corpus/` does not change the dump.
 //!
 //! The vectors are read from the frame specification itself
 //! (`docs/specification/frame-specification.md` §11.1), because that table is
@@ -100,9 +103,19 @@ fn schema_file_lines(text: &str) -> Vec<String> {
     out
 }
 
+/// The frozen copy of the veh-cluster corpus that the generated-crate surface
+/// reads, relative to the repository root. The `evals/corpus/` copies declare
+/// no union, so without it the dump would hold no proto3 `oneof` line and no
+/// FlatBuffers `union` line.
+const UNION_SOURCE: (&str, &str) = (
+    "veh-cluster",
+    "xtask/tests/freeze-fixtures/generated/veh-cluster",
+);
+
 /// Each corpus workspace the schema lines are built from, as `(name,
 /// directory)`: the name is the one the dump lines carry, the directory is
 /// the frozen copy that `ridl build` reads, relative to the repository root.
+/// They are the copies of `evals/corpus/` and [`UNION_SOURCE`].
 fn corpora(root: &Path) -> Result<Vec<(String, String)>, String> {
     let dir = format!("{}/evals/corpus", bin::SOURCE_COPIES);
     let entries =
@@ -114,6 +127,11 @@ fn corpora(root: &Path) -> Result<Vec<(String, String)>, String> {
             out.push((name.clone(), format!("{dir}/{name}")));
         }
     }
+    let (name, source) = UNION_SOURCE;
+    if out.iter().any(|(n, _)| n == name) {
+        return Err(format!("{dir}/{name} has the name of {source}"));
+    }
+    out.push((name.to_string(), source.to_string()));
     out.sort();
     Ok(out)
 }
@@ -166,6 +184,102 @@ fn schema_lines(
                 .map_err(|e| format!("cannot read {}: {e}", file.display()))?;
             for line in schema_file_lines(&text) {
                 out.push(format!("{extension} {name}/{relative} {line}"));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `podbuf <package.Type> <field> <offset> <size>` for each field of the head
+/// of each struct and union that `ridl build --emit codegen-model` lowers for
+/// each corpus workspace. The layout is read from the model, which is where
+/// the toolchain computes it once, so the lines are what a plugin reads. The
+/// standard package is left out: every corpus reaches it, and its types are
+/// not the corpus's.
+fn podbuf_lines(
+    root: &Path,
+    ridl: &Path,
+    scratch: &Path,
+    out: &mut Vec<String>,
+) -> Result<(), String> {
+    for (name, source) in corpora(root)? {
+        let out_dir = scratch.join("podbuf").join(&name);
+        let run = bin::run(
+            ridl,
+            root,
+            &[
+                "build",
+                &source,
+                "--emit",
+                "codegen-model",
+                "--out-dir",
+                &out_dir.to_string_lossy(),
+            ],
+        )?;
+        if run.code != 0 {
+            return Err(format!(
+                "`ridl build {source} --emit codegen-model` exited {}",
+                run.code
+            ));
+        }
+        for file in bin::files_below(&out_dir)? {
+            let file_name = file
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default();
+            if !file_name.ends_with(".codegen.json") || file_name.starts_with("ridl.std.") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&file)
+                .map_err(|e| format!("cannot read {}: {e}", file.display()))?;
+            let model: Value = serde_json::from_str(&text)
+                .map_err(|e| format!("{} is not JSON: {e}", file.display()))?;
+            podbuf_model_lines(&model, out).map_err(|e| format!("{}: {e}", file.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// The lines of one model, see [`podbuf_lines`]. Protobuf JSON leaves out a
+/// number that is 0, so an absent `offset` is 0.
+fn podbuf_model_lines(model: &Value, out: &mut Vec<String>) -> Result<(), String> {
+    let package = model["name"]["dotted"]
+        .as_str()
+        .ok_or("the model names no package")?;
+    let number = |value: &Value, key: &str| value.get(key).and_then(Value::as_u64).unwrap_or(0);
+    let heads = model["podbuf"]["heads"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    for head in &heads {
+        // Only the head of a struct or a union: the other heads are reached
+        // through one of those.
+        let Some(index) = head.get("declaration").and_then(Value::as_u64) else {
+            continue;
+        };
+        let declared = model["declarations"][index as usize]["name"]["declared"]
+            .as_str()
+            .ok_or_else(|| format!("declaration {index} has no name"))?;
+        for field in head["fields"].as_array().into_iter().flatten() {
+            let source = &field["source"];
+            let field_name = if let Some(name) = source["field"]["name"].as_str() {
+                name.to_string()
+            } else if source.get("flags").is_some() {
+                format!("_flags{}", number(source, "flags"))
+            } else if source.get("tag").is_some() {
+                "tag".to_string()
+            } else if source.get("arm").is_some() {
+                "arm".to_string()
+            } else {
+                return Err(format!("a field of {package}.{declared} has no source"));
+            };
+            let line = format!(
+                "podbuf {package}.{declared} {field_name} {} {}",
+                number(field, "offset"),
+                number(field, "size")
+            );
+            if !out.contains(&line) {
+                out.push(line);
             }
         }
     }
@@ -483,6 +597,7 @@ pub fn dump(root: &Path) -> Result<Vec<String>, String> {
             schema_lines(root, &ridl, &scratch.0, emit, &mut lines)?;
         }
     }
+    podbuf_lines(root, &ridl, &scratch.0, &mut lines)?;
     lines.extend(catalog_hashes(root, &ridl, &scratch.0)?);
     let spec = std::fs::read_to_string(root.join(FRAME_SPEC))
         .map_err(|e| format!("cannot read {FRAME_SPEC}: {e}"))?;
@@ -517,6 +632,15 @@ mod tests {
         );
         assert!(lines.iter().any(|l| l.starts_with("proto ")));
         assert!(lines.iter().any(|l| l.starts_with("fbs ")));
+        // The veh-cluster copy declares `FaultEvent`, whose head the layout
+        // law fixes at these offsets.
+        for expected in [
+            "podbuf veh.cluster.FaultEvent code 0 2",
+            "podbuf veh.cluster.FaultEvent message 4 8",
+            "podbuf veh.cluster.FaultEvent timestamp 16 8",
+        ] {
+            assert!(lines.iter().any(|l| l == expected), "{expected}");
+        }
         // The dump holds every vector of the frame specification §11.1, in
         // the table's order, and no other.
         let spec = std::fs::read_to_string(root().join(FRAME_SPEC)).unwrap();
@@ -537,8 +661,12 @@ mod tests {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let corpora = corpora(root).unwrap();
         let names: Vec<&str> = corpora.iter().map(|(n, _)| n.as_str()).collect();
-        assert_eq!(names, vec!["mavlink", "ros2", "vss"]);
+        assert_eq!(names, vec!["mavlink", "ros2", "veh-cluster", "vss"]);
         for (name, dir) in &corpora {
+            if *name == UNION_SOURCE.0 {
+                assert_eq!(*dir, UNION_SOURCE.1);
+                continue;
+            }
             assert_eq!(
                 *dir,
                 format!("xtask/tests/freeze-fixtures/sources/evals/corpus/{name}")
@@ -548,6 +676,36 @@ mod tests {
             CATALOG_SOURCE.starts_with("xtask/tests/freeze-fixtures/"),
             "{CATALOG_SOURCE}"
         );
+    }
+
+    #[test]
+    fn reordering_union_arms_removes_a_line() {
+        // A FlatBuffers union sets each arm's tag by its position, and the
+        // proto3 `oneof` sets it by number: in both, a reorder must remove a
+        // line, because the check compares the dumps as sets of lines.
+        let fbs = |arms: &str| schema_file_lines(&format!("union U {{ {arms} }}\n"));
+        let before = fbs("a: A, b: B");
+        let after = fbs("b: B, a: A");
+        assert!(before.iter().any(|line| !after.contains(line)), "{after:?}");
+        let oneof = |a: u32, b: u32| {
+            schema_file_lines(&format!(
+                "message M {{\n  oneof value {{\n    A a = {a};\n    B b = {b};\n  }}\n}}\n"
+            ))
+        };
+        let before = oneof(1, 2);
+        let after = oneof(2, 1);
+        // The committed dump holds both forms, built from `UNION_SOURCE`.
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let dump = std::fs::read_to_string(root.join("freeze/wire.txt")).unwrap();
+        assert!(
+            dump.lines()
+                .any(|l| l.starts_with("fbs veh-cluster/") && l.contains(" union "))
+        );
+        assert!(
+            dump.lines()
+                .any(|l| l.starts_with("proto veh-cluster/") && l.ends_with("oneof value {"))
+        );
+        assert!(before.iter().any(|line| !after.contains(line)), "{after:?}");
     }
 
     #[test]

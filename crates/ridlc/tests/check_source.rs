@@ -1,5 +1,6 @@
-//! `ridlc::check_source`: the single-file front end the MCP tool and
-//! `ridl check --format json` share.
+//! `ridlc::check_source`: the single-file front end behind the `ridl_check`
+//! tool of `ridl mcp`. `ridl check --format json` calls `run_check` instead;
+//! the two render with the same `ridl_core::diag::to_json`.
 
 use ridl_core::diag::to_json;
 

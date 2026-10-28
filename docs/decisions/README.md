@@ -228,7 +228,9 @@ other entry below is Accepted.
   type parameter. Amended 2026-10-20 on decision 4 and open item 3: the proto3
   codec's byte-level conformance is checked against `prost` generated through
   `protox`, not `protoc`, and the generated Rust codec skips and drops unknown
-  fields.
+  fields. Amended 2026-10-23 on decision 13: the domain-mediated path ships as
+  `ridl_rt::payload::transcode`, and `[backend.rust] transcode = true` makes the
+  backend generate `transcode_<s>_to_<d>` functions (MANI-020).
 
 - **ADR-0019 — The FlatBuffers projection.** Seven rules the second wire backend
   needed: a union isolated in a wrapper table, a non-table union arm boxed,
@@ -251,7 +253,7 @@ other entry below is Accepted.
   driftsys/ridl#713.
 
 - **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
-  plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a
+  plugin system.** _Proposed._ `podbuf` joins proto3 and FlatBuffers as a
   payload encoding, and the encoding matrix settles the codec-in-wasm boundary
   as FlatBuffers; `ridl-rt` is one `no_std` crate with one cargo feature per
   encoding (a fourth, non-encoding feature `std` is ADR-0021 decision 8's
@@ -274,7 +276,11 @@ other entry below is Accepted.
   2026-10-10 on decisions 5 and 9: `contract` loses `EncodedSizes` and `Unsized`
   and gains `Sizes<E>`, `Payload<E>` gains `Buffer`, `port` gains `Encoded`, a
   generated package enables one `ridl-rt` feature per named encoding, and the
-  request carries the `encodings` option.
+  request carries the `encodings` option. Amended 2026-10-24 on decision 6:
+  `ridl-transport-ws` gains the optional `descriptor` feature, off by default,
+  which adds `ridl-descriptor` with its default features off
+  (driftsys/ridl#985); amended again the same day: the feature has no minimum
+  Rust version of its own (driftsys/ridl#1047).
 
 - **ADR-0021 — The `ridl-rt` 0.1 API: identity, the proof type, the port
   dispositions, and the release policy.** Fixes what the earlier records left
@@ -508,6 +514,47 @@ other entry below is Accepted.
   cites an issue. The general form §4.7 promotion of `labels` and `deprecated`
   is declined: both stay doc tags. Amends ADR-0026 decisions 4, 6 and 9 in
   place.
+
+- **ADR-0030 — Transfer and bound limits.** _Accepted._ Eleven decisions: one
+  transfer is at most 16,384 bytes with a header of up to 128 bytes, so the
+  payload ceiling is 16,256 bytes for every encoding and transport; each backend
+  caps `MAX_SIZE` at the ceiling while the IR size states stay as computed, so a
+  type with no finite bound will generate; encode will refuse a larger value
+  with a new `EncodeError::TooLarge`, which the face will map to the port
+  errors' `TooLarge`, and verify will refuse it with `Malformed::TooLarge`;
+  `BUFFER` stays; the `MAX_SIZE` cap and the run-time refusal are not built yet
+  (driftsys/ridl#996); TYPL-116 `bound-above-transfer` warns on a `string` bound
+  above 4,032 characters or a `bytes` bound above 16,128 bytes, and RIDL-150
+  `payload-above-ceiling` on a payload above the ceiling, both at `warn` under
+  an amendment of ADR-0029 decision 2; the `[0..256]` default stays; larger data
+  is a stream (driftsys/ridl#996). Amended 2026-10-24 (driftsys/ridl#1045), now
+  fifteen decisions: each interaction has its own payload limit, set in a
+  `[limits]` table of `ridl.toml` by name, by kind or as a default, never above
+  the ceiling (built, with RIDL-151 for a payload above a declared limit and
+  RIDL-152 for an entry that names no interaction); the limit is covered by the
+  catalog hash and carried in a column of the catalog descriptor (built); the
+  WebSocket message limit is at most 16,292 bytes, which an embedder can lower
+  but not raise, and a request above its member's limit is answered `corrupt`
+  (built).
+
+- **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
+  _Accepted._ The projection record that ADR-0020 decision 4 asks for. Fifteen
+  decisions: the target rule (little-endian, head alignment 8, `const` and
+  `_Static_assert` checks); a buffer of an 8-byte preamble, a head and a tail,
+  with 8-byte descriptors and a `u16` stride; the first-fit placement law with
+  optional flags; the value rules and the totality table, with RIDL-153 to
+  RIDL-155 for a type too large, an array or map past the descriptor limits and
+  a deprecated field with no valid value; the generated names; `verify` as a
+  call tree that checks the data present and never the pads; the encoder's duty
+  to zero every pad; the evolution rules (an append that reads as 0 is
+  compatible, an append to a struct held inline is a break, a field removal
+  breaks under every encoding); strict and open enums, decided, with the typl
+  `open` keyword not built; the `podbuf_inline_append`, `podbuf_width_change`
+  and `podbuf_strict_enum_append` diff categories and RIDL-156
+  `podbuf-padding-order`; and what the backend generates and exposes in the
+  codegen model. It lists where it departs from the design it restates, which is
+  archived, and carries five open items. Amends ADR-0020 decision 4 and closes
+  its open item 1.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

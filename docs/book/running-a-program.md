@@ -31,11 +31,13 @@ name = "veh.cabin"
 version = "1.0.0"
 
 [backend.rust]
-encodings = ["flatbuffers"]
+encodings = ["flatbuffers", "proto3", "podbuf"]
 ```
 
-Do the same in your own package: uncomment the table in `ridl.toml`, and the
-build writes the codec, the descriptors and the face.
+The face needs one of the encodings; the example lists all three so that the
+program can also encode a value with podbuf. Do the same in your own package:
+uncomment the table in `ridl.toml`, and the build writes the codec, the
+descriptors and the face.
 
 ## Generate the crate
 
@@ -57,8 +59,8 @@ builds has the same three dependencies in `examples/cabin/consumer/Cargo.toml`:
 ```toml
 [dependencies]
 veh_cabin = { path = "generated", features = ["std"] }
-ridl-loopback = "0.12.0"
-ridl-rt = { version = "0.12.0", features = ["std"] }
+ridl-loopback = "0.14.0"
+ridl-rt = { version = "0.14.0", features = ["std"] }
 ```
 
 The program imports `CatalogRef`, `Interface` and `Provenance` from `ridl-rt`
@@ -115,7 +117,9 @@ cargo run --manifest-path examples/cabin/Cargo.toml -p consumer
 
 The program prints one line per round trip. Each line carries the value that
 the round trip moved, and the program exits with a non-zero status when a value
-is not the expected one:
+is not the expected one. The last line comes from a value that goes through the
+generated podbuf codec alone, without the runtime: the program encodes it,
+verifies the bytes and decodes it again:
 
 ```text
 signal ok 21
@@ -124,6 +128,7 @@ command ok 42
 query ok 7
 blocking command ok 43
 blocking query ok 9
+podbuf round trip: 21.5
 ```
 
 ## Where to go next

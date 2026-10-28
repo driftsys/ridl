@@ -9,11 +9,12 @@ description = "The `ridlc` compile pipeline as a library: source to IR to genera
 [dependencies]
 clap.workspace = true
 ridl-backend-flatbuffers.workspace = true
+ridl-backend-podbuf.workspace = true
 ridl-backend-proto.workspace = true
 ridl-backend-rust.workspace = true
 ridl-backend-ts.workspace = true
 ridl-core.workspace = true
-ridl-descriptor.workspace = true
+ridl-descriptor = { workspace = true, features = ["std", "dedup"] }
 ridl-ir.workspace = true
 ridl-sem.workspace = true
 ridl-syntax.workspace = true

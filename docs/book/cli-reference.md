@@ -68,7 +68,7 @@ Commands:
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
   lock      Allocate a number to every interface that has none and write each unit's `interfaces.lock`; with `--rename` or `--retire`, rewrite one unit's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
-  lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
+  lsp       Run the language server over stdio: exit 0 after `shutdown` then `exit`, 1 when the client ends the session without `shutdown`, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   init      Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the directory would make a manifest inside a unit (MANI-013)
   new       Create a directory, with its parents, and scaffold a new unit in it, as `ridl init` does. Exits 2 without writing anything when the path exists
@@ -649,9 +649,10 @@ Options:
           - ir-json:         The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
           - ir-text:         The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
           - ir-binary:       The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`
+          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
+          - podbuf:          The podbuf C header, written to `<base>.h`
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
           - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
@@ -859,10 +860,11 @@ version = "1.0.0"
 encodings = ["flatbuffers"]
 ```
 
-The names are `flatbuffers`, `proto3` and `repr-c`. An absent table, an absent
+The names are `flatbuffers`, `proto3` and `podbuf`. An absent table, an absent
 key and an empty list all mean types only. The Rust backend builds
-`flatbuffers` and `proto3`, alone or together, and refuses `repr-c`
-([driftsys/ridl#317][i317]). The generated `Cargo.toml` enables one `ridl-rt`
+each of the three, alone or together. A `podbuf` codec buffer starts on an
+8-byte boundary, and the generated size tables hold `Aligned` buffers for it.
+The generated `Cargo.toml` enables one `ridl-rt`
 feature per named encoding, and none for types only. A single-file build has no
 manifest, so it is types only. Each emitted codec names its encoding, as
 `::ridl_rt::encoding::FlatBuffers` or `::ridl_rt::encoding::Proto3`; the face
@@ -874,17 +876,63 @@ write names an encoding only where it builds that runtime — over
 names the encoding in that port's `Encoded` implementation instead
 ([Writing a port](writing-a-port.md)).
 
+`[backend.rust] wasm = true` adds a module `wasm` to the generated crate,
+written to `__ridl_wasm.rs`. The module lists the payload types that have a
+FlatBuffers codec in `WASM_PAYLOAD_TYPES`, sorted by qualified name
+(`veh.cabin.Temperature`; an induced tuple by its Rust name), and the typl rule
+names in `WASM_RULES`, sorted. A `type_id` is an index into the list of the same
+build. When the target is `wasm32` and the generated crate's feature
+`wasm-exports` is on, the module exports `ridl_alloc`, `ridl_free`,
+`ridl_catalog_hash`, `ridl_verify` and `ridl_type_id`, and no other function.
+`ridl_type_id` returns the type id of a payload type named by its qualified
+name, or -1 for a name the list does not hold.
+`ridl_verify(type_id, ptr, len)` returns 0 when the bytes verify as the type at
+index `type_id`, 1 for a malformed buffer, 2 plus the index of the broken rule
+in `WASM_RULES`, and -1 for an unknown `type_id`. A null `ptr` with a length,
+and a range past the end of memory, return 1. `ridl_alloc` returns 0 when the
+length is 0 or the allocation fails. The generated `Cargo.toml` declares the
+feature `wasm-exports = ["std"]` and no crate type, so a Rust consumer of the
+crate links no export. [The `wasm-exports` feature](generated-code.md#the-wasm-exports-feature) gives the
+command that builds the module. The module writes the catalog hash of one unit: the root
+package's unit, or the one unit of the workspace's own packages when the
+manifest is a `[workspace]`. A build with no root package and other than one
+unit is refused. The option needs `encodings` to name `flatbuffers`, and the
+Rust backend refuses it otherwise. A package whose first segment is `wasm`
+refuses it too. A build with the option off removes a `__ridl_wasm.rs` that an
+earlier build wrote, and a build with it on refuses to overwrite a
+`__ridl_wasm.rs` that does not start with the generated marker. Single-file
+mode has no manifest, so it has no `wasm` module.
+
+`[backend.typescript] codec = true` writes `<base>.codec.ts` beside the
+TypeScript module of every package that has a payload root with a codec (its
+own, or one of another package that its interfaces name), and turns the `wasm`
+module on when `[backend.rust]` writes
+no `wasm` key. A written `wasm = false`, and a manifest with no
+`[backend.rust]` table, are MANI-019. `[backend.rust] encodings` must still name
+`flatbuffers`, and the Rust backend refuses an implied `wasm` module otherwise.
+
+`[backend.rust] transcode = true` asks the Rust backend for the transcoding
+functions between the encodings of the same table. The table must write at least
+two `encodings` elements; every written element counts, valid or not. Fewer than
+two written elements, or an absent `encodings` key, is MANI-020, reported on the
+`transcode` value. A written element that is unknown or repeated is also
+MANI-015. An `encodings` value that is not an array is MANI-015 only. The
+`ridlc` request carries a `transcode` option with the value `true` for that
+table, and no `transcode` option otherwise.
+
 MANI-015 is an error when the `encodings` value is not an array of the known
-names or repeats a name, and MANI-016 is an error when the manifest of a
-workspace member holds a `backend` key or `[backend.<name>]` table: only the workspace root,
-or a standalone package, sets it. Any other key under `[backend.<name>]` is
+names or repeats a name, when `wasm`, `codec` or `transcode` is not a boolean,
+when a `[limits]` value is not an integer of 0 or more, or when `[limits]`,
+`[limits.kind]` or `[limits.interaction]` is not a table, and MANI-016 is an error when the manifest of a workspace member holds
+a `backend` key or `[backend.<name>]` table: only the workspace root, or a
+standalone package, sets it. Any other key under `[backend.<name>]` is
 MANI-005. The table is not the `backend.` attribute namespace of an rsdl
 declaration. The lint RSDL-807 `link-encoding-not-emitted` warns when a link of
 the selected deployment carries an encoding that the emitted backend's list
 does not name. It is compared once per emitted backend that can carry a codec:
 the `rust` emit and each `--plugin`, and a backend named by both an `--emit`
-and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`),
-the `typescript` emit and `codegen-model` are not compared, because their
+and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`), the
+`podbuf` emit, the `typescript` emit and `codegen-model` are not compared, because their
 backends take no `encodings` option, and `codegen-request` is not compared
 either, because it writes its options into the request rather than emitting a
 codec from them. A `[backend.<name>]` table whose
@@ -895,6 +943,57 @@ table at all is compared, so a build that declared no encodings is still
 reported. An empty list is how a
 schema-only plugin silences the lint for its own backend, where the `[lints]`
 level silences it for every backend at once.
+
+`[limits]` gives the interactions of a unit their payload limits, in bytes of
+encoded payload ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md)
+decision 12). A unit sets it in its own `ridl.toml`; the table of a workspace
+root does not apply to its members, and a package of a unit's subdirectory
+takes the unit's table.
+
+```toml
+[limits]
+default = 4096                  # every kind with no entry below
+
+[limits.kind]
+signal = 256                    # signal, fixed, event, command or query
+event = 2048
+
+[limits.interaction]
+"Climate.temperature" = 64      # Interface.member, quoted because of the dot
+```
+
+The table of a remote unit that `[imports]` names is read too, so its
+interactions record the owner's limits and the consumer computes the owner's
+catalog hash. The consumer reports no RIDL-151 or RIDL-152 for it.
+
+The limit of an interaction is the first that is found of: its entry in
+`[limits.interaction]`, the entry of its kind in `[limits.kind]`, `default`,
+and the payload ceiling of 16,256 bytes. No limit is above the ceiling. A key
+of `[limits.interaction]` is the short name of the interface, or of the inline
+`service` (the last segment of its dotted name), then `.`, then the member;
+neither the package nor a dotted service name is part of it. When two
+interfaces or inline services of one unit share a short name, a key that uses
+the name is ambiguous.
+
+An unknown kind in `[limits.kind]` is MANI-021, and a value above 16,256 is
+MANI-022. A key that names no interaction of the unit, or that is ambiguous, is
+RIDL-152, reported on the key. RIDL-151 is reported on an interaction whose
+payload has a largest encoded size, in an encoding that a `[backend.<name>]`
+table enables (FlatBuffers when no table names one), above the limit that an
+entry of `[limits]` gives it, or no finite bound. A `command` or `query`
+checks its request and its reply against its one limit, and a `fixed` is sized
+too. Both are errors, so they have no name and no level in `[lints]`. A payload
+above the ceiling under a declared limit draws RIDL-150 as well; where no entry
+gives a limit, only RIDL-150 applies. A package with an error that stops
+`ridl build` writing artifacts, or that depends on one, is not checked, and a
+unit with such a package reports no RIDL-152. An error in a manifest stops
+RIDL-150 in every package of the workspace, and RIDL-151 and RIDL-152 only in
+the packages beneath that manifest.
+
+A `[limits]` entry that applies to an interaction is recorded in the IR, so
+adding, removing or editing one changes the catalog hash of the interaction's
+unit. An interaction that no entry reaches records no limit, and a unit with no
+`[limits]` table keeps its hash.
 
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages
@@ -910,6 +1009,17 @@ differ — a union is isolated in a wrapper table, every struct is a `table`, a
 map is a vector of generated entry tables with no `(key)`, and enum values are
 not prefixed because FlatBuffers scopes them inside their enum — and are
 recorded in ADR-0019.
+
+**`podbuf` is the third wire backend**: it writes the C header, `<base>.h`,
+through which a C consumer reads a podbuf buffer that the gate has verified,
+with no library. The header holds the preamble and descriptor structs, one head
+`struct` per type with its pad members written out and `_Static_assert` checks
+on every `sizeof` and `offsetof`, the constants of the enums and the union
+tags, and inline accessor functions that read through the preamble's head size
+and answer 0 for a field past it. It refuses a big-endian target with `#error`.
+It takes no option. A package that lays out a struct, tuple or union of another
+package inline defines that head again behind a guard macro, so the headers of
+two packages can be included in one translation unit.
 
 **`codegen-model` is not a backend at all**: it writes the lowered codegen
 model — one package, resolved over the scope the build read, with the scalar
@@ -1002,7 +1112,9 @@ When a package names a type from `ridl.std`, the standard package is written
 beside your own as one more file per `--emit` target — `ridl.std.rs`,
 `ridl.std.ts`, `ridl.std.codegen.json` — because generated code refers to
 standard types by package path and does not compile without it, and the model
-is lowered over the same scope. The three IR targets —
+is lowered over the same scope. `ridl.std.codec.ts` joins them under
+`[backend.typescript] codec = true` only when a package's codec module imports
+it, for a payload type that is a `ridl.std` scalar. The three IR targets —
 `ir-json`, `ir-text`, `ir-binary` — get no such file: a direct IR dump
 records the packages the workspace declares, and `ridl.std` ships with the
 compiler rather than with the workspace ([ADR-0007][adr-0007] decision 15).
@@ -1399,9 +1511,10 @@ Arguments:
   [NEW]  The candidate, in the same forms as the baseline
 
 Options:
-      --format <FORMAT>     Output format for the report [default: text] [possible values: text, json]
-      --explain <CATEGORY>  Print the classification rule for one change category and exit, instead of comparing snapshots. Takes a category exactly as the report prints it, e.g. `timing_changed`
-  -h, --help                Print help
+      --format <FORMAT>      Output format for the report [default: text] [possible values: text, json]
+      --explain <CATEGORY>   Print the classification rule for one change category and exit, instead of comparing snapshots. Takes a category exactly as the report prints it, e.g. `timing_changed`
+      --encoding <ENCODING>  An encoding the change is judged for, as `[backend.<name>] encodings` names it; repeat the flag for several. A snapshot does not record the encodings a workspace builds. Only `podbuf` has a rule of its own: with it, a change under the heading "breaking under podbuf" is breaking; without it, compatible [possible values: flatbuffers, proto3, podbuf]
+  -h, --help                 Print help
 ```
 
 `OLD` and `NEW` each take one of three forms: an `.ir.json` snapshot, a
@@ -1421,6 +1534,56 @@ this is checked before the directory is read as a source tree, so a source
 directory holding such an entry is refused too. Every other input reaches
 the source compiler. Omit both and pass `--explain <CATEGORY>` instead to print that
 category's classification rule without comparing anything.
+
+`--encoding <ENCODING>` names an encoding the change is judged for, with the
+names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
+`proto3`, `podbuf`); repeat the flag for several. A snapshot does not record
+the encodings a workspace builds, so the command does not read them from a
+manifest. Only `podbuf` has rules of its own, three of them. A struct field
+appended to a struct that another struct, a tuple or an exact-length array
+holds inline anywhere in the new side — in a struct, in the argument struct a
+call with several parameters induces, or in a tuple reply — is
+`podbuf_inline_append`, breaking with `--encoding podbuf` and compatible
+without it, because the inline copy cannot grow without moving the fields
+after it. An enum value or a union arm appended after which the podbuf
+integer of the enum or the tag of the union is a different integer, by width
+or by signedness — a value above 255 or an arm past ordinal 255 widens a `u8`
+to a `u16`, above 65535 a `u16` to a `u32`, and a first negative value of an
+enum turns a `u8` into an `i8` — is `podbuf_width_change`, reported once per
+declaration with the old and the new integer, breaking with `--encoding
+podbuf` and compatible without it, because every head that holds the enum or
+the union lays out a different integer; an append that keeps the integer draws
+no such line. An enum value or an enum-set flag appended is
+`podbuf_strict_enum_append`, reported once per declaration with the appended
+names, breaking with `--encoding podbuf` and compatible without it, because
+every enum and enum set is strict and the `verify` of an older reader refuses
+a value or a bit its declaration does not name; an enum whose append changes
+the integer draws only the `podbuf_width_change` line. The `podbuf_inline_append` line names each inline use, a struct field as
+`<package>/<struct>/<field>` and an interaction's request, reply or fixed
+payload as `<package>/<interface>/<interaction>`, and sits under the heading
+`breaking under podbuf` either way, so that a workspace that does not build
+podbuf still sees it. The search mirrors the heads the encoder lays out, a
+declaration and a named induced tuple: a struct that is a root of its own (a
+single named parameter, a named reply, a signal, event or fixed payload), that
+is used only behind a descriptor (the element of a bounded array, the key or
+value of a map entry, a union arm), or only inside an exact-length array that
+is itself a root (a fixed payload `[S; 2..2]`, which has no head) draws no
+such line: the root or the descriptor's stride gives the producer's size. A
+tuple inside such a root is a head, and a struct inside that tuple is a use.
+A name outside the three is a usage error,
+exit 2. With `Reading` held
+inline by `Bounds` and a field appended to it:
+
+```sh
+ridl diff --encoding podbuf v1.typl v2.typl
+```
+
+```text
+breaking
+  [compatible] decl_added veh.cluster/Reading/quality: (absent) -> quality
+breaking under podbuf:
+  [breaking] podbuf_inline_append veh.cluster/Reading/quality: (absent) -> nested inline in veh.cluster/Bounds/range
+```
 
 **It writes nothing.** The report goes to stdout; a compile error's
 diagnostics go to stderr instead and no report prints.
@@ -1713,6 +1876,7 @@ the categories `ridl diff` reports are:
   params_changed
   timing_changed
   rpc_bound_changed
+  limit_changed
   contract_changed
   interaction_class_changed
   width_changed
@@ -1724,6 +1888,9 @@ the categories `ridl diff` reports are:
   service_interface_removed
   doc_only
   visibility_changed
+  podbuf_inline_append
+  podbuf_width_change
+  podbuf_strict_enum_append
 ```
 
 ### `ridl lock`
@@ -1926,7 +2093,7 @@ ridl lsp --help
 ```
 
 ```text
-Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this. Stdio is the only transport
+Run the language server over stdio: exit 0 after `shutdown` then `exit`, 1 when the client ends the session without `shutdown`, 2 on a transport error. Editors spawn this. Stdio is the only transport
 
 Usage: ridl lsp [OPTIONS]
 
@@ -1956,11 +2123,12 @@ Code client runs the server as `ridl lsp --stdio`. Stdio is the only
 transport, so `--pipe` and `--socket` are refused with exit 2. The client's
 process id also arrives in the `initialize` request.
 
-**Exit codes.** 0 on a clean shutdown — the client sends `shutdown` then
-`exit`. 2 when the transport ends before the `initialize` handshake, or fails
-for any other reason. There is no exit 1: `ridl lsp` answers no question that
-can come back negative. Both outcomes are confirmed directly against the built
-binary by `crates/ridl/tests/servers.rs`.
+**Exit codes.** They follow the LSP specification (3.17, "Exit
+Notification"). 0 on a clean shutdown — the client sends `shutdown` then
+`exit`. 1 when the client sends `exit` with no `shutdown` before it, or closes
+stdin after the handshake with no `shutdown`. 2 when the transport ends before
+the `initialize` handshake, or fails for any other reason. All four outcomes are
+confirmed directly against the built binary by `crates/ridl/tests/servers.rs`.
 
 ### `ridl mcp`
 
@@ -2144,6 +2312,7 @@ ridl describe out/corpus.baseline.catalog.binfb
       "members": [
         {
           "kind": "Signal",
+          "limit": null,
           "name": "currentSpeed",
           "ordinal": 1,
           "payloads": [
@@ -2398,16 +2567,17 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `codegen-model`, `codegen-request`, `catalog`
+          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `podbuf`, `codegen-model`, `codegen-request`, `catalog`
 
           Possible values:
           - rust:            Idiomatic Rust source, written to `<base>.rs`
           - ir-json:         The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
           - ir-text:         The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
           - ir-binary:       The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
-          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`
+          - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
+          - podbuf:          The podbuf C header, written to `<base>.h`
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
           - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
@@ -2551,7 +2721,6 @@ argument.
 
 [adr-0007]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0007-e1-execution.md
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md
-[i317]: https://github.com/driftsys/ridl/issues/317
 [adr-0014]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0014-ir-encodings.md
 [adr-0020]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
 [issue-196]: https://github.com/driftsys/ridl/issues/196

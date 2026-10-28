@@ -62,8 +62,15 @@ fn generated_interaction_face_matches_the_emitter() {
 /// fails the guard above.
 #[test]
 fn the_pipeline_emits_the_items_of_the_checked_in_face() {
+    // The refresh test above writes the fixture while the test runner may run
+    // this test in parallel. Reading the fixture then returns the old or the
+    // new content, so a refresh run skips the comparison; run the target again
+    // without the variable to check the refreshed fixture.
+    if std::env::var_os("RIDL_UPDATE_GENERATED").is_some() {
+        return;
+    }
     let package = ir::compile_fixture("interaction_face.ridl");
-    let pipeline = ridl_backend_rust::generate_pipeline(&package, ENCODINGS, &[])
+    let pipeline = ridl_backend_rust::generate_pipeline(&package, ENCODINGS, false, &[])
         .expect("generate_pipeline")
         .rust_source;
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -80,12 +80,12 @@ pub fn one_commit_publishes_every_staged_signal_under_one_timestamp<F: Factory>(
 /// the commits of the writer or the publications of its interface.
 pub fn a_channel_sequence_number_counts_that_channel_publications<F: Factory>() {
     let mut rt = runtime::<F>();
-    // Three commits publish `ORD`, and only the last also publishes `OTHER`,
-    // so a counter kept per writer, per commit or per interface numbers
-    // `OTHER` 3 or 4 rather than 1.
+    // Three commits publish `ORD`, and only the middle one also publishes
+    // `OTHER`. A counter kept per writer, per commit or per interface numbers
+    // `OTHER` 2, 3 or 4 rather than 1.
     for value in 1..=3u8 {
         rt.set(IFACE, ORD, &[value]).expect("set");
-        if value == 3 {
+        if value == 2 {
             rt.set(IFACE, OTHER, &[value]).expect("set");
         }
         rt.commit();
@@ -99,6 +99,18 @@ pub fn a_channel_sequence_number_counts_that_channel_publications<F: Factory>() 
         rt.read(IFACE, OTHER, &mut out).expect("read").envelope.seq,
         1,
         "the other channel has had one publication"
+    );
+
+    // A fourth commit publishes only `OTHER`. A counter that advances every
+    // known channel on every commit, including the commits that leave the
+    // channel alone, numbers this publication 3.
+    rt.set(IFACE, OTHER, &[4]).expect("set");
+    rt.commit();
+    assert_eq!(rt.read(IFACE, ORD, &mut out).expect("read").envelope.seq, 3);
+    assert_eq!(
+        rt.read(IFACE, OTHER, &mut out).expect("read").envelope.seq,
+        2,
+        "the other channel has had two publications"
     );
 }
 

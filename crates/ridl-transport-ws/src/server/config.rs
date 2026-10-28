@@ -4,7 +4,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::frame::{ProtocolViolation, Target, MIN_MESSAGE_LIMIT};
+use crate::frame::{ProtocolViolation, Target, MAX_MESSAGE_LIMIT, MIN_MESSAGE_LIMIT};
 
 /// What the server records about a session: frames it dropped and events
 /// that no frame reports to the client. Recording is through
@@ -58,26 +58,55 @@ pub enum Note {
         /// The interaction answered.
         target: Target,
     },
+    /// A `subscribe`, `read`, `request` or `unsubscribe` named an interaction
+    /// the member table does not hold, or holds under another kind (frame
+    /// specification §6.4). An `unsubscribe` is dropped; the other three are
+    /// answered `contract(UnknownInteraction)`.
+    UnknownInteraction {
+        /// The interaction named.
+        target: Target,
+    },
 }
 
-/// A `max_message_bytes` below [`MIN_MESSAGE_LIMIT`].
+/// A `max_message_bytes` outside the range [`MIN_MESSAGE_LIMIT`] to
+/// [`MAX_MESSAGE_LIMIT`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct LimitTooSmall {
+pub struct LimitOutOfRange {
     /// The limit asked for.
     pub given: usize,
 }
 
-impl fmt::Display for LimitTooSmall {
+impl fmt::Display for LimitOutOfRange {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "a message limit of {} bytes is below the smallest allowed, {} bytes",
-            self.given, MIN_MESSAGE_LIMIT
+            "a message limit of {} bytes is outside the allowed range, {} to {} bytes",
+            self.given, MIN_MESSAGE_LIMIT, MAX_MESSAGE_LIMIT
         )
     }
 }
 
-impl std::error::Error for LimitTooSmall {}
+impl std::error::Error for LimitOutOfRange {}
+
+/// A `max_retained_bytes` below [`MAX_MESSAGE_LIMIT`], the largest message
+/// limit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RetainedTooSmall {
+    /// The cap asked for.
+    pub given: usize,
+}
+
+impl fmt::Display for RetainedTooSmall {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "a retained-bytes cap of {} bytes is below the smallest allowed, {} bytes",
+            self.given, MAX_MESSAGE_LIMIT
+        )
+    }
+}
+
+impl std::error::Error for RetainedTooSmall {}
 
 /// The hook the server calls with each [`Note`].
 pub(crate) type Record = Arc<dyn Fn(&Note) + Send + Sync>;
@@ -109,13 +138,15 @@ pub struct Config {
     /// first poll after the request, so that call gets no `response`.
     pub call_abandon_after: Duration,
     max_message_bytes: usize,
+    max_retained_bytes: usize,
     record: Option<Record>,
     origin_check: Option<OriginCheck>,
 }
 
 impl Default for Config {
     /// 20 ms between polls, a ping every 5 s, a liveness timeout of 15 s, a
-    /// call abandoned after 60 s, a message limit of 1 MiB, nothing
+    /// call abandoned after 60 s, a message limit of 16,292 bytes
+    /// ([`MAX_MESSAGE_LIMIT`]), a retained-bytes cap of 16 MiB, nothing
     /// recorded, and no origin check.
     fn default() -> Self {
         Config {
@@ -123,7 +154,8 @@ impl Default for Config {
             ping_interval: Duration::from_secs(5),
             liveness_timeout: Duration::from_secs(15),
             call_abandon_after: Duration::from_secs(60),
-            max_message_bytes: 1024 * 1024,
+            max_message_bytes: MAX_MESSAGE_LIMIT,
+            max_retained_bytes: 16 * 1024 * 1024,
             record: None,
             origin_check: None,
         }
@@ -136,13 +168,36 @@ impl Config {
         self.max_message_bytes
     }
 
-    /// Sets the largest message the server reads or sends. A limit below
-    /// [`MIN_MESSAGE_LIMIT`] is refused: no `attach` could be read under it.
-    pub fn with_max_message_bytes(mut self, n: usize) -> Result<Self, LimitTooSmall> {
-        if n < MIN_MESSAGE_LIMIT {
-            return Err(LimitTooSmall { given: n });
+    /// Sets the largest message the server reads or sends. The limit can
+    /// only be lowered from the default, [`MAX_MESSAGE_LIMIT`]: a limit above
+    /// it is refused, and so is a limit below [`MIN_MESSAGE_LIMIT`], under
+    /// which no `attach` could be read.
+    pub fn with_max_message_bytes(mut self, n: usize) -> Result<Self, LimitOutOfRange> {
+        if !(MIN_MESSAGE_LIMIT..=MAX_MESSAGE_LIMIT).contains(&n) {
+            return Err(LimitOutOfRange { given: n });
         }
         self.max_message_bytes = n;
+        Ok(self)
+    }
+
+    /// The cap on the bytes of the responses a session keeps for a repeated
+    /// `request` (frame specification §7). A session closes with 1008 when
+    /// the kept bytes pass this value (see [`Config::with_max_retained_bytes`]).
+    pub fn max_retained_bytes(&self) -> usize {
+        self.max_retained_bytes
+    }
+
+    /// Sets the most bytes of the responses a session keeps for a repeated
+    /// `request`. When a response sent would make the kept bytes pass `n`,
+    /// the response is sent and the session is then closed with 1008. A cap
+    /// below [`MAX_MESSAGE_LIMIT`] is refused, whatever the message limit, so
+    /// that one response of the largest message never closes a session on
+    /// its own.
+    pub fn with_max_retained_bytes(mut self, n: usize) -> Result<Self, RetainedTooSmall> {
+        if n < MAX_MESSAGE_LIMIT {
+            return Err(RetainedTooSmall { given: n });
+        }
+        self.max_retained_bytes = n;
         Ok(self)
     }
 
@@ -198,8 +253,42 @@ mod tests {
     }
 
     #[test]
-    fn the_default_limit_is_one_mebibyte() {
-        assert_eq!(Config::default().max_message_bytes(), 1024 * 1024);
+    fn the_default_limit_is_the_largest_allowed() {
+        assert_eq!(Config::default().max_message_bytes(), MAX_MESSAGE_LIMIT);
+    }
+
+    #[test]
+    fn a_limit_above_the_maximum_is_refused() {
+        let err = Config::default()
+            .with_max_message_bytes(MAX_MESSAGE_LIMIT + 1)
+            .err();
+        assert_eq!(err, Some(LimitOutOfRange { given: 16_293 }));
+        assert!(err.unwrap().to_string().contains("294 to 16292"));
+    }
+
+    #[test]
+    fn the_maximum_limit_is_accepted() {
+        let config = Config::default()
+            .with_max_message_bytes(1024)
+            .unwrap()
+            .with_max_message_bytes(MAX_MESSAGE_LIMIT)
+            .expect("accepted");
+        assert_eq!(config.max_message_bytes(), MAX_MESSAGE_LIMIT);
+    }
+
+    #[test]
+    fn a_retained_cap_below_the_largest_message_limit_is_refused() {
+        let config = Config::default().with_max_message_bytes(1024).unwrap();
+        let err = config.clone().with_max_retained_bytes(16_291).err();
+        assert_eq!(err, Some(RetainedTooSmall { given: 16_291 }));
+        assert!(err.unwrap().to_string().contains("16292"));
+        assert_eq!(
+            config
+                .with_max_retained_bytes(16_292)
+                .unwrap()
+                .max_retained_bytes(),
+            16_292
+        );
     }
 
     #[test]
@@ -209,7 +298,7 @@ mod tests {
             .err();
         assert_eq!(
             err,
-            Some(LimitTooSmall {
+            Some(LimitOutOfRange {
                 given: MIN_MESSAGE_LIMIT - 1
             })
         );

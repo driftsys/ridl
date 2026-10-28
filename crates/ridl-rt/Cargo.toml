@@ -1,11 +1,11 @@
 [package]
 name = "ridl-rt"
 version.workspace = true
-# The crate compiles as edition 2021 because its rust-version minimum (1.83)
-# predates edition 2024, which Rust cannot build before 1.85; source ridl
-# emits, copied or generated into a consuming crate, compiles as that crate's
-# own edition. `just compat-check` also tests this crate as edition 2024 with
-# the toolchain pin.
+# The crate compiles as edition 2021, which is part of its frozen minimum
+# (ADR-0029 decision 5), so that a consuming crate on edition 2021 or 2024
+# can use it; source ridl emits, copied or generated into a consuming crate,
+# compiles as that crate's own edition. `just compat-check` also tests this
+# crate as edition 2024 with the toolchain pin.
 edition = "2021"
 license.workspace = true
 repository.workspace = true
@@ -16,22 +16,22 @@ categories = ["no-std", "encoding"]
 # The oldest Rust this crate supports. `just compat-check` builds and tests
 # the crate with that toolchain; the newest tested is the rust-toolchain.toml
 # pin.
-rust-version = "1.83"
+rust-version = "1.88"
 
-# One feature per payload encoding (ADR-0020 decision 5). In this version
-# `flatbuffers` and `proto3` each enable the module of the same name, `repr-c`
-# enables nothing, and the crate has no dependency in any combination.
+# One feature per payload encoding (ADR-0020 decision 5). Each of `flatbuffers`,
+# `proto3` and `podbuf` enables the module of the same name, and the crate has
+# no dependency in any combination.
 # `std` is not an encoding: it links the standard library and enables the
 # `task` module (ADR-0021 decision 8, amended 2026-09-26) and the propagation
 # hook of the `trace` module (ADR-0021 decision 22).
 [features]
 flatbuffers = []
 proto3 = []
-repr-c = []
+podbuf = []
 std = []
 
 # docs.rs builds with every feature on, so the crate docs' links to the
-# `flatbuffers`, `proto3` and `task` modules resolve.
+# `flatbuffers`, `proto3`, `podbuf` and `task` modules resolve.
 [package.metadata.docs.rs]
 all-features = true
 

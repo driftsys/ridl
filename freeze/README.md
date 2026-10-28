@@ -6,7 +6,8 @@ which release each surface is frozen against (ADR-0029).
 - `<surface>.txt` is the sorted, deduplicated dump of one surface, one line per
   fact. A dump is generated, never edited by hand.
 - `surfaces.toml` has one `[[surface]]` table per frozen surface, with a `name`
-  and a `baseline` (a git ref). The check fails when a line of the dump at the
+  and a `baseline` (a git ref that names an ancestor commit of HEAD; the check
+  fails on any other commit). The check fails when a line of the dump at the
   baseline is missing from the dump at HEAD. An added line passes. The optional
   top-level `required` key lists the surfaces that must have a row; it stays
   above the first table. The check fails when a row's name is not in `required`,
@@ -17,20 +18,28 @@ which release each surface is frozen against (ADR-0029).
 ## The frozen source copies
 
 The `accepted-sources` and `wire` dumps read frozen copies of the packages under
-`examples/` and `evals/corpus/`, not the packages themselves. The copies are in
+`examples/` and `evals/corpus/`, not the packages themselves (the `wire` dump
+also reads one copy under `generated/`, below). The copies are in
 `xtask/tests/freeze-fixtures/sources/`, each at the path of its original (for
 example `xtask/tests/freeze-fixtures/sources/examples/cabin`), and each holds
 the package's `ridl.toml` and its `.typl`, `.ridl` and `.rsdl` files. A dump
 line names the path of the original. The catalog hash of the `wire` dump is read
 from `xtask/tests/freeze-fixtures/generated/cabin`, the copy of `examples/cabin`
-that the `generated-crate` surface reads. An edit to `examples/` or to
-`evals/corpus/` therefore changes no dump. The `wire` dump also holds the test
-vectors of the WebSocket binding: one `frame-vector <id> <hex>` line per row of
-the vector table in `docs/specification/frame-specification.md` §11.1, read from
-that document by the row's `Id`, so an edit to a vector changes the dump. The
-checker also reads the payload that a row's `Vector` cell names as
-`` payload `<hex>` `` and fails a row whose bytes after the header differ from
-it, or from no bytes when the cell names none.
+that the `generated-crate` surface reads. The `.proto` and `.fbs` lines of the
+`wire` dump are also built from
+`xtask/tests/freeze-fixtures/generated/veh-cluster`, the only frozen copy that
+declares a union, so the dump holds a proto3 `oneof` and a FlatBuffers `union`.
+A FlatBuffers union is one line that lists its arms in order, so reordering arms
+removes a line. The FlatBuffers backend refuses the ros2 corpus, so ros2 has no
+`.fbs` line. A refresh of the veh-cluster copy for the `generated-crate` surface
+therefore also changes `wire.txt`. An edit to `examples/` or to `evals/corpus/`
+therefore changes no dump. The `wire` dump also holds the test vectors of the
+WebSocket binding: one `frame-vector <id> <hex>` line per row of the vector
+table in `docs/specification/frame-specification.md` §11.1, read from that
+document by the row's `Id`, so an edit to a vector changes the dump. The checker
+also reads the payload that a row's `Vector` cell names as `` payload `<hex>` ``
+and fails a row whose bytes after the header differ from it, or from no bytes
+when the cell names none.
 
 To refresh a copy on purpose, copy the package's files over it and run
 `cargo xtask freeze update`. A new copy adds lines and passes. A replaced copy
@@ -43,9 +52,19 @@ lines. Neither has a `<surface>.txt`.
 
 - `runtime-crates`: `ridl-rt`, `ridl-rt-conformance`, `ridl-loopback`,
   `ridl-descriptor` and `ridl-transport-ws`, compared with the same crates at
-  the baseline. Each crate's own items are compared: the `ridl-ir` items that
-  `ridl-descriptor` re-exports or takes in its signatures are not, so a break in
-  them is caught only by review until driftsys/ridl#934 is fixed.
+  the baseline. Each crate's own items are compared. `ridl-descriptor` wraps the
+  catalog hash functions of `ridl-ir`, so the wrappers are compared. The
+  `ridl-ir` types that appear in `ridl-descriptor` signatures are not, so a
+  break in them is caught only by review until driftsys/ridl#1010 is fixed. The
+  comparison is skipped when `git diff --quiet <baseline>` reports no change
+  between the baseline and the working tree, and no file is untracked, in the
+  directory of each of these crates, in `crates/ridl-ir`, in the root
+  `Cargo.toml` and in `Cargo.lock`, because then no break is possible. The
+  working tree is compared, so an edit that is not committed yet is still
+  compared. `rust-toolchain.toml` and the sources of `xtask` are not inputs: the
+  comparison reads the rustdoc of the crates, and neither changes an item of
+  them. A file that git ignores under these paths is not an input either. The
+  passing line of the check says so.
 - `generated-crate`: each directory `generated/<name>/` holds a crate that
   `ridl build --emit rust` writes, from the source packages under
   `xtask/tests/freeze-fixtures/generated/`. Those are frozen copies of
@@ -70,6 +89,19 @@ the local cargo cache. Before the first comparison, the check runs
 `cargo fetch --locked` with the network allowed, which puts every package of
 `Cargo.lock` there, for every platform. A build of the workspace is not enough:
 it downloads only the packages of the host platform.
+
+The `runtime-crates` comparison also builds the crates at the baseline offline.
+The baseline can pin a package that HEAD's `Cargo.lock` no longer names, so the
+check also extracts the baseline's tree into
+`${CARGO_TARGET_DIR:-target}/freeze-api/baseline-tree/` and runs
+`cargo fetch --locked` there, with the network allowed, before the comparison.
+It does this only when the baseline's `Cargo.lock` differs from the working
+tree's, because an equal lockfile names the same packages that HEAD's fetch
+already downloaded.
+
+The passing line of the check says which Rust API comparisons ran. For each API
+surface it names one of three results: compared with its baseline, skipped (with
+the reason), or not compared because the surface has no row in `surfaces.toml`.
 
 ## Lines that a compatible change removes
 

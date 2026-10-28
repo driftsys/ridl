@@ -45,6 +45,7 @@ scopes = [
   "ridl-backend-ts",
   "ridl-backend-proto",
   "ridl-backend-flatbuffers",
+  "ridl-backend-podbuf",
   "ridl-diff",
   "ridl-fmt",
   "xtask",
@@ -62,6 +63,8 @@ scopes = [
   "ridl-transport-ws",
   # the TypeScript client of the same binding (packages/ridl-transport-ws/)
   "ts-transport-ws",
+  # the TypeScript loader of the generated wasm codec (packages/ridl-runtime/)
+  "ts-runtime",
   # the port contract tests any runtime runs (docs/ROADMAP.md,
   # E11.20; ADR-0020 decision 6)
   "ridl-rt-conformance",
@@ -121,3 +124,18 @@ regex = '(?m)^ridl-rt = \{ version = "([^"]+)"'
 [[version_files]]
 path = "packages/ridl-transport-ws/deno.json"
 regex = '(?m)^  "version": "([^"]+)"'
+
+[[version_files]]
+path = "packages/ridl-runtime/deno.json"
+regex = '(?m)^  "version": "([^"]+)"'
+
+# The ridl-core dev-dependency pins. A path dependency with a version keeps
+# that version when the crate is published, so it has to equal the workspace
+# version.
+[[version_files]]
+path = "crates/ridl-diff/Cargo.toml"
+regex = 'ridl-core = \{ path = "\.\./ridl-core", version = "([^"]+)"'
+
+[[version_files]]
+path = "crates/ridl-sem/Cargo.toml"
+regex = 'ridl-core = \{ path = "\.\./ridl-core", version = "([^"]+)"'

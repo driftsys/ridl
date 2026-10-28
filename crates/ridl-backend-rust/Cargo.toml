@@ -67,18 +67,27 @@ ridl-loopback = { path = "../ridl-loopback" }
 # every write. It is enabled here, on the dev-dependency, and nowhere else:
 # this crate's library links no runtime at all. The `proto3` feature is the
 # same for `::ridl_rt::proto3`: the checked-in face is generated with both
-# codecs, and its round trips run over a proto3 port as well.
+# codecs, and its round trips run over a proto3 port as well. The `podbuf`
+# feature is the same for `::ridl_rt::podbuf`, which the checked-in transcode
+# module names.
 # The `std` feature is what makes `::ridl_rt::task` exist: the round trips
 # through the generated async client poll its futures by hand with
 # `ridl_rt::task::noop_waker`, the way a frame loop does.
-ridl-rt = { path = "../ridl-rt", features = ["flatbuffers", "proto3", "std"] }
+ridl-rt = { path = "../ridl-rt", features = [
+  "flatbuffers",
+  "proto3",
+  "podbuf",
+  "std",
+] }
 # The independent FlatBuffers implementation the conformance test round trips
 # against (design note D-8), and the code generator that turns the
 # emitted `.fbs` into the Rust reader that test drives. `planus-codegen` runs
 # in one test, which regenerates the checked-in reader and asserts it is byte
 # for byte what is in the tree; `planus` is the runtime that reader links, in
 # this test binary only. This crate's own use of both is dev-only. The
-# toolchain may depend on planus (`ridl-descriptor` does); `ridl-rt` and every
+# toolchain may depend on planus (`ridl-descriptor` does, and
+# `ridl-transport-ws` through it under its optional `descriptor` feature);
+# `ridl-rt` and every
 # generated package must not (ADR-0020 decision 5, as amended 2026-10-03).
 # The `.fbs` the conformance test compiles with planus is emitted from the
 # same IR as the codec under test, by the schema backend, so the two agree by

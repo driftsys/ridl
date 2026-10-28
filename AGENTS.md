@@ -7,27 +7,29 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: twenty-one
+(ADRs), the implementation roadmap, and the compiler workspace: twenty-two
 crates under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`,
 `ridl-descriptor` (the catalog descriptor's schema, accessors and verifier),
 `ridlc`, `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
-`ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`,
-`ridl-rt`, `ridl-loopback`, `ridl-transport-ws` (the WebSocket binding of the
-frame), `ridl-rt-conformance` (the port contract tests any runtime runs,
-published for runtimes outside this repository), and `ridlc-gen-model` and
-`ridlc-gen-rust` (the reference codegen plugins, test-only) — plus `xtask` at
-the root, `packages/` (the TypeScript packages; `packages/ridl-transport-ws` is
-the Deno and browser client of the WebSocket binding), the `editors/vscode`
-extension, `skills/` (the `ridl-authoring` agent skill, which the extension and
-the editor release package), `evals/` (the public corpus, the calibration
-records and the eval tasks for design evaluation, which `cargo xtask eval` runs,
-outside the published crates and the book), and `examples/`, whose worked
-examples are compiled and run by the test suite rather than being prose. The
-typl v0.1 toolchain (epic E1), the ridl interface layer over it (epic E2) and
-rsdl's checks, lowering and `ridl diff` at the system (epic E6) are built; the
-boundary model (epic E3) is sequenced in the roadmap, and `rmdl` stays a
-Proposed draft with no implementation. See
-`docs/technotes/walking-skeleton-architecture.md` for the as-built map.
+`ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-backend-podbuf` (the C
+header of the podbuf layout), `ridl-diff`, `ridl-fmt`, `ridl-rt`,
+`ridl-loopback`, `ridl-transport-ws` (the WebSocket binding of the frame),
+`ridl-rt-conformance` (the port contract tests any runtime runs, published for
+runtimes outside this repository), and `ridlc-gen-model` and `ridlc-gen-rust`
+(the reference codegen plugins, test-only) — plus `xtask` at the root,
+`packages/` (the TypeScript packages; `packages/ridl-transport-ws` is the Deno
+and browser client of the WebSocket binding, and `packages/ridl-runtime` loads
+the generated wasm codec), the `editors/vscode` extension, `skills/` (the
+`ridl-authoring` agent skill, which the extension and the editor release
+package), `evals/` (the public corpus, the calibration records and the eval
+tasks for design evaluation, which `cargo xtask eval` runs, outside the
+published crates and the book), and `examples/`, whose worked examples are
+compiled and run by the test suite rather than being prose. The typl v0.1
+toolchain (epic E1), the ridl interface layer over it (epic E2) and rsdl's
+checks, lowering and `ridl diff` at the system (epic E6) are built; the boundary
+model (epic E3) is sequenced in the roadmap, and `rmdl` stays a Proposed draft
+with no implementation. See `docs/technotes/walking-skeleton-architecture.md`
+for the as-built map.
 
 **Start from the map for your task, then read what the task touches.**
 
@@ -89,6 +91,10 @@ Proposed draft with no implementation. See
   - ADR-0028 and `docs/book/generated-code.md` — before changing what a backend
     renders in a generated doc comment, or the doc fields of the codegen
     `Model`.
+  - ADR-0031 and `docs/design/podbuf-codec.md` — before changing the podbuf
+    layout in `ridl-ir`, the podbuf codec of the Rust backend,
+    `ridl-backend-podbuf`, the `podbuf` module of `ridl-rt`, RIDL-153 to
+    RIDL-156, or the podbuf rules of `ridl diff`.
   - ADR-0029, `docs/book/stability.md` and `freeze/README.md` — before changing
     a frozen surface, a dump under `freeze/`, `freeze/surfaces.toml`, or the
     freeze check in `xtask/src/freeze.rs` and `xtask/src/freeze/`.
@@ -121,8 +127,9 @@ member; rsdl is the apex.
     just toolchain-check the running toolchain is the one rust-toolchain.toml pins
     just gate-parity     CI invokes every member of just build, and the members
                          of build match the expected list in the recipe
-    just install-check   end-to-end test of install.sh (and install.ps1's dry
-                         run) against a fixture release
+    just install-check   end-to-end test of install.sh and, where pwsh
+                         is installed, install.ps1 (dry run, good install,
+                         corrupted download), against a fixture release
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
     just book-check      mdbook build on a copy of docs/ and of the
                          examples/**/*.rs and examples/**/*.ridl sources —
@@ -140,8 +147,10 @@ member; rsdl is the apex.
     just doc-path-check  every docs/ file path named in a tracked file
                          resolves — the bare paths link-check cannot see, in
                          prose, in an inline code span, and in a source
-                         comment. A directory citation is checked when it
-                         ends with /; the slashless form (docs/book) is not.
+                         comment. A directory citation ending with / has
+                         to be a directory; a path with no extension and no
+                         trailing slash (docs/book) has to be a file or a
+                         directory.
                          Skips docs/archive/, docs/wip/ and CHANGELOG.md,
                          where such a path records what was true when it was
                          written (the changelog is generated from commit
@@ -180,16 +189,15 @@ member; rsdl is the apex.
                          2021 with the rust-version in crates/ridl-rt/Cargo.toml
                          and as edition 2024 with the rust-toolchain.toml pin,
                          check both crates' LICENSE files, build the packaged
-                         ridl-loopback and ridl-transport-ws (with its default
-                         features on and off) at that rust-version, build the packaged
-                         ridl-ir and ridl-descriptor at the rust-version in
-                         crates/ridl-descriptor/Cargo.toml, and check the crate
-                         ridl build emits for examples/cabin (built with
-                         rustc, with only the std feature on) and for the
-                         veh-cluster corpus (built with cargo, every feature
-                         on and default features off) as edition 2021 with the
-                         ridl-rt rust-version, the first cell of the codegen
-                         build matrix (ADR-0021 decision 10)
+                         ridl-loopback, ridl-transport-ws (with its default
+                         features on, off, and with its descriptor feature),
+                         ridl-ir and ridl-descriptor at that rust-version, and
+                         check the crate ridl build emits for examples/cabin
+                         (built with rustc, with only the std feature on) and
+                         for the veh-cluster corpus (built with cargo, every
+                         feature on and default features off) as edition 2021
+                         with the same rust-version, the first cell of the
+                         codegen build matrix (ADR-0021 decision 10)
     just demo            generate examples/cabin's crate with ridl build and run
                          the program that links it — each round trip's value
                          is matched, and a missing one or a non-zero exit
@@ -199,7 +207,14 @@ member; rsdl is the apex.
                          generated crate, and one generated from the
                          veh-cluster corpus, check with their default features off
                          for thumbv7em-none-eabihf, a target with no standard
-                         library; the corpus crate is also linted with clippy,
+                         library, and with their default features on for
+                         i686-unknown-linux-gnu and
+                         aarch64-unknown-linux-gnu, so that the podbuf layout
+                         assertions are evaluated for a 32-bit and a 64-bit
+                         target; the program also encodes, verifies and decodes
+                         one value through the generated podbuf codec and fails
+                         unless it reports `podbuf round trip: 21.5`; the corpus
+                         crate is also linted with clippy,
                          with its default features and with them off for that
                          target, under -D warnings, so any diagnostic fails
                          it, dead_code included; the lints that its lib.rs
@@ -211,7 +226,8 @@ member; rsdl is the apex.
                          cargo workspace, outside this one, and carries the fmt
                          and clippy checks for its consumer, which --all over
                          this workspace cannot reach
-    just ts-check        in packages/ridl-transport-ws, with Deno:
+    just ts-check        in packages/ridl-runtime and packages/ridl-transport-ws,
+                         with Deno:
                          deno fmt --check, deno lint, deno check for Deno
                          and against the DOM library, the unit tests under
                          tests/, and deno publish --dry-run. The Deno version
@@ -219,26 +235,69 @@ member; rsdl is the apex.
     just ts-e2e          build the loopback_server example of
                          ridl-transport-ws and run the package's Deno
                          end-to-end test against it
+    just cabin-ws-demo   generate cabin's crate, its TypeScript codec module and
+                         its FlatBuffers schema with ridl build, run flatc
+                         over the schema, check the
+                         format and lint of examples/cabin/server and build it,
+                         build cabin's wasm codec (wasm32 cdylib), lint,
+                         type-check and round-trip the generated TypeScript
+                         codec modules of the two fixtures under
+                         crates/ridl-backend-ts/tests/fixtures/ against
+                         flatc's output (_codec-ts-check), run the
+                         unit tests of the check (check_test.ts),
+                         then run the Deno program of examples/cabin/web,
+                         which reads the catalog, the interaction table and
+                         the decode function from the generated codec module
+                         against it: the program decodes the server's
+                         temperature payloads through the generated codec
+                         module and fails
+                         unless every value is inside [-40..85], every
+                         received value is 1 to 63 steps ahead of the previous
+                         one on the ring of the 126 values (85 is followed by
+                         -40; a repeated value is ignored), 85 is reached by
+                         such a step, and -40 is seen after 85 (the first
+                         sample counts for neither bound). Before it connects,
+                         the program checks that the codec accepts 20 and
+                         rejects -41 and 86 with the range rule; it then
+                         verifies every received payload with the codec.
+                         Needs Deno and flatc at the version in .flatc-version
     just ts-browser-e2e  the same build, then the package's end-to-end test
                          in a headless browser; needs a Chromium-family
                          browser (RIDL_BROWSER names one). Runs in CI; not a
                          member of build, so a contributor's build needs no
                          browser
+    just cabin-browser-demo
+                         the generation and server build of cabin-ws-demo,
+                         then the same codec self-test, payload verification
+                         and temperature check in a page that a
+                         headless browser opens (RIDL_BROWSER names one);
+                         needs Deno, flatc and a Chromium-family browser.
+                         Runs in CI; not a member of build, for the same
+                         reason as ts-browser-e2e
+    just ts-npm-check    build packages/ridl-runtime and packages/ridl-transport-ws
+                         into npm packages with dnt, verify the built manifest and tarball,
+                         install the tarball in a temporary directory, and
+                         import it by name from Node. Needs deno, node and npm
+                         on PATH and network access. Not a member of pre-push.
+                         .github/workflows/npm-release.yml publishes the
+                         packages to npm on a v* tag
     just build           toolchain-check + gate-parity + install-check +
                          fmt-check + book-check + link-check + doc-path-check +
                          story-id-check + ts-check + freeze-check + compile +
                          test + lint + wasm-check + compat-check + demo +
-                         ts-e2e + check — the full local gate: every member
+                         ts-e2e + cabin-ws-demo + ts-npm-check + check — the full local gate: every member
                          ADR-0008 decision 11 names, the four CI checks
                          ADR-0009 brought back to this side, and
                          doc-path-check, story-id-check, freeze-check, demo,
-                         ts-check and ts-e2e, which postdate both
+                         ts-check, ts-e2e, cabin-ws-demo and ts-npm-check, which postdate
+                         both
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just pre-push        lint-commits + the static-check members of build,
                          ts-check included; skips freeze-check, compile, lint,
-                         test, wasm-check, compat-check, demo, ts-e2e, and
-                         install-check — wired as the pre-push hook
+                         test, wasm-check, compat-check, demo, ts-e2e,
+                         cabin-ws-demo, ts-npm-check, and install-check — wired as the pre-push hook,
+                         which skips it on a push of tags only
     just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
     just book-build      render the book to ./book — what CI publishes to Pages
@@ -250,8 +309,13 @@ member; rsdl is the apex.
                          vsce-target)
     just package-vscode  build ridl for this machine and package the extension
                          (local testing)
-    just release         freeze check --release, then git std bump — version,
-                         changelog, tag
+    just release         on a main commit whose ci passed: freeze check
+                         --release, git std bump --no-commit, release-sync, a
+                         lockfile and derived-pin check, then the release
+                         commit and the v and editor-v tags, all local
+    just release-sync    update the version pins git std bump cannot write
+    just release-push    push main, wait for ci on the release commit, then
+                         push the two tags
     just install         ./bootstrap — toolchain, git hooks, gate requirements
 
 Full recipe set: `justfile`. The toolchain conventions come from

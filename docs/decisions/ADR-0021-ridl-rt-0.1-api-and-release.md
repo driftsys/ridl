@@ -202,6 +202,12 @@ item 3). Each decision carries the amendment in place; the as-built records are
 [the `ridl-rt` design record](../design/ridl-rt.md) and
 [the proto3 codec design record](../design/proto3-codec.md).
 
+**Amendment (2026-10-24) — decision 10: the minimum Rust version is 1.88.**
+`ridl-rt` and the code the Rust codegen emits now require Rust 1.88 instead of
+1.83 (driftsys/ridl#1047). The editions do not change. Decision 10 carries the
+amendment in place; the approval of the break is recorded in
+[ADR-0029](ADR-0029-stability-policy.md).
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime
@@ -393,7 +399,7 @@ trusted with no `unsafe` and no second verification pass.
    `unsafe` to decode (a flatc-generated accessor used as a `View` may still
    contain `unsafe` inside the accessor itself, which narrows the no-`unsafe`
    rule to code ridl emits, not to every `View`). `encoding::Encoding` is
-   sealed, so `FlatBuffers`, `Proto3` and `ReprC` are the only encodings a
+   sealed, so `FlatBuffers`, `Proto3` and `Podbuf` are the only encodings a
    payload can implement; adding a fourth is a decision recorded in an ADR,
    never an `impl` in a downstream crate.
 
@@ -458,7 +464,7 @@ trusted with no `unsafe` and no second verification pass.
    may be far smaller.
 
 8. **The three cargo features are declared and carry no dependency in 0.1.**
-   `flatbuffers`, `proto3` and `repr-c` exist so a runtime can name every
+   `flatbuffers`, `proto3` and `podbuf` exist so a runtime can name every
    encoding without linking a codec, and the crate has no dependency in any
    feature combination. The `flatbuffers` dependency, its version, and the
    obligation it brings — every final binary that enables the feature must
@@ -544,8 +550,10 @@ trusted with no `unsafe` and no second verification pass.
    generated `verify` returns. It decides no layout, takes no dependency,
    allocates nothing and has no `unsafe` code, so the three constraints this
    crate holds to are unaffected, and `just wasm-check` and `just compat-check`
-   cover it through their `--all-features` invocations. `repr-c` still enables
-   nothing. Under decision 10 the change is additive.
+   cover it through their `--all-features` invocations. `repr-c`, since renamed
+   `podbuf`, still enabled nothing at the time; it gates the `podbuf` module
+   since [ADR-0031](ADR-0031-podbuf-projection-rules.md). Under decision 10 the
+   change is additive.
 
 9. **`Contract` and `CallError` stay exhaustive; every other error enum stays
    `#[non_exhaustive]`.** `Contract`'s variants are ridl §10.2's fixed
@@ -583,7 +591,7 @@ trusted with no `unsafe` and no second verification pass.
     `Ordinal`, `InterfaceNo`, `CatalogHash`, `Correlation`, `ClaimId`,
     `Timestamp` and `Duration` — follow the same rule: each has one public field
     code outside the crate builds directly. The unit structs `FlatBuffers`,
-    `Proto3` and `ReprC` (`crates/ridl-rt/src/encoding.rs`) follow it for a
+    `Proto3` and `Podbuf` (`crates/ridl-rt/src/encoding.rs`) follow it for a
     different reason: each is a marker type with no field, and code outside the
     crate uses it as a value or a pattern, so a field added to any of them
     breaks that code just as surely. A field added to any of these structs is
@@ -665,24 +673,22 @@ trusted with no `unsafe` and no second verification pass.
     A platform-wide payload ceiling for both codecs, which would cap such a
     bound instead of refusing it, is driftsys/ridl#996.
 
-    `ridl-rt` supports Rust 1.83 or newer: `rust-version = "1.83"` in
-    `crates/ridl-rt/Cargo.toml`. The crate's manifest compiles as edition 2021,
-    because its 1.83 minimum predates edition 2024 — Rust cannot build that
-    edition before 1.85 — and the crate is tested as both editions it supports:
-    edition 2021 with the 1.83 toolchain and with the `rust-toolchain.toml` pin,
-    and edition 2024 with the pin — edition 2024 did not exist before Rust 1.85,
-    so the 1.83 minimum cannot build it. `just test` covers edition 2021 with
-    the pin; `just compat-check` covers edition 2021 with 1.83 and edition 2024
-    with the pin, against the crate `cargo package -p ridl-rt` produces, not a
-    hand copy. The root `Cargo.toml` sets `resolver = "2"`, because
-    `cargo package` writes the workspace's resolver into the packaged manifest,
-    cargo 1.83 cannot read resolver 3 ("feature `edition2024` is required"), and
-    resolver 3's MSRV-aware fallback would resolve every workspace dependency
-    for `ridl-rt`'s minimum rather than only its own; decided by Sebastien on
-    2026-09-14 in driftsys/ridl#352. The pin follows the latest stable release:
-    a maintainer bumps it by hand under
-    [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 3 when a new
-    stable release appears (driftsys/ridl#353). Raising `rust-version` is a
+    `ridl-rt` supports Rust 1.88 or newer: `rust-version = "1.88"` in
+    `crates/ridl-rt/Cargo.toml` (1.83 until the 2026-10-24 amendment below). The
+    crate's manifest compiles as edition 2021, which is part of the frozen
+    minimum, and the crate is tested as both editions it supports: edition 2021
+    with the 1.88 toolchain and with the `rust-toolchain.toml` pin, and edition
+    2024 with the pin. `just test` covers edition 2021 with the pin;
+    `just compat-check` covers edition 2021 with 1.88 and edition 2024 with the
+    pin, against the crate `cargo package -p ridl-rt` produces, not a hand copy.
+    The root `Cargo.toml` sets `resolver = "2"`, because resolver 3's MSRV-aware
+    fallback would resolve every workspace dependency for `ridl-rt`'s minimum
+    rather than only its own; decided by Sebastien on 2026-09-14 in
+    driftsys/ridl#352. On that date a second reason held: cargo 1.83 could not
+    read resolver 3, which `cargo package` writes into the packaged manifest.
+    The pin follows the latest stable release: a maintainer bumps it by hand
+    under [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 3 when a
+    new stable release appears (driftsys/ridl#353). Raising `rust-version` is a
     breaking change under this decision's rule, shipped in a 0.x minor release;
     a toolchain pin bump does not by itself change `rust-version`. This replaces
     R-12's `rust-version` item — not the rest of R-12 — in
@@ -692,15 +698,23 @@ trusted with no `unsafe` and no second verification pass.
     the pin would rise with every toolchain bump.
 
     `ridl-rt` compiles as edition 2021 and is tested as editions 2021 and 2024,
-    with Rust 1.83 and with the pin, in the matrix above. The Rust codegen
+    with Rust 1.88 and with the pin, in the matrix above. The Rust codegen
     (roadmap epic E11) emits code that compiles under the same matrix — edition
-    2021 with 1.83, edition 2021 with the pin, and edition 2024 with the pin —
+    2021 with 1.88, edition 2021 with the pin, and edition 2024 with the pin —
     and the codegen stories test that; decided by Sebastien on 2026-09-14 during
     the review of driftsys/ridl#352, because Cargo compiles each crate under its
     own edition — an edition-2024 dependency builds under an edition-2021
     consumer once the toolchain is 1.85 or newer — but source ridl emits, copied
     or generated directly into a consuming crate, compiles as that crate's own
     edition, and a consumer may be edition 2021 or 2024.
+
+    **Amended (2026-10-24, driftsys/ridl#1047).** The minimum is raised from
+    Rust 1.83 to Rust 1.88 for `ridl-rt` and for the code the Rust codegen
+    emits, by the owner's decision of that date: `ridl-descriptor` already
+    needed 1.88, and the qualified Rust toolchains that the 1.83 minimum served
+    now ship Rust 1.88 or later. The editions do not change. The two paragraphs
+    above are changed in place; the stability policy and the approval of the
+    break are in [ADR-0029](ADR-0029-stability-policy.md).
 
 11. **Amendment (2026-09-20) — every port trait is implemented for `&mut P`, and
     every port trait whose methods all take `&self` also for `&P`.** For each
@@ -782,8 +796,10 @@ trusted with no `unsafe` and no second verification pass.
     `SignalWriter`, `EventSource`, `EventSink`, `Caller` and `Handler` — is
     `Send` and need not be `Sync`, because one thread drives each. Deriving the
     split from the receiver rather than from a list classifies every one of the
-    eleven port traits. A single-threaded runtime is held to neither, for the
-    reason the third paragraph gives.
+    eleven port traits that existed when this decision was written; `Wakeable`
+    (decision 13), the twelfth, takes `&self` and is classified the same way. A
+    single-threaded runtime is held to neither, for the reason the third
+    paragraph gives.
 
     A face is built over one value implementing exactly the port traits its
     interface needs, which [ADR-0023](ADR-0023-interaction-face-generation.md)
@@ -847,23 +863,25 @@ trusted with no `unsafe` and no second verification pass.
     displaces the stored one and wakes it; a stored waker is woken at most once,
     after every change of its kind becomes visible, and is cleared when woken;
     the caller registers on every poll and registers before it reads the port.
-    (The per-kind storage replaces "one waker per key", and the refresh rule
-    moves into the decision from the note of 2026-09-26 (story E11.16,
-    driftsys/ridl#510, landed by driftsys/ridl#545) that first stated it, which
-    driftsys/ridl#551 removed; decided on driftsys/ridl#546, landed by
-    driftsys/ridl#551.) A second task waiting for the same events holds a second
-    handle, and each handle's waiter is woken. `Event` and `Claim` are keyed per
-    interface, because `EventSource::next` and `Handler::next_claim` drain one
-    queue whatever the ordinal and the subscription and the served set already
-    filter by member. `Interest` is exhaustive, because a runtime must handle
-    every key and an unknown key has no safe default; a new key is a 0.x minor
-    under decision 10. A runtime with one unkeyed "something changed" source may
-    wake every waiter it holds on any change; the contract is never that a
-    waiter is woken only for its key. Every runtime that serves a generated
-    async client implements the trait; a runtime with no wake source of its own
-    has none to offer. The name is `Interest`, not `Wake`, because `task`
-    already imports `std::task::Wake`. This closes open question 6. Notes F-5
-    and F-6.
+    What a runtime does when `wake_on` names a kind of key that nothing
+    observes, or an `Outcome` correlation it does not know, is the runtime's
+    choice; the contract states no behaviour for either case. (The per-kind
+    storage replaces "one waker per key", and the refresh rule moves into the
+    decision from the note of 2026-09-26 (story E11.16, driftsys/ridl#510,
+    landed by driftsys/ridl#545) that first stated it, which driftsys/ridl#551
+    removed; decided on driftsys/ridl#546, landed by driftsys/ridl#551.) A
+    second task waiting for the same events holds a second handle, and each
+    handle's waiter is woken. `Event` and `Claim` are keyed per interface,
+    because `EventSource::next` and `Handler::next_claim` drain one queue
+    whatever the ordinal and the subscription and the served set already filter
+    by member. `Interest` is exhaustive, because a runtime must handle every key
+    and an unknown key has no safe default; a new key is a 0.x minor under
+    decision 10. A runtime with one unkeyed "something changed" source may wake
+    every waiter it holds on any change; the contract is never that a waiter is
+    woken only for its key. Every runtime that serves a generated async client
+    implements the trait; a runtime with no wake source of its own has none to
+    offer. The name is `Interest`, not `Wake`, because `task` already imports
+    `std::task::Wake`. This closes open question 6. Notes F-5 and F-6.
 
 14. **Amendment (2026-09-26) — `Transport::Busy` crosses the frame (story
     E11.16).** `Transport` gains `Busy`: the providing runtime refused the call

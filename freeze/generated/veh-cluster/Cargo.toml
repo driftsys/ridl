@@ -4,6 +4,7 @@
 name = "ridl_generated"
 version = "0.0.0"
 edition = "2021"
+rust-version = "1.88"
 
 [features]
 default = ["validate-pattern", "std"]
@@ -14,7 +15,7 @@ validate-pattern = ["dep:regex"]
 std = ["ridl-rt/std"]
 
 [dependencies]
-ridl-rt = { version = "0.12", features = ["flatbuffers"] }
+ridl-rt = { version = "0.14", features = ["flatbuffers", "proto3", "podbuf"] }
 regex = { version = "1.13", optional = true }
 
 [lib]

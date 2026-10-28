@@ -9,7 +9,7 @@ mod remote_support;
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdout, Command as StdCommand, ExitStatus, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command as StdCommand, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -965,6 +965,58 @@ fn assert_lsp_handshake_and_clean_shutdown(args: &[&str]) {
 
     let status = wait_for_exit(&mut child, "ridl lsp");
     assert_eq!(status.code(), Some(0), "a clean shutdown exits 0");
+}
+
+/// Starts `ridl lsp`, completes the `initialize` handshake and sends
+/// `initialized`, and returns the child with its stdin and its message
+/// stream. The caller decides how the session ends.
+fn start_initialized_lsp() -> (Child, ChildStdin, mpsc::Receiver<Message>) {
+    let mut child = spawn_lsp(&[]);
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let messages = read_messages(child.stdout.take().expect("piped stdout"));
+    let initialize = RequestId::from(1);
+    Message::Request(Request::new(
+        initialize.clone(),
+        "initialize".to_string(),
+        json!({ "capabilities": {} }),
+    ))
+    .write(&mut stdin)
+    .expect("write initialize");
+    response_to(&messages, initialize)
+        .response_result
+        .expect("an initialize result, not an error");
+    Message::Notification(Notification::new("initialized".to_string(), json!({})))
+        .write(&mut stdin)
+        .expect("write initialized");
+    (child, stdin, messages)
+}
+
+/// The LSP specification (3.17, "Exit Notification") says the server exits
+/// with code 1 when `exit` arrives and `shutdown` did not come before it.
+#[test]
+fn ridl_lsp_exits_one_on_exit_without_shutdown() {
+    let (mut child, mut stdin, _messages) = start_initialized_lsp();
+    Message::Notification(Notification::new("exit".to_string(), json!(null)))
+        .write(&mut stdin)
+        .expect("write exit");
+    // stdin stays open: only the `exit` notification may end the session.
+    let status = wait_for_exit(&mut child, "ridl lsp");
+    assert_eq!(status.code(), Some(1), "exit without shutdown exits 1");
+}
+
+/// A client that disappears after the handshake and before `shutdown` ends
+/// the session without the shutdown the specification requires, so the exit
+/// code is 1, not 0.
+#[test]
+fn ridl_lsp_exits_one_when_stdin_closes_without_shutdown() {
+    let (mut child, stdin, _messages) = start_initialized_lsp();
+    drop(stdin);
+    let status = wait_for_exit(&mut child, "ridl lsp");
+    assert_eq!(
+        status.code(),
+        Some(1),
+        "stdin closed without shutdown exits 1"
+    );
 }
 
 #[test]

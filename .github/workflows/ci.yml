@@ -44,6 +44,8 @@ env:
   # ADR-0009 decision 8 records that asymmetry and why it is not closed here.
   # The Deno pin is not here: it is in .deno-version, because `./bootstrap`
   # reads it too and installs that version when a contributor has no `deno`.
+  # The flatc pin is not here either: it is in .flatc-version, for the same
+  # reason.
   JUST_VERSION: 1.38.0
   MDBOOK_VERSION: 0.4.40
 
@@ -221,13 +223,29 @@ jobs:
       - run: just toolchain-check
       # Needs no toolchain of its own, and has no other job to sit in.
       - run: just gate-parity
-      # Needs neither a toolchain nor a network: it tests install.sh against a
-      # local file:// fixture.
+      # Needs no toolchain and no external network: it tests install.sh against
+      # a local file:// fixture, and install.ps1 against a fixture served from
+      # a local HTTP server.
       - run: just install-check
       - run: just fmt-check
       - run: just freeze-check
       - run: just compile
+      # One test of `just test` (crates/ridlc/tests/wasm_module.rs) runs the
+      # generated wasm module in Node. ubuntu-latest has Node on PATH; the
+      # step pins the major version the test is run with.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # `crates/ridl-backend-podbuf/tests/c_compile.rs` compiles the generated C
+      # header for three targets with `clang`. `RIDL_REQUIRE_CC=1` makes a
+      # missing compiler a failure instead of a skip.
+      - name: install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
       - run: just test
+        env:
+          RIDL_REQUIRE_CC: "1"
       - run: just lint
       # The demo: `ridl build` writes a crate from examples/cabin, and cargo
       # builds a program against it and runs it. Sits in this job because it
@@ -255,22 +273,36 @@ jobs:
       - run: just wasm-check
       - run: just compat-check
 
-  # The TypeScript package packages/ridl-transport-ws. `ts-check` and `ts-e2e`
-  # are members of `just build`; `ts-browser-e2e` is not, because a
-  # contributor's build needs no browser, so `gate-parity` does not see its step
-  # here and it is checked by reading. ubuntu-latest has Google Chrome on PATH.
-  # RIDL_BROWSER_NO_SANDBOX starts it with --no-sandbox, which a runner may need
-  # and which is harmless where it is not.
+  # The TypeScript packages packages/ridl-runtime and packages/ridl-transport-ws.
+  # `ts-check`, `ts-npm-check`, `ts-e2e` and `cabin-ws-demo`
+  # are members of `just build`; `ts-browser-e2e` and `cabin-browser-demo` are
+  # not, because a contributor's build needs no browser, so `gate-parity` does
+  # not see their steps here and they are checked by reading. ubuntu-latest has
+  # Google Chrome on PATH. RIDL_BROWSER_NO_SANDBOX starts it with --no-sandbox,
+  # which a runner may need and which is harmless where it is not.
   typescript:
     name: typescript
     needs: changes
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
+    # The job runs the TypeScript checks and the cabin demo; a hung server or
+    # program ends at this limit.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: install the pinned toolchain
         run: rustup show
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+      # The cabin workspace is a separate cargo workspace whose members are
+      # written by the recipe, so rust-cache cannot read its metadata before
+      # the recipe runs. Its target directory is cached by path instead.
+      - uses: actions/cache@v4
+        with:
+          path: examples/cabin/target
+          key: cabin-target-${{ runner.os }}-${{ hashFiles('examples/cabin/Cargo.lock', 'rust-toolchain.toml') }}
       - name: install just
         run: |
           set -o pipefail
@@ -291,8 +323,29 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/deno" --version
       - run: just ts-check
+      - run: just ts-npm-check
       - run: just ts-e2e
+      # `just cabin-ws-demo` and `just cabin-browser-demo` need `flatc` at the
+      # version the recipes check, which is read from .flatc-version, the one
+      # place it is pinned. The official release archive is used because the
+      # distribution packages carry other versions.
+      - name: install flatc
+        run: |
+          set -o pipefail
+          flatc_version="$(tr -d '[:space:]' < .flatc-version)"
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$RUNNER_TEMP/flatc.zip" \
+            "https://github.com/google/flatbuffers/releases/download/v${flatc_version}/Linux.flatc.binary.g++-13.zip"
+          unzip -o -q "$RUNNER_TEMP/flatc.zip" -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/flatc"
+          "$HOME/.local/bin/flatc" --version
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: just cabin-ws-demo
       - run: just ts-browser-e2e
+        env:
+          RIDL_BROWSER_NO_SANDBOX: "1"
+      # Uses the flatc installed above.
+      - run: just cabin-browser-demo
         env:
           RIDL_BROWSER_NO_SANDBOX: "1"
 

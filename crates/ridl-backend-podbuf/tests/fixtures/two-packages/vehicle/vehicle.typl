@@ -1,0 +1,16 @@
+package pod.vehicle
+
+import pod.parts.Wheel
+import pod.parts.Hub
+import pod.parts.Tyre
+import pod.parts.Gauge
+import pod.parts.Clash
+
+struct Axle {
+  note  : integer [0..255]
+  wheel : Wheel
+  hub   : Hub
+  tyre  : Tyre
+  gauge : Gauge
+  clash : Clash
+}

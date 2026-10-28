@@ -1174,6 +1174,7 @@ mod v2_round_trip {
     /// enclosing interface (ridl §11).
     fn interaction(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
         v2::Decl {
+            limit: None,
             name: name.to_string(),
             visibility: v2::Visibility::Unspecified as i32,
             is_error: false,
@@ -1407,6 +1408,7 @@ mod v2_round_trip {
             // along unchanged in v2; package-level declarations carry
             // ordinal 0.
             decls: vec![v2::Decl {
+                limit: None,
                 name: "Speed".to_string(),
                 visibility: v2::Visibility::Public as i32,
                 is_error: false,
@@ -1443,6 +1445,7 @@ mod v2_round_trip {
     fn vocabulary_fixture() -> v2::Package {
         fn decl(name: &str, kind: v2::decl::Kind) -> v2::Decl {
             v2::Decl {
+                limit: None,
                 name: name.to_string(),
                 visibility: v2::Visibility::Public as i32,
                 is_error: false,

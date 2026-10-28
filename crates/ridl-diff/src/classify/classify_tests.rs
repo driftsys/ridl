@@ -15,6 +15,7 @@ use crate::{Category, Change, DiffReport, Verdict, diff_packages};
 
 fn decl(name: &str, ordinal: u32, kind: v2::decl::Kind) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: name.to_string(),
         visibility: v2::Visibility::Public as i32,
         is_error: false,
@@ -57,6 +58,7 @@ fn event(name: &str, ordinal: u32, payload: &str) -> v2::Decl {
 
 fn reserved(name: &str, ordinal: u32) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: String::new(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,
@@ -1243,6 +1245,69 @@ fn an_rpc_bound_change_on_a_kind_that_carries_no_rpc_bound_is_breaking() {
     assert_eq!(
         super::classify(&change, &package, &package),
         Verdict::Breaking
+    );
+}
+
+// ==========================================================================
+// Payload limits (ADR-0030 decision 13).
+// ==========================================================================
+
+fn limited(limit: Option<u32>) -> v2::Package {
+    let mut interaction = signal("a", 1, "T");
+    interaction.limit = limit;
+    pkg(vec![interaction])
+}
+
+#[test]
+fn a_raised_limit_is_breaking() {
+    assert_row(
+        &limited(Some(64)),
+        &limited(Some(128)),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn a_lowered_limit_is_breaking() {
+    assert_row(
+        &limited(Some(128)),
+        &limited(Some(64)),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn a_limit_added_is_breaking() {
+    assert_row(
+        &limited(None),
+        &limited(Some(64)),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn a_limit_removed_is_breaking() {
+    assert_row(
+        &limited(Some(64)),
+        &limited(None),
+        Category::LimitChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn an_unchanged_limit_reports_nothing() {
+    let report = diff_packages(&limited(Some(64)), &limited(Some(64)));
+    assert!(
+        report
+            .changes
+            .iter()
+            .all(|change| change.category != Category::LimitChanged),
+        "{:?}",
+        report.changes
     );
 }
 
@@ -2811,6 +2876,7 @@ fn a_visibility_change_is_not_reported_as_doc_only() {
 /// taking it classified as a clean append.
 fn nameless_reserved(ordinal: u32) -> v2::Decl {
     v2::Decl {
+        limit: None,
         name: String::new(),
         visibility: v2::Visibility::Unspecified as i32,
         is_error: false,
@@ -2951,6 +3017,16 @@ fn every_category_has_a_rule_row_naming_its_verdicts() {
             "{word} must round-trip through category_from_word"
         );
     }
+}
+
+#[test]
+fn the_limit_changed_rule_row_says_breaking_and_never_compatible() {
+    let text = super::explain(Category::LimitChanged);
+    assert!(
+        text.contains("  breaking    a limit raised, lowered, added where none was, or removed"),
+        "{text}"
+    );
+    assert!(!text.contains("compatible"), "{text}");
 }
 
 #[test]
@@ -3116,4 +3192,102 @@ fn removing_an_unreadable_stepped_origin_is_breaking() {
     after.min = None;
     let (old, new) = constraint_case(before, after);
     assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+}
+
+/// The input of [`absence_refused`](crate::absence_refused) over a workspace of
+/// two packages: the struct `S` is in the second one, so a lookup that takes
+/// the first package finds nothing, and its field types come from `ridl.std`,
+/// which only the context holds.
+fn absence_workspace() -> (Vec<v2::Package>, Vec<v2::Package>) {
+    let package = |name: &str, decls: Vec<v2::Decl>| v2::Package {
+        name: name.to_string(),
+        decls,
+        interfaces: Vec::new(),
+        services: Vec::new(),
+        retired: Vec::new(),
+        unit: String::new(),
+    };
+    let std = package(
+        "ridl.std",
+        vec![
+            scalar(
+                "Timestamp",
+                bounds(Some("0"), Some("9223372036854775807")),
+                v2::IntWidth::I64,
+            ),
+            backed(
+                "Label",
+                v2::PrimitiveType::String,
+                Some(v2::Constraint {
+                    len_min: Some(1),
+                    len_max: Some(64),
+                    ..bounds(None, None)
+                }),
+            ),
+        ],
+    );
+    let first = package(
+        "first",
+        vec![struct_decl(
+            "Other",
+            vec![field("label", 1, "ridl.std.Label")],
+        )],
+    );
+    let second = package(
+        "second",
+        vec![
+            struct_decl(
+                "S",
+                vec![
+                    field("at", 1, "ridl.std.Timestamp"),
+                    field("label", 2, "ridl.std.Label"),
+                ],
+            ),
+            union_decl("U", vec![union_arm("x", 1, "ridl.std.Label")], false),
+        ],
+    );
+    (vec![first, second], vec![std])
+}
+
+/// The package is looked up by name, not taken as the first of the set: the
+/// struct `S` is in the second package, and each package answers for its own
+/// containers only.
+#[test]
+fn absence_refused_reads_the_struct_of_the_named_package() {
+    let (set, context) = absence_workspace();
+    assert!(crate::absence_refused(
+        &set, &context, "second", "S", "label"
+    ));
+    assert!(!crate::absence_refused(&set, &context, "second", "S", "at"));
+    assert!(crate::absence_refused(
+        &set, &context, "first", "Other", "label"
+    ));
+    assert!(!crate::absence_refused(
+        &set, &context, "first", "S", "label"
+    ));
+    assert!(!crate::absence_refused(
+        &set, &context, "missing", "S", "label"
+    ));
+}
+
+/// A package in `context` resolves a field type without being compared. With
+/// no context `ridl.std.Timestamp` is unresolved and reads as refused, which
+/// is what the desk check would report if it passed no `ridl.std`.
+#[test]
+fn absence_refused_resolves_a_field_type_through_the_context() {
+    let (set, context) = absence_workspace();
+    assert!(!crate::absence_refused(&set, &context, "second", "S", "at"));
+    assert!(crate::absence_refused(&set, &[], "second", "S", "at"));
+}
+
+/// Only a struct has an absent-field rule. A union arm, or a name that no
+/// declaration of the package holds, is not refused, although the type the arm
+/// names would be refused as a struct field.
+#[test]
+fn absence_refused_is_false_for_a_container_that_is_not_a_struct() {
+    let (set, context) = absence_workspace();
+    assert!(!crate::absence_refused(&set, &context, "second", "U", "x"));
+    assert!(!crate::absence_refused(
+        &set, &context, "second", "Missing", "x"
+    ));
 }

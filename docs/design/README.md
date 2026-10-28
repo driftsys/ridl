@@ -26,12 +26,12 @@ choices, see [`../decisions/`](../decisions/).
   for the face its handles are passed to.
 - **ridl-transport-ws.md** — the WebSocket binding of the frame as built: the
   `no_std` codec of frame specification §11.1, the server side of RFC 6455
-  written in the crate with no dependency but `ridl-rt`, the sans-IO session
-  core that serves a backend's observe-and-call ports, the blocking `serve` over
-  a connection the embedder accepted, the session sequence numbers, the
-  correlation map and its duplicate retention, the tests, and the design's
-  decisions D-1 to D-25 with what is not built. The decisions behind its choices
-  are
+  written in the crate with no unconditional dependency but `ridl-rt`, the
+  sans-IO session core that serves a backend's observe-and-call ports, the
+  blocking `serve` over a connection the embedder accepted, the session sequence
+  numbers, the correlation map and its duplicate retention, the tests, and the
+  design's decisions D-1 to D-25 with what is not built. The decisions behind
+  its choices are
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decision 6 as amended 2026-10-19, and
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) for the port
@@ -47,6 +47,14 @@ choices, see [`../decisions/`](../decisions/).
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 6 and 7, with decision 6 as amended 2026-10-20, and
   [ADR-0009](../decisions/ADR-0009-toolchain-and-gate-parity.md) for the gates.
+- **ts-codec-table.md** — the generated TypeScript codec module
+  `<base>.codec.ts` as built: the `encode`/`decode` functions over plain
+  objects, the conversion rules per typl kind, the interface tables, the catalog
+  facts and the payload type names the wasm codec is loaded with, the `codec`
+  manifest option that implies the wasm module, the `ridl_type_id` export, and
+  the known gaps. The decisions behind its choices are
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decisions 6 and 7.
 - **flatbuffers-codec.md** — the generated `Payload<FlatBuffers>` implementation
   a package carries: where the projection facts both emitters read live, what
   `generate` emits per table, what `encode`, `verify`, `decode` and `MAX_SIZE`
@@ -67,6 +75,17 @@ choices, see [`../decisions/`](../decisions/).
   decisions 3 and 4 and
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 8
   and 10, as amended 2026-10-20.
+- **podbuf-codec.md** — the generated `Payload<Podbuf>` implementation and the C
+  header as built: where the code is, the layout law computed once in `ridl-ir`,
+  what is emitted per type (the head struct, the view, the encoder, `verify` as
+  a call tree, `decode`), the `podbuf` module of `ridl-rt`, the `Sizes<Podbuf>`
+  table, the conformance tests with the law as the oracle, and the known gaps.
+  The decisions behind its choices are
+  [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md),
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decisions 1, 3, 5, 8 and 9 and
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 7
+  and 8.
 - **catalog-descriptor.md** — the FlatBuffers catalog descriptor per unit as
   built: the `RDLC` file `--emit catalog` writes, the append-only schema and its
   generated planus accessors, what a catalog contains, the catalog hash and the

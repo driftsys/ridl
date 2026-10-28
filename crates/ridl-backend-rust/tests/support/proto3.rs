@@ -250,6 +250,7 @@ impl Program {
             let generated = ridl_backend_rust::generate_pipeline(
                 package,
                 &[ridl_backend_rust::WireEncoding::Proto3],
+                false,
                 &others,
             )
             .unwrap_or_else(|error| panic!("{} generates: {}", package.name, error.message))

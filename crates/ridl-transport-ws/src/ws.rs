@@ -254,6 +254,8 @@ impl CloseCode {
     pub(crate) const PROTOCOL: Self = Self(1002);
     /// The peer sent a text message.
     pub(crate) const UNSUPPORTED: Self = Self(1003);
+    /// The session passed a resource limit the server states.
+    pub(crate) const POLICY: Self = Self(1008);
     /// The peer sent a message over the size limit.
     pub(crate) const TOO_BIG: Self = Self(1009);
 }
@@ -1267,7 +1269,11 @@ mod tests {
 
     #[test]
     fn close_codes_are_accepted_inside_each_range_and_refused_outside_it() {
-        for code in [1000u16, 1003, 1007, 1014, 3000, 4999] {
+        // The whole of 1007 to 1014 is walked, so that a hole in the range
+        // cannot pass: 1008 is the code the server sends itself (the
+        // retained-bytes cap), so a peer may close with it first.
+        let accepted = [1000u16, 1003, 3000, 4999].into_iter().chain(1007..=1014);
+        for code in accepted {
             let bytes = masked(0x88, &code.to_be_bytes());
             assert_eq!(
                 parse_all(1000, &bytes),
@@ -1275,7 +1281,7 @@ mod tests {
                 "{code}"
             );
         }
-        for code in [999u16, 1004, 1006, 1015, 2999, 5000] {
+        for code in [999u16, 1004, 1005, 1006, 1015, 2999, 5000] {
             let bytes = masked(0x88, &code.to_be_bytes());
             assert_eq!(
                 parse_all(1000, &bytes),

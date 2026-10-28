@@ -964,9 +964,242 @@ fn an_unknown_key_is_refused() {
         value: "flatbuffers".to_string(),
     }]);
     assert!(
-        message.contains("takes one option, `encodings`") && message.contains("`codec`"),
+        message.contains("takes the options `encodings`, `wasm` and `transcode`")
+            && message.contains("`codec`"),
         "got: {message}"
     );
+}
+
+fn option(key: &str, value: &str) -> v1::BackendOption {
+    v1::BackendOption {
+        key: key.to_string(),
+        value: value.to_string(),
+    }
+}
+
+/// `wasm = true` needs `flatbuffers` in `encodings`: the `wasm` module checks
+/// FlatBuffers bytes, so a crate without that codec has nothing to export.
+#[test]
+fn wasm_without_flatbuffers_is_refused() {
+    for options in [
+        vec![option("wasm", "true")],
+        vec![option("encodings", "proto3"), option("wasm", "true")],
+    ] {
+        let message = refused_options(options);
+        assert!(
+            message
+                .contains("`[backend.rust] wasm = true` needs `encodings` to name `flatbuffers`"),
+            "got: {message}"
+        );
+    }
+    let message = refused_options(vec![
+        option("encodings", "flatbuffers"),
+        option("wasm", "1"),
+    ]);
+    assert!(message.contains("`wasm` is `1`"), "got: {message}");
+}
+
+/// `wasm = implied` is what `ridlc` sends when `codec = true` turns the module
+/// on; with `flatbuffers` it is accepted like `true`.
+#[test]
+fn an_implied_wasm_is_accepted_with_flatbuffers() {
+    backend_response(vec![
+        option("encodings", "flatbuffers"),
+        option("wasm", "implied"),
+    ])
+    .expect("a file is written");
+}
+
+/// Without `flatbuffers`, an implied `wasm` is refused with a message that
+/// names `codec = true`; a written `wasm = true` keeps its own message.
+#[test]
+fn an_implied_wasm_without_flatbuffers_is_refused_with_the_implied_wording() {
+    assert_eq!(
+        refused_options(vec![
+            option("encodings", "proto3"),
+            option("wasm", "implied")
+        ]),
+        "`wasm` is implied by `codec = true` in the manifest, and `[backend.rust] encodings` \
+         does not name `flatbuffers`, which every export of the `wasm` module checks"
+    );
+    let message = refused_options(vec![option("encodings", "proto3"), option("wasm", "true")]);
+    assert!(
+        message.starts_with("`[backend.rust] wasm = true` needs "),
+        "got: {message}"
+    );
+}
+
+/// `codec` is an option of the backend that writes the codec file, not of the
+/// Rust backend.
+#[test]
+fn codec_on_the_rust_table_is_refused_by_the_rust_backend() {
+    let message = refused_options(vec![
+        option("encodings", "flatbuffers"),
+        option("codec", "true"),
+    ]);
+    assert!(
+        message.contains("`codec` is not one it knows"),
+        "got: {message}"
+    );
+}
+
+/// The module is written once per crate by `ridlc`, so the option leaves a
+/// package's own file byte for byte as it is without the option.
+#[test]
+fn wasm_does_not_change_the_package_output() {
+    let without = backend_response(vec![option("encodings", "flatbuffers")]).expect("a file");
+    for wasm in ["true", "false"] {
+        let with = backend_response(vec![
+            option("encodings", "flatbuffers"),
+            option("wasm", wasm),
+        ])
+        .expect("a file");
+        assert_eq!(with, without, "wasm = {wasm}");
+    }
+}
+
+/// The module lists the types that have a `Payload<FlatBuffers>`
+/// implementation, sorted by qualified name, and exports the four functions
+/// and no other.
+#[test]
+fn wasm_module_lists_the_payload_types_sorted() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let source = ridl_backend_rust::generate_wasm_module(&[7; 32], &[&model, &model])
+        .expect("the module generates")
+        .rust_source;
+    let codec = backend_response(vec![option("encodings", "flatbuffers")]).expect("a file");
+    let d = dense(&source);
+    let head = "WASM_PAYLOAD_TYPES:&[&str]=&[";
+    let start = d.find(head).expect("the list") + head.len();
+    let end = start + d[start..].find(']').expect("the list ends");
+    let names: Vec<&str> = d[start..end]
+        .split(',')
+        .map(|name| name.trim().trim_matches('"'))
+        .filter(|name| !name.is_empty())
+        .collect();
+    assert!(!names.is_empty(), "got:\n{source}");
+    let mut sorted = names.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(names, sorted, "sorted and each once");
+    let impls = dense(&codec)
+        .matches("::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>for")
+        .count();
+    assert_eq!(
+        names.len(),
+        impls,
+        "one entry per Payload<FlatBuffers> impl"
+    );
+    for name in &names {
+        let short = name.rsplit('.').next().expect("a name");
+        assert!(
+            dense(&codec).contains(&format!("FlatBuffers>for{short}{{")),
+            "`{short}` has no Payload<FlatBuffers> impl"
+        );
+    }
+    assert!(
+        d.contains(
+            "WASM_RULES:&[&str]=&[\"length\",\"pattern\",\"range\",\"step\",\"unique\",\"variant\",]"
+        ),
+        "got:\n{source}"
+    );
+    let exports: Vec<&str> = d
+        .match_indices("pubunsafeextern\"C\"fn")
+        .chain(d.match_indices("pubextern\"C\"fn"))
+        .map(|(at, matched)| {
+            let rest = &d[at + matched.len()..];
+            &rest[..rest.find('(').expect("a parameter list")]
+        })
+        .collect();
+    let mut exports = exports;
+    exports.sort_unstable();
+    assert_eq!(
+        exports,
+        [
+            "ridl_alloc",
+            "ridl_catalog_hash",
+            "ridl_free",
+            "ridl_type_id",
+            "ridl_verify"
+        ]
+    );
+    assert_eq!(source.matches("no_mangle").count(), 5);
+    assert!(
+        d.contains("pubfntype_id_of(name:&str)->::core::primitive::i32"),
+        "got:\n{source}"
+    );
+    assert!(d.contains("#[cfg(all(target_arch=\"wasm32\",feature=\"wasm-exports\"))]modexports{"));
+    assert!(ridl_backend_rust::generate_wasm_module(&[0; 31], &[&model]).is_err());
+}
+
+/// `wasm = false` is accepted with any `encodings`, or none, because it asks
+/// for nothing; a value that is not `true` or `false` is refused.
+#[test]
+fn wasm_false_is_accepted_without_flatbuffers() {
+    for options in [
+        vec![option("wasm", "false")],
+        vec![option("encodings", "proto3"), option("wasm", "false")],
+    ] {
+        backend_response(options.clone()).unwrap_or_else(|err| panic!("{options:?}: {err:?}"));
+    }
+    let message = refused_options(vec![option("encodings", "flatbuffers"), option("wasm", "")]);
+    assert!(message.contains("`wasm` is ``"), "got: {message}");
+}
+
+/// The module lists a type only when its FlatBuffers root has a finite bound:
+/// a root made unbounded drops out of the list, and the rest stay.
+#[test]
+fn wasm_module_leaves_out_an_unbounded_root() {
+    let package = ir::compile_fixture("interaction_face.ridl");
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let list = |model: &v1::Model| -> String {
+        let source = ridl_backend_rust::generate_wasm_module(&[0; 32], &[model])
+            .expect("the module generates")
+            .rust_source;
+        let d = dense(&source);
+        let head = "WASM_PAYLOAD_TYPES:&[&str]=&[";
+        let start = d.find(head).expect("the list") + head.len();
+        d[start..start + d[start..].find(']').expect("the end")].to_string()
+    };
+    let before = list(&model);
+    assert!(before.contains("\"face.demo.Temperature\""), "{before}");
+    let mut unbounded = model.clone();
+    let projection = unbounded.flatbuffers.as_mut().expect("a projection");
+    let root = projection
+        .roots
+        .iter_mut()
+        .find(|root| {
+            root.tuple.is_none()
+                && model.declarations[root.declaration as usize]
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.declared == "Temperature")
+        })
+        .expect("Temperature has a root");
+    root.bound = Some(v1::fb_root::Bound::Unbounded(Default::default()));
+    let after = list(&unbounded);
+    assert_eq!(
+        after,
+        before.replace("\"face.demo.Temperature\",", ""),
+        "only Temperature drops out"
+    );
+}
+
+/// The fallback arms of the generated code, which no rule or error of the
+/// current `ridl-rt` reaches: a rule the list does not name is
+/// `2 + WASM_RULES.len()`, and a `VerifyError` added later is 1.
+#[test]
+fn wasm_module_keeps_its_fallback_codes() {
+    let source = ridl_backend_rust::generate_wasm_module(&[0; 32], &[])
+        .expect("the module generates")
+        .rust_source;
+    let d = dense(&source);
+    assert!(
+        d.contains("_=>2+WASM_RULES.len()as::core::primitive::i32,"),
+        "{source}"
+    );
+    assert!(d.contains("::core::result::Result::Err(_)=>1,"), "{source}");
 }
 
 /// `proto3` is accepted through the contract. Alone, it emits the domain
@@ -1004,15 +1237,29 @@ fn proto3_is_accepted_through_the_contract() {
     assert!(both.contains("pub mod valve"));
 }
 
-/// An encoding this backend has no codec for yet is refused with the issue
-/// that builds the codec, so a manifest author knows the name is right and
-/// the codec is pending.
+/// `podbuf` is accepted: the package carries the podbuf codec, the
+/// `Payload<Podbuf>` implementations and the `Sizes<Podbuf>` table of its
+/// interface, whose claim and event buffers are 8-aligned.
 #[test]
-fn repr_c_is_refused_naming_its_issue() {
-    let message = refused_options(vec![encodings_option("repr-c")]);
+fn podbuf_is_accepted() {
+    let source = backend_response(vec![encodings_option("podbuf")]).expect("a file is written");
+    let d = dense(&source);
+    assert!(source.contains("PodbufHead"), "got: {source}");
     assert!(
-        message.contains("`repr-c`") && message.contains("driftsys/ridl#317"),
-        "got: {message}"
+        d.contains("Payload<::ridl_rt::encoding::Podbuf>for"),
+        "got: {source}"
+    );
+    assert!(
+        d.contains("Sizes<::ridl_rt::encoding::Podbuf>for"),
+        "got: {source}"
+    );
+    assert!(
+        d.contains("typeClaimBuffer=::ridl_rt::podbuf::Aligned<"),
+        "got: {source}"
+    );
+    assert!(
+        !d.contains("encoding::FlatBuffers") && !d.contains("encoding::Proto3"),
+        "nothing of the other encodings without them, got: {source}"
     );
 }
 
@@ -1135,9 +1382,10 @@ fn a_model_without_a_catalog_refuses_the_model() {
 #[test]
 fn an_induced_argument_struct_has_a_payload_impl() {
     let package = ir::compile_fixture("induced_params.ridl");
-    let source = ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::FlatBuffers], &[])
-        .expect("generate_pipeline")
-        .rust_source;
+    let source =
+        ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::FlatBuffers], false, &[])
+            .expect("generate_pipeline")
+            .rust_source;
     let d = dense(&source);
     for induced in [
         "PumpBothParams",

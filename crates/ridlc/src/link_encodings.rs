@@ -108,7 +108,7 @@ fn encoding_name(encoding: i32) -> Option<&'static str> {
     match v1::Encoding::try_from(encoding) {
         Ok(v1::Encoding::Flatbuffers) => Some("flatbuffers"),
         Ok(v1::Encoding::Proto3) => Some("proto3"),
-        Ok(v1::Encoding::ReprC) => Some("repr-c"),
+        Ok(v1::Encoding::Podbuf) => Some("podbuf"),
         Ok(v1::Encoding::Unspecified) | Err(_) => None,
     }
 }
@@ -141,7 +141,7 @@ mod tests {
                 v1::Encoding::Unspecified => None,
                 v1::Encoding::Flatbuffers => Some("flatbuffers"),
                 v1::Encoding::Proto3 => Some("proto3"),
-                v1::Encoding::ReprC => Some("repr-c"),
+                v1::Encoding::Podbuf => Some("podbuf"),
             }
         }
         let mut reached = Vec::new();

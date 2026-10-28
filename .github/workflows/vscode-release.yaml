@@ -296,20 +296,13 @@ jobs:
       - name: publish each target
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: |
-          shopt -s nullglob
-          files=(vsix/*.vsix)
-          if [ "${#files[@]}" -ne 5 ]; then
-            echo "::error::expected 5 VSIX files, found ${#files[@]}" >&2
-            exit 1
-          fi
-          for f in "${files[@]}"; do
-            echo "publishing $f"
-            editors/vscode/node_modules/.bin/vsce publish --packagePath "$f"
-          done
+        run: editors/vscode/scripts/publish-vsix.sh vsce vsix
 
+  # Disabled: no OVSX_PAT secret is available to this repository. Remove the
+  # `if` when the secret is set again.
   publish-ovsx:
     name: publish to Open VSX
+    if: false
     needs: package-vsix
     runs-on: ubuntu-latest
     environment: marketplace
@@ -329,14 +322,4 @@ jobs:
       - name: publish each target
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
-        run: |
-          shopt -s nullglob
-          files=(vsix/*.vsix)
-          if [ "${#files[@]}" -ne 5 ]; then
-            echo "::error::expected 5 VSIX files, found ${#files[@]}" >&2
-            exit 1
-          fi
-          for f in "${files[@]}"; do
-            echo "publishing $f"
-            editors/vscode/node_modules/.bin/ovsx publish "$f"
-          done
+        run: editors/vscode/scripts/publish-vsix.sh ovsx vsix

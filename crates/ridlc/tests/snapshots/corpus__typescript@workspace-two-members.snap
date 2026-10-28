@@ -42,7 +42,7 @@ export function initTemperature(): Temperature {
 
 
 // ===== package veh.cluster =====
-import * as veh_common from './veh.common';
+import * as veh_common from './veh.common.js';
 
 /**
  * Instrument-cluster reading, carrying a speed from the common package.

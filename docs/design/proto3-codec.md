@@ -567,7 +567,7 @@ under `just test`, as the FlatBuffers suite does for its codec. `examples/cabin`
 and `crates/ridlc/tests/corpus/veh-cluster` carry `proto3` in their `encodings`,
 so `just demo` builds, lints with clippy, documents and checks for
 `thumbv7em-none-eabihf` a crate that carries this codec, and `just compat-check`
-builds it at Rust 1.83 and edition 2021. The frozen copies under
+builds it at Rust 1.88 and edition 2021. The frozen copies under
 `xtask/tests/freeze-fixtures/generated/` name `flatbuffers` only, and they
 regenerate byte for byte.
 

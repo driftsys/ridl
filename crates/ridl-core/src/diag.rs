@@ -396,6 +396,13 @@ diag_codes! {
         TYPL_115 = "TYPL-115", Info,
             "type has no derivable init value and no declared `= value`", lint = "no-init-value";
 
+        /// `string` bound above 4,032 characters or `bytes` bound above 16,128
+        /// bytes (typl §4.4–§4.5, §16.2; ADR-0030 decision 7). Warning. The
+        /// payload ceiling is 16,256 bytes; the codecs do not yet enforce it
+        /// (driftsys/ridl#996).
+        TYPL_116 = "TYPL-116", Warning,
+            "`string`/`bytes` bound above the advised transfer limit", lint = "bound-above-transfer";
+
         /// Array without explicit bounds (typl §16.3).
         TYPL_201 = "TYPL-201", Error,
             "array without explicit bounds";
@@ -806,6 +813,67 @@ diag_codes! {
         /// transform that collided. Emitted per-package by the checker.
         RIDL_149 = "RIDL-149", Error,
             "two names in one scope collide after a pinned name transform";
+
+        /// A payload carried by an interaction whose largest encoded size, in an
+        /// encoding that the workspace manifest enables, is above the payload ceiling of 16,256
+        /// bytes, or has no finite bound (ADR-0030 decision 7). Warning. Emitted
+        /// by `ridlc` after lowering, for `ridl check` and `ridl build`.
+        RIDL_150 = "RIDL-150", Warning,
+            "payload above the payload ceiling or with no finite bound", lint = "payload-above-ceiling";
+
+        /// A payload whose largest encoded size, in an encoding that the
+        /// workspace manifest enables, is above the limit that a `[limits]`
+        /// entry of its unit gives the interaction, or has no finite bound
+        /// (ADR-0030 decisions 12 and 14). Error; as an error code it has no
+        /// name and no level (ADR-0024 decision 1). Emitted by `ridlc` after
+        /// lowering, for `ridl check` and `ridl build`.
+        RIDL_151 = "RIDL-151", Error,
+            "payload above its declared limit or with no finite bound";
+
+        /// A `[limits.interaction]` key that names no interaction of its unit
+        /// (ADR-0030 decision 12). Error. Emitted by `ridlc` after lowering,
+        /// on the key in the unit's `ridl.toml`.
+        RIDL_152 = "RIDL-152", Error,
+            "a `[limits]` entry names no interaction of its unit";
+
+        /// A struct, tuple or union whose largest podbuf encoding, computed
+        /// from its declared bounds, is above `u32::MAX` bytes, because a
+        /// `u32` offset cannot address all of it. A tuple is the argument
+        /// struct a call with several parameters induces, or a tuple reply,
+        /// reported on the interaction. Error; as an error code it has no
+        /// name and no level. Emitted by `ridlc` when a `[backend.<name>]`
+        /// table enables `podbuf`. The message names the type, or the
+        /// interaction's request or reply.
+        RIDL_153 = "RIDL-153", Error,
+            "type too large for podbuf";
+
+        /// A field whose array or map declares more than 65,535 elements, or
+        /// whose element or entry is larger than 65,535 bytes, because the
+        /// podbuf descriptor records the count and the element size as
+        /// `u16`. Error; as an error code it has no name and no level.
+        /// Emitted by `ridlc` when a `[backend.<name>]` table enables
+        /// `podbuf`, on the field. The message names the type and the field.
+        RIDL_154 = "RIDL-154", Error,
+            "array or map exceeds the podbuf descriptor limits";
+
+        /// A non-optional field marked `@deprecated` whose init value is
+        /// neither declared nor derivable and whose type excludes 0, so the
+        /// podbuf encoder has no valid value to write for it. Error; as an
+        /// error code it has no name and no level. Emitted by `ridlc` when a
+        /// `[backend.<name>]` table enables `podbuf`, on the field. The
+        /// message names the type and the field.
+        RIDL_155 = "RIDL-155", Error,
+            "deprecated field has no valid podbuf value";
+
+        /// A struct whose declared field order lays out in a larger podbuf
+        /// head than the same fields sorted by descending alignment, and that
+        /// no published baseline declares. Info. Raised by `ridl check` only
+        /// when a `[backend.<name>]` table enables `podbuf`. The message names
+        /// both head sizes and the saving order. A field order is wire
+        /// identity once published, so the lint speaks before the first
+        /// release.
+        RIDL_156 = "RIDL-156", Info,
+            "struct field order wastes podbuf padding", lint = "podbuf-padding-order";
 
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker.
@@ -1387,10 +1455,13 @@ diag_codes! {
         /// `[backend.<name>] encodings` is malformed: `backend` or
         /// `[backend.<name>]` is not a table, `encodings` is not an array of
         /// strings, an element is not one of `flatbuffers`, `proto3` and
-        /// `repr-c`, or an element repeats. The message names the offending
-        /// value and lists the known names.
+        /// `podbuf`, or an element repeats. The message names the offending
+        /// value and lists the known names. A `wasm` that is not a boolean is
+        /// MANI-015 too, and its message names the value. So is a `[limits]`
+        /// value that is not a table where a table is expected, or not an
+        /// integer of 0 or more where a limit is expected.
         MANI_015 = "MANI-015", Error,
-            "`[backend.<name>] encodings` is not an array of encoding names, names an unknown encoding, or names one twice";
+            "a `[backend.<name>]` value has the wrong shape: `encodings` is not an array of known, distinct encoding names, `wasm`, `codec` or `transcode` is not a boolean, or a `[limits]` value is not a non-negative integer or a table";
 
         /// A workspace member's manifest holds a `backend` key or a
         /// `[backend.<name>]` table. Only the workspace root's manifest, or a
@@ -1413,6 +1484,34 @@ diag_codes! {
         /// file, in path order.
         MANI_018 = "MANI-018", Warning,
             "a source file under the root's `vendor/` is not loaded", lint = "vendor-source-not-loaded";
+
+        /// A `[backend.<name>]` table sets `codec = true`, and the Rust `wasm`
+        /// module the codec runs on cannot be built: `[backend.rust]` writes
+        /// `wasm = false`, or the manifest has no `[backend.rust]` table. A
+        /// `rust` table with no `wasm` key has the module implied. Reported on
+        /// the `codec` value.
+        MANI_019 = "MANI-019", Error,
+            "a backend table sets `codec = true` without a Rust wasm codec to run on";
+
+        /// A `[backend.<name>]` table sets `transcode = true` and lists fewer
+        /// than two encodings, so there is no pair of encodings to convert
+        /// between. Reported on the `transcode` value. A name that is unknown,
+        /// repeated or not a string is still counted, and is also reported as
+        /// MANI-015; a table with one such name and no other name gets
+        /// MANI-020 as well.
+        MANI_020 = "MANI-020", Error,
+            "a backend table sets `transcode = true` with fewer than two encodings";
+
+        /// A `[limits.kind]` key is not one of `signal`, `fixed`, `event`,
+        /// `command` and `query`. Reported on the key; the entry is dropped.
+        MANI_021 = "MANI-021", Error,
+            "unknown kind in `[limits.kind]`";
+
+        /// A `[limits]` value is above the payload ceiling of 16,256 bytes.
+        /// Reported on the value; the entry is dropped. A value that is not an
+        /// integer from 0 up is MANI-015.
+        MANI_022 = "MANI-022", Error,
+            "payload limit above the payload ceiling of 16,256 bytes";
 
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
@@ -1557,6 +1656,7 @@ pub struct Diagnostic {
 struct SourceEntry {
     path: String,
     text: String,
+    lines: LineIndex,
 }
 
 /// The file table the renderer reads: it maps every [`FileId`] to the path and
@@ -1583,8 +1683,20 @@ impl SourceMap {
         self.files.push(SourceEntry {
             path: path.to_string(),
             text: text.to_string(),
+            lines: LineIndex::new(text),
         });
         id
+    }
+
+    /// The [`FileId`] already interned for `path`, or `None` when the map has
+    /// not seen `path`. Unlike [`file_id`](Self::file_id) it takes `&self` and
+    /// interns nothing, so a reader of a finished map can reach
+    /// [`line_col`](Self::line_col) from a path.
+    pub fn id_of(&self, path: &str) -> Option<FileId> {
+        self.files
+            .iter()
+            .position(|entry| entry.path == path)
+            .map(|index| FileId(index as u32))
     }
 
     /// The path an interned [`FileId`] stands for, or `None` for an id this map
@@ -1604,6 +1716,16 @@ impl SourceMap {
             .get(id.0 as usize)
             .map(|entry| entry.text.as_str())
     }
+
+    /// The line and column of byte `offset` in the file `id` stands for, by
+    /// the rule of [`line_col`], or `None` for an id this map never issued.
+    /// The map scans each file's line breaks once, when it interns the file,
+    /// so a lookup costs a binary search over the lines instead of a scan of
+    /// the text before the offset.
+    pub fn line_col(&self, id: FileId, offset: TextSize) -> Option<LineCol> {
+        let entry = self.files.get(id.0 as usize)?;
+        Some(entry.lines.line_col(&entry.text, offset))
+    }
 }
 
 /// A 1-based line and column. The column counts Unicode scalar values — Rust
@@ -1622,21 +1744,44 @@ pub struct LineCol {
 /// language server's line index. A CRLF pair is one line break, and its CR is
 /// counted as a column of the line it ends.
 pub fn line_col(text: &str, offset: TextSize) -> LineCol {
-    let mut offset = usize::from(offset).min(text.len());
-    while !text.is_char_boundary(offset) {
-        offset -= 1;
+    LineIndex::new(text).line_col(text, offset)
+}
+
+/// The byte offset at which each line of one text starts, under the rule of
+/// [`line_col`]. Building it scans the text once; each lookup is a binary
+/// search.
+#[derive(Debug)]
+struct LineIndex {
+    starts: Vec<usize>,
+}
+
+impl LineIndex {
+    fn new(text: &str) -> Self {
+        let bytes = text.as_bytes();
+        let mut starts = vec![0];
+        starts.extend(
+            (0..bytes.len())
+                .filter(|&at| ends_line(bytes, at))
+                .map(|at| at + 1),
+        );
+        Self { starts }
     }
-    let bytes = text.as_bytes();
-    let mut line = 1u32;
-    let mut line_start = 0usize;
-    for at in 0..offset {
-        if ends_line(bytes, at) {
-            line += 1;
-            line_start = at + 1;
+
+    /// The line and column of `offset` in `text`, the text this index was built
+    /// from, clamped as [`line_col`] describes.
+    fn line_col(&self, text: &str, offset: TextSize) -> LineCol {
+        let mut offset = usize::from(offset).min(text.len());
+        while !text.is_char_boundary(offset) {
+            offset -= 1;
+        }
+        // The last line that starts at or before `offset`.
+        let line = self.starts.partition_point(|&start| start <= offset) - 1;
+        let column = text[self.starts[line]..offset].chars().count() as u32 + 1;
+        LineCol {
+            line: line as u32 + 1,
+            column,
         }
     }
-    let column = text[line_start..offset].chars().count() as u32 + 1;
-    LineCol { line, column }
 }
 
 /// Whether the byte at `at` ends a line: an LF, or a CR that is not followed by
@@ -1767,11 +1912,15 @@ pub struct JsonDiagnostic {
 
 fn json_span(span: Span, sources: &SourceMap) -> JsonSpan {
     let path = sources.path(span.file).unwrap_or("").to_string();
-    let text = sources.text(span.file).unwrap_or("");
+    let at = |offset| {
+        sources
+            .line_col(span.file, offset)
+            .unwrap_or_else(|| line_col("", offset))
+    };
     JsonSpan {
         path,
-        start: line_col(text, span.range.start()),
-        end: line_col(text, span.range.end()),
+        start: at(span.range.start()),
+        end: at(span.range.end()),
     }
 }
 
@@ -2275,6 +2424,7 @@ mod tests {
             ("TYPL-102", "unbounded-float"),
             ("TYPL-103", "unbounded-length"),
             ("TYPL-115", "no-init-value"),
+            ("TYPL-116", "bound-above-transfer"),
             ("TYPL-211", "duplicate-reserved"),
             ("TYPL-222", "inconsistent-unit"),
             ("TYPL-224", "duplicate-shape"),
@@ -2289,6 +2439,8 @@ mod tests {
             ("RIDL-100", "missing-timing"),
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),
+            ("RIDL-150", "payload-above-ceiling"),
+            ("RIDL-156", "podbuf-padding-order"),
             ("RIDL-304", "error-typed-parameter"),
             ("RIDL-305", "ensure-without-result"),
             ("RIDL-307", "contract-error-name-in-enum"),
@@ -2805,6 +2957,21 @@ mod json_tests {
     use super::*;
 
     #[test]
+    fn id_of_finds_an_interned_path_and_interns_nothing() {
+        let mut sources = SourceMap::new();
+        let a = sources.file_id("a.ridl", "x\n");
+        let b = sources.file_id("b.ridl", "y\n");
+        assert_eq!(sources.id_of("a.ridl"), Some(a));
+        assert_eq!(sources.id_of("b.ridl"), Some(b));
+        assert_eq!(sources.id_of("c.ridl"), None);
+        assert_eq!(
+            sources.iter_files().count(),
+            2,
+            "a lookup of an unknown path adds no file"
+        );
+    }
+
+    #[test]
     fn line_col_is_one_based_and_counts_chars() {
         let text = "ab\ncé\n";
         assert_eq!(
@@ -2829,6 +2996,45 @@ mod json_tests {
             line_col(text, TextSize::from(99)),
             LineCol { line: 3, column: 1 }
         );
+    }
+
+    #[test]
+    fn source_map_line_col_pins_columns_including_a_mid_character_offset() {
+        // Lines: "aé" (3 bytes + LF), "\u{1F600}x" (5 bytes + CRLF), "z" (lone CR), "end".
+        let text = "a\u{e9}\n\u{1F600}x\r\nz\rend";
+        let mut sources = SourceMap::new();
+        let id = sources.file_id("a.ridl", text);
+        let at = |offset: u32| sources.line_col(id, TextSize::from(offset)).unwrap();
+        assert_eq!(at(0), LineCol { line: 1, column: 1 });
+        // Offset 2 is inside the two-byte `\u{e9}`: it moves back to offset 1.
+        assert_eq!(at(2), LineCol { line: 1, column: 2 });
+        assert_eq!(at(3), LineCol { line: 1, column: 3 });
+        assert_eq!(at(4), LineCol { line: 2, column: 1 });
+        // Offsets 5 to 7 are inside the four-byte emoji: they move back to 4.
+        assert_eq!(at(5), LineCol { line: 2, column: 1 });
+        assert_eq!(at(7), LineCol { line: 2, column: 1 });
+        assert_eq!(at(8), LineCol { line: 2, column: 2 });
+        // The CR of the CRLF pair is the last column of its line.
+        assert_eq!(at(9), LineCol { line: 2, column: 3 });
+        assert_eq!(at(11), LineCol { line: 3, column: 1 });
+        assert_eq!(at(12), LineCol { line: 3, column: 2 });
+        assert_eq!(at(13), LineCol { line: 4, column: 1 });
+        assert_eq!(at(99), LineCol { line: 4, column: 4 });
+        assert_eq!(sources.line_col(FileId::DETACHED, TextSize::from(0)), None);
+    }
+
+    #[test]
+    fn source_map_line_col_agrees_with_the_free_function_at_every_offset() {
+        let text = "a\u{e9}\n\u{1F600}x\r\nz\r\r\nend\r";
+        let mut sources = SourceMap::new();
+        let id = sources.file_id("a.ridl", text);
+        for offset in 0..=text.len() as u32 + 2 {
+            assert_eq!(
+                sources.line_col(id, TextSize::from(offset)),
+                Some(line_col(text, TextSize::from(offset))),
+                "offset {offset}"
+            );
+        }
     }
 
     #[test]
@@ -3121,6 +3327,37 @@ mod json_tests {
         assert_eq!(first.labels[0].span.path, "b.typl");
         assert_eq!(first.labels[0].span.start, LineCol { line: 2, column: 1 });
         assert_eq!(first.labels[0].span.end, LineCol { line: 2, column: 9 });
+    }
+
+    /// The serialized key names of a label are part of the agent-facing
+    /// contract; the typed fields alone do not pin them.
+    #[test]
+    fn to_json_serializes_a_label_as_message_and_span() {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("a.typl", "package a\n");
+        let span = Span {
+            file,
+            range: TextRange::new(TextSize::from(0), TextSize::from(7)),
+        };
+        let diagnostic = Diagnostic {
+            code: DiagCode::TYPL_009,
+            severity: Severity::Error,
+            message: "expected a type".to_string(),
+            primary: span,
+            labels: vec![Label {
+                span,
+                message: "declared here".to_string(),
+            }],
+            fixits: Vec::new(),
+        };
+
+        let value = serde_json::to_value(to_json(&[diagnostic], &sources)).unwrap();
+
+        let label = value[0]["labels"][0].as_object().unwrap();
+        let mut keys: Vec<&str> = label.keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(keys, ["message", "span"]);
+        assert_eq!(label["message"], "declared here");
     }
 
     /// `Severity::Info` renders as `"info"`. The other two variants

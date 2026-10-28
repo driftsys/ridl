@@ -3,4 +3,8 @@ name = "veh.cabin"
 version = "1.0.0"
 
 [backend.rust]
-encodings = ["flatbuffers", "proto3"]
+encodings = ["flatbuffers", "proto3", "podbuf"]
+wasm = true
+
+[backend.typescript]
+codec = true

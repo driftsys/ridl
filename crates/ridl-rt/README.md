@@ -24,10 +24,10 @@ With its default features the crate is `no_std` and allocates nothing; it
 contains no `unsafe` code and has no dependency in any feature combination. It
 declares one cargo feature per payload encoding — `flatbuffers`, which enables
 the FlatBuffers reading and writing helpers, `proto3`, which enables the proto3
-varint, tag, reader and writer helpers, and `repr-c`, which enables nothing in
-this version — and a `std` feature, off by default, that links the standard
-library and enables `task::block_on`, `task::noop_waker` and `task::flag_waker`,
-and the propagation hook of the `trace` module.
+varint, tag, reader and writer helpers, and `podbuf`, which enables the podbuf
+reading and writing helpers — and a `std` feature, off by default, that links
+the standard library and enables `task::block_on`, `task::noop_waker` and
+`task::flag_waker`, and the propagation hook of the `trace` module.
 
 ## Versioning
 
@@ -40,7 +40,7 @@ because code outside the crate can build it as a struct literal: `CatalogRef`,
 `Occurrence`, `TraceContext`. The public tuple structs — `Ordinal`,
 `InterfaceNo`, `CatalogHash`, `Correlation`, `ClaimId`, `Timestamp`, `Duration`
 — follow the same rule. So do the unit structs `FlatBuffers`, `Proto3` and
-`ReprC` (`src/encoding.rs`), `TrackerFull` (`src/sample.rs`) and `AlreadySet`
+`Podbuf` (`src/encoding.rs`), `TrackerFull` (`src/sample.rs`) and `AlreadySet`
 (`src/trace.rs`): each is a unit struct with no field that code outside the
 crate uses as a value or a pattern, so a field added to any of them breaks that
 code.
@@ -48,19 +48,19 @@ code.
 The API questions that the reviews of 0.1 raised are settled; the issue that
 tracked them is <https://github.com/driftsys/ridl/issues/350>.
 
-`ridl-rt` supports Rust 1.83 or newer (`rust-version = "1.83"`). Raising that
+`ridl-rt` supports Rust 1.88 or newer (`rust-version = "1.88"`). Raising that
 minimum is a breaking change, shipped in a 0.x minor release like any other.
+Releases before the one that raised it to 1.88 supported Rust 1.83.
 
 The crate builds as edition 2021 and edition 2024: edition 2021 is tested with
-Rust 1.83 and with the pinned toolchain, and edition 2024 is tested with the
-pinned toolchain (edition 2024 did not exist before Rust 1.85, so the minimum
-cannot build it).
+Rust 1.88 and with the pinned toolchain, and edition 2024 is tested with the
+pinned toolchain.
 
 ## What 0.1 leaves out
 
 - streams
 - `Inline`
-- the three payload codecs (proto3, FlatBuffers, `repr(C)`)
+- the three payload codecs (proto3, FlatBuffers, `podbuf`)
 - `Encoding::FORMAT`
 - `Family`
 - `Access`

@@ -33,6 +33,7 @@ use std::collections::{BTreeSet, HashSet};
 mod claims;
 mod clauses;
 mod codec;
+mod codec_podbuf;
 mod codec_proto3;
 mod contract;
 mod defaults;
@@ -41,9 +42,13 @@ mod descriptors;
 mod docs;
 mod face;
 mod scalar_step;
+mod transcode;
+mod wasm;
 
+pub use codec_podbuf::HeadLayout as PodbufHeadLayout;
 pub use codec_proto3::{Label as Proto3Label, MessageLayout as Proto3MessageLayout};
-pub use contract::{Backend, ENCODINGS_OPTION};
+pub use contract::{Backend, ENCODINGS_OPTION, TRANSCODE_OPTION, WASM_OPTION};
+pub use wasm::{PAYLOAD_TYPES_CONST, RULES_CONST, generate_wasm_module};
 
 /// The generated artifact for one package: Rust source.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,7 +91,7 @@ pub struct GenerateError {
 pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, &[]);
     let ctx = Ctx::new(package, &model);
-    render(package_items(&ctx, &[], &[])?)
+    render(package_items(&ctx, &[], &[], false)?)
 }
 
 /// Generates the Rust source for `package`: the domain types [`generate`]
@@ -127,7 +132,7 @@ pub fn generate_face_with(
     let model = ridl_ir::codegen::lower(package, &[]);
     let mut ctx = Ctx::new(package, &model);
     if !emits_face(encodings) {
-        return render(package_items(&ctx, &[], encodings)?);
+        return render(package_items(&ctx, &[], encodings, false)?);
     }
     ctx.encodings = encodings.to_vec();
     // This entry point refuses rather than skips, so every named interface's
@@ -145,7 +150,7 @@ pub fn generate_face_with(
             })
             .map(|(index, _)| index),
     );
-    let mut items = package_items(&ctx, &interfaces, encodings)?;
+    let mut items = package_items(&ctx, &interfaces, encodings, false)?;
     items.extend(descriptors::interface_items(&ctx)?);
     items.extend(face::interface_items(&ctx, &model, &ctx.links())?);
     render(items)
@@ -169,13 +174,18 @@ pub fn generate_with(
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, others);
     let ctx = Ctx::with_others(package, others, &model);
-    render(package_items(&ctx, &[], &[])?)
+    render(package_items(&ctx, &[], &[], false)?)
 }
 
 /// The pipeline's entry point: everything [`generate_face_with`] emits, over
 /// the whole build, with an interface the face cannot carry skipped rather
 /// than refused (interaction-face design rules 1, 2 and 4). An empty
 /// `encodings` is the domain types only, as it is for [`generate_face_with`].
+///
+/// `transcode` adds, for each generated type that implements `Payload` under
+/// at least two of the listed `encodings`, one `transcode_<s>_to_<d>`
+/// function per ordered pair of those encodings (ADR-0018 decision 13). It
+/// has no effect when fewer than two encodings are listed.
 ///
 /// **Why the pipeline calls this and not [`generate`]** (design rule 1): a
 /// consumer of `ridl build --emit rust` needs the face as much as the domain
@@ -207,10 +217,11 @@ pub fn generate_with(
 pub fn generate_pipeline(
     package: &v2::Package,
     encodings: &[WireEncoding],
+    transcode: bool,
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
     let model = ridl_ir::codegen::lower(package, others);
-    generate_pipeline_over(&model, encodings)
+    generate_pipeline_over(&model, encodings, transcode)
 }
 
 /// [`generate_pipeline`] over a model the caller already has.
@@ -219,16 +230,18 @@ pub fn generate_pipeline(
 /// handed a `CodegenRequest` carrying the model and no IR, so the entry point
 /// it reaches cannot be one that takes a `v2::Package`. `generate_pipeline`
 /// is this function after one `lower`, which is why the two cannot disagree.
+/// `encodings` and `transcode` mean what they mean for [`generate_pipeline`].
 pub(crate) fn generate_pipeline_over(
     model: &v1::Model,
     encodings: &[WireEncoding],
+    transcode: bool,
 ) -> Result<Generated, GenerateError> {
     let mut ctx = Ctx::over(model);
     if !emits_face(encodings) {
         // Types only: the list is empty, so no codec, no descriptor and no
         // face is emitted, the catalog hash is not read and no interface is
         // walked, so nothing below applies and nothing is refused.
-        return render(package_items(&ctx, &[], encodings)?);
+        return render(package_items(&ctx, &[], encodings, transcode)?);
     }
     ctx.encodings = encodings.to_vec();
     // A malformed catalog hash refuses the whole model here; inside the
@@ -279,7 +292,7 @@ pub(crate) fn generate_pipeline_over(
             }
         }
     }
-    let mut items = package_items(&ctx, &faced, encodings)?;
+    let mut items = package_items(&ctx, &faced, encodings, transcode)?;
     items.extend(interface_items);
     render(items)
 }
@@ -493,17 +506,39 @@ fn package_items(
     ctx: &Ctx,
     interfaces: &[&v1::Interface],
     encodings: &[WireEncoding],
+    transcode: bool,
 ) -> Result<Vec<TokenStream>, GenerateError> {
     claims::check(ctx, interfaces)?;
     let mut items = domain_items(ctx)?;
     for encoding in encodings {
         encoding.check_emitted();
     }
+    let mut recorded: Vec<(WireEncoding, Vec<transcode::PayloadOwner>)> = Vec::new();
     if encodings.contains(&WireEncoding::FlatBuffers) {
-        items.extend(codec::package_items(ctx)?);
+        let (codec_items, owners) = codec::package_items(ctx)?;
+        items.extend(codec_items);
+        recorded.push((WireEncoding::FlatBuffers, owners));
     }
     if encodings.contains(&WireEncoding::Proto3) {
-        items.extend(codec_proto3::package_items(ctx)?);
+        let (codec_items, owners) = codec_proto3::package_items(ctx)?;
+        items.extend(codec_items);
+        recorded.push((WireEncoding::Proto3, owners));
+    }
+    if encodings.contains(&WireEncoding::Podbuf) {
+        let (codec_items, owners) = codec_podbuf::package_items(ctx)?;
+        items.extend(codec_items);
+        recorded.push((WireEncoding::Podbuf, owners));
+    }
+    if transcode {
+        // The owner lists in the order the encodings are listed; a repeated
+        // encoding takes its list once.
+        let mut owners = Vec::new();
+        for encoding in encodings {
+            if let Some(index) = recorded.iter().position(|(e, _)| e == encoding) {
+                owners.push(recorded.swap_remove(index));
+            }
+        }
+        items.extend(transcode::package_items(&owners));
     }
     Ok(items)
 }
@@ -521,9 +556,11 @@ fn package_items(
 /// as the [`ENCODINGS_OPTION`] request option; there is no default, and a
 /// package whose list is empty carries the domain types only.
 ///
-/// Two variants today, the two codecs `ridl-backend-rust` emits a `Payload`
-/// implementation for. `repr(C)` joins when the Rust backend emits its codec,
-/// which is what `#[non_exhaustive]` says to a caller that matches on this.
+/// Three variants, one per codec `ridl-backend-rust` emits. The FlatBuffers,
+/// proto3 and podbuf codecs carry a `Payload` implementation each, and the
+/// podbuf codec also carries the head struct and the read-in-place view.
+/// `#[non_exhaustive]` tells a caller that matches on this that a variant can
+/// still join.
 ///
 /// The encoding reaches the output as the full path
 /// `::ridl_rt::encoding::FlatBuffers` at every site that names it — the
@@ -540,16 +577,20 @@ pub enum WireEncoding {
     /// The proto3 codec, emitted into a package's own output when the
     /// package's `encodings` names `proto3`.
     Proto3,
+    /// The podbuf codec, emitted into a package's own output when the
+    /// package's `encodings` names `podbuf`.
+    Podbuf,
 }
 
 impl WireEncoding {
     /// The encoding `name` spells, as `ridl_rt::encoding::Encoding::NAME`
-    /// spells it (`flatbuffers`, `proto3`), or `None` for every other string
-    /// — an encoding this backend has no codec for (`repr-c`) included.
+    /// spells it (`flatbuffers`, `proto3`, `podbuf`), or `None` for every
+    /// other string.
     pub fn parse(name: &str) -> Option<Self> {
         match name {
             "flatbuffers" => Some(WireEncoding::FlatBuffers),
             "proto3" => Some(WireEncoding::Proto3),
+            "podbuf" => Some(WireEncoding::Podbuf),
             _ => None,
         }
     }
@@ -559,6 +600,7 @@ impl WireEncoding {
         match self {
             WireEncoding::FlatBuffers => "flatbuffers",
             WireEncoding::Proto3 => "proto3",
+            WireEncoding::Podbuf => "podbuf",
         }
     }
 
@@ -572,7 +614,7 @@ impl WireEncoding {
     /// shows up as a compile error rather than as wrong output.
     fn check_emitted(self) {
         match self {
-            WireEncoding::FlatBuffers | WireEncoding::Proto3 => {}
+            WireEncoding::FlatBuffers | WireEncoding::Proto3 | WireEncoding::Podbuf => {}
         }
     }
 }
@@ -769,6 +811,20 @@ pub fn proto3_layout(
     let model = ridl_ir::codegen::lower(package, others);
     let ctx = Ctx::with_others(package, others, &model);
     codec_proto3::layout(&ctx)
+}
+
+/// The podbuf head layouts the codec emits `package` from, for the test that
+/// compares the numbers in the emitted `const` assertions with the layout
+/// law computed directly from the IR: one entry per head struct, keyed by the
+/// struct's name. Not part of the backend's API.
+#[doc(hidden)]
+pub fn podbuf_layout(
+    package: &v2::Package,
+    others: &[&v2::Package],
+) -> Result<Vec<PodbufHeadLayout>, GenerateError> {
+    let model = ridl_ir::codegen::lower(package, others);
+    let ctx = Ctx::with_others(package, others, &model);
+    codec_podbuf::layout(&ctx)
 }
 
 /// Parses the assembled items as a bare `syn::File` (no inner attribute, so an
@@ -1117,7 +1173,16 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
     let default_impl = defaults::decl_default_expr(ctx, decl)
         .map(|expr| {
             let name = ident(declared(decl.name.as_ref()));
+            // The body names every field of a struct, a deprecated one
+            // included, which a consumer that builds with `-D warnings`
+            // would otherwise refuse.
+            let allow_deprecated = if has_deprecated_field(decl) {
+                quote! { #[allow(deprecated)] }
+            } else {
+                quote! {}
+            };
             quote! {
+                #allow_deprecated
                 impl ::core::default::Default for #name {
                     fn default() -> Self { #expr }
                 }
@@ -1126,6 +1191,19 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
         .unwrap_or_default();
 
     allow_dead_code_if_internal(decl.visibility, quote! { #item #default_impl })
+}
+
+/// Whether a struct declaration has a field marked `@deprecated`.
+fn has_deprecated_field(decl: &v1::Declaration) -> bool {
+    match decl.kind.as_ref() {
+        Some(v1::declaration::Kind::Struct(sd)) => sd.slots.iter().any(|slot| {
+            matches!(
+                slot.occupant.as_ref(),
+                Some(v1::slot::Occupant::Field(field)) if field.deprecated.is_some()
+            )
+        }),
+        _ => false,
+    }
 }
 
 /// A named scalar becomes a `#[repr(transparent)]` newtype with a private
@@ -1888,7 +1966,9 @@ fn emit_enum_set(
     // refuses whole, rather than ignoring the bit it does not know. Whether
     // an enum set is closed or open on the wire is recorded as an open
     // question rather than settled here, because settling it changes that arm
-    // of `ridl-diff` as well as this backend.
+    // of `ridl-diff` as well as this backend. (Under `--encoding podbuf`
+    // `ridl-diff` already reports an appended bit as breaking, as
+    // `podbuf_strict_enum_append`, ADR-0031 decision 10.)
     //
     // A bit outside the int64 domain contributes nothing to the mask rather
     // than shifting by it. `ridl-sem` reports TYPL-111 for a position outside

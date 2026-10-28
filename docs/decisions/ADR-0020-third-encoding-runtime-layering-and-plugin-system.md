@@ -22,6 +22,41 @@ placed behind a browser playground. The in-place amendments this record causes
 are listed in **Documents amended**; each is written into the record it belongs
 to, not here.
 
+**Amended 2026-10-24 (driftsys/ridl#1047) — decision 6, the `descriptor` feature
+has no minimum of its own.** The minimum Rust version of every runtime crate is
+now 1.88 ([ADR-0029](ADR-0029-stability-policy.md)), so `ridl-transport-ws`
+needs no later Rust with its `descriptor` feature on. The feature stays optional
+and off by default, because of the weight of its dependencies. The
+`ridl-transport-ws` row is changed in place.
+
+**Amended 2026-10-24 — decision 6, `ridl-transport-ws` reads the catalog
+descriptor under a feature.** The `ridl-transport-ws` row said `ridl-rt` alone.
+The crate gains the optional feature `descriptor`, off by default, which adds
+`ridl-descriptor` with its default features off, the `no_std` reader, so that an
+embedder can build the member table it gives the server from a
+`<unit>.catalog.binfb` file (driftsys/ridl#985). With the feature on the crate
+needs Rust 1.88, the minimum of planus 1.3.0; with it off the minimum stays 1.83
+(ADR-0029). The row is changed in place; `ridl-loopback` is unchanged. With the
+feature on, the crate reaches planus through `ridl-descriptor`. Decision 5's
+amendment of 2026-10-03 names the toolchain as the side that may depend on
+planus and forbids it to `ridl-rt` and every generated package; those two rules
+are unchanged, and `ridl-transport-ws` under its `descriptor` feature is the one
+runtime crate that reaches planus.
+
+**Amended 2026-10-21 — decision 6 and open item 2, the TypeScript runtime
+package is named and both TypeScript packages publish to npm.** The runtime
+package is `@driftsys/ridl-runtime`. It is not called `ridl-rt`, because
+[ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) already gives that
+name two meanings, the engine and the library, and a third would add to the
+ambiguity. Both TypeScript packages of decision 6, `@driftsys/ridl-runtime` and
+`@driftsys/ridl-transport-ws`, are published to npm under the `driftsys` scope.
+A generated package is published by whoever runs `ridlc`, under a name that
+person chooses. It ships its own wasm codec beside its generated TypeScript, and
+it depends on `@driftsys/ridl-runtime` and never on a transport. Publishing the
+same two packages to JSR as well stays with driftsys/ridl#992. The name is
+changed in place in decision 6's table and in open item 2; no other decision
+changes.
+
 **Amended 2026-10-20 — decision 6, the TypeScript WebSocket package depends on
 nothing until the runtime package exists.** The TypeScript WebSocket package row
 said it depends on "the runtime package". That package is not written, and its
@@ -118,13 +153,34 @@ proto3 when the program names none. The row is changed in place.
 
 **Amended 2026-10-12 — decision 3, the `#[repr(C)]` removal landed ahead of the
 backend it was sequenced with.** The decision tied the removal to roadmap story
-E11.12, the `repr(C)` backend that replaces the attribute, which is not built.
-It is taken now instead, because [ADR-0029](ADR-0029-stability-policy.md)
-freezes the generated crate and the attribute is part of that surface: removing
-it before the surface's row is added to `freeze/surfaces.toml` costs nothing,
-and removing it after would be a break of a frozen surface. The amendment is
-written into decision 3 in place; what that decision says about the layout
-belonging to decision 1's separate struct is unchanged.
+E11.12, the `repr(C)` backend (since renamed `podbuf`) that replaces the
+attribute, which was not built at the time. It is taken now instead, because
+[ADR-0029](ADR-0029-stability-policy.md) freezes the generated crate and the
+attribute is part of that surface: removing it before the surface's row is added
+to `freeze/surfaces.toml` costs nothing, and removing it after would be a break
+of a frozen surface. The amendment is written into decision 3 in place; what
+that decision says about the layout belonging to decision 1's separate struct is
+unchanged.
+
+**Amended 2026-10-25 — decisions 1, 5 and 9, the encoding is named `podbuf`.**
+Decision 1's encoding is named `podbuf`, where it was named `repr(C)`. Decision
+5's cargo feature is `podbuf`, where it was `repr-c`; the marker type is
+`ridl_rt::encoding::Podbuf`. Decision 9's `encodings` option name is `podbuf`.
+The frame's encoding tag 3 keeps its value, and the codegen protocol's enum
+value 3 is named `ENCODING_PODBUF`. The catalog descriptor's `Encoding` value 2
+is named `Podbuf`. Decisions 1, 5 and 9 are changed in place. The name stands
+for "plain old data buffer": the head is a plain-old-data `#[repr(C)]` struct,
+and `#[repr(C)]` stays as the description of how the head is laid out. The
+record stays Proposed.
+
+**Amended 2026-10-27 — decision 4 and open item 1, the projection record is
+written.** [ADR-0031](ADR-0031-podbuf-projection-rules.md) is the projection
+record that decision 4 asks for: it fixes the bytes of the `podbuf` encoding
+(the preamble, the first-fit law, the descriptors, `verify`, evolution). Open
+item 1 is closed: `Inline` stays FlatBuffers' struct read in place, and `podbuf`
+is the in-place encoding for a consumer that links no reader library, so
+decision 2's matrix is unchanged. Decision 4 and open item 1 are changed in
+place. The record stays Proposed.
 
 ## Context
 
@@ -162,7 +218,7 @@ as its public contract.
 
 ## Decision
 
-1. **A third payload encoding: `repr(C)`.** The encoding is three artifacts from
+1. **A third payload encoding: `podbuf`.** The encoding is three artifacts from
    one IR: a generated `#[repr(C)]` layout struct per type the encoding can
    carry, a C header describing the same layout, and a generated codec between
    the layout struct and the domain type. It serves two uses — a wire payload
@@ -198,7 +254,7 @@ as its public contract.
    | Mapped or passed within a node — a shared-memory store or queue, a local socket, Binder | FlatBuffers | the receiver is handed a buffer it reads in place, with one copy or none                                        |
    | A wasm codec and the host it was generated with                                         | FlatBuffers | both sides come from one IR at one time, so there is no skew to survive, and the host reads the buffer in place |
    | A wasm guest that updates independently of its host                                     | proto3      | decision 3's original case: skew is possible, so the encoding has to survive it                                 |
-   | A C reader, or any consumer that links no reader library                                | `repr(C)`   | a field at a fixed offset needs no reader library at all                                                        |
+   | A C reader, or any consumer that links no reader library                                | `podbuf`    | a field at a fixed offset needs no reader library at all                                                        |
 
    ADR-0018 decision 3 put proto3 on "the wasm guest boundary" without dividing
    the two wasm cases, and its stated reason was that decision 14 makes the
@@ -243,13 +299,14 @@ as its public contract.
 
    **Amendment (2026-10-12) — the removal has landed, ahead of that backend.**
    `emit_struct` emits no layout attribute. The removal was sequenced with the
-   backend that replaces the attribute, which is not built; it is taken earlier
-   because [ADR-0029](ADR-0029-stability-policy.md) freezes the generated crate,
-   and a break of that surface is far cheaper before its row is added to
+   backend that replaces the attribute, which was not built at the time (it is
+   now, as `podbuf`); it was taken earlier because
+   [ADR-0029](ADR-0029-stability-policy.md) freezes the generated crate, and a
+   break of that surface is far cheaper before its row is added to
    `freeze/surfaces.toml` than after. What this decision says about the layout
    belonging to decision 1's separate struct is unchanged.
 
-4. **The `repr(C)` projection rules belong in a projection record, written when
+4. **The `podbuf` projection rules belong in a projection record, written when
    the backend is.** The rules — the fixed-capacity layout of a bounded string,
    an optional and a collection; the string capacity and whether a terminator is
    guaranteed for a C reader; alignment; endianness — are target-specific in
@@ -257,12 +314,13 @@ as its public contract.
    [ADR-0019](ADR-0019-flatbuffers-projection-rules.md)'s are, so they take that
    record's shape and are not in this one and not in the ADR-0018 amendments.
    This record fixes the encoding's place in the matrix; that record fixes what
-   the bytes are.
+   the bytes are. That record is [ADR-0031](ADR-0031-podbuf-projection-rules.md)
+   (amended 2026-10-27).
 
 5. **One `ridl-rt` crate, one cargo feature per encoding.** `ridl-rt` is a
    single `no_std` crate holding the six modules the ridl-rt design note's §1.1
    lists — `contract`, `sample`, `payload`, `port`, `strata`, `encoding` — with
-   one feature per encoding: `flatbuffers`, `proto3`, `repr-c`. With default
+   one feature per encoding: `flatbuffers`, `proto3`, `podbuf`. With default
    features off the crate has no dependency at all, which makes that note's
    RA-01 read as a ceiling rather than a floor: the FlatBuffers runtime is its
    only permitted dependency and is reached only under the `flatbuffers`
@@ -335,7 +393,9 @@ as its public contract.
    [lane E16 driver](../archive/2026-10-03-lane-e16-catalog-descriptor-driver.md),
    section 4, answer 8) is: the toolchain may depend on planus —
    `ridl-descriptor`, and through it `ridlc` and `ridl` — and `ridl-rt` and
-   every generated package must not.
+   every generated package must not. Since 2026-10-24 `ridl-transport-ws` also
+   reaches planus through `ridl-descriptor`, under its optional `descriptor`
+   feature only (decision 6).
 
    This record reads that answer as follows. "Must not" covers every kind of
    dependency on every planus crate: a normal, a build or a dev dependency on
@@ -373,16 +433,18 @@ as its public contract.
 
 6. **The runtimes live outside `ridl-rt`.** The note's RA-03 fixes the
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
-   each runtime is its own crate or package.
+   each runtime is its own crate or package. The one exception is optional:
+   `ridl-transport-ws` adds `ridl-descriptor` under its `descriptor` feature,
+   off by default (amended 2026-10-24).
 
-   | Crate or package                           | Holds                                                                                                                                                       | Depends on                                                                                                                                                                                                                              |
-   | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | `ridl-rt`                                  | the library of decision 5                                                                                                                                   | the FlatBuffers runtime, only under its feature — permitted, and not taken: since 2026-09-20 (story E11.7, stage K3) the `flatbuffers` feature gates the crate's own helpers and `ridl-rt` has no dependency in any feature combination |
-   | `ridl-loopback`                            | the in-process reference runtime — every port over a queue and a map, and no IO                                                                             | `ridl-rt`                                                                                                                                                                                                                               |
-   | `ridl-rt-conformance`                      | the port contract tests, generic over a runtime factory, which a runtime runs from its own tests; published (2026-10-08)                                    | `ridl-rt`                                                                                                                                                                                                                               |
-   | `ridl-transport-ws`                        | the ports over a WebSocket, carrying the encoding the session names, proto3 by default (frame specification §11.1); the default of the getting-started path | `ridl-rt`                                                                                                                                                                                                                               |
-   | the TypeScript runtime package (name open) | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec                                                          | nothing outside itself                                                                                                                                                                                                                  |
-   | the TypeScript WebSocket package           | the same binding for Deno and the browser                                                                                                                   | nothing until the runtime package exists; built as `@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`, which carries payload bytes without decoding them                                                                    |
+   | Crate or package                 | Holds                                                                                                                                                       | Depends on                                                                                                                                                                                                                              |
+   | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `ridl-rt`                        | the library of decision 5                                                                                                                                   | the FlatBuffers runtime, only under its feature — permitted, and not taken: since 2026-09-20 (story E11.7, stage K3) the `flatbuffers` feature gates the crate's own helpers and `ridl-rt` has no dependency in any feature combination |
+   | `ridl-loopback`                  | the in-process reference runtime — every port over a queue and a map, and no IO                                                                             | `ridl-rt`                                                                                                                                                                                                                               |
+   | `ridl-rt-conformance`            | the port contract tests, generic over a runtime factory, which a runtime runs from its own tests; published (2026-10-08)                                    | `ridl-rt`                                                                                                                                                                                                                               |
+   | `ridl-transport-ws`              | the ports over a WebSocket, carrying the encoding the session names, proto3 by default (frame specification §11.1); the default of the getting-started path | `ridl-rt`; `ridl-descriptor` with its default features off, under the `descriptor` feature (off by default)                                                                                                                             |
+   | `@driftsys/ridl-runtime` (npm)   | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec                                                          | nothing outside itself                                                                                                                                                                                                                  |
+   | the TypeScript WebSocket package | the same binding for Deno and the browser                                                                                                                   | nothing until the runtime package exists; built as `@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`, which carries payload bytes without decoding them                                                                    |
 
    Generated Rust links `ridl-rt`, generated TypeScript imports the runtime
    package, and neither ever names a transport.
@@ -479,7 +541,7 @@ as its public contract.
    codec reads the request option `encodings`: the encoding names the manifest's
    `[backend.<name>] encodings` array holds for that backend, joined by `,` in
    manifest order, and no option when the table is absent or the array is empty
-   (ADR-0002 section 4). The names are `flatbuffers`, `proto3` and `repr-c`. A
+   (ADR-0002 section 4). The names are `flatbuffers`, `proto3` and `podbuf`. A
    backend refuses a name it does not implement, with a message that names the
    name. The option `wire-encoding` is retired. The option is a convention of
    the existing option map, so the request has no new field and no change to
@@ -554,7 +616,7 @@ as its public contract.
 | `#[repr(C)]` on the domain types themselves             | rejected | confines every domain type to the C subset, charges the representation to every Rust consumer, and lets a typl §17.11 width change move every later field (decision 3)              |
 | C restored as a language backend                        | rejected | the finding of ADR-0018 decision 6 stands — a layout-only header drops most of a realistic package silently; the need is an encoding, and decision 1 is one                         |
 | proto3 at the codec-in-wasm boundary                    | rejected | ADR-0018 decision 3's reason for proto3 is survivable version skew, and a codec generated with its host has no skew; keeping proto3 there would materialize an object on every read |
-| The `repr(C)` layout rules in the ADR-0018 amendments   | rejected | they are target-specific in the way ADR-0017's and ADR-0019's are, so they take a projection record's shape (decision 4); one roadmap revision had this wrong                       |
+| The `podbuf` layout rules in the ADR-0018 amendments    | rejected | they are target-specific in the way ADR-0017's and ADR-0019's are, so they take a projection record's shape (decision 4); one roadmap revision had this wrong                       |
 | `ridl-abi` — the port traits as a crate under `ridl-rt` | rejected | the ports need `Sample<T>`, `Envelope` and `Provenance`, so the crates would always ship together, and the features already buy what the split would (decision 5)                   |
 | TypeScript faces and frame with no transport package    | rejected | two independently written emulators would share no transport, and the TypeScript backend would have no end-to-end test in this repository (decision 7)                              |
 | TypeScript faces with no frame specification            | rejected | two hand-written transports over the same contract would not interoperate (decision 7)                                                                                              |
@@ -575,7 +637,7 @@ as its public contract.
   its target's syntax rather than the semantics again.
 - **Positive — a consumer pays for the encodings it uses.** Decision 5's default
   features off means a `no_std` consumer links a third-party runtime only under
-  the `flatbuffers` feature; `proto3` and `repr-c` add none, because ADR-0018
+  the `flatbuffers` feature; `proto3` and `podbuf` add none, because ADR-0018
   decision 4 generates those codecs rather than delegating them.
 - **Positive — legacy C interoperation is served without a C language target.**
   Decisions 1 and 3 give a C reader a header and a fixed layout while the domain
@@ -584,7 +646,7 @@ as its public contract.
   FlatBuffers at the wasm boundary, so the accessors read the buffer in place.
 - **Negative — three encodings are three conformance obligations.** ADR-0018
   decision 4's byte-level conformance test now has a third target, and the
-  `repr(C)` one is a C compiler rather than a reference implementation.
+  `podbuf` one is a C compiler rather than a reference implementation.
 - **Negative — E4.5a moves onto the critical path and #231 blocks it.** Decision
   12 makes the IR stability policy a prerequisite of the lowering step, so the
   round-trip defect has to be fixed before any backend is ported.
@@ -597,16 +659,18 @@ as its public contract.
 
 ## Open
 
-1. **`Inline` versus `repr(C)`.** The ridl-rt design note's `Inline` payload is
-   a FlatBuffers struct read in place; a `repr(C)` struct read in place is the
-   same operation with a simpler rule and no runtime dependency. Whether
-   `Inline` becomes the `repr(C)` encoding, with FlatBuffers keeping only its
-   tables, touches decision 2's matrix and is settled with the projection record
-   of decision 4. That note's RA-X7 and RA-X8 are inputs to it.
+1. **`Inline` versus `podbuf`.** _Closed 2026-10-27._ The ridl-rt design note's
+   `Inline` payload is a FlatBuffers struct read in place; a `podbuf` struct
+   read in place is the same operation with a simpler rule and no runtime
+   dependency. `Inline` stays FlatBuffers' and `podbuf` is the in-place
+   encoding; decision 2's matrix is unchanged. The projection record of decision
+   4, [ADR-0031](ADR-0031-podbuf-projection-rules.md), settles the `podbuf`
+   side. That note's RA-X7 and RA-X8 were inputs to it.
 2. **Where the TypeScript packages live in this workspace, and what the runtime
    package is called.** Decision 6 leaves both open. (Amended 2026-10-20: the
    location is `packages/`, and the first package there is
-   `packages/ridl-transport-ws/`. The runtime package's name is still open.)
+   `packages/ridl-transport-ws/`. Amended 2026-10-21: the runtime package is
+   named `@driftsys/ridl-runtime`.)
 3. **Which wasm runtime `ridlc` embeds** for the second host of decision 10, and
    whether the export signature can be identical to the process host's stdin and
    stdout framing.
@@ -666,9 +730,9 @@ as its public contract.
 | [ADR-0013](ADR-0013-codegen-backend-scope.md)                                                  | decision 1's target list amended: a language backend need not live in this workspace, and the C header returns as an artifact of decision 1's encoding rather than as a language target                                                                                                                                                                                                                                                                                                                                         |
 | [ADR-0007](ADR-0007-e1-execution.md)                                                           | decision 13's `#[repr(C)]` on generated domain structs retired by decision 3; ADR-0018 decision 6 had retired only that decision's header and extern-C face                                                                                                                                                                                                                                                                                                                                                                     |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | decision-ledger row 35 (decisions 1 to 4), and the open-question index's cross-cutting entry (decision 12)                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| [`docs/specification/typl-language-reference.md`](../specification/typl-language-reference.md) | §17.13 sends the `repr(C)` string rules to decision 4's projection record                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| [`docs/specification/typl-language-reference.md`](../specification/typl-language-reference.md) | §17.13 sends the `podbuf` string rules to decision 4's projection record                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | [`docs/wip/2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md)                 | the library's placement is decisions 5 and 6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| [`docs/ROADMAP.md`](../ROADMAP.md)                                                             | E11.0 is `ridl-rt` (decision 5); E11.9 is the transport crate and the loopback runtime (decision 6), with the matching package (decision 7) — E11.9 was split on 2026-09-20 (driftsys/ridl#445) and the loopback runtime is story E11.15; E11.12 is the `repr(C)` codec (decision 1); E4.5a and E4.5b are both in scope (decisions 8 to 12); E4.5b's row corrected 2026-09-22 with decision 11's amendment — the Rust backend ported onto the contract, not both in-tree backends                                               |
+| [`docs/ROADMAP.md`](../ROADMAP.md)                                                             | E11.0 is `ridl-rt` (decision 5); E11.9 is the transport crate and the loopback runtime (decision 6), with the matching package (decision 7) — E11.9 was split on 2026-09-20 (driftsys/ridl#445) and the loopback runtime is story E11.15; E11.12 is the `podbuf` codec (decision 1); E4.5a and E4.5b are both in scope (decisions 8 to 12); E4.5b's row corrected 2026-09-22 with decision 11's amendment — the Rust backend ported onto the contract, not both in-tree backends                                                |
 | [`docs/design/ridl-rt.md`](../design/ridl-rt.md)                                               | the `flatbuffers` feature's paragraph: the FlatBuffers runtime decision 5 permits cannot be planus (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                                                                                                          |
 | [`crates/ridl-rt/src/flatbuffers.rs`](../../crates/ridl-rt/src/flatbuffers.rs)                 | the module documentation: no planus crate may be a dependency of `ridl-rt` (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | [`docs/design/flatbuffers-codec.md`](../design/flatbuffers-codec.md)                           | the conformance test's planus paragraph: `ridl-backend-rust`'s own use of planus is dev-only, the toolchain may depend on planus, and `ridl-rt` and every generated package must not (decision 5's 2026-10-03 amendment)                                                                                                                                                                                                                                                                                                        |

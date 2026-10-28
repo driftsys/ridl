@@ -63,7 +63,7 @@ fn compiles(source: &str) {
 #[test]
 fn an_unbounded_induced_request_refuses_only_its_interface() {
     let package = package_with_an_unbounded_pump();
-    let source = generate_pipeline(&package, &[WireEncoding::FlatBuffers], &[])
+    let source = generate_pipeline(&package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate pipeline")
         .rust_source;
     compiles(&source);
@@ -106,7 +106,7 @@ fn an_unbounded_induced_request_refuses_only_its_interface_under_proto3() {
             "`face.calls.PumpSetParams` has no finite FlatBuffers bound",
         ),
     ] {
-        let source = generate_pipeline(&package, encodings, &[])
+        let source = generate_pipeline(&package, encodings, false, &[])
             .expect("generate pipeline")
             .rust_source;
         compiles(&source);
@@ -154,7 +154,7 @@ fn optional_array_of_level() -> v2::FieldType {
 #[test]
 fn an_induced_request_is_judged_in_each_encoding_the_list_names() {
     let package = package(optional_array_of_level());
-    let flatbuffers = generate_pipeline(&package, &[WireEncoding::FlatBuffers], &[])
+    let flatbuffers = generate_pipeline(&package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate pipeline")
         .rust_source;
     assert!(
@@ -165,7 +165,7 @@ fn an_induced_request_is_judged_in_each_encoding_the_list_names() {
         &[WireEncoding::Proto3][..],
         &[WireEncoding::FlatBuffers, WireEncoding::Proto3][..],
     ] {
-        let proto3 = generate_pipeline(&package, encodings, &[])
+        let proto3 = generate_pipeline(&package, encodings, false, &[])
             .expect("generate pipeline")
             .rust_source;
         compiles(&proto3);
@@ -237,14 +237,14 @@ interface Healthy {
         interfaces,
         ..package
     };
-    let flatbuffers = generate_pipeline(&package, &[WireEncoding::FlatBuffers], &[])
+    let flatbuffers = generate_pipeline(&package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate pipeline")
         .rust_source;
     assert!(
         !flatbuffers.contains("__RIDL_NO_FACE_Pump"),
         "the reply message has a finite FlatBuffers bound: {flatbuffers}"
     );
-    let proto3 = generate_pipeline(&package, &[WireEncoding::Proto3], &[])
+    let proto3 = generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
         .expect("generate pipeline")
         .rust_source;
     compiles(&proto3);
@@ -296,7 +296,7 @@ fn an_unbounded_induced_request_of_a_service_shape_refuses_nothing() {
         &[WireEncoding::Proto3][..],
         &[WireEncoding::FlatBuffers, WireEncoding::Proto3][..],
     ] {
-        let source = generate_pipeline(&package, encodings, &[])
+        let source = generate_pipeline(&package, encodings, false, &[])
             .expect("generate pipeline")
             .rust_source;
         compiles(&source);
@@ -331,7 +331,7 @@ fn a_tuple_parameter_named_params_has_a_distinct_wrapper() {
         "{:?}",
         model.tuple_collisions
     );
-    let source = generate_pipeline(&package, &[WireEncoding::FlatBuffers], &[])
+    let source = generate_pipeline(&package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate pipeline")
         .rust_source;
     assert!(!source.contains("__RIDL_NO_FACE_Pump"), "{source}");
@@ -364,7 +364,7 @@ fn a_bounded_induced_request_of_a_service_shape_is_a_root() {
         (&[WireEncoding::FlatBuffers][..], "FlatBuffers"),
         (&[WireEncoding::Proto3][..], "Proto3"),
     ] {
-        let source = generate_pipeline(&package, encodings, &[])
+        let source = generate_pipeline(&package, encodings, false, &[])
             .expect("generate pipeline")
             .rust_source;
         compiles(&source);

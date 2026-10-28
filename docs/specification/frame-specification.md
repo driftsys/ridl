@@ -25,24 +25,28 @@ Version: 0.2.0
 > package `@driftsys/ridl-transport-ws` (`packages/ridl-transport-ws/`), the
 > consuming side ([the crate's design record](../design/ridl-transport-ws.md),
 > [the package's design record](../design/ridl-transport-ws-ts.md)). The crate
-> serves the observe and call ports of a provider runtime, applies the
-> exact-match rule of §6.1 at `attach`, and keeps the last 64 settled responses
-> of a session for duplicate suppression instead of keeping each until its
-> response bound has passed (§7). The runtime here, `ridl-loopback`, runs in
-> process: it carries bytes from a provider handle to a consumer handle over one
-> in-memory store, opens no socket, and has no wire format
-> ([its design record](../design/ridl-loopback.md)). Neither the crate nor
-> `ridl-loopback` enforces a timing rule or a contract clause on the provider
-> side, so every sentence below about those describes the specification, not
-> behaviour a shipped runtime performs. The first binding is the WebSocket
-> transport (driftsys/ridl#265); the second is a runtime's own binder contract
-> on Android, outside this repository (§11.2, which reverses an earlier AIDL
-> binding generated per interface).
+> serves the observe and call ports of a provider runtime. With a member table
+> of its catalog, which the embedder supplies, it accepts an `attach` naming a
+> listed earlier hash (§6.1); without one it applies the exact-match rule. With
+> a member table it keeps each settled response until its bound has passed (§7);
+> without one, or for a member with no bound, it keeps the last 64. With a
+> member table that gives a member a payload limit, it also answers a `request`
+> whose payload is longer than that limit `corrupt` (§11.1). The runtime here,
+> `ridl-loopback`, runs in process: it carries bytes from a provider handle to a
+> consumer handle over one in-memory store, opens no socket, and has no wire
+> format ([its design record](../design/ridl-loopback.md)). Neither the crate
+> nor `ridl-loopback` enforces a timing rule or a contract clause on the
+> provider side, so every sentence below about those describes the
+> specification, not behaviour a shipped runtime performs. The first binding is
+> the WebSocket transport (driftsys/ridl#265); the second is a runtime's own
+> binder contract on Android, outside this repository (§11.2, which reverses an
+> earlier AIDL binding generated per interface).
 >
 > The catalog descriptor carries the list of compatible earlier catalog hashes
-> that §6.1 names, and no runtime in this workspace reads it at `attach`.
-> `ridl-transport-ws` holds no descriptor, so it applies only the exact-match
-> rule of §6.1 and does not meet conformance item 1 of §12 until it reads one.
+> that §6.1 names. `ridl-transport-ws` applies the list when its embedder gives
+> it a member table that holds it, and meets conformance item 1 of §12 then;
+> without a table it applies only the exact-match rule. `ridl-loopback` reads no
+> descriptor.
 
 ---
 
@@ -84,7 +88,7 @@ Three layers are involved, and each is defined once:
 | a binding         | one document per transport, written from this one (§10, §11) | how the frame's fields are carried over that transport, and whether the binding carries any of the three payload encodings or fixes one |
 
 The payload's encoding is not this document's either. A payload crosses as bytes
-in one of the three core encodings — FlatBuffers, proto3, `repr(C)` — and which
+in one of the three core encodings — FlatBuffers, proto3, `podbuf` — and which
 encoding a session uses is named at `attach` (§3). A binding either carries any
 of the three, the `attach` tag naming the session's, or fixes one; the
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -128,7 +132,7 @@ definition, or the crate's own source under `crates/ridl-rt/src/`.
 | `Contract`    | `ridl_rt::error`    | the four contract-error categories of ridl §10.2: `InvalidValue(Violation)`, `PreconditionFailed`, `ContractBroken`, `UnknownInteraction`                                                                                                                                                                                                     |
 | `Transport`   | `ridl_rt::error`    | the detected infrastructure failures of ridl §10.3: `Timeout`, `Undelivered`, `Down`, `Corrupt`, `Busy`                                                                                                                                                                                                                                       |
 | `Violation`   | `ridl_rt::payload`  | the `Rule` that failed and, for a violation the generated code detected, the name of the typl type whose constraint failed; a `contract(InvalidValue)` outcome decoded from a frame carries the rule alone (§9.6), whereas a consumer's own `Detected(InvalidValue(..))` on received bytes and a violation delivered in process keep the name |
-| `Encoding`    | `ridl_rt::encoding` | the closed set of payload encodings: `FlatBuffers`, `Proto3`, `ReprC`, each named as its cargo feature is                                                                                                                                                                                                                                     |
+| `Encoding`    | `ridl_rt::encoding` | the closed set of payload encodings: `FlatBuffers`, `Proto3`, `Podbuf`, each named as its cargo feature is                                                                                                                                                                                                                                    |
 
 Two words this document adds, because `ridl-rt` has no need of them:
 
@@ -174,7 +178,7 @@ are:
 | --- | ----------- | ---------------- |
 | 1   | FlatBuffers | `flatbuffers`    |
 | 2   | proto3      | `proto3`         |
-| 3   | `repr(C)`   | `repr-c`         |
+| 3   | `podbuf`    | `podbuf`         |
 
 These are the values the `ridl-rt` design record lists as "the frame
 specification's wire tag values" against a constant `Encoding::FORMAT` that
@@ -663,9 +667,11 @@ same way, and that answer is the designed one, not a defect: the consuming
 runtime reports it as the contract error of ridl §10.2. A frame the consumer
 cannot place is the provider's defect on either kind of session. Whether a
 runtime can tell an unknown ordinal from one it has no value for yet depends on
-its holding the member table. `ridl-loopback` holds none: giving the loopback
-the catalog descriptor is not yet assigned to an issue. Until it holds one, it
-cannot report `UnknownInteraction` at all.
+its holding the member table. `ridl-transport-ws` reports `UnknownInteraction`
+when its embedder gives it one (its design record, D-12), and not otherwise.
+`ridl-loopback` holds none: giving the loopback the catalog descriptor is not
+yet assigned to an issue. Until it holds one, it cannot report
+`UnknownInteraction` at all.
 
 ## 7. Sequence Numbers, Loss and Duplicates
 
@@ -708,10 +714,13 @@ within the declared `max`, and reaching it is the Stratum 3 detection (§8).
 
 No shipped runtime retransmits. `ridl-loopback` delivers each call once because
 nothing in a process is lost. `ridl-transport-ws` suppresses a duplicate
-`request`: it keeps the last 64 settled responses of a session, and sends the
-kept response again for a `request` whose `seq` is among them. It does not know
-the response bound, because it holds no descriptor, so it fixes a count instead
-of retaining each response until the bound has passed.
+`request` and keeps each settled response until the request's bound has passed,
+measured from the request's `stamp` or from the provider's clock at receipt,
+whichever is earlier, when its member table gives the member a bound. For a
+member the table gives no bound, or when the embedder gives it no table, it
+keeps the last 64 settled responses of the session instead. That fallback is a
+deviation of this crate, stated here and in its design record, and not a rule of
+the binding (driftsys/ridl#986).
 
 ## 8. Timing
 
@@ -969,11 +978,16 @@ no bytes — and is handed to the generated binding as it is.
 its envelope is 20 bytes (`response`), so a data-plane message is at most 36
 bytes plus the payload bound. The largest header of any message is the `attach`
 at 39 + 255 = 294 bytes; it carries no payload, so a receiver's message size
-limit admits at least 294 bytes. The codegen model carries the data-plane
-numbers as the `websocket` row, binding version `"1"`, `frame_header_max_bytes`
-20, `envelope_bytes` 16 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is
-derived from this layout: the layout is frozen through the vectors below, and
-the row is a derived value, corrected in a patch release if it is wrong
+limit admits at least 294 bytes. Under the payload ceiling of 16,256 bytes
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 2), the
+largest data-plane message is 36 + 16,256 = 16,292 bytes. The Rust provider
+`ridl-transport-ws` limits a message to 16,292 bytes by default and refuses a
+configured limit above it (ADR-0030 decision 10). The codegen model carries the
+data-plane numbers as the `websocket` row, binding version `"1"`,
+`frame_header_max_bytes` 20, `envelope_bytes` 16
+(`crates/ridl-ir/src/codegen/bindings.rs`). The row is derived from this layout:
+the layout is frozen through the vectors below, and the row is a derived value,
+corrected in a patch release if it is wrong
 ([ADR-0029](../decisions/ADR-0029-stability-policy.md) decision 2).
 
 **3. The encoding tag.** The binding fixes no encoding: a session uses the
@@ -995,11 +1009,15 @@ discarded and recorded (§9.5). A frame whose header says it carries a payload i
 never answered or discarded for the payload's length: the payload, zero bytes
 included, goes to `Payload::verify`, and a payload that fails to decode follows
 §9 — a `request`'s is answered `corrupt` (§5.3). So the `request` of §9.5 whose
-payload is absent does not occur on this binding. A message above the receiver's
-configured size limit, which admits at least 294 bytes, is closed with 1009.
-Either side ends the session on purpose with 1000, the provider with 1001 when
-it shuts down; after `attached(refused)` the provider closes with 1000, and the
-reason is in the frame. The binding defines no close code of its own.
+payload is absent does not occur on this binding. One exception: a provider that
+holds the member limits of its catalog answers a `request` whose payload is
+longer than its member's limit `corrupt` without verifying it (ADR-0030 decision
+15). A message above the receiver's configured size limit, which admits at least
+294 bytes, is closed with 1009. Either side ends the session on purpose with
+1000, the provider with 1001 when it shuts down; after `attached(refused)` the
+provider closes with 1000, and the reason is in the frame. A provider may close
+with 1008 when a session passes a resource limit it states, such as a cap on the
+responses it keeps for §7. The binding defines no close code of its own.
 
 **5. The caller's identity** for §7 is the connection. It does not survive a
 reconnect: a reconnect is a new session, its counters start over, and the calls
@@ -1088,8 +1106,9 @@ so that each catches one way of being wrong.
 1. An `attach` naming a catalog the provider serves under a hash that is neither
    the provider's own nor one its descriptor lists as compatible is refused
    `catalog_mismatch`, and no other frame is exchanged; one naming a listed
-   earlier hash is accepted (§6.1; the toolchain writes the list, and no runtime
-   in this workspace accepts a listed hash, per the As-built note).
+   earlier hash is accepted (§6.1; the toolchain writes the list, and
+   `ridl-transport-ws` with a member table accepts a listed hash, per the
+   As-built note).
 2. A `subscribe` to a signal is followed by exactly one `publish` before any
    provider action: `Init`, `seq` 0, no payload, before a first publication; the
    last publication otherwise (§5.1, §6.2).
