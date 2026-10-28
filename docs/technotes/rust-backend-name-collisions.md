@@ -64,7 +64,11 @@ justifies a backend strategy, not a language rule. The wire backends name a
 tuple's fields by position (`field_1`, `field_2`) and the TypeScript backend
 keeps every name as declared, so `(minSpeed : Speed, min_speed : Speed)` is
 legal there (X-6a). Only the Rust backend applies `snake_case` to a tuple's
-fields, so that collision is the Rust backend's.
+fields, so that collision is the Rust backend's. Since 2026-10-28 the podbuf C
+header also names a tuple's members under `snake_case`, and falls back to
+positional names for a tuple whose spelled names clash instead of refusing it;
+see the 2026-10-28 amendment of
+[ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md).
 
 One inconsistency is left in place and recorded as open in ADR-0016: RIDL-149
 checks a union's arms under `camel_case` and an enum's values under
