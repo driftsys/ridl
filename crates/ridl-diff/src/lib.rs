@@ -284,20 +284,21 @@ declare_categories! {
         /// An enum value, an enum-set flag or a union arm appended, compatible
         /// under the generic rule, after which the podbuf integer of the enum
         /// or the enum set or the tag of the union is a different integer, by
-        /// width or by signedness: `u8` to `u16`, `u16` to `u32`, `u32` to
-        /// `u64` for an enum set that gains bit 32, or `u8` to `i8` (`i16`
-        /// when a value is above 127) for an enum that gains a negative value.
-        /// The integer is the narrowest that holds every declared value
-        /// (ADR-0031 decision 5), for an enum set its width (the narrowest
-        /// unsigned integer that holds its highest bit) or, for a tag, every
-        /// arm ordinal. Breaking when `podbuf` is among the encodings the
-        /// comparison is judged for, because every head that holds the enum,
-        /// the enum set or the union lays out a different integer; compatible
-        /// otherwise, which holds under proto3. An enum-set flag that widens
-        /// the integer also widens the enum set's FlatBuffers scalar, which no
-        /// rule reports yet (driftsys/ridl#1120). Reported once per
-        /// declaration, at `<package>/<decl>`, with the old and the new
-        /// integer. An append that keeps the integer draws no such line.
+        /// width or by signedness: `u8` to `u16`, `u16` to `u32` or `u32` to
+        /// `u64`. The integer is the narrowest that holds every declared
+        /// value, signed when a value is negative (ADR-0031 decision 5), for
+        /// an enum set its width (the narrowest unsigned integer that holds
+        /// its highest bit) or, for a tag, every arm ordinal. A negative value
+        /// appended to an enum that has values is an insert below its highest
+        /// value, a breaking [`Category::DeclAdded`], so the integer turns
+        /// signed only when an enum with no value gains values. Breaking when
+        /// `podbuf` is among the encodings the comparison is judged for,
+        /// because every head that holds the enum, the enum set or the union
+        /// lays out a different integer; compatible otherwise, which holds
+        /// under proto3. An enum-set flag that widens the integer also widens
+        /// the enum set's FlatBuffers scalar, which no rule reports yet
+        /// (driftsys/ridl#1120). Reported once per declaration, at
+        /// `<package>/<decl>`, with the old and the new integer. An append that keeps the integer draws no such line.
         PodbufWidthChange,
         /// An enum value or an enum-set flag appended, compatible under the
         /// generic rule, to an enum or an enum set that is strict (ADR-0031

@@ -1549,11 +1549,13 @@ after it. An enum value, an enum-set flag or a union arm appended after which
 the podbuf integer of the enum, of the enum set or the tag of the union is a
 different integer, by width or by signedness — a value above 255, a flag at
 bit 8 or an arm past ordinal 255 widens a `u8` to a `u16`, a value above 65535
-or a flag at bit 16 a `u16` to a `u32`, a flag at bit 32 a `u32` to a `u64`,
-and a first negative value of an enum turns a `u8` into an `i8`, or into an
-`i16` when a value is above 127 — is `podbuf_width_change`, reported once per
-declaration with the old and the new integer, breaking with `--encoding podbuf`
-because every head that holds the enum, the enum set or the union lays out a
+or a flag at bit 16 a `u16` to a `u32`, and a value above 4294967295 or a flag
+at bit 32 a `u32` to a `u64`; an enum's integer is signed when a value is
+negative, and since a negative value appended to an enum that has values is an
+insert below its highest value, a breaking `decl_added`, the integer turns
+signed only when an enum with no value gains values — is
+`podbuf_width_change`, reported once per declaration with the old and the new
+integer, breaking with `--encoding podbuf` because every head that holds the enum, the enum set or the union lays out a
 different integer; an append that keeps the integer draws no such line. Without
 the flag the line is reported compatible, which holds under proto3; an enum-set
 flag that widens the integer also widens the enum set's FlatBuffers scalar,

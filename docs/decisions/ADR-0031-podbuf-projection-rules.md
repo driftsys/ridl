@@ -471,14 +471,17 @@ a field is appended.
     value to a strict enum or a flag to a strict enum set **(Sebastien)**;
     appending an enum value, an enum-set flag or a union arm that changes the
     podbuf integer of the enum or the enum set or the tag of the union, by width
-    or by signedness (`u8` to `u16` at 256, `u16` to `u32` at 65,536, `u8` to
-    `i8` at the first negative enum value, or to `i16` when a value is above
-    127, by the rules of decision 5; for an enum set, `u8` to `u16` at bit 8,
-    `u16` to `u32` at bit 16 and `u32` to `u64` at bit 32, by the width typl
-    §9.3 infers), which lays out a different integer in every head that holds
-    the enum, the enum set or the union; appending a field that cannot read as
-    0; appending to a struct that is nested inline anywhere in the workspace;
-    changing a strict enum to an open one or the reverse; and removing a field.
+    or by signedness (the narrowest integer that holds every value, signed when
+    a value is negative, by the rules of decision 5: `u8` to `u16` at 256, `u16`
+    to `u32` at 65,536 and `u32` to `u64` at 4,294,967,296; for an enum set,
+    `u8` to `u16` at bit 8, `u16` to `u32` at bit 16 and `u32` to `u64` at bit
+    32, by the width typl §9.3 infers; a negative value appended to an enum that
+    has values is an insert below its highest value, a generic break, so the
+    integer turns signed only when an enum with no value gains values), which
+    lays out a different integer in every head that holds the enum, the enum set
+    or the union; appending a field that cannot read as 0; appending to a struct
+    that is nested inline anywhere in the workspace; changing a strict enum to
+    an open one or the reverse; and removing a field.
 
     **A strict-enum append is reported (builder's call).** `ridl diff` reports
     an appended enum value or enum-set flag as the category

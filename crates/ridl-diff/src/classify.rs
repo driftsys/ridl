@@ -151,8 +151,10 @@ pub(crate) fn classify_in(
         // the verdict is the encoding's alone: an inline copy of the struct
         // cannot grow under podbuf, a wider enum integer or union tag moves
         // every head that holds it, a value or flag a strict enum does not
-        // name is refused by an older reader's `verify`, and no other
-        // encoding lays any of them out.
+        // name is refused by an older reader's `verify`. proto3 has no fixed
+        // layout for any of them. FlatBuffers lays out an enum set's integer
+        // at its width too, so a widening flag also changes its scalar, which
+        // no FlatBuffers rule reports yet (driftsys/ridl#1120).
         Category::PodbufInlineAppend
         | Category::PodbufWidthChange
         | Category::PodbufStrictEnumAppend => {
@@ -1536,10 +1538,14 @@ pub fn explain(category: Category) -> &'static str {
             "narrowest unsigned integer that holds the largest arm ordinal: a value\n",
             "above 255, a flag at bit 8 or an arm past ordinal 255 widens a `u8` to\n",
             "a `u16`, a value above 65535 or a flag at bit 16 a `u16` to a `u32`,\n",
-            "a flag at bit 32 a `u32` to a `u64`, and a first negative value turns\n",
-            "a `u8` into an `i8`, or into an `i16` when a value is above 127. The\n",
-            "line is reported once per declaration and carries the old and the new\n",
-            "integer. An append that keeps the integer draws no such line.\n",
+            "and a value above 4294967295 or a flag at bit 32 a `u32` to a `u64`.\n",
+            "A negative value appended to an enum that has values is below its\n",
+            "highest value, an insert, which the generic rule reports as a breaking\n",
+            "`decl_added` line and not as a width line; the integer turns signed\n",
+            "only when an enum with no value gains values (`-1` gives an `i8`,\n",
+            "`-1` and `200` an `i16`). The line is reported once per declaration\n",
+            "and carries the old and the new integer. An append that keeps the\n",
+            "integer draws no such line.\n",
             "  breaking    with `--encoding podbuf`: every head that holds the enum,\n",
             "              the enum set or the union lays out a different integer,\n",
             "              and an older reader misreads the value\n",
