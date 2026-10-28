@@ -3623,6 +3623,49 @@ mod podbuf_width {
         );
     }
 
+    /// The width line of `old` to `new` as `(verdict, before, after)`.
+    fn width_of(
+        old: &v2::Package,
+        new: &v2::Package,
+    ) -> Option<(Verdict, Option<String>, Option<String>)> {
+        width_change(&diff_refs_with(&[old], &[new], &[], &["podbuf"]))
+            .map(|change| (change.verdict, change.before.clone(), change.after.clone()))
+    }
+
+    fn width(before: &str, after: &str) -> Option<(Verdict, Option<String>, Option<String>)> {
+        Some((
+            Verdict::Breaking,
+            Some(before.to_string()),
+            Some(after.to_string()),
+        ))
+    }
+
+    /// A negative value can be appended only to an enum with no value: in a
+    /// non-empty enum it is below the highest value, an insert. `-1` gives
+    /// an `i8`, and `-1` with `200` the narrowest signed integer that holds
+    /// both, an `i16`.
+    #[test]
+    fn values_appended_to_an_empty_enum_give_the_narrowest_signed_integer() {
+        assert_eq!(width_of(&enum_of(&[]), &enum_of(&[-1])), width("u8", "i8"));
+        assert_eq!(
+            width_of(&enum_of(&[]), &enum_of(&[-1, 200])),
+            width("u8", "i16")
+        );
+    }
+
+    /// Bit 32 appended to an enum set whose highest bit is 31 widens its
+    /// integer from `u32` to `u64`.
+    #[test]
+    fn an_appended_enum_set_flag_at_bit_32_widens_u32_to_u64() {
+        assert_eq!(
+            width_of(
+                &enum_set_with(&[0, 31], v2::IntWidth::U32),
+                &enum_set_with(&[0, 31, 32], v2::IntWidth::U64)
+            ),
+            width("u32", "u64")
+        );
+    }
+
     /// A value inserted at a free number below the largest is breaking under
     /// the generic rule, so it draws no width line even when it changes the
     /// integer: -1 inserted into `0, 2` turns `u8` into `i8`, and the generic
