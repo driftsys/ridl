@@ -10,15 +10,15 @@ train and the maintainer acts) and ADR-0005's resolved host-coverage question
 
 The repository has two independent release trains:
 
-- **`v<version>`**, cut by `just release` (git-std bump, which bumps the
-  `[workspace.package]` version every crate in the workspace shares — ADR-0007
-  decision 14's 2026-09-21 amendment). The tag triggers
-  `.github/workflows/crates-io-release.yml`, which publishes every crate whose
-  manifest does not set `publish = false` to crates.io: a `verify` job checks
-  the tag's commit is an ancestor of `main` and runs `just build`, then a
-  `publish` job runs the crates in dependency order, skipping one already at
-  that version on crates.io. `xtask`, `ridlc-gen-model` and `ridlc-gen-rust` are
-  the crates left `publish = false`: the first is workspace tooling and the
+- **`v<version>`**, created by `just release` after `git std bump` bumps the
+  `[workspace.package]` version every crate in the workspace shares (ADR-0007
+  decision 14's 2026-09-21 amendment), and pushed by `just release-push`. The
+  tag triggers `.github/workflows/crates-io-release.yml`, which publishes every
+  crate whose manifest does not set `publish = false` to crates.io: a `verify`
+  job checks the tag's commit is an ancestor of `main` and runs `just build`,
+  then a `publish` job runs the crates in dependency order, skipping one already
+  at that version on crates.io. `xtask`, `ridlc-gen-model` and `ridlc-gen-rust`
+  are the crates left `publish = false`: the first is workspace tooling and the
   other two are test-only, so none is published; every other crate, including
   `ridl` (published under the crates.io package name `ridl-cli` — `ridl` is
   already someone else's crate — with an explicit `[[bin]] name = "ridl"` so the
@@ -28,7 +28,8 @@ The repository has two independent release trains:
   [R-12 of the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md)); it
   now shares the workspace version and this tag like every other published
   crate. The tag push is still the maintainer act (ADR-0007 decision 14).
-- **`editor-v<version>`**, cut by a maintainer pushing the tag. This builds the
+- **`editor-v<version>`**, created on the same release commit by `just release`
+  and pushed by `just release-push` (see "Cutting a release"). This builds the
   `ridl` binary for five targets and packages one VSIX per target, creates the
   GitHub Release, and holds the Marketplace and Open VSX publishes behind the
   reviewed `marketplace` environment (`.github/workflows/vscode-release.yaml`).
@@ -46,6 +47,51 @@ linked against the runner's own glibc would require that newer version instead,
 and the extension cannot recover from that: it does not fall back to `PATH`
 while a bundled binary exists. The floor changes neither the target triple nor
 the tarball names, so `install.sh` and the VSIX layout are unaffected.
+
+## Cutting a release
+
+The two trains are cut together. The editor version is the workspace version,
+because `vscode-release.yaml` refuses an `editor-v` tag that differs from
+`editors/vscode/package.json`. The release commit goes to `main` directly,
+without a pull request.
+
+1. On a clean `main` equal to `origin/main`, whose `ci` run has passed, run
+   `just release --release-as <version>`. Before 1.0, `git std bump` picks a
+   patch release unless it is told the version. The recipe runs the release
+   check of the freeze gate, then `git std bump --no-commit`, then
+   `just release-sync`, which updates the pins that a `[[version_files]]` entry
+   cannot express: the root and cabin lockfiles, the `ridl-rt` requirement that
+   `ridl build` emits, the cabin manifests and `deno.lock`, the editor manifest
+   and the frozen generated manifests. The recipe does not run the build gate,
+   which `ci` already ran on that commit. It checks only what the bump and the
+   sync wrote: that both lockfiles agree with their manifests
+   (`cargo metadata --locked`) and that every derived pin follows the new
+   version. It then commits `chore(release): <version>`, and creates the
+   annotated tags `v<version>` and `editor-v<version>`, all locally.
+2. Read the changelog in the release commit.
+3. Run `just release-push`. It pushes `main`, waits for the `ci` run on the
+   release commit, and pushes the two tags only if that run passed. A push to
+   `main` during that run cancels it; re-run it with `gh run rerun` and run
+   `just release-push` again, which does not push the release commit a second
+   time. If the run failed, fix `main` and cut the next patch version. Keep the
+   two local tags and never push them: `git std bump` starts the next changelog
+   section after the newest tag, so without them the next section repeats every
+   entry of the failed version. The tags start `crates-io-release.yml`,
+   `npm-release.yml` and `vscode-release.yaml`. The Marketplace job then waits
+   for approval in the `marketplace` environment. The Open VSX job is turned off
+   until an `OVSX_PAT` secret exists.
+
+A tag is not moved after it is pushed. A publish workflow that starts from a tag
+runs that tag's commit, and a re-run of it also uses the workflow file of that
+commit, so a fix on `main` cannot reach it. A failure in a publish workflow
+before anything is published is fixed on `main` and released as the next patch
+version. The crates.io and npm jobs skip a version that is already on their
+registry, so a re-run after a partial publish continues where the earlier run
+stopped. The Marketplace and Open VSX publishes are not idempotent: after a
+partial failure, the remaining targets are published by hand, as
+`vscode-release.yaml` describes. The crates.io job waits after each crate until
+the version is in the index that cargo reads
+(`.github/scripts/wait-for-crate-index.sh`).
 
 ## How the binary learns its version
 
