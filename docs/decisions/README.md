@@ -567,6 +567,24 @@ other entry below is Accepted.
   archived, and carries five open items. Amends ADR-0020 decision 4 and closes
   its open item 1.
 
+- **ADR-0032 — Byte streams.** _Proposed._ Eight decisions: the use case is a
+  file or document of unknown size, downloaded or uploaded and read or written
+  as I/O; no syntax and no kind are added: a bare `bytes` stream element
+  (`<bytes>`) is a byte stream whose chunk boundaries are not part of the
+  contract and are chosen by the transport, each chunk at most the payload
+  ceiling of the interaction's kind, and the element has no bound, so typl's
+  `[0..256]` default and TYPL-103 do not apply in that position; `<string>` is a
+  UTF-8 text stream whose chunks never split a code point; a named element type
+  keeps its meaning, a stream of bounded messages; metadata (content type, size,
+  digest) is an ordinary typed value, a size is a hint and resume is an `offset`
+  parameter; the intended generated surface is a reader and a writer per target
+  (Rust `AsyncRead`/`AsyncWrite` or `Stream`/`Sink`, TypeScript
+  `ReadableStream`/`WritableStream`, Kotlin
+  `Flow`/`InputStream`/`OutputStream`); framing, buffering, backpressure and
+  chunk size stay transport concerns; and ADR-0030 decision 11 names both forms
+  of a stream. Six open questions, among them a target without `std`. Not built
+  (driftsys/ridl#336).
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
 constrains it to four family members rather than five.
