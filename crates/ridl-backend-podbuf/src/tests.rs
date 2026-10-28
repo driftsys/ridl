@@ -72,3 +72,29 @@ fn a_type_above_the_limits_is_refused_naming_it() {
     let err = generate_fixture_err(TOO_LARGE);
     assert!(err.message.contains("`limits.Huge`"), "{}", err.message);
 }
+
+/// A model whose tuple members carry no name — one written before
+/// `position_name` existed — names them by position.
+#[test]
+fn a_tuple_member_with_no_name_is_named_by_its_position() {
+    let package = compile(
+        "package q\n\
+         struct S {\n  t : (a: integer [0..255], b: integer [0..255])\n}\n",
+    );
+    let mut model = ridl_ir::codegen::lower(&package, &[]);
+    let projection = model.podbuf.as_mut().expect("a projection");
+    for head in &mut projection.heads {
+        for field in &mut head.fields {
+            if let Some(source) = field.source.as_mut() {
+                source.position_name.clear();
+            }
+        }
+    }
+    let h = crate::generate_model(&package, &[], &model)
+        .expect("generate")
+        .header_source;
+    assert!(h.contains("_Alignas(8) uint8_t f1;"), "{h}");
+    assert!(h.contains("\n  uint8_t f2;"), "{h}");
+    assert!(!h.contains("uint8_t a;"), "{h}");
+    assert!(h.contains("q_st_f2_at("), "{h}");
+}

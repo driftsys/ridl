@@ -165,6 +165,42 @@ fn member_name(declared: &str) -> String {
     }
 }
 
+/// Whether the typl names of the tuple members of `head`, spelled as C
+/// members, would clash in a way the header refuses: two members equal under
+/// [`member_name`] (`minSpeed` and `min_speed`), or a member equal to the
+/// presence test `has_<member>` of an optional member (`hasX` next to `x?`).
+/// Such a head names its members by position instead. The decision reads the
+/// head's own fields only, so the header that declares the tuple and a header
+/// that lays it out inline make the same choice. The names are compared
+/// without the trailing underscore of a reserved word, as the accessor names
+/// are built.
+fn spelled_tuple_names_clash(head: &v1::PodbufHead) -> bool {
+    use v1::podbuf_source::Kind;
+    let members: Vec<(String, bool)> = head
+        .fields
+        .iter()
+        .filter_map(|field| {
+            let source = field.source.as_ref()?;
+            if !matches!(source.kind, Some(Kind::Position(_))) || source.position_name.is_empty() {
+                return None;
+            }
+            let spelled = member_name(&source.position_name);
+            Some((
+                spelled.trim_end_matches('_').to_string(),
+                field.optional.is_some(),
+            ))
+        })
+        .collect();
+    let mut seen = HashSet::new();
+    let repeated = members.iter().any(|(name, _)| !seen.insert(name.as_str()));
+    let presence = members.iter().any(|(name, _)| {
+        members
+            .iter()
+            .any(|(other, optional)| *optional && *name == format!("has_{other}"))
+    });
+    repeated || presence
+}
+
 /// `veh.cluster` as `veh_cluster`: each segment in snake case.
 fn package_prefix(dotted: &str) -> String {
     dotted
@@ -216,6 +252,9 @@ struct Header<'a> {
     prefix: String,
     /// The C type name of each head.
     type_names: Vec<String>,
+    /// Whether each head names its tuple members by position: see
+    /// [`spelled_tuple_names_clash`].
+    positional: Vec<bool>,
 }
 
 impl<'a> Header<'a> {
@@ -230,6 +269,7 @@ impl<'a> Header<'a> {
             heads,
             prefix,
             type_names: Vec::new(),
+            positional: heads.iter().map(spelled_tuple_names_clash).collect(),
         };
         header.type_names = (0..heads.len()).map(|at| header.type_name(at)).collect();
         header
@@ -399,8 +439,10 @@ impl<'a> Header<'a> {
         use v1::podbuf_head::Source as Owner;
         use v1::podbuf_source::Kind;
         let head = &self.heads[at];
-        let source = field.source.as_ref();
-        match source.and_then(|source| source.kind.as_ref()) {
+        let Some(source) = field.source.as_ref() else {
+            return format!("_field{}", field.offset);
+        };
+        match source.kind.as_ref() {
             Some(Kind::Field(named)) => member_name(&named.name),
             Some(Kind::Flags(index)) => format!("_flags{index}"),
             Some(Kind::Tag(_)) => "tag".to_string(),
@@ -410,12 +452,16 @@ impl<'a> Header<'a> {
             },
             // A tuple member is named by its typl name, which the model
             // carries next to the position for the tuple of another package
-            // too. A model written before `position_name` existed leaves it
-            // empty, and the member falls back to its position.
-            Some(Kind::Position(position)) => match source.map(|s| s.position_name.as_str()) {
-                Some(name) if !name.is_empty() => member_name(name),
-                _ => format!("f{position}"),
-            },
+            // too. The member falls back to its position when the head's
+            // spelled names clash ([`spelled_tuple_names_clash`]), or when a
+            // model written before `position_name` existed leaves it empty.
+            Some(Kind::Position(position)) => {
+                if self.positional[at] || source.position_name.is_empty() {
+                    format!("f{position}")
+                } else {
+                    member_name(&source.position_name)
+                }
+            }
             Some(Kind::Key(_)) => "key".to_string(),
             Some(Kind::Value(_)) => "value".to_string(),
             None => format!("_field{}", field.offset),
