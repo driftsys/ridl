@@ -307,7 +307,7 @@ and no header.
 
 **The `[backend.<name>]` tables** (amended 2026-10-10, driftsys/ridl#801;
 amended 2026-10-22) hold two keys per backend. `encodings` is an array of the
-encoding names the toolchain knows, `flatbuffers`, `proto3` and `repr-c`, which
+encoding names the toolchain knows, `flatbuffers`, `proto3` and `podbuf`, which
 the backend named by `<name>` emits beside the types. `wasm` is a boolean, false
 when absent, that asks the backend for the `wasm` module of the generated crate;
 the Rust backend reads it and requires `encodings` to name `flatbuffers`, and a

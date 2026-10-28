@@ -10,6 +10,7 @@ use ridl_descriptor::{
     verify,
 };
 use ridl_ir::projection::flatbuffers::{Packages, max_size};
+use ridl_ir::projection::podbuf;
 use ridl_ir::v2::{
     ArrayType, Backing, CommandDef, Constraint, Decl, EventDef, Field, FieldType, FixedDef,
     IntWidth, Interface, MapType, Package, Param, PrimitiveType, QueryDef, Reserved,
@@ -268,6 +269,22 @@ fn point_fb_bound(package: &Package) -> u32 {
     .unwrap()
 }
 
+/// The podbuf bound of `Point`, from the podbuf projection.
+fn point_podbuf_bound(package: &Package) -> u32 {
+    let decl = package.decls.iter().find(|d| d.name == "Point").unwrap();
+    u32::try_from(
+        podbuf::max_size(
+            Packages {
+                package,
+                others: &[],
+            },
+            decl,
+        )
+        .unwrap(),
+    )
+    .unwrap()
+}
+
 #[test]
 fn the_descriptor_carries_every_member_of_every_kind() {
     let bytes = lower_one(&package()).unwrap();
@@ -391,7 +408,7 @@ fn rows(
 }
 
 #[test]
-fn a_named_type_payload_has_a_row_per_sized_encoding_and_no_repr_c() {
+fn a_named_type_payload_has_a_row_per_sized_encoding() {
     let package = package();
     let bytes = lower_one(&package).unwrap();
     let catalog = verify(&bytes).unwrap();
@@ -412,6 +429,12 @@ fn a_named_type_payload_has_a_row_per_sized_encoding_and_no_repr_c() {
                 Encoding::FlatBuffers,
                 SizeStateTag::Bounded,
                 point_fb_bound(&package),
+                UnboundedCause::Unspecified
+            ),
+            (
+                Encoding::Podbuf,
+                SizeStateTag::Bounded,
+                point_podbuf_bound(&package),
                 UnboundedCause::Unspecified
             ),
         ]
@@ -449,6 +472,12 @@ fn a_request_of_one_named_parameter_is_sized_and_of_several_is_absent() {
                 Encoding::FlatBuffers,
                 SizeStateTag::Bounded,
                 point_fb_bound(&package),
+                UnboundedCause::Unspecified
+            ),
+            (
+                Encoding::Podbuf,
+                SizeStateTag::Bounded,
+                point_podbuf_bound(&package),
                 UnboundedCause::Unspecified
             ),
         ]
@@ -608,6 +637,41 @@ fn timing_is_carried_when_declared_and_absent_otherwise() {
     );
 }
 
+/// The limit of the member `name` of the `Vehicle` interface, as the reader
+/// returns it.
+fn limit_of(bytes: &[u8], name: &str) -> Option<u32> {
+    let catalog = verify(bytes).unwrap();
+    let member = vehicle(catalog)
+        .members()
+        .unwrap()
+        .iter()
+        .map(Result::unwrap)
+        .find(|m| m.name().unwrap() == name)
+        .unwrap();
+    member.limit().unwrap()
+}
+
+#[test]
+fn a_declared_limit_reaches_the_member() {
+    let mut package = package();
+    let command = package.interfaces[0]
+        .interactions
+        .iter_mut()
+        .find(|d| d.name == "moveTo")
+        .unwrap();
+    command.limit = Some(64);
+    let bytes = lower_one(&package).unwrap();
+    assert_eq!(limit_of(&bytes, "moveTo"), Some(64));
+    // Only the member the limit was given to carries one.
+    assert_eq!(limit_of(&bytes, "nearest"), None);
+}
+
+#[test]
+fn an_unset_limit_is_absent() {
+    let bytes = lower_one(&package()).unwrap();
+    assert_eq!(limit_of(&bytes, "moveTo"), None);
+}
+
 #[test]
 fn a_stream_response_has_absent_sizes_and_a_spelled_type_name() {
     // Driver §4 answer 10: no `stream` flag, no per-element bound yet (#336).
@@ -726,6 +790,12 @@ fn a_query_response_of_one_named_type_is_sized() {
                 point_fb_bound(&package),
                 UnboundedCause::Unspecified
             ),
+            (
+                Encoding::Podbuf,
+                SizeStateTag::Bounded,
+                point_podbuf_bound(&package),
+                UnboundedCause::Unspecified
+            ),
         ]
     );
 }
@@ -789,6 +859,12 @@ fn a_payload_from_another_package_is_sized_and_hashed_through_others() {
                 Encoding::FlatBuffers,
                 SizeStateTag::Bounded,
                 point_fb_bound(&geo),
+                UnboundedCause::Unspecified
+            ),
+            (
+                Encoding::Podbuf,
+                SizeStateTag::Bounded,
+                point_podbuf_bound(&geo),
                 UnboundedCause::Unspecified
             ),
         ]
@@ -1057,6 +1133,12 @@ fn a_subpackage_payload_is_sized_in_its_own_package() {
                 point_fb_bound(&root),
                 UnboundedCause::Unspecified
             ),
+            (
+                Encoding::Podbuf,
+                SizeStateTag::Bounded,
+                point_podbuf_bound(&root),
+                UnboundedCause::Unspecified
+            ),
         ],
         "the root row is sized in `u`"
     );
@@ -1073,6 +1155,12 @@ fn a_subpackage_payload_is_sized_in_its_own_package() {
                 Encoding::FlatBuffers,
                 SizeStateTag::Bounded,
                 point_fb_bound(&cluster),
+                UnboundedCause::Unspecified
+            ),
+            (
+                Encoding::Podbuf,
+                SizeStateTag::Bounded,
+                point_podbuf_bound(&cluster),
                 UnboundedCause::Unspecified
             ),
         ],

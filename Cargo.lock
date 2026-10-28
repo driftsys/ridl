@@ -1999,6 +1999,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ridl-backend-podbuf"
+version = "0.14.0"
+dependencies = [
+ "insta",
+ "ridl-core",
+ "ridl-ir",
+ "ridlc",
+ "tempfile",
+]
+
+[[package]]
 name = "ridl-backend-proto"
 version = "0.14.0"
 dependencies = [
@@ -2259,6 +2270,7 @@ dependencies = [
  "pulldown-cmark",
  "regex",
  "ridl-backend-flatbuffers",
+ "ridl-backend-podbuf",
  "ridl-backend-proto",
  "ridl-backend-rust",
  "ridl-backend-ts",

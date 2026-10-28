@@ -269,6 +269,14 @@ small is `TranscodeError::Encode` with `EncodeError::Capacity`, and bytes that
 do not verify are `TranscodeError::Verify`. A function exists only where
 the type has a `Payload` implementation under both encodings of the pair.
 
+A podbuf buffer starts on an 8-byte boundary. A caller passes an
+`out` for a podbuf target, and `bytes` for a podbuf source, that starts on one:
+the type's `<T as Payload<Podbuf>>::BUFFER` is an `Aligned` array, and
+`ridl_rt::podbuf::Aligned` wraps any other array. An `out` that is not aligned
+is `EncodeError::Unaligned`, and `bytes` that are not aligned do not verify.
+A map is written in key order, so a value whose map is in another order
+decodes from a podbuf source in key order.
+
 ## Cargo features
 
 The generated `Cargo.toml` declares two features, both on by default:
@@ -302,8 +310,8 @@ veh_cabin = { path = "generated", default-features = false }
 ```
 
 The generated crate depends on `ridl-rt` with one feature per encoding that the
-manifest names under `[backend.rust] encodings` — `flatbuffers`, `proto3`, or
-both, which the codecs need — and no feature for a types-only build. An application that names `ridl-rt` itself, for example to use
+manifest names under `[backend.rust] encodings` — `flatbuffers`, `proto3`,
+`podbuf`, or a combination, which the codecs need — and no feature for a types-only build. An application that names `ridl-rt` itself, for example to use
 `ridl_rt::task::noop_waker` or the error types, selects from its features:
 
 | `ridl-rt` feature | Default | Enables                                                                                                                                                                           |
@@ -311,7 +319,7 @@ both, which the codecs need — and no feature for a types-only build. An applic
 | `flatbuffers`     | off     | The `flatbuffers` module the generated codec calls.                                                                                                                               |
 | `std`             | off     | The standard library; the `task` module: `block_on`, `noop_waker` and `flag_waker`; the `face::Timeout` trait; and the propagation hook of the `trace` module, `set_propagation`. |
 | `proto3`          | off     | The `proto3` module the generated proto3 codec calls.                                                                                                                             |
-| `repr-c`          | off     | Nothing yet. It names the `repr(C)` encoding.                                                                                                                                     |
+| `podbuf`          | off     | The `podbuf` module the generated podbuf codec calls: the preamble check, the in-place reads, the writer and the `Aligned` buffer type.                                          |
 
 `ridl-rt` has no dependency in any feature combination. It builds for `wasm32`,
 and its minimum Rust version is 1.88. The generated crate declares edition 2021

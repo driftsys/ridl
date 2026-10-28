@@ -23,6 +23,7 @@ fn member(ordinal: u32, kind: ridl_descriptor::Kind, max_us: Option<&str>) -> Me
                 max_us: Some(max.to_owned()),
             })
         }),
+        limit: None,
     }
 }
 
@@ -87,6 +88,16 @@ fn a_descriptor_gives_the_members_their_kinds_and_bounds_and_no_entry_for_reserv
     assert_eq!(t.member(InterfaceNo(9), Ordinal(1)), None);
     assert_eq!(t.len(), 5);
     assert_eq!(t.compatible(), &[CatalogHash([6; 32])]);
+}
+
+#[test]
+fn each_members_limit_is_read_and_an_absent_one_is_none() {
+    let bytes = descriptor_with(|c| c.interfaces[0].members[0].limit = Some(64));
+    let t = MemberTable::from_descriptor(&bytes).unwrap();
+    let i = InterfaceNo(1);
+    assert_eq!(t.limit(i, Ordinal(1)), Some(64));
+    assert_eq!(t.limit(i, Ordinal(2)), None);
+    assert_eq!(t.limit(InterfaceNo(9), Ordinal(1)), None);
 }
 
 #[test]

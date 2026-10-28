@@ -94,21 +94,29 @@ fn struct_default(ctx: &Ctx, name: &str, sd: &v1::Struct) -> Option<TokenStream>
     let mut inits = Vec::new();
     for slot in &sd.slots {
         if let Some(v1::slot::Occupant::Field(field)) = slot.occupant.as_ref() {
-            let ft = field.r#type.as_ref()?;
             // The same projection `emit_field` applies, or the initializer
             // names a field the struct does not have (ADR-0016 decision 2).
             let fname = ident(snake_of(field.name.as_ref()));
-            let init = field.init.as_ref();
-            let slot = Slot {
-                init_value: init.and_then(|i| i.value.as_deref()),
-                declared_init: field.declared_init.as_deref(),
-                flag: Some(init.is_some_and(|i| i.one_level)),
-            };
-            let expr = slot_default(ctx, ft, &slot)?;
+            let expr = field_default_expr(ctx, field)?;
             inits.push(quote! { #fname: #expr });
         }
     }
     Some(quote! { #name_id { #(#inits),* } })
+}
+
+/// The init value of one struct field as an expression of the field's Rust
+/// type (typl §5.8), or `None` when the position is not constructible. Read
+/// by the struct's `Default` body, and by the podbuf encoder, which writes a
+/// deprecated field as its init value.
+pub(crate) fn field_default_expr(ctx: &Ctx, field: &v1::Field) -> Option<TokenStream> {
+    let ft = field.r#type.as_ref()?;
+    let init = field.init.as_ref();
+    let slot = Slot {
+        init_value: init.and_then(|i| i.value.as_deref()),
+        declared_init: field.declared_init.as_deref(),
+        flag: Some(init.is_some_and(|i| i.one_level)),
+    };
+    slot_default(ctx, ft, &slot)
 }
 
 /// The `Default` body for one generated tuple struct (typl §11). Tuple fields

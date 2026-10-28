@@ -67,6 +67,36 @@ fn compile_crate_root(dir: &Path) {
     );
 }
 
+/// [`compile_crate_root`] with every warning denied.
+fn compile_crate_root_denying_warnings(dir: &Path) {
+    let rlib_dir = tempfile::tempdir().expect("a temp dir is created");
+    let rlib = support::ridl_rt_rlib(rlib_dir.path());
+    let output = std::process::Command::new("rustc")
+        .current_dir(dir)
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+            "-D",
+            "warnings",
+            "-o",
+        ])
+        .arg(dir.join("out.rmeta"))
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg("lib.rs")
+        .output()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        output.status.success(),
+        "the emitted crate root must compile without a warning, rustc said:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 /// Every file named by a `#[path = "…"]` attribute in a generated crate root,
 /// in the order they appear. The inline-module anchor `#[path = "."]` is not
 /// one: it names the output directory, not a file.
@@ -175,6 +205,78 @@ fn rust_emit_writes_a_compiling_crate() {
 
     let lib = std::fs::read_to_string(out.path().join("lib.rs")).unwrap();
     assert!(lib.contains("pub mod veh"), "lib.rs was:\n{lib}");
+}
+
+/// The `ridl-rt` dependency of the emitted manifest names one feature per
+/// encoding of the package's `[backend.rust] encodings` list, in list order:
+/// `podbuf` is a name like the other two, and the generated codec needs the
+/// module it enables.
+#[test]
+fn the_emitted_manifest_enables_the_podbuf_feature_when_named() {
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(
+        Path::new("tests/corpus/veh-cluster"),
+        out.path(),
+        &[Emit::Rust],
+        false.into(),
+    )
+    .expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+    let text = std::fs::read_to_string(out.path().join("Cargo.toml")).unwrap();
+    let manifest: toml::Table = text.parse().expect("the manifest parses");
+    let features: Vec<&str> = manifest["dependencies"]["ridl-rt"]["features"]
+        .as_array()
+        .expect("ridl-rt names features")
+        .iter()
+        .map(|feature| feature.as_str().expect("a feature is a string"))
+        .collect();
+    assert_eq!(features, ["flatbuffers", "proto3", "podbuf"]);
+}
+
+/// The crate `ridl build` emits for `veh-cluster`, whose manifest lists
+/// `podbuf` beside the other two encodings, compiles with every warning
+/// denied. The podbuf codec's head structs, views, verifiers and decoders are
+/// reached from a `Payload<Podbuf>` implementation or marked as the code of an
+/// internal declaration, so none is dead code, and every interface's
+/// `Sizes<Podbuf>` table names a payload bound that exists.
+#[test]
+fn the_emitted_veh_cluster_crate_with_podbuf_compiles_without_a_warning() {
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(
+        Path::new("tests/corpus/veh-cluster"),
+        out.path(),
+        &[Emit::Rust],
+        false.into(),
+    )
+    .expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+    // Whitespace is dropped before the match: the emitted source is
+    // formatted, and a long `impl` header wraps across lines.
+    let source: String = emitted_package_sources(out.path())
+        .iter()
+        .map(|name| std::fs::read_to_string(out.path().join(name)).expect("a package file"))
+        .collect::<String>()
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect();
+    for marker in [
+        "impl::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf>forFaultPage",
+        "::ridl_rt::contract::Sizes<::ridl_rt::encoding::Podbuf>forWheelHistory",
+    ] {
+        assert!(
+            source.contains(marker),
+            "the emitted crate must contain `{marker}`, or this proof compiles nothing"
+        );
+    }
+    compile_crate_root_denying_warnings(out.path());
 }
 
 /// What `ridl build --emit rust` relies on for a field whose type another

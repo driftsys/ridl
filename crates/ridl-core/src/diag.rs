@@ -836,6 +836,45 @@ diag_codes! {
         RIDL_152 = "RIDL-152", Error,
             "a `[limits]` entry names no interaction of its unit";
 
+        /// A struct, tuple or union whose largest podbuf encoding, computed
+        /// from its declared bounds, is above `u32::MAX` bytes, because a
+        /// `u32` offset cannot address all of it. A tuple is the argument
+        /// struct a call with several parameters induces, or a tuple reply,
+        /// reported on the interaction. Error; as an error code it has no
+        /// name and no level. Emitted by `ridlc` when a `[backend.<name>]`
+        /// table enables `podbuf`. The message names the type, or the
+        /// interaction's request or reply.
+        RIDL_153 = "RIDL-153", Error,
+            "type too large for podbuf";
+
+        /// A field whose array or map declares more than 65,535 elements, or
+        /// whose element or entry is larger than 65,535 bytes, because the
+        /// podbuf descriptor records the count and the element size as
+        /// `u16`. Error; as an error code it has no name and no level.
+        /// Emitted by `ridlc` when a `[backend.<name>]` table enables
+        /// `podbuf`, on the field. The message names the type and the field.
+        RIDL_154 = "RIDL-154", Error,
+            "array or map exceeds the podbuf descriptor limits";
+
+        /// A non-optional field marked `@deprecated` whose init value is
+        /// neither declared nor derivable and whose type excludes 0, so the
+        /// podbuf encoder has no valid value to write for it. Error; as an
+        /// error code it has no name and no level. Emitted by `ridlc` when a
+        /// `[backend.<name>]` table enables `podbuf`, on the field. The
+        /// message names the type and the field.
+        RIDL_155 = "RIDL-155", Error,
+            "deprecated field has no valid podbuf value";
+
+        /// A struct whose declared field order lays out in a larger podbuf
+        /// head than the same fields sorted by descending alignment, and that
+        /// no published baseline declares. Info. Raised by `ridl check` only
+        /// when a `[backend.<name>]` table enables `podbuf`. The message names
+        /// both head sizes and the saving order. A field order is wire
+        /// identity once published, so the lint speaks before the first
+        /// release.
+        RIDL_156 = "RIDL-156", Info,
+            "struct field order wastes podbuf padding", lint = "podbuf-padding-order";
+
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker.
         RIDL_201 = "RIDL-201", Error,
@@ -1416,7 +1455,7 @@ diag_codes! {
         /// `[backend.<name>] encodings` is malformed: `backend` or
         /// `[backend.<name>]` is not a table, `encodings` is not an array of
         /// strings, an element is not one of `flatbuffers`, `proto3` and
-        /// `repr-c`, or an element repeats. The message names the offending
+        /// `podbuf`, or an element repeats. The message names the offending
         /// value and lists the known names. A `wasm` that is not a boolean is
         /// MANI-015 too, and its message names the value. So is a `[limits]`
         /// value that is not a table where a table is expected, or not an
@@ -2401,6 +2440,7 @@ mod tests {
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),
             ("RIDL-150", "payload-above-ceiling"),
+            ("RIDL-156", "podbuf-padding-order"),
             ("RIDL-304", "error-typed-parameter"),
             ("RIDL-305", "ensure-without-result"),
             ("RIDL-307", "contract-error-name-in-enum"),

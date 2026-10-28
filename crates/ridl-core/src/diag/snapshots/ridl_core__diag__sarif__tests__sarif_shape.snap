@@ -845,6 +845,43 @@ expression: log
               }
             },
             {
+              "id": "RIDL-153",
+              "shortDescription": {
+                "text": "type too large for podbuf"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-154",
+              "shortDescription": {
+                "text": "array or map exceeds the podbuf descriptor limits"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-155",
+              "shortDescription": {
+                "text": "deprecated field has no valid podbuf value"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RIDL-156",
+              "name": "podbuf-padding-order",
+              "shortDescription": {
+                "text": "struct field order wastes podbuf padding"
+              },
+              "defaultConfiguration": {
+                "level": "note"
+              }
+            },
+            {
               "id": "RIDL-201",
               "shortDescription": {
                 "text": "stream `<T>` on a `signal` or `event` payload"
@@ -1794,7 +1831,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 175,
+          "ruleIndex": 179,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

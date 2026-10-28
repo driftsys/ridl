@@ -206,11 +206,13 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/lower.rs",
-        lines: 5,
+        lines: 6,
         why: "the `vehicle()` helper and three tests, each reading the catalog \
               descriptor's own `Catalog.interfaces` field back out of a \
-              buffer, and a test that zeroes the number of the one interface \
-              its package declares; the lowering itself walks `shapes()`",
+              buffer, a test that zeroes the number of the one interface its \
+              package declares, and a test that sets a limit on the one \
+              command of the IR package it lowers; the lowering itself walks \
+              `shapes()`",
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/round_trip.rs",
@@ -221,8 +223,8 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/verify.rs",
-        lines: 1,
-        why: "a test case naming the catalog descriptor's own `Catalog.interfaces` \
+        lines: 2,
+        why: "test cases naming the catalog descriptor's own `Catalog.interfaces` \
               field, not a read of `Package::interfaces`",
     },
     Allowed {
@@ -234,7 +236,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-transport-ws/tests/descriptor.rs",
-        lines: 7,
+        lines: 8,
         why: "a test fixture building and editing the owned descriptor \
               `Catalog.interfaces` field, not a read of `Package::interfaces`",
     },
@@ -440,12 +442,13 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/tests.rs",
-        lines: 6,
+        lines: 7,
         why: "a test mutating one fixture interface, two lines in the \
               name-stability test indexing into the single fixture interface \
-              both the old and new packages share, and three lines in the \
+              both the old and new packages share, three lines in the \
               doc-field tests editing the single fixture interface or its \
-              one interaction",
+              one interaction, and one line in the podbuf inline-use tests \
+              setting a fixture package's named interfaces",
     },
     Allowed {
         path: "crates/ridl-diff/src/unit_verdict.rs",

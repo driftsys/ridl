@@ -25,12 +25,12 @@ every section below cites for the contract it implements.
 Nine modules, each public item living in exactly one (ADR-0020 decision 5;
 `error` renamed from that decision's original `strata`, amended in place
 2026-09-13; `correlate` added by ADR-0021 decision 15; `face` by ADR-0021
-decision 19; `trace` by ADR-0021 decision 21), plus three that a cargo feature
+decision 19; `trace` by ADR-0021 decision 21), plus four that a cargo feature
 adds:
 
 | Module        | Contents                                                                                                                                                                                                                                                                        |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `ReprC`                                                                                                                                                                                                                           |
+| `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `Podbuf`                                                                                                                                                                                                                          |
 | `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`, `TranscodeError`, `transcode`                                                                                                                                       |
 | `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                                    |
 | `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `Sizes<E>`, `reservation`, `table_budget`                                           |
@@ -41,6 +41,7 @@ adds:
 | `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                                     |
 | `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter                        |
 | `proto3`      | under the feature of the same name, since 2026-10-20: `WireType`, `Value`, `Field`, `Reader`, `Writer`, `Verified`, `varint_len`, `tag_len`, the zigzag functions, `check_capacity`, `read_varint`, `narrow_u32`, `narrow_i32`, `unzigzag32_checked`, `utf8`                    |
+| `podbuf`      | under the feature of the same name: `PREAMBLE_SIZE`, `Preamble`, `Region`, `Desc`, `ArrayDesc`, `tail_range`, `text`, `scalar_count`, `Writer`, `Aligned`                                                                                                                       |
 | `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                           |
 
 Generated code names every item by its full path and imports none, because
@@ -190,8 +191,8 @@ per core encoding, which the Rust backend filled in its `flatbuffers` column
 only, so a reservation in any other encoding was a run-time `Unsized`. The table
 replaced the row so that an encoding the package does not carry is a compile
 error instead. A consumer that needs to know which encodings a payload has asks
-the catalog descriptor. The `repr(C)` layout is still undefined
-(driftsys/ridl#317), so no backend emits a `Sizes<ReprC>` table.
+the catalog descriptor. The Rust backend emits a `Sizes<Podbuf>` table for a
+package whose `encodings` list names `podbuf`.
 
 Not carried by a descriptor: the toolchain version (not identity), retired
 interfaces and reserved ordinals (a runtime answers
@@ -330,8 +331,8 @@ pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64;
   Every item is a const expression over `<T as Payload<E>>::MAX_SIZE`, never a
   number, so a table cannot drift from its codec; an encoding the package does
   not carry has no table, so naming it is a compile error at the call site
-  (`Cabin: Sizes<ReprC>` is not satisfied, because no backend emits a `repr(C)`
-  codec), not a run-time error. `RESERVATIONS` is one row per member of
+  (`Cabin: Sizes<Podbuf>` is not satisfied, because the package does not list
+  `podbuf`), not a run-time error. `RESERVATIONS` is one row per member of
   `Interface::MEMBERS`, in order: the sum, as a `u64`, of `MAX_SIZE` over the
   member's payloads — the request then the reply for a query, `0` for a fixed,
   which is never in flight. The codegen model's `Interaction.reservation` and
@@ -377,7 +378,7 @@ pub trait Encoding: sealed::Sealed + 'static {
 }
 pub struct FlatBuffers; // NAME = "flatbuffers"
 pub struct Proto3;      // NAME = "proto3"
-pub struct ReprC;        // NAME = "repr-c"
+pub struct Podbuf;        // NAME = "podbuf"
 
 pub trait Payload<E: Encoding>: Sized {
     const MAX_SIZE: usize;
@@ -403,11 +404,12 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
     pub fn decode(self) -> T;                                     // calls T::decode
 }
 
-#[non_exhaustive] pub enum EncodeError { Capacity { needed: usize, available: usize } }
+#[non_exhaustive] pub enum EncodeError { Capacity { needed: usize, available: usize }, Contract(Violation), Unaligned, Layout { at: usize } }
 #[non_exhaustive] pub enum VerifyError { Structure(Malformed), Contract(Violation) }
 #[non_exhaustive] pub enum Malformed {
     OutOfBounds, Unaligned, MissingRequired, Utf8, Union, TooDeep, TooManyTables, TooLarge,
     Varint, WireType, Duplicate, // the proto3 codec's, since 2026-10-20
+    Preamble, Stride, Terminator, KeyOrder, // the podbuf codec's
 }
 pub struct Violation { pub type_name: Option<&'static str>, pub rule: Rule }
 #[non_exhaustive] pub enum Rule { Range, Step, Length, Pattern, Variant, Unique }
@@ -429,15 +431,32 @@ is not repeated written twice, or a union message with two arms. The rustdoc of
 `Duplicate` states that refusing it deviates on purpose from protobuf's "last
 one wins" and merge rules ([the proto3 codec record](proto3-codec.md)).
 
-`Encoding` is sealed: `FlatBuffers`, `Proto3` and `ReprC` are the only encodings
-a payload type can implement, and the marker types carry no cargo feature of
-their own, so a runtime can name every encoding without linking a codec. `Ref`'s
-fields are private, and `Ref::verify` and `Ref::encode` are the only functions
-that build one — each calls the generated `Payload::verify` or `Payload::encode`
-and wraps the result — so `Payload::decode` is reachable only with a proof that
-the bytes were checked or that the crate's own encoder wrote them, and code ridl
-emits needs no `unsafe` to decode. `Ref::encode` delegates constraint checks to
-`Payload::encode` and performs no additional verification; the
+`Malformed::Preamble`, `Stride`, `Terminator` and `KeyOrder` belong to the
+podbuf codec and are not gated by a feature either. `Preamble` is a buffer
+shorter than its 8-byte preamble or a `head_size` that is not a multiple of 8 or
+reaches past the buffer; `Stride` is an array or map `elem_size` that its
+element type does not allow; `Terminator` is a string without its closing NUL or
+with a NUL inside; `KeyOrder` is map keys that do not strictly increase. A
+string that is not UTF-8 reuses `Utf8`.
+
+`EncodeError::Unaligned` and `EncodeError::Layout { at }` belong to the podbuf
+writer. `Unaligned` is an output buffer that does not start on an 8-byte
+boundary. `Layout` is a defect of the generated encoder: a head size that is not
+a multiple of 8 (`at` is the size), or a store outside the written bytes (`at`
+is the offset of the first one, reported by `Writer::finish`; a debug build
+panics at the store). Neither is `Capacity`, because a larger buffer does not
+repair them.
+
+`Encoding` is sealed: `FlatBuffers`, `Proto3` and `Podbuf` are the only
+encodings a payload type can implement, and the marker types carry no cargo
+feature of their own, so a runtime can name every encoding without linking a
+codec. `Ref`'s fields are private, and `Ref::verify` and `Ref::encode` are the
+only functions that build one — each calls the generated `Payload::verify` or
+`Payload::encode` and wraps the result — so `Payload::decode` is reachable only
+with a proof that the bytes were checked or that the crate's own encoder wrote
+them, and code ridl emits needs no `unsafe` to decode. `Ref::encode` delegates
+constraint checks to `Payload::encode` and performs no additional verification;
+the
 [FlatBuffers codec record](flatbuffers-codec.md#encode-verify-decode-max_size)
 describes its sender checks. The receiver checks received constraints through
 `verify`. The closed encoding set and the proof-type design are ADR-0021
@@ -473,7 +492,7 @@ may replace it with one that gives the same result.
 ## Features, `no_std`, `alloc` and `wasm32`
 
 The crate root carries `#![no_std]` and `#![forbid(unsafe_code)]`, with no
-`extern crate alloc`. The three features `flatbuffers`, `proto3` and `repr-c`
+`extern crate alloc`. The three features `flatbuffers`, `proto3` and `podbuf`
 name the payload encodings, and the crate has no dependency in any feature
 combination — decided in ADR-0021 decision 8. `just wasm-check` covers
 `-p ridl-rt`, because a package's generated Rust links this crate and is
@@ -497,8 +516,16 @@ after its first error, the narrowing of a varint to the scalar its field
 declares, and `Verified<'a>`, the view a generated proto3 `verify` returns,
 which holds the verified bytes and has no accessors. Like `flatbuffers`, it
 decides no layout: it is handed field numbers, wire types and scalars. It takes
-no dependency and allocates nothing. `repr-c` remains empty. What a generated
-proto3 codec does with the module is [the proto3 codec record](proto3-codec.md).
+no dependency and allocates nothing. What a generated proto3 codec does with the
+module is [the proto3 codec record](proto3-codec.md).
+
+**`podbuf`** gates the `podbuf` module: the preamble check, `Region`, a window
+that reads 0 past the size the producer wrote, the two descriptor layouts, the
+bounds and alignment check of a descriptor's data (`tail_range`, with checked
+arithmetic), the string checks, `Writer`, which fills the caller's slice, zeroes
+what it reserves and reports a store outside the written bytes, and `Aligned`,
+an 8-byte aligned array wrapper. It decides no layout, takes no dependency,
+allocates nothing, and holds a `compile_error!` for a big-endian target.
 
 **Since 2026-09-25 a fourth feature, `std`, exists, off by default.** It is not
 an encoding: it links the standard library and gates the `task` module, whose
@@ -668,7 +695,7 @@ Each transport's default and its override:
 | ----------------------------- | ----------- | ---------------------------------------------------------- |
 | `ridl-loopback` (in process)  | FlatBuffers | `Loopback::<E>::with_encoding(catalog)`                    |
 | WebSocket (driftsys/ridl#265) | proto3      | `ws::connect_with::<E>(url)`; `ws::connect(url)` is proto3 |
-| shared memory (later)         | `repr(C)`   | likewise                                                   |
+| shared memory (later)         | `podbuf`    | likewise                                                   |
 
 The loopback row is built. The server side of the WebSocket row is built as
 `ridl-transport-ws`; its client side (`ws::connect`) and the shared-memory row
@@ -1003,7 +1030,7 @@ Streams (`stream`-typed fields) and `Inline` payloads; `Constrained` (nothing
 calls it in 0.1); `Family` (the IR carries no family field yet); `ServiceId`
 (dropped, ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's
 wire tag values — the frame specification fixed the values, 1 FlatBuffers, 2
-proto3, 3 `repr(C)`; the constant itself is a later 0.x minor); `Access` (the
+proto3, 3 `podbuf`; the constant itself is a later 0.x minor); `Access` (the
 trust constant the Rust codegen generates once the rsdl lowering exists); the
 three payload codecs; the runtimes — `ridl-loopback` is its own crate
 ([its design record](ridl-loopback.md)) and `ridl-transport-ws` is its own

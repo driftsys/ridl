@@ -103,7 +103,7 @@ pub(crate) struct Session<B: Backend> {
     /// sends.
     message_limit: usize,
     /// The most bytes the kept responses may hold before the session closes
-    /// with 1008: the larger of the configured cap and the message limit.
+    /// with 1008.
     max_retained_bytes: usize,
     call_abandon_after: Duration,
     record: Option<Record>,
@@ -164,9 +164,7 @@ impl<B: Backend> Session<B> {
             occurrence_cap: limit - empty_occurrence.encoded_len(),
             reply_cap: limit - empty_reply.encoded_len(),
             message_limit: limit,
-            // The effective cap is never below the message limit, so that one
-            // response the limit admits never closes the session on its own.
-            max_retained_bytes: config.max_retained_bytes().max(limit),
+            max_retained_bytes: config.max_retained_bytes(),
             call_abandon_after: config.call_abandon_after,
             record: config.record(),
             attached: false,
@@ -738,7 +736,12 @@ impl<B: Backend> Session<B> {
     /// a settled call gets its response again, and a `seq` not above the
     /// highest seen that is neither is dropped and recorded. A new `seq` is
     /// sent to the backend, with no trace context; a send that fails is
-    /// answered at once.
+    /// answered at once. A member that the member table does not hold under
+    /// the request's kind is answered `contract(UnknownInteraction)`. Arguments
+    /// longer than the payload limit the table gives a command or a query are
+    /// answered `corrupt` without a call to the backend, and no note is recorded; the
+    /// response is kept like any other. A member with no limit, and a backend
+    /// with no member table, leave the message limit as the only bound.
     fn request(
         &mut self,
         target: Target,
@@ -774,6 +777,17 @@ impl<B: Backend> Session<B> {
                 receipt,
                 out,
             );
+        }
+        // Only a command or a query is answered; any other kind falls to the
+        // unknown-interaction answer below whatever the length.
+        let over_limit = matches!(target.kind, Kind::Command | Kind::Query)
+            && self
+                .backend
+                .members()
+                .and_then(|table| table.limit(target.iface, target.ord))
+                .is_some_and(|limit| payload.len() > limit as usize);
+        if over_limit {
+            return self.respond(target, seq, ResponseOutcome::Corrupt, stamp, receipt, out);
         }
         let ports = self.backend.ports();
         let sent = match target.kind {
@@ -819,8 +833,7 @@ impl<B: Backend> Session<B> {
     /// gives one (frame specification §7), and as one of the last 64
     /// otherwise. A `contract(InvalidValue)` whose rule the frame cannot
     /// carry is sent as `corrupt` and recorded. Returns a close with 1008
-    /// when the kept responses then pass the larger of
-    /// [`Config::max_retained_bytes`] and [`Config::max_message_bytes`]; the
+    /// when the kept responses then pass [`Config::max_retained_bytes`]; the
     /// response is still sent.
     fn respond(
         &mut self,
@@ -1129,8 +1142,7 @@ mod tests {
         Target,
     };
     use crate::server::{
-        Backend, Config, Described, MemberTable, Note, Polling, RetainedTooSmall, Scanning,
-        TableMismatch,
+        Backend, Config, Described, MemberTable, Note, Polling, Scanning, TableMismatch,
     };
 
     const CATALOG: CatalogRef = CatalogRef {
@@ -3677,6 +3689,171 @@ mod tests {
         let backend = Described::new(Scanning(rt), table()).unwrap();
         (Session::new(backend, &config(&notes)), provider, notes)
     }
+    // -- The payload limit of a member (ADR-0030 decision 15) ----------------
+
+    /// The test table with a payload limit of `limit` on `COMMAND`, and on
+    /// `QUERY` when `query` is set.
+    fn limited_table(limit: u32, query: bool) -> MemberTable {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, COMMAND.ord, limit));
+        if query {
+            assert!(t.set_limit(IFACE, QUERY.ord, limit));
+        }
+        t
+    }
+
+    /// Sends a request of `target` with `payload` and checks that the one
+    /// frame sent back is `corrupt` and that the backend saw no call.
+    fn assert_answered_corrupt(
+        s: &mut Session<Described<Scanning<Loopback>>>,
+        p: &mut Loopback,
+        target: Target,
+        seq: u64,
+        payload: &[u8],
+    ) -> Vec<u8> {
+        let (step, out) = send(s, &request(target, seq, payload));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(target, 0, 1, seq, ResponseOutcome::Corrupt)
+        );
+        p.serve(target.iface, &[target.ord]).unwrap();
+        let mut buf = [0; 64];
+        assert_eq!(p.next_claim(&mut buf).unwrap(), None);
+        out.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn a_request_above_its_members_limit_is_answered_corrupt() {
+        let (mut s, mut p, notes) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        assert_answered_corrupt(&mut s, &mut p, COMMAND, 1, &[1; 5]);
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_request_at_its_members_limit_reaches_the_backend() {
+        let (mut s, mut p, _n) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        let (step, out) = send(&mut s, &request(COMMAND, 1, &[1; 4]));
+        assert_eq!(step, Step::Continue);
+        assert!(out.is_empty());
+        assert_eq!(claim(&mut p, COMMAND).len, 4);
+    }
+
+    #[test]
+    fn a_query_above_its_members_limit_is_answered_corrupt() {
+        let (mut s, mut p, _n) = described_with(limited_table(4, true), |c| c);
+        open(&mut s);
+        assert_answered_corrupt(&mut s, &mut p, QUERY, 1, &[1; 5]);
+    }
+
+    #[test]
+    fn a_limit_of_zero_admits_only_empty_arguments() {
+        let (mut s, mut p, _n) = described_with(limited_table(0, false), |c| c);
+        open(&mut s);
+        let (_, out) = send(&mut s, &request(COMMAND, 1, &[]));
+        assert!(out.is_empty());
+        assert_eq!(claim(&mut p, COMMAND).len, 0);
+        assert_answered_corrupt(&mut s, &mut p, COMMAND, 2, &[1]);
+    }
+
+    #[test]
+    fn a_member_with_no_limit_checks_no_argument_length() {
+        let (mut s, mut p, _n) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        let (_, out) = send(&mut s, &request(COMMAND_UNBOUNDED, 1, &[1; 5]));
+        assert!(out.is_empty());
+        assert_eq!(claim(&mut p, COMMAND_UNBOUNDED).len, 5);
+    }
+
+    #[test]
+    fn a_repeat_of_a_request_answered_corrupt_for_its_length_gets_the_same_response() {
+        let (mut s, mut p, notes) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        let first = assert_answered_corrupt(&mut s, &mut p, COMMAND, 1, &[1; 5]);
+        let (_, again) = send(&mut s, &request(COMMAND, 1, &[1; 5]));
+        assert_eq!(again, vec![first]);
+        let mut buf = [0; 64];
+        assert_eq!(p.next_claim(&mut buf).unwrap(), None);
+        assert!(notes.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn an_unknown_member_is_answered_unknown_interaction_whatever_its_length() {
+        let (mut s, _p, _n) = described_with(limited_table(4, false), |c| c);
+        open(&mut s);
+        // Ordinal 1 is a signal in the table, so it is unknown under `Command`
+        // and holds no limit. `COMMAND`'s ordinal is a command with a limit of
+        // 4, so it is unknown under `Query`: the length check must not run
+        // before the member is found to be unknown.
+        let targets = [
+            Target {
+                kind: Kind::Command,
+                iface: IFACE,
+                ord: Ordinal(1),
+            },
+            Target {
+                kind: Kind::Query,
+                iface: IFACE,
+                ord: COMMAND.ord,
+            },
+        ];
+        for (seq, target) in (1..).zip(targets) {
+            let (_, out) = send(&mut s, &request(target, seq, &[1; 5]));
+            assert_eq!(out.len(), 1, "{target:?}");
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                response(
+                    target,
+                    0,
+                    seq,
+                    seq,
+                    ResponseOutcome::Contract(Contract::UnknownInteraction)
+                ),
+                "{target:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_request_under_another_kind_than_command_or_query_is_unknown_whatever_its_length() {
+        // Ordinals 1, 2 and 5 are a signal, an event and a fixed in the table;
+        // a limit on them must not turn the unknown-interaction answer into
+        // `corrupt`.
+        let kinds = [
+            (Kind::Signal, Ordinal(1)),
+            (Kind::Event, Ordinal(2)),
+            (Kind::Fixed, Ordinal(5)),
+        ];
+        let mut t = (*table()).clone();
+        for (_, ord) in kinds {
+            assert!(t.set_limit(IFACE, ord, 4));
+        }
+        let (mut s, _p, _n) = described_with(t, |c| c);
+        open(&mut s);
+        for (seq, (kind, ord)) in (1..).zip(kinds) {
+            let target = Target {
+                kind,
+                iface: IFACE,
+                ord,
+            };
+            let (_, out) = send(&mut s, &request(target, seq, &[1; 5]));
+            assert_eq!(out.len(), 1, "{target:?}");
+            assert_eq!(
+                decode(&out[0]).unwrap(),
+                response(
+                    target,
+                    0,
+                    seq,
+                    seq,
+                    ResponseOutcome::Contract(Contract::UnknownInteraction)
+                ),
+                "{target:?}"
+            );
+        }
+    }
 
     #[test]
     fn an_attach_naming_a_listed_earlier_hash_is_accepted_and_an_unlisted_one_is_catalog_mismatch()
@@ -3975,17 +4152,15 @@ mod tests {
         let notes = Notes::default();
         let rt = Loopback::new(CATALOG);
         let mut p = rt.attach();
-        let limit = 4096;
         let config = config(&notes)
-            .with_max_message_bytes(limit)
-            .unwrap()
-            .with_max_retained_bytes(4 * limit)
+            .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
-        let big = vec![1u8; 4000];
-        // Four replies of 4000 bytes and their headers fit under 16384; the
-        // fifth passes it, long before the ring holds 64.
+        let big = vec![1u8; 4037];
+        // Four replies of 4,037 bytes are 4,073 bytes each with their
+        // headers, 16,292 bytes in all, the cap; the fifth passes it, long
+        // before the ring holds 64.
         for seq in 1..=5 {
             let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
             assert!(out.is_empty());
@@ -3993,7 +4168,7 @@ mod tests {
             p.settle(c.id, Ok(&big)).unwrap();
             let (step, out) = tick(&mut s);
             assert_eq!(out.len(), 1, "reply {seq}");
-            assert!(out[0].len() > 4000, "reply {seq}");
+            assert_eq!(out[0].len(), 4073, "reply {seq}");
             let expected = if seq < 5 {
                 Step::Continue
             } else {
@@ -4008,23 +4183,29 @@ mod tests {
     fn retained_bytes_equal_to_the_cap_do_not_close_and_one_more_byte_closes_1008() {
         let notes = Notes::default();
         let rt = Loopback::new(CATALOG);
-        // A `response` under `contract(UnknownInteraction)` is 36 bytes. The cap
-        // cannot go below the message limit, and the limit cannot go below 294,
-        // so the cap is nine responses, 324 bytes: the ninth reaches the cap
-        // exactly, and the tenth passes it.
+        let mut p = rt.attach();
+        // The cap cannot go below 16,292 bytes. Four `response`s of 4,073
+        // bytes reach it exactly, and the next one passes it.
         let config = config(&notes)
-            .with_max_message_bytes(crate::frame::MIN_MESSAGE_LIMIT)
-            .unwrap()
-            .with_max_retained_bytes(9 * 36)
+            .with_max_retained_bytes(crate::frame::MAX_MESSAGE_LIMIT)
             .unwrap();
         let mut s = Session::new(Scanning(rt), &config);
         open(&mut s);
-        for seq in 1..=9 {
-            let (step, out) = send(&mut s, &request(SIGNAL, seq, &[]));
-            assert_eq!((step, out[0].len()), (Step::Continue, 36), "response {seq}");
+        let reply = vec![1u8; 4037];
+        for seq in 1..=4 {
+            let (_, out) = send(&mut s, &request(QUERY, seq, &[]));
+            assert!(out.is_empty());
+            let c = claim(&mut p, QUERY);
+            p.settle(c.id, Ok(&reply)).unwrap();
+            let (step, out) = tick(&mut s);
+            assert_eq!(
+                (step, out.len(), out[0].len()),
+                (Step::Continue, 1, 4073),
+                "response {seq}"
+            );
         }
-        let (step, out) = send(&mut s, &request(SIGNAL, 10, &[]));
-        // The tenth response is still sent, then the session closes.
+        let (step, out) = send(&mut s, &request(SIGNAL, 5, &[]));
+        // The fifth response is still sent, then the session closes.
         assert_eq!((step, out.len()), (Step::Close(1008), 1));
     }
 
@@ -4042,24 +4223,6 @@ mod tests {
             *notes.lock().unwrap(),
             vec![Note::DuplicateDropped { seq: 1 }]
         );
-    }
-
-    /// Mutation: use the raw cap instead of the cap raised to the message
-    /// limit.
-    #[test]
-    fn a_response_above_the_default_cap_within_a_larger_limit_does_not_close() {
-        let (mut s, mut p, _n) = described_with((*table()).clone(), |c| {
-            c.with_max_message_bytes(32 * 1024 * 1024).unwrap()
-        });
-        open(&mut s);
-        let big = vec![1u8; 17 * 1024 * 1024];
-        let (_, out) = send(&mut s, &request(QUERY, 1, &[]));
-        assert!(out.is_empty());
-        let c = claim(&mut p, QUERY);
-        p.settle(c.id, Ok(&big)).unwrap();
-        let (step, out) = tick(&mut s);
-        assert_eq!((step, out.len()), (Step::Continue, 1));
-        assert!(out[0].len() > 16 * 1024 * 1024);
     }
 
     /// Mutation: keep while `now < until` (a zero bound then expires at once).
@@ -4105,25 +4268,6 @@ mod tests {
         tick(&mut s);
         let (_, again) = send(&mut s, &request_at(COMMAND, 1, late, &[]));
         assert_eq!(again, out);
-    }
-
-    #[test]
-    fn a_retained_cap_below_the_message_limit_is_refused() {
-        let config = Config::default().with_max_message_bytes(2048).unwrap();
-        assert_eq!(
-            config.clone().with_max_retained_bytes(2047).err(),
-            Some(RetainedTooSmall {
-                given: 2047,
-                message_limit: 2048
-            })
-        );
-        assert_eq!(
-            config
-                .with_max_retained_bytes(2048)
-                .unwrap()
-                .max_retained_bytes(),
-            2048
-        );
     }
 
     #[test]

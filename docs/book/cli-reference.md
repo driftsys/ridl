@@ -652,6 +652,7 @@ Options:
           - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
+          - podbuf:          The podbuf C header, written to `<base>.h`
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
           - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
@@ -859,10 +860,11 @@ version = "1.0.0"
 encodings = ["flatbuffers"]
 ```
 
-The names are `flatbuffers`, `proto3` and `repr-c`. An absent table, an absent
+The names are `flatbuffers`, `proto3` and `podbuf`. An absent table, an absent
 key and an empty list all mean types only. The Rust backend builds
-`flatbuffers` and `proto3`, alone or together, and refuses `repr-c`
-([driftsys/ridl#317][i317]). The generated `Cargo.toml` enables one `ridl-rt`
+each of the three, alone or together. A `podbuf` codec buffer starts on an
+8-byte boundary, and the generated size tables hold `Aligned` buffers for it.
+The generated `Cargo.toml` enables one `ridl-rt`
 feature per named encoding, and none for types only. A single-file build has no
 manifest, so it is types only. Each emitted codec names its encoding, as
 `::ridl_rt::encoding::FlatBuffers` or `::ridl_rt::encoding::Proto3`; the face
@@ -929,8 +931,8 @@ declaration. The lint RSDL-807 `link-encoding-not-emitted` warns when a link of
 the selected deployment carries an encoding that the emitted backend's list
 does not name. It is compared once per emitted backend that can carry a codec:
 the `rust` emit and each `--plugin`, and a backend named by both an `--emit`
-and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`),
-the `typescript` emit and `codegen-model` are not compared, because their
+and a `--plugin` is compared once. A schema emit (`proto`, `flatbuffers`), the
+`podbuf` emit, the `typescript` emit and `codegen-model` are not compared, because their
 backends take no `encodings` option, and `codegen-request` is not compared
 either, because it writes its options into the request rather than emitting a
 codec from them. A `[backend.<name>]` table whose
@@ -959,6 +961,10 @@ event = 2048
 [limits.interaction]
 "Climate.temperature" = 64      # Interface.member, quoted because of the dot
 ```
+
+The table of a remote unit that `[imports]` names is read too, so its
+interactions record the owner's limits and the consumer computes the owner's
+catalog hash. The consumer reports no RIDL-151 or RIDL-152 for it.
 
 The limit of an interaction is the first that is found of: its entry in
 `[limits.interaction]`, the entry of its kind in `[limits.kind]`, `default`,
@@ -1003,6 +1009,17 @@ differ — a union is isolated in a wrapper table, every struct is a `table`, a
 map is a vector of generated entry tables with no `(key)`, and enum values are
 not prefixed because FlatBuffers scopes them inside their enum — and are
 recorded in ADR-0019.
+
+**`podbuf` is the third wire backend**: it writes the C header, `<base>.h`,
+through which a C consumer reads a podbuf buffer that the gate has verified,
+with no library. The header holds the preamble and descriptor structs, one head
+`struct` per type with its pad members written out and `_Static_assert` checks
+on every `sizeof` and `offsetof`, the constants of the enums and the union
+tags, and inline accessor functions that read through the preamble's head size
+and answer 0 for a field past it. It refuses a big-endian target with `#error`.
+It takes no option. A package that lays out a struct, tuple or union of another
+package inline defines that head again behind a guard macro, so the headers of
+two packages can be included in one translation unit.
 
 **`codegen-model` is not a backend at all**: it writes the lowered codegen
 model — one package, resolved over the scope the build read, with the scalar
@@ -1494,9 +1511,10 @@ Arguments:
   [NEW]  The candidate, in the same forms as the baseline
 
 Options:
-      --format <FORMAT>     Output format for the report [default: text] [possible values: text, json]
-      --explain <CATEGORY>  Print the classification rule for one change category and exit, instead of comparing snapshots. Takes a category exactly as the report prints it, e.g. `timing_changed`
-  -h, --help                Print help
+      --format <FORMAT>      Output format for the report [default: text] [possible values: text, json]
+      --explain <CATEGORY>   Print the classification rule for one change category and exit, instead of comparing snapshots. Takes a category exactly as the report prints it, e.g. `timing_changed`
+      --encoding <ENCODING>  An encoding the change is judged for, as `[backend.<name>] encodings` names it; repeat the flag for several. A snapshot does not record the encodings a workspace builds. Only `podbuf` has a rule of its own: with it, a change under the heading "breaking under podbuf" is breaking; without it, compatible [possible values: flatbuffers, proto3, podbuf]
+  -h, --help                 Print help
 ```
 
 `OLD` and `NEW` each take one of three forms: an `.ir.json` snapshot, a
@@ -1516,6 +1534,56 @@ this is checked before the directory is read as a source tree, so a source
 directory holding such an entry is refused too. Every other input reaches
 the source compiler. Omit both and pass `--explain <CATEGORY>` instead to print that
 category's classification rule without comparing anything.
+
+`--encoding <ENCODING>` names an encoding the change is judged for, with the
+names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
+`proto3`, `podbuf`); repeat the flag for several. A snapshot does not record
+the encodings a workspace builds, so the command does not read them from a
+manifest. Only `podbuf` has rules of its own, three of them. A struct field
+appended to a struct that another struct, a tuple or an exact-length array
+holds inline anywhere in the new side — in a struct, in the argument struct a
+call with several parameters induces, or in a tuple reply — is
+`podbuf_inline_append`, breaking with `--encoding podbuf` and compatible
+without it, because the inline copy cannot grow without moving the fields
+after it. An enum value or a union arm appended after which the podbuf
+integer of the enum or the tag of the union is a different integer, by width
+or by signedness — a value above 255 or an arm past ordinal 255 widens a `u8`
+to a `u16`, above 65535 a `u16` to a `u32`, and a first negative value of an
+enum turns a `u8` into an `i8` — is `podbuf_width_change`, reported once per
+declaration with the old and the new integer, breaking with `--encoding
+podbuf` and compatible without it, because every head that holds the enum or
+the union lays out a different integer; an append that keeps the integer draws
+no such line. An enum value or an enum-set flag appended is
+`podbuf_strict_enum_append`, reported once per declaration with the appended
+names, breaking with `--encoding podbuf` and compatible without it, because
+every enum and enum set is strict and the `verify` of an older reader refuses
+a value or a bit its declaration does not name; an enum whose append changes
+the integer draws only the `podbuf_width_change` line. The `podbuf_inline_append` line names each inline use, a struct field as
+`<package>/<struct>/<field>` and an interaction's request, reply or fixed
+payload as `<package>/<interface>/<interaction>`, and sits under the heading
+`breaking under podbuf` either way, so that a workspace that does not build
+podbuf still sees it. The search mirrors the heads the encoder lays out, a
+declaration and a named induced tuple: a struct that is a root of its own (a
+single named parameter, a named reply, a signal, event or fixed payload), that
+is used only behind a descriptor (the element of a bounded array, the key or
+value of a map entry, a union arm), or only inside an exact-length array that
+is itself a root (a fixed payload `[S; 2..2]`, which has no head) draws no
+such line: the root or the descriptor's stride gives the producer's size. A
+tuple inside such a root is a head, and a struct inside that tuple is a use.
+A name outside the three is a usage error,
+exit 2. With `Reading` held
+inline by `Bounds` and a field appended to it:
+
+```sh
+ridl diff --encoding podbuf v1.typl v2.typl
+```
+
+```text
+breaking
+  [compatible] decl_added veh.cluster/Reading/quality: (absent) -> quality
+breaking under podbuf:
+  [breaking] podbuf_inline_append veh.cluster/Reading/quality: (absent) -> nested inline in veh.cluster/Bounds/range
+```
 
 **It writes nothing.** The report goes to stdout; a compile error's
 diagnostics go to stderr instead and no report prints.
@@ -1820,6 +1888,9 @@ the categories `ridl diff` reports are:
   service_interface_removed
   doc_only
   visibility_changed
+  podbuf_inline_append
+  podbuf_width_change
+  podbuf_strict_enum_append
 ```
 
 ### `ridl lock`
@@ -2241,6 +2312,7 @@ ridl describe out/corpus.baseline.catalog.binfb
       "members": [
         {
           "kind": "Signal",
+          "limit": null,
           "name": "currentSpeed",
           "ordinal": 1,
           "payloads": [
@@ -2495,7 +2567,7 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `codegen-model`, `codegen-request`, `catalog`
+          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`, `podbuf`, `codegen-model`, `codegen-request`, `catalog`
 
           Possible values:
           - rust:            Idiomatic Rust source, written to `<base>.rs`
@@ -2505,6 +2577,7 @@ Options:
           - typescript:      Idiomatic TypeScript source, written to `<base>.ts`, and the codec module `<base>.codec.ts` with `[backend.typescript] codec = true`
           - proto:           The proto3 schema, written to `<base>.proto`
           - flatbuffers:     The FlatBuffers schema, written to `<base>.fbs`
+          - podbuf:          The podbuf C header, written to `<base>.h`
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
           - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
@@ -2648,7 +2721,6 @@ argument.
 
 [adr-0007]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0007-e1-execution.md
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md
-[i317]: https://github.com/driftsys/ridl/issues/317
 [adr-0014]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0014-ir-encodings.md
 [adr-0020]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
 [issue-196]: https://github.com/driftsys/ridl/issues/196

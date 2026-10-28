@@ -7,28 +7,29 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: twenty-one
+(ADRs), the implementation roadmap, and the compiler workspace: twenty-two
 crates under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`,
 `ridl-descriptor` (the catalog descriptor's schema, accessors and verifier),
 `ridlc`, `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
-`ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`,
-`ridl-rt`, `ridl-loopback`, `ridl-transport-ws` (the WebSocket binding of the
-frame), `ridl-rt-conformance` (the port contract tests any runtime runs,
-published for runtimes outside this repository), and `ridlc-gen-model` and
-`ridlc-gen-rust` (the reference codegen plugins, test-only) — plus `xtask` at
-the root, `packages/` (the TypeScript packages; `packages/ridl-transport-ws` is
-the Deno and browser client of the WebSocket binding, and
-`packages/ridl-runtime` loads the generated wasm codec), the `editors/vscode`
-extension, `skills/` (the `ridl-authoring` agent skill, which the extension and
-the editor release package), `evals/` (the public corpus, the calibration
-records and the eval tasks for design evaluation, which `cargo xtask eval` runs,
-outside the published crates and the book), and `examples/`, whose worked
-examples are compiled and run by the test suite rather than being prose. The
-typl v0.1 toolchain (epic E1), the ridl interface layer over it (epic E2) and
-rsdl's checks, lowering and `ridl diff` at the system (epic E6) are built; the
-boundary model (epic E3) is sequenced in the roadmap, and `rmdl` stays a
-Proposed draft with no implementation. See
-`docs/technotes/walking-skeleton-architecture.md` for the as-built map.
+`ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-backend-podbuf` (the C
+header of the podbuf layout), `ridl-diff`, `ridl-fmt`, `ridl-rt`,
+`ridl-loopback`, `ridl-transport-ws` (the WebSocket binding of the frame),
+`ridl-rt-conformance` (the port contract tests any runtime runs, published for
+runtimes outside this repository), and `ridlc-gen-model` and `ridlc-gen-rust`
+(the reference codegen plugins, test-only) — plus `xtask` at the root,
+`packages/` (the TypeScript packages; `packages/ridl-transport-ws` is the Deno
+and browser client of the WebSocket binding, and `packages/ridl-runtime` loads
+the generated wasm codec), the `editors/vscode` extension, `skills/` (the
+`ridl-authoring` agent skill, which the extension and the editor release
+package), `evals/` (the public corpus, the calibration records and the eval
+tasks for design evaluation, which `cargo xtask eval` runs, outside the
+published crates and the book), and `examples/`, whose worked examples are
+compiled and run by the test suite rather than being prose. The typl v0.1
+toolchain (epic E1), the ridl interface layer over it (epic E2) and rsdl's
+checks, lowering and `ridl diff` at the system (epic E6) are built; the boundary
+model (epic E3) is sequenced in the roadmap, and `rmdl` stays a Proposed draft
+with no implementation. See `docs/technotes/walking-skeleton-architecture.md`
+for the as-built map.
 
 **Start from the map for your task, then read what the task touches.**
 
@@ -90,6 +91,10 @@ Proposed draft with no implementation. See
   - ADR-0028 and `docs/book/generated-code.md` — before changing what a backend
     renders in a generated doc comment, or the doc fields of the codegen
     `Model`.
+  - ADR-0031 and `docs/design/podbuf-codec.md` — before changing the podbuf
+    layout in `ridl-ir`, the podbuf codec of the Rust backend,
+    `ridl-backend-podbuf`, the `podbuf` module of `ridl-rt`, RIDL-153 to
+    RIDL-156, or the podbuf rules of `ridl diff`.
   - ADR-0029, `docs/book/stability.md` and `freeze/README.md` — before changing
     a frozen surface, a dump under `freeze/`, `freeze/surfaces.toml`, or the
     freeze check in `xtask/src/freeze.rs` and `xtask/src/freeze/`.
@@ -202,7 +207,14 @@ member; rsdl is the apex.
                          generated crate, and one generated from the
                          veh-cluster corpus, check with their default features off
                          for thumbv7em-none-eabihf, a target with no standard
-                         library; the corpus crate is also linted with clippy,
+                         library, and with their default features on for
+                         i686-unknown-linux-gnu and
+                         aarch64-unknown-linux-gnu, so that the podbuf layout
+                         assertions are evaluated for a 32-bit and a 64-bit
+                         target; the program also encodes, verifies and decodes
+                         one value through the generated podbuf codec and fails
+                         unless it reports `podbuf round trip: 21.5`; the corpus
+                         crate is also linted with clippy,
                          with its default features and with them off for that
                          target, under -D warnings, so any diagnostic fails
                          it, dead_code included; the lints that its lib.rs

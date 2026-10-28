@@ -1,0 +1,470 @@
+---
+source: crates/ridl-backend-podbuf/tests/corpus.rs
+expression: "support::header(&packages, \"veh.cluster\")"
+---
+#ifndef RIDL_PODBUF_VEH_CLUSTER_H
+#define RIDL_PODBUF_VEH_CLUSTER_H
+
+#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error "podbuf requires a little-endian target"
+#endif
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifndef RIDL_PODBUF_PREAMBLE_DEFINED
+#define RIDL_PODBUF_PREAMBLE_DEFINED
+
+#define RIDL_PODBUF_PREAMBLE_SIZE 8
+
+/* The first 8 bytes of every buffer. */
+typedef struct ridl_podbuf_preamble {
+  uint32_t head_size;
+  uint32_t reserved;
+} ridl_podbuf_preamble;
+_Static_assert(sizeof(ridl_podbuf_preamble) == 8, "ridl_podbuf_preamble size");
+
+/* A string, bytes or union arm: `off` counts from the buffer start. */
+typedef struct ridl_podbuf_desc {
+  uint32_t off;
+  uint32_t len;
+} ridl_podbuf_desc;
+_Static_assert(sizeof(ridl_podbuf_desc) == 8, "ridl_podbuf_desc size");
+_Static_assert(_Alignof(ridl_podbuf_desc) == 4, "ridl_podbuf_desc alignment");
+
+/* An array or map: `len` counts elements, `elem_size` is the stride. */
+typedef struct ridl_podbuf_array_desc {
+  uint32_t off;
+  uint16_t len;
+  uint16_t elem_size;
+} ridl_podbuf_array_desc;
+_Static_assert(sizeof(ridl_podbuf_array_desc) == 8, "ridl_podbuf_array_desc size");
+_Static_assert(_Alignof(ridl_podbuf_array_desc) == 4, "ridl_podbuf_array_desc alignment");
+
+/* The head size the producer wrote. */
+static inline uint32_t ridl_podbuf_head_size(const uint8_t *buf) {
+  return (uint32_t)buf[0] | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2] << 16) |
+         ((uint32_t)buf[3] << 24);
+}
+
+/* Whether `n` bytes at head offset `off` lie inside a head of `sz` bytes. */
+static inline int ridl_podbuf_fits(uint32_t sz, uint32_t off, uint32_t n) {
+  return (uint64_t)off + n <= sz;
+}
+
+/* A little-endian unsigned load from a head of `sz` bytes; 0 past it. */
+static inline uint64_t ridl_podbuf_load(const uint8_t *h, uint32_t sz, uint32_t off, uint32_t n) {
+  uint64_t value = 0;
+  uint32_t i;
+  if (!ridl_podbuf_fits(sz, off, n)) {
+    return 0;
+  }
+  for (i = n; i > 0; i--) {
+    value = (value << 8) | h[off + i - 1];
+  }
+  return value;
+}
+
+static inline float ridl_podbuf_load_f32(const uint8_t *h, uint32_t sz, uint32_t off) {
+  union {
+    uint32_t bits;
+    float value;
+  } pun;
+  pun.bits = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
+  return pun.value;
+}
+
+static inline double ridl_podbuf_load_f64(const uint8_t *h, uint32_t sz, uint32_t off) {
+  union {
+    uint64_t bits;
+    double value;
+  } pun;
+  pun.bits = ridl_podbuf_load(h, sz, off, 8);
+  return pun.value;
+}
+
+static inline ridl_podbuf_desc ridl_podbuf_desc_at(const uint8_t *h, uint32_t sz, uint32_t off) {
+  ridl_podbuf_desc d;
+  d.off = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
+  d.len = (uint32_t)ridl_podbuf_load(h, sz, off + 4, 4);
+  return d;
+}
+
+static inline ridl_podbuf_array_desc ridl_podbuf_array_desc_at(const uint8_t *h, uint32_t sz,
+                                                               uint32_t off) {
+  ridl_podbuf_array_desc d;
+  d.off = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
+  d.len = (uint16_t)ridl_podbuf_load(h, sz, off + 4, 2);
+  d.elem_size = (uint16_t)ridl_podbuf_load(h, sz, off + 6, 2);
+  return d;
+}
+
+#endif
+
+#define VEH_CLUSTER_DIAG_ERROR_FILTER_INVALID 0
+#define VEH_CLUSTER_DIAG_ERROR_STORAGE_BUSY 1
+#define VEH_CLUSTER_DIAG_ERROR_ACCESS_DENIED 2
+#define VEH_CLUSTER_HVAC_ERROR_COMPRESSOR_OFF 0
+#define VEH_CLUSTER_HVAC_ERROR_SENSOR_FAULT 1
+
+#ifndef VEH_CLUSTER_DOOR_PAYLOAD_HEAD_DEFINED
+#define VEH_CLUSTER_DOOR_PAYLOAD_HEAD_DEFINED
+typedef struct veh_cluster_door_payload_head {
+  _Alignas(8) uint8_t sensor_id;
+  uint8_t is_open;
+  uint8_t _pad2[6];
+} veh_cluster_door_payload_head;
+#endif
+_Static_assert(sizeof(veh_cluster_door_payload_head) == 8, "veh_cluster_door_payload_head size");
+_Static_assert(_Alignof(veh_cluster_door_payload_head) == 8, "veh_cluster_door_payload_head alignment");
+_Static_assert(offsetof(veh_cluster_door_payload_head, sensor_id) == 0, "veh_cluster_door_payload_head.sensor_id offset");
+_Static_assert(sizeof(((veh_cluster_door_payload_head *)0)->sensor_id) == 1, "veh_cluster_door_payload_head.sensor_id size");
+_Static_assert(offsetof(veh_cluster_door_payload_head, is_open) == 1, "veh_cluster_door_payload_head.is_open offset");
+_Static_assert(sizeof(((veh_cluster_door_payload_head *)0)->is_open) == 1, "veh_cluster_door_payload_head.is_open size");
+
+#ifndef VEH_CLUSTER_DIAG_FILTER_HEAD_DEFINED
+#define VEH_CLUSTER_DIAG_FILTER_HEAD_DEFINED
+typedef struct veh_cluster_diag_filter_head {
+  _Alignas(8) uint8_t severity;
+  uint8_t _flags0;
+  uint8_t _pad2[2];
+  ridl_podbuf_desc category;
+  uint8_t _pad12[4];
+} veh_cluster_diag_filter_head;
+#endif
+_Static_assert(sizeof(veh_cluster_diag_filter_head) == 16, "veh_cluster_diag_filter_head size");
+_Static_assert(_Alignof(veh_cluster_diag_filter_head) == 8, "veh_cluster_diag_filter_head alignment");
+_Static_assert(offsetof(veh_cluster_diag_filter_head, severity) == 0, "veh_cluster_diag_filter_head.severity offset");
+_Static_assert(sizeof(((veh_cluster_diag_filter_head *)0)->severity) == 1, "veh_cluster_diag_filter_head.severity size");
+_Static_assert(offsetof(veh_cluster_diag_filter_head, _flags0) == 1, "veh_cluster_diag_filter_head._flags0 offset");
+_Static_assert(sizeof(((veh_cluster_diag_filter_head *)0)->_flags0) == 1, "veh_cluster_diag_filter_head._flags0 size");
+_Static_assert(offsetof(veh_cluster_diag_filter_head, category) == 4, "veh_cluster_diag_filter_head.category offset");
+_Static_assert(sizeof(((veh_cluster_diag_filter_head *)0)->category) == 8, "veh_cluster_diag_filter_head.category size");
+
+#ifndef VEH_CLUSTER_FAULT_EVENT_HEAD_DEFINED
+#define VEH_CLUSTER_FAULT_EVENT_HEAD_DEFINED
+typedef struct veh_cluster_fault_event_head {
+  _Alignas(8) uint16_t code;
+  uint8_t _pad2[2];
+  ridl_podbuf_desc message;
+  uint8_t _pad12[4];
+  uint64_t timestamp;
+} veh_cluster_fault_event_head;
+#endif
+_Static_assert(sizeof(veh_cluster_fault_event_head) == 24, "veh_cluster_fault_event_head size");
+_Static_assert(_Alignof(veh_cluster_fault_event_head) == 8, "veh_cluster_fault_event_head alignment");
+_Static_assert(offsetof(veh_cluster_fault_event_head, code) == 0, "veh_cluster_fault_event_head.code offset");
+_Static_assert(sizeof(((veh_cluster_fault_event_head *)0)->code) == 2, "veh_cluster_fault_event_head.code size");
+_Static_assert(offsetof(veh_cluster_fault_event_head, message) == 4, "veh_cluster_fault_event_head.message offset");
+_Static_assert(sizeof(((veh_cluster_fault_event_head *)0)->message) == 8, "veh_cluster_fault_event_head.message size");
+_Static_assert(offsetof(veh_cluster_fault_event_head, timestamp) == 16, "veh_cluster_fault_event_head.timestamp offset");
+_Static_assert(sizeof(((veh_cluster_fault_event_head *)0)->timestamp) == 8, "veh_cluster_fault_event_head.timestamp size");
+
+#ifndef VEH_CLUSTER_FAULT_PAGE_HEAD_DEFINED
+#define VEH_CLUSTER_FAULT_PAGE_HEAD_DEFINED
+typedef struct veh_cluster_fault_page_head {
+  _Alignas(8) ridl_podbuf_array_desc faults;
+} veh_cluster_fault_page_head;
+#endif
+_Static_assert(sizeof(veh_cluster_fault_page_head) == 8, "veh_cluster_fault_page_head size");
+_Static_assert(_Alignof(veh_cluster_fault_page_head) == 8, "veh_cluster_fault_page_head alignment");
+_Static_assert(offsetof(veh_cluster_fault_page_head, faults) == 0, "veh_cluster_fault_page_head.faults offset");
+_Static_assert(sizeof(((veh_cluster_fault_page_head *)0)->faults) == 8, "veh_cluster_fault_page_head.faults size");
+
+#ifndef VEH_CLUSTER_RAW_WHEEL_SPAN_SPAN_HEAD_DEFINED
+#define VEH_CLUSTER_RAW_WHEEL_SPAN_SPAN_HEAD_DEFINED
+typedef struct veh_cluster_raw_wheel_span_span_head {
+  _Alignas(8) uint16_t first;
+  uint16_t latest;
+  uint8_t _pad4[4];
+} veh_cluster_raw_wheel_span_span_head;
+#endif
+_Static_assert(sizeof(veh_cluster_raw_wheel_span_span_head) == 8, "veh_cluster_raw_wheel_span_span_head size");
+_Static_assert(_Alignof(veh_cluster_raw_wheel_span_span_head) == 8, "veh_cluster_raw_wheel_span_span_head alignment");
+_Static_assert(offsetof(veh_cluster_raw_wheel_span_span_head, first) == 0, "veh_cluster_raw_wheel_span_span_head.first offset");
+_Static_assert(sizeof(((veh_cluster_raw_wheel_span_span_head *)0)->first) == 2, "veh_cluster_raw_wheel_span_span_head.first size");
+_Static_assert(offsetof(veh_cluster_raw_wheel_span_span_head, latest) == 2, "veh_cluster_raw_wheel_span_span_head.latest offset");
+_Static_assert(sizeof(((veh_cluster_raw_wheel_span_span_head *)0)->latest) == 2, "veh_cluster_raw_wheel_span_span_head.latest size");
+
+#ifndef VEH_CLUSTER_RAW_WHEEL_SPAN_HEAD_DEFINED
+#define VEH_CLUSTER_RAW_WHEEL_SPAN_HEAD_DEFINED
+typedef struct veh_cluster_raw_wheel_span_head {
+  _Alignas(8) veh_cluster_raw_wheel_span_span_head span;
+  veh_cluster_raw_wheel_span_span_head bursts[2];
+} veh_cluster_raw_wheel_span_head;
+#endif
+_Static_assert(sizeof(veh_cluster_raw_wheel_span_head) == 24, "veh_cluster_raw_wheel_span_head size");
+_Static_assert(_Alignof(veh_cluster_raw_wheel_span_head) == 8, "veh_cluster_raw_wheel_span_head alignment");
+_Static_assert(offsetof(veh_cluster_raw_wheel_span_head, span) == 0, "veh_cluster_raw_wheel_span_head.span offset");
+_Static_assert(sizeof(((veh_cluster_raw_wheel_span_head *)0)->span) == 8, "veh_cluster_raw_wheel_span_head.span size");
+_Static_assert(offsetof(veh_cluster_raw_wheel_span_head, bursts) == 8, "veh_cluster_raw_wheel_span_head.bursts offset");
+_Static_assert(sizeof(((veh_cluster_raw_wheel_span_head *)0)->bursts) == 16, "veh_cluster_raw_wheel_span_head.bursts size");
+
+#ifndef VEH_CLUSTER_FILTER_STATE_HEAD_DEFINED
+#define VEH_CLUSTER_FILTER_STATE_HEAD_DEFINED
+typedef struct veh_cluster_filter_state_head {
+  _Alignas(8) uint16_t hours_run;
+  uint8_t clogged;
+  uint8_t _pad3[5];
+} veh_cluster_filter_state_head;
+#endif
+_Static_assert(sizeof(veh_cluster_filter_state_head) == 8, "veh_cluster_filter_state_head size");
+_Static_assert(_Alignof(veh_cluster_filter_state_head) == 8, "veh_cluster_filter_state_head alignment");
+_Static_assert(offsetof(veh_cluster_filter_state_head, hours_run) == 0, "veh_cluster_filter_state_head.hours_run offset");
+_Static_assert(sizeof(((veh_cluster_filter_state_head *)0)->hours_run) == 2, "veh_cluster_filter_state_head.hours_run size");
+_Static_assert(offsetof(veh_cluster_filter_state_head, clogged) == 2, "veh_cluster_filter_state_head.clogged offset");
+_Static_assert(sizeof(((veh_cluster_filter_state_head *)0)->clogged) == 1, "veh_cluster_filter_state_head.clogged size");
+
+#ifndef VEH_CLUSTER_CLIMATE_REPORT_HEAD_DEFINED
+#define VEH_CLUSTER_CLIMATE_REPORT_HEAD_DEFINED
+typedef struct veh_cluster_climate_report_head {
+  _Alignas(8) float cabin;
+  float setpoint;
+  uint8_t fan;
+  uint8_t _pad9[7];
+} veh_cluster_climate_report_head;
+#endif
+_Static_assert(sizeof(veh_cluster_climate_report_head) == 16, "veh_cluster_climate_report_head size");
+_Static_assert(_Alignof(veh_cluster_climate_report_head) == 8, "veh_cluster_climate_report_head alignment");
+_Static_assert(offsetof(veh_cluster_climate_report_head, cabin) == 0, "veh_cluster_climate_report_head.cabin offset");
+_Static_assert(sizeof(((veh_cluster_climate_report_head *)0)->cabin) == 4, "veh_cluster_climate_report_head.cabin size");
+_Static_assert(offsetof(veh_cluster_climate_report_head, setpoint) == 4, "veh_cluster_climate_report_head.setpoint offset");
+_Static_assert(sizeof(((veh_cluster_climate_report_head *)0)->setpoint) == 4, "veh_cluster_climate_report_head.setpoint size");
+_Static_assert(offsetof(veh_cluster_climate_report_head, fan) == 8, "veh_cluster_climate_report_head.fan offset");
+_Static_assert(sizeof(((veh_cluster_climate_report_head *)0)->fan) == 1, "veh_cluster_climate_report_head.fan size");
+
+#ifndef VEH_CLUSTER_RAW_WHEEL_SPAN_BURSTS_ELEMENT_HEAD_DEFINED
+#define VEH_CLUSTER_RAW_WHEEL_SPAN_BURSTS_ELEMENT_HEAD_DEFINED
+typedef struct veh_cluster_raw_wheel_span_bursts_element_head {
+  _Alignas(8) uint16_t first;
+  uint16_t latest;
+  uint8_t _pad4[4];
+} veh_cluster_raw_wheel_span_bursts_element_head;
+#endif
+_Static_assert(sizeof(veh_cluster_raw_wheel_span_bursts_element_head) == 8, "veh_cluster_raw_wheel_span_bursts_element_head size");
+_Static_assert(_Alignof(veh_cluster_raw_wheel_span_bursts_element_head) == 8, "veh_cluster_raw_wheel_span_bursts_element_head alignment");
+_Static_assert(offsetof(veh_cluster_raw_wheel_span_bursts_element_head, first) == 0, "veh_cluster_raw_wheel_span_bursts_element_head.first offset");
+_Static_assert(sizeof(((veh_cluster_raw_wheel_span_bursts_element_head *)0)->first) == 2, "veh_cluster_raw_wheel_span_bursts_element_head.first size");
+_Static_assert(offsetof(veh_cluster_raw_wheel_span_bursts_element_head, latest) == 2, "veh_cluster_raw_wheel_span_bursts_element_head.latest offset");
+_Static_assert(sizeof(((veh_cluster_raw_wheel_span_bursts_element_head *)0)->latest) == 2, "veh_cluster_raw_wheel_span_bursts_element_head.latest size");
+
+#ifndef VEH_CLUSTER_WHEEL_DIAGNOSTICS_READ_SPAN_REPLY_HEAD_DEFINED
+#define VEH_CLUSTER_WHEEL_DIAGNOSTICS_READ_SPAN_REPLY_HEAD_DEFINED
+typedef struct veh_cluster_wheel_diagnostics_read_span_reply_head {
+  _Alignas(8) uint16_t min;
+  uint16_t max;
+  uint8_t _pad4[4];
+} veh_cluster_wheel_diagnostics_read_span_reply_head;
+#endif
+_Static_assert(sizeof(veh_cluster_wheel_diagnostics_read_span_reply_head) == 8, "veh_cluster_wheel_diagnostics_read_span_reply_head size");
+_Static_assert(_Alignof(veh_cluster_wheel_diagnostics_read_span_reply_head) == 8, "veh_cluster_wheel_diagnostics_read_span_reply_head alignment");
+_Static_assert(offsetof(veh_cluster_wheel_diagnostics_read_span_reply_head, min) == 0, "veh_cluster_wheel_diagnostics_read_span_reply_head.min offset");
+_Static_assert(sizeof(((veh_cluster_wheel_diagnostics_read_span_reply_head *)0)->min) == 2, "veh_cluster_wheel_diagnostics_read_span_reply_head.min size");
+_Static_assert(offsetof(veh_cluster_wheel_diagnostics_read_span_reply_head, max) == 2, "veh_cluster_wheel_diagnostics_read_span_reply_head.max offset");
+_Static_assert(sizeof(((veh_cluster_wheel_diagnostics_read_span_reply_head *)0)->max) == 2, "veh_cluster_wheel_diagnostics_read_span_reply_head.max size");
+
+#ifndef VEH_CLUSTER_WHEEL_DIAGNOSTICS_TICK_BOUNDS_ELEMENT_HEAD_DEFINED
+#define VEH_CLUSTER_WHEEL_DIAGNOSTICS_TICK_BOUNDS_ELEMENT_HEAD_DEFINED
+typedef struct veh_cluster_wheel_diagnostics_tick_bounds_element_head {
+  _Alignas(8) uint16_t low;
+  uint16_t high;
+  uint8_t _pad4[4];
+} veh_cluster_wheel_diagnostics_tick_bounds_element_head;
+#endif
+_Static_assert(sizeof(veh_cluster_wheel_diagnostics_tick_bounds_element_head) == 8, "veh_cluster_wheel_diagnostics_tick_bounds_element_head size");
+_Static_assert(_Alignof(veh_cluster_wheel_diagnostics_tick_bounds_element_head) == 8, "veh_cluster_wheel_diagnostics_tick_bounds_element_head alignment");
+_Static_assert(offsetof(veh_cluster_wheel_diagnostics_tick_bounds_element_head, low) == 0, "veh_cluster_wheel_diagnostics_tick_bounds_element_head.low offset");
+_Static_assert(sizeof(((veh_cluster_wheel_diagnostics_tick_bounds_element_head *)0)->low) == 2, "veh_cluster_wheel_diagnostics_tick_bounds_element_head.low size");
+_Static_assert(offsetof(veh_cluster_wheel_diagnostics_tick_bounds_element_head, high) == 2, "veh_cluster_wheel_diagnostics_tick_bounds_element_head.high offset");
+_Static_assert(sizeof(((veh_cluster_wheel_diagnostics_tick_bounds_element_head *)0)->high) == 2, "veh_cluster_wheel_diagnostics_tick_bounds_element_head.high size");
+
+#ifndef VEH_CLUSTER_VEH_HVAC_CABIN_GET_BOUNDS_REPLY_HEAD_DEFINED
+#define VEH_CLUSTER_VEH_HVAC_CABIN_GET_BOUNDS_REPLY_HEAD_DEFINED
+typedef struct veh_cluster_veh_hvac_cabin_get_bounds_reply_head {
+  _Alignas(8) float min;
+  float max;
+} veh_cluster_veh_hvac_cabin_get_bounds_reply_head;
+#endif
+_Static_assert(sizeof(veh_cluster_veh_hvac_cabin_get_bounds_reply_head) == 8, "veh_cluster_veh_hvac_cabin_get_bounds_reply_head size");
+_Static_assert(_Alignof(veh_cluster_veh_hvac_cabin_get_bounds_reply_head) == 8, "veh_cluster_veh_hvac_cabin_get_bounds_reply_head alignment");
+_Static_assert(offsetof(veh_cluster_veh_hvac_cabin_get_bounds_reply_head, min) == 0, "veh_cluster_veh_hvac_cabin_get_bounds_reply_head.min offset");
+_Static_assert(sizeof(((veh_cluster_veh_hvac_cabin_get_bounds_reply_head *)0)->min) == 4, "veh_cluster_veh_hvac_cabin_get_bounds_reply_head.min size");
+_Static_assert(offsetof(veh_cluster_veh_hvac_cabin_get_bounds_reply_head, max) == 4, "veh_cluster_veh_hvac_cabin_get_bounds_reply_head.max offset");
+_Static_assert(sizeof(((veh_cluster_veh_hvac_cabin_get_bounds_reply_head *)0)->max) == 4, "veh_cluster_veh_hvac_cabin_get_bounds_reply_head.max size");
+
+static inline uint8_t veh_cluster_door_payload_sensor_id_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
+}
+
+static inline uint8_t veh_cluster_door_payload_sensor_id(const uint8_t *buf) {
+  return veh_cluster_door_payload_sensor_id_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t veh_cluster_door_payload_is_open_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 1, 1);
+}
+
+static inline uint8_t veh_cluster_door_payload_is_open(const uint8_t *buf) {
+  return veh_cluster_door_payload_is_open_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t veh_cluster_diag_filter_severity_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
+}
+
+static inline uint8_t veh_cluster_diag_filter_severity(const uint8_t *buf) {
+  return veh_cluster_diag_filter_severity_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const char *veh_cluster_diag_filter_category_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {
+  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, 4);
+  *len = d.len;
+  return d.len ? (const char *)(buf + d.off) : NULL;
+}
+
+static inline const char *veh_cluster_diag_filter_category(const uint8_t *buf, uint32_t *len) {
+  return veh_cluster_diag_filter_category_at(buf, buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf), len);
+}
+
+static inline int veh_cluster_diag_filter_has_category_at(const uint8_t *h, uint32_t sz) {
+  return (int)((ridl_podbuf_load(h, sz, 1, 1) >> 0) & 1u);
+}
+
+static inline int veh_cluster_diag_filter_has_category(const uint8_t *buf) {
+  return veh_cluster_diag_filter_has_category_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint16_t veh_cluster_fault_event_code_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline uint16_t veh_cluster_fault_event_code(const uint8_t *buf) {
+  return veh_cluster_fault_event_code_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const char *veh_cluster_fault_event_message_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint32_t *len) {
+  ridl_podbuf_desc d = ridl_podbuf_desc_at(h, sz, 4);
+  *len = d.len;
+  return d.len ? (const char *)(buf + d.off) : NULL;
+}
+
+static inline const char *veh_cluster_fault_event_message(const uint8_t *buf, uint32_t *len) {
+  return veh_cluster_fault_event_message_at(buf, buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf), len);
+}
+
+static inline uint64_t veh_cluster_fault_event_timestamp_at(const uint8_t *h, uint32_t sz) {
+  return (uint64_t)ridl_podbuf_load(h, sz, 16, 8);
+}
+
+static inline uint64_t veh_cluster_fault_event_timestamp(const uint8_t *buf) {
+  return veh_cluster_fault_event_timestamp_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const uint8_t *veh_cluster_fault_page_faults_at(const uint8_t *buf, const uint8_t *h, uint32_t sz, uint16_t *count, uint16_t *elem_size) {
+  ridl_podbuf_array_desc d = ridl_podbuf_array_desc_at(h, sz, 0);
+  *count = d.len;
+  *elem_size = d.elem_size;
+  return d.len ? buf + d.off : NULL;
+}
+
+static inline const uint8_t *veh_cluster_fault_page_faults(const uint8_t *buf, uint16_t *count, uint16_t *elem_size) {
+  return veh_cluster_fault_page_faults_at(buf, buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf), count, elem_size);
+}
+
+static inline uint16_t veh_cluster_raw_wheel_span_span_first_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline uint16_t veh_cluster_raw_wheel_span_span_latest_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 2, 2);
+}
+
+static inline const uint8_t *veh_cluster_raw_wheel_span_span_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_fits(sz, 0, 8) ? h + 0 : NULL;
+}
+
+static inline const uint8_t *veh_cluster_raw_wheel_span_span(const uint8_t *buf) {
+  return veh_cluster_raw_wheel_span_span_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const uint8_t *veh_cluster_raw_wheel_span_bursts_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_fits(sz, 8, 16) ? h + 8 : NULL;
+}
+
+static inline const uint8_t *veh_cluster_raw_wheel_span_bursts(const uint8_t *buf) {
+  return veh_cluster_raw_wheel_span_bursts_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint16_t veh_cluster_filter_state_hours_run_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline uint16_t veh_cluster_filter_state_hours_run(const uint8_t *buf) {
+  return veh_cluster_filter_state_hours_run_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t veh_cluster_filter_state_clogged_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 2, 1);
+}
+
+static inline uint8_t veh_cluster_filter_state_clogged(const uint8_t *buf) {
+  return veh_cluster_filter_state_clogged_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline float veh_cluster_climate_report_cabin_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
+
+static inline float veh_cluster_climate_report_cabin(const uint8_t *buf) {
+  return veh_cluster_climate_report_cabin_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline float veh_cluster_climate_report_setpoint_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 4);
+}
+
+static inline float veh_cluster_climate_report_setpoint(const uint8_t *buf) {
+  return veh_cluster_climate_report_setpoint_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint8_t veh_cluster_climate_report_fan_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 8, 1);
+}
+
+static inline uint8_t veh_cluster_climate_report_fan(const uint8_t *buf) {
+  return veh_cluster_climate_report_fan_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline uint16_t veh_cluster_raw_wheel_span_bursts_element_first_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline uint16_t veh_cluster_raw_wheel_span_bursts_element_latest_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 2, 2);
+}
+
+static inline uint16_t veh_cluster_wheel_diagnostics_read_span_reply_min_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline uint16_t veh_cluster_wheel_diagnostics_read_span_reply_max_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 2, 2);
+}
+
+static inline uint16_t veh_cluster_wheel_diagnostics_tick_bounds_element_low_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 0, 2);
+}
+
+static inline uint16_t veh_cluster_wheel_diagnostics_tick_bounds_element_high_at(const uint8_t *h, uint32_t sz) {
+  return (uint16_t)ridl_podbuf_load(h, sz, 2, 2);
+}
+
+static inline float veh_cluster_veh_hvac_cabin_get_bounds_reply_min_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 0);
+}
+
+static inline float veh_cluster_veh_hvac_cabin_get_bounds_reply_max_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_load_f32(h, sz, 4);
+}
+
+#endif /* RIDL_PODBUF_VEH_CLUSTER_H */

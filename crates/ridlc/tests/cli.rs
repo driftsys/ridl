@@ -417,6 +417,7 @@ fn build_help_documents_every_emit_value() {
             "typescript",
             "proto",
             "flatbuffers",
+            "podbuf",
             "codegen-model",
             "codegen-request",
             "catalog"
@@ -565,6 +566,7 @@ fn every_emit_variant_is_classified() {
             | ridlc::Emit::TypeScript
             | ridlc::Emit::Proto
             | ridlc::Emit::Flatbuffers
+            | ridlc::Emit::Podbuf
             | ridlc::Emit::CodegenModel
             | ridlc::Emit::CodegenRequest
             | ridlc::Emit::Catalog => false,
@@ -598,6 +600,7 @@ fn every_emit_variant_names_its_intended_suffix() {
             | ridlc::Emit::TypeScript
             | ridlc::Emit::Proto
             | ridlc::Emit::Flatbuffers
+            | ridlc::Emit::Podbuf
             | ridlc::Emit::CodegenModel
             | ridlc::Emit::CodegenRequest
             | ridlc::Emit::Catalog => None,
@@ -680,6 +683,7 @@ fn every_emit_variant_names_its_intended_system_suffix() {
             | ridlc::Emit::TypeScript
             | ridlc::Emit::Proto
             | ridlc::Emit::Flatbuffers
+            | ridlc::Emit::Podbuf
             | ridlc::Emit::CodegenModel
             | ridlc::Emit::CodegenRequest
             | ridlc::Emit::Catalog => None,

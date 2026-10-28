@@ -178,6 +178,10 @@ fn one_interface_public(
         tables.push(sizes_table(&iface_ident, WireEncoding::Proto3, &sizes));
         table_docs.push(table_doc(iface_name, "proto3", "Proto3"));
     }
+    if ctx.encodings.contains(&WireEncoding::Podbuf) {
+        tables.push(sizes_table(&iface_ident, WireEncoding::Podbuf, &sizes));
+        table_docs.push(table_doc(iface_name, "podbuf", "Podbuf"));
+    }
     let mut interface_doc = format!(
         "Descriptor for interface `{iface_name}`: its catalog, number, name and \
          members, as `ridl_rt::contract::Interface`."
@@ -233,6 +237,7 @@ fn encoding_path(encoding: WireEncoding) -> TokenStream {
     match encoding {
         WireEncoding::FlatBuffers => quote! { ::ridl_rt::encoding::FlatBuffers },
         WireEncoding::Proto3 => quote! { ::ridl_rt::encoding::Proto3 },
+        WireEncoding::Podbuf => quote! { ::ridl_rt::encoding::Podbuf },
     }
 }
 
@@ -288,6 +293,25 @@ fn sizes_table(
     let table = quote! {
         <Self as ::ridl_rt::contract::Sizes<#marker>>
     };
+    // A podbuf buffer starts on an 8-byte boundary, so its claim and event
+    // buffers are `Aligned` arrays; the other encodings take plain arrays.
+    let (claim_buffer, event_buffer_type, claim_zero, event_zero) = if encoding
+        == WireEncoding::Podbuf
+    {
+        (
+            quote! { ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; #table::MAX_BUFFER_SIZE]> },
+            quote! { ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; #table::EVENT_SOURCE_BUFFER_SIZE]> },
+            quote! { ::ridl_rt::podbuf::Aligned::<[::core::primitive::u8; #table::MAX_BUFFER_SIZE]>::zeroed() },
+            quote! { ::ridl_rt::podbuf::Aligned::<[::core::primitive::u8; #table::EVENT_SOURCE_BUFFER_SIZE]>::zeroed() },
+        )
+    } else {
+        (
+            quote! { [::core::primitive::u8; #table::MAX_BUFFER_SIZE] },
+            quote! { [::core::primitive::u8; #table::EVENT_SOURCE_BUFFER_SIZE] },
+            quote! { [0u8; #table::MAX_BUFFER_SIZE] },
+            quote! { [0u8; #table::EVENT_SOURCE_BUFFER_SIZE] },
+        )
+    };
     quote! {
         impl ::ridl_rt::contract::Sizes<#marker> for #iface_ident {
             const RESERVATIONS: &'static [::core::primitive::u64] = &[
@@ -295,10 +319,10 @@ fn sizes_table(
             ];
             const MAX_BUFFER_SIZE: ::core::primitive::usize = #max_buffer;
             const EVENT_SOURCE_BUFFER_SIZE: ::core::primitive::usize = #event_buffer;
-            type ClaimBuffer = [::core::primitive::u8; #table::MAX_BUFFER_SIZE];
-            type EventBuffer = [::core::primitive::u8; #table::EVENT_SOURCE_BUFFER_SIZE];
-            const CLAIM_BUFFER: Self::ClaimBuffer = [0u8; #table::MAX_BUFFER_SIZE];
-            const EVENT_BUFFER: Self::EventBuffer = [0u8; #table::EVENT_SOURCE_BUFFER_SIZE];
+            type ClaimBuffer = #claim_buffer;
+            type EventBuffer = #event_buffer_type;
+            const CLAIM_BUFFER: Self::ClaimBuffer = #claim_zero;
+            const EVENT_BUFFER: Self::EventBuffer = #event_zero;
         }
     }
 }
@@ -706,7 +730,8 @@ pub(crate) fn query_param_type<'a>(
 /// generates the rest of the package (interaction-face design rule 2). With
 /// `flatbuffers` in the list the bound read is the FlatBuffers root's; with
 /// `proto3` in the list it is the proto3 size state of the interaction's
-/// payload, `sizes`, and the refusal names the cause the sizer gave.
+/// payload, `sizes`, and the refusal names the cause the sizer gave; with
+/// `podbuf` in the list it is the podbuf size state of the same payload.
 fn induced_name<'a>(
     ctx: &Ctx<'a>,
     reference: Option<&v1::TupleRef>,
@@ -741,6 +766,21 @@ fn induced_name<'a>(
             return Err(GenerateError {
                 message: format!(
                     "`{}.{name}` has no finite proto3 bound: {cause}",
+                    ctx.package_name()
+                ),
+            });
+        }
+    }
+    if ctx.encodings.contains(&WireEncoding::Podbuf) {
+        let state = sizes.and_then(|sizes| sizes.podbuf.as_ref());
+        if !matches!(
+            state.and_then(|state| state.state.as_ref()),
+            Some(v1::size_state::State::Bounded(_))
+        ) {
+            return Err(GenerateError {
+                message: format!(
+                    "`{}.{name}` has no finite podbuf bound: its largest buffer does not fit a \
+                     u32 offset, or an array or map of it passes a descriptor limit",
                     ctx.package_name()
                 ),
             });

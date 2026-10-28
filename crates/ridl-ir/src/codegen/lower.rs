@@ -91,6 +91,7 @@ pub fn lower_with(
         flatbuffers: None,
         foreign: lowering.foreign.clone(),
         tuple_collisions: lowering.collisions.clone(),
+        podbuf: None,
     };
 
     // The FlatBuffers projection is its own walk over the IR, in the order the
@@ -114,6 +115,8 @@ pub fn lower_with(
     let projected = flatbuffers::project(scope, &named, &lowering.foreign_at);
     patch_flatbuffers(&mut model, &projected);
     model.flatbuffers = Some(projected.projection);
+    // A head that cannot be laid out is listed in `refused` with its cause.
+    model.podbuf = Some(super::podbuf::project(scope, &named, &lowering.foreign_at));
     model
 }
 
@@ -365,6 +368,14 @@ impl<'a> Lowering<'a> {
                     &PayloadShape::Named(&decl.name),
                     Some(&decl.name),
                     Encoding::Proto3,
+                )
+            }),
+            podbuf: (!is_constant).then(|| {
+                self.size_state(
+                    home,
+                    &PayloadShape::Named(&decl.name),
+                    Some(&decl.name),
+                    Encoding::Podbuf,
                 )
             }),
             kind: self.declaration_kind(home, decl, path),
@@ -1284,6 +1295,7 @@ impl<'a> Lowering<'a> {
         v1::PayloadSizes {
             proto3: Some(self.size_state(home, shape, reference, Encoding::Proto3)),
             flatbuffers: Some(self.size_state(home, shape, reference, Encoding::FlatBuffers)),
+            podbuf: Some(self.size_state(home, shape, reference, Encoding::Podbuf)),
         }
     }
 
@@ -1565,6 +1577,7 @@ pub(super) fn reserve(member: &str, payloads: Option<&[MemberPayload]>) -> v1::R
     v1::Reservation {
         proto3: Some(state(|sizes| &sizes.proto3)),
         flatbuffers: Some(state(|sizes| &sizes.flatbuffers)),
+        podbuf: Some(state(|sizes| &sizes.podbuf)),
     }
 }
 
@@ -1610,6 +1623,7 @@ fn budget(slots: &[v1::InteractionSlot]) -> v1::Reservation {
     v1::Reservation {
         proto3: Some(state(|reservation| &reservation.proto3)),
         flatbuffers: Some(state(|reservation| &reservation.flatbuffers)),
+        podbuf: Some(state(|reservation| &reservation.podbuf)),
     }
 }
 
@@ -1626,6 +1640,7 @@ fn absent_sizes() -> v1::PayloadSizes {
     v1::PayloadSizes {
         proto3: Some(state()),
         flatbuffers: Some(state()),
+        podbuf: Some(state()),
     }
 }
 
@@ -1693,7 +1708,7 @@ fn decl_kind(decl: &v2::Decl) -> v1::DeclKind {
 /// declared type, and a stream parameter, have no struct field, so a list
 /// holding either induces nothing (interaction face design, the request-shape
 /// rule).
-fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
+pub fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
     let mut fields = Vec::with_capacity(params.len());
     for param in params {
         let ty = param.r#type.as_ref()?;
@@ -1713,7 +1728,7 @@ fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
 /// fallible `T | E` reply, a named reply, and every other return form give
 /// `None` — a named reply keeps `reply_payload`, and a fallible reply is a
 /// sum this toolchain does not induce.
-fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
+pub fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
     let Some(ret) = ret else {
         return Some(v2::TupleType::default());
     };
@@ -1728,7 +1743,7 @@ fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
 
 /// What a call's request is sized as: the induced argument struct when the
 /// call has one, otherwise the single named parameter.
-fn request_shape<'a>(
+pub fn request_shape<'a>(
     params: &'a [v2::Param],
     induced: Option<&'a v2::TupleType>,
 ) -> PayloadShape<'a> {
@@ -1747,7 +1762,7 @@ fn single_param_type(params: &[v2::Param]) -> Option<&str> {
     named_type(param.r#type.as_ref()?)
 }
 
-fn query_reply_type(query: &v2::QueryDef) -> Option<&str> {
+pub fn query_reply_type(query: &v2::QueryDef) -> Option<&str> {
     match query.return_type.as_ref()?.kind.as_ref()? {
         v2::return_type::Kind::Value(value) => named_type(value),
         v2::return_type::Kind::Fallible(_) => None,

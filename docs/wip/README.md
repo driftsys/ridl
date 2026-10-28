@@ -165,6 +165,25 @@ archived on 2026-10-23, once `ridl_rt::payload::transcode` and the generated
 [the generated code chapter](../book/generated-code.md) are their durable
 records.
 
+The lane LIM driver and its three stage plans
+(`2026-10-24-lane-limits-{driver,lim1-plan,lim2-plan}.md` and
+`2026-10-27-lane-limits-lim3-plan.md`) were archived on 2026-10-27, once the
+three stages landed;
+[ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 10 and
+12 to 15, [`../design/ridl-transport-ws.md`](../design/ridl-transport-ws.md),
+[`../design/catalog-descriptor.md`](../design/catalog-descriptor.md), the frame
+specification §11.1 and [the CLI reference](../book/cli-reference.md) are their
+durable records.
+
+The podbuf design (`2026-10-24-podbuf-design.md`) was archived on 2026-10-27,
+once the codec landed;
+[ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md) (with the
+2026-10-27 amendment of
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 4 and open item 1) and
+[the podbuf codec design record](../design/podbuf-codec.md) are its durable
+records. Its plan (`2026-10-24-podbuf-plan.md`) is not archived; see below.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)
@@ -366,3 +385,11 @@ and was not archived. The reason is stated once per file or group.
   of the typl reference). The tracker shows #597 closed, but no commit after the
   design implements it; the maintainer decides whether each is taken, archived
   or superseded.
+
+## Files that stay after the podbuf pass (2026-10-27)
+
+- **2026-10-24-podbuf-plan.md** — Tasks 1 to 12, 15 and 16 are built, but Tasks
+  13 (open enums and enum sets in podbuf) and 14 (the `ridl diff` rule for an
+  open enum that changes width) are open: both wait for the typl `open` keyword,
+  which no record specifies yet. A note at the top of the plan says so. It is
+  archived with the work that builds them.

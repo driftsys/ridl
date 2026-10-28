@@ -293,17 +293,19 @@ shows them in use.
 ### Sizes
 
 The model states the maximum encoded size of every payload, of every command
-and query request, and of every query reply, once per wire encoding, proto3 and
-FlatBuffers. Each is bounded with a byte count, unbounded with a cause (for
+and query request, and of every query reply, once per wire encoding: proto3,
+FlatBuffers and podbuf. Each is bounded with a byte count, unbounded with a cause (for
 FlatBuffers only), or absent with a cause. The model also sums them:
 `Interaction.reservation` is the memory a call table reserves for one member,
 and `Interface.table_budget` (the key `tableBudget`) is the memory for the whole interface, each as a
 byte count or as `unsized`, naming the first payload or member that has no
-bounded size. Each `Declaration` carries one more size, `proto3`: the proto3
+bounded size. Each `Declaration` carries two more sizes. `proto3` is the proto3
 size state of the declaration's root message — its own message for a struct or
 a union, its `<Name>Box` message for a named scalar, an enum and an enum set.
-A constant has none. A proto3 codec reads it as the declaration's largest
-encoded size, as the Rust backend does.
+`podbuf` is the podbuf size state of the declaration as a payload root, the
+bound `ridl_ir::projection::podbuf::max_size` computes. A constant has neither.
+A codec reads them as the declaration's largest encoded size, as the Rust
+backend does.
 
 **A plugin reads these sizes; it does not compute them.** The sizes of the
 `warning` event's payload in `examples/cabin`, and its reservation:
@@ -319,6 +321,9 @@ jq '.model.interfaces[0].slots[1].interaction.event.payload.sizes' request.json
   },
   "flatbuffers": {
     "bounded": 60
+  },
+  "podbuf": {
+    "bounded": 16
   }
 }
 ```
@@ -334,6 +339,9 @@ jq '.model.interfaces[0].slots[1].interaction.reservation' request.json
   },
   "flatbuffers": {
     "bytes": "60"
+  },
+  "podbuf": {
+    "bytes": "16"
   }
 }
 ```
@@ -347,6 +355,19 @@ those values: the `websocket` row of
 [the frame specification §11.1](reference/frame.md#111-websocket), a data-plane
 frame header of at most 20 bytes and an envelope of 16 bytes. A test of
 `ridl-transport-ws` checks that row against the frames its codec writes.
+
+### The podbuf layout
+
+`Model.podbuf` holds the layout of every podbuf head of the package, so that a
+plugin that writes podbuf code never computes the layout law. Each head lists
+its fields with the offset, the size, the alignment and the form of each, the
+flag bit of an optional field, and the unused byte runs. A form says what the
+bytes are: an integer, a float, an enum, an inline head (an index into
+`podbuf.heads`), an exact-length array, or a descriptor to the tail with the
+element type, the stride and the bounds. A union head lists the head of each
+arm. A struct, union or tuple that cannot be laid out is listed in
+`podbuf.refused` with its cause, and no head is written for it.
+[The codegen plugin record, "The podbuf projection"][podbuf-projection] gives the order of the heads and the meaning of each field.
 
 ## The catalog hash
 
@@ -401,9 +422,9 @@ section carries those facts to a plugin at build time.
 
 ## What is not available yet
 
-- **`repr(C)`.** The `ENCODING_REPR_C` value exists in the schema, but no
-  consumer link carries it and no payload has a `repr(C)` size state
-  ([driftsys/ridl#317][i317]).
+- **`podbuf` on a consumer link.** Every payload has a `podbuf` size state and
+  the model carries the podbuf layout (see "The podbuf layout" above), but no
+  consumer link carries `ENCODING_PODBUF`: no rsdl fact selects it.
 - **Members whose depth or size cannot be derived.** An event's depth is absent
   with the source `UNDERIVABLE` when its timing gives no bound. The build warns
   with RSDL-806 when a consumer link consumes such an event with no declared
@@ -432,6 +453,7 @@ section carries those facts to a plugin at build time.
 [design]: https://github.com/driftsys/ridl/blob/main/docs/design/codegen-plugins.md
 [design-host]: https://github.com/driftsys/ridl/blob/main/docs/design/codegen-plugins.md#4-the-process-host
 [design-deployment]: https://github.com/driftsys/ridl/blob/main/docs/design/codegen-plugins.md#7-the-deployment-section
+[podbuf-projection]: https://github.com/driftsys/ridl/blob/main/docs/design/codegen-plugins.md#the-podbuf-projection
 [catalog]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md
 [size-states]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md#the-size-states
 [not-built]: https://github.com/driftsys/ridl/blob/main/docs/design/catalog-descriptor.md#not-built
@@ -448,5 +470,4 @@ section carries those facts to a plugin at build time.
 [gen-model]: https://github.com/driftsys/ridl/blob/main/crates/ridlc-gen-model/src/main.rs
 [layout]: https://github.com/driftsys/ridl/blob/main/crates/ridlc/tests/layout.rs
 [kotlin]: https://github.com/driftsys/ridlc-gen-kotlin
-[i317]: https://github.com/driftsys/ridl/issues/317
 [i735]: https://github.com/driftsys/ridl/issues/735

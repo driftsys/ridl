@@ -43,6 +43,7 @@ expression: stdout
       "members": [
         {
           "kind": "Signal",
+          "limit": null,
           "name": "currentSpeed",
           "ordinal": 1,
           "payloads": [
@@ -59,6 +60,12 @@ expression: stdout
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
                   "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
+                  "state": "Bounded"
                 }
               ],
               "role": "value",
@@ -73,6 +80,7 @@ expression: stdout
         },
         {
           "kind": "Event",
+          "limit": null,
           "name": "tyrePressure",
           "ordinal": 2,
           "payloads": [
@@ -89,6 +97,12 @@ expression: stdout
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
                   "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
+                  "state": "Bounded"
                 }
               ],
               "role": "occurrence",
@@ -103,6 +117,7 @@ expression: stdout
         },
         {
           "kind": "Event",
+          "limit": null,
           "name": "doorClosed",
           "ordinal": 3,
           "payloads": [
@@ -119,6 +134,12 @@ expression: stdout
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
                   "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
+                  "state": "Bounded"
                 }
               ],
               "role": "occurrence",
@@ -133,6 +154,7 @@ expression: stdout
         },
         {
           "kind": "Event",
+          "limit": null,
           "name": "doorOpened",
           "ordinal": 4,
           "payloads": [
@@ -149,6 +171,12 @@ expression: stdout
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
                   "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
+                  "state": "Bounded"
                 }
               ],
               "role": "occurrence",
@@ -163,6 +191,7 @@ expression: stdout
         },
         {
           "kind": "Signal",
+          "limit": null,
           "name": "legacyWheelPhase",
           "ordinal": 5,
           "payloads": [
@@ -178,6 +207,12 @@ expression: stdout
                   "bytes": 46,
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
                   "state": "Bounded"
                 }
               ],
@@ -201,6 +236,7 @@ expression: stdout
       "members": [
         {
           "kind": "Signal",
+          "limit": null,
           "name": "cabinTemp",
           "ordinal": 1,
           "payloads": [
@@ -217,6 +253,12 @@ expression: stdout
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
                   "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
+                  "state": "Bounded"
                 }
               ],
               "role": "value",
@@ -231,6 +273,7 @@ expression: stdout
         },
         {
           "kind": "Event",
+          "limit": null,
           "name": "filterClogged",
           "ordinal": 2,
           "payloads": [
@@ -246,6 +289,12 @@ expression: stdout
                   "bytes": 43,
                   "cause": "Unspecified",
                   "encoding": "FlatBuffers",
+                  "state": "Bounded"
+                },
+                {
+                  "bytes": 16,
+                  "cause": "Unspecified",
+                  "encoding": "Podbuf",
                   "state": "Bounded"
                 }
               ],

@@ -996,35 +996,7 @@ impl<'a> Codec<'a> {
     /// wire whatever its interface's identity; no name is needed, because
     /// nothing here refuses.
     fn interaction_roots(&self) -> HashMap<u32, u32> {
-        let mut roots: HashMap<u32, u32> = HashMap::new();
-        for interface in &self.ctx.model.interfaces {
-            for (_, interaction) in interactions(interface) {
-                let payloads: Vec<(Option<&v1::TupleRef>, Option<&v1::PayloadSizes>)> =
-                    match interaction.shape.as_ref() {
-                        Some(v1::interaction::Shape::Command(command)) => {
-                            vec![(
-                                command.request_tuple.as_ref(),
-                                command.request_sizes.as_ref(),
-                            )]
-                        }
-                        Some(v1::interaction::Shape::Query(query)) => vec![
-                            (query.request_tuple.as_ref(), query.request_sizes.as_ref()),
-                            (query.reply_tuple.as_ref(), query.reply_sizes.as_ref()),
-                        ],
-                        _ => Vec::new(),
-                    };
-                for (reference, sizes) in payloads {
-                    let Some(reference) = reference else {
-                        continue;
-                    };
-                    let state = sizes.and_then(|sizes| sizes.proto3.as_ref());
-                    if let Ok(bound) = bound_state(state) {
-                        roots.insert(reference.index, bound);
-                    }
-                }
-            }
-        }
-        roots
+        tuple_roots(self.ctx, |sizes| sizes.proto3.as_ref())
     }
 
     /// The induced tuples reachable from the declarations and from the
@@ -2919,6 +2891,45 @@ impl<'a> Codec<'a> {
             }
         }
     }
+}
+
+/// The induced tuples the interactions of a package send on their own, each
+/// with the bound `select` reads from the interaction's payload sizes, when
+/// that state is bounded. The proto3 and podbuf codecs share the walk and
+/// differ in the encoding's state.
+pub(crate) fn tuple_roots(
+    ctx: &Ctx,
+    select: fn(&v1::PayloadSizes) -> Option<&v1::SizeState>,
+) -> HashMap<u32, u32> {
+    let mut roots: HashMap<u32, u32> = HashMap::new();
+    for interface in &ctx.model.interfaces {
+        for (_, interaction) in interactions(interface) {
+            let payloads: Vec<(Option<&v1::TupleRef>, Option<&v1::PayloadSizes>)> =
+                match interaction.shape.as_ref() {
+                    Some(v1::interaction::Shape::Command(command)) => {
+                        vec![(
+                            command.request_tuple.as_ref(),
+                            command.request_sizes.as_ref(),
+                        )]
+                    }
+                    Some(v1::interaction::Shape::Query(query)) => vec![
+                        (query.request_tuple.as_ref(), query.request_sizes.as_ref()),
+                        (query.reply_tuple.as_ref(), query.reply_sizes.as_ref()),
+                    ],
+                    _ => Vec::new(),
+                };
+            for (reference, sizes) in payloads {
+                let Some(reference) = reference else {
+                    continue;
+                };
+                let state = sizes.and_then(select);
+                if let Ok(bound) = bound_state(state) {
+                    roots.insert(reference.index, bound);
+                }
+            }
+        }
+    }
+    roots
 }
 
 /// The bound a proto3 size state carries, or the cause of its absence as

@@ -87,9 +87,10 @@ pub struct LoadedWorkspace {
     /// member's manifest cannot carry one (MANI-016).
     pub backends: BTreeMap<String, BackendTable>,
     /// Each unit's `[limits]` table, keyed by the `[package]` name of the
-    /// unit's manifest. A table applies to its own unit only: a workspace
-    /// root's `[limits]` is not carried to its members, and a unit with no
-    /// table has no entry. Empty in single-file mode.
+    /// unit's manifest, for each loaded local and remote unit. A table
+    /// applies to its own unit only: a workspace root's `[limits]` is not
+    /// carried to its members, and a unit with no table has no entry. Empty
+    /// in single-file mode.
     pub unit_limits: BTreeMap<String, UnitLimits>,
     /// The member directory the entry lies in, when the entry is inside a
     /// member of the loaded workspace ([`find_root`] walked from the member to
@@ -1414,8 +1415,9 @@ impl Loader {
     /// its own
     /// `interfaces.lock`. The ordinary rules apply unchanged: MANI-014 when
     /// a consumer unit or an earlier remote unit already claims a package,
-    /// and the tree is then not loaded. No lint scope is recorded for the
-    /// unit's directory. Returns the unit's name once the manifest gave one.
+    /// and the tree is then not loaded. The unit's `[limits]` table is stored
+    /// in `unit_limits`, so the consumer records the owner's limits. No lint
+    /// scope is recorded for the unit's directory. Returns the unit's name once the manifest gave one.
     #[cfg(feature = "fetch")]
     fn read_remote_unit(
         &mut self,
@@ -1535,6 +1537,15 @@ impl Loader {
             origin: &origin,
         };
         self.load_package_tree(db, &unit.dir, &name, &scope)?;
+        if !manifest.limits.is_empty() {
+            self.unit_limits.insert(
+                name.clone(),
+                UnitLimits {
+                    manifest: file_id,
+                    limits: manifest.limits.clone(),
+                },
+            );
+        }
         self.remote_units.insert(name.clone(), unit.clone());
         Ok(Some(name))
     }
@@ -4759,6 +4770,55 @@ service:veh.common.climate 2
                 loaded.imports,
                 BTreeMap::from([(URL.to_string(), BTreeSet::from(["veh.common".to_string()]))])
             );
+        }
+
+        /// The `[limits]` table of a remote unit is loaded under the unit's
+        /// name, with the unit's own `ridl.toml` as its manifest.
+        #[test]
+        fn a_remote_units_limits_table_is_loaded() {
+            let fixture = TempDir::new("remote-limits");
+            let root = consumer(&fixture);
+            let manifest = format!("{COMMON_MANIFEST}\n[limits]\ndefault = 64\n");
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[
+                    ("ridl.toml", manifest.as_str()),
+                    ("common.typl", "package veh.common\ntype Speed: km/h\n"),
+                ],
+            );
+            let (_db, loaded) = load_frozen(&fixture, &root);
+            assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
+            let entry = loaded
+                .unit_limits
+                .get("veh.common")
+                .expect("the remote unit has a limits entry");
+            assert_eq!(entry.limits.default.as_ref().map(|d| *d.as_ref()), Some(64));
+            assert_eq!(
+                loaded.sources.path(entry.manifest),
+                Some(
+                    path_string(&loaded.remote_units["veh.common"].dir.join("ridl.toml")).as_str()
+                )
+            );
+        }
+
+        /// A remote unit with no `[limits]` table has no entry.
+        #[test]
+        fn a_remote_unit_with_no_limits_table_has_no_entry() {
+            let fixture = TempDir::new("remote-no-limits");
+            let root = consumer(&fixture);
+            seed(
+                &cache(&fixture),
+                &root,
+                URL,
+                &[
+                    ("ridl.toml", COMMON_MANIFEST),
+                    ("common.typl", "package veh.common\ntype Speed: km/h\n"),
+                ],
+            );
+            let (_db, loaded) = load_frozen(&fixture, &root);
+            assert!(!loaded.unit_limits.contains_key("veh.common"));
         }
 
         /// A tree with no top-level `ridl.toml` is a detached MANI-105 that

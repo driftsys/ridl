@@ -30,10 +30,13 @@
 //! refused with both sources named rather than by the FlatBuffers projection,
 //! whose message named neither (X-11).
 
-use crate::codec;
 use crate::descriptors::{self, declared_name, interactions};
 use crate::face::{self, CALL_SUFFIXES};
-use crate::{Ctx, GenerateError, camel_of, declared, ident, snake_of, tuple_collision, tuple_name};
+use crate::{
+    Ctx, GenerateError, WireEncoding, camel_of, declared, ident, snake_of, tuple_collision,
+    tuple_name,
+};
+use crate::{codec, codec_podbuf};
 use proc_macro2::Ident;
 use ridl_ir::codegen::v1;
 use std::collections::HashMap;
@@ -158,6 +161,50 @@ pub(crate) fn check(ctx: &Ctx, interfaces: &[&v1::Interface]) -> Result<(), Gene
                     tuple_source(ctx, tuple)
                 ),
             )?;
+        }
+    }
+
+    // The podbuf head struct and view of each type the podbuf codec emits
+    // for, claimed only when the codec is: a types-only package, or one that
+    // lists the other encodings alone, carries neither.
+    if ctx.encodings.contains(&WireEncoding::Podbuf) {
+        for owner in codec_podbuf::head_owners(ctx) {
+            let (name, source) = match owner {
+                codec_podbuf::HeadOwner::Declaration(index)
+                | codec_podbuf::HeadOwner::Boxed(index) => {
+                    let Some(decl) = ctx.declaration(index) else {
+                        continue;
+                    };
+                    let name = declared(decl.name.as_ref());
+                    (name, format!("declaration `{name}`"))
+                }
+                codec_podbuf::HeadOwner::Tuple(index) => {
+                    let Some(tuple) = ctx.tuple(index) else {
+                        continue;
+                    };
+                    (tuple_name(tuple), tuple_source(ctx, tuple))
+                }
+            };
+            // A boxed scalar has a view and no head struct.
+            if !matches!(owner, codec_podbuf::HeadOwner::Boxed(_)) {
+                types.claim(
+                    &codec_podbuf::head_ident(name),
+                    format!("the podbuf head of {source} (the suffix `PodbufHead`)"),
+                )?;
+            }
+            types.claim(
+                &codec_podbuf::view_ident(name),
+                format!("the podbuf view of {source} (the suffix `PodbufView`)"),
+            )?;
+            if matches!(owner, codec_podbuf::HeadOwner::Declaration(index)
+            if ctx.declaration(index).is_some_and(|decl| {
+                matches!(decl.kind, Some(v1::declaration::Kind::Union(_)))
+            })) {
+                types.claim(
+                    &codec_podbuf::arm_ident(name),
+                    format!("the podbuf arm views of {source} (the suffix `PodbufArm`)"),
+                )?;
+            }
         }
     }
 

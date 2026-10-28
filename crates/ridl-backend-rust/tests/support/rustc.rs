@@ -52,7 +52,7 @@ pub fn ridl_rt_rlib_bare(dir: &Path) -> PathBuf {
 }
 
 fn ridl_rt_rlib_with(dir: &Path, std: bool) -> PathBuf {
-    let mut features = vec!["flatbuffers", "proto3", "repr-c"];
+    let mut features = vec!["flatbuffers", "proto3", "podbuf"];
     if std {
         features.push("std");
     }
@@ -227,7 +227,26 @@ pub fn run_program_capturing_stdout(name: &str, source: &str) -> String {
 /// not installed and cannot be added: the same guard `just wasm-check` puts
 /// on `rustup`. The caller reports that rather than passing in silence.
 pub fn check_for_wasm32(name: &str, source: &str) -> bool {
-    if !ensure_wasm32_target() {
+    check_for_target(
+        "wasm32-unknown-unknown",
+        &["flatbuffers", "proto3", "podbuf"],
+        name,
+        source,
+    )
+}
+
+/// Checks `source` for `thumbv7em-none-eabihf`, a target with no standard
+/// library, against a `ridl-rt` built for it with only the `podbuf` feature.
+/// `source` has to be `no_std` itself. Returns `false`, having checked
+/// nothing, when the target is not installed and cannot be added.
+pub fn check_for_thumbv7em(name: &str, source: &str) -> bool {
+    check_for_target("thumbv7em-none-eabihf", &["podbuf"], name, source)
+}
+
+/// [`check_for_wasm32`] for any `target`, with `ridl-rt` built for it with
+/// the features in `features`.
+fn check_for_target(target: &str, features: &[&str], name: &str, source: &str) -> bool {
+    if !ensure_target(target) {
         return false;
     }
     let dir = tempfile::tempdir().expect("a temp dir is created");
@@ -249,14 +268,13 @@ pub fn check_for_wasm32(name: &str, source: &str) -> bool {
             "--crate-name",
             "ridl_rt",
             "--target",
-            "wasm32-unknown-unknown",
+            target,
         ])
-        .arg("--cfg")
-        .arg(r#"feature="flatbuffers""#)
-        .arg("--cfg")
-        .arg(r#"feature="proto3""#)
-        .arg("--cfg")
-        .arg(r#"feature="repr-c""#)
+        .args(
+            features
+                .iter()
+                .flat_map(|feature| ["--cfg".to_string(), format!(r#"feature="{feature}""#)]),
+        )
         .arg(&ridl_rt_source)
         .arg("-o")
         .arg(&rlib)
@@ -264,7 +282,7 @@ pub fn check_for_wasm32(name: &str, source: &str) -> bool {
         .expect("rustc must be installed and runnable for this test to be meaningful");
     assert!(
         status.success(),
-        "ridl-rt must build for wasm32 before generated code can be checked against it"
+        "ridl-rt must build for {target} before generated code can be checked against it"
     );
 
     let status = std::process::Command::new("rustc")
@@ -274,7 +292,7 @@ pub fn check_for_wasm32(name: &str, source: &str) -> bool {
             "--crate-type",
             "lib",
             "--target",
-            "wasm32-unknown-unknown",
+            target,
             "--emit=metadata",
             "-D",
             "warnings",
@@ -288,14 +306,14 @@ pub fn check_for_wasm32(name: &str, source: &str) -> bool {
         .expect("rustc must be installed and runnable for this test to be meaningful");
     assert!(
         status.success(),
-        "the generated code must check for wasm32-unknown-unknown, source:\n{source}"
+        "the generated code must check for {target}, source:\n{source}"
     );
     true
 }
 
-/// Installs `wasm32-unknown-unknown` if it is missing, and reports whether
-/// the target is available afterwards.
-fn ensure_wasm32_target() -> bool {
+/// Installs `target` if it is missing, and reports whether the target is
+/// available afterwards.
+fn ensure_target(target: &str) -> bool {
     let Ok(installed) = std::process::Command::new("rustup")
         .args(["target", "list", "--installed"])
         .output()
@@ -304,12 +322,12 @@ fn ensure_wasm32_target() -> bool {
     };
     if String::from_utf8_lossy(&installed.stdout)
         .lines()
-        .any(|line| line.trim() == "wasm32-unknown-unknown")
+        .any(|line| line.trim() == target)
     {
         return true;
     }
     std::process::Command::new("rustup")
-        .args(["target", "add", "wasm32-unknown-unknown"])
+        .args(["target", "add", target])
         .status()
         .map(|status| status.success())
         .unwrap_or(false)

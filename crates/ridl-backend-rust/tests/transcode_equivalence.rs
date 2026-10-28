@@ -8,8 +8,9 @@
 //! direction likewise. A streaming transcoder that replaces the bodies of those
 //! functions must pass the same comparisons.
 
-use ridl_rt::encoding::{FlatBuffers, Proto3};
+use ridl_rt::encoding::{FlatBuffers, Podbuf, Proto3};
 use ridl_rt::payload::{EncodeError, Ref, Rule, TranscodeError, VerifyError};
+use ridl_rt::podbuf::Aligned;
 
 /// The checked-in output of `generate_pipeline` over `tests/fixtures/transcode.ridl`
 /// with both encodings and `transcode = true`. It is `include!`d, never
@@ -61,6 +62,66 @@ macro_rules! assert_equivalent {
             .expect("transcode flatbuffers to proto3");
         assert_eq!(
             to_proto3.bytes(),
+            proto3.bytes(),
+            "flatbuffers to proto3 differs from the direct encoding of {value:?}"
+        );
+    }};
+}
+
+/// Checks the six ordered pairs of the three encodings for one value of
+/// `$ty`: the transcode of the bytes of one encoding to another must equal the
+/// direct encoding of the value in the other. A podbuf buffer starts on an
+/// 8-byte boundary, so every output is an `Aligned` array.
+macro_rules! assert_all_pairs_equivalent {
+    ($ty:ty, $value:expr) => {{
+        let value: $ty = $value;
+        let mut proto3_buf = Aligned([0u8; BUFFER]);
+        let mut flatbuffers_buf = Aligned([0u8; BUFFER]);
+        let mut podbuf_buf = Aligned([0u8; BUFFER]);
+        let proto3 = Ref::<$ty, Proto3>::encode(&value, &mut proto3_buf.0).expect("encode proto3");
+        let flatbuffers = Ref::<$ty, FlatBuffers>::encode(&value, &mut flatbuffers_buf.0)
+            .expect("encode flatbuffers");
+        let podbuf = Ref::<$ty, Podbuf>::encode(&value, &mut podbuf_buf.0).expect("encode podbuf");
+        let mut out = Aligned([0u8; BUFFER]);
+        assert_eq!(
+            <$ty>::transcode_proto3_to_podbuf(proto3.bytes(), &mut out.0)
+                .expect("proto3 to podbuf")
+                .bytes(),
+            podbuf.bytes(),
+            "proto3 to podbuf differs from the direct encoding of {value:?}"
+        );
+        assert_eq!(
+            <$ty>::transcode_flatbuffers_to_podbuf(flatbuffers.bytes(), &mut out.0)
+                .expect("flatbuffers to podbuf")
+                .bytes(),
+            podbuf.bytes(),
+            "flatbuffers to podbuf differs from the direct encoding of {value:?}"
+        );
+        assert_eq!(
+            <$ty>::transcode_podbuf_to_proto3(podbuf.bytes(), &mut out.0)
+                .expect("podbuf to proto3")
+                .bytes(),
+            proto3.bytes(),
+            "podbuf to proto3 differs from the direct encoding of {value:?}"
+        );
+        assert_eq!(
+            <$ty>::transcode_podbuf_to_flatbuffers(podbuf.bytes(), &mut out.0)
+                .expect("podbuf to flatbuffers")
+                .bytes(),
+            flatbuffers.bytes(),
+            "podbuf to flatbuffers differs from the direct encoding of {value:?}"
+        );
+        assert_eq!(
+            <$ty>::transcode_proto3_to_flatbuffers(proto3.bytes(), &mut out.0)
+                .expect("proto3 to flatbuffers")
+                .bytes(),
+            flatbuffers.bytes(),
+            "proto3 to flatbuffers differs from the direct encoding of {value:?}"
+        );
+        assert_eq!(
+            <$ty>::transcode_flatbuffers_to_proto3(flatbuffers.bytes(), &mut out.0)
+                .expect("flatbuffers to proto3")
+                .bytes(),
             proto3.bytes(),
             "flatbuffers to proto3 differs from the direct encoding of {value:?}"
         );
@@ -426,4 +487,82 @@ fn a_flatbuffers_value_outside_a_declared_range_fails_with_a_contract_violation(
         Level::transcode_flatbuffers_to_proto3(&level_bytes, &mut out),
         "Level",
     );
+}
+
+#[test]
+fn podbuf_transcodes_agree_with_the_direct_encodings() {
+    // A named scalar, an enum, a struct, a union and the induced call struct
+    // each carry the three encodings.
+    for value in [0, 1, 100, 200] {
+        assert_all_pairs_equivalent!(Count, count(value));
+    }
+    for value in [-5, 0, 10] {
+        assert_all_pairs_equivalent!(Level, level(value));
+    }
+    for value in ["", "a", "naïve café", "sixteen chars..."] {
+        assert_all_pairs_equivalent!(Label, label(value));
+    }
+    for value in [Mode::Idle, Mode::Active, Mode::Fault] {
+        assert_all_pairs_equivalent!(Mode, value);
+    }
+    assert_all_pairs_equivalent!(Reading, Reading::default());
+    assert_all_pairs_equivalent!(
+        Reading,
+        reading(200, 10, "sixteen chars...", Mode::Fault, 1.0, true)
+    );
+    assert_all_pairs_equivalent!(
+        Reading,
+        reading(17, -3, "température", Mode::Idle, -0.25, true)
+    );
+    assert_all_pairs_equivalent!(Outcome, Outcome::Number(count(200)));
+    assert_all_pairs_equivalent!(Outcome, Outcome::Text(label("mid")));
+    assert_all_pairs_equivalent!(Outcome, Outcome::Mode(Mode::Fault));
+    assert_all_pairs_equivalent!(
+        Outcome,
+        Outcome::Reading(reading(5, -5, "x", Mode::Active, -1.0, true))
+    );
+    assert_all_pairs_equivalent!(
+        GaugeSetParams,
+        GaugeSetParams {
+            count: count(200),
+            level: level(-5),
+        }
+    );
+    assert_all_pairs_equivalent!(
+        Panel,
+        Panel {
+            note: Some(label("n")),
+            levels: vec![level(-1), level(2)],
+            // Sorted by key: podbuf writes a map in key order, so a map in
+            // any other order would decode into a different sequence.
+            by_key: vec![(key("clé"), count(200)), (key("k"), count(5))],
+            inner: inner(9, "日本語"),
+        }
+    );
+}
+
+#[test]
+fn podbuf_bytes_that_do_not_verify_fail_with_a_verify_error() {
+    let garbage = Aligned([0xffu8; 8]);
+    let mut out = Aligned([0u8; BUFFER]);
+    assert!(matches!(
+        Reading::transcode_podbuf_to_proto3(&garbage.0, &mut out.0),
+        Err(TranscodeError::Verify(_))
+    ));
+    assert!(matches!(
+        Reading::transcode_podbuf_to_flatbuffers(&garbage.0, &mut out.0),
+        Err(TranscodeError::Verify(_))
+    ));
+}
+
+#[test]
+fn a_podbuf_output_buffer_that_is_too_small_fails_with_a_capacity_error() {
+    let value = reading(200, 10, "sixteen chars...", Mode::Fault, 1.0, true);
+    let mut a = [0u8; BUFFER];
+    let proto3 = Ref::<Reading, Proto3>::encode(&value, &mut a).expect("encode proto3");
+    let mut small = Aligned([0u8; 8]);
+    assert!(matches!(
+        Reading::transcode_proto3_to_podbuf(proto3.bytes(), &mut small.0),
+        Err(TranscodeError::Encode(EncodeError::Capacity { .. }))
+    ));
 }

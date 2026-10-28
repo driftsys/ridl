@@ -109,9 +109,10 @@ impl MemberTable {
     ///
     /// The table holds one entry for each member of each interface, with
     /// the member's kind and its `max` bound (the `max_us` of its timing,
-    /// `None` when the member has no timing or no `max_us`). A reserved
-    /// ordinal and a retired interface give no entry. Each hash of the
-    /// catalog's `compatible` list is added with
+    /// `None` when the member has no timing or no `max_us`) and its payload
+    /// limit (the descriptor's `limit`, `None` when absent; any `u32` is
+    /// stored as it is). A reserved ordinal and a retired interface give no
+    /// entry. Each hash of the catalog's `compatible` list is added with
     /// [`add_compatible`](Self::add_compatible), so a repeated hash and the
     /// own hash are not listed.
     ///
@@ -163,6 +164,9 @@ impl MemberTable {
                     None => None,
                 };
                 table.insert(iface, ord, kind(member.kind().map_err(invalid)?), max);
+                if let Some(limit) = member.limit().map_err(invalid)? {
+                    table.set_limit(iface, ord, limit);
+                }
             }
         }
         // Absent in a file written before the field existed.

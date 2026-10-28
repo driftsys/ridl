@@ -75,6 +75,17 @@ choices, see [`../decisions/`](../decisions/).
   decisions 3 and 4 and
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 8
   and 10, as amended 2026-10-20.
+- **podbuf-codec.md** — the generated `Payload<Podbuf>` implementation and the C
+  header as built: where the code is, the layout law computed once in `ridl-ir`,
+  what is emitted per type (the head struct, the view, the encoder, `verify` as
+  a call tree, `decode`), the `podbuf` module of `ridl-rt`, the `Sizes<Podbuf>`
+  table, the conformance tests with the law as the oracle, and the known gaps.
+  The decisions behind its choices are
+  [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md),
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decisions 1, 3, 5, 8 and 9 and
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decisions 7
+  and 8.
 - **catalog-descriptor.md** — the FlatBuffers catalog descriptor per unit as
   built: the `RDLC` file `--emit catalog` writes, the append-only schema and its
   generated planus accessors, what a catalog contains, the catalog hash and the
