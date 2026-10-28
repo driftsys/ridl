@@ -22,6 +22,8 @@
 //!   breaking. A false "breaking" costs a maintainer one review; a false
 //!   "compatible" ships a wire break.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use ridl_ir::v2;
 
 use crate::{Category, Change, Verdict, frozen};
@@ -485,9 +487,14 @@ fn resolve<'a>(
 /// retired number, which typl §7.4 forbids so a wire value never carries a new
 /// meaning.
 fn appended_slot(old: &[(String, i64)], old_retired: &[i64], new: &[(String, i64)]) -> bool {
+    // The first slot of a name, as a linear search would find it.
+    let mut new_slots: BTreeMap<&str, i64> = BTreeMap::new();
+    for (name, slot) in new {
+        new_slots.entry(name.as_str()).or_insert(*slot);
+    }
     for (name, old_slot) in old {
-        match new.iter().find(|(new_name, _)| new_name == name) {
-            Some((_, new_slot)) if new_slot == old_slot => {}
+        match new_slots.get(name.as_str()) {
+            Some(new_slot) if new_slot == old_slot => {}
             // A surviving member moved, or vanished alongside the addition.
             _ => return false,
         }
@@ -498,9 +505,9 @@ fn appended_slot(old: &[(String, i64)], old_retired: &[i64], new: &[(String, i64
             .map(|(_, slot)| *slot)
             .chain(old_retired.iter().copied())
     };
-    let old_names: Vec<&String> = old.iter().map(|(name, _)| name).collect();
+    let old_names: BTreeSet<&str> = old.iter().map(|(name, _)| name.as_str()).collect();
     for (name, slot) in new {
-        if old_names.contains(&name) {
+        if old_names.contains(name.as_str()) {
             continue;
         }
         if !is_above_high_water(*slot, held()) {
