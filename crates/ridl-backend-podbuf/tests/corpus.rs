@@ -84,7 +84,19 @@ fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/two-packages");
     let packages = support::workspace(&path);
     for name in ["pod.parts", "pod.vehicle"] {
-        let header = support::header(&packages, name);
+        let package = packages.iter().find(|p| p.name == name).unwrap();
+        let others: Vec<&ridl_ir::v2::Package> = packages.iter().collect();
+        let built = ridl_backend_podbuf::generate_with(package, &others);
+        assert!(
+            built.is_ok(),
+            "{name}: the build refused: {}",
+            built
+                .as_ref()
+                .err()
+                .map(|e| e.message.as_str())
+                .unwrap_or("")
+        );
+        let header = built.unwrap().header_source;
         let pair = head_body(&header, "pod_parts_clash_pair_head");
         assert!(pair.contains("uint8_t f1;"), "{name}: {pair}");
         assert!(pair.contains("uint8_t f2;"), "{name}: {pair}");
@@ -93,6 +105,18 @@ fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
         assert!(presence.contains("uint8_t f1;"), "{name}: {presence}");
         assert!(presence.contains("uint8_t f2;"), "{name}: {presence}");
         assert!(!presence.contains("has_x"), "{name}: {presence}");
+        // The reserved word `int` is spelled `int_`, and its presence test
+        // is `has_int`, so the stems are compared without the underscore.
+        let trim = head_body(&header, "pod_parts_clash_trim_head");
+        assert!(trim.contains("uint8_t f1;"), "{name}: {trim}");
+        assert!(trim.contains("uint8_t f2;"), "{name}: {trim}");
+        assert!(!trim.contains("int_"), "{name}: {trim}");
+        // A required `x` has no presence test, so `hasX` next to it is no
+        // clash.
+        let plain = head_body(&header, "pod_parts_clash_plain_head");
+        assert!(plain.contains("uint8_t x;"), "{name}: {plain}");
+        assert!(plain.contains("uint8_t has_x;"), "{name}: {plain}");
+        assert!(!plain.contains("f1"), "{name}: {plain}");
         let clear = head_body(&header, "pod_parts_clash_clear_head");
         assert!(clear.contains("uint8_t left;"), "{name}: {clear}");
         assert!(clear.contains("uint8_t right;"), "{name}: {clear}");
@@ -105,6 +129,9 @@ fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
         "{parts}"
     );
     assert!(parts.contains("pod_parts_clash_presence_f2_at("), "{parts}");
+    assert!(parts.contains("pod_parts_clash_trim_has_f1_at("), "{parts}");
+    assert!(parts.contains("pod_parts_clash_plain_x_at("), "{parts}");
+    assert!(parts.contains("pod_parts_clash_plain_has_x_at("), "{parts}");
     assert!(parts.contains("pod_parts_clash_clear_left_at("), "{parts}");
 }
 

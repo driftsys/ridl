@@ -53,5 +53,7 @@ struct Gauge {
 struct Clash {
   pair     : (minSpeed: integer [0..255], min_speed: integer [0..255])
   presence : (x: integer [0..255]?, hasX: integer [0..255])
+  trim     : (int: integer [0..255]?, hasInt: integer [0..255])
+  plain    : (x: integer [0..255], hasX: integer [0..255])
   clear    : (left: integer [0..255], right: integer [0..255])
 }
