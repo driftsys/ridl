@@ -2541,7 +2541,10 @@ mod podbuf {
     fn reading_v2() -> v2::Decl {
         struct_decl(
             "SensorReading",
-            vec![field("value", 1, named("Level")), field("quality", 2, wide())],
+            vec![
+                field("value", 1, named("Level")),
+                field("quality", 2, wide()),
+            ],
         )
     }
 
@@ -2671,7 +2674,10 @@ mod podbuf {
     /// inline nowhere on the old side.
     #[test]
     fn a_holder_new_on_the_new_side_does_not_make_the_append_a_break() {
-        let old = package("veh.common", vec![int_type("Level", "0", "100"), reading_v1()]);
+        let old = package(
+            "veh.common",
+            vec![int_type("Level", "0", "100"), reading_v1()],
+        );
         let report = diff(&old, &inline_package(reading_v2()), &["podbuf"]);
         assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
         assert!(

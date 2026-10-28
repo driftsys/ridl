@@ -1993,7 +1993,11 @@ pub(crate) fn podbuf_inline_appends(
 }
 
 /// The struct `name` of the package `package` in `scope`, when it is one.
-fn struct_def<'p>(scope: &[&'p v2::Package], package: &str, name: &str) -> Option<&'p v2::StructDef> {
+fn struct_def<'p>(
+    scope: &[&'p v2::Package],
+    package: &str,
+    name: &str,
+) -> Option<&'p v2::StructDef> {
     let home = scope.iter().copied().find(|pkg| pkg.name == package)?;
     home.decls
         .iter()
@@ -2006,7 +2010,12 @@ fn struct_def<'p>(scope: &[&'p v2::Package], package: &str, name: &str) -> Optio
 
 /// The podbuf head size of the struct `name` of `package`, laid out by the
 /// law over `scope`; `None` when the law refuses the struct.
-fn head_size(scope: &[&v2::Package], package: &str, name: &str, def: &v2::StructDef) -> Option<u32> {
+fn head_size(
+    scope: &[&v2::Package],
+    package: &str,
+    name: &str,
+    def: &v2::StructDef,
+) -> Option<u32> {
     let index = scope.iter().position(|pkg| pkg.name == package)?;
     let others: Vec<&v2::Package> = scope
         .iter()
