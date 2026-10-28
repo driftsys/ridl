@@ -565,9 +565,11 @@ struct Bounds {
 /// An enum value appended at 256 widens the enum's podbuf integer from `u8`
 /// to `u16`: `podbuf_width_change`, exit 1 under `--encoding podbuf` and exit
 /// 0 without the flag. A value appended at 255 keeps the width and draws no
-/// such line. The same at the 255/256 arm boundary of a union.
+/// such line. The same at the 255/256 arm boundary of a union, and for a
+/// flag at bit 8 appended to an enum set whose highest bit is 7, where the
+/// width is the one the checker infers from the source.
 #[test]
-fn an_appended_enum_value_or_union_arm_that_widens_is_a_podbuf_break() {
+fn an_appended_enum_value_flag_or_union_arm_that_widens_is_a_podbuf_break() {
     fn enum_source(count: usize) -> String {
         let values: String = (0..count)
             .map(|value| format!("  V{value} = {value}\n"))
@@ -593,6 +595,12 @@ fn an_appended_enum_value_or_union_arm_that_widens_is_a_podbuf_break() {
             union_source(255),
             union_source(256),
             "podbuf_width_change veh.cluster/Outcome: u8 -> u16",
+        ),
+        (
+            "enumset",
+            "package veh.cluster\nenumset Flags {\n  A = 0\n  B = 7\n}\n".to_string(),
+            "package veh.cluster\nenumset Flags {\n  A = 0\n  B = 7\n  C = 8\n}\n".to_string(),
+            "podbuf_width_change veh.cluster/Flags: u8 -> u16",
         ),
     ] {
         let v1 = dir.write(&format!("{name}-v1.typl"), &old);
