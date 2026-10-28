@@ -236,6 +236,22 @@ package and an interaction name is unique in an interface; the claim table of
 the Rust backend still refuses a collision with a declaration, a view or a
 descriptor.
 
+**Amendment (2026-10-28), from driftsys/ridl#1103.** The podbuf C header
+(`ridl-backend-podbuf`) names a tuple's members by their typl names under the
+pinned `snake_case`, as it names a struct's fields, in the package that declares
+the tuple and in a package that lays it out inline alike; the codegen model
+carries the name next to the position (`PodbufSource.position_name`). So the
+statement of the 2026-09-29 amendment and of the consequences entry on
+driftsys/ridl#449 that the wire backends name a tuple's fields by position and
+do not meet the `minSpeed` / `min_speed` pair no longer holds for podbuf. The
+podbuf header does not refuse the pair: a tuple whose spelled member names would
+clash in a way the header refuses — two members equal under `snake_case`, or a
+member equal to the presence test `has_<member>` of an optional member — falls
+back to positional names (`f1`, `f2`) for that whole tuple head, decided from
+the tuple's own member names so that both headers make the same choice. The
+proto3 and FlatBuffers backends still name a tuple's fields by position, and the
+scope of RIDL-149 is unchanged.
+
 ## Context
 
 The note answers two questions the store-and-dispatcher work raised: what
@@ -553,14 +569,15 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
 
 ## Documents amended
 
-| Document          | Change                                                                                                                                                                                                                       |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| rsdl §13          | gains the service-number open question (decision 8) — answered in rsdl v0.2.0 §17 item 9 (2026-09-13): a tag-based transport's service number is its backend key                                                             |
-| ridl §16.4        | RIDL-149's row gains a union's arms as a fourth checked namespace and the second pinned transform (2026-09-20 amendment)                                                                                                     |
-| ADR-0017          | decision 5's union-arm half is done and its enum-value half is not; open question 2 ("whether `ridl-backend-rust` should transform struct field names") is answered yes; the alternatives row follows (2026-09-20 amendment) |
-| `docs/ROADMAP.md` | the E9.7 row restated per decisions 1 to 3; the Epic 9 status paragraph records this ratification and the corrections                                                                                                        |
-| ridl §16.4        | RIDL-149's row gains the values of one enum, checked under `pascal_case` (2026-09-26 amendment)                                                                                                                              |
-| ADR-0017          | decision 5's enum-value half is done: RIDL-149 covers an enum's values (2026-09-26 amendment)                                                                                                                                |
+| Document                                                                        | Change                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| rsdl §13                                                                        | gains the service-number open question (decision 8) — answered in rsdl v0.2.0 §17 item 9 (2026-09-13): a tag-based transport's service number is its backend key                                                                                                                          |
+| ridl §16.4                                                                      | RIDL-149's row gains a union's arms as a fourth checked namespace and the second pinned transform (2026-09-20 amendment)                                                                                                                                                                  |
+| ADR-0017                                                                        | decision 5's union-arm half is done and its enum-value half is not; open question 2 ("whether `ridl-backend-rust` should transform struct field names") is answered yes; the alternatives row follows (2026-09-20 amendment)                                                              |
+| `docs/ROADMAP.md`                                                               | the E9.7 row restated per decisions 1 to 3; the Epic 9 status paragraph records this ratification and the corrections                                                                                                                                                                     |
+| ridl §16.4                                                                      | RIDL-149's row gains the values of one enum, checked under `pascal_case` (2026-09-26 amendment)                                                                                                                                                                                           |
+| ADR-0017                                                                        | decision 5's enum-value half is done: RIDL-149 covers an enum's values (2026-09-26 amendment)                                                                                                                                                                                             |
+| `docs/design/podbuf-codec.md`, `docs/technotes/rust-backend-name-collisions.md` | the podbuf C header names a tuple's members by their typl names under `snake_case` and falls back to positions for a tuple whose spelled names clash; the statement that the wire backends name a tuple's fields by position holds for proto3 and FlatBuffers only (2026-10-28 amendment) |
 
 ## Open
 

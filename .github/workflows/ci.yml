@@ -236,7 +236,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # `crates/ridl-backend-podbuf/tests/c_compile.rs` compiles the generated C
+      # header for three targets with `clang`. `RIDL_REQUIRE_CC=1` makes a
+      # missing compiler a failure instead of a skip.
+      - name: install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
       - run: just test
+        env:
+          RIDL_REQUIRE_CC: "1"
       - run: just lint
       # The demo: `ridl build` writes a crate from examples/cabin, and cargo
       # builds a program against it and runs it. Sits in this job because it

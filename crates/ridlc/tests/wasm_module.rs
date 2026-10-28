@@ -130,7 +130,7 @@ use ridl_rt::contract::Interface;
 use ridl_rt::encoding::FlatBuffers;
 use ridl_rt::payload::{Payload, Rule};
 use veh_cabin::veh::cabin::{
-    Average, Cabin, Diagnostic, Health, Level, Subsystems, Temperature, Warning, Window,
+    Average, Cabin, Diagnostic, Health, Level, Setpoint, Subsystems, Temperature, Warning, Window,
 };
 
 fn hex(bytes: &[u8]) -> String {
@@ -177,6 +177,7 @@ fn main() {
     );
     println!("payload veh.cabin.Health {}", bytes_of!("veh.cabin.Health", Health, Health::Warn));
     println!("payload veh.cabin.Level {}", bytes_of!("veh.cabin.Level", Level, Level::new(42).unwrap()));
+    println!("payload veh.cabin.Setpoint {}", bytes_of!("veh.cabin.Setpoint", Setpoint, Setpoint::new(21.5).unwrap()));
     println!("payload veh.cabin.Subsystems {}", bytes_of!("veh.cabin.Subsystems", Subsystems, Subsystems::CLIMATE));
     println!("payload veh.cabin.Temperature {}", bytes_of!("veh.cabin.Temperature", Temperature, Temperature::new(-3).unwrap()));
     println!(

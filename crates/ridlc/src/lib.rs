@@ -649,6 +649,11 @@ pub enum Emit {
     /// A wire backend: the typl surface plus the interaction identity table,
     /// and nothing above them (ADR-0013 decision 2).
     Flatbuffers,
+    /// The podbuf C header, written to `<base>.h`.
+    ///
+    /// A wire backend: the header a C consumer reads a verified podbuf buffer
+    /// through, with no library.
+    Podbuf,
     /// The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf
     /// JSON, written to `<base>.codegen.json`.
     ///
@@ -732,6 +737,7 @@ impl Emit {
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
+            | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
             // `Catalog` is classed as a code emit although it goes through no
@@ -765,6 +771,7 @@ impl Emit {
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
+            | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
             | Emit::Catalog => None,
@@ -804,6 +811,7 @@ impl Emit {
             Emit::TypeScript => Some("typescript"),
             Emit::Proto => Some("proto"),
             Emit::Flatbuffers => Some("flatbuffers"),
+            Emit::Podbuf => Some("podbuf"),
             Emit::CodegenModel => Some("codegen-model"),
             Emit::CodegenRequest => Some("codegen-request"),
             Emit::Catalog | Emit::IrJson | Emit::IrText | Emit::IrBinary => None,
@@ -831,6 +839,7 @@ impl Emit {
             Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
+            | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
             | Emit::Catalog
@@ -2418,10 +2427,27 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
     // encodings are those of every `[backend.<name>]` table; none named means
     // FlatBuffers is checked. A workspace with no interface has nothing to
     // report, so `ridl.std` is not checked for it either.
+    let encodings = enabled_encodings(&backends);
+    // RIDL-153 to RIDL-155 read types, not interactions, so they run for a
+    // workspace with no interface, whenever a backend table enables podbuf.
+    if encodings.iter().any(|name| name == "podbuf") {
+        let blocked =
+            payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
+        let std_ir = check_package(db, workspace, std, std).ir;
+        diagnostics.extend(design_lints::check_podbuf(
+            db,
+            &packages,
+            &checked,
+            &resolutions,
+            &blocked,
+            &std_ir,
+            &encodings,
+            &mut sources,
+        ));
+    }
     if checked.iter().any(|pkg| pkg.ir.shapes().next().is_some()) {
         let blocked =
             payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
-        let encodings = enabled_encodings(&backends);
         let std_ir = check_package(db, workspace, std, std).ir;
         diagnostics.extend(design_lints::check_payload_ceiling(
             db,
@@ -2992,6 +3018,7 @@ fn write_emits(
             Emit::TypeScript => Box::new(ridl_backend_ts::Backend::new(raw)),
             Emit::Proto => Box::new(ridl_backend_proto::Backend::new(raw)),
             Emit::Flatbuffers => Box::new(ridl_backend_flatbuffers::Backend::new(raw)),
+            Emit::Podbuf => Box::new(ridl_backend_podbuf::Backend::new(raw)),
             Emit::CodegenModel => Box::new(codegen::ModelBackend),
             Emit::CodegenRequest => Box::new(codegen::RequestBackend),
             // Written once per build by `write_catalogs`, not per package.
@@ -3167,6 +3194,7 @@ fn write_system_emits(
             | Emit::TypeScript
             | Emit::Proto
             | Emit::Flatbuffers
+            | Emit::Podbuf
             | Emit::CodegenModel
             | Emit::CodegenRequest
             | Emit::Catalog => continue,
@@ -3384,6 +3412,7 @@ mod emit_table_tests {
         assert_eq!(Emit::TypeScript.backend_table(), Some("typescript"));
         assert_eq!(Emit::Proto.backend_table(), Some("proto"));
         assert_eq!(Emit::Flatbuffers.backend_table(), Some("flatbuffers"));
+        assert_eq!(Emit::Podbuf.backend_table(), Some("podbuf"));
         assert_eq!(Emit::CodegenModel.backend_table(), Some("codegen-model"));
         assert_eq!(
             Emit::CodegenRequest.backend_table(),
@@ -3403,6 +3432,7 @@ mod emit_table_tests {
             Emit::TypeScript,
             Emit::Proto,
             Emit::Flatbuffers,
+            Emit::Podbuf,
             Emit::CodegenModel,
             Emit::CodegenRequest,
             Emit::Catalog,

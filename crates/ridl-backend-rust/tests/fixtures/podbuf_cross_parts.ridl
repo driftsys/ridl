@@ -1,0 +1,11 @@
+// The package that `podbuf_cross_holder.ridl` references across a package
+// boundary: a struct that the holder lays out inline in its head and in an
+// array.
+
+package pod.parts
+
+/// `a` at 0, `b` at 2, pad 1..2 and 4..8: a head of 8 bytes.
+struct Pair {
+  a : integer [0..255]
+  b : integer [0..65535]
+}

@@ -1,7 +1,7 @@
 //! The regeneration guard of the transcode fixture.
 //!
 //! `tests/generated/transcode.rs` is `generate_pipeline`'s output for
-//! `tests/fixtures/transcode.ridl` with both encodings and `transcode = true`,
+//! `tests/fixtures/transcode.ridl` with all three encodings and `transcode = true`,
 //! checked in and `include!`d by `tests/transcode_equivalence.rs`. The guard
 //! lives in its own test target so that when a change to the emitter leaves
 //! the equivalence tests unable to compile against a stale fixture,
@@ -14,6 +14,7 @@ mod ir;
 const ENCODINGS: &[ridl_backend_rust::WireEncoding] = &[
     ridl_backend_rust::WireEncoding::FlatBuffers,
     ridl_backend_rust::WireEncoding::Proto3,
+    ridl_backend_rust::WireEncoding::Podbuf,
 ];
 
 /// Regenerates the fixture and compares it byte-for-byte against the
@@ -52,6 +53,7 @@ fn a_repeated_encoding_emits_each_transcode_function_once() {
     let repeated = [
         ridl_backend_rust::WireEncoding::FlatBuffers,
         ridl_backend_rust::WireEncoding::Proto3,
+        ridl_backend_rust::WireEncoding::Podbuf,
         ridl_backend_rust::WireEncoding::FlatBuffers,
     ];
     let once = ridl_backend_rust::generate_pipeline(&package, ENCODINGS, true, &[])

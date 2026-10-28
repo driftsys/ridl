@@ -1,5 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
+assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 ---
@@ -65,6 +66,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "proto3": {
         "bounded": 6
       },
+      "podbuf": {
+        "bounded": 16
+      },
       "scalar": {
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
@@ -125,6 +129,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "proto3": {
         "bounded": 5
       },
+      "podbuf": {
+        "bounded": 16
+      },
       "scalar": {
         "class": "SCALAR_CLASS_FLOAT",
         "unit": "%",
@@ -179,6 +186,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "proto3": {
         "bounded": 6
       },
+      "podbuf": {
+        "bounded": 16
+      },
       "scalar": {
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
@@ -221,6 +231,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "rules": [],
       "proto3": {
         "bounded": 2
+      },
+      "podbuf": {
+        "bounded": 16
       },
       "enum": {
         "values": [
@@ -292,6 +305,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "rules": [],
       "proto3": {
         "bounded": 8
+      },
+      "podbuf": {
+        "bounded": 16
       },
       "struct": {
         "slots": [
@@ -410,6 +426,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "proto3": {
         "bounded": 2
       },
+      "podbuf": {
+        "bounded": 16
+      },
       "enum": {
         "values": [
           {
@@ -515,6 +534,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "50"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -548,6 +570,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 50
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -586,6 +611,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "60"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -619,6 +647,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 60
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               }
@@ -650,6 +681,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -716,6 +750,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -726,6 +763,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "shape": "SHAPE_NONE"
@@ -756,6 +796,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readDoor.reply: DoorReport | DoorFault"
               },
               "flatbuffers": {
+                "unsized": "readDoor.reply: DoorReport | DoorFault"
+              },
+              "podbuf": {
                 "unsized": "readDoor.reply: DoorReport | DoorFault"
               }
             },
@@ -831,6 +874,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -861,6 +907,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "replySizes": {
@@ -870,6 +919,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 },
                 "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
                   "absent": {
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
@@ -897,6 +951,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "0"
               },
               "flatbuffers": {
+                "bytes": "0"
+              },
+              "podbuf": {
                 "bytes": "0"
               }
             },
@@ -933,6 +990,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               }
@@ -945,6 +1005,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "unsized": "readDoor"
         },
         "flatbuffers": {
+          "unsized": "readDoor"
+        },
+        "podbuf": {
           "unsized": "readDoor"
         }
       },
@@ -993,6 +1056,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -1026,6 +1092,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -1063,6 +1132,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "79"
+              },
+              "podbuf": {
+                "bytes": "24"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -1115,6 +1187,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -1140,6 +1215,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 33
+                },
+                "podbuf": {
+                  "bounded": 8
                 }
               },
               "replySizes": {
@@ -1148,6 +1226,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 46
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "requestTuple": {
@@ -1163,6 +1244,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         },
         "flatbuffers": {
           "bytes": "125"
+        },
+        "podbuf": {
+          "bytes": "40"
         }
       },
       "links": [],
@@ -1374,7 +1458,220 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
     ]
   },
   "foreign": [],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [
+      {
+        "size": 8,
+        "align": 8,
+        "fields": [
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "door",
+                "ordinal": 1
+              }
+            },
+            "offset": 0,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "int": {
+                "width": "INT_WIDTH_U8",
+                "signed": false
+              }
+            }
+          },
+          {
+            "source": {
+              "positionName": "",
+              "field": {
+                "name": "locked",
+                "ordinal": 2
+              }
+            },
+            "offset": 1,
+            "size": 1,
+            "align": 1,
+            "form": {
+              "enum": {
+                "width": "INT_WIDTH_U8",
+                "signed": false,
+                "reference": "LockState"
+              }
+            }
+          }
+        ],
+        "pads": [
+          {
+            "offset": 2,
+            "size": 6
+          }
+        ],
+        "declaration": 4
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 0
+      }
+    ],
+    "refused": [],
+    "boxes": [
+      {
+        "declaration": 0,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "int": {
+                  "width": "INT_WIDTH_U8",
+                  "signed": false
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 1,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 4,
+              "align": 4,
+              "form": {
+                "float": "FLOAT_WIDTH_F32"
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 4,
+              "size": 4
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 2,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 4,
+              "align": 4,
+              "form": {
+                "int": {
+                  "width": "INT_WIDTH_U32",
+                  "signed": false
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 4,
+              "size": 4
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 3,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "enum": {
+                  "width": "INT_WIDTH_U8",
+                  "signed": false,
+                  "reference": "LockState"
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      },
+      {
+        "declaration": 5,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "enum": {
+                  "width": "INT_WIDTH_U8",
+                  "signed": false,
+                  "reference": "DoorFault"
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      }
+    ]
+  }
 }
 
 // ===== package fleet.legacy =====
@@ -1429,6 +1726,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "rules": [],
       "proto3": {
         "bounded": 2
+      },
+      "podbuf": {
+        "bounded": 16
       },
       "enum": {
         "values": [
@@ -1515,7 +1815,44 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
     ]
   },
   "foreign": [],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [],
+    "refused": [],
+    "boxes": [
+      {
+        "declaration": 0,
+        "head": {
+          "size": 8,
+          "align": 8,
+          "fields": [
+            {
+              "source": {
+                "positionName": "",
+                "arm": true
+              },
+              "offset": 0,
+              "size": 1,
+              "align": 1,
+              "form": {
+                "enum": {
+                  "width": "INT_WIDTH_U8",
+                  "signed": false,
+                  "reference": "DoorFault"
+                }
+              }
+            }
+          ],
+          "pads": [
+            {
+              "offset": 1,
+              "size": 7
+            }
+          ]
+        }
+      }
+    ]
+  }
 }
 
 // ===== package fleet.vehicle =====
@@ -1573,6 +1910,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "46"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -1606,6 +1946,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -1643,6 +1986,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "43"
+              },
+              "podbuf": {
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -1709,6 +2055,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -1719,6 +2068,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "shape": "SHAPE_NONE"
@@ -1750,6 +2102,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               },
               "flatbuffers": {
                 "bytes": "89"
+              },
+              "podbuf": {
+                "bytes": "32"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -1830,6 +2185,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -1862,6 +2220,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 46
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -1903,6 +2264,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "replySizes": {
@@ -1911,6 +2275,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 46
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               }
             }
@@ -1935,6 +2302,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "bytes": "0"
               },
               "flatbuffers": {
+                "bytes": "0"
+              },
+              "podbuf": {
                 "bytes": "0"
               }
             },
@@ -1971,6 +2341,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               }
@@ -2001,6 +2374,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readDoor.reply: fleet.contracts.DoorReport | fleet.contracts.DoorFault"
               },
               "flatbuffers": {
+                "unsized": "readDoor.reply: fleet.contracts.DoorReport | fleet.contracts.DoorFault"
+              },
+              "podbuf": {
                 "unsized": "readDoor.reply: fleet.contracts.DoorReport | fleet.contracts.DoorFault"
               }
             },
@@ -2076,6 +2452,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -2106,6 +2485,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "replySizes": {
@@ -2115,6 +2497,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 },
                 "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
                   "absent": {
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
@@ -2147,6 +2534,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "unsized": "readLegacyDoor.reply: fleet.contracts.DoorReport | fleet.legacy.DoorFault"
               },
               "flatbuffers": {
+                "unsized": "readLegacyDoor.reply: fleet.contracts.DoorReport | fleet.legacy.DoorFault"
+              },
+              "podbuf": {
                 "unsized": "readLegacyDoor.reply: fleet.contracts.DoorReport | fleet.legacy.DoorFault"
               }
             },
@@ -2222,6 +2612,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   },
                   "flatbuffers": {
                     "bounded": 43
+                  },
+                  "podbuf": {
+                    "bounded": 16
                   }
                 }
               },
@@ -2252,6 +2645,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 },
                 "flatbuffers": {
                   "bounded": 43
+                },
+                "podbuf": {
+                  "bounded": 16
                 }
               },
               "replySizes": {
@@ -2261,6 +2657,11 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 },
                 "flatbuffers": {
+                  "absent": {
+                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
+                  }
+                },
+                "podbuf": {
                   "absent": {
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
@@ -2276,6 +2677,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "unsized": "readDoor"
         },
         "flatbuffers": {
+          "unsized": "readDoor"
+        },
+        "podbuf": {
           "unsized": "readDoor"
         }
       },
@@ -2472,6 +2876,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "proto3": {
           "bounded": 5
         },
+        "podbuf": {
+          "bounded": 16
+        },
         "scalar": {
           "class": "SCALAR_CLASS_FLOAT",
           "unit": "%",
@@ -2529,6 +2936,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "proto3": {
           "bounded": 6
         },
+        "podbuf": {
+          "bounded": 16
+        },
         "scalar": {
           "class": "SCALAR_CLASS_INTEGER",
           "constraint": {
@@ -2574,6 +2984,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "rules": [],
         "proto3": {
           "bounded": 8
+        },
+        "podbuf": {
+          "bounded": 16
         },
         "struct": {
           "slots": [
@@ -2695,6 +3108,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "proto3": {
           "bounded": 2
         },
+        "podbuf": {
+          "bounded": 16
+        },
         "enum": {
           "values": [
             {
@@ -2768,6 +3184,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "rules": [],
         "proto3": {
           "bounded": 2
+        },
+        "podbuf": {
+          "bounded": 16
         },
         "enum": {
           "values": [
@@ -2843,6 +3262,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "proto3": {
           "bounded": 2
         },
+        "podbuf": {
+          "bounded": 16
+        },
         "enum": {
           "values": [
             {
@@ -2883,5 +3305,10 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       }
     }
   ],
-  "tupleCollisions": []
+  "tupleCollisions": [],
+  "podbuf": {
+    "heads": [],
+    "refused": [],
+    "boxes": []
+  }
 }

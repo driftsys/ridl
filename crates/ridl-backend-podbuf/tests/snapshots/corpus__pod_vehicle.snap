@@ -1,0 +1,370 @@
+---
+source: crates/ridl-backend-podbuf/tests/corpus.rs
+expression: "support::header(&packages, \"pod.vehicle\")"
+---
+#ifndef RIDL_PODBUF_POD_VEHICLE_H
+#define RIDL_PODBUF_POD_VEHICLE_H
+
+#if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+#error "podbuf requires a little-endian target"
+#endif
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifndef RIDL_PODBUF_PREAMBLE_DEFINED
+#define RIDL_PODBUF_PREAMBLE_DEFINED
+
+#define RIDL_PODBUF_PREAMBLE_SIZE 8
+
+/* The first 8 bytes of every buffer. */
+typedef struct ridl_podbuf_preamble {
+  uint32_t head_size;
+  uint32_t reserved;
+} ridl_podbuf_preamble;
+_Static_assert(sizeof(ridl_podbuf_preamble) == 8, "ridl_podbuf_preamble size");
+
+/* A string, bytes or union arm: `off` counts from the buffer start. */
+typedef struct ridl_podbuf_desc {
+  uint32_t off;
+  uint32_t len;
+} ridl_podbuf_desc;
+_Static_assert(sizeof(ridl_podbuf_desc) == 8, "ridl_podbuf_desc size");
+_Static_assert(_Alignof(ridl_podbuf_desc) == 4, "ridl_podbuf_desc alignment");
+
+/* An array or map: `len` counts elements, `elem_size` is the stride. */
+typedef struct ridl_podbuf_array_desc {
+  uint32_t off;
+  uint16_t len;
+  uint16_t elem_size;
+} ridl_podbuf_array_desc;
+_Static_assert(sizeof(ridl_podbuf_array_desc) == 8, "ridl_podbuf_array_desc size");
+_Static_assert(_Alignof(ridl_podbuf_array_desc) == 4, "ridl_podbuf_array_desc alignment");
+
+/* The head size the producer wrote. */
+static inline uint32_t ridl_podbuf_head_size(const uint8_t *buf) {
+  return (uint32_t)buf[0] | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2] << 16) |
+         ((uint32_t)buf[3] << 24);
+}
+
+/* Whether `n` bytes at head offset `off` lie inside a head of `sz` bytes. */
+static inline int ridl_podbuf_fits(uint32_t sz, uint32_t off, uint32_t n) {
+  return (uint64_t)off + n <= sz;
+}
+
+/* A little-endian unsigned load from a head of `sz` bytes; 0 past it. */
+static inline uint64_t ridl_podbuf_load(const uint8_t *h, uint32_t sz, uint32_t off, uint32_t n) {
+  uint64_t value = 0;
+  uint32_t i;
+  if (!ridl_podbuf_fits(sz, off, n)) {
+    return 0;
+  }
+  for (i = n; i > 0; i--) {
+    value = (value << 8) | h[off + i - 1];
+  }
+  return value;
+}
+
+static inline float ridl_podbuf_load_f32(const uint8_t *h, uint32_t sz, uint32_t off) {
+  union {
+    uint32_t bits;
+    float value;
+  } pun;
+  pun.bits = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
+  return pun.value;
+}
+
+static inline double ridl_podbuf_load_f64(const uint8_t *h, uint32_t sz, uint32_t off) {
+  union {
+    uint64_t bits;
+    double value;
+  } pun;
+  pun.bits = ridl_podbuf_load(h, sz, off, 8);
+  return pun.value;
+}
+
+static inline ridl_podbuf_desc ridl_podbuf_desc_at(const uint8_t *h, uint32_t sz, uint32_t off) {
+  ridl_podbuf_desc d;
+  d.off = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
+  d.len = (uint32_t)ridl_podbuf_load(h, sz, off + 4, 4);
+  return d;
+}
+
+static inline ridl_podbuf_array_desc ridl_podbuf_array_desc_at(const uint8_t *h, uint32_t sz,
+                                                               uint32_t off) {
+  ridl_podbuf_array_desc d;
+  d.off = (uint32_t)ridl_podbuf_load(h, sz, off, 4);
+  d.len = (uint16_t)ridl_podbuf_load(h, sz, off + 4, 2);
+  d.elem_size = (uint16_t)ridl_podbuf_load(h, sz, off + 6, 2);
+  return d;
+}
+
+#endif
+
+
+#ifndef POD_PARTS_WHEEL_HEAD_DEFINED
+#define POD_PARTS_WHEEL_HEAD_DEFINED
+typedef struct pod_parts_wheel_head {
+  _Alignas(8) uint8_t radius;
+  uint8_t _pad1[3];
+  uint32_t grip;
+} pod_parts_wheel_head;
+#endif
+_Static_assert(sizeof(pod_parts_wheel_head) == 8, "pod_parts_wheel_head size");
+_Static_assert(_Alignof(pod_parts_wheel_head) == 8, "pod_parts_wheel_head alignment");
+_Static_assert(offsetof(pod_parts_wheel_head, radius) == 0, "pod_parts_wheel_head.radius offset");
+_Static_assert(sizeof(((pod_parts_wheel_head *)0)->radius) == 1, "pod_parts_wheel_head.radius size");
+_Static_assert(offsetof(pod_parts_wheel_head, grip) == 4, "pod_parts_wheel_head.grip offset");
+_Static_assert(sizeof(((pod_parts_wheel_head *)0)->grip) == 4, "pod_parts_wheel_head.grip size");
+
+#ifndef POD_PARTS_HUB_SIZE_HEAD_DEFINED
+#define POD_PARTS_HUB_SIZE_HEAD_DEFINED
+typedef struct pod_parts_hub_size_head {
+  _Alignas(8) uint8_t width;
+  uint8_t height;
+  uint8_t _pad2[6];
+} pod_parts_hub_size_head;
+#endif
+_Static_assert(sizeof(pod_parts_hub_size_head) == 8, "pod_parts_hub_size_head size");
+_Static_assert(_Alignof(pod_parts_hub_size_head) == 8, "pod_parts_hub_size_head alignment");
+_Static_assert(offsetof(pod_parts_hub_size_head, width) == 0, "pod_parts_hub_size_head.width offset");
+_Static_assert(sizeof(((pod_parts_hub_size_head *)0)->width) == 1, "pod_parts_hub_size_head.width size");
+_Static_assert(offsetof(pod_parts_hub_size_head, height) == 1, "pod_parts_hub_size_head.height offset");
+_Static_assert(sizeof(((pod_parts_hub_size_head *)0)->height) == 1, "pod_parts_hub_size_head.height size");
+
+#ifndef POD_PARTS_HUB_HEAD_DEFINED
+#define POD_PARTS_HUB_HEAD_DEFINED
+typedef struct pod_parts_hub_head {
+  _Alignas(8) pod_parts_hub_size_head size;
+  ridl_podbuf_desc label;
+} pod_parts_hub_head;
+#endif
+_Static_assert(sizeof(pod_parts_hub_head) == 16, "pod_parts_hub_head size");
+_Static_assert(_Alignof(pod_parts_hub_head) == 8, "pod_parts_hub_head alignment");
+_Static_assert(offsetof(pod_parts_hub_head, size) == 0, "pod_parts_hub_head.size offset");
+_Static_assert(sizeof(((pod_parts_hub_head *)0)->size) == 8, "pod_parts_hub_head.size size");
+_Static_assert(offsetof(pod_parts_hub_head, label) == 8, "pod_parts_hub_head.label offset");
+_Static_assert(sizeof(((pod_parts_hub_head *)0)->label) == 8, "pod_parts_hub_head.label size");
+
+#ifndef POD_PARTS_TYRE_HEAD_DEFINED
+#define POD_PARTS_TYRE_HEAD_DEFINED
+typedef struct pod_parts_tyre_head {
+  _Alignas(8) uint8_t tag;
+  uint8_t _pad1[3];
+  ridl_podbuf_desc arm;
+  uint8_t _pad12[4];
+} pod_parts_tyre_head;
+#endif
+_Static_assert(sizeof(pod_parts_tyre_head) == 16, "pod_parts_tyre_head size");
+_Static_assert(_Alignof(pod_parts_tyre_head) == 8, "pod_parts_tyre_head alignment");
+_Static_assert(offsetof(pod_parts_tyre_head, tag) == 0, "pod_parts_tyre_head.tag offset");
+_Static_assert(sizeof(((pod_parts_tyre_head *)0)->tag) == 1, "pod_parts_tyre_head.tag size");
+_Static_assert(offsetof(pod_parts_tyre_head, arm) == 4, "pod_parts_tyre_head.arm offset");
+_Static_assert(sizeof(((pod_parts_tyre_head *)0)->arm) == 8, "pod_parts_tyre_head.arm size");
+
+#ifndef POD_PARTS_GAUGE_SPAN_HEAD_DEFINED
+#define POD_PARTS_GAUGE_SPAN_HEAD_DEFINED
+typedef struct pod_parts_gauge_span_head {
+  _Alignas(8) uint8_t low_mark;
+  uint8_t int_;
+  uint8_t _pad2[6];
+} pod_parts_gauge_span_head;
+#endif
+_Static_assert(sizeof(pod_parts_gauge_span_head) == 8, "pod_parts_gauge_span_head size");
+_Static_assert(_Alignof(pod_parts_gauge_span_head) == 8, "pod_parts_gauge_span_head alignment");
+_Static_assert(offsetof(pod_parts_gauge_span_head, low_mark) == 0, "pod_parts_gauge_span_head.low_mark offset");
+_Static_assert(sizeof(((pod_parts_gauge_span_head *)0)->low_mark) == 1, "pod_parts_gauge_span_head.low_mark size");
+_Static_assert(offsetof(pod_parts_gauge_span_head, int_) == 1, "pod_parts_gauge_span_head.int_ offset");
+_Static_assert(sizeof(((pod_parts_gauge_span_head *)0)->int_) == 1, "pod_parts_gauge_span_head.int_ size");
+
+#ifndef POD_PARTS_GAUGE_HEAD_DEFINED
+#define POD_PARTS_GAUGE_HEAD_DEFINED
+typedef struct pod_parts_gauge_head {
+  _Alignas(8) pod_parts_gauge_span_head span;
+} pod_parts_gauge_head;
+#endif
+_Static_assert(sizeof(pod_parts_gauge_head) == 8, "pod_parts_gauge_head size");
+_Static_assert(_Alignof(pod_parts_gauge_head) == 8, "pod_parts_gauge_head alignment");
+_Static_assert(offsetof(pod_parts_gauge_head, span) == 0, "pod_parts_gauge_head.span offset");
+_Static_assert(sizeof(((pod_parts_gauge_head *)0)->span) == 8, "pod_parts_gauge_head.span size");
+
+#ifndef POD_PARTS_CLASH_PAIR_HEAD_DEFINED
+#define POD_PARTS_CLASH_PAIR_HEAD_DEFINED
+typedef struct pod_parts_clash_pair_head {
+  _Alignas(8) uint8_t f1;
+  uint8_t f2;
+  uint8_t _pad2[6];
+} pod_parts_clash_pair_head;
+#endif
+_Static_assert(sizeof(pod_parts_clash_pair_head) == 8, "pod_parts_clash_pair_head size");
+_Static_assert(_Alignof(pod_parts_clash_pair_head) == 8, "pod_parts_clash_pair_head alignment");
+_Static_assert(offsetof(pod_parts_clash_pair_head, f1) == 0, "pod_parts_clash_pair_head.f1 offset");
+_Static_assert(sizeof(((pod_parts_clash_pair_head *)0)->f1) == 1, "pod_parts_clash_pair_head.f1 size");
+_Static_assert(offsetof(pod_parts_clash_pair_head, f2) == 1, "pod_parts_clash_pair_head.f2 offset");
+_Static_assert(sizeof(((pod_parts_clash_pair_head *)0)->f2) == 1, "pod_parts_clash_pair_head.f2 size");
+
+#ifndef POD_PARTS_CLASH_PRESENCE_HEAD_DEFINED
+#define POD_PARTS_CLASH_PRESENCE_HEAD_DEFINED
+typedef struct pod_parts_clash_presence_head {
+  _Alignas(8) uint8_t _flags0;
+  uint8_t f1;
+  uint8_t f2;
+  uint8_t _pad3[5];
+} pod_parts_clash_presence_head;
+#endif
+_Static_assert(sizeof(pod_parts_clash_presence_head) == 8, "pod_parts_clash_presence_head size");
+_Static_assert(_Alignof(pod_parts_clash_presence_head) == 8, "pod_parts_clash_presence_head alignment");
+_Static_assert(offsetof(pod_parts_clash_presence_head, _flags0) == 0, "pod_parts_clash_presence_head._flags0 offset");
+_Static_assert(sizeof(((pod_parts_clash_presence_head *)0)->_flags0) == 1, "pod_parts_clash_presence_head._flags0 size");
+_Static_assert(offsetof(pod_parts_clash_presence_head, f1) == 1, "pod_parts_clash_presence_head.f1 offset");
+_Static_assert(sizeof(((pod_parts_clash_presence_head *)0)->f1) == 1, "pod_parts_clash_presence_head.f1 size");
+_Static_assert(offsetof(pod_parts_clash_presence_head, f2) == 2, "pod_parts_clash_presence_head.f2 offset");
+_Static_assert(sizeof(((pod_parts_clash_presence_head *)0)->f2) == 1, "pod_parts_clash_presence_head.f2 size");
+
+#ifndef POD_PARTS_CLASH_TRIM_HEAD_DEFINED
+#define POD_PARTS_CLASH_TRIM_HEAD_DEFINED
+typedef struct pod_parts_clash_trim_head {
+  _Alignas(8) uint8_t _flags0;
+  uint8_t f1;
+  uint8_t f2;
+  uint8_t _pad3[5];
+} pod_parts_clash_trim_head;
+#endif
+_Static_assert(sizeof(pod_parts_clash_trim_head) == 8, "pod_parts_clash_trim_head size");
+_Static_assert(_Alignof(pod_parts_clash_trim_head) == 8, "pod_parts_clash_trim_head alignment");
+_Static_assert(offsetof(pod_parts_clash_trim_head, _flags0) == 0, "pod_parts_clash_trim_head._flags0 offset");
+_Static_assert(sizeof(((pod_parts_clash_trim_head *)0)->_flags0) == 1, "pod_parts_clash_trim_head._flags0 size");
+_Static_assert(offsetof(pod_parts_clash_trim_head, f1) == 1, "pod_parts_clash_trim_head.f1 offset");
+_Static_assert(sizeof(((pod_parts_clash_trim_head *)0)->f1) == 1, "pod_parts_clash_trim_head.f1 size");
+_Static_assert(offsetof(pod_parts_clash_trim_head, f2) == 2, "pod_parts_clash_trim_head.f2 offset");
+_Static_assert(sizeof(((pod_parts_clash_trim_head *)0)->f2) == 1, "pod_parts_clash_trim_head.f2 size");
+
+#ifndef POD_PARTS_CLASH_PLAIN_HEAD_DEFINED
+#define POD_PARTS_CLASH_PLAIN_HEAD_DEFINED
+typedef struct pod_parts_clash_plain_head {
+  _Alignas(8) uint8_t x;
+  uint8_t has_x;
+  uint8_t _pad2[6];
+} pod_parts_clash_plain_head;
+#endif
+_Static_assert(sizeof(pod_parts_clash_plain_head) == 8, "pod_parts_clash_plain_head size");
+_Static_assert(_Alignof(pod_parts_clash_plain_head) == 8, "pod_parts_clash_plain_head alignment");
+_Static_assert(offsetof(pod_parts_clash_plain_head, x) == 0, "pod_parts_clash_plain_head.x offset");
+_Static_assert(sizeof(((pod_parts_clash_plain_head *)0)->x) == 1, "pod_parts_clash_plain_head.x size");
+_Static_assert(offsetof(pod_parts_clash_plain_head, has_x) == 1, "pod_parts_clash_plain_head.has_x offset");
+_Static_assert(sizeof(((pod_parts_clash_plain_head *)0)->has_x) == 1, "pod_parts_clash_plain_head.has_x size");
+
+#ifndef POD_PARTS_CLASH_CLEAR_HEAD_DEFINED
+#define POD_PARTS_CLASH_CLEAR_HEAD_DEFINED
+typedef struct pod_parts_clash_clear_head {
+  _Alignas(8) uint8_t left;
+  uint8_t right;
+  uint8_t _pad2[6];
+} pod_parts_clash_clear_head;
+#endif
+_Static_assert(sizeof(pod_parts_clash_clear_head) == 8, "pod_parts_clash_clear_head size");
+_Static_assert(_Alignof(pod_parts_clash_clear_head) == 8, "pod_parts_clash_clear_head alignment");
+_Static_assert(offsetof(pod_parts_clash_clear_head, left) == 0, "pod_parts_clash_clear_head.left offset");
+_Static_assert(sizeof(((pod_parts_clash_clear_head *)0)->left) == 1, "pod_parts_clash_clear_head.left size");
+_Static_assert(offsetof(pod_parts_clash_clear_head, right) == 1, "pod_parts_clash_clear_head.right offset");
+_Static_assert(sizeof(((pod_parts_clash_clear_head *)0)->right) == 1, "pod_parts_clash_clear_head.right size");
+
+#ifndef POD_PARTS_CLASH_HEAD_DEFINED
+#define POD_PARTS_CLASH_HEAD_DEFINED
+typedef struct pod_parts_clash_head {
+  _Alignas(8) pod_parts_clash_pair_head pair;
+  pod_parts_clash_presence_head presence;
+  pod_parts_clash_trim_head trim;
+  pod_parts_clash_plain_head plain;
+  pod_parts_clash_clear_head clear;
+} pod_parts_clash_head;
+#endif
+_Static_assert(sizeof(pod_parts_clash_head) == 40, "pod_parts_clash_head size");
+_Static_assert(_Alignof(pod_parts_clash_head) == 8, "pod_parts_clash_head alignment");
+_Static_assert(offsetof(pod_parts_clash_head, pair) == 0, "pod_parts_clash_head.pair offset");
+_Static_assert(sizeof(((pod_parts_clash_head *)0)->pair) == 8, "pod_parts_clash_head.pair size");
+_Static_assert(offsetof(pod_parts_clash_head, presence) == 8, "pod_parts_clash_head.presence offset");
+_Static_assert(sizeof(((pod_parts_clash_head *)0)->presence) == 8, "pod_parts_clash_head.presence size");
+_Static_assert(offsetof(pod_parts_clash_head, trim) == 16, "pod_parts_clash_head.trim offset");
+_Static_assert(sizeof(((pod_parts_clash_head *)0)->trim) == 8, "pod_parts_clash_head.trim size");
+_Static_assert(offsetof(pod_parts_clash_head, plain) == 24, "pod_parts_clash_head.plain offset");
+_Static_assert(sizeof(((pod_parts_clash_head *)0)->plain) == 8, "pod_parts_clash_head.plain size");
+_Static_assert(offsetof(pod_parts_clash_head, clear) == 32, "pod_parts_clash_head.clear offset");
+_Static_assert(sizeof(((pod_parts_clash_head *)0)->clear) == 8, "pod_parts_clash_head.clear size");
+
+#ifndef POD_VEHICLE_AXLE_HEAD_DEFINED
+#define POD_VEHICLE_AXLE_HEAD_DEFINED
+typedef struct pod_vehicle_axle_head {
+  _Alignas(8) uint8_t note;
+  uint8_t _pad1[7];
+  pod_parts_wheel_head wheel;
+  pod_parts_hub_head hub;
+  pod_parts_tyre_head tyre;
+  pod_parts_gauge_head gauge;
+  pod_parts_clash_head clash;
+} pod_vehicle_axle_head;
+#endif
+_Static_assert(sizeof(pod_vehicle_axle_head) == 96, "pod_vehicle_axle_head size");
+_Static_assert(_Alignof(pod_vehicle_axle_head) == 8, "pod_vehicle_axle_head alignment");
+_Static_assert(offsetof(pod_vehicle_axle_head, note) == 0, "pod_vehicle_axle_head.note offset");
+_Static_assert(sizeof(((pod_vehicle_axle_head *)0)->note) == 1, "pod_vehicle_axle_head.note size");
+_Static_assert(offsetof(pod_vehicle_axle_head, wheel) == 8, "pod_vehicle_axle_head.wheel offset");
+_Static_assert(sizeof(((pod_vehicle_axle_head *)0)->wheel) == 8, "pod_vehicle_axle_head.wheel size");
+_Static_assert(offsetof(pod_vehicle_axle_head, hub) == 16, "pod_vehicle_axle_head.hub offset");
+_Static_assert(sizeof(((pod_vehicle_axle_head *)0)->hub) == 16, "pod_vehicle_axle_head.hub size");
+_Static_assert(offsetof(pod_vehicle_axle_head, tyre) == 32, "pod_vehicle_axle_head.tyre offset");
+_Static_assert(sizeof(((pod_vehicle_axle_head *)0)->tyre) == 16, "pod_vehicle_axle_head.tyre size");
+_Static_assert(offsetof(pod_vehicle_axle_head, gauge) == 48, "pod_vehicle_axle_head.gauge offset");
+_Static_assert(sizeof(((pod_vehicle_axle_head *)0)->gauge) == 8, "pod_vehicle_axle_head.gauge size");
+_Static_assert(offsetof(pod_vehicle_axle_head, clash) == 56, "pod_vehicle_axle_head.clash offset");
+_Static_assert(sizeof(((pod_vehicle_axle_head *)0)->clash) == 40, "pod_vehicle_axle_head.clash size");
+
+static inline uint8_t pod_vehicle_axle_note_at(const uint8_t *h, uint32_t sz) {
+  return (uint8_t)ridl_podbuf_load(h, sz, 0, 1);
+}
+
+static inline uint8_t pod_vehicle_axle_note(const uint8_t *buf) {
+  return pod_vehicle_axle_note_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const uint8_t *pod_vehicle_axle_wheel_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_fits(sz, 8, 8) ? h + 8 : NULL;
+}
+
+static inline const uint8_t *pod_vehicle_axle_wheel(const uint8_t *buf) {
+  return pod_vehicle_axle_wheel_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const uint8_t *pod_vehicle_axle_hub_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_fits(sz, 16, 16) ? h + 16 : NULL;
+}
+
+static inline const uint8_t *pod_vehicle_axle_hub(const uint8_t *buf) {
+  return pod_vehicle_axle_hub_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const uint8_t *pod_vehicle_axle_tyre_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_fits(sz, 32, 16) ? h + 32 : NULL;
+}
+
+static inline const uint8_t *pod_vehicle_axle_tyre(const uint8_t *buf) {
+  return pod_vehicle_axle_tyre_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const uint8_t *pod_vehicle_axle_gauge_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_fits(sz, 48, 8) ? h + 48 : NULL;
+}
+
+static inline const uint8_t *pod_vehicle_axle_gauge(const uint8_t *buf) {
+  return pod_vehicle_axle_gauge_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+static inline const uint8_t *pod_vehicle_axle_clash_at(const uint8_t *h, uint32_t sz) {
+  return ridl_podbuf_fits(sz, 56, 40) ? h + 56 : NULL;
+}
+
+static inline const uint8_t *pod_vehicle_axle_clash(const uint8_t *buf) {
+  return pod_vehicle_axle_clash_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
+}
+
+#endif /* RIDL_PODBUF_POD_VEHICLE_H */

@@ -64,6 +64,10 @@ RIDL-149 error
 RIDL-150 warning lint=payload-above-ceiling default=warn
 RIDL-151 error
 RIDL-152 error
+RIDL-153 error
+RIDL-154 error
+RIDL-155 error
+RIDL-156 info lint=podbuf-padding-order default=info
 RIDL-201 error
 RIDL-202 error
 RIDL-301 error

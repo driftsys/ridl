@@ -181,7 +181,7 @@ wasm-check:
         rustup target add wasm32-unknown-unknown
         cargo check --target wasm32-unknown-unknown \
             -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir -p ridl-descriptor \
-            -p ridl-backend-proto -p ridl-backend-flatbuffers \
+            -p ridl-backend-proto -p ridl-backend-flatbuffers -p ridl-backend-podbuf \
             -p ridl-backend-rust -p ridl-backend-ts \
             -p ridl-rt -p ridl-fmt \
             --no-default-features
@@ -547,11 +547,13 @@ compat-check: toolchain-check
     # `std` is on for both: the emitted crate's `blocking` module is under its
     # `std` feature and names `ridl_rt::task::block_on`, which `ridl-rt`'s
     # `std` feature gates, so the cell covers that module too. `ridl-rt`'s
-    # `flatbuffers` and `proto3` features are the two codecs cabin's manifest
-    # names; the emitted manifest turns both on for `ridl-rt`. The crate has
-    # no feature of that name, and its code carries no `cfg` on either codec.
+    # `flatbuffers`, `proto3` and `podbuf` features are the three codecs
+    # cabin's manifest names; the emitted manifest turns all three on for
+    # `ridl-rt`. The crate has no feature of those names, and its code
+    # carries no `cfg` on any codec.
     rustup run "$minimum" rustc --edition 2021 --crate-type rlib --crate-name ridl_rt \
-        --cfg 'feature="flatbuffers"' --cfg 'feature="proto3"' --cfg 'feature="std"' \
+        --cfg 'feature="flatbuffers"' --cfg 'feature="proto3"' --cfg 'feature="podbuf"' \
+        --cfg 'feature="std"' \
         "$pkg/src/lib.rs" -o "$cabin/libridl_rt.rlib"
     rustup run "$minimum" rustc --edition 2021 --crate-type lib --crate-name veh_cabin \
         --emit=metadata -D warnings --cfg 'feature="std"' \
@@ -844,10 +846,13 @@ _cabin-generate:
 # failing to compile; the emitted crate failing to check with its default
 # features off for `thumbv7em-none-eabihf`; the crate emitted for the
 # veh-cluster corpus failing to check the same way, or with only
-# `validate-pattern` on; the program exiting non-zero or not reporting all four
-# round trips; the lock being out of date; the consumer being unformatted or
-# drawing a clippy warning; the generated crate drawing a clippy warning that
-# its `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
+# `validate-pattern` on; either generated crate failing to check for
+# `i686-unknown-linux-gnu` or `aarch64-unknown-linux-gnu`, which evaluates its
+# podbuf layout assertions for those targets; the program exiting non-zero or
+# not reporting all seven round trips, the last being `podbuf round trip: 21.5`;
+# the lock being out of date; the consumer being unformatted or drawing a
+# clippy warning; the generated crate drawing a clippy warning that its
+# `lib.rs` does not allow, or an allow that no longer fires; a `lib.rs`
 # with no `#![allow(` line to rewrite; the crate emitted for the veh-cluster
 # corpus drawing a clippy diagnostic, with default features or without them, or
 # cargo finishing no build there; `cargo doc` on either generated crate drawing
@@ -924,6 +929,15 @@ demo: _cabin-generate
     # the crate links the standard library while `std` stays off.
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
         --no-default-features --target thumbv7em-none-eabihf
+    # The same two crates for a 32-bit and a 64-bit Arm or x86 target: the
+    # podbuf layout assertions (`size_of`, `offset_of!`) are `const` items, so
+    # checking evaluates them for each target without a linker.
+    for target in i686-unknown-linux-gnu aarch64-unknown-linux-gnu; do
+        for crate in veh_cabin ridl_generated; do
+            cargo check --manifest-path examples/cabin/Cargo.toml -p "$crate" --locked \
+                --target "$target"
+        done
+    done
     cargo check --manifest-path examples/cabin/Cargo.toml -p ridl_generated --locked \
         --no-default-features --features validate-pattern
     # The corpus crate is linted as well, with its default features and with
@@ -977,7 +991,8 @@ demo: _cabin-generate
     fi
     printf '%s\n' "$output"
     for round_trip in "signal ok 21" "event ok 5" "command ok 42" "query ok 7" \
-            "blocking command ok 43" "blocking query ok 9"; do
+            "blocking command ok 43" "blocking query ok 9" \
+            "podbuf round trip: 21.5"; do
         if ! printf '%s\n' "$output" | grep -qxF "$round_trip"; then
             echo "demo: the consumer did not report \"$round_trip\"" >&2
             exit 1
@@ -3230,11 +3245,183 @@ pre-push: lint-commits toolchain-check gate-parity fmt-check check doc-path-chec
 # Run before opening a PR.
 verify: lint-commits build
 
-# Cut a release: git-std bumps the version, writes the changelog, tags.
-# The release check of the freeze gate runs first.
-release: toolchain-check
+# Cut a release commit and its two tags, locally; `just release-push` publishes
+# them. Pass the version: `just release --release-as 0.15.0` (before 1.0,
+# git-std picks a patch release unless it is told otherwise). The order is
+# described in docs/technotes/toolchain-distribution.md, "Cutting a release".
+#
+# It refuses to start unless this is a clean `main` equal to `origin/main`
+# whose `ci` run passed, runs the release check of the freeze gate, lets
+# `git std bump --no-commit` write the version, the `version_files` pins and
+# the changelog, runs `release-sync` for the pins git-std cannot write, and
+# checks that the lockfiles agree with their manifests and that the pins
+# `release-sync` wrote follow the version, before it commits and tags. The
+# `version_files` pins and the build gate are left to the `ci` run on the
+# release commit, which `release-push` waits for.
+release *ARGS: toolchain-check
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(git rev-parse --abbrev-ref HEAD)" != main ]; then
+        echo "release: check out main first" >&2
+        exit 1
+    fi
+    if [ -n "$(git status --porcelain)" ]; then
+        echo "release: the working tree is not clean" >&2
+        exit 1
+    fi
+    git fetch origin main --quiet
+    if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+        echo "release: main is not equal to origin/main; pull or push first" >&2
+        exit 1
+    fi
+    # The tree is taken as sane because ci passed on it; the release does not
+    # run the build gate.
+    # The newest run of any event, so a manual re-run after an infrastructure
+    # failure counts.
+    ci="$(gh run list --workflow ci --commit "$(git rev-parse HEAD)" \
+        --json status,conclusion --jq '.[0] | if . == null then "no run" elif .status != "completed" then .status else .conclusion end')"
+    if [ "$ci" != success ]; then
+        echo "release: ci has not passed on HEAD ($ci); wait for it or fix main" >&2
+        exit 1
+    fi
+    echo "release: open pull requests on main (for information):"
+    gh pr list --base main --state open || true
     cargo run --locked --package xtask -- freeze check --release
-    git std bump
+    # The tree was clean and equal to origin/main before the bump, so a reset
+    # to origin/main discards a failed release, including a commit already
+    # made. The trap is on EXIT, so an explicit `exit 1` reports it too.
+    released=false
+    trap '[ "$released" = true ] || echo "release: failed; discard the release with: git reset --hard origin/main, and git tag -d for a v or editor-v tag it created" >&2' EXIT
+    git std bump --no-commit {{ ARGS }}
+    just release-sync
+    # Cheap checks of what the bump and the sync wrote: both lockfiles agree
+    # with their manifests, and every derived pin follows the new version.
+    cargo metadata --locked --format-version 1 >/dev/null
+    (cd examples/cabin && cargo metadata --locked --format-version 1 >/dev/null)
+    cargo test --locked --package xtask --test release_derived_pins
+    version="$(cargo metadata --no-deps --format-version 1 \
+        | jq -r '.packages[] | select(.name == "ridl-core") | .version')"
+    if [ -n "$(git ls-files --others --exclude-standard)" ]; then
+        echo "release: the release created untracked files; add them to the sync or ignore them:" >&2
+        git ls-files --others --exclude-standard >&2
+        exit 1
+    fi
+    for tag in "v$version" "editor-v$version"; do
+        if git rev-parse --quiet --verify "refs/tags/$tag" >/dev/null \
+            || [ -n "$(git ls-remote --tags origin "refs/tags/$tag")" ]; then
+            echo "release: tag $tag already exists" >&2
+            exit 1
+        fi
+    done
+    git add -u
+    git commit -m "chore(release): $version"
+    git tag -a "v$version" -m "v$version"
+    git tag -a "editor-v$version" -m "editor-v$version"
+    released=true
+    echo "release: $version is committed and tagged locally. Review the"
+    echo "release: changelog, then run: just release-push"
+    echo "release: (not the git push --follow-tags that git std bump printed)"
+
+# Update the version pins that `git std bump` cannot write, after the bump:
+# the `ridl-rt` requirement that `ridl build` emits (`<major>.<minor>`, not the
+# full version, except for a pre-release, which only a requirement that names
+# the same pre-release matches), the cabin example's manifests, lockfiles and
+# `deno.lock`, the editor manifest (an `editor-v` tag must equal it), the root
+# `Cargo.lock` (one entry per crate, and a `version_files` entry rewrites only
+# the first match) and the frozen generated manifests.
+# xtask/tests/release_derived_pins.rs fails when one of them does not follow
+# the workspace version.
+release-sync:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export VERSION MM
+    VERSION="$(cargo metadata --no-deps --format-version 1 \
+        | jq -r '.packages[] | select(.name == "ridl-core") | .version')"
+    case "$VERSION" in
+        *-*) MM="$VERSION" ;;
+        *) MM="$(echo "$VERSION" | cut -d. -f1-2)" ;;
+    esac
+    echo "release-sync: workspace version $VERSION, ridl-rt requirement $MM"
+    perl -pi -e 's/(const RIDL_RT_REQUIREMENT: &str = ")[^"]+/${1}$ENV{MM}/; s/(The `ridl-rt = ")[^"]+/${1}$ENV{MM}/' \
+        crates/ridlc/src/lib.rs
+    perl -pi -e 's/(ridl-rt = \{ version = ")[^"]+/${1}$ENV{MM}/' \
+        examples/cabin/consumer/Cargo.toml examples/cabin/server/Cargo.toml
+    perl -pi -e 's/(requires `ridl-rt = ")[^"]+/${1}$ENV{MM}/' examples/cabin/Cargo.toml
+    perl -pi -e 's/(jsr:\@driftsys\/ridl-runtime\@)[^"]+/${1}$ENV{VERSION}/' examples/cabin/web/deno.lock
+    (cd editors/vscode && npm version "$VERSION" --no-git-tag-version --allow-same-version)
+    cargo update --workspace --offline
+    # The generated crate's manifest must carry the new requirement before
+    # the cabin lockfile is updated, or cargo looks for the old ridl-rt on
+    # crates.io.
+    just _cabin-generate
+    (cd examples/cabin && cargo update --workspace --offline)
+    cargo run --locked --package xtask -- freeze update
+
+# Push the release commit that `just release` made, wait for the `ci` run on it
+# to pass, then push its two tags, which start the crates.io, npm and editor
+# release workflows. A tag is pushed only after CI passed on its commit, so a
+# failure is fixed on main before any publish workflow starts. It can be run
+# again: a release commit already on origin/main is not pushed again, and the
+# newest ci run of any event on it is the one that counts.
+release-push:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(git rev-parse --abbrev-ref HEAD)" != main ]; then
+        echo "release-push: check out main first" >&2
+        exit 1
+    fi
+    subject="$(git log -1 --format=%s)"
+    version="${subject#chore(release): }"
+    if [ "$version" = "$subject" ]; then
+        echo "release-push: HEAD is not a release commit ($subject)" >&2
+        exit 1
+    fi
+    sha="$(git rev-parse HEAD)"
+    for tag in "v$version" "editor-v$version"; do
+        if [ "$(git rev-parse --quiet --verify "$tag^{commit}" || true)" != "$sha" ]; then
+            echo "release-push: tag $tag is missing or does not point at HEAD" >&2
+            exit 1
+        fi
+    done
+    git fetch origin main --quiet
+    if git merge-base --is-ancestor "$sha" origin/main; then
+        echo "release-push: $sha is already on origin/main"
+    else
+        git push origin HEAD:main
+    fi
+    run_id=""
+    for _ in $(seq 30); do
+        run_id="$(gh run list --workflow ci --commit "$sha" --json databaseId --jq '.[0].databaseId // empty')"
+        [ -n "$run_id" ] && break
+        sleep 10
+    done
+    if [ -z "$run_id" ]; then
+        echo "release-push: no ci run for $sha after 5 minutes; the tags are not pushed" >&2
+        exit 1
+    fi
+    if ! gh run watch "$run_id" --exit-status; then
+        state="$(gh run view "$run_id" --json status,conclusion \
+            --jq 'if .status != "completed" then "unfinished" else .conclusion end' || echo unknown)"
+        echo "release-push: the ci run on $sha did not pass ($state); the tags are not pushed." >&2
+        if [ "$state" = unknown ]; then
+            echo "release-push: gh could not read run $run_id; look at it with: gh run view $run_id" >&2
+        elif [ "$state" = unfinished ]; then
+            echo "release-push: the watch stopped before the run finished; run just release-push again." >&2
+        elif [ "$conclusion" = cancelled ]; then
+            echo "release-push: a later push to main cancels the run. Re-run it with" >&2
+            echo "release-push:   gh run rerun $run_id" >&2
+            echo "release-push: then run just release-push again." >&2
+        else
+            echo "release-push: fix main, then cut the next patch version. Keep the local" >&2
+            echo "release-push: tags v$version and editor-v$version, so that git std bump starts" >&2
+            echo "release-push: the next changelog section after $version, and never push them." >&2
+        fi
+        exit 1
+    fi
+    git push origin "v$version" "editor-v$version"
+    echo "release-push: tags pushed. Watch crates-io-release, npm-release and"
+    echo "release-push: vscode-release; the Marketplace job waits for approval"
+    echo "release-push: in the marketplace environment."
 
 # Set up a clone or worktree: git-std, prim, the git hooks, the Rust toolchain
 # rust-toolchain.toml pins, and a report on any of the three tools the gate

@@ -130,7 +130,7 @@ carry no version, as in `ridl-loopback`.
 The codec is `crates/ridl-transport-ws/src/frame.rs`. It also defines the
 constants `FRAME_VERSION` (1), `SUBPROTOCOL` (`ridl-ws-v1`), `MIN_MESSAGE_LIMIT`
 (294, the largest `attach`) and `ENVELOPE_BYTES` (16), and `encoding_tag`, which
-maps an encoding name to the tag of §3: `flatbuffers` 1, `proto3` 2, `repr-c` 3.
+maps an encoding name to the tag of §3: `flatbuffers` 1, `proto3` 2, `podbuf` 3.
 
 **D-3. One borrowed `Frame` enum, with the payload rules in the types.** A
 decoded frame borrows its payload and its unit name from the message. The

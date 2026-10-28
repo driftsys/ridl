@@ -131,7 +131,7 @@ session file at a readable size.
 
 The codec defines `FRAME_VERSION` (1), `SUBPROTOCOL` (`ridl-ws-v1`),
 `MIN_MESSAGE_LIMIT` (294) and `ENVELOPE_BYTES` (16), the `Kind` codes, and
-`encodingTag`, which maps `flatbuffers`, `proto3` and `repr-c` to 1, 2 and 3. As
+`encodingTag`, which maps `flatbuffers`, `proto3` and `podbuf` to 1, 2 and 3. As
 in the crate's D-3, the payload rules are in the types: a `publish` carries a
 `PublishState` (`init`, `live` with a payload, or `invalid`), a `response` a
 `ResponseOutcome` (`accepted`, `reply` with a payload, `contract`, `corrupt` or
@@ -171,7 +171,7 @@ into the message, and the session keeps no reference to it.
 ```ts
 const session = await connect("ws://127.0.0.1:9000", {
   catalog: { name: "veh.cabin", hash }, // hash: Uint8Array, 32 bytes
-  encoding: "flatbuffers", // or "proto3" or "repr-c"; the default is "proto3"
+  encoding: "flatbuffers", // or "proto3" or "podbuf"; the default is "proto3"
   onPublish(target, sample) {}, // each accepted publish of a subscribed signal
   onOccurrence(occurrence) {}, // each accepted occurrence, in arrival order
   onNote(note) {}, // violations, discarded frames and losses

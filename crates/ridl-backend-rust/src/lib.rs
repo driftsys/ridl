@@ -33,6 +33,7 @@ use std::collections::{BTreeSet, HashSet};
 mod claims;
 mod clauses;
 mod codec;
+mod codec_podbuf;
 mod codec_proto3;
 mod contract;
 mod defaults;
@@ -44,6 +45,7 @@ mod scalar_step;
 mod transcode;
 mod wasm;
 
+pub use codec_podbuf::HeadLayout as PodbufHeadLayout;
 pub use codec_proto3::{Label as Proto3Label, MessageLayout as Proto3MessageLayout};
 pub use contract::{Backend, ENCODINGS_OPTION, TRANSCODE_OPTION, WASM_OPTION};
 pub use wasm::{PAYLOAD_TYPES_CONST, RULES_CONST, generate_wasm_module};
@@ -522,6 +524,11 @@ fn package_items(
         items.extend(codec_items);
         recorded.push((WireEncoding::Proto3, owners));
     }
+    if encodings.contains(&WireEncoding::Podbuf) {
+        let (codec_items, owners) = codec_podbuf::package_items(ctx)?;
+        items.extend(codec_items);
+        recorded.push((WireEncoding::Podbuf, owners));
+    }
     if transcode {
         // The owner lists in the order the encodings are listed; a repeated
         // encoding takes its list once.
@@ -549,9 +556,11 @@ fn package_items(
 /// as the [`ENCODINGS_OPTION`] request option; there is no default, and a
 /// package whose list is empty carries the domain types only.
 ///
-/// Two variants today, the two codecs `ridl-backend-rust` emits a `Payload`
-/// implementation for. `repr(C)` joins when the Rust backend emits its codec,
-/// which is what `#[non_exhaustive]` says to a caller that matches on this.
+/// Three variants, one per codec `ridl-backend-rust` emits. The FlatBuffers,
+/// proto3 and podbuf codecs carry a `Payload` implementation each, and the
+/// podbuf codec also carries the head struct and the read-in-place view.
+/// `#[non_exhaustive]` tells a caller that matches on this that a variant can
+/// still join.
 ///
 /// The encoding reaches the output as the full path
 /// `::ridl_rt::encoding::FlatBuffers` at every site that names it — the
@@ -568,16 +577,20 @@ pub enum WireEncoding {
     /// The proto3 codec, emitted into a package's own output when the
     /// package's `encodings` names `proto3`.
     Proto3,
+    /// The podbuf codec, emitted into a package's own output when the
+    /// package's `encodings` names `podbuf`.
+    Podbuf,
 }
 
 impl WireEncoding {
     /// The encoding `name` spells, as `ridl_rt::encoding::Encoding::NAME`
-    /// spells it (`flatbuffers`, `proto3`), or `None` for every other string
-    /// — an encoding this backend has no codec for (`repr-c`) included.
+    /// spells it (`flatbuffers`, `proto3`, `podbuf`), or `None` for every
+    /// other string.
     pub fn parse(name: &str) -> Option<Self> {
         match name {
             "flatbuffers" => Some(WireEncoding::FlatBuffers),
             "proto3" => Some(WireEncoding::Proto3),
+            "podbuf" => Some(WireEncoding::Podbuf),
             _ => None,
         }
     }
@@ -587,6 +600,7 @@ impl WireEncoding {
         match self {
             WireEncoding::FlatBuffers => "flatbuffers",
             WireEncoding::Proto3 => "proto3",
+            WireEncoding::Podbuf => "podbuf",
         }
     }
 
@@ -600,7 +614,7 @@ impl WireEncoding {
     /// shows up as a compile error rather than as wrong output.
     fn check_emitted(self) {
         match self {
-            WireEncoding::FlatBuffers | WireEncoding::Proto3 => {}
+            WireEncoding::FlatBuffers | WireEncoding::Proto3 | WireEncoding::Podbuf => {}
         }
     }
 }
@@ -797,6 +811,20 @@ pub fn proto3_layout(
     let model = ridl_ir::codegen::lower(package, others);
     let ctx = Ctx::with_others(package, others, &model);
     codec_proto3::layout(&ctx)
+}
+
+/// The podbuf head layouts the codec emits `package` from, for the test that
+/// compares the numbers in the emitted `const` assertions with the layout
+/// law computed directly from the IR: one entry per head struct, keyed by the
+/// struct's name. Not part of the backend's API.
+#[doc(hidden)]
+pub fn podbuf_layout(
+    package: &v2::Package,
+    others: &[&v2::Package],
+) -> Result<Vec<PodbufHeadLayout>, GenerateError> {
+    let model = ridl_ir::codegen::lower(package, others);
+    let ctx = Ctx::with_others(package, others, &model);
+    codec_podbuf::layout(&ctx)
 }
 
 /// Parses the assembled items as a bare `syn::File` (no inner attribute, so an
@@ -1145,7 +1173,16 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
     let default_impl = defaults::decl_default_expr(ctx, decl)
         .map(|expr| {
             let name = ident(declared(decl.name.as_ref()));
+            // The body names every field of a struct, a deprecated one
+            // included, which a consumer that builds with `-D warnings`
+            // would otherwise refuse.
+            let allow_deprecated = if has_deprecated_field(decl) {
+                quote! { #[allow(deprecated)] }
+            } else {
+                quote! {}
+            };
             quote! {
+                #allow_deprecated
                 impl ::core::default::Default for #name {
                     fn default() -> Self { #expr }
                 }
@@ -1154,6 +1191,19 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Declaration) -> TokenStream {
         .unwrap_or_default();
 
     allow_dead_code_if_internal(decl.visibility, quote! { #item #default_impl })
+}
+
+/// Whether a struct declaration has a field marked `@deprecated`.
+fn has_deprecated_field(decl: &v1::Declaration) -> bool {
+    match decl.kind.as_ref() {
+        Some(v1::declaration::Kind::Struct(sd)) => sd.slots.iter().any(|slot| {
+            matches!(
+                slot.occupant.as_ref(),
+                Some(v1::slot::Occupant::Field(field)) if field.deprecated.is_some()
+            )
+        }),
+        _ => false,
+    }
 }
 
 /// A named scalar becomes a `#[repr(transparent)]` newtype with a private
@@ -1916,7 +1966,9 @@ fn emit_enum_set(
     // refuses whole, rather than ignoring the bit it does not know. Whether
     // an enum set is closed or open on the wire is recorded as an open
     // question rather than settled here, because settling it changes that arm
-    // of `ridl-diff` as well as this backend.
+    // of `ridl-diff` as well as this backend. (Under `--encoding podbuf`
+    // `ridl-diff` already reports an appended bit as breaking, as
+    // `podbuf_strict_enum_append`, ADR-0031 decision 10.)
     //
     // A bit outside the int64 domain contributes nothing to the mask rather
     // than shifting by it. `ridl-sem` reports TYPL-111 for a position outside

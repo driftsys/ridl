@@ -1237,15 +1237,29 @@ fn proto3_is_accepted_through_the_contract() {
     assert!(both.contains("pub mod valve"));
 }
 
-/// An encoding this backend has no codec for yet is refused with the issue
-/// that builds the codec, so a manifest author knows the name is right and
-/// the codec is pending.
+/// `podbuf` is accepted: the package carries the podbuf codec, the
+/// `Payload<Podbuf>` implementations and the `Sizes<Podbuf>` table of its
+/// interface, whose claim and event buffers are 8-aligned.
 #[test]
-fn repr_c_is_refused_naming_its_issue() {
-    let message = refused_options(vec![encodings_option("repr-c")]);
+fn podbuf_is_accepted() {
+    let source = backend_response(vec![encodings_option("podbuf")]).expect("a file is written");
+    let d = dense(&source);
+    assert!(source.contains("PodbufHead"), "got: {source}");
     assert!(
-        message.contains("`repr-c`") && message.contains("driftsys/ridl#317"),
-        "got: {message}"
+        d.contains("Payload<::ridl_rt::encoding::Podbuf>for"),
+        "got: {source}"
+    );
+    assert!(
+        d.contains("Sizes<::ridl_rt::encoding::Podbuf>for"),
+        "got: {source}"
+    );
+    assert!(
+        d.contains("typeClaimBuffer=::ridl_rt::podbuf::Aligned<"),
+        "got: {source}"
+    );
+    assert!(
+        !d.contains("encoding::FlatBuffers") && !d.contains("encoding::Proto3"),
+        "nothing of the other encodings without them, got: {source}"
     );
 }
 

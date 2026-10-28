@@ -112,14 +112,19 @@ struct EmittedCabin {
 /// proofs below start here: one links a program that runs, the other compiles
 /// a program that must be refused.
 fn emit_and_compile_cabin() -> EmittedCabin {
+    emit_and_compile_cabin_from(&example_dir())
+}
+
+/// [`emit_and_compile_cabin`] over the package in `package_dir`.
+fn emit_and_compile_cabin_from(package_dir: &Path) -> EmittedCabin {
     let out_dir = tempfile::tempdir().expect("a temp dir is created");
     let libs_dir = tempfile::tempdir().expect("a temp dir is created");
     let out = out_dir.path().to_path_buf();
     let libs = libs_dir.path().to_path_buf();
 
     // 1 — the build under test, through the same entry point the CLI calls.
-    let run = ridlc::run_build(&example_dir(), &out, &[Emit::Rust], false.into())
-        .expect("the build runs");
+    let run =
+        ridlc::run_build(package_dir, &out, &[Emit::Rust], false.into()).expect("the build runs");
     assert!(
         !run.has_error(),
         "the example must compile clean, diagnostics: {:?}",
@@ -246,7 +251,7 @@ fn the_emitted_cabin_crate_runs_six_round_trips_against_a_consumer() {
 /// A program that binds a client of the generated `Cabin` face over the
 /// loopback `runtime` builds. The two programs below differ in that
 /// expression alone. The generated prelude is imported for `Bind`, which the
-/// cabin consumer imports the same way; the `ReprC` import is unused in one
+/// cabin consumer imports the same way; the `Podbuf` import is unused in one
 /// of the two programs, which the crate-level attribute covers.
 fn binding_program(runtime: &str) -> String {
     format!(
@@ -255,7 +260,7 @@ use veh_cabin::veh::cabin as api;
 use api::cabin::prelude::*;
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{{CatalogRef, Interface}};
-use ridl_rt::encoding::ReprC;
+use ridl_rt::encoding::Podbuf;
 const CATALOG: CatalogRef = *<api::Cabin as Interface>::CATALOG;
 fn main() {{
     let rt = {runtime};
@@ -436,15 +441,15 @@ fn last_segment(path: &str) -> String {
 
 /// The generated face reads its payload encoding from its port, and the
 /// generated package carries the encoding tables of the encodings it was
-/// built with — for the cabin example, FlatBuffers and proto3. So a port that
-/// carries `ReprC` has no table in that package, and binding a face over it
-/// must be refused.
+/// built with. The package of this test lists FlatBuffers and proto3, a copy of
+/// the cabin example without its `podbuf`. So a port that carries `Podbuf` has
+/// no table in that package, and binding a face over it must be refused.
 ///
 /// What this pins is **where** the refusal lands: at the binding, on the
 /// `Sizes` bound the face declares, and not inside the body of a call that a
 /// reader would have to step into to understand. The port does implement
 /// `Encoded`, so the refusal must not be that the port is not `Encoded`; the
-/// missing item is the package's `Sizes<ReprC>` table.
+/// missing item is the package's `Sizes<Podbuf>` table.
 ///
 /// The same program over `Loopback::new(CATALOG)`, whose encoding is
 /// FlatBuffers, compiles, and so does the same program over a proto3
@@ -452,12 +457,13 @@ fn last_segment(path: &str) -> String {
 /// broken compile command rather than from the bound.
 #[test]
 fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
-    let built = emit_and_compile_cabin();
+    let package = cabin_package_with_encodings(r#"["flatbuffers", "proto3"]"#);
+    let built = emit_and_compile_cabin_from(package.path());
 
     let refused = compile_against_cabin(
         &built,
         "encoding_the_package_lacks",
-        &binding_program("Loopback::<ReprC>::with_encoding(CATALOG)"),
+        &binding_program("Loopback::<Podbuf>::with_encoding(CATALOG)"),
         ErrorFormat::Json,
     );
     let stderr = String::from_utf8_lossy(&refused.stderr);
@@ -482,7 +488,7 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
     let expected = Predicate {
         self_type: "Cabin".to_owned(),
         trait_name: "Sizes".to_owned(),
-        arguments: vec!["ReprC".to_owned()],
+        arguments: vec!["Podbuf".to_owned()],
     };
     // The statement the refusal must point at. `rustc` highlights the
     // argument inside it, and the span carries the whole statement, so the
@@ -510,7 +516,7 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
     // The port is `Encoded`; what the package lacks is its `Sizes` table. So
     // no unsatisfied-bound diagnostic may report a predicate whose trait is
     // `Encoded`. The name does appear elsewhere in the output — in the
-    // projection path `<Loopback<ReprC> as Encoded>::Encoding` of the
+    // projection path `<Loopback<Podbuf> as Encoded>::Encoding` of the
     // companion type-mismatch diagnostic, and in the
     // `ridl_rt::payload::Encoded` struct the generated FlatBuffers codec
     // names, which is a different item — so the predicate is read rather
@@ -551,6 +557,65 @@ fn a_port_whose_encoding_the_package_lacks_is_refused_at_the_binding() {
         "the same program over proto3, the package's second encoding, must compile, rustc said:\n{}",
         String::from_utf8_lossy(&accepted.stderr)
     );
+}
+
+/// A copy of `examples/cabin/` whose manifest lists `encodings` instead of the
+/// example's own list.
+fn cabin_package_with_encodings(encodings: &str) -> tempfile::TempDir {
+    let package = tempfile::tempdir().expect("a temp dir is created");
+    for file in ["cabin.ridl", "system.rsdl"] {
+        std::fs::copy(example_dir().join(file), package.path().join(file))
+            .expect("the example file is copied");
+    }
+    let manifest = std::fs::read_to_string(example_dir().join("ridl.toml"))
+        .expect("the example manifest is readable");
+    let own = r#"encodings = ["flatbuffers", "proto3", "podbuf"]"#;
+    let changed = manifest.replace(own, &format!("encodings = {encodings}"));
+    assert_ne!(changed, manifest, "the manifest names the encodings");
+    std::fs::write(package.path().join("ridl.toml"), changed).expect("the manifest is written");
+    package
+}
+
+/// The counterpart of the refusal above: the example lists `podbuf`, so it
+/// carries the `Sizes<Podbuf>` table of its interface, the same binding over a
+/// podbuf loopback compiles, and the table's claim buffer is 8-aligned.
+#[test]
+fn a_package_that_lists_podbuf_carries_its_size_table() {
+    let built = emit_and_compile_cabin();
+    let program = format!(
+        "{}\nfn aligned() {{\n    use ridl_rt::contract::Sizes;\n    \
+         assert_eq!(core::mem::align_of::<<api::Cabin as Sizes<Podbuf>>::ClaimBuffer>(), 8);\n    \
+         assert!(<api::Cabin as Sizes<Podbuf>>::MAX_BUFFER_SIZE > 0);\n}}\n",
+        binding_program("Loopback::<Podbuf>::with_encoding(CATALOG)")
+    );
+    let accepted = compile_against_cabin(
+        &built,
+        "the_encoding_the_package_lists",
+        &program,
+        ErrorFormat::Human,
+    );
+    assert!(
+        accepted.status.success(),
+        "a face bound over a podbuf port must compile when the package lists podbuf, rustc said:\n{}",
+        String::from_utf8_lossy(&accepted.stderr)
+    );
+}
+
+/// The cabin example lists `podbuf` among its encodings, so the emitted crate
+/// carries a podbuf codec for its types and a podbuf size table for its
+/// interface. `just demo` round-trips one value through that codec.
+#[test]
+fn the_cabin_crate_carries_a_podbuf_codec_and_size_table() {
+    let out = tempfile::tempdir().expect("a temp dir is created");
+    let run = ridlc::run_build(&example_dir(), out.path(), &[Emit::Rust], false.into())
+        .expect("the build runs");
+    assert!(!run.has_error(), "the example must compile clean");
+    let src = std::fs::read_to_string(out.path().join("veh.cabin.rs"))
+        .expect("the emitted crate source is readable");
+    assert!(
+        src.contains("impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Setpoint")
+    );
+    assert!(src.contains("impl ::ridl_rt::contract::Sizes<::ridl_rt::encoding::Podbuf> for Cabin"));
 }
 
 /// The cabin workspace declares one system with one deployment, `Bench`, whose

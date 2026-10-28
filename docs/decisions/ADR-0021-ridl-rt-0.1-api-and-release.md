@@ -399,7 +399,7 @@ trusted with no `unsafe` and no second verification pass.
    `unsafe` to decode (a flatc-generated accessor used as a `View` may still
    contain `unsafe` inside the accessor itself, which narrows the no-`unsafe`
    rule to code ridl emits, not to every `View`). `encoding::Encoding` is
-   sealed, so `FlatBuffers`, `Proto3` and `ReprC` are the only encodings a
+   sealed, so `FlatBuffers`, `Proto3` and `Podbuf` are the only encodings a
    payload can implement; adding a fourth is a decision recorded in an ADR,
    never an `impl` in a downstream crate.
 
@@ -464,7 +464,7 @@ trusted with no `unsafe` and no second verification pass.
    may be far smaller.
 
 8. **The three cargo features are declared and carry no dependency in 0.1.**
-   `flatbuffers`, `proto3` and `repr-c` exist so a runtime can name every
+   `flatbuffers`, `proto3` and `podbuf` exist so a runtime can name every
    encoding without linking a codec, and the crate has no dependency in any
    feature combination. The `flatbuffers` dependency, its version, and the
    obligation it brings — every final binary that enables the feature must
@@ -550,8 +550,10 @@ trusted with no `unsafe` and no second verification pass.
    generated `verify` returns. It decides no layout, takes no dependency,
    allocates nothing and has no `unsafe` code, so the three constraints this
    crate holds to are unaffected, and `just wasm-check` and `just compat-check`
-   cover it through their `--all-features` invocations. `repr-c` still enables
-   nothing. Under decision 10 the change is additive.
+   cover it through their `--all-features` invocations. `repr-c`, since renamed
+   `podbuf`, still enabled nothing at the time; it gates the `podbuf` module
+   since [ADR-0031](ADR-0031-podbuf-projection-rules.md). Under decision 10 the
+   change is additive.
 
 9. **`Contract` and `CallError` stay exhaustive; every other error enum stays
    `#[non_exhaustive]`.** `Contract`'s variants are ridl §10.2's fixed
@@ -589,7 +591,7 @@ trusted with no `unsafe` and no second verification pass.
     `Ordinal`, `InterfaceNo`, `CatalogHash`, `Correlation`, `ClaimId`,
     `Timestamp` and `Duration` — follow the same rule: each has one public field
     code outside the crate builds directly. The unit structs `FlatBuffers`,
-    `Proto3` and `ReprC` (`crates/ridl-rt/src/encoding.rs`) follow it for a
+    `Proto3` and `Podbuf` (`crates/ridl-rt/src/encoding.rs`) follow it for a
     different reason: each is a marker type with no field, and code outside the
     crate uses it as a value or a pattern, so a field added to any of them
     breaks that code just as surely. A field added to any of these structs is

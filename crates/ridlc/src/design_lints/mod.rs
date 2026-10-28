@@ -8,6 +8,7 @@ use ridl_sem::{CheckedPackage, Resolution};
 mod ceiling;
 mod cohesion;
 mod limits;
+mod podbuf;
 mod shapes;
 mod sites;
 mod units;
@@ -71,6 +72,44 @@ pub(crate) fn check_payload_ceiling(
         })
         .collect();
     ceiling::check(
+        &Ctx {
+            checked,
+            subject,
+            sites,
+        },
+        std_ir,
+        encodings,
+    )
+}
+
+/// RIDL-153, RIDL-154 and RIDL-155 over one source set: the build-time errors
+/// of the podbuf encoding, raised only when `encodings` names `podbuf`. The
+/// inputs are those of [`check_payload_ceiling`]. The checks read types, not
+/// interactions, so they run for a workspace with no interface. All three
+/// codes are errors, so lint levels do not apply.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn check_podbuf(
+    db: &RidlDatabase,
+    packages: &[Package],
+    checked: &[CheckedPackage],
+    resolutions: &[Resolution],
+    blocked: &[bool],
+    std_ir: &ridl_ir::v2::Package,
+    encodings: &[String],
+    sources: &mut SourceMap,
+) -> Vec<Diagnostic> {
+    if !podbuf::enabled(encodings) {
+        return Vec::new();
+    }
+    let sites = SiteIndex::new(db, packages, resolutions, sources);
+    let subject = packages
+        .iter()
+        .zip(blocked)
+        .map(|(package, blocked)| {
+            !blocked && !matches!(package.origin(db), PackageOrigin::Remote { .. })
+        })
+        .collect();
+    podbuf::check(
         &Ctx {
             checked,
             subject,

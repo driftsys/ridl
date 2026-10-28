@@ -479,6 +479,7 @@ fn proto3_sizes(bound: Option<u32>) -> Option<v1::PayloadSizes> {
             }),
         }),
         flatbuffers: None,
+        podbuf: None,
     })
 }
 

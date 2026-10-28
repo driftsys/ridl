@@ -1,0 +1,20 @@
+[package]
+name = "ridl-backend-podbuf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Compiles a RIDL IR package to the podbuf C header."
+
+[dependencies]
+ridl-ir.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+# The source-to-IR compile path for the tests: `ridlc` depends on this crate
+# as a normal dependency, so this is a dev-dependency cycle back to the crate
+# under test, and carries a path with no version for the reason
+# `ridl-backend-flatbuffers/Cargo.toml` gives.
+ridlc = { path = "../ridlc" }
+ridl-core = { path = "../ridl-core" }
+tempfile = "3.15.0"

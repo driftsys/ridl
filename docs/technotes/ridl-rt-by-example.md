@@ -320,7 +320,7 @@ Steps 1 and 2 both crossed the same boundary: a `Temperature` on one side, a
 `&[u8]` on the other. That boundary is the `payload` and `encoding` modules, and
 it is worth understanding once because every interaction kind uses it.
 
-**An encoding is a marker type.** `ReprC`, `Proto3` and `FlatBuffers` implement
+**An encoding is a marker type.** `Podbuf`, `Proto3` and `FlatBuffers` implement
 the `Encoding` trait, which is sealed — the set is closed by ADR-0020 decision
 1, so a fourth encoding is an ADR, not an `impl` in another crate. The markers
 do not depend on a cargo feature, so a runtime can name an encoding without
@@ -900,11 +900,10 @@ variant compiles without a `_` arm. That split is pinned by doctests in
 Everything in this note is real code that compiles and runs. Several pieces of
 what it stands on are placeholders with a named replacement.
 
-| Placeholder                                                                               | Replaced by       |
-| ----------------------------------------------------------------------------------------- | ----------------- |
-| The transport under the in-process runtime the examples run against                       | driftsys/ridl#265 |
-| A `repr(C)` size table (`Sizes<ReprC>`): no backend emits one until the layout is defined | driftsys/ridl#317 |
-| The contract-clause translator                                                            | driftsys/ridl#704 |
+| Placeholder                                                         | Replaced by       |
+| ------------------------------------------------------------------- | ----------------- |
+| The transport under the in-process runtime the examples run against | driftsys/ridl#265 |
+| The contract-clause translator                                      | driftsys/ridl#704 |
 
 One further limit is not a placeholder but scope. A second, that
 `ridl --emit rust` did not emit the face at all, closed on 2026-09-21: the

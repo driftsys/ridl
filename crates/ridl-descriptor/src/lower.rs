@@ -24,7 +24,7 @@ use crate::{
 const COLUMNS: [size::Encoding; 3] = [
     size::Encoding::Proto3,
     size::Encoding::FlatBuffers,
-    size::Encoding::ReprC,
+    size::Encoding::Podbuf,
 ];
 
 /// Why a checked package could not be lowered: a defect upstream, not data.
@@ -261,7 +261,7 @@ fn row(encoding: size::Encoding, state: SizeState) -> Option<MaxSize> {
     let encoding = match encoding {
         size::Encoding::Proto3 => Encoding::Proto3,
         size::Encoding::FlatBuffers => Encoding::FlatBuffers,
-        size::Encoding::ReprC => Encoding::ReprC,
+        size::Encoding::Podbuf => Encoding::Podbuf,
     };
     match state {
         SizeState::Bounded(bytes) => Some(MaxSize {

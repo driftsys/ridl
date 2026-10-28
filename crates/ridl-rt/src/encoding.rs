@@ -26,7 +26,7 @@ mod sealed {
 /// fn name<E: ridl_rt::encoding::Encoding>() -> &'static str {
 ///     E::NAME
 /// }
-/// assert_eq!(name::<ridl_rt::encoding::ReprC>(), "repr-c");
+/// assert_eq!(name::<ridl_rt::encoding::Podbuf>(), "podbuf");
 /// ```
 ///
 /// and cannot add an encoding. The error codes on the `compile_fail` blocks
@@ -61,13 +61,13 @@ pub struct FlatBuffers;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Proto3;
 
-/// `repr(C)`, the fixed-layout encoding of ADR-0020 decision 1.
+/// `podbuf`, the fixed-layout encoding of ADR-0020 decision 1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ReprC;
+pub struct Podbuf;
 
 impl sealed::Sealed for FlatBuffers {}
 impl sealed::Sealed for Proto3 {}
-impl sealed::Sealed for ReprC {}
+impl sealed::Sealed for Podbuf {}
 
 impl Encoding for FlatBuffers {
     const NAME: &'static str = "flatbuffers";
@@ -77,13 +77,13 @@ impl Encoding for Proto3 {
     const NAME: &'static str = "proto3";
 }
 
-impl Encoding for ReprC {
-    const NAME: &'static str = "repr-c";
+impl Encoding for Podbuf {
+    const NAME: &'static str = "podbuf";
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{sealed, Encoding, FlatBuffers, Proto3, ReprC};
+    use super::{sealed, Encoding, FlatBuffers, Podbuf, Proto3};
 
     /// A fourth encoding, for this test only. It implements every required
     /// item of `Encoding`, so a required item added to the trait fails to
@@ -105,6 +105,6 @@ mod tests {
     fn each_name_is_the_cargo_feature_name() {
         assert_eq!(FlatBuffers::NAME, "flatbuffers");
         assert_eq!(Proto3::NAME, "proto3");
-        assert_eq!(ReprC::NAME, "repr-c");
+        assert_eq!(Podbuf::NAME, "podbuf");
     }
 }

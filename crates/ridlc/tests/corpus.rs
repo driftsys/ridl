@@ -545,6 +545,50 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      `crates/ridlc/tests/payload_limits.rs`",
         },
     ),
+    (
+        "RIDL-153",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/podbuf_checks.rs",
+            reason: "the podbuf checks run in the shared check pass, over the manifest's \
+                     `[backend.<name>]` encodings, and the corpus runner assembles its own \
+                     passes, so the showcase compile never reaches them. Provoked by \
+                     `a_type_above_u32_max_bytes_is_ridl_153_naming_it` in \
+                     `crates/ridlc/tests/podbuf_checks.rs`",
+        },
+    ),
+    (
+        "RIDL-154",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/podbuf_checks.rs",
+            reason: "the podbuf checks run in the shared check pass, over the manifest's \
+                     `[backend.<name>]` encodings, and the corpus runner assembles its own \
+                     passes, so the showcase compile never reaches them. Provoked by \
+                     `an_array_past_65535_elements_or_bytes_per_element_is_ridl_154` in \
+                     `crates/ridlc/tests/podbuf_checks.rs`",
+        },
+    ),
+    (
+        "RIDL-155",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/podbuf_checks.rs",
+            reason: "the podbuf checks run in the shared check pass, over the manifest's \
+                     `[backend.<name>]` encodings, and the corpus runner assembles its own \
+                     passes, so the showcase compile never reaches them. Provoked by \
+                     `a_deprecated_field_with_no_valid_value_is_ridl_155` in \
+                     `crates/ridlc/tests/podbuf_checks.rs`",
+        },
+    ),
+    (
+        "RIDL-156",
+        Elsewhere {
+            fixture: "crates/ridl/tests/lints.rs",
+            reason: "the lint runs in `ridl check` only, because it reads the published \
+                     baseline and `ridlc` does not, so the showcase compile never reaches it. \
+                     Provoked by \
+                     `a_struct_whose_order_wastes_padding_draws_ridl_156_with_both_sizes_and_the_saving_order` \
+                     in `crates/ridl/tests/lints.rs`",
+        },
+    ),
     ("RIDL-201", Showcase),
     ("RIDL-202", Showcase),
     ("RIDL-301", Showcase),

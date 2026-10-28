@@ -1,5 +1,6 @@
 ---
 source: crates/ridl-backend-ts/tests/codec.rs
+assertion_line: 76
 expression: "module(&cabin_model(), \"veh.cabin\")"
 ---
 import * as flatbuffers from "flatbuffers";
@@ -19,6 +20,7 @@ export const PAYLOAD_TYPES = [
   "veh.cabin.Diagnostic",
   "veh.cabin.Health",
   "veh.cabin.Level",
+  "veh.cabin.Setpoint",
   "veh.cabin.Subsystems",
   "veh.cabin.Temperature",
   "veh.cabin.Warning",
@@ -141,6 +143,17 @@ function unpackDiagnostic(object: fb.DiagnosticT): t.Diagnostic {
     health: Number(object.health) as t.Health,
     loop: object.loop as t.Level,
   };
+}
+
+/** Encodes a `veh.cabin.Setpoint` payload. */
+export function encodeSetpoint(value: t.Setpoint): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.SetpointBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.cabin.Setpoint` payload the codec has verified. */
+export function decodeSetpoint(bytes: Uint8Array): t.Setpoint {
+  return fb.SetpointBox.getRootAsSetpointBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Setpoint;
 }
 
 const codecTemperature: PayloadCodec<t.Temperature> = { type: "veh.cabin.Temperature", encode: encodeTemperature, decode: decodeTemperature };
