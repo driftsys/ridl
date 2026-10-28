@@ -186,6 +186,11 @@ TypeScript WebSocket transport package (driftsys/ridl#982), was filed as a new
 story, because no story held the transport package that the TypeScript framework
 names.
 
+**Filed 2026-10-26.** E2.14, nested interface members (driftsys/ridl#1084), and
+E6.20, a partition under `machine` (driftsys/ridl#1085), are new rows under "The
+next breaking release", beside LIM3 (driftsys/ridl#1059). Each takes the next
+free identifier in its epic.
+
 **Filed 2026-10-26, with exact numerics.** Epic 18 is new, with its own
 milestone; its stories are driftsys/ridl#1087 (E18.1, first filed as E10.12
 before the epic was split out, and retitled) and driftsys/ridl#1089 to
@@ -1180,6 +1185,52 @@ needed for the first Kotlin demo.
 
 ---
 
+# The next breaking release
+
+**Scheduled on 2026-10-26 by the maintainer.** The next release marked breaking,
+the first after 0.14.0, carries three items, and it is cut when all three have
+landed:
+
+- **LIM3, the transport's limits** (driftsys/ridl#1059): `ridl-transport-ws`
+  gets a fixed message limit and a per-request limit check. It is the last stage
+  of the limits lane, whose driver is archived as
+  [`2026-10-24-lane-limits-driver.md`](archive/2026-10-24-lane-limits-driver.md).
+  LIM1 and LIM2 shipped in 0.14.0. LIM3 landed on 2026-10-28
+  (driftsys/ridl#1098), and LIM4 gardened the lane the same day
+  (driftsys/ridl#1106).
+- **E2.14, nested interface members** (driftsys/ridl#1084).
+- **E6.20, a partition under `machine`** (driftsys/ridl#1085).
+
+| ID    | Story                                                                                                                                                                                                                                        | Done when                                                                                                                                                                        | Size |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E2.14 | Nested interface members: an interface member, or a member of an inline service shape, names another interface in a named form (`slot0 : Widget`) or an indexed form (`slots : [Widget; 5]`), and each instance has its own interface number | a contract with a named and an indexed nested member is checked, locked and diffed, and a backend that meets a nested member emits one diagnostic saying it is not generated yet | L    |
+| E6.20 | A partition under `machine`: an optional grouping that carries an assurance level, with one implicit partition when a machine declares none, and a mixed-level placement rejected at check                                                   | a component whose `labels` demand a higher level than its partition is rejected, and a machine that declares no partition lowers with one implicit partition                     | M    |
+
+**E2.14 starts with its decision record.** The maintainer took the
+nested-interface design note,
+[`2026-09-21-nested-interface-design.md`](wip/2026-09-21-nested-interface-design.md),
+on 2026-10-26. The story's first task is the ADR that amends ADR-0015 decisions
+16 and 17 and answers the note's three open questions: the lock key spelling for
+an index, the book's guidance on a per-instance command, and how `ridl diff`
+presents the instances of an indexed member. The row is the note's first step,
+the language and the IR. Its second step, the Rust face over the per-instance
+numbers, and its third, the bounded form, become their own rows when this one
+lands, and they are not in this release.
+
+**E6.20 reopens decision D-2.** D-2 of
+[`2026-09-12-rsdl-rewrite-decisions.md`](wip/2026-09-12-rsdl-rewrite-decisions.md)
+says rsdl declares no process, and it names the shape a grouping noun would
+take; the maintainer reopened it on 2026-10-26. The rsdl reference §12 states
+the same shape, and the story amends that section when it lands. The partition
+is designed against ARINC 653's time and space partitioning rather than
+invented, as the section "What this repository is, and is not" says. The
+rejection compares levels on the ordered `0..N` scales of ADR-0018 decision 9,
+one dimension at a time, because its three dimensions do not compare in the same
+direction. An rsdl `labels` value is a list of names with no defined order, so
+the story also defines how a label maps to a level. The partition carries no
+pump kind and no priority, because D-2 leaves scheduling to the backend and the
+engine.
+
 # Epic 18 — exact numerics
 
 **Scheduled on 2026-10-27 over two releases marked breaking.** Filed 2026-10-26.
@@ -1329,6 +1380,28 @@ reopening is an observation rather than an argument.
 
 # Milestone summary
 
+| Epic | Milestone                       | Step                                                                               |
+| ---- | ------------------------------- | ---------------------------------------------------------------------------------- |
+| E0   | walking skeleton                | landed — internal                                                                  |
+| E1   | typl schema language            | landed — **v0.1 preview**                                                          |
+| E2   | ridl contract boundary          | landed — v0.x                                                                      |
+| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
+| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                      |
+| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR             |
+| E17  | layout inputs for plugins       | **step 1**, landed                                                                 |
+| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                           |
+| E11  | the runtime library             | **step 1** — generated code links a library                                        |
+| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                      |
+| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                               |
+| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                             |
+| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                          |
+| E8   | agent enablement                | **step 1** — threads alongside                                                     |
+| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                    |
+| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                       |
+| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                              |
+| none | Kotlin, the first plugin        | after step 2                                                                       |
+| none | the next breaking release       | after 0.14.0 — LIM3, E2.14 and E6.20                                               |
+
 | Epic | Milestone                       | Step                                                                                   |
 | ---- | ------------------------------- | -------------------------------------------------------------------------------------- |
 | E0   | walking skeleton                | landed — internal                                                                      |
@@ -1351,8 +1424,10 @@ reopening is an observation rather than an argument.
 | none | Kotlin, the first plugin        | after step 2                                                                           |
 | E18  | exact numerics                  | the next two breaking releases — the design and the policy, then the type and the wire |
 
-Rows are in step order, not numeric order — the numbering is identity, as the
-tracker section above explains. Two rows have no epic: the Rust codegen section
-is a section of this page holding three Epic 11 stories (E11.7, E11.8, E11.12),
-and Kotlin is a plugin written outside this workspace with no story identifier
-here.
+Rows are in step order, not numeric order, except the last, which is a release
+rather than a step — the numbering is identity, as the tracker section above
+explains. Three rows have no epic: the Rust codegen section is a section of this
+page holding three Epic 11 stories (E11.7, E11.8, E11.12), and Kotlin is a
+plugin written outside this workspace with no story identifier here, and the row
+for the next breaking release groups the last limits stage and two stories, of
+Epics 2 and 6.

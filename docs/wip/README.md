@@ -384,6 +384,9 @@ and was not archived. The reason is stated once per file or group.
   note into an amendment of ADR-0015, the match pattern note into an amendment
   of the typl reference). The tracker shows #597 closed, but no commit after the
   design implements it; the maintainer decides whether each is taken, archived
+  or superseded. The nested interface note was taken on 2026-10-26 as E2.14
+  (driftsys/ridl#1084).
+
   or superseded.
 
 ## Files that stay after the podbuf pass (2026-10-27)
