@@ -236,6 +236,22 @@ package and an interaction name is unique in an interface; the claim table of
 the Rust backend still refuses a collision with a declaration, a view or a
 descriptor.
 
+**Amendment (2026-10-28), from driftsys/ridl#1103.** The podbuf C header
+(`ridl-backend-podbuf`) names a tuple's members by their typl names under the
+pinned `snake_case`, as it names a struct's fields, in the package that declares
+the tuple and in a package that lays it out inline alike; the codegen model
+carries the name next to the position (`PodbufSource.position_name`). So the
+statement of the 2026-09-29 amendment and of the consequences entry on
+driftsys/ridl#449 that the wire backends name a tuple's fields by position and
+do not meet the `minSpeed` / `min_speed` pair no longer holds for podbuf. The
+podbuf header does not refuse the pair: a tuple whose spelled member names would
+clash in a way the header refuses — two members equal under `snake_case`, or a
+member equal to the presence test `has_<member>` of an optional member — falls
+back to positional names (`f1`, `f2`) for that whole tuple head, decided from
+the tuple's own member names so that both headers make the same choice. The
+proto3 and FlatBuffers backends still name a tuple's fields by position, and the
+scope of RIDL-149 is unchanged.
+
 ## Context
 
 The note answers two questions the store-and-dispatcher work raised: what

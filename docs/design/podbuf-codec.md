@@ -176,10 +176,15 @@ the headers of two packages can be included together; one `struct` per head,
 with `_Alignas(8)` on its first member and every gap as a `_padN` member;
 `_Static_assert` checks on `sizeof` and `offsetof` for every head and field; the
 constants of the enums, enum sets and union tags; and inline accessor functions.
-`<owner>_<field>_at` reads a field from a head of a size the caller gives and
+`<owner>_<member>_at` reads a field from a head of a size the caller gives and
 answers 0 (or `NULL`) for a field past it; the head of a declaration also has
-`<owner>_<field>`, which reads a whole buffer through the preamble's
-`head_size`. A foreign struct, tuple or union that a field lays out inline is
+`<owner>_<member>`, which reads a whole buffer through the preamble's
+`head_size`. `<member>` is the C member name: the typl name of a struct field or
+a tuple member under the pinned `snake_case`, without the trailing underscore a
+reserved word takes, so the accessor names follow the member names. A tuple
+whose spelled member names would clash falls back to positional members (`f1`,
+`f2`) and accessors, in every header that defines its head (ADR-0016, amendment
+of 2026-10-28). A foreign struct, tuple or union that a field lays out inline is
 defined again behind a `<PKG>_<TYPE>_HEAD_DEFINED` guard. The header carries
 `#error` on a big-endian target, and has no `verify`: the gate is Rust.
 
