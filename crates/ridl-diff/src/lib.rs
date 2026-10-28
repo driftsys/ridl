@@ -281,15 +281,17 @@ declare_categories! {
         /// inside such a root is a head, and a struct inside that tuple is a
         /// use.
         PodbufInlineAppend,
-        /// An enum value or a union arm appended, compatible under the
-        /// generic rule, after which the podbuf integer of the enum or the
-        /// tag of the union is a different integer, by width or by
-        /// signedness: `u8` to `u16`, `u16` to `u32`, or `u8` to `i8` for an
-        /// enum that gains a negative value. The integer is the narrowest
-        /// that holds every declared value (ADR-0031 decision 5) or, for a
-        /// tag, every arm ordinal. Breaking when `podbuf` is among the
-        /// encodings the comparison is judged for, because every head that
-        /// holds the enum or the union lays out a different integer;
+        /// An enum value, an enum-set flag or a union arm appended, compatible
+        /// under the generic rule, after which the podbuf integer of the enum
+        /// or the enum set or the tag of the union is a different integer, by
+        /// width or by signedness: `u8` to `u16`, `u16` to `u32`, or `u8` to
+        /// `i8` for an enum that gains a negative value. The integer is the
+        /// narrowest that holds every declared value (ADR-0031 decision 5),
+        /// for an enum set its width (the narrowest unsigned integer that
+        /// holds its highest bit) or, for a tag, every arm ordinal. Breaking
+        /// when `podbuf` is among the encodings the comparison is judged for,
+        /// because every head that holds the enum, the enum set or the union
+        /// lays out a different integer;
         /// compatible otherwise. Reported once per declaration, at
         /// `<package>/<decl>`, with the old and the new integer. An append
         /// that keeps the integer draws no such line.
@@ -301,8 +303,8 @@ declare_categories! {
         /// Every enum and enum set is strict today. Breaking when `podbuf`
         /// is among the encodings the comparison is judged for; compatible
         /// otherwise. Reported once per declaration, at `<package>/<decl>`,
-        /// with the appended names in the detail. An enum whose append also
-        /// changes the podbuf integer draws only the
+        /// with the appended names in the detail. An enum or an enum set whose
+        /// append also changes the podbuf integer draws only the
         /// [`Category::PodbufWidthChange`] line.
         PodbufStrictEnumAppend,
     }
@@ -487,8 +489,9 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 ///
 /// Only `podbuf` has rules of its own: a struct field appended to a struct
 /// that another head holds inline is [`Category::PodbufInlineAppend`], and an
-/// enum value or a union arm appended that changes the enum's integer or the
-/// union's tag is [`Category::PodbufWidthChange`]; both are breaking when
+/// enum value, an enum-set flag or a union arm appended that changes the
+/// integer of the enum or the enum set or the union's tag is
+/// [`Category::PodbufWidthChange`]; both are breaking when
 /// `podbuf` is in `encodings` and compatible otherwise. Every other category
 /// is judged the same under every list, and a name that is not `podbuf` adds
 /// no rule. The CLI and the MCP tool refuse a name that is

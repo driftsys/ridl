@@ -178,20 +178,22 @@ common cases:
   inside an exact-length array that is itself a root (a fixed payload
   `[S; 2..2]`, which has no head) can grow under podbuf, and such an append is
   compatible. A tuple inside such a root is a head, and a struct inside that
-  tuple is a use. Also breaking under podbuf: an enum value or a union arm
-  appended after which the podbuf integer of the enum or the tag of the union
-  is a different integer, by width or by signedness: a value above 255 or an
-  arm past ordinal 255 (`u8` to `u16`), above 65535 (`u16` to `u32`), or a
-  first negative value of an enum (`u8` to `i8`). It is reported once per
-  declaration as `podbuf_width_change` with the old and the new integer,
-  under the same heading and with the same verdict rule; every head that holds
-  the enum or the union lays out a different integer, and an append that keeps
-  the integer draws no such line. Also breaking under podbuf: an enum value or
+  tuple is a use. Also breaking under podbuf: an enum value, an enum-set flag
+  or a union arm appended after which the podbuf integer of the enum or the
+  enum set or the tag of the union is a different integer, by width or by
+  signedness: a value above 255, a flag at bit 8 or an arm past ordinal 255
+  (`u8` to `u16`), a value above 65535 or a flag at bit 16 (`u16` to `u32`),
+  or a first negative value of an enum (`u8` to `i8`). It is reported once per
+  declaration as `podbuf_width_change` with the old and the new integer, under
+  the same heading and with the same verdict rule; every head that holds the
+  enum, the enum set or the union lays out a different integer, and an append
+  that keeps the integer draws no such line. Also breaking under podbuf: an enum value or
   an enum-set flag appended. Every enum and enum set is strict, and the
   `verify` of an older reader refuses a value or a bit its declaration does not
   name. It is reported once per declaration as `podbuf_strict_enum_append`,
-  under the same heading and with the same verdict rule, except that an enum
-  whose append changes the integer draws only the `podbuf_width_change` line.
+  under the same heading and with the same verdict rule, except that an enum or
+  an enum set whose append changes the integer draws only the
+  `podbuf_width_change` line.
   A field removed from a struct, its slot held by a tombstone, is `decl_removed`,
   breaking under every encoding: the type is gone from the source, so its
   bytes cannot be kept.

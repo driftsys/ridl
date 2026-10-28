@@ -3471,4 +3471,86 @@ mod podbuf_width {
         let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
         assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
     }
+
+    /// An enum set `Flags` with a flag `F<bit>` at each of `bits`, of the
+    /// declared `width` (the checker infers it from the highest bit, typl
+    /// §9.3; the podbuf layout reads the declared width).
+    fn enum_set_with(bits: &[i64], width: v2::IntWidth) -> v2::Package {
+        let bits = bits
+            .iter()
+            .map(|&bit| v2::EnumValue {
+                name: format!("F{bit}"),
+                value: bit,
+                ..Default::default()
+            })
+            .collect();
+        with_decl(
+            "Flags",
+            v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                bits,
+                width: width as i32,
+                ..Default::default()
+            }),
+        )
+    }
+
+    /// Bit 8 appended to `enumset {F0 = 0, F7 = 7}` widens the podbuf integer
+    /// from `u8` to `u16`: the width line, breaking under podbuf, and no
+    /// strict-enum line beside it.
+    #[test]
+    fn an_appended_enum_set_flag_that_widens_the_integer_is_a_podbuf_width_change() {
+        let old = enum_set_with(&[0, 7], v2::IntWidth::U8);
+        let new = enum_set_with(&[0, 7, 8], v2::IntWidth::U16);
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(
+            width_change(&report).map(|change| (
+                change.path.as_str(),
+                change.verdict,
+                change.before.as_deref(),
+                change.after.as_deref()
+            )),
+            Some((
+                "veh.cluster/Flags",
+                Verdict::Breaking,
+                Some("u8"),
+                Some("u16")
+            )),
+            "{}",
+            render_text(&report)
+        );
+        assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
+        assert_eq!(report.verdict, Verdict::Breaking);
+        assert_eq!(
+            width_change(&diff_refs_with(&[&old], &[&new], &[], &[])).map(|change| change.verdict),
+            Some(Verdict::Compatible)
+        );
+    }
+
+    /// Bit 7 appended to `enumset {F0 = 0, F3 = 3}` keeps the `u8`: no width
+    /// line, and the strict-enum line still reports the flag.
+    #[test]
+    fn an_appended_enum_set_flag_that_keeps_the_width_draws_no_width_line() {
+        let old = enum_set_with(&[0, 3], v2::IntWidth::U8);
+        let new = enum_set_with(&[0, 3, 7], v2::IntWidth::U8);
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(width_change(&report), None);
+        let changes = strict_append(&report);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].path, "veh.cluster/Flags");
+        assert_eq!(changes[0].after.as_deref(), Some("F7"));
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    /// Bit 3 inserted into `enumset {F0 = 0, F7 = 7}` keeps the `u8` and is
+    /// breaking under the generic rule (`decl_added`), so it draws neither a
+    /// width line nor a strict-enum line.
+    #[test]
+    fn a_flag_inserted_below_the_highest_bit_draws_no_width_line() {
+        let old = enum_set_with(&[0, 7], v2::IntWidth::U8);
+        let new = enum_set_with(&[0, 7, 3], v2::IntWidth::U8);
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(width_change(&report), None);
+        assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
 }
