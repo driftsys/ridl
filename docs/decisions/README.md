@@ -535,7 +535,18 @@ other entry below is Accepted.
   catalog hash and carried in a column of the catalog descriptor (built); the
   WebSocket message limit is at most 16,292 bytes, which an embedder can lower
   but not raise, and a request above its member's limit is answered `corrupt`
-  (built).
+  (built). Amended 2026-10-28, now eighteen decisions: each kind has a default
+  payload ceiling that bounds the longest copy nothing can interrupt: 3,840
+  bytes for a signal and an event, 16,128 bytes for a command and a query,
+  lowered from 16,256, and 65,280 bytes for a fixed, which is read in place; a
+  `[limits.interaction]` entry may raise one member up to 16,128 bytes, recorded
+  in the IR and the descriptor; a signal or an event above 3,840 bytes with no
+  entry is the new error RIDL-157, and a `[limits]` entry above what its kind
+  allows is MANI-022; no `BUFFER` above 16,128 bytes goes on the stack, and a
+  larger fixed is read in place; the WebSocket message limit becomes 16,164
+  bytes, one payload per message, and a provider refuses at attach a catalog
+  whose fixed does not fit one message; breaking, and not built yet
+  (driftsys/ridl#1108).
 
 - **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
   _Accepted._ The projection record that ADR-0020 decision 4 asks for. Fifteen
@@ -555,6 +566,24 @@ other entry below is Accepted.
   codegen model. It lists where it departs from the design it restates, which is
   archived, and carries five open items. Amends ADR-0020 decision 4 and closes
   its open item 1.
+
+- **ADR-0032 — Byte streams.** _Proposed._ Eight decisions: the use case is a
+  file or document of unknown size, downloaded or uploaded and read or written
+  as I/O; no syntax and no kind are added: a bare `bytes` stream element
+  (`<bytes>`) is a byte stream whose chunk boundaries are not part of the
+  contract and are chosen by the transport, each chunk at most the payload
+  ceiling of the interaction's kind, and the element has no bound, so typl's
+  `[0..256]` default and TYPL-103 do not apply in that position; `<string>` is a
+  UTF-8 text stream whose chunks never split a code point; a named element type
+  keeps its meaning, a stream of bounded messages; metadata (content type, size,
+  digest) is an ordinary typed value, a size is a hint and resume is an `offset`
+  parameter; the intended generated surface is a reader and a writer per target
+  (Rust `AsyncRead`/`AsyncWrite` or `Stream`/`Sink`, TypeScript
+  `ReadableStream`/`WritableStream`, Kotlin
+  `Flow`/`InputStream`/`OutputStream`); framing, buffering, backpressure and
+  chunk size stay transport concerns; and ADR-0030 decision 11 names both forms
+  of a stream. Six open questions, among them a target without `std`. Not built
+  (driftsys/ridl#336).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
