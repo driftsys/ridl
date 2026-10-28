@@ -33,16 +33,16 @@ export const Kind = {
 export type Kind = (typeof Kind)[keyof typeof Kind];
 
 /** The encodings an `attach` can ask for. */
-export type EncodingName = "flatbuffers" | "proto3" | "repr-c";
+export type EncodingName = "flatbuffers" | "proto3" | "podbuf";
 
-/** The encoding tag of an encoding name: `flatbuffers` 1, `proto3` 2, `repr-c` 3. */
+/** The encoding tag of an encoding name: `flatbuffers` 1, `proto3` 2, `podbuf` 3. */
 export function encodingTag(name: EncodingName): 1 | 2 | 3 {
   switch (name) {
     case "flatbuffers":
       return 1;
     case "proto3":
       return 2;
-    case "repr-c":
+    case "podbuf":
       return 3;
   }
 }

@@ -1,0 +1,15 @@
+// A package whose head holds a struct of another package inline, and an
+// array of that struct: the generated head names the foreign head struct
+// through a `crate::` path.
+
+package pod.holder
+
+import pod.parts.Pair
+
+/// `tag` at 0, `pair` at 8..16 (an inline head, at alignment 8), the
+/// descriptor of `pairs` at 16..24: a head of 24 bytes.
+struct Holder {
+  tag   : integer [0..255]
+  pair  : Pair
+  pairs : [Pair; 0..4]
+}

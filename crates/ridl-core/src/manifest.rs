@@ -149,7 +149,7 @@ impl Limits {
 
 /// The encoding names the toolchain knows, spelled as the encoding enum of
 /// `ridl-rt` spells them. `[backend.<name>] encodings` accepts only these.
-pub const ENCODING_NAMES: [&str; 3] = ["flatbuffers", "proto3", "repr-c"];
+pub const ENCODING_NAMES: [&str; 3] = ["flatbuffers", "proto3", "podbuf"];
 
 /// The key of a `[backend.<name>]` table that lists encodings, and the key of
 /// the backend request option that carries the same list.
@@ -2149,7 +2149,7 @@ version = \"1.0.0\"
     #[test]
     fn backend_transcode_with_two_encodings_has_no_diagnostic() {
         let text = format!(
-            "{PACKAGE_HEAD}[backend.rust]\ntranscode = true\nencodings = [\"flatbuffers\", \"repr-c\"]\n"
+            "{PACKAGE_HEAD}[backend.rust]\ntranscode = true\nencodings = [\"flatbuffers\", \"podbuf\"]\n"
         );
         let (_, diags) = parse(&text);
         assert!(diags.is_empty(), "{diags:?}");
@@ -2294,7 +2294,7 @@ version = \"1.0.0\"
         assert_eq!(codes(&diags), vec!["MANI-015"]);
         let message = &diags[0].message;
         assert!(message.contains("FlatBuffers"), "{message}");
-        assert!(message.contains("flatbuffers, proto3, repr-c"), "{message}");
+        assert!(message.contains("flatbuffers, proto3, podbuf"), "{message}");
         let start = usize::from(diags[0].primary.range.start());
         let end = usize::from(diags[0].primary.range.end());
         assert_eq!(&text[start..end], "\"FlatBuffers\"");
@@ -2317,7 +2317,7 @@ version = \"1.0.0\"
         let message = &diags[0].message;
         assert!(message.contains("is named twice"), "{message}");
         assert!(
-            message.ends_with("; known encodings: flatbuffers, proto3, repr-c"),
+            message.ends_with("; known encodings: flatbuffers, proto3, podbuf"),
             "{message}"
         );
     }

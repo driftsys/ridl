@@ -5,7 +5,8 @@ use ridl_ir::codegen::known_bindings;
 use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal};
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_transport_ws::frame::{
-    Attach, Frame, PublishState, ResponseOutcome, Target, ENVELOPE_BYTES, MIN_MESSAGE_LIMIT,
+    Attach, Frame, PublishState, ResponseOutcome, Target, ENVELOPE_BYTES, MAX_MESSAGE_LIMIT,
+    MIN_MESSAGE_LIMIT,
 };
 
 /// The frame header maximum and the envelope size of the `websocket` row.
@@ -33,7 +34,7 @@ fn target(kind: Kind) -> Target {
 /// Encodes `frame` into a buffer and checks the written length against both
 /// the returned length and `encoded_len`.
 fn written_len(frame: &Frame<'_>) -> usize {
-    let mut buf = vec![0u8; 1024];
+    let mut buf = vec![0u8; 32 * 1024];
     let written = frame.encode(&mut buf).expect("the buffer is large enough");
     assert_eq!(written, frame.encoded_len());
     written
@@ -97,4 +98,17 @@ fn the_largest_attach_is_294_bytes() {
     let attach = Attach::new(1, 1, CatalogHash([0; 32]), &name).expect("a valid attach");
     assert_eq!(written_len(&Frame::Attach(attach)), MIN_MESSAGE_LIMIT);
     assert_eq!(MIN_MESSAGE_LIMIT, 294);
+}
+
+#[test]
+fn the_largest_message_limit_is_the_largest_data_plane_message() {
+    assert_eq!(MAX_MESSAGE_LIMIT, ENVELOPE_BYTES + 20 + 16_256);
+    let payload = vec![0u8; 16_256];
+    let frame = Frame::Response {
+        target: target(Kind::Query),
+        envelope: envelope(),
+        correlation: 5,
+        outcome: ResponseOutcome::Reply(&payload),
+    };
+    assert_eq!(written_len(&frame), MAX_MESSAGE_LIMIT);
 }

@@ -488,16 +488,16 @@ decision 2:
 | `off-board`         | proto3      |
 
 A crossing that is unspecified or unknown gives the unspecified encoding. No
-link carries the `repr(C)` encoding: the enum value exists in the schema, and
-nothing selects it until driftsys/ridl#317. The choice between a shared-memory
-store and a local socket on one machine stays the plugin's. Both carry
-FlatBuffers, so the choice does not change a size.
+link carries the `podbuf` encoding: the enum value exists in the schema, and no
+rsdl fact selects it. The choice between a shared-memory store and a local
+socket on one machine stays the plugin's. Both carry FlatBuffers, so the choice
+does not change a size.
 
 This rule is also what RSDL-807 (`link-encoding-not-emitted`) compares a
 `[backend.<name>] encodings` list against, once per emitted backend that can
 carry a codec — the Rust emit and each plugin, not a schema emit, whose backend
 takes no `encodings` option; it is aligned with the transport defaults when
-`repr(C)` or a shared-memory transport lands.
+`podbuf` or a shared-memory transport lands.
 
 A backend named by both an `--emit` and a `--plugin` is compared once, so its
 links draw one diagnostic rather than one per name. A plugin that emits a schema
@@ -631,6 +631,62 @@ own. Declared sizing values are not in the `examples/cabin` source; another test
 in the same file builds a workspace in a temporary directory that declares
 `depth`, `slots` and `budget` and checks that each declared value reaches the
 request with the declared source.
+
+### The podbuf projection
+
+`Model.podbuf` (`PodbufProjection`) carries the layout that
+`ridl_ir::projection::podbuf` computes, so that a plugin never computes the
+layout law again (ADR-0020 decisions 8 and 9). It holds one flat list, `heads`,
+and every reference from one head to another is an index into that list. A
+second list, `boxes`, holds the one-field head of each named scalar, enum and
+enum set that can be laid out, with the declaration index: such a type is a
+payload root by itself, with its value at offset 0 of its box. A box is in no
+index of `heads`. `Declaration.podbuf` is the size state of a declaration as a
+payload root, and the bound a generated `Payload<Podbuf>` carries.
+
+- **Order.** The heads of the declarations come first, in `Model.declarations`
+  order: a struct and a union each have one head, any other declaration has
+  none. The heads of the named induced tuples follow, in `Model.tuples` order.
+  The heads reached from those come last, in the order a depth-first walk of the
+  fields reaches them: the entry head of a map, the head of each arm of a union,
+  and a struct or union of another package that a field lays out inline.
+- **Source.** `PodbufHead.source` is the declaration index, the tuple index, a
+  `MapEntry` whose `path` is the declaration name followed by the names of the
+  fields that lead to the map, an `ArmHead` that names the union declaration and
+  the arm ordinal (and, for a union of another package, the index into
+  `Model.foreign`), an index into `Model.foreign`, or a `NestedTuple`, a tuple
+  written inside a struct of another package.
+- **Size and alignment.** `size` is a multiple of 8 and `align` is 8 for every
+  head. A head with no field has size 0.
+- **Fields.** Each `PodbufField` has the `offset`, `size` and `align` the law
+  gave, a `source` (a struct field with its name and ordinal, a flags field, a
+  union tag, a union head's arm descriptor or the one value of a scalar arm, a
+  tuple position with the typl name of the tuple field in `position_name`, a map
+  key or a map value), the `form`, and, for an optional field, the `optional`
+  flag bit. The name travels with the position so that a backend spells the
+  member of a tuple head the same way in the package that declares the tuple and
+  in a package that lays it out inline. `pads` lists the unused byte runs.
+- **Forms.** A struct, a tuple or a union written as a field is laid out inline
+  as a copy of its own head. The form names the head of the type it was written
+  with (`inline_head`): the head of that declaration, the foreign head for a
+  type of another package, or for a tuple written at the field the named tuple
+  with the same structure. Two declarations with one layout have two heads. A
+  descriptor form says what the tail holds: a bounded string or bytes (`min`,
+  `max`), an array (the element form, the stride `elem_size`, `min`, `max`), a
+  map (the entry head, `elem_size`, `min`, `max`) or the arms of a union (the
+  ordinal and head of each arm).
+- **Refused heads.** `Model.podbuf` is set whenever the toolchain lowers a
+  package. A struct, a union or a tuple that cannot be laid out has no head; it
+  is listed in `refused` with its source and a cause. A valid workspace reaches
+  that only when a head is larger than a `u32` offset can address (an inline
+  array of such a head included); the other causes are malformed IR: a string or
+  bytes with no bound, a stream field, a name that does not resolve, or a type
+  that reaches itself. A head that needs a refused head is refused too, and its
+  cause names that head. Every other head is emitted. The podbuf checks report
+  the too-large head (RIDL-153) when `podbuf` is a selected encoding.
+- **Sizes.** `PayloadSizes.podbuf` and `Reservation.podbuf` are filled by the
+  same sizer as the other two encodings. A request of several parameters is
+  sized as an induced struct under proto3, FlatBuffers and podbuf alike.
 
 ## 8. What a plugin author reads
 

@@ -114,10 +114,13 @@ descriptor has no inherent constant of either name.
   `Sizes<Proto3>`, emitted beside it when `encodings` names `proto3` and built
   from `<T as Payload<Proto3>>::MAX_SIZE` in the same way. A proto3 payload with
   no finite bound is refused or skipped the same way, so a `Sizes<Proto3>` table
-  has no `None` either ([the proto3 codec record](proto3-codec.md)). A `repr(C)`
-  table arrives when the backend emits that codec (driftsys/ridl#317). The face
-  reads buffers from `<T as Payload<P::Encoding>>::BUFFER`, in the encoding of
-  its port `P`, and from the `CLAIM_BUFFER` and `EVENT_BUFFER` of
+  has no `None` either ([the proto3 codec record](proto3-codec.md)). The
+  `Sizes<Podbuf>` table is emitted beside them when `encodings` names `podbuf`
+  and is built from `<T as Payload<Podbuf>>::MAX_SIZE` in the same way; a
+  payload with no finite podbuf bound is refused or skipped the same way, so
+  that table has no `None` either ([the podbuf codec record](podbuf-codec.md)).
+  The face reads buffers from `<T as Payload<P::Encoding>>::BUFFER`, in the
+  encoding of its port `P`, and from the `CLAIM_BUFFER` and `EVENT_BUFFER` of
   `Sizes<P::Encoding>`; `reservation::<X, E>()` and `table_budget::<I, E>()` in
   `ridl_rt::contract` serve a runtime that sizes a store.
 
@@ -704,14 +707,13 @@ The codecs a package carries are listed in the manifest:
 encodings = [...]` (MANI-015), which `ridl build` sends the
 backend as the request option `encodings`. `ridl_backend_rust::WireEncoding` is
 the parsed element and has two variants, `FlatBuffers` and, since 2026-10-20,
-`Proto3`, one per codec this backend emits. The option reaches the entry points
-as a slice, `generate_face_with(package, encodings)` and `generate_pipeline`,
-and a slice that is empty emits the domain types alone, with no codec, no
-descriptor and no face. A slice that names either encoding, or both, emits the
-descriptors and the same face, because the face reads its encoding from the
-port. `repr(C)` joins the enum when the Rust backend emits its codec; until then
-the backend refuses that name, so it cannot produce a face over implementations
-that do not exist.
+`Proto3` and `Podbuf`, one per codec this backend emits. The option reaches the
+entry points as a slice, `generate_face_with(package, encodings)` and
+`generate_pipeline`, and a slice that is empty emits the domain types alone,
+with no codec, no descriptor and no face. A slice that names any of the
+encodings emits the descriptors and the same face, because the face reads its
+encoding from the port. A `Podbuf` size table holds `Aligned` claim and event
+buffers, because a podbuf buffer starts on an 8-byte boundary.
 
 `generate_face_with` with a non-empty list emits the codec, the descriptors and
 the face beside the items `generate` emits, and `generate_pipeline` does the
@@ -1087,11 +1089,10 @@ is built.
 
 ## What is provisional
 
-| Placeholder                                                                                              | Replaced by                                  |
-| -------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| The `repr(C)` `Sizes<E>` table (`flatbuffers` and `proto3` are built; this backend emits no other codec) | driftsys/ridl#317                            |
-| The narrow contract-clause translator (`src/clauses.rs`)                                                 | driftsys/ridl#704                            |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion           | a test over `ridl-loopback`, not yet written |
+| Placeholder                                                                                    | Replaced by                                  |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| The narrow contract-clause translator (`src/clauses.rs`)                                       | driftsys/ridl#704                            |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | a test over `ridl-loopback`, not yet written |
 
 **The hand-written payload row was retired on 2026-09-21**, by design note D-11
 of [the FlatBuffers codec record](flatbuffers-codec.md). It read "the
@@ -1137,9 +1138,9 @@ ports" above.
   `ProviderError`, the `std` feature's `block_on`, and since 0.4.0 the `face`
   traits, ADR-0021 decision 19); the IR's provisional interface numbering (the
   lock design's L4, driftsys/ridl#391)
-- Replaced later by: driftsys/ridl#317 (the `repr(C)` size table) and
-  driftsys/ridl#704 (the clause translator). The payload stand-in, the test-only
-  ports, the zero catalog hash, the `None` `flatbuffers` size column (now the
+- Replaced later by: driftsys/ridl#704 (the clause translator). The `podbuf`
+  size table is built. The payload stand-in, the test-only ports, the zero
+  catalog hash, the `None` `flatbuffers` size column (now the
   `Sizes<FlatBuffers>` table) and the unemitted catalog check are already
   replaced
 - Reasoning trail (archived):

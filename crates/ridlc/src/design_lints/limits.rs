@@ -151,7 +151,7 @@ pub(crate) fn check(
     limits: &BTreeMap<String, UnitLimits>,
     units: &[String],
 ) -> Vec<Diagnostic> {
-    let (flatbuffers, proto3) = ceiling::checked_encodings(encodings);
+    let (flatbuffers, proto3, podbuf) = ceiling::checked_encodings(encodings);
     let mut by_unit: BTreeMap<&str, Unit<'_>> = BTreeMap::new();
     for (index, unit) in units.iter().enumerate() {
         if let Some(table) = limits.get(unit) {
@@ -242,6 +242,13 @@ pub(crate) fn check(
                             found.extend(ceiling::describe_above(
                                 &payload.proto3,
                                 "proto3",
+                                limit_bytes,
+                            ));
+                        }
+                        if podbuf {
+                            found.extend(ceiling::describe_above(
+                                &payload.podbuf,
+                                "podbuf",
                                 limit_bytes,
                             ));
                         }

@@ -59,7 +59,7 @@ pub fn ridl_rt_rlib(dir: &Path) -> PathBuf {
         .arg("--cfg")
         .arg(r#"feature="proto3""#)
         .arg("--cfg")
-        .arg(r#"feature="repr-c""#)
+        .arg(r#"feature="podbuf""#)
         .arg("--cfg")
         .arg(r#"feature="std""#)
         .arg(&source)

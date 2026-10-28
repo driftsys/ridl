@@ -5,13 +5,13 @@
 
 use std::cell::Cell;
 
-use ridl_rt::encoding::{Proto3, ReprC};
+use ridl_rt::encoding::{Podbuf, Proto3};
 use ridl_rt::payload::{
     EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError, Violation,
 };
 
 thread_local! {
-    /// How many times `<Speed as Payload<ReprC>>::verify` ran on this thread.
+    /// How many times `<Speed as Payload<Podbuf>>::verify` ran on this thread.
     /// Thread-local, because the test harness runs each test on its own
     /// thread.
     static VERIFY_CALLS: Cell<usize> = const { Cell::new(0) };
@@ -54,7 +54,7 @@ fn write_le(value: u16, out: &mut [u8]) -> Result<&[u8], EncodeError> {
 }
 
 /// A codec whose view is the checked bytes.
-impl Payload<ReprC> for Speed {
+impl Payload<Podbuf> for Speed {
     const MAX_SIZE: usize = 2;
     type Buffer = [u8; 2];
     const BUFFER: [u8; 2] = [0; 2];
@@ -71,7 +71,7 @@ impl Payload<ReprC> for Speed {
         Ok(buf)
     }
 
-    fn decode(r: Ref<'_, Self, ReprC>) -> Self {
+    fn decode(r: Ref<'_, Self, Podbuf>) -> Self {
         let b = r.bytes();
         Speed(u16::from_le_bytes([b[0], b[1]]))
     }
@@ -115,7 +115,7 @@ impl Payload<Proto3> for Speed {
 
 #[test]
 fn verified_bytes_decode_to_the_value() {
-    let proof = Ref::<Speed, ReprC>::verify(&[0x2c, 0x01]).expect("300 is in range");
+    let proof = Ref::<Speed, Podbuf>::verify(&[0x2c, 0x01]).expect("300 is in range");
     assert_eq!(proof.bytes(), &[0x2c, 0x01]);
     assert_eq!(proof.decode(), Speed(300));
 }
@@ -124,7 +124,7 @@ fn verified_bytes_decode_to_the_value() {
 fn encoded_bytes_decode_without_a_second_check() {
     let mut out = [0u8; 4];
     let before = VERIFY_CALLS.with(Cell::get);
-    let proof = Ref::<Speed, ReprC>::encode(&Speed(88), &mut out).expect("4 bytes is enough");
+    let proof = Ref::<Speed, Podbuf>::encode(&Speed(88), &mut out).expect("4 bytes is enough");
     assert_eq!(proof.bytes(), &[88, 0]);
     assert_eq!(proof.decode(), Speed(88));
     assert_eq!(
@@ -137,13 +137,13 @@ fn encoded_bytes_decode_without_a_second_check() {
 #[test]
 fn a_value_outside_its_range_fails_the_contract_check() {
     let bytes = 301u16.to_le_bytes();
-    let result = Ref::<Speed, ReprC>::verify(&bytes);
+    let result = Ref::<Speed, Podbuf>::verify(&bytes);
     assert_eq!(result.err(), Some(VerifyError::Contract(SPEED_RANGE)));
 }
 
 #[test]
 fn a_truncated_buffer_fails_the_structure_check() {
-    let result = Ref::<Speed, ReprC>::verify(&[0x2c]);
+    let result = Ref::<Speed, Podbuf>::verify(&[0x2c]);
     assert_eq!(
         result.err(),
         Some(VerifyError::Structure(Malformed::OutOfBounds))
@@ -153,7 +153,7 @@ fn a_truncated_buffer_fails_the_structure_check() {
 #[test]
 fn a_short_output_buffer_is_a_capacity_error() {
     let mut out = [0u8; 1];
-    let result = Ref::<Speed, ReprC>::encode(&Speed(1), &mut out);
+    let result = Ref::<Speed, Podbuf>::encode(&Speed(1), &mut out);
     assert_eq!(
         result.err(),
         Some(EncodeError::Capacity {
@@ -191,7 +191,7 @@ fn a_parsed_view_is_lent_then_moved_out() {
 /// does not pin a computed size.
 #[test]
 fn a_type_with_two_codecs_names_each_max_size_through_its_encoding() {
-    assert_eq!(<Speed as Payload<ReprC>>::MAX_SIZE, 2);
+    assert_eq!(<Speed as Payload<Podbuf>>::MAX_SIZE, 2);
     assert_eq!(<Speed as Payload<Proto3>>::MAX_SIZE, 3);
 }
 
@@ -208,7 +208,7 @@ fn every_payload_error_is_copy_and_owns_nothing() {
 /// A payload whose largest encoding is 8 bytes.
 struct Wide(u64);
 
-impl Payload<ReprC> for Wide {
+impl Payload<Podbuf> for Wide {
     const MAX_SIZE: usize = 8;
     type Buffer = [u8; 8];
     const BUFFER: [u8; 8] = [0; 8];
@@ -231,7 +231,7 @@ impl Payload<ReprC> for Wide {
         Ok(buf)
     }
 
-    fn decode(r: Ref<'_, Self, ReprC>) -> Self {
+    fn decode(r: Ref<'_, Self, Podbuf>) -> Self {
         let mut bytes = [0u8; 8];
         bytes.copy_from_slice(r.bytes());
         Wide(u64::from_le_bytes(bytes))
@@ -240,8 +240,8 @@ impl Payload<ReprC> for Wide {
 
 #[test]
 fn a_buffer_holds_the_largest_encoding() {
-    let mut buffer = <Wide as Payload<ReprC>>::BUFFER;
-    let proof = Ref::<Wide, ReprC>::encode(&Wide(u64::MAX), buffer.as_mut())
+    let mut buffer = <Wide as Payload<Podbuf>>::BUFFER;
+    let proof = Ref::<Wide, Podbuf>::encode(&Wide(u64::MAX), buffer.as_mut())
         .expect("a buffer is as long as the largest encoding");
     assert_eq!(proof.bytes(), &u64::MAX.to_le_bytes());
 }

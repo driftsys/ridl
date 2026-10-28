@@ -91,9 +91,9 @@ written from the specification alone does not interoperate with this server.
 `ridl-rt` at its default features (`no_std`). The `server` feature turns on
 `std` for this crate and nothing else; it turns on no `ridl-rt` feature. The
 crate root re-exports `serve`, `Backend`, `Config`, `Connection`, `Described`,
-`Ended`, `LimitTooSmall`, `MemberTable`, `Note`, `Polling`, `RetainedTooSmall`,
-`Scanning` and `TableMismatch` under that feature, and `DescriptorError` under
-`descriptor` (`crates/ridl-transport-ws/src/lib.rs`).
+`Ended`, `LimitOutOfRange`, `MemberTable`, `Note`, `Polling`,
+`RetainedTooSmall`, `Scanning` and `TableMismatch` under that feature, and
+`DescriptorError` under `descriptor` (`crates/ridl-transport-ws/src/lib.rs`).
 
 **D-2. No unconditional dependency but `ridl-rt`.** The WebSocket layer is
 written in this crate, and only its server side: parse one HTTP/1.1 upgrade
@@ -130,7 +130,7 @@ carry no version, as in `ridl-loopback`.
 The codec is `crates/ridl-transport-ws/src/frame.rs`. It also defines the
 constants `FRAME_VERSION` (1), `SUBPROTOCOL` (`ridl-ws-v1`), `MIN_MESSAGE_LIMIT`
 (294, the largest `attach`) and `ENVELOPE_BYTES` (16), and `encoding_tag`, which
-maps an encoding name to the tag of §3: `flatbuffers` 1, `proto3` 2, `repr-c` 3.
+maps an encoding name to the tag of §3: `flatbuffers` 1, `proto3` 2, `podbuf` 3.
 
 **D-3. One borrowed `Frame` enum, with the payload rules in the types.** A
 decoded frame borrows its payload and its unit name from the message. The
@@ -271,16 +271,18 @@ other three methods; `Described::new` compares the table's name and hash with
 table is found on the embedder's thread before `serve` runs.
 
 `MemberTable` holds the unit name, the catalog hash, and a map from
-`(InterfaceNo, Ordinal)` to `(Kind, Option<Duration>)`, the duration being the
-member's `max`. A retired interface and a reserved ordinal have no entry (§6.4).
-The embedder builds it through `new` and `insert`, or, with the `descriptor`
-feature, with `MemberTable::from_descriptor` from the bytes of a
-`<unit>.catalog.binfb` file. `from_descriptor` verifies the buffer with
-`ridl_descriptor::verify`, adds one entry for each member, with its `max_us` as
-the bound, and adds each hash of the descriptor's `compatible` list; it returns
-`DescriptorError` for a buffer that fails verification, a hash that is not 32
-bytes, an interface number or an ordinal of 0, and a `max_us` that is not a
-decimal `u64`.
+`(InterfaceNo, Ordinal)` to the member's kind, its `max` bound and its payload
+limit. `insert` sets an entry with no limit; `set_limit` sets the limit of an
+existing entry and `limit` reads it. A retired interface and a reserved ordinal
+have no entry (§6.4). The embedder builds it through `new` and `insert`, or,
+with the `descriptor` feature, with `MemberTable::from_descriptor` from the
+bytes of a `<unit>.catalog.binfb` file. `from_descriptor` verifies the buffer
+with `ridl_descriptor::verify`, adds one entry for each member, with its
+`max_us` as the bound and its `limit` as the payload limit (an absent `limit`
+gives no limit), and adds each hash of the descriptor's `compatible` list; it
+returns `DescriptorError` for a buffer that fails verification, a hash that is
+not 32 bytes, an interface number or an ordinal of 0, and a `max_us` that is not
+a decimal `u64`.
 
 The ports are an associated type rather than supertraits so that an embedder, or
 a test crate, can serve a runtime type it does not own: the orphan rule forbids
@@ -487,6 +489,14 @@ responses kept for duplicates are `server/calls.rs`.
   `corrupt`: arguments larger than the member's capacity are not a well-formed
   encoding of its type, the same reasoning ADR-0021 decision 5 gives for
   `ShortClaim`.
+- A `request` for a command or a query whose arguments are longer than the
+  member's payload limit in the member table is answered `corrupt` without a
+  call to the backend (ADR-0030 decision 15). The server places the `seq` first,
+  then checks that the member is known, then checks the length, so a repeat gets
+  the kept response again and an unknown member is
+  `contract(UnknownInteraction)` whatever the length. No note is recorded. With
+  no member table, or a member with no limit, the message limit alone bounds the
+  arguments. A `publish` is not checked.
 - Each tick the server polls `ack` for each command in flight and `reply` for
   each query in flight. A known outcome becomes one `response` with
   `correlation` = the client's `seq`, `seq` = the next value of the server's
@@ -539,17 +549,18 @@ responses kept for duplicates are `server/calls.rs`.
   the server keeps the last 64 as before: a stated deviation from §11.1 item 6
   (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
   retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
-  by default), and a session never applies a cap below `max_message_bytes`; when
-  a response makes the kept bytes pass the cap, the response is sent, then the
+  by default, and never below 16,292 bytes, the largest message limit); when a
+  response makes the kept bytes pass the cap, the response is sent, then the
   session closes with 1008, which `serve` returns as
   `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
   server with no table, or one whose members have no bound, closes with 1008
-  when its replies are large enough to pass the cap before the ring holds 64 (at
-  the default 1 MiB message limit, 64 replies would be 64 MiB against the 16 MiB
-  default cap); an embedder with such replies sets `max_retained_bytes` to 64
-  times its message limit, which bounds the ring on its own. Expired responses
-  also go when a `request` arrives, before its `seq` is placed. Closing is
-  observable, where dropping the oldest response would silently break item 6.
+  when its replies are large enough to pass the cap before the ring holds 64. At
+  the default message limit, 64 replies are at most 64 × 16,292 = 1,042,688
+  bytes, below the 16 MiB default cap; an embedder that lowers the cap keeps it
+  at least 64 times its message limit, lowering the message limit too, so that
+  the ring alone bounds it. Expired responses also go when a `request` arrives,
+  before its `seq` is placed. Closing is observable, where dropping the oldest
+  response would silently break item 6.
 
 **D-17. `fixed`.** A `read` of a `fixed` calls `Backend::read_fixed` and sends
 one `publish` with `kind` `Fixed`, state `Live` with the value, `seq` 0, and
@@ -587,14 +598,15 @@ interaction the member table does not hold; dropped or answered as D-12 says).
 
 `Config` (`server/config.rs`) has four public durations — `poll_interval` (20
 ms), `ping_interval` (5 s), `liveness_timeout` (15 s) and `call_abandon_after`
-(60 s) — and four settings behind methods: `with_max_message_bytes` (1 MiB; a
-value below `MIN_MESSAGE_LIMIT` is refused with `LimitTooSmall`),
-`with_max_retained_bytes` (16 MiB; a value below `max_message_bytes` is refused
-with `RetainedTooSmall`, and a session applies the larger of the cap and the
-message limit, so a limit raised later also raises the cap), `with_record` and
-`with_origin_check`. A `ping_interval` at or above `liveness_timeout` ends an
-idle client's session before the first ping, because a client that is not pinged
-sends nothing; the rustdoc says so.
+(60 s) — and four settings behind methods: `with_max_message_bytes` (16,292
+bytes, `MAX_MESSAGE_LIMIT`, the largest data-plane message: the limit can only
+be lowered, and a value outside the range 294 to 16,292 is refused with
+`LimitOutOfRange`), `with_max_retained_bytes` (16 MiB; a value below 16,292 is
+refused with `RetainedTooSmall`, whatever the message limit, and a session
+applies the cap as set), `with_record` and `with_origin_check`. A
+`ping_interval` at or above `liveness_timeout` ends an idle client's session
+before the first ping, because a client that is not pinged sends nothing; the
+rustdoc says so.
 
 ## The WebSocket layer (`ws`)
 
@@ -637,16 +649,16 @@ Fragmented messages are reassembled, also when a frame is split across socket
 reads. A data message whose total size passes `max_message_bytes` closes with
 1009 as soon as the length is known, before it is buffered; the limit applies to
 data messages, not to control frames, which RFC 6455 caps at 125 bytes.
-`max_message_bytes` is at least 294 (§11.1 "The sizes"). Client frames that are
-not masked close with 1002 (RFC 6455 §5.1). A ping is answered with a pong
-carrying its payload.
+`max_message_bytes` is at least 294 and at most 16,292 (§11.1 "The sizes").
+Client frames that are not masked close with 1002 (RFC 6455 §5.1). A ping is
+answered with a pong carrying its payload.
 
 Each frame the server sends, header and payload, is assembled in one buffer the
 session reuses and written with one write call, so that with `TCP_NODELAY` off
 the payload does not wait for the peer's delayed acknowledgement of the header.
 The buffer keeps the capacity of the largest frame sent, which
-`max_message_bytes` bounds (1 MiB by default per idle session after a large
-message).
+`max_message_bytes` bounds (16,292 bytes by default per idle session after a
+large message).
 
 **D-22. Liveness.** The server sends a ping every `ping_interval` and ends the
 session when no message of any kind has arrived for `liveness_timeout`. A

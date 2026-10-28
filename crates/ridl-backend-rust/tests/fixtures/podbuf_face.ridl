@@ -1,0 +1,34 @@
+// The podbuf size-table fixture.
+//
+// One interface with a payload of every root kind a podbuf size table sums:
+// a named scalar (a signal), a struct (an event), a call with two parameters,
+// whose request is an induced struct, and a query that replies with an enum.
+// Kept self-contained, with no cross-package import.
+
+package podbuf.face
+
+/// A one-byte level.
+type Level : integer [0..200]
+
+/// A mode.
+enum Mode {
+  IDLE   = 0
+  ACTIVE = 1
+}
+
+/// Raised when the panel needs attention.
+struct Alarm {
+  code  : Level
+  armed : boolean
+}
+
+interface Panel {
+  /// The current level.
+  signal level: Level @10ms
+  /// Raised on a fault.
+  event alarm: Alarm @[100ms..1s]
+  /// Moves to a position: two parameters, so the request is an induced struct.
+  command moveTo(x: Level, y: Level) @[..50ms]
+  /// The mode at a level.
+  query modeAt(at: Level): Mode @[..50ms]
+}

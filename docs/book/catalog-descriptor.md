@@ -92,6 +92,7 @@ The member `average`, a query, as it appears in `members`:
 ```json
 {
   "kind": "Query",
+  "limit": null,
   "name": "average",
   "ordinal": 4,
   "payloads": [
@@ -114,8 +115,8 @@ The member `average`, a query, as it appears in `members`:
 }
 ```
 
-The keys are in alphabetical order, and an absent timing bound is `null`. A file
-that is not a valid descriptor, or that has a schema version this toolchain
+The keys are in alphabetical order, and an absent timing bound or limit is
+`null`. A file that is not a valid descriptor, or that has a schema version this toolchain
 does not read, makes `ridl describe` exit with code 2. The
 [CLI reference](cli-reference.md#ridl-describe) has the details.
 
@@ -140,8 +141,9 @@ does not read, makes `ridl describe` exit with code 2. The
   [section 11](reference/ridl.md#11-interaction-identity-and-evolution), is
   the rule for the names and the numbers.
 - **Each member**: its `name`, its `ordinal` (its position in the interface
-  body), its `kind`, its `payloads`, and its `timing` when the member declares
-  one.
+  body), its `kind`, its `payloads`, its `timing` when the member declares
+  one, and its `limit`, the payload limit in bytes that a `[limits]` entry of
+  the unit's `ridl.toml` gives it, absent when no entry applies.
 - **Each payload**: its `role` (`value` for a signal or a `fixed`, `occurrence`
   for an event, `request` for a command or a query, `response` for a query's
   reply), its `type_name`, and one `max_sizes` row per encoding. A row is
@@ -152,7 +154,8 @@ does not read, makes `ridl describe` exit with code 2. The
   most that FlatBuffers' 32-bit offsets can address. An encoding with no row
   has no size computed by this toolchain. A stream payload, a request of zero
   or of several parameters, and an inline `T | E` reply have no row in any
-  encoding. A `repr(C)` payload has no row, and a proto3 row is present only
+  encoding. A `podbuf` row is present for a payload with a podbuf root, sized
+  by `ridl_ir::projection::podbuf::max_size`, and a proto3 row is present only
   for a payload that is a struct, a union, a named scalar, an enum or an enum
   set, the kinds the proto3 schema gives a message of their own. A named
   scalar, an enum and an enum set are sized as their root message

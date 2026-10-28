@@ -103,6 +103,17 @@ const BOUNDARIES: &[Boundary] = &[
         package: "ridl-backend-proto",
         oracle: "protox",
     },
+    // `ridl-backend-podbuf` emits a C header, which a C compiler checks in its
+    // tests, so it has no schema oracle at all. Both schema oracles are named
+    // so that a promotion of either into its graph fails here.
+    Boundary {
+        package: "ridl-backend-podbuf",
+        oracle: "planus-translation",
+    },
+    Boundary {
+        package: "ridl-backend-podbuf",
+        oracle: "protox",
+    },
     // `ridl-backend-rust` uses planus's runtime and code generator for the
     // FlatBuffers codec's conformance test. They
     // are the same kind of oracle: this crate emits the codec rather than
