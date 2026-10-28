@@ -3471,4 +3471,218 @@ mod podbuf_width {
         let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
         assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
     }
+
+    /// An enum set `Flags` with a flag `F<bit>` at each of `bits`, of the
+    /// declared `width` (the checker infers it from the highest bit, typl
+    /// §9.3; the podbuf layout reads the declared width).
+    fn enum_set_with(bits: &[i64], width: v2::IntWidth) -> v2::Package {
+        let bits = bits
+            .iter()
+            .map(|&bit| v2::EnumValue {
+                name: format!("F{bit}"),
+                value: bit,
+                ..Default::default()
+            })
+            .collect();
+        with_decl(
+            "Flags",
+            v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                bits,
+                width: width as i32,
+                ..Default::default()
+            }),
+        )
+    }
+
+    /// Bit 8 appended to `enumset {F0 = 0, F7 = 7}` widens the podbuf integer
+    /// from `u8` to `u16`: the width line, breaking under podbuf, and no
+    /// strict-enum line beside it.
+    #[test]
+    fn an_appended_enum_set_flag_that_widens_the_integer_is_a_podbuf_width_change() {
+        let old = enum_set_with(&[0, 7], v2::IntWidth::U8);
+        let new = enum_set_with(&[0, 7, 8], v2::IntWidth::U16);
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(
+            width_change(&report).map(|change| (
+                change.path.as_str(),
+                change.verdict,
+                change.before.as_deref(),
+                change.after.as_deref()
+            )),
+            Some((
+                "veh.cluster/Flags",
+                Verdict::Breaking,
+                Some("u8"),
+                Some("u16")
+            )),
+            "{}",
+            render_text(&report)
+        );
+        assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
+        assert_eq!(report.verdict, Verdict::Breaking);
+        assert_eq!(
+            width_change(&diff_refs_with(&[&old], &[&new], &[], &[])).map(|change| change.verdict),
+            Some(Verdict::Compatible)
+        );
+    }
+
+    /// Bit 7 appended to `enumset {F0 = 0, F3 = 3}` keeps the `u8`: no width
+    /// line, and the strict-enum line still reports the flag.
+    #[test]
+    fn an_appended_enum_set_flag_that_keeps_the_width_draws_no_width_line() {
+        let old = enum_set_with(&[0, 3], v2::IntWidth::U8);
+        let new = enum_set_with(&[0, 3, 7], v2::IntWidth::U8);
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(width_change(&report), None);
+        let changes = strict_append(&report);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].path, "veh.cluster/Flags");
+        assert_eq!(changes[0].after.as_deref(), Some("F7"));
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    /// Bit 3 inserted into `enumset {F0 = 0, F7 = 7}` is breaking under the
+    /// generic rule, as `decl_added`, so it draws no strict-enum line: that
+    /// rule reads only compatible appends.
+    #[test]
+    fn a_flag_inserted_below_the_highest_bit_is_a_generic_break_with_no_strict_enum_line() {
+        let old = enum_set_with(&[0, 7], v2::IntWidth::U8);
+        let new = enum_set_with(&[0, 7, 3], v2::IntWidth::U8);
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| change.category == Category::DeclAdded
+                    && change.verdict == Verdict::Breaking
+                    && change.path == "veh.cluster/Flags/F3"),
+            "{}",
+            render_text(&report)
+        );
+        assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
+        assert_eq!(report.verdict, Verdict::Breaking);
+    }
+
+    /// Value 65,536 appended to an enum of `0, 65535` widens its integer from
+    /// `u16` to `u32`.
+    #[test]
+    fn an_appended_enum_value_past_65535_widens_u16_to_u32() {
+        let (old, new) = (enum_of(&[0, 65_535]), enum_of(&[0, 65_535, 65_536]));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(
+            width_change(&report).map(|change| (
+                change.verdict,
+                change.before.as_deref(),
+                change.after.as_deref()
+            )),
+            Some((Verdict::Breaking, Some("u16"), Some("u32"))),
+            "{}",
+            render_text(&report)
+        );
+    }
+
+    /// An enum of the values `numbers`, named `V<n>` (`Vm<n>` for a negative
+    /// one).
+    fn enum_of(numbers: &[i64]) -> v2::Package {
+        let values = numbers
+            .iter()
+            .map(|&value| v2::EnumValue {
+                name: if value < 0 {
+                    format!("Vm{}", -value)
+                } else {
+                    format!("V{value}")
+                },
+                value,
+                ..Default::default()
+            })
+            .collect();
+        with_decl(
+            "Mode",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values,
+                ..Default::default()
+            }),
+        )
+    }
+
+    /// Value 128 appended to an enum of `-1, 0, 127` widens its signed integer
+    /// from `i8` to `i16`.
+    #[test]
+    fn an_appended_enum_value_past_127_widens_a_signed_i8_to_i16() {
+        let (old, new) = (enum_of(&[-1, 0, 127]), enum_of(&[-1, 0, 127, 128]));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(
+            width_change(&report).map(|change| (
+                change.verdict,
+                change.before.as_deref(),
+                change.after.as_deref()
+            )),
+            Some((Verdict::Breaking, Some("i8"), Some("i16"))),
+            "{}",
+            render_text(&report)
+        );
+    }
+
+    /// The width line of `old` to `new` as `(verdict, before, after)`.
+    fn width_of(
+        old: &v2::Package,
+        new: &v2::Package,
+    ) -> Option<(Verdict, Option<String>, Option<String>)> {
+        width_change(&diff_refs_with(&[old], &[new], &[], &["podbuf"]))
+            .map(|change| (change.verdict, change.before.clone(), change.after.clone()))
+    }
+
+    fn width(before: &str, after: &str) -> Option<(Verdict, Option<String>, Option<String>)> {
+        Some((
+            Verdict::Breaking,
+            Some(before.to_string()),
+            Some(after.to_string()),
+        ))
+    }
+
+    /// A negative value can be appended only to an enum with no value: in a
+    /// non-empty enum it is below the highest value, an insert. `-1` gives
+    /// an `i8`, and `-1` with `200` the narrowest signed integer that holds
+    /// both, an `i16`.
+    #[test]
+    fn values_appended_to_an_empty_enum_give_the_narrowest_signed_integer() {
+        assert_eq!(width_of(&enum_of(&[]), &enum_of(&[-1])), width("u8", "i8"));
+        assert_eq!(
+            width_of(&enum_of(&[]), &enum_of(&[-1, 200])),
+            width("u8", "i16")
+        );
+    }
+
+    /// Bit 32 appended to an enum set whose highest bit is 31 widens its
+    /// integer from `u32` to `u64`.
+    #[test]
+    fn an_appended_enum_set_flag_at_bit_32_widens_u32_to_u64() {
+        assert_eq!(
+            width_of(
+                &enum_set_with(&[0, 31], v2::IntWidth::U32),
+                &enum_set_with(&[0, 31, 32], v2::IntWidth::U64)
+            ),
+            width("u32", "u64")
+        );
+    }
+
+    /// A value inserted at a free number below the largest is breaking under
+    /// the generic rule, so it draws no width line even when it changes the
+    /// integer: -1 inserted into `0, 2` turns `u8` into `i8`, and the generic
+    /// `decl_added` line is the only report of the value.
+    #[test]
+    fn a_breaking_insert_that_changes_the_integer_draws_no_width_line() {
+        let (old, new) = (enum_of(&[0, 2]), enum_of(&[-1, 0, 2]));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| change.category == Category::DeclAdded
+                    && change.verdict == Verdict::Breaking),
+            "{}",
+            render_text(&report)
+        );
+        assert_eq!(width_change(&report), None, "{}", render_text(&report));
+    }
 }

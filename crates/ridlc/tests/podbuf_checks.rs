@@ -111,6 +111,21 @@ fn a_named_tuple_above_u32_max_bytes_is_ridl_153_naming_the_interaction() {
     );
 }
 
+/// RIDL-153 on a named tuple points at the interaction that induces it, not at
+/// the interface that declares the interaction.
+#[test]
+fn a_named_tuple_above_u32_max_bytes_is_ridl_153_on_the_interaction_span() {
+    let out = check(TOO_LARGE_TUPLES, PODBUF);
+    let spans: Vec<&str> = podbuf_errors(&out)
+        .iter()
+        .map(|diagnostic| {
+            let range = diagnostic.primary.range;
+            &TOO_LARGE_TUPLES[usize::from(range.start())..usize::from(range.end())]
+        })
+        .collect();
+    assert_eq!(spans, ["load", "pair"], "{out:?}");
+}
+
 /// A query with two parameters of `Big`: the induced argument struct is about
 /// 7.8 GB, so the request of a query is checked as the request of a command.
 const TOO_LARGE_QUERY_REQUEST: &str = "package demo\n\

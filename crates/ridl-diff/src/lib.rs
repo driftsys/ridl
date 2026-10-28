@@ -281,18 +281,24 @@ declare_categories! {
         /// inside such a root is a head, and a struct inside that tuple is a
         /// use.
         PodbufInlineAppend,
-        /// An enum value or a union arm appended, compatible under the
-        /// generic rule, after which the podbuf integer of the enum or the
-        /// tag of the union is a different integer, by width or by
-        /// signedness: `u8` to `u16`, `u16` to `u32`, or `u8` to `i8` for an
-        /// enum that gains a negative value. The integer is the narrowest
-        /// that holds every declared value (ADR-0031 decision 5) or, for a
-        /// tag, every arm ordinal. Breaking when `podbuf` is among the
-        /// encodings the comparison is judged for, because every head that
-        /// holds the enum or the union lays out a different integer;
-        /// compatible otherwise. Reported once per declaration, at
-        /// `<package>/<decl>`, with the old and the new integer. An append
-        /// that keeps the integer draws no such line.
+        /// An enum value, an enum-set flag or a union arm appended, compatible
+        /// under the generic rule, after which the podbuf integer of the enum
+        /// or the enum set or the tag of the union is a different integer, by
+        /// width or by signedness: `u8` to `u16`, `u16` to `u32` or `u32` to
+        /// `u64`. The integer is the narrowest that holds every declared
+        /// value, signed when a value is negative (ADR-0031 decision 5), for
+        /// an enum set its width (the narrowest unsigned integer that holds
+        /// its highest bit) or, for a tag, every arm ordinal. A negative value
+        /// appended to an enum that has values is an insert below its highest
+        /// value, a breaking [`Category::DeclAdded`], so the integer turns
+        /// signed only when an enum with no value gains values. Breaking when
+        /// `podbuf` is among the encodings the comparison is judged for,
+        /// because every head that holds the enum, the enum set or the union
+        /// lays out a different integer; compatible otherwise, which holds
+        /// under proto3. An enum-set flag that widens the integer also widens
+        /// the enum set's FlatBuffers scalar, which no rule reports yet
+        /// (driftsys/ridl#1120). Reported once per declaration, at
+        /// `<package>/<decl>`, with the old and the new integer. An append that keeps the integer draws no such line.
         PodbufWidthChange,
         /// An enum value or an enum-set flag appended, compatible under the
         /// generic rule, to an enum or an enum set that is strict (ADR-0031
@@ -301,8 +307,8 @@ declare_categories! {
         /// Every enum and enum set is strict today. Breaking when `podbuf`
         /// is among the encodings the comparison is judged for; compatible
         /// otherwise. Reported once per declaration, at `<package>/<decl>`,
-        /// with the appended names in the detail. An enum whose append also
-        /// changes the podbuf integer draws only the
+        /// with the appended names in the detail. An enum or an enum set whose
+        /// append also changes the podbuf integer draws only the
         /// [`Category::PodbufWidthChange`] line.
         PodbufStrictEnumAppend,
     }
@@ -487,9 +493,12 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 ///
 /// Only `podbuf` has rules of its own: a struct field appended to a struct
 /// that another head holds inline is [`Category::PodbufInlineAppend`], and an
-/// enum value or a union arm appended that changes the enum's integer or the
-/// union's tag is [`Category::PodbufWidthChange`]; both are breaking when
-/// `podbuf` is in `encodings` and compatible otherwise. Every other category
+/// enum value, an enum-set flag or a union arm appended that changes the
+/// integer of the enum or the enum set or the union's tag is
+/// [`Category::PodbufWidthChange`]; both are breaking when
+/// `podbuf` is in `encodings` and compatible otherwise. An enum-set flag that
+/// widens the integer also widens its FlatBuffers scalar, which no rule under
+/// `flatbuffers` reports yet (driftsys/ridl#1120). Every other category
 /// is judged the same under every list, and a name that is not `podbuf` adds
 /// no rule. The CLI and the MCP tool refuse a name that is
 /// not one of the three before calling this; the engine does not check it.

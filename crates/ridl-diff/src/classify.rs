@@ -151,8 +151,10 @@ pub(crate) fn classify_in(
         // the verdict is the encoding's alone: an inline copy of the struct
         // cannot grow under podbuf, a wider enum integer or union tag moves
         // every head that holds it, a value or flag a strict enum does not
-        // name is refused by an older reader's `verify`, and no other
-        // encoding lays any of them out.
+        // name is refused by an older reader's `verify`. proto3 has no fixed
+        // layout for any of them. FlatBuffers lays out an enum set's integer
+        // at its width too, so a widening flag also changes its scalar, which
+        // no FlatBuffers rule reports yet (driftsys/ridl#1120).
         Category::PodbufInlineAppend
         | Category::PodbufWidthChange
         | Category::PodbufStrictEnumAppend => {
@@ -1526,22 +1528,32 @@ pub fn explain(category: Category) -> &'static str {
             "              podbuf\", so that a workspace that builds podbuf sees it"
         ),
         Category::PodbufWidthChange => concat!(
-            "An enum value or a union arm appended, compatible under the generic\n",
-            "rule, after which the podbuf integer of the enum or the tag of the\n",
-            "union is a different integer, by width or by signedness. podbuf lays\n",
-            "an enum out as the narrowest integer that holds every declared value,\n",
-            "signed when a value is negative (ADR-0031 decision 5), and a union's\n",
-            "tag as the narrowest unsigned integer that holds the largest arm\n",
-            "ordinal: a value above 255 or an arm past ordinal 255 widens a `u8`\n",
-            "to a `u16`, above 65535 a `u16` to a `u32`, and a first negative\n",
-            "value turns a `u8` into an `i8`. The line is reported once per\n",
-            "declaration and carries the old and the new integer. An append that\n",
-            "keeps the integer draws no such line.\n",
-            "  breaking    with `--encoding podbuf`: every head that holds the enum\n",
-            "              or the union lays out a different integer, and an older\n",
-            "              reader misreads the value\n",
-            "  compatible  otherwise; listed under the heading \"breaking under\n",
-            "              podbuf\", so that a workspace that builds podbuf sees it"
+            "An enum value, an enum-set flag or a union arm appended, compatible\n",
+            "under the generic rule, after which the podbuf integer of the enum or\n",
+            "the enum set or the tag of the union is a different integer, by width\n",
+            "or by signedness. podbuf lays an enum out as the narrowest integer\n",
+            "that holds every declared value, signed when a value is negative\n",
+            "(ADR-0031 decision 5), an enum set as its width, the narrowest\n",
+            "unsigned integer that holds its highest bit, and a union's tag as the\n",
+            "narrowest unsigned integer that holds the largest arm ordinal: a value\n",
+            "above 255, a flag at bit 8 or an arm past ordinal 255 widens a `u8` to\n",
+            "a `u16`, a value above 65535 or a flag at bit 16 a `u16` to a `u32`,\n",
+            "and a value above 4294967295 or a flag at bit 32 a `u32` to a `u64`.\n",
+            "A negative value appended to an enum that has values is below its\n",
+            "highest value, an insert, which the generic rule reports as a breaking\n",
+            "`decl_added` line and not as a width line; the integer turns signed\n",
+            "only when an enum with no value gains values (`-1` gives an `i8`,\n",
+            "`-1` and `200` an `i16`). The line is reported once per declaration\n",
+            "and carries the old and the new integer. An append that keeps the\n",
+            "integer draws no such line.\n",
+            "  breaking    with `--encoding podbuf`: every head that holds the enum,\n",
+            "              the enum set or the union lays out a different integer,\n",
+            "              and an older reader misreads the value\n",
+            "  compatible  otherwise, which holds under proto3; listed under the\n",
+            "              heading \"breaking under podbuf\", so that a workspace\n",
+            "              that builds podbuf sees it. An enum-set flag that widens\n",
+            "              the integer also widens the enum set's FlatBuffers\n",
+            "              scalar, which no rule reports yet (driftsys/ridl#1120)"
         ),
         Category::PodbufStrictEnumAppend => concat!(
             "An enum value or an enum-set flag appended, compatible under the\n",
@@ -1551,8 +1563,9 @@ pub fn explain(category: Category) -> &'static str {
             "appended one. Every enum and enum set is strict today; once the\n",
             "`open` keyword is built, the rule narrows to the strict ones. The\n",
             "line is reported once per declaration, at `<package>/<decl>`, and the\n",
-            "detail names the appended values or flags. An enum whose append also\n",
-            "changes the podbuf integer draws only the `podbuf_width_change` line.\n",
+            "detail names the appended values or flags. An enum or an enum set\n",
+            "whose append also changes the podbuf integer draws only the\n",
+            "`podbuf_width_change` line.\n",
             "  breaking    with `--encoding podbuf`: an older reader refuses the\n",
             "              appended value or flag\n",
             "  compatible  otherwise; listed under the heading \"breaking under\n",

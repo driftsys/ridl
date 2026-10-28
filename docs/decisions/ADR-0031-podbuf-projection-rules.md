@@ -469,14 +469,19 @@ a field is appended.
     _Breaking (a new type version):_ reordering; widening an integer across a
     width boundary; changing a bound; removing an arm or an enum value; adding a
     value to a strict enum or a flag to a strict enum set **(Sebastien)**;
-    appending an enum value or a union arm that changes the podbuf integer of
-    the enum or the tag of the union, by width or by signedness (`u8` to `u16`
-    at 256, `u16` to `u32` at 65,536, `u8` to `i8` at the first negative enum
-    value, by the rules of decision 5), which lays out a different integer in
-    every head that holds the enum or the union; appending a field that cannot
-    read as 0; appending to a struct that is nested inline anywhere in the
-    workspace; changing a strict enum to an open one or the reverse; and
-    removing a field.
+    appending an enum value, an enum-set flag or a union arm that changes the
+    podbuf integer of the enum or the enum set or the tag of the union, by width
+    or by signedness (the narrowest integer that holds every value, signed when
+    a value is negative, by the rules of decision 5: `u8` to `u16` at 256, `u16`
+    to `u32` at 65,536 and `u32` to `u64` at 4,294,967,296; for an enum set,
+    `u8` to `u16` at bit 8, `u16` to `u32` at bit 16 and `u32` to `u64` at bit
+    32, by the width typl §9.3 infers; a negative value appended to an enum that
+    has values is an insert below its highest value, a generic break, so the
+    integer turns signed only when an enum with no value gains values), which
+    lays out a different integer in every head that holds the enum, the enum set
+    or the union; appending a field that cannot read as 0; appending to a struct
+    that is nested inline anywhere in the workspace; changing a strict enum to
+    an open one or the reverse; and removing a field.
 
     **A strict-enum append is reported (builder's call).** `ridl diff` reports
     an appended enum value or enum-set flag as the category
@@ -552,14 +557,18 @@ a field is appended.
       listed under the heading "breaking under podbuf" and breaking when
       `podbuf` is among the encodings the comparison is judged for, compatible
       otherwise: the append to an inline struct, the category
-      `podbuf_inline_append`, and an appended enum value or union arm that
-      changes the podbuf integer of the enum or the tag of the union, by width
-      or by signedness, the category `podbuf_width_change`, reported once per
-      declaration with the old and the new integer. An appended enum value or
-      enum-set flag is the category `podbuf_strict_enum_append`, reported once
-      per declaration, except that an enum whose append changes the integer
-      draws only the `podbuf_width_change` line (builder's call). An appended
-      union arm that keeps the tag is reported as the generic rule judges it,
+      `podbuf_inline_append`, and an appended enum value, enum-set flag or union
+      arm that changes the podbuf integer of the enum or the enum set or the tag
+      of the union, by width or by signedness, the category
+      `podbuf_width_change`, reported once per declaration with the old and the
+      new integer. The compatible verdict without podbuf holds under proto3; an
+      enum-set flag that widens the integer also widens the enum set's
+      FlatBuffers scalar, which `ridl diff` does not report yet
+      (driftsys/ridl#1120). An appended enum value or enum-set flag is the
+      category `podbuf_strict_enum_append`, reported once per declaration,
+      except that an enum or an enum set whose append changes the integer draws
+      only the `podbuf_width_change` line (builder's call). An appended union
+      arm that keeps the tag is reported as the generic rule judges it,
       compatible. When the `open` keyword is built (open item 1), the strict
       enum rule narrows to strict enums and enum sets.
       `ridl diff --encoding <name>` and the `ridl_diff` MCP tool name the

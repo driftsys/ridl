@@ -1963,11 +1963,38 @@ pub(crate) fn podbuf_inline_appends(pair: &[Change], scope: &[&v2::Package]) -> 
     changes
 }
 
+/// The `(declaration, member)` names of every compatible member append in
+/// `pair` to a declaration of `new`: a [`Category::DeclAdded`] change at
+/// `<package>/<decl>/<member>` whose settled verdict is compatible, in the
+/// order of `pair`.
+fn compatible_member_appends<'c>(
+    pair: &'c [Change],
+    new: &v2::Package,
+) -> impl Iterator<Item = (&'c str, &'c str)> {
+    let package_name = new.name.clone();
+    pair.iter().filter_map(move |change| {
+        if change.category != Category::DeclAdded || change.verdict != Verdict::Compatible {
+            return None;
+        }
+        let mut segments = change.path.split('/');
+        let (Some(package), Some(name), Some(member), None) = (
+            segments.next(),
+            segments.next(),
+            segments.next(),
+            segments.next(),
+        ) else {
+            return None;
+        };
+        (package == package_name).then_some((name, member))
+    })
+}
+
 /// The [`Category::PodbufWidthChange`] changes of one walked and classified
-/// package pair: one per enum or union of `new` to which `pair` appends a
-/// value or an arm compatibly, when the podbuf width of the enum's integer or
-/// of the union's tag differs between `old` and `new`. The width is read from
-/// the layout law ([`projection::podbuf::enum_width`] and
+/// package pair: one per enum, enum set or union of `new` to which `pair`
+/// appends a value, a flag or an arm compatibly, when the podbuf width of the
+/// enum's integer, of the enum set's integer or of the union's tag differs
+/// between `old` and `new`. The width is read from the layout law
+/// ([`projection::podbuf::enum_width`], the enum set's declared width and
 /// [`projection::podbuf::union_tag_width`]), so what the rule calls a width
 /// is what the encoder lays out. The verdict is the placeholder [`emit`]
 /// stamps; the classifier settles it from the encodings.
@@ -1980,20 +2007,8 @@ pub(crate) fn podbuf_width_changes(
 
     let mut seen: BTreeSet<&str> = BTreeSet::new();
     let mut changes = Vec::new();
-    for change in pair {
-        if change.category != Category::DeclAdded || change.verdict != Verdict::Compatible {
-            continue;
-        }
-        let mut segments = change.path.split('/');
-        let (Some(package), Some(name), Some(_), None) = (
-            segments.next(),
-            segments.next(),
-            segments.next(),
-            segments.next(),
-        ) else {
-            continue;
-        };
-        if package != new.name || !seen.insert(name) {
+    for (name, _) in compatible_member_appends(pair, new) {
+        if !seen.insert(name) {
             continue;
         }
         fn find<'p>(pkg: &'p v2::Package, name: &str) -> Option<&'p v2::Decl> {
@@ -2006,6 +2021,12 @@ pub(crate) fn podbuf_width_changes(
             (Some(v2::decl::Kind::EnumDef(old_def)), Some(v2::decl::Kind::EnumDef(new_def))) => {
                 (enum_width(old_def), enum_width(new_def))
             }
+            // An enum set's integer is its declared width, unsigned, as the
+            // layout law reads it.
+            (
+                Some(v2::decl::Kind::EnumSetDef(old_def)),
+                Some(v2::decl::Kind::EnumSetDef(new_def)),
+            ) => ((old_def.width(), false), (new_def.width(), false)),
             (Some(v2::decl::Kind::UnionDef(old_def)), Some(v2::decl::Kind::UnionDef(new_def))) => (
                 (union_tag_width(old_def), false),
                 (union_tag_width(new_def), false),
@@ -2017,7 +2038,7 @@ pub(crate) fn podbuf_width_changes(
         }
         emit(
             &mut changes,
-            format!("{package}/{name}"),
+            format!("{}/{name}", new.name),
             Category::PodbufWidthChange,
             Some(int_width_name(widths.0.0 as i32).to_string()),
             Some(int_width_name(widths.1.0 as i32).to_string()),
@@ -2028,10 +2049,10 @@ pub(crate) fn podbuf_width_changes(
 
 /// The [`Category::PodbufStrictEnumAppend`] changes of one walked and
 /// classified package pair: one per enum or enum set of `new` to which `pair`
-/// appends a value or a flag compatibly, except an enum that `widths` (the
-/// [`podbuf_width_changes`] of the same pair) already reports, so that one
-/// change draws one line. The verdict is the placeholder [`emit`] stamps; the
-/// classifier settles it from the encodings.
+/// appends a value or a flag compatibly, except a declaration that `widths`
+/// (the [`podbuf_width_changes`] of the same pair) already reports, so that
+/// one change draws one line. The verdict is the placeholder [`emit`] stamps;
+/// the classifier settles it from the encodings.
 pub(crate) fn podbuf_strict_enum_appends(
     pair: &[Change],
     old: &v2::Package,
@@ -2039,22 +2060,8 @@ pub(crate) fn podbuf_strict_enum_appends(
     widths: &[Change],
 ) -> Vec<Change> {
     let mut appended: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    for change in pair {
-        if change.category != Category::DeclAdded || change.verdict != Verdict::Compatible {
-            continue;
-        }
-        let mut segments = change.path.split('/');
-        let (Some(package), Some(name), Some(member), None) = (
-            segments.next(),
-            segments.next(),
-            segments.next(),
-            segments.next(),
-        ) else {
-            continue;
-        };
-        if package == new.name {
-            appended.entry(name).or_default().push(member);
-        }
+    for (name, member) in compatible_member_appends(pair, new) {
+        appended.entry(name).or_default().push(member);
     }
     let mut changes = Vec::new();
     for (name, members) in appended {
