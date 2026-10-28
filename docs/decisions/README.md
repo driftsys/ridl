@@ -542,7 +542,7 @@ other entry below is Accepted.
   from 16,256; a fixed sixteen pages, 65,280 bytes; a `[limits.interaction]`
   entry may raise one member up to four pages, recorded in the IR and the
   descriptor; a signal or an event above 3,840 bytes with no entry is the new
-  error RIDL-153, and a `[limits]` entry above what its kind allows is MANI-022;
+  error RIDL-157, and a `[limits]` entry above what its kind allows is MANI-022;
   no `BUFFER` above four pages goes on the stack, and a larger fixed is read in
   place; the WebSocket message limit becomes 16,164 bytes, one payload per
   message, and a provider refuses at attach a catalog whose fixed does not fit

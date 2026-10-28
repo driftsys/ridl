@@ -80,15 +80,15 @@ When accepted, these records gain a dated note or are changed in place:
   `docs/book/evolving-an-interface.md`).
 - From the amendment of 2026-10-28, when its code lands: ADR-0002 (the note of
   2026-10-24: the range of a `[limits]` value and MANI-022), ADR-0024 (the note
-  of 2026-10-24: the kinds RIDL-150 checks, and the error RIDL-153), the ridl
+  of 2026-10-24: the kinds RIDL-150 checks, and the error RIDL-157), the ridl
   reference's diagnostics table (the RIDL-150 and RIDL-151 rows, and a new
-  RIDL-153 row), the family overview §7 (the MANI-022 row), the typl reference
+  RIDL-157 row), the family overview §7 (the MANI-022 row), the typl reference
   §4.4 and §4.5 (the ceiling of 16,128 bytes, and the smaller default ceiling of
   a signal and an event), `docs/book/lints.md` (the paragraphs on
   `payload-above-ceiling` and on `[limits]`, including the sentence that a
   `fixed` is not checked), `docs/book/cli-reference.md` (the `[limits]` section:
   the order that resolves a limit, the raise by a `[limits.interaction]` entry,
-  MANI-022, RIDL-150, RIDL-151 and RIDL-153), `docs/design/interaction-face.md`,
+  MANI-022, RIDL-150, RIDL-151 and RIDL-157), `docs/design/interaction-face.md`,
   `docs/design/ridl-rt.md` and `docs/design/flatbuffers-codec.md` (no `BUFFER`
   above four pages on the stack, and a fixed above that read through a view and
   encoded through the caller-buffer API), `docs/design/catalog-descriptor.md`
@@ -253,7 +253,7 @@ When accepted, these records gain a dated note or are changed in place:
      is above 16,128 bytes, and a `fixed` whose payload is above 65,280 bytes,
      or either with no finite bound, where no `[limits]` entry gives the
      interaction its limit. It now sizes a `fixed`, which it did not before. A
-     signal and an event are checked by RIDL-153 (decision 17), and an
+     signal and an event are checked by RIDL-157 (decision 17), and an
      interaction that an entry gives a limit by RIDL-151 (decision 14), so
      RIDL-150 reports neither. Its message gives the ceiling of the
      interaction's kind.
@@ -392,7 +392,7 @@ When accepted, these records gain a dated note or are changed in place:
     adds that sizing. Amended 2026-10-28: RIDL-151 checks an interaction of any
     kind against the limit that an entry gives it, including a raised limit
     (decision 18). Where no entry applies, a signal and an event are checked by
-    the error RIDL-153 (decision 17), and a fixed, a command and a query by
+    the error RIDL-157 (decision 17), and a fixed, a command and a query by
     RIDL-150 at `warn` (decision 7). One interaction draws at most one of the
     three.
 
@@ -479,7 +479,7 @@ When accepted, these records gain a dated note or are changed in place:
     2026-10-28). When no `[limits]` entry gives a signal or an event its limit,
     and the computed bound of its payload, in an encoding the workspace enables
     (the same set as RIDL-150), is larger than 3,840 bytes or has no finite
-    bound, the checker reports a new error, RIDL-153, on the interaction. As an
+    bound, the checker reports a new error, RIDL-157, on the interaction. As an
     error code it has no name and no level (ADR-0024 decision 1), so `[lints]`
     cannot lower it. It runs in `ridlc` after lowering, where RIDL-150 and
     RIDL-151 run, and it skips the packages that RIDL-151 skips. It is an error,
@@ -521,7 +521,7 @@ When accepted, these records gain a dated note or are changed in place:
   message limit and the request check (decisions 10 and 15).
 - From the amendment of 2026-10-28, once its code lands: the ridl reference's
   diagnostics table, `docs/book/lints.md` and `docs/book/cli-reference.md`: the
-  default ceilings, the raise, MANI-022 and RIDL-153 (decisions 12 and 16 to
+  default ceilings, the raise, MANI-022 and RIDL-157 (decisions 12 and 16 to
   18). The frame specification §11.1 and `docs/design/ridl-transport-ws.md`: the
   ceilings of decision 16, the message limit of 16,164 bytes, and one payload in
   one message as a rule of the WebSocket binding (decisions 1, 2, 10 and 15).
@@ -529,7 +529,7 @@ When accepted, these records gain a dated note or are changed in place:
 ## Alternatives considered
 
 - **RIDL-150 at level `error` for a signal and an event, or a wider RIDL-151**
-  (2026-10-28). Rejected in favour of the new code RIDL-153 (decision 17): a
+  (2026-10-28). Rejected in favour of the new code RIDL-157 (decision 17): a
   lint has one default level for its code, an error code is never a lint
   (ADR-0024 decision 1), and `[lints]` could lower such a level to `allow`.
   RIDL-151 keeps its meaning, a payload above a limit that a `[limits]` entry
@@ -642,7 +642,7 @@ When accepted, these records gain a dated note or are changed in place:
   are updated when the code lands.
 - From the amendment of 2026-10-28: a signal or an event whose payload is larger
   than 3,840 bytes or has no finite bound, with no `[limits]` entry for it,
-  which drew RIDL-150 or nothing before, now draws RIDL-153 and fails
+  which drew RIDL-150 or nothing before, now draws RIDL-157 and fails
   `ridl check`; an entry in `[limits.interaction]` that raises it up to 16,128
   bytes makes it compile again. A `[limits.kind]` entry above its kind's
   default, and a `[limits.interaction]` entry above 16,128 for a kind other than
@@ -657,7 +657,7 @@ When accepted, these records gain a dated note or are changed in place:
   yet released, so all of this ships in the next version marked breaking. The
   code change measures which sources of the corpus under `evals/`, the test
   fixtures, the examples and the book it breaks, and bounds them. The
-  diagnostics surface gains RIDL-153. A unit whose `[limits]` entries are
+  diagnostics surface gains RIDL-157. A unit whose `[limits]` entries are
   unchanged keeps its catalog hash, and the IR and the descriptor schema do not
   change.
 
