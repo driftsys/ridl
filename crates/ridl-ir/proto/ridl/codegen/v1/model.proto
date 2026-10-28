@@ -1368,7 +1368,8 @@ message PodbufSource {
     // A union head's descriptor to the active arm, or the one value field of
     // the head of an arm whose type is a scalar, an enum or an enum set.
     bool arm = 13;
-    // A tuple field, by its 1-based position.
+    // A tuple field, by its 1-based position; `position_name` carries its
+    // typl name.
     uint32 position = 14;
     // A map entry's key.
     bool key = 15;
