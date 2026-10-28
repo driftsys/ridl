@@ -303,53 +303,11 @@ fn has_no_valid_value(scope: &SizeCtx<'_>, home: &v2::Package, field: &v2::Field
 }
 
 /// Whether 0 is a valid value of `ty`: the rule `ridl diff` applies to an
-/// appended field, with the same helpers of [`ridl_ir::zero`].
+/// appended field, [`ridl_ir::zero::field_type_holds_zero`].
 fn holds_zero(scope: &SizeCtx<'_>, home: &v2::Package, ty: &v2::FieldType) -> bool {
-    match ty.kind.as_ref() {
-        Some(field_type::Kind::Primitive(primitive)) => matches!(
-            v2::PrimitiveType::try_from(*primitive),
-            Ok(v2::PrimitiveType::Boolean | v2::PrimitiveType::Integer | v2::PrimitiveType::Float)
-        ),
-        Some(field_type::Kind::InlineScalar(def)) => scalar_holds_zero(def),
-        Some(field_type::Kind::Named(reference)) => {
-            match scope
-                .resolve(home, reference)
-                .and_then(|(declaration, _)| declaration.kind.as_ref())
-            {
-                Some(decl::Kind::TypeDef(def)) => scalar_holds_zero(def),
-                Some(decl::Kind::EnumDef(def)) => {
-                    ridl_ir::zero::enum_zero_member(&def.values).is_some()
-                }
-                // An enum set at 0 is the empty set.
-                Some(decl::Kind::EnumSetDef(_)) => true,
-                _ => false,
-            }
-        }
-        _ => false,
-    }
-}
-
-/// Whether a scalar is valid at 0: a boolean, integer, float or unit backing
-/// whose constraint holds 0. A string or bytes backing is not.
-fn scalar_holds_zero(def: &v2::TypeDef) -> bool {
-    let numeric = match def
-        .backing
-        .as_ref()
-        .and_then(|backing| backing.kind.as_ref())
-    {
-        Some(v2::backing::Kind::Unit(_)) => true,
-        Some(v2::backing::Kind::Primitive(primitive)) => matches!(
-            v2::PrimitiveType::try_from(*primitive),
-            Ok(v2::PrimitiveType::Boolean | v2::PrimitiveType::Integer | v2::PrimitiveType::Float)
-        ),
-        None => false,
-    };
-    numeric
-        && def.constraint.as_ref().is_none_or(|constraint| {
-            ridl_ir::zero::range_holds_zero(
-                constraint.min.as_deref(),
-                constraint.max.as_deref(),
-                constraint.step.as_deref(),
-            )
-        })
+    ridl_ir::zero::field_type_holds_zero(ty, |reference| {
+        scope
+            .resolve(home, reference)
+            .map(|(declaration, _)| declaration)
+    })
 }

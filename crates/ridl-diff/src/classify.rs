@@ -409,54 +409,7 @@ fn absence_reads_as_legal(
     }) else {
         return false;
     };
-    if r#type.optional {
-        return true;
-    }
-    use v2::field_type::Kind;
-    match &r#type.kind {
-        Some(Kind::Primitive(primitive)) => matches!(
-            v2::PrimitiveType::try_from(*primitive),
-            Ok(v2::PrimitiveType::Boolean | v2::PrimitiveType::Integer | v2::PrimitiveType::Float)
-        ),
-        Some(Kind::InlineScalar(def)) => scalar_holds_zero(def),
-        Some(Kind::Named(reference)) => {
-            use v2::decl::Kind as Decl;
-            match resolve(home, scope, reference).and_then(|decl| decl.kind.as_ref()) {
-                Some(Decl::TypeDef(def)) => scalar_holds_zero(def),
-                Some(Decl::EnumDef(def)) => ridl_ir::zero::enum_zero_member(&def.values).is_some(),
-                // An enum set at 0 is the empty set.
-                Some(Decl::EnumSetDef(_)) => true,
-                _ => false,
-            }
-        }
-        _ => false,
-    }
-}
-
-/// Whether a named or inline scalar is legal at 0: a boolean, integer, float or
-/// unit backing whose constraint holds 0. A string or bytes backing has no
-/// default at all.
-fn scalar_holds_zero(def: &v2::TypeDef) -> bool {
-    let numeric = match def
-        .backing
-        .as_ref()
-        .and_then(|backing| backing.kind.as_ref())
-    {
-        Some(v2::backing::Kind::Unit(_)) => true,
-        Some(v2::backing::Kind::Primitive(primitive)) => matches!(
-            v2::PrimitiveType::try_from(*primitive),
-            Ok(v2::PrimitiveType::Boolean | v2::PrimitiveType::Integer | v2::PrimitiveType::Float)
-        ),
-        None => false,
-    };
-    numeric
-        && def.constraint.as_ref().is_none_or(|constraint| {
-            ridl_ir::zero::range_holds_zero(
-                constraint.min.as_deref(),
-                constraint.max.as_deref(),
-                constraint.step.as_deref(),
-            )
-        })
+    ridl_ir::zero::field_type_holds_zero(r#type, |reference| resolve(home, scope, reference))
 }
 
 /// The declaration a type reference names on the new side, in the IR's
