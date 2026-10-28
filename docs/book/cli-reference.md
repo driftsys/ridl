@@ -1545,20 +1545,22 @@ holds inline anywhere in the new side — in a struct, in the argument struct a
 call with several parameters induces, or in a tuple reply — is
 `podbuf_inline_append`, breaking with `--encoding podbuf` and compatible
 without it, because the inline copy cannot grow without moving the fields
-after it. An enum value or a union arm appended after which the podbuf
-integer of the enum or the tag of the union is a different integer, by width
-or by signedness — a value above 255 or an arm past ordinal 255 widens a `u8`
-to a `u16`, above 65535 a `u16` to a `u32`, and a first negative value of an
-enum turns a `u8` into an `i8` — is `podbuf_width_change`, reported once per
+after it. An enum value, an enum-set flag or a union arm appended after which
+the podbuf integer of the enum, of the enum set or the tag of the union is a
+different integer, by width or by signedness — a value above 255, a flag at
+bit 8 or an arm past ordinal 255 widens a `u8` to a `u16`, a value above 65535
+or a flag at bit 16 a `u16` to a `u32`, and a first negative value of an enum
+turns a `u8` into an `i8` — is `podbuf_width_change`, reported once per
 declaration with the old and the new integer, breaking with `--encoding
-podbuf` and compatible without it, because every head that holds the enum or
-the union lays out a different integer; an append that keeps the integer draws
-no such line. An enum value or an enum-set flag appended is
+podbuf` and compatible without it, because every head that holds the enum, the
+enum set or the union lays out a different integer; an append that keeps the
+integer draws no such line. An enum value or an enum-set flag appended is
 `podbuf_strict_enum_append`, reported once per declaration with the appended
 names, breaking with `--encoding podbuf` and compatible without it, because
 every enum and enum set is strict and the `verify` of an older reader refuses
-a value or a bit its declaration does not name; an enum whose append changes
-the integer draws only the `podbuf_width_change` line. The `podbuf_inline_append` line names each inline use, a struct field as
+a value or a bit its declaration does not name; an enum or an enum set whose
+append changes the integer draws only the `podbuf_width_change` line. The
+`podbuf_inline_append` line names each inline use, a struct field as
 `<package>/<struct>/<field>` and an interaction's request, reply or fixed
 payload as `<package>/<interface>/<interaction>`, and sits under the heading
 `breaking under podbuf` either way, so that a workspace that does not build

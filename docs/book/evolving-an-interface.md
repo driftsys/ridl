@@ -187,10 +187,10 @@ common cases:
   declaration as `podbuf_width_change` with the old and the new integer, under
   the same heading and with the same verdict rule; every head that holds the
   enum, the enum set or the union lays out a different integer, and an append
-  that keeps the integer draws no such line. Also breaking under podbuf: an enum value or
-  an enum-set flag appended. Every enum and enum set is strict, and the
-  `verify` of an older reader refuses a value or a bit its declaration does not
-  name. It is reported once per declaration as `podbuf_strict_enum_append`,
+  that keeps the integer draws no such line. Also breaking under podbuf: an
+  enum value or an enum-set flag appended. Every enum and enum set is strict,
+  and the `verify` of an older reader refuses a value or a bit its declaration
+  does not name. It is reported once per declaration as `podbuf_strict_enum_append`,
   under the same heading and with the same verdict rule, except that an enum or
   an enum set whose append changes the integer draws only the
   `podbuf_width_change` line.

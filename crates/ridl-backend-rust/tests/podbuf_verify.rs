@@ -538,9 +538,10 @@ fn a_map_block_must_start_at_alignment_8() {
 /// §7 rule 8 for integer and boolean keys: a descending pair and a duplicate
 /// are `KeyOrder`. An entry is 8 bytes, so the second key is at buffer 24
 /// when the first is at 16. The boolean pair is tested as a duplicate
-/// (`false`, `false`) and as a descending pair (`true`, `false`). A duplicate string key, two descriptors to the
-/// same bytes, is `KeyOrder` too: the second entry's key descriptor is at
-/// 32, and the first key's bytes are at 48.
+/// (`false`, `false`) and as a descending pair (`true`, `false`). A duplicate
+/// string key, two descriptors to the same bytes, is `KeyOrder` too: the
+/// second entry's key descriptor is at 32, and the first key's bytes are at
+/// 48.
 #[test]
 fn integer_boolean_and_duplicate_string_keys_are_ordered() {
     let out = run(
