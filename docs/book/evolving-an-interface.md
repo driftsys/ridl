@@ -182,12 +182,16 @@ common cases:
   or a union arm appended after which the podbuf integer of the enum or the
   enum set or the tag of the union is a different integer, by width or by
   signedness: a value above 255, a flag at bit 8 or an arm past ordinal 255
-  (`u8` to `u16`), a value above 65535 or a flag at bit 16 (`u16` to `u32`),
-  or a first negative value of an enum (`u8` to `i8`). It is reported once per
+  (`u8` to `u16`), a value above 65535 or a flag at bit 16 (`u16` to `u32`), a
+  flag at bit 32 (`u32` to `u64`), or a first negative value of an enum (`u8`
+  to `i8`, or to `i16` when a value is above 127). It is reported once per
   declaration as `podbuf_width_change` with the old and the new integer, under
   the same heading and with the same verdict rule; every head that holds the
   enum, the enum set or the union lays out a different integer, and an append
-  that keeps the integer draws no such line. Also breaking under podbuf: an
+  that keeps the integer draws no such line. Without `--encoding podbuf` the
+  line is reported compatible, which holds under proto3; an enum-set flag that
+  widens the integer also widens the enum set's FlatBuffers scalar, which
+  `ridl diff --encoding flatbuffers` does not report yet (driftsys/ridl#1120). Also breaking under podbuf: an
   enum value or an enum-set flag appended. Every enum and enum set is strict,
   and the `verify` of an older reader refuses a value or a bit its declaration
   does not name. It is reported once per declaration as `podbuf_strict_enum_append`,

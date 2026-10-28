@@ -1536,14 +1536,18 @@ pub fn explain(category: Category) -> &'static str {
             "narrowest unsigned integer that holds the largest arm ordinal: a value\n",
             "above 255, a flag at bit 8 or an arm past ordinal 255 widens a `u8` to\n",
             "a `u16`, a value above 65535 or a flag at bit 16 a `u16` to a `u32`,\n",
-            "and a first negative value turns a `u8` into an `i8`. The line is\n",
-            "reported once per declaration and carries the old and the new\n",
+            "a flag at bit 32 a `u32` to a `u64`, and a first negative value turns\n",
+            "a `u8` into an `i8`, or into an `i16` when a value is above 127. The\n",
+            "line is reported once per declaration and carries the old and the new\n",
             "integer. An append that keeps the integer draws no such line.\n",
             "  breaking    with `--encoding podbuf`: every head that holds the enum,\n",
             "              the enum set or the union lays out a different integer,\n",
             "              and an older reader misreads the value\n",
-            "  compatible  otherwise; listed under the heading \"breaking under\n",
-            "              podbuf\", so that a workspace that builds podbuf sees it"
+            "  compatible  otherwise, which holds under proto3; listed under the\n",
+            "              heading \"breaking under podbuf\", so that a workspace\n",
+            "              that builds podbuf sees it. An enum-set flag that widens\n",
+            "              the integer also widens the enum set's FlatBuffers\n",
+            "              scalar, which no rule reports yet (driftsys/ridl#1120)"
         ),
         Category::PodbufStrictEnumAppend => concat!(
             "An enum value or an enum-set flag appended, compatible under the\n",
