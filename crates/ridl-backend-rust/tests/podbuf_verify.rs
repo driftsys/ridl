@@ -122,6 +122,11 @@ fn grow(mut bytes: Vec<u8>, n: usize) -> Vec<u8> {
     bytes
 }
 
+/// `bytes` with the descriptor at buffer 8 set to `{ off, len, elem_size: 0 }`.
+fn zero_stride(bytes: Vec<u8>, off: u32, len: u16) -> Vec<u8> {
+    patch_u16(patch_u16(patch_u32(bytes, 8, off), 12, len), 14, 0)
+}
+
 fn patch(mut bytes: Vec<u8>, at: usize, value: u8) -> Vec<u8> {
     bytes[at] = value;
     bytes
@@ -419,18 +424,21 @@ fn an_empty_arm_descriptor_with_data_is_in_the_tail_and_8_aligned() {
 /// 8-aligned. Every element reads as all zeros, and `verify` checks those
 /// zeros. `FaultPage.faults` and `Labels.by_name` have their descriptor at
 /// buffer 8 (`off` at 8, `len` at 12, `elem_size` at 14), and the tail
-/// starts at 16. Two `FaultEvent` elements of size 0 verify and decode as
-/// two events of all zeros; 65 of them are above the bound of 64 (`Length`).
-/// One `Labels` entry of size 0 is accepted; two are `KeyOrder`, because
-/// both keys read as the empty string.
+/// starts at 16; `zero_stride` writes all three. Two `FaultEvent` elements
+/// of size 0 at 16 verify and decode as two events of all zeros; 65 of them
+/// are above the bound of 64 (`Length`). The placement is still checked when
+/// the data is 0 bytes: `off` 8, inside the head, and `off` 24, past the end
+/// of a 16-byte buffer, are `OutOfBounds`; `off` 20 in a 24-byte buffer is
+/// `Unaligned`. One `Labels` entry of size 0 is accepted; two are
+/// `KeyOrder`, because both keys read as the empty string.
 #[test]
 fn a_zero_stride_descriptor_reads_every_element_as_zeros() {
     let out = run(
         "podbuf_zero_stride",
         &[
-            r#"check!(FaultPage, patch_u16(patch_u32(enc!(FaultPage { faults: vec![] }), 8, 16), 12, 2))"#,
+            r#"check!(FaultPage, zero_stride(enc!(FaultPage { faults: vec![] }), 16, 2))"#,
             r#"{
-                let bytes = patch_u16(patch_u32(enc!(FaultPage { faults: vec![] }), 8, 16), 12, 2);
+                let bytes = zero_stride(enc!(FaultPage { faults: vec![] }), 16, 2);
                 let buf = aligned(&bytes);
                 match FaultPage::__ridl_podbuf_verify(&buf.0[..bytes.len()]) {
                     Ok(view) => (FaultPage::__ridl_podbuf_decode(view).faults
@@ -439,12 +447,27 @@ fn a_zero_stride_descriptor_reads_every_element_as_zeros() {
                     Err(refused) => verdict::<()>(Err(refused)),
                 }
             }"#,
-            r#"rule!(FaultPage, patch_u16(patch_u32(enc!(FaultPage { faults: vec![] }), 8, 16), 12, 65))"#,
-            r#"check!(Labels, patch_u16(patch_u32(enc!(Labels { by_name: vec![] }), 8, 16), 12, 1))"#,
-            r#"check!(Labels, patch_u16(patch_u32(enc!(Labels { by_name: vec![] }), 8, 16), 12, 2))"#,
+            r#"rule!(FaultPage, zero_stride(enc!(FaultPage { faults: vec![] }), 16, 65))"#,
+            r#"check!(FaultPage, zero_stride(enc!(FaultPage { faults: vec![] }), 8, 2))"#,
+            r#"check!(FaultPage, zero_stride(enc!(FaultPage { faults: vec![] }), 24, 2))"#,
+            r#"check!(FaultPage, zero_stride(grow(enc!(FaultPage { faults: vec![] }), 8), 20, 2))"#,
+            r#"check!(Labels, zero_stride(enc!(Labels { by_name: vec![] }), 16, 1))"#,
+            r#"check!(Labels, zero_stride(enc!(Labels { by_name: vec![] }), 16, 2))"#,
         ],
     );
-    assert_eq!(out, ["OK", "true", "Length", "OK", "KeyOrder"]);
+    assert_eq!(
+        out,
+        [
+            "OK",
+            "true",
+            "Length",
+            "OutOfBounds",
+            "OutOfBounds",
+            "Unaligned",
+            "OK",
+            "KeyOrder"
+        ]
+    );
 }
 
 /// §14 "Floats in verify": a float with no range accepts NaN. A `float` with

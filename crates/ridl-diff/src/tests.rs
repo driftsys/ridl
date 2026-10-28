@@ -3541,24 +3541,33 @@ mod podbuf_width {
         assert_eq!(report.verdict, Verdict::Breaking);
     }
 
-    /// Bit 3 inserted into `enumset {F0 = 0, F7 = 7}` keeps the `u8` and is
-    /// breaking under the generic rule (`decl_added`), so it draws neither a
-    /// width line nor a strict-enum line.
+    /// Bit 3 inserted into `enumset {F0 = 0, F7 = 7}` is breaking under the
+    /// generic rule, as `decl_added`, so it draws no strict-enum line: that
+    /// rule reads only compatible appends.
     #[test]
-    fn a_flag_inserted_below_the_highest_bit_draws_no_width_line() {
+    fn a_flag_inserted_below_the_highest_bit_is_a_generic_break_with_no_strict_enum_line() {
         let old = enum_set_with(&[0, 7], v2::IntWidth::U8);
         let new = enum_set_with(&[0, 7, 3], v2::IntWidth::U8);
         let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
-        assert_eq!(width_change(&report), None);
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| change.category == Category::DeclAdded
+                    && change.verdict == Verdict::Breaking
+                    && change.path == "veh.cluster/Flags/F3"),
+            "{}",
+            render_text(&report)
+        );
         assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
         assert_eq!(report.verdict, Verdict::Breaking);
     }
 
-    /// Value 65,536 appended to an enum of `0..=65535` widens its integer
-    /// from `u16` to `u32`.
+    /// Value 65,536 appended to an enum of `0, 65535` widens its integer from
+    /// `u16` to `u32`.
     #[test]
     fn an_appended_enum_value_past_65535_widens_u16_to_u32() {
-        let (old, new) = (enum_package(65_536), enum_package(65_537));
+        let (old, new) = (enum_of(&[0, 65_535]), enum_of(&[0, 65_535, 65_536]));
         let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
         assert_eq!(
             width_change(&report).map(|change| (
