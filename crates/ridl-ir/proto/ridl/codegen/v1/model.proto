@@ -1368,13 +1368,19 @@ message PodbufSource {
     // A union head's descriptor to the active arm, or the one value field of
     // the head of an arm whose type is a scalar, an enum or an enum set.
     bool arm = 13;
-    // A tuple field, by its 1-based position.
+    // A tuple field, by its 1-based position; `position_name` carries its
+    // typl name.
     uint32 position = 14;
     // A map entry's key.
     bool key = 15;
     // A map entry's value.
     bool value = 16;
   }
+  // The typl name of the tuple field `position` names; empty for every other
+  // kind. A tuple field is always named (typl §11), so a backend that spells
+  // the member of a tuple head reads this name, in the package that declares
+  // the tuple and in a package that lays it out inline alike.
+  string position_name = 2;
 }
 
 message PodbufNamedField {

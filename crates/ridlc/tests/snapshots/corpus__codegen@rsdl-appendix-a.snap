@@ -1126,6 +1126,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "count",
                 "ordinal": 1
@@ -1161,6 +1162,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -1187,6 +1189,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -1213,6 +1216,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,

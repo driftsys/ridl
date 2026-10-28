@@ -15,7 +15,8 @@
 //! A struct, a tuple or a union written as a field is laid out inline as a
 //! copy of its own head. That copy is not stored again: the field names the
 //! head of the type it lays out, by the identity the projection records
-//! ([`Inlined`]): the declaration, or for a tuple, its structure.
+//! ([`Inlined`]): the declaration, or for a tuple, its structure and its
+//! member names.
 //!
 //! A head that cannot be laid out is not in the list. It is listed in
 //! `refused` with its cause, and so is every head that needs it.
@@ -431,7 +432,8 @@ impl Walk<'_> {
             Inlined::Tuple => {
                 // A tuple of this package's tuple list, or one reached inside
                 // a foreign aggregate, which the list does not hold: it gets
-                // a head of its own, found again by structure.
+                // a head of its own, found again by structure and member
+                // names.
                 let known = self.tuples.iter().chain(&self.nested);
                 if let Some((_, index)) = known.into_iter().find(|(named, _)| named == head) {
                     return Ok(*index);
@@ -555,7 +557,7 @@ impl Walk<'_> {
 fn segment(source: &Source) -> Option<String> {
     match source {
         Source::Field { name, .. } => Some(name.clone()),
-        Source::Position(position) => Some(position.to_string()),
+        Source::Position { position, .. } => Some(position.to_string()),
         Source::Key => Some("key".to_string()),
         Source::Value => Some("value".to_string()),
         Source::Flags { .. } | Source::Tag | Source::Arm => None,
@@ -572,9 +574,16 @@ fn source(source: &Source) -> v1::PodbufSource {
         Source::Flags { index } => Kind::Flags(*index),
         Source::Tag => Kind::Tag(true),
         Source::Arm => Kind::Arm(true),
-        Source::Position(position) => Kind::Position(*position),
+        Source::Position { position, .. } => Kind::Position(*position),
         Source::Key => Kind::Key(true),
         Source::Value => Kind::Value(true),
     };
-    v1::PodbufSource { kind: Some(kind) }
+    let position_name = match source {
+        Source::Position { name, .. } => name.clone(),
+        _ => String::new(),
+    };
+    v1::PodbufSource {
+        kind: Some(kind),
+        position_name,
+    }
 }

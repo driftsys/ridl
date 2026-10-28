@@ -85,8 +85,8 @@ pub enum Source {
     /// arm whose type is a named scalar, an enum or an enum set, the one
     /// value field.
     Arm,
-    /// A tuple field, by its 1-based position.
-    Position(u32),
+    /// A tuple field, by its 1-based position and its typl name.
+    Position { position: u32, name: String },
     /// A map entry's key.
     Key,
     /// A map entry's value.
@@ -684,7 +684,14 @@ impl<'a> Layout<'a> {
                 .as_ref()
                 .ok_or_else(|| error(format!("{name}.{} has no type", field.name)))?;
             let form = self.form(home, ty)?;
-            members.push(Source::Position(position), form, ty.optional);
+            members.push(
+                Source::Position {
+                    position,
+                    name: field.name.clone(),
+                },
+                form,
+                ty.optional,
+            );
         }
         lay_out(members.items)
     }

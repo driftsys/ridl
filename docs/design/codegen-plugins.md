@@ -661,8 +661,11 @@ payload root, and the bound a generated `Payload<Podbuf>` carries.
 - **Fields.** Each `PodbufField` has the `offset`, `size` and `align` the law
   gave, a `source` (a struct field with its name and ordinal, a flags field, a
   union tag, a union head's arm descriptor or the one value of a scalar arm, a
-  tuple position, a map key or a map value), the `form`, and, for an optional
-  field, the `optional` flag bit. `pads` lists the unused byte runs.
+  tuple position with the typl name of the tuple field in `position_name`, a map
+  key or a map value), the `form`, and, for an optional field, the `optional`
+  flag bit. The name travels with the position so that a backend spells the
+  member of a tuple head the same way in the package that declares the tuple and
+  in a package that lays it out inline. `pads` lists the unused byte runs.
 - **Forms.** A struct, a tuple or a union written as a field is laid out inline
   as a copy of its own head. The form names the head of the type it was written
   with (`inline_head`): the head of that declaration, the foreign head for a

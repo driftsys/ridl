@@ -1467,6 +1467,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "door",
                 "ordinal": 1
@@ -1484,6 +1485,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "locked",
                 "ordinal": 2
@@ -1527,6 +1529,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -1556,6 +1559,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -1582,6 +1586,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -1611,6 +1616,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -1641,6 +1647,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -1821,6 +1828,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,

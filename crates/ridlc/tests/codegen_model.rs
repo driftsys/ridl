@@ -1648,4 +1648,21 @@ fn a_foreign_union_and_a_foreign_tuple_keep_their_heads() {
     );
     assert_eq!(tuple.size, 8);
     assert_eq!(tuple.fields.len(), 2);
+    // The foreign nested tuple carries the typl name of each member next to
+    // its position: a header that defines the head again has a name to read.
+    let members: Vec<(Option<&v1::podbuf_source::Kind>, &str)> = tuple
+        .fields
+        .iter()
+        .map(|field| {
+            let source = field.source.as_ref().expect("a source");
+            (source.kind.as_ref(), source.position_name.as_str())
+        })
+        .collect();
+    assert_eq!(
+        members,
+        vec![
+            (Some(&v1::podbuf_source::Kind::Position(1)), "a"),
+            (Some(&v1::podbuf_source::Kind::Position(2)), "b"),
+        ]
+    );
 }

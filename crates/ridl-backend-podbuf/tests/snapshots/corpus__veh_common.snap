@@ -158,16 +158,16 @@ _Static_assert(sizeof(((veh_common_driver_profile_head *)0)->override) == 4, "ve
 #ifndef VEH_COMMON_SENSOR_BOUNDS_RANGE_HEAD_DEFINED
 #define VEH_COMMON_SENSOR_BOUNDS_RANGE_HEAD_DEFINED
 typedef struct veh_common_sensor_bounds_range_head {
-  _Alignas(8) float f1;
-  float f2;
+  _Alignas(8) float min;
+  float max;
 } veh_common_sensor_bounds_range_head;
 #endif
 _Static_assert(sizeof(veh_common_sensor_bounds_range_head) == 8, "veh_common_sensor_bounds_range_head size");
 _Static_assert(_Alignof(veh_common_sensor_bounds_range_head) == 8, "veh_common_sensor_bounds_range_head alignment");
-_Static_assert(offsetof(veh_common_sensor_bounds_range_head, f1) == 0, "veh_common_sensor_bounds_range_head.f1 offset");
-_Static_assert(sizeof(((veh_common_sensor_bounds_range_head *)0)->f1) == 4, "veh_common_sensor_bounds_range_head.f1 size");
-_Static_assert(offsetof(veh_common_sensor_bounds_range_head, f2) == 4, "veh_common_sensor_bounds_range_head.f2 offset");
-_Static_assert(sizeof(((veh_common_sensor_bounds_range_head *)0)->f2) == 4, "veh_common_sensor_bounds_range_head.f2 size");
+_Static_assert(offsetof(veh_common_sensor_bounds_range_head, min) == 0, "veh_common_sensor_bounds_range_head.min offset");
+_Static_assert(sizeof(((veh_common_sensor_bounds_range_head *)0)->min) == 4, "veh_common_sensor_bounds_range_head.min size");
+_Static_assert(offsetof(veh_common_sensor_bounds_range_head, max) == 4, "veh_common_sensor_bounds_range_head.max offset");
+_Static_assert(sizeof(((veh_common_sensor_bounds_range_head *)0)->max) == 4, "veh_common_sensor_bounds_range_head.max size");
 
 #ifndef VEH_COMMON_SENSOR_BOUNDS_HEAD_DEFINED
 #define VEH_COMMON_SENSOR_BOUNDS_HEAD_DEFINED
@@ -354,11 +354,11 @@ static inline int veh_common_driver_profile_has_override(const uint8_t *buf) {
   return veh_common_driver_profile_has_override_at(buf + RIDL_PODBUF_PREAMBLE_SIZE, ridl_podbuf_head_size(buf));
 }
 
-static inline float veh_common_sensor_bounds_range_f1_at(const uint8_t *h, uint32_t sz) {
+static inline float veh_common_sensor_bounds_range_min_at(const uint8_t *h, uint32_t sz) {
   return ridl_podbuf_load_f32(h, sz, 0);
 }
 
-static inline float veh_common_sensor_bounds_range_f2_at(const uint8_t *h, uint32_t sz) {
+static inline float veh_common_sensor_bounds_range_max_at(const uint8_t *h, uint32_t sz) {
   return ridl_podbuf_load_f32(h, sz, 4);
 }
 
