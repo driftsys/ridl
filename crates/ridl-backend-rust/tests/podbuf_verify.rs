@@ -116,6 +116,12 @@ macro_rules! roundtrip {
     }};
 }
 
+/// `bytes` with `n` zero bytes appended.
+fn grow(mut bytes: Vec<u8>, n: usize) -> Vec<u8> {
+    bytes.resize(bytes.len() + n, 0);
+    bytes
+}
+
 fn patch(mut bytes: Vec<u8>, at: usize, value: u8) -> Vec<u8> {
     bytes[at] = value;
     bytes
@@ -246,7 +252,8 @@ fn a_boolean_above_1_a_strict_enum_value_not_declared_and_an_undeclared_bit_are_
 }
 
 /// §7 rule 2: an absent optional whose descriptor bytes are not zero is
-/// refused; a present one with a value is accepted.
+/// refused, at its first byte and at its last; a present one with a value is
+/// accepted.
 #[test]
 fn an_absent_optional_whose_bytes_are_not_zero_is_refused() {
     let out = run(
@@ -256,9 +263,11 @@ fn an_absent_optional_whose_bytes_are_not_zero_is_refused() {
             r#"check!(DiagFilter, enc!(DiagFilter { severity: 2, category: None }))"#,
             r#"check!(DiagFilter, enc!(DiagFilter { severity: 2, category: Some("x".into()) }))"#,
             r#"check!(DiagFilter, patch(enc!(DiagFilter { severity: 2, category: Some("x".into()) }), 9, 0x03))"#,
+            // The last byte of the absent descriptor at 12..20.
+            r#"check!(DiagFilter, patch(enc!(DiagFilter { severity: 2, category: None }), 19, 1))"#,
         ],
     );
-    assert_eq!(out, ["Contract", "OK", "OK", "OK"]);
+    assert_eq!(out, ["Contract", "OK", "OK", "OK", "Contract"]);
 }
 
 /// §7 rule 4: a descriptor inside the head, one whose end overflows, a string
@@ -386,6 +395,58 @@ fn rule_7_and_8_unions_and_maps() {
     );
 }
 
+/// ADR-0031 decision 8 rule 7 for an arm whose head has no field: the arm
+/// descriptor of `Maybe` (`off` at buffer 12, `len` at 16, the tail from 24)
+/// may carry data a later producer wrote, and that data is in the tail and
+/// 8-aligned like any other arm's. Eight bytes at 24 are accepted; the same
+/// eight bytes at 16, inside the head, are `OutOfBounds`; at 28 they are
+/// `Unaligned`.
+#[test]
+fn an_empty_arm_descriptor_with_data_is_in_the_tail_and_8_aligned() {
+    let out = run(
+        "podbuf_empty_arm",
+        &[
+            r#"check!(Maybe, patch_u32(patch_u32(grow(enc!(Maybe::None(Empty {})), 8), 12, 24), 16, 8))"#,
+            r#"check!(Maybe, patch_u32(patch_u32(grow(enc!(Maybe::None(Empty {})), 8), 12, 16), 16, 8))"#,
+            r#"check!(Maybe, patch_u32(patch_u32(grow(enc!(Maybe::None(Empty {})), 16), 12, 28), 16, 8))"#,
+        ],
+    );
+    assert_eq!(out, ["OK", "OutOfBounds", "Unaligned"]);
+}
+
+/// ADR-0031 decision 3: an array or map descriptor to inline heads with
+/// `elem_size` 0 and `len` above 0 is accepted when `off` is in the tail and
+/// 8-aligned. Every element reads as all zeros, and `verify` checks those
+/// zeros. `FaultPage.faults` and `Labels.by_name` have their descriptor at
+/// buffer 8 (`off` at 8, `len` at 12, `elem_size` at 14), and the tail
+/// starts at 16. Two `FaultEvent` elements of size 0 verify and decode as
+/// two events of all zeros; 65 of them are above the bound of 64 (`Length`).
+/// One `Labels` entry of size 0 is accepted; two are `KeyOrder`, because
+/// both keys read as the empty string.
+#[test]
+fn a_zero_stride_descriptor_reads_every_element_as_zeros() {
+    let out = run(
+        "podbuf_zero_stride",
+        &[
+            r#"check!(FaultPage, patch_u16(patch_u32(enc!(FaultPage { faults: vec![] }), 8, 16), 12, 2))"#,
+            r#"{
+                let bytes = patch_u16(patch_u32(enc!(FaultPage { faults: vec![] }), 8, 16), 12, 2);
+                let buf = aligned(&bytes);
+                match FaultPage::__ridl_podbuf_verify(&buf.0[..bytes.len()]) {
+                    Ok(view) => (FaultPage::__ridl_podbuf_decode(view).faults
+                        == vec![ev(0, "", 0), ev(0, "", 0)])
+                    .to_string(),
+                    Err(refused) => verdict::<()>(Err(refused)),
+                }
+            }"#,
+            r#"rule!(FaultPage, patch_u16(patch_u32(enc!(FaultPage { faults: vec![] }), 8, 16), 12, 65))"#,
+            r#"check!(Labels, patch_u16(patch_u32(enc!(Labels { by_name: vec![] }), 8, 16), 12, 1))"#,
+            r#"check!(Labels, patch_u16(patch_u32(enc!(Labels { by_name: vec![] }), 8, 16), 12, 2))"#,
+        ],
+    );
+    assert_eq!(out, ["OK", "true", "Length", "OK", "KeyOrder"]);
+}
+
 /// §14 "Floats in verify": a float with no range accepts NaN. A `float` with
 /// no range is an `f64` in Rust, so the value is `f64::NAN`.
 #[test]
@@ -476,7 +537,8 @@ fn a_map_block_must_start_at_alignment_8() {
 
 /// §7 rule 8 for integer and boolean keys: a descending pair and a duplicate
 /// are `KeyOrder`. An entry is 8 bytes, so the second key is at buffer 24
-/// when the first is at 16. A duplicate string key, two descriptors to the
+/// when the first is at 16. The boolean pair is tested as a duplicate
+/// (`false`, `false`) and as a descending pair (`true`, `false`). A duplicate string key, two descriptors to the
 /// same bytes, is `KeyOrder` too: the second entry's key descriptor is at
 /// 32, and the first key's bytes are at 48.
 #[test]
@@ -489,12 +551,15 @@ fn integer_boolean_and_duplicate_string_keys_are_ordered() {
             r#"check!(IntKeyed, patch(enc!(IntKeyed { by_id: vec![(1, weight(1)), (2, weight(2))] }), 24, 0))"#,
             r#"check!(BoolKeyed, enc!(BoolKeyed { by_flag: vec![(false, weight(1)), (true, weight(2))] }))"#,
             r#"check!(BoolKeyed, patch(enc!(BoolKeyed { by_flag: vec![(false, weight(1)), (true, weight(2))] }), 24, 0))"#,
+            r#"check!(BoolKeyed, patch(patch(enc!(BoolKeyed { by_flag: vec![(false, weight(1)), (true, weight(2))] }), 16, 1), 24, 0))"#,
             r#"check!(Labels, patch_u32(enc!(Labels { by_name: map(&[("a", 1), ("b", 2)]) }), 32, 48))"#,
         ],
     );
     assert_eq!(
         out,
-        ["OK", "KeyOrder", "KeyOrder", "OK", "KeyOrder", "KeyOrder"]
+        [
+            "OK", "KeyOrder", "KeyOrder", "OK", "KeyOrder", "KeyOrder", "KeyOrder"
+        ]
     );
 }
 

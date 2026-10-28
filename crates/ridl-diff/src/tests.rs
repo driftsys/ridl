@@ -3553,4 +3553,84 @@ mod podbuf_width {
         assert_eq!(strict_append(&report), Vec::<&crate::Change>::new());
         assert_eq!(report.verdict, Verdict::Breaking);
     }
+
+    /// Value 65,536 appended to an enum of `0..=65535` widens its integer
+    /// from `u16` to `u32`.
+    #[test]
+    fn an_appended_enum_value_past_65535_widens_u16_to_u32() {
+        let (old, new) = (enum_package(65_536), enum_package(65_537));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(
+            width_change(&report).map(|change| (
+                change.verdict,
+                change.before.as_deref(),
+                change.after.as_deref()
+            )),
+            Some((Verdict::Breaking, Some("u16"), Some("u32"))),
+            "{}",
+            render_text(&report)
+        );
+    }
+
+    /// An enum of the values `numbers`, named `V<n>` (`Vm<n>` for a negative
+    /// one).
+    fn enum_of(numbers: &[i64]) -> v2::Package {
+        let values = numbers
+            .iter()
+            .map(|&value| v2::EnumValue {
+                name: if value < 0 {
+                    format!("Vm{}", -value)
+                } else {
+                    format!("V{value}")
+                },
+                value,
+                ..Default::default()
+            })
+            .collect();
+        with_decl(
+            "Mode",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values,
+                ..Default::default()
+            }),
+        )
+    }
+
+    /// Value 128 appended to an enum of `-1, 0, 127` widens its signed integer
+    /// from `i8` to `i16`.
+    #[test]
+    fn an_appended_enum_value_past_127_widens_a_signed_i8_to_i16() {
+        let (old, new) = (enum_of(&[-1, 0, 127]), enum_of(&[-1, 0, 127, 128]));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert_eq!(
+            width_change(&report).map(|change| (
+                change.verdict,
+                change.before.as_deref(),
+                change.after.as_deref()
+            )),
+            Some((Verdict::Breaking, Some("i8"), Some("i16"))),
+            "{}",
+            render_text(&report)
+        );
+    }
+
+    /// A value inserted at a free number below the largest is breaking under
+    /// the generic rule, so it draws no width line even when it changes the
+    /// integer: -1 inserted into `0, 2` turns `u8` into `i8`, and the generic
+    /// `decl_added` line is the only report of the value.
+    #[test]
+    fn a_breaking_insert_that_changes_the_integer_draws_no_width_line() {
+        let (old, new) = (enum_of(&[0, 2]), enum_of(&[-1, 0, 2]));
+        let report = diff_refs_with(&[&old], &[&new], &[], &["podbuf"]);
+        assert!(
+            report
+                .changes
+                .iter()
+                .any(|change| change.category == Category::DeclAdded
+                    && change.verdict == Verdict::Breaking),
+            "{}",
+            render_text(&report)
+        );
+        assert_eq!(width_change(&report), None, "{}", render_text(&report));
+    }
 }
