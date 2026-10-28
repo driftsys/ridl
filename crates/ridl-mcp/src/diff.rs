@@ -235,8 +235,9 @@ mod tests {
         }
     }
 
-    /// An append to a struct another struct holds inline is `podbuf_inline_append`:
-    /// compatible with no `encodings`, breaking with `["podbuf"]`.
+    /// An append that grows a struct another struct holds inline is
+    /// `podbuf_inline_append`: compatible with no `encodings`, breaking with
+    /// `["podbuf"]`. The appended eight-byte integer grows the 8-byte head.
     #[test]
     fn diff_with_podbuf_makes_an_inline_append_breaking() {
         let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
@@ -248,7 +249,7 @@ mod tests {
         std::fs::write(&path, &text).unwrap();
         let appended = text.replace(
             "  health: Health\n}",
-            "  health: Health\n  quality: Level\n}",
+            "  health: Health\n  quality: integer [0..9223372036854775807]\n}",
         );
         let input = |encodings: Option<Vec<String>>| DiffInput {
             old: copy.0.to_str().unwrap().into(),

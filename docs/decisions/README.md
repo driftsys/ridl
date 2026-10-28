@@ -558,14 +558,14 @@ other entry below is Accepted.
   a deprecated field with no valid value; the generated names; `verify` as a
   call tree that checks the data present and never the pads; the encoder's duty
   to zero every pad; the evolution rules (an append that reads as 0 is
-  compatible, an append to a struct held inline is a break, a field removal
-  breaks under every encoding); strict and open enums, decided, with the typl
-  `open` keyword not built; the `podbuf_inline_append`, `podbuf_width_change`
-  and `podbuf_strict_enum_append` diff categories and RIDL-156
-  `podbuf-padding-order`; and what the backend generates and exposes in the
-  codegen model. It lists where it departs from the design it restates, which is
-  archived, and carries five open items. Amends ADR-0020 decision 4 and closes
-  its open item 1.
+  compatible, an append that grows a struct held inline is a break, a field
+  removal breaks under every encoding); strict and open enums, decided, with the
+  typl `open` keyword not built; the `podbuf_inline_append`,
+  `podbuf_width_change` and `podbuf_strict_enum_append` diff categories and
+  RIDL-156 `podbuf-padding-order`; and what the backend generates and exposes in
+  the codegen model. It lists where it departs from the design it restates,
+  which is archived, and carries five open items. Amends ADR-0020 decision 4 and
+  closes its open item 1.
 
 - **ADR-0032 — Byte streams.** _Proposed._ Eight decisions: the use case is a
   file or document of unknown size, downloaded or uploaded and read or written

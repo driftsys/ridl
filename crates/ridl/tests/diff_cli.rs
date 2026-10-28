@@ -467,13 +467,15 @@ fn a_narrowed_range_exits_one_and_a_widened_range_exits_zero() {
 }
 
 /// `ridl diff --encoding podbuf` over a field appended to a struct that
-/// another struct holds inline: exit 1 with the flag, exit 0 without it, and
-/// the line sits under the heading "breaking under podbuf" both times. An
-/// encoding the manifest does not name is a usage error, exit 2.
+/// another struct holds inline, where the eight-byte field grows the head
+/// from 8 to 16 bytes: exit 1 with the flag, exit 0 without it, and the line
+/// sits under the heading "breaking under podbuf" both times. An encoding
+/// the manifest does not name is a usage error, exit 2.
 #[test]
 fn diff_encoding_podbuf_exits_1_on_an_inline_append() {
     const INLINE_V1: &str = "package veh.cluster
 type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
 struct Reading {
   value: Level
 }
@@ -484,9 +486,10 @@ struct Bounds {
 ";
     const INLINE_V2: &str = "package veh.cluster
 type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
 struct Reading {
   value: Level
-  quality: Level
+  quality: Wide
 }
 struct Bounds {
   range: Reading
@@ -700,6 +703,7 @@ fn an_appended_enum_value_or_flag_is_a_strict_enum_break_under_podbuf() {
 fn a_fixed_exact_array_payload_is_not_a_podbuf_inline_use() {
     const V1: &str = "package veh.cluster
 type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
 struct Reading {
   value: Level
 }
@@ -709,9 +713,10 @@ interface Ctl {
 ";
     const V2: &str = "package veh.cluster
 type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
 struct Reading {
   value: Level
-  quality: Level
+  quality: Wide
 }
 interface Ctl {
   fixed window: [Reading; 2..2]
