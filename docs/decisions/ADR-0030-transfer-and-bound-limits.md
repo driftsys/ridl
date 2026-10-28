@@ -29,15 +29,15 @@ marked breaking.
 
 Amended 2026-10-28 from the owner's decisions of that day: decisions 1, 2, 7,
 11, 12, 13 and 14 are changed in place, and decisions 16 and 17 are added. A
-signal, an event and a fixed have a payload ceiling of 4,032 bytes, one memory
-page of 4,096 bytes minus one cache line of 64 bytes; a command and a query keep
-the ceiling of 16,256 bytes. How a transport moves a payload, whole or split, is
-a rule of each transport binding, not of the language, the catalog, the
-descriptor or `ridl-rt`. The amendment lands as a decision first; the code
-follows in driftsys/ridl#1108. It is a breaking change: a signal, an event or a
-fixed whose payload is larger than 4,032 bytes, and a `[limits]` entry above
-4,032 for one of them, stop compiling. It is released in the next version marked
-breaking, with the transport limits of the amendment of 2026-10-24.
+signal, an event and a fixed have a payload ceiling of 3,840 bytes, one memory
+page of 4,096 bytes minus 256 reserved bytes; a command and a query keep the
+ceiling of 16,256 bytes. How a transport moves a payload, whole or split, is a
+rule of each transport binding, not of the language, the catalog, the descriptor
+or `ridl-rt`. The amendment lands as a decision first; the code follows in
+driftsys/ridl#1108. It is a breaking change: a signal, an event or a fixed whose
+payload is larger than 3,840 bytes, and a `[limits]` entry above 3,840 for one
+of them, stop compiling. It is released in the next version marked breaking,
+with the transport limits of the amendment of 2026-10-24.
 
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
@@ -124,8 +124,8 @@ When accepted, these records gain a dated note or are changed in place:
 - The target transport model is shared memory with 4 KiB pages, a seqlock and a
   header of one or two cache lines.
 - On 2026-10-28 the owner set how that model holds a value: a signal, an event
-  and a fixed are each held as one cell, and a cell is one memory page minus one
-  cache line. A command and a query are not held in a cell.
+  and a fixed are each held as one cell, and a cell is one memory page of which
+  256 bytes are reserved. A command and a query are not held in a cell.
 
 ## Decision
 
@@ -289,7 +289,7 @@ When accepted, these records gain a dated note or are changed in place:
     the interaction's kind (decisions 2 and 16), and with no `[limits]` table
     every interaction's limit is the ceiling of its kind. `default` applies to a
     kind up to the ceiling of that kind: a signal, an event or a fixed whose
-    limit comes from a `default` above 4,032 has the limit 4,032. The table
+    limit comes from a `default` above 3,840 has the limit 3,840. The table
     names only the unit's own interactions, by the interface's or inline
     service's name without its package, then `.`, then the member. An inline
     service `demo.svc` is keyed `svc.member`; a key with the package
@@ -306,12 +306,12 @@ When accepted, these records gain a dated note or are changed in place:
     RIDL-152 for a name that matches no interaction. The ceiling stays the upper
     bound for every interaction and is changed only by amending this record.
     Amended 2026-10-28: MANI-022 is a value above the ceiling of its kind. A
-    `[limits.kind]` entry for `signal`, `event` or `fixed` above 4,032 is
+    `[limits.kind]` entry for `signal`, `event` or `fixed` above 3,840 is
     MANI-022, raised by the manifest layer as today. A `[limits.interaction]`
-    entry above 4,032 that names a signal, an event or a fixed is MANI-022 as
+    entry above 3,840 that names a signal, an event or a fixed is MANI-022 as
     well; the manifest layer does not know the kind of the member a key names,
     so the pass of `ridlc` that resolves the keys raises it, on the value, as
-    the checker raises MANI-009. A `default` above 4,032 is not an error,
+    the checker raises MANI-009. A `default` above 3,840 is not an error,
     because it applies to a command and a query too.
 
     The limits are in the manifest, not in an attribute, because a signal, an
@@ -353,7 +353,7 @@ When accepted, these records gain a dated note or are changed in place:
     and a `query` keep RIDL-150 at `warn`, and a signal, an event and a fixed
     are checked by the error RIDL-153 (decision 17). Where an entry applies,
     RIDL-151 checks every kind; the entry of a signal, an event or a fixed is at
-    most 4,032 (decision 12), so RIDL-151 also holds such an interaction within
+    most 3,840 (decision 12), so RIDL-151 also holds such an interaction within
     the ceiling of its kind.
 
 15. **The transport derives its limits from the catalog** (added 2026-10-24). A
@@ -381,26 +381,42 @@ When accepted, these records gain a dated note or are changed in place:
     its role of sizing the memory an embedder grants a session, above that
     minimum.
 
-16. **A signal, an event and a fixed have a payload ceiling of 4,032 bytes**
+16. **A signal, an event and a fixed have a payload ceiling of 3,840 bytes**
     (added 2026-10-28). Each of them is held as one cell, and a cell is one
-    memory page minus one cache line. The page is 4,096 bytes and the cache line
-    64 bytes on every target; both are fixed constants, not values of the
+    memory page of 4,096 bytes, of which 256 bytes are reserved: 128 bytes
+    before the payload and 128 bytes after it. The 128 bytes before the payload
+    are the cell header: the sequence counter and the envelope, with room for
+    the envelope to grow. The 128 bytes after the payload are a trailer reserved
+    for end markers: an end version that detects a torn read, a checksum, or a
+    commit marker for a cell read from shared memory or by a persistence layer.
+    This record reserves the bytes and does not define their contents; the
+    contents are each engine's. Both reservations are 128 bytes, so that the
+    payload starts on a line boundary on a target with 128-byte cache lines, and
+    the header does not share an adjacent-line prefetch pair with the payload on
+    x86. The page and the reservations are fixed constants, the same on every
     target, so a catalog that is valid on one target is valid on every target.
     The ceiling of the kinds `signal`, `event` and `fixed` is therefore 4,096 −
-    64 = 4,032 bytes of encoded payload. The ceiling of `command` and `query`
-    stays 16,256 bytes (decision 2). The ceiling of a kind is a constant of the
-    checker, in `ridl_core::limits` beside `PAYLOAD_CEILING`; it is not recorded
-    in the IR (decision 13) and is not added to `ridl-rt` or to a transport.
-    4,032 is also the number decision 6 gives as the largest advised `string`
-    bound. The two are equal in value only: decision 6 counts characters, and a
-    string of 4,032 characters is up to 16,128 bytes of UTF-8, so a signal, an
-    event or a fixed whose payload holds a string at that bound is above the
-    ceiling of its kind.
+    256 = 3,840 bytes (30 × 128) of encoded payload. The ceiling of `command`
+    and `query` stays 16,256 bytes (decision 2). The ceiling of a kind is a
+    constant of the checker, in `ridl_core::limits` beside `PAYLOAD_CEILING`; it
+    is not recorded in the IR (decision 13) and is not added to `ridl-rt` or to
+    a transport.
+
+    The ceiling is compared with the payload's encoded `MAX_SIZE` under each
+    encoding the workspace manifest enables (decision 17), so the framing of a
+    codec counts inside the 3,840 bytes, and the 256 reserved bytes never cover
+    codec overhead. For example, a payload of one `string [0..N]` fits when 4·N
+    plus the codec's framing is at most 3,840 bytes, so N is about 950; the
+    exact figure for each codec is measured with the code (driftsys/ridl#1108).
+
+    Reserving more now is the safer direction: raising a ceiling later is not a
+    break for sources, because every source that compiled still compiles, and
+    lowering it is.
 
 17. **A signal, an event or a fixed above the ceiling of its kind is an error**
     (added 2026-10-28). When no `[limits]` entry gives a signal, an event or a
     fixed its limit, and the computed bound of its payload, in an encoding the
-    workspace enables (the same set as RIDL-150), is larger than 4,032 bytes or
+    workspace enables (the same set as RIDL-150), is larger than 3,840 bytes or
     has no finite bound, the checker reports a new error, RIDL-153, on the
     interaction. As an error code it has no name and no level (ADR-0024 decision
     1), so `[lints]` cannot lower it. It runs in `ridlc` after lowering, where
@@ -443,6 +459,24 @@ When accepted, these records gain a dated note or are changed in place:
   never a lint (ADR-0024 decision 1), so a level per kind cannot be expressed in
   the registry, and `[lints]` could lower such a level to `allow`. A separate
   error code keeps RIDL-150 a lint for a command and a query.
+- **A per-kind level on RIDL-150, or a wider RIDL-151** (2026-10-28). Rejected
+  in favour of the new code RIDL-153 (decision 17). RIDL-151 keeps its meaning,
+  a payload above a limit that a `[limits]` entry declares, so no existing code
+  changes meaning.
+- **MANI-022 for a `default` above the ceiling of a kind** (2026-10-28).
+  Rejected: a `default` applies to a command and a query too, and a manifest
+  that sets `default = 16256` today would stop compiling. A `default` above
+  3,840 is valid and resolves to at most 3,840 for a signal, an event and a
+  fixed (decision 12).
+- **A `RIDL-` code for a `[limits.interaction]` entry above the ceiling of its
+  kind** (2026-10-28). Rejected: the error is in the manifest value, so it keeps
+  the manifest code MANI-022, raised by the pass of `ridlc` that resolves the
+  keys, as the checker raises MANI-009 (decision 12).
+- **One memory page minus one 64-byte cache line, a ceiling of 4,032 bytes**
+  (2026-10-28). Rejected: it leaves no reserved room after the payload for an
+  end marker, a 64-byte header does not start the payload on a line boundary on
+  a target with 128-byte cache lines, and a ceiling that is too high can only be
+  lowered by a break of sources.
 - **The page and the cache line of the target** (2026-10-28). Rejected: a
   catalog valid on one target would be invalid on a target with smaller pages or
   larger cache lines, and two peers would disagree on what each may send.
@@ -528,9 +562,9 @@ When accepted, these records gain a dated note or are changed in place:
   frozen `ir` surface and the descriptor schema under ADR-0029; the freeze dumps
   are updated when the code lands.
 - From the amendment of 2026-10-28: a signal, an event or a fixed whose payload
-  is larger than 4,032 bytes or has no finite bound, which drew RIDL-150 or
+  is larger than 3,840 bytes or has no finite bound, which drew RIDL-150 or
   nothing before, now draws RIDL-153 and fails `ridl check`, and a `[limits]`
-  entry above 4,032 for one of them now draws MANI-022. Both remove accepted
+  entry above 3,840 for one of them now draws MANI-022. Both remove accepted
   sources, a breaking change of the `accepted-sources` surface (ADR-0029),
   released in the next version marked breaking. The code change measures which
   sources of the corpus under `evals/`, the test fixtures, the examples and the

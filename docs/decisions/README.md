@@ -536,14 +536,14 @@ other entry below is Accepted.
   WebSocket message limit is at most 16,292 bytes, which an embedder can lower
   but not raise, and a request above its member's limit is answered `corrupt`
   (built). Amended 2026-10-28, now seventeen decisions: a signal, an event and a
-  fixed are each held as one cell of one 4,096-byte page minus one 64-byte cache
-  line, so their payload ceiling is 4,032 bytes, while a command and a query
-  keep 16,256; a payload above the ceiling of its kind is the new error
-  RIDL-153, and a `[limits]` entry above it is MANI-022; the ceiling of a kind
-  is a platform constant, not recorded in the IR, so no catalog hash changes;
-  whether a payload travels whole in one message is a rule of each transport
-  binding, which the WebSocket binding keeps as built; breaking, and not built
-  yet (driftsys/ridl#1108).
+  fixed are each held as one cell, a 4,096-byte page with 128 bytes reserved
+  before the payload and 128 after it, so their payload ceiling is 3,840 bytes
+  of encoded payload, while a command and a query keep 16,256; a payload above
+  the ceiling of its kind is the new error RIDL-153, and a `[limits]` entry
+  above it is MANI-022; the ceiling of a kind is a platform constant, not
+  recorded in the IR, so no catalog hash changes; whether a payload travels
+  whole in one message is a rule of each transport binding, which the WebSocket
+  binding keeps as built; breaking, and not built yet (driftsys/ridl#1108).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
