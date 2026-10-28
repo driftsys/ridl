@@ -98,3 +98,25 @@ fn a_tuple_member_with_no_name_is_named_by_its_position() {
     assert!(!h.contains("uint8_t a;"), "{h}");
     assert!(h.contains("q_st_f2_at("), "{h}");
 }
+
+/// A member whose pinned snake case is a C23 keyword (`staticAssert` is
+/// `static_assert`) is escaped with a trailing underscore, as every reserved
+/// word is, for a struct field and for a tuple member.
+#[test]
+fn a_member_named_by_a_c23_keyword_is_escaped() {
+    let h = generate_fixture(
+        "package q\n\
+         struct S {\n  staticAssert : integer [0..255]\n  typeof : integer [0..255]\n\
+         \x20 t : (constexpr: integer [0..255], nullptr: integer [0..255])\n}\n",
+    )
+    .header_source;
+    assert!(h.contains("_Alignas(8) uint8_t static_assert_;"), "{h}");
+    assert!(h.contains("\n  uint8_t typeof_;"), "{h}");
+    assert!(h.contains("q_s_static_assert_at("), "{h}");
+    assert!(h.contains("q_s_typeof_at("), "{h}");
+    assert!(h.contains("_Alignas(8) uint8_t constexpr_;"), "{h}");
+    assert!(h.contains("\n  uint8_t nullptr_;"), "{h}");
+    assert!(h.contains("offsetof(q_st_head, nullptr_) == 1"), "{h}");
+    assert!(!h.contains(" static_assert;"), "{h}");
+    assert!(!h.contains(" typeof;"), "{h}");
+}

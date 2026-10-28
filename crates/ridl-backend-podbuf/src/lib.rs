@@ -152,6 +152,10 @@ const C_KEYWORDS: &[&str] = &[
     "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register",
     "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef",
     "union", "unsigned", "void", "volatile", "while", "bool", "true", "false", "NULL",
+    // C23 keywords (ISO/IEC 9899:2024 §6.4.1): spelled without the underscore
+    // prefix of their C11 forms, so a typl name can reach them.
+    "alignas", "alignof", "constexpr", "nullptr", "static_assert", "thread_local", "typeof",
+    "typeof_unqual",
 ];
 
 /// A field name as a C member name: the pinned snake case of ADR-0016, with a
