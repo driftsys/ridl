@@ -2819,6 +2819,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "limit",
                 "ordinal": 1
@@ -2833,6 +2834,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "actual",
                 "ordinal": 2
@@ -2855,6 +2857,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "name",
                 "ordinal": 1
@@ -2874,6 +2877,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "speed",
                 "ordinal": 2
@@ -2888,6 +2892,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "flags": 0
             },
             "offset": 12,
@@ -2902,6 +2907,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "gears",
                 "ordinal": 4
@@ -2919,6 +2925,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "override",
                 "ordinal": 3
@@ -2954,6 +2961,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "range",
                 "ordinal": 1
@@ -2968,6 +2976,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "readings",
                 "ordinal": 2
@@ -2987,6 +2996,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "labels",
                 "ordinal": 3
@@ -3015,6 +3025,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "meta",
                 "ordinal": 4
@@ -3044,6 +3055,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "tag": true
             },
             "offset": 0,
@@ -3058,6 +3070,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "arm": true
             },
             "offset": 4,
@@ -3099,6 +3112,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "value",
                 "ordinal": 1
@@ -3113,6 +3127,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "timestamp",
                 "ordinal": 2
@@ -3143,6 +3158,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "code",
                 "ordinal": 1
@@ -3160,6 +3176,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "message",
                 "ordinal": 2
@@ -3196,6 +3213,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "ticks",
                 "ordinal": 1
@@ -3213,6 +3231,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "frame",
                 "ordinal": 2
@@ -3248,6 +3267,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "min",
               "position": 1
             },
             "offset": 0,
@@ -3259,6 +3279,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "max",
               "position": 2
             },
             "offset": 4,
@@ -3278,6 +3299,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "key": true
             },
             "offset": 0,
@@ -3294,6 +3316,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "value": true
             },
             "offset": 8,
@@ -3323,6 +3346,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "value",
                 "ordinal": 1
@@ -3337,6 +3361,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "timestamp",
                 "ordinal": 2
@@ -3370,6 +3395,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "fields": [
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "code",
                 "ordinal": 1
@@ -3387,6 +3413,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           },
           {
             "source": {
+              "positionName": "",
               "field": {
                 "name": "message",
                 "ordinal": 2
@@ -3431,6 +3458,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -3457,6 +3485,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -3483,6 +3512,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -3509,6 +3539,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -3535,6 +3566,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -3564,6 +3596,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -3590,6 +3623,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -3620,6 +3654,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
@@ -3650,6 +3685,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "fields": [
             {
               "source": {
+                "positionName": "",
                 "arm": true
               },
               "offset": 0,
