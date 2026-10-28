@@ -535,12 +535,12 @@ other entry below is Accepted.
   catalog hash and carried in a column of the catalog descriptor (built); the
   WebSocket message limit is at most 16,292 bytes, which an embedder can lower
   but not raise, and a request above its member's limit is answered `corrupt`
-  (built). Amended 2026-10-28, now seventeen decisions: a signal, an event and a
-  fixed are each held as one cell, a 4,096-byte page with 128 bytes reserved
-  before the payload and 128 after it, so their payload ceiling is 3,840 bytes
-  of encoded payload, while a command and a query keep 16,256; a payload above
-  the ceiling of its kind is the new error RIDL-153, and a `[limits]` entry
-  above it is MANI-022; the ceiling of a kind is a platform constant, not
+  (built). Amended 2026-10-28, now seventeen decisions: a signal and an event
+  are each held as one cell, a 4,096-byte page with 128 bytes reserved before
+  the payload and 128 after it, so their payload ceiling is 3,840 bytes of
+  encoded payload, while a fixed, a command and a query keep 16,256; a payload
+  above the ceiling of its kind is the new error RIDL-153, and a `[limits]`
+  entry above it is MANI-022; the ceiling of a kind is a platform constant, not
   recorded in the IR, so no catalog hash changes; whether a payload travels
   whole in one message is a rule of each transport binding, which the WebSocket
   binding keeps as built; breaking, and not built yet (driftsys/ridl#1108).
