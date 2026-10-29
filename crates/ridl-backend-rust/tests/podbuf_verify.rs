@@ -419,6 +419,26 @@ fn an_empty_arm_descriptor_with_data_is_in_the_tail_and_8_aligned() {
     assert_eq!(out, ["OK", "OutOfBounds", "Unaligned"]);
 }
 
+/// ADR-0031 decision 3, the other half of the `elem_size` 0 rule: the zeros
+/// a zero-stride element reads are checked like any other value, so an
+/// element whose field refuses 0 is refused with that field's `Contract`
+/// rule. `Stricts.items` holds `Strict { level: [1..9] }`: with `len` 1 or 3
+/// and `elem_size` 0 every `level` reads as 0, below the range, `Range`.
+/// `Talls.items` holds `Tall`, whose fields accept 0: the same descriptor is
+/// accepted, so the refusal is the field check and not the stride.
+#[test]
+fn a_zero_stride_element_whose_field_refuses_zero_is_refused() {
+    let out = run(
+        "podbuf_zero_stride_refused",
+        &[
+            r#"rule!(Stricts, zero_stride(enc!(Stricts { items: vec![] }), 16, 1))"#,
+            r#"rule!(Stricts, zero_stride(enc!(Stricts { items: vec![] }), 16, 3))"#,
+            r#"rule!(Talls, zero_stride(enc!(Talls { items: vec![] }), 16, 1))"#,
+        ],
+    );
+    assert_eq!(out, ["Range", "Range", "OK"]);
+}
+
 /// ADR-0031 decision 3: an array or map descriptor to inline heads with
 /// `elem_size` 0 and `len` above 0 is accepted when `off` is in the tail and
 /// 8-aligned. Every element reads as all zeros, and `verify` checks those
