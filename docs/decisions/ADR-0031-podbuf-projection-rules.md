@@ -13,6 +13,16 @@ codec in `ridl-backend-rust`, the C header backend `ridl-backend-podbuf`, the
 `ridl check`, and every codegen plugin that reads the podbuf layout from the
 codegen `Model`.
 
+**Amended 2026-10-29 — decision 10, the inline-append rule, from
+driftsys/ridl#1100.** An append to a struct that another head holds inline is a
+break only when the struct's podbuf head changes between the old and the new
+declaration, by size (every head has the alignment `HEAD_ALIGN`, so a change of
+the head is a change of its size), and only a holder of the old side counts. An
+appended field that first-fit places in the pad bytes of the old head is
+compatible, because `verify` does not check pads (decision 8). Decision 10
+carries the dated note, decision 13 points to it, and the negative consequence
+on a type held inline is reworded.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -580,7 +590,7 @@ a field is appended.
       append to a strict enum or enum set, the category
       `podbuf_strict_enum_append`, reported once per declaration, except that an
       enum or an enum set whose append changes the integer draws only the
-      `podbuf_width_change` line (builder's call). The two rules are stated in
+      `podbuf_width_change` line (builder's call). The three rules are stated in
       decision 10; `ridl diff --explain <category>` states each in full. The
       compatible verdict without podbuf holds under proto3; an enum-set flag
       that widens the integer also widens the enum set's FlatBuffers scalar,
