@@ -43,6 +43,16 @@ When accepted, these records are changed:
 - `docs/book/stability.md`: the `podbuf` feature and the podbuf lines of the
   `wire` dump.
 
+Amended 2026-10-30 by [ADR-0030](ADR-0030-transfer-and-bound-limits.md)
+decisions 17 and 19, from driftsys/ridl#1099. Decision 8 is changed in place:
+`Payload<Podbuf>::verify` no longer refuses a buffer longer than its own
+`MAX_SIZE`; the transport refuses a payload longer than its interaction's limit,
+once. Open item 2 is closed with that answer. Decision 6 is changed in place: a
+payload above the default ceiling of its kind is reported by the error RIDL-157,
+which replaces the retired lint RIDL-150. Not built: the generated `verify`
+still checks the length (driftsys/ridl#1128), and RIDL-150 is still raised
+(driftsys/ridl#1108).
+
 ## Context
 
 ADR-0020 decision 1 adds a third payload encoding for a consumer that reads a
@@ -314,7 +324,9 @@ a field is appended.
    descriptor limit draws RIDL-154 on the field and not RIDL-153. The codes
    RIDL-151 and RIDL-152 were allocated by ADR-0030 after the plan was written,
    so the podbuf codes start at 153 (builder's call). A payload above the
-   payload ceiling of ADR-0030 is reported by RIDL-150, not by podbuf.
+   payload ceiling of ADR-0030 is reported by RIDL-150, not by podbuf. Amended
+   2026-10-30: by RIDL-157, which replaces the retired RIDL-150 for every kind
+   (ADR-0030 decision 17).
 
    **The size bound (builder's call).** `MAX_SIZE` of a `Payload<Podbuf>` is the
    preamble, the head and the largest tail, with every optional field present
@@ -325,7 +337,8 @@ a field is appended.
    as `Declaration.podbuf`. ADR-0030 decision 3 asks each backend to cap the
    generated `MAX_SIZE` at the payload ceiling; the podbuf codec, like the other
    two, emits the computed bound uncapped (driftsys/ridl#996), and RIDL-150
-   reports a payload above the ceiling at check time.
+   reports a payload above the ceiling at check time (RIDL-157 once ADR-0030's
+   amendment of 2026-10-30 is built).
 
 7. **Generated names (builder's call).** In Rust, per type `T`: `TPodbufHead`
    (the `#[repr(C, align(8))]` struct, for a struct, union or named tuple),
@@ -397,7 +410,15 @@ a field is appended.
 
    **`Payload<Podbuf>::verify` also refuses a buffer longer than `MAX_SIZE`**,
    with `Malformed::TooLarge`, before it reads the preamble (builder's call).
-   See open item 2.
+   See open item 2. Amended 2026-10-30: this check is withdrawn
+   ([ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision 19).
+   `Payload<Podbuf>::verify` refuses no buffer for its length; it reads the
+   preamble, the head and the tail that the descriptors reference, and ignores
+   the bytes past them. The transport refuses a payload longer than its
+   interaction's limit from the catalog before `verify` runs, and an embedder
+   whose gate copies bytes that no binding has checked checks that length
+   itself. The verify work bound below does not depend on the length check. Not
+   built yet (driftsys/ridl#1128).
 
    **Not checked, by design** (author's call): pad bytes, anywhere. First-fit
    backfill can place a field appended in a later release in the pad bytes of an
@@ -656,7 +677,7 @@ stated in the decision above; this list is the index.
 - `verify` is a call tree with one function per head type (decision 8).
 - A boolean above 1 and an absent optional with non-zero bytes are refused with
   existing `Contract` rules; `Payload<Podbuf>::verify` refuses a buffer longer
-  than `MAX_SIZE` (decision 8).
+  than `MAX_SIZE` (decision 8; withdrawn on 2026-10-30 by ADR-0030 decision 19).
 - The string accessor re-validates UTF-8 on each read (decision 15).
 - A field removal is breaking under every encoding, not a podbuf-specific break
   (decision 10).
@@ -725,7 +746,12 @@ stated in the decision above; this list is the index.
 1. **The `open` keyword.** Decision 12's open enums wait for the typl change. It
    needs its own record, and a check of how every backend and `ridl diff` treat
    a new enum value under a strict default.
-2. **A compatible append that raises `max_size`.** `Payload<Podbuf>::verify`
+2. **A compatible append that raises `max_size`.** Closed 2026-10-30 by
+   [ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision 19, with the first
+   answer: `verify` checks structure only and no longer refuses a buffer longer
+   than the reader's `MAX_SIZE`, and the transport refuses a payload longer than
+   its interaction's limit. An append that raises `max_size` stays compatible.
+   The text below is the question as it was asked. `Payload<Podbuf>::verify`
    refuses a buffer longer than the reader's own `MAX_SIZE`. Decision 10 makes
    an append of an optional field, or of a field that reads as 0, compatible. An
    append can raise the type's `max_size`, so an older reader refuses the
@@ -747,12 +773,13 @@ stated in the decision above; this list is the index.
 
 ## Documents amended
 
-| Document                                                                                 | Change                                                                                                                               |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding |
-| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | new: the as-built codec                                                                                                              |
-| [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                           |
-| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                          |
+| Document                                                                                 | Change                                                                                                                                |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding  |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | new: the as-built codec                                                                                                               |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-30, to be updated when driftsys/ridl#1128 lands: `verify` has no length check, and the "Known gaps" row of #1099 goes |
+| [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                            |
+| [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                           |
 
 ## Trace
 

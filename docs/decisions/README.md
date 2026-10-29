@@ -546,6 +546,18 @@ other entry below is Accepted.
   larger fixed is read in place; the WebSocket message limit becomes 16,164
   bytes, one payload per message, and a provider refuses at attach a catalog
   whose fixed does not fit one message; breaking, and not built yet
+  (driftsys/ridl#1108). Amended 2026-10-30, now twenty-one decisions: one rule
+  for every kind, so a payload above its kind's default ceiling or with no
+  finite bound, with no `[limits.interaction]` entry, is the error RIDL-157 for
+  a command, a query and a fixed too, and the lint RIDL-150
+  `payload-above-ceiling` is retired, its name reserved; TYPL-116 warns only on
+  a bound no kind can carry, a `string` above 16,256 characters or `bytes` above
+  65,280 bytes; the language server runs the size checks; `verify` checks
+  structure only and the transport refuses a payload longer than its
+  interaction's limit, once (closes ADR-0031 open item 2, driftsys/ridl#1128); a
+  binding never refuses an interaction the catalog allows, so the refusal at
+  attach is withdrawn, and how the WebSocket binding carries a payload larger
+  than one message is not settled yet; breaking, and not built yet
   (driftsys/ridl#1108).
 
 - **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
@@ -565,7 +577,9 @@ other entry below is Accepted.
   `podbuf-padding-order`; and what the backend generates and exposes in the
   codegen model. It lists where it departs from the design it restates, which is
   archived, and carries five open items. Amends ADR-0020 decision 4 and closes
-  its open item 1.
+  its open item 1. Amended 2026-10-30 by ADR-0030: `verify` no longer refuses a
+  buffer longer than its own `MAX_SIZE`, which closes open item 2, and RIDL-157
+  replaces RIDL-150; not built yet (driftsys/ridl#1128).
 
 - **ADR-0032 — Byte streams.** _Proposed._ Eight decisions: the use case is a
   file or document of unknown size, downloaded or uploaded and read or written

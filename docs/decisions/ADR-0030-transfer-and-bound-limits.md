@@ -47,6 +47,30 @@ and 16,292 are on `main` from driftsys/ridl#1098 and not yet released, so the
 amendment is released in the same version marked breaking as the transport
 limits of the amendment of 2026-10-24.
 
+Amended 2026-10-30 from the owner's decisions of that day: decisions 1, 2, 4, 6,
+7, 9, 14, 15, 16 and 17 are changed in place, decisions 19, 20 and 21 are added,
+and ADR-0031 open item 2 is closed (decision 19). Size is a property of a
+payload in its interaction kind, so one rule applies to every kind: a payload
+above the default ceiling of its kind, or with no finite bound, where no
+`[limits.interaction]` entry gives the interaction its limit, is the error
+RIDL-157 for a signal, an event, a command, a query and a fixed (decision 17).
+The lint RIDL-150 `payload-above-ceiling` is retired (decision 7). TYPL-116
+`bound-above-transfer` warns only on a bound that no interaction kind can carry:
+a `string` bound above 16,256 characters or a `bytes` bound above 65,280 bytes
+(decisions 6 and 7). The language server runs the size checks, so RIDL-151 and
+RIDL-157 appear in the editor (decision 21). A type's `verify` checks structure
+only; the transport refuses a payload longer than its interaction's limit, once
+(decision 19). A transport binding carries every payload up to the limit that
+the catalog gives its interaction, a raised limit included (decision 20). How
+the WebSocket binding does that is not settled yet (decision 15, "WebSocket: to
+be settled"). The amendment lands as a decision first. Its code is added to
+driftsys/ridl#1108 and ships in the same version marked breaking, except the
+change of `verify` and the transport-side refusal of decision 19, which are
+tracked in driftsys/ridl#1128. It is a breaking change: every command, query and
+fixed whose payload is above its kind's default ceiling or has no finite bound,
+with no entry for it, stops compiling (see Consequences), and a `[lints]` key
+that names `payload-above-ceiling` now draws MANI-010.
+
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
 limit in the IR and the catalog hash of decision 13 (driftsys/ridl#1065), and
@@ -56,7 +80,12 @@ at the ceiling, and `ridl-rt` has no `PAYLOAD_CEILING` and no
 `EncodeError::TooLarge` (driftsys/ridl#996). The amendment of 2026-10-28 is not
 built (driftsys/ridl#1108): the code still uses 16,256 as the ceiling, the
 WebSocket limits of decisions 10 and 15 are built at 16,292, and decisions 16 to
-18 are not built.
+18 are not built. The amendment of 2026-10-30 is not built: TYPL-116 still uses
+4,032 characters and 16,128 bytes, RIDL-150 is still raised at `warn` for a
+signal, an event, a command and a query and does not size a fixed, the language
+server does not run RIDL-150, RIDL-151 or RIDL-152, and the generated
+FlatBuffers and podbuf `verify` still refuse a buffer longer than the type's
+`MAX_SIZE` (driftsys/ridl#1108, driftsys/ridl#1128).
 
 When accepted, these records gain a dated note or are changed in place:
 
@@ -103,6 +132,32 @@ When accepted, these records gain a dated note or are changed in place:
   `freeze/diagnostics.txt` and the `runtime-crates` dump, and
   `freeze/accepted-sources.txt` and `freeze/manifest.txt` where a frozen source
   or manifest is affected.
+- From the amendment of 2026-10-30, changed in this change:
+  [ADR-0031](ADR-0031-podbuf-projection-rules.md) (decision 6: RIDL-157 in place
+  of RIDL-150; decision 8: no length check in `verify`; open item 2 closed; the
+  list of departures from the design) and `docs/decisions/README.md` (the
+  summaries of ADR-0030 and ADR-0031).
+- From the amendment of 2026-10-30, to be updated when its code lands: ADR-0024
+  (a note: RIDL-150 retired, its name reserved, RIDL-157 for every kind, and the
+  language server runs the size checks), ADR-0029 (the amendment of 2026-10-21
+  to decision 2: only TYPL-116 remains a lint that starts at `warn`), the ridl
+  reference's diagnostics table (the RIDL-150 row retired, the RIDL-151 row,
+  which names RIDL-150, and the RIDL-157 row for every kind), the typl reference
+  §4.4, §4.5 and §16.2 (the TYPL-116 threshold), `docs/book/lints.md` (the
+  TYPL-116 paragraph, the `payload-above-ceiling` row and paragraphs, and the
+  sentence that the language server does not run it),
+  `docs/book/cli-reference.md` (the `[limits]` section: RIDL-150 retired,
+  RIDL-157 for every kind), `docs/book/stability.md` (the two lints that start
+  at `warn`), `docs/design/flatbuffers-codec.md` and
+  `docs/design/podbuf-codec.md` (no length check in `verify`; the "Known gaps"
+  row of driftsys/ridl#1099), `docs/design/proto3-codec.md` (what protects a
+  receiver is the transport's refusal against the interaction's limit), the
+  frame specification §9 (the refusal before `verify`) and §11.1 (the WebSocket
+  rule of decision 15, once it is settled), `docs/design/ridl-transport-ws.md`
+  and `docs/design/ridl-transport-ws-ts.md` (the size checks of each side, and
+  the WebSocket rule of decision 15), and the freeze dump
+  `freeze/diagnostics.txt` (RIDL-150 and its lint name removed), and
+  `freeze/accepted-sources.txt` where a frozen source is affected.
 
 ## Context
 
@@ -160,7 +215,11 @@ When accepted, these records gain a dated note or are changed in place:
    over several messages, it refuses at attach a catalog whose fixed is larger
    than its message limit, naming the member (decision 15). Another binding may
    split a payload. Nothing about pages, slots or splitting is added to the
-   catalog, the descriptor or `ridl-rt`.
+   catalog, the descriptor or `ridl-rt`. Amended 2026-10-30: a binding never
+   refuses an interaction that the catalog allows (decision 20), so the refusal
+   at attach of a catalog whose fixed is larger than the message limit is
+   withdrawn. How the WebSocket binding carries such a payload is not settled
+   yet (decision 15, "WebSocket: to be settled").
 
 2. **The payload ceiling is 16,256 bytes** (16,384 − 128). It is a platform
    rule, stated in the specifications, and it is the same for every encoding,
@@ -174,7 +233,11 @@ When accepted, these records gain a dated note or are changed in place:
    `ridl-rt`'s planned `PAYLOAD_CEILING` is 65,280. How the cap of decision 3
    and the refusal of decision 4, which are not built, apply the smaller ceiling
    of the other kinds is settled when they are built (driftsys/ridl#996). 16,128
-   is also the largest `bytes` bound that decision 6 advises.
+   is also the largest `bytes` bound that decision 6 advises. Amended
+   2026-10-30: the smaller ceiling of a kind, and a limit that an entry gives,
+   is applied by the transport against the catalog, not by the codec (decision
+   19); the codec applies `PAYLOAD_CEILING` alone (decision 4 as amended).
+   Decision 6 no longer advises 16,128 bytes for `bytes`.
 
 3. **`MAX_SIZE` is capped at the ceiling.** The IR size states, the catalog
    descriptor's size rows and the codegen `Model` stay as computed, so they
@@ -215,6 +278,25 @@ When accepted, these records gain a dated note or are changed in place:
      may be longer than this type's `MAX_SIZE` and is still valid.
    - `ridl-rt` exports the ceiling as `PAYLOAD_CEILING: usize = 16_256`, so
      every runtime and transport reads one constant.
+   - Amended 2026-10-30. The third item is withdrawn: `verify` refuses no input
+     for its length, neither above `MAX_SIZE` nor above the ceiling, in any
+     codec (decision 19). The encode side stays as the first two items state,
+     with `PAYLOAD_CEILING` = 65,280 (decision 2 as amended), the largest
+     payload of any interaction. `encode` does not know which interaction
+     carries the value, because one type can be the payload of several
+     interactions, so the codec applies only this one value, which no
+     interaction may exceed. The limit of the interaction, the default ceiling
+     of its kind or the limit an entry gives, is applied by the transport
+     against the catalog: on the sending side, a port refuses a payload longer
+     than its member's limit with its `TooLarge { cap }`, `cap` being that
+     limit; on the receiving side, as decision 19 states. A face generated for
+     an interaction that compiles never reaches either refusal: decision 17 as
+     amended makes a payload whose `MAX_SIZE`, in an encoding the workspace
+     enables, is above the interaction's limit an error, so each value it
+     encodes is at most that limit. The codec cap guards a value of a type that
+     no checked interaction carries, such as a type of a typl library package
+     encoded by hand; the transport's refusal guards against a peer that does
+     not keep the contract.
 
 5. **`BUFFER` stays.** Each use creates an array of at most 16,256 bytes on the
    stack. A call holds an argument buffer and a reply buffer; a client also
@@ -232,6 +314,23 @@ When accepted, these records gain a dated note or are changed in place:
    With the 128-byte header and about 32 bytes of FlatBuffers overhead it fits
    in 16,384 bytes: (16,384 − 128 − 32) / 4 = 4,056, rounded down to a multiple
    of 64. `bytes` takes the same byte size, 4,032 × 4.
+
+   Amended 2026-10-30: the bound is no longer an advised bound but the largest
+   bound that some interaction kind can carry. The largest payload of any kind
+   is 65,280 bytes, the default ceiling of a fixed (decision 16), so the largest
+   bound is 65,280 bytes for `bytes` and 16,256 characters for `string`. The
+   string bound is derived as 4,032 was: a string whose bound is N characters is
+   at most 4·N bytes of UTF-8, and the largest framing of a payload that is one
+   string is that of FlatBuffers, measured at 58 bytes (a query's reply or a
+   fixed of type `string [0..16305]` has a FlatBuffers `MAX_SIZE` of 65,278
+   bytes = 4 × 16,305 + 58; proto3 adds 4 bytes and podbuf 17). So (65,280 − 58)
+   / 4 = 16,305, rounded down to a multiple of 64, is 16,256 = 254 × 64. The
+   ceiling of 65,280 is a payload size with no header in it, so no header is
+   subtracted, where 4,032 subtracted 128 bytes of a transfer. A
+   `string [0..16256]` is at most 65,024 + 58 = 65,082 bytes in FlatBuffers, so
+   it fits a fixed in every encoding with 198 bytes left for other framing. The
+   number 16,256 is also the payload ceiling of decision 2 as first written; the
+   two values are not related.
 
 7. **Two lints, both at level `warn`.**
    - TYPL-116 `bound-above-transfer`: a `string` bound above 4,032 or a `bytes`
@@ -262,6 +361,28 @@ When accepted, these records gain a dated note or are changed in place:
      ADR-0027 decision 4 does for design lints; neither is a design lint in the
      sense of ADR-0027, because both check a platform rule, not a quality
      measured on a corpus.
+   - Amended 2026-10-30, TYPL-116: it reports a `string` bound above 16,256
+     characters or a `bytes` bound above 65,280 bytes (decision 6 as amended), a
+     bound that no interaction kind can carry. It stays a lint at `warn`, on the
+     bound, in the typl checker. Size is a property of a payload in its
+     interaction kind, so the interaction checks of decision 17 decide whether a
+     payload fits. The threshold of 4,032 characters and 16,128 bytes was right
+     only for a command and a query: it warned on a legitimate fixed, whose
+     ceiling is 65,280 bytes, and said nothing useful for a signal or an event,
+     whose ceiling is 3,840 bytes. The type lint still serves a type that no
+     interaction carries, such as a type of a typl library package, and gives
+     feedback in the editor on the bound itself. Its message names the largest
+     payload of any kind, 65,280 bytes, not the payload ceiling of 16,256 bytes.
+   - Amended 2026-10-30, RIDL-150: the lint `payload-above-ceiling` is retired.
+     The case it reported, a command, a query or a fixed above its kind's
+     default ceiling or with no finite bound, with no entry for it, is the error
+     RIDL-157 (decision 17 as amended). The number 150 joins the retired `RIDL-`
+     codes, and the name `payload-above-ceiling` stays reserved and is never
+     reused (ADR-0024 decision 7). A `[lints]` key that names it is an unknown
+     lint name, so it draws the warning MANI-010 `unknown-lint` and is ignored,
+     as ADR-0024 decision 11 states for any name that is not registered; it does
+     not stop a check. The earlier items of this decision that describe RIDL-150
+     describe the lint until the amendment is built.
 
 8. **The default stays `[0..256]`.** A `string` or `bytes` with no bound written
    keeps the TYPL-103 default and warning.
@@ -271,7 +392,11 @@ When accepted, these records gain a dated note or are changed in place:
    payload above the ceiling will be refused at run time once decision 4 lands,
    and a lower level would hide that failure until then. A `warn` diagnostic
    does not fail `ridl check`, so no source that compiled before stops
-   compiling.
+   compiling. Amended 2026-10-30: RIDL-150 is retired (decision 7 as amended),
+   so TYPL-116 is the one exception that remains. RIDL-150 started at `warn` and
+   not at `error` to keep every source that compiled before compiling; the
+   ceiling is a hard limit at run time for every kind (decision 17 as amended),
+   so that choice is withdrawn.
 
 10. **The WebSocket limit is at most one transfer.** `ridl-transport-ws` changes
     its `max_message_bytes` default from 1 MiB to 36 + 16,256 = 16,292 bytes,
@@ -391,7 +516,9 @@ When accepted, these records gain a dated note or are changed in place:
     (decision 18). Where no entry applies, a signal and an event are checked by
     the error RIDL-157 (decision 17), and a fixed, a command and a query by
     RIDL-150 at `warn` (decision 7). One interaction draws at most one of the
-    three.
+    three. Amended 2026-10-30: where no entry applies, every kind is checked by
+    RIDL-157 (decision 17 as amended), and RIDL-150 is retired. One interaction
+    draws at most one of RIDL-151 and RIDL-157.
 
 15. **The transport derives its limits from the catalog** (added 2026-10-24). A
     server whose backend has a member table reads each member's limit from it.
@@ -428,6 +555,34 @@ When accepted, these records gain a dated note or are changed in place:
     messages is tracked with the stream framing of ADR-0032, drafted in
     parallel.
 
+    Amended 2026-10-30: the refusal at attach of the amendment of 2026-10-28 is
+    withdrawn, because a binding never refuses an interaction that the catalog
+    allows (decision 20). The check of a `request` against its member's limit
+    stays; it is the transport-side refusal of decision 19 on the provider's
+    side. The sentence that a publish is not checked is replaced by decision 19:
+    every endpoint that receives a payload checks its length against its
+    member's limit, so the client side checks a `reply` and a `publish`.
+
+    **WebSocket: to be settled.** The owner has not yet chosen how this binding
+    carries a payload larger than its message limit of 16,164 bytes, which a
+    fixed of up to 65,280 bytes can be; a raised signal, event, command or query
+    is at most 16,128 bytes and fits. Two options are open:
+    - _A message limit derived from the catalog._ The message limit of a session
+      becomes 36 + the largest limit in its catalog, a member's raised limit or
+      its kind's default ceiling, so at most 36 + 65,280 = 65,316 bytes. A
+      server whose `Config` sets a lower message limit refuses at attach a
+      catalog that needs more, so the refusal comes from the deployment's
+      configuration, not from the catalog.
+    - _Payloads split into parts by the binding._ The binding splits a payload
+      into parts of 4 KiB and reassembles them on the receiving side, so the
+      message limit stays small and fixed. Reassembly is bounded by the member's
+      limit from the catalog, and the parts need a framing rule in the frame
+      specification §11.1.
+
+    Until the choice is recorded here, decisions 10 and 15 keep the message
+    limit of 16,164 bytes, and the frame specification §11.1 is not changed by
+    this amendment.
+
 16. **Each kind has a default payload ceiling** (added 2026-10-28). The default
     ceiling of each kind, in bytes of encoded payload, is:
 
@@ -441,7 +596,12 @@ When accepted, these records gain a dated note or are changed in place:
     target is valid on every target. The default ceilings are constants of the
     checker, in `ridl_core::limits` beside the payload ceiling; they are not
     recorded in the IR (decision 13) and are not added to `ridl-rt` or to a
-    transport.
+    transport. Amended 2026-10-30: a transport applies the limit of each member
+    (decision 19), and an absent limit in the descriptor means the default
+    ceiling of the member's kind (decision 13), so a transport needs the three
+    values. `ridl-rt` exports them beside `PAYLOAD_CEILING`, and
+    `ridl_core::limits` and `ridl-rt` are kept equal by a test. They are still
+    not recorded in the IR.
 
     A ceiling is compared with the payload's encoded `MAX_SIZE` under each
     encoding the workspace manifest enables (decision 17), so the framing of a
@@ -474,7 +634,8 @@ When accepted, these records gain a dated note or are changed in place:
     that the payload starts on a line boundary on a target with 128-byte cache
     lines. This record does not bind an engine to that layout: it fixes the
     ceilings, and an engine lays out its cells as it chooses. 3,840 is 30 × 128,
-    and 16,128 equals the largest `bytes` bound that decision 6 advises.
+    and 16,128 equals the largest `bytes` bound that decision 6 advised before
+    its amendment of 2026-10-30.
 
     Reserving more now is the safer direction: raising a ceiling later is not a
     break for sources, because every source that compiled still compiles, and
@@ -493,6 +654,30 @@ When accepted, these records gain a dated note or are changed in place:
     on the interaction, not on the type: a type that a fixed, a command or a
     query carries has the default ceiling of its kind.
 
+    Amended 2026-10-30: **one rule for every kind.** When no
+    `[limits.interaction]` entry gives an interaction its limit, and the
+    computed bound of its payload, in an encoding the workspace enables, is
+    larger than the default ceiling of its kind (3,840 bytes for a signal and an
+    event, 16,128 bytes for a command and a query, 65,280 bytes for a fixed) or
+    has no finite bound, the checker reports RIDL-157 on the interaction, for
+    every kind. A call checks its arguments and its reply; a query whose reply
+    is a fallible `T | E` is checked through both types. RIDL-157 replaces the
+    lint RIDL-150, which is retired (decision 7 as amended). The ceiling is a
+    hard limit at run time for every kind: the transport refuses a larger
+    payload (decision 19), and the codec refuses one above `PAYLOAD_CEILING`
+    (decision 4). A warning allowed code to be built that then fails in
+    production, which is not consistent with that; the level `warn` of RIDL-150
+    was a choice made to keep earlier sources compiling, and it is withdrawn.
+    The way to accept a larger payload is a `[limits.interaction]` entry
+    (decision 18): it is a value of the contract, recorded in the IR, covered by
+    the catalog hash and carried in the descriptor, so each peer and each engine
+    sees it. A comment directive that allows a lint in the source, such as the
+    one that driftsys/ridl#1126 proposes for ADR-0024, cannot replace that
+    entry: it changes no contract value, and it cannot silence RIDL-157, which
+    is an error and not a lint. Above what an entry may give, the payload is a
+    stream (decision 11, ADR-0032). The same pass that sizes the payloads raises
+    RIDL-151, RIDL-152 and RIDL-157, and it skips the same packages.
+
 18. **An entry may raise one member up to 16,128 bytes** (added 2026-10-28). A
     `[limits.interaction]` entry that names one member, of any kind, may give it
     a limit above the default ceiling of its kind, up to 16,128 bytes. A fixed
@@ -504,6 +689,77 @@ When accepted, these records gain a dated note or are changed in place:
     event whose limit is above 3,840 bytes, and either supports it or refuses
     the catalog, naming the member. Nothing else is raised above 16,128 bytes:
     larger data is a stream (decision 11).
+
+19. **The transport owns the size of a payload; `verify` checks structure**
+    (added 2026-10-30, from driftsys/ridl#1099). A type's `verify`, in every
+    codec, checks the structure and the typl constraints of what it reads and
+    ignores the bytes past what it reads. It refuses no buffer for its length,
+    and in particular no longer refuses a buffer longer than its own `MAX_SIZE`.
+    The size refusal is made once, by the transport, against the interaction's
+    limit from the catalog: the limit that an entry gives, carried in the
+    descriptor's limit column, or the default ceiling of the member's kind when
+    the column holds none (decision 13). Every endpoint of a binding that
+    receives a payload refuses one longer than that limit before it verifies the
+    payload, and reports the refusal as a structure failure of the kind (frame
+    specification §9.1 to §9.4): a signal's sample is
+    `Invalid(Detected(Corrupt))`, an event's occurrence carries `Err(Corrupt)`,
+    a request is answered `corrupt`, a reply is `CallError::Transport(Corrupt)`,
+    and a fixed's read reports the detection. This is a check of length, not a
+    verification, so the rule that a runtime never verifies (frame specification
+    §9) is unchanged. An embedder that calls `verify` on bytes that no binding
+    has checked, such as the gate of the podbuf trust model (ADR-0031), checks
+    the length against the interaction's limit itself.
+
+    The codecs as built differ: the generated FlatBuffers and podbuf `verify`
+    refuse a buffer longer than the type's `MAX_SIZE` with
+    `Malformed::TooLarge`, and the proto3 `verify` applies no length check,
+    because its verifier skips unknown fields (`docs/design/proto3-codec.md`).
+    FlatBuffers and podbuf change to the proto3 behaviour. `Malformed::TooLarge`
+    stays in `ridl-rt`, because removing a variant would change its published
+    API; the generated code no longer returns it.
+
+    Rationale. ADR-0031 decision 10 makes an appended field compatible under
+    podbuf, and ADR-0019 makes an appended field compatible under FlatBuffers.
+    An append can raise the type's `MAX_SIZE`, so an older reader that refuses a
+    buffer longer than its own `MAX_SIZE` refuses the larger valid buffers of a
+    newer writer. Example: v1 `Reading { value: f32 }` has a podbuf `MAX_SIZE`
+    of 8 bytes; v2 appends `note: string [0..64]`; a v1 reader refuses an
+    80-byte v2 buffer, although the change is compatible. The limit of the
+    interaction does not change with an append: it is recorded in the catalog,
+    and a change of it is breaking (decision 13). The work of `verify` does not
+    depend on the length check: podbuf bounds it by the maxima the reader's type
+    declares (ADR-0031 decision 8), proto3 by the bytes it reads, which the
+    transport has already bounded, and FlatBuffers by the declared maxima and
+    its depth and table limits. This closes ADR-0031 open item 2 with its first
+    answer. The code is tracked in driftsys/ridl#1128.
+
+20. **A transport binding never refuses an allowed interaction** (added
+    2026-10-30). A binding carries every payload up to the limit that the
+    catalog gives its interaction: the default ceiling of its kind, or the limit
+    that a `[limits.interaction]` entry gives it, a raised limit included. A
+    catalog that compiles is therefore served by every binding, whatever the
+    sizes of its payloads, and a binding may not refuse it at attach for the
+    size of a member. How a binding carries a payload larger than one of its
+    messages, whole in a larger message or split into parts, is the binding's
+    rule (decision 1); the rule of the WebSocket binding is not settled yet
+    (decision 15, "WebSocket: to be settled"). A binding may still refuse a
+    catalog for a reason that is not the size of an allowed payload, and a
+    deployment's own configuration may still be refused when it cannot carry its
+    catalog.
+
+21. **The language server runs the size checks** (added 2026-10-30). The checks
+    of decisions 12, 14 and 17, which `ridlc` runs after lowering (RIDL-151,
+    RIDL-152, RIDL-157, and the MANI-022 that the pass of decision 12 raises for
+    an entry between 16,129 and 65,280 that does not name a fixed), also run in
+    the language server, so an author sees them in the editor, on the
+    interaction, as `ridl check` reports them. Today the lint
+    `payload-above-ceiling` and these errors are raised only by `ridl check` and
+    `ridl build`. The language server already reads the lowered IR for its
+    hovers and inlay hints and runs the design lints of `ridlc`; the cost added
+    on each check is the lowering of the workspace where it is not already done,
+    the sizing of each interaction's payload in each enabled encoding and the
+    resolution of the `[limits]` tables. This record does not say how the server
+    schedules that work.
 
 ## Where the rules are stated
 
@@ -530,8 +786,51 @@ When accepted, these records gain a dated note or are changed in place:
   18). The frame specification §11.1 and `docs/design/ridl-transport-ws.md`: the
   ceilings of decision 16, the message limit of 16,164 bytes, and one payload in
   one message as a rule of the WebSocket binding (decisions 1, 2, 10 and 15).
+- From the amendment of 2026-10-30, once its code lands: the typl reference
+  §4.4, §4.5 and §16.2 and `docs/book/lints.md`: the TYPL-116 threshold
+  (decisions 6 and 7). The ridl reference's diagnostics table,
+  `docs/book/lints.md` and `docs/book/cli-reference.md`: RIDL-157 for every
+  kind, RIDL-150 retired, and the size checks in the language server (decisions
+  7, 17 and 21). The codec records and the frame specification §9: `verify`
+  without a length check and the transport's refusal (decisions 4 and 19). The
+  frame specification §11.1 and `docs/design/ridl-transport-ws.md`: the
+  WebSocket rule of decision 15, once it is settled (decision 20).
 
 ## Alternatives considered
+
+- **Keep RIDL-150 at `warn` for a command, a query and a fixed** (2026-10-30).
+  Rejected: the ceiling is a limit at run time for every kind, so a warning lets
+  code be built that the transport or the codec refuses in production. The level
+  `warn` was a choice made to keep earlier sources compiling.
+- **Allow an oversized payload with a comment directive in the source**
+  (2026-10-30), such as the directive that driftsys/ridl#1126 proposes.
+  Rejected: RIDL-157 is an error, not a lint, and the limit a peer must accept
+  is a contract value that belongs in the catalog, which a
+  `[limits.interaction]` entry records (decision 18).
+- **A TYPL-116 threshold for each kind** (2026-10-30). Rejected: a type does not
+  know which interaction kinds carry it, and the interaction checks of decision
+  17 already apply each kind's ceiling. The type lint reports only a bound that
+  no kind can carry.
+- **A TYPL-116 string threshold of exactly 16,305 characters** (2026-10-30), the
+  largest that fits 65,280 bytes in FlatBuffers when the string is the whole
+  payload. Rejected for 16,256, rounded down to a multiple of 64 as decision 6
+  rounded 4,032: the exact value depends on the framing of one encoding, and the
+  rounding leaves room for the framing of a struct that holds the string.
+- **An append that raises `MAX_SIZE` is a break** (2026-10-30), the second
+  answer that ADR-0031 open item 2 offered. Rejected: it would make most appends
+  to a type with a string, `bytes`, array or map breaking under podbuf and
+  FlatBuffers, while proto3 already accepts them, and a reader's length check
+  against its own `MAX_SIZE` is not needed to bound the work of `verify`
+  (decision 19).
+- **`verify` checks the input against `PAYLOAD_CEILING`** (decision 4 as first
+  written). Withdrawn on 2026-10-30: the transport already refuses a payload
+  above its interaction's limit, which is never above the ceiling, so a second
+  check in each codec adds nothing, and the size refusal is made once (decision
+  19).
+- **Refuse at attach a catalog that a WebSocket provider cannot carry in one
+  message** (decision 15 as amended on 2026-10-28). Withdrawn on 2026-10-30: a
+  catalog that compiles is valid, and a binding that refuses it moves a limit of
+  the binding into the contract (decision 20).
 
 - **RIDL-150 at level `error` for a signal and an event, or a wider RIDL-151**
   (2026-10-28). Rejected in favour of the new code RIDL-157 (decision 17): a
@@ -677,11 +976,53 @@ When accepted, these records gain a dated note or are changed in place:
   unbounded. The diagnostics surface gains RIDL-157. A unit whose `[limits]`
   entries are unchanged keeps its catalog hash, and the IR and the descriptor
   schema do not change.
+- From the amendment of 2026-10-30: every command, query and fixed whose payload
+  is above the default ceiling of its kind or has no finite bound, with no
+  `[limits.interaction]` entry for it, which drew the warning RIDL-150 before,
+  now draws the error RIDL-157 and fails `ridl check`. This removes accepted
+  sources, a breaking change of the `accepted-sources` surface, and the removal
+  of RIDL-150 and its lint name is a breaking change of the `diagnostics`
+  surface (ADR-0029); both ship in the same version marked breaking as the
+  amendment of 2026-10-28 (driftsys/ridl#1108). A `[lints]` key that names
+  `payload-above-ceiling` draws MANI-010 and is ignored. Measured on `main` at
+  952ebb2a with `ridl check`, the sources that stop compiling, beyond those that
+  the amendment of 2026-10-28 lists, are:
+  - `evals/corpus/ros2` and its frozen copy under
+    `xtask/tests/freeze-fixtures/sources/evals/corpus/ros2`: 15 commands and
+    queries with no finite bound in a request or a reply (`clearEntireCostmap`,
+    `followPath`, `followWaypoints`, `getCostmap`, `isPathValid`, `loadMap`,
+    `navigateToPose` and `saveMap` of `nav2msgs`; `getMap`, `getPlan`, `loadMap`
+    and `setMap` of `navmsgs`; `setCameraInfo` of `sensormsgs`; `setBool` and
+    `trigger` of `stdsrvs`). An entry cannot help, because RIDL-151 also refuses
+    a payload with no finite bound, so each needs a bound.
+  - The veh-cluster corpus (`crates/ridlc/tests/corpus/veh-cluster` and
+    `xtask/tests/freeze-fixtures/generated/veh-cluster`): the reply of
+    `VehicleStatus.getFaultPage` is up to 70,649 bytes in FlatBuffers, 67,008 in
+    proto3 and 67,152 in podbuf, above the 16,128 bytes that an entry may give a
+    query. Streams are not built (ADR-0032), so the corpus lowers the bound of
+    `FaultPage.faults` (`[0..64]`) until the reply fits 16,128 bytes in every
+    enabled encoding, and the test snapshots and freeze dumps that read the
+    corpus are updated.
+  - The TypeScript codec fixture `crates/ridl-backend-ts/tests/fixtures/codec`
+    draws RIDL-150 today only on `Sensors.note` and `Sensors.bounds`, which the
+    amendment of 2026-10-28 already moves to RIDL-157.
+  - `evals/corpus/mavlink`, `evals/corpus/vss` and `examples/cabin` draw no
+    RIDL-150 and no TYPL-116, and are unchanged.
+
+  TYPL-116 now warns on fewer bounds: the six `RosString` declarations of the
+  ros2 corpus (bound 18,446,744,073,709,551,615) still warn, and a bound between
+  4,033 and 16,256 characters, or between 16,129 and 65,280 bytes, no longer
+  does. The language server publishes RIDL-151, RIDL-152 and RIDL-157 (decision
+  21). The generated FlatBuffers and podbuf `verify` accept a buffer longer than
+  their `MAX_SIZE`, a change of run-time behaviour with no change of a public
+  signature (driftsys/ridl#1128). The WebSocket rule for a payload larger than
+  one message is not settled (decision 15).
 
 ## References
 
 - driftsys/ridl#996, driftsys/ridl#336, driftsys/ridl#264, driftsys/ridl#1045,
-  driftsys/ridl#1042
+  driftsys/ridl#1042, driftsys/ridl#1099, driftsys/ridl#1108,
+  driftsys/ridl#1126, driftsys/ridl#1128
 - [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md),
   [ADR-0024](ADR-0024-lint-registry-and-levels.md),
   [ADR-0027](ADR-0027-design-lints-calibrated-on-a-corpus.md),
