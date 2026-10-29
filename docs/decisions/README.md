@@ -554,11 +554,13 @@ other entry below is Accepted.
   a bound no kind can carry, a `string` above 16,256 characters or `bytes` above
   65,280 bytes; the language server runs the size checks; `verify` checks
   structure only and the transport refuses a payload longer than its
-  interaction's limit, once (closes ADR-0031 open item 2, driftsys/ridl#1128); a
-  binding never refuses an interaction the catalog allows, so the refusal at
-  attach is withdrawn, and how the WebSocket binding carries a payload larger
-  than one message is not settled yet; breaking, and not built yet
-  (driftsys/ridl#1108).
+  interaction's limit, once, which answers ADR-0031 open item 2
+  (driftsys/ridl#1128); the catalog's limit is the one source of truth for the
+  sender, the binding and the receiver, and a binding never refuses an
+  interaction the catalog allows, so the refusal at attach is withdrawn; the
+  WebSocket binding keeps messages of 16,164 bytes and carries a larger payload
+  in blocks, a new frame version whose layout is tracked in driftsys/ridl#1129;
+  breaking, and not built yet (driftsys/ridl#1108).
 
 - **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
   _Accepted._ The projection record that ADR-0020 decision 4 asks for. Fifteen

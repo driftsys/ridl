@@ -61,15 +61,17 @@ a `string` bound above 16,256 characters or a `bytes` bound above 65,280 bytes
 RIDL-157 appear in the editor (decision 21). A type's `verify` checks structure
 only; the transport refuses a payload longer than its interaction's limit, once
 (decision 19). A transport binding carries every payload up to the limit that
-the catalog gives its interaction, a raised limit included (decision 20). How
-the WebSocket binding does that is not settled yet (decision 15, "WebSocket: to
-be settled"). The amendment lands as a decision first. Its code is added to
-driftsys/ridl#1108 and ships in the same version marked breaking, except the
-change of `verify` and the transport-side refusal of decision 19, which are
-tracked in driftsys/ridl#1128. It is a breaking change: every command, query and
-fixed whose payload is above its kind's default ceiling or has no finite bound,
-with no entry for it, stops compiling (see Consequences), and a `[lints]` key
-that names `payload-above-ceiling` now draws MANI-010.
+the catalog gives its interaction, a raised limit included (decision 20). The
+WebSocket binding keeps its message size of 16,164 bytes and carries a larger
+payload in blocks, in a new frame version whose layout is tracked in
+driftsys/ridl#1129 (decision 15). The amendment lands as a decision first. Its
+code is added to driftsys/ridl#1108 and ships in the same version marked
+breaking, except the change of `verify` and the transport-side refusal of
+decision 19, which are tracked in driftsys/ridl#1128. It is a breaking change:
+every command, query and fixed whose payload is above its kind's default ceiling
+or has no finite bound, with no entry for it, stops compiling (see
+Consequences), and a `[lints]` key that names `payload-above-ceiling` now draws
+MANI-010.
 
 Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
@@ -85,7 +87,8 @@ WebSocket limits of decisions 10 and 15 are built at 16,292, and decisions 16 to
 signal, an event, a command and a query and does not size a fixed, the language
 server does not run RIDL-150, RIDL-151 or RIDL-152, and the generated
 FlatBuffers and podbuf `verify` still refuse a buffer longer than the type's
-`MAX_SIZE` (driftsys/ridl#1108, driftsys/ridl#1128).
+`MAX_SIZE` (driftsys/ridl#1108, driftsys/ridl#1128), and the WebSocket binding
+has no blocks (driftsys/ridl#1129).
 
 When accepted, these records gain a dated note or are changed in place:
 
@@ -153,10 +156,10 @@ When accepted, these records gain a dated note or are changed in place:
   row of driftsys/ridl#1099), `docs/design/proto3-codec.md` (what protects a
   receiver is the transport's refusal against the interaction's limit), the
   frame specification §9 (the refusal before `verify`) and §11.1 (the WebSocket
-  rule of decision 15, once it is settled), `docs/design/ridl-transport-ws.md`
-  and `docs/design/ridl-transport-ws-ts.md` (the size checks of each side, and
-  the WebSocket rule of decision 15), and the freeze dump
-  `freeze/diagnostics.txt` (RIDL-150 and its lint name removed), and
+  blocks of decision 15, a new frame version),
+  `docs/design/ridl-transport-ws.md` and `docs/design/ridl-transport-ws-ts.md`
+  (the size checks of each side, and the blocks of decision 15), and the freeze
+  dump `freeze/diagnostics.txt` (RIDL-150 and its lint name removed), and
   `freeze/accepted-sources.txt` where a frozen source is affected.
 
 ## Context
@@ -218,8 +221,9 @@ When accepted, these records gain a dated note or are changed in place:
    catalog, the descriptor or `ridl-rt`. Amended 2026-10-30: a binding never
    refuses an interaction that the catalog allows (decision 20), so the refusal
    at attach of a catalog whose fixed is larger than the message limit is
-   withdrawn. How the WebSocket binding carries such a payload is not settled
-   yet (decision 15, "WebSocket: to be settled").
+   withdrawn. The rule that one payload travels in one message is no longer a
+   rule of the WebSocket binding: a payload larger than one message travels in
+   blocks (decision 15, "WebSocket: blocks").
 
 2. **The payload ceiling is 16,256 bytes** (16,384 − 128). It is a platform
    rule, stated in the specifications, and it is the same for every encoding,
@@ -563,25 +567,43 @@ When accepted, these records gain a dated note or are changed in place:
     every endpoint that receives a payload checks its length against its
     member's limit, so the client side checks a `reply` and a `publish`.
 
-    **WebSocket: to be settled.** The owner has not yet chosen how this binding
-    carries a payload larger than its message limit of 16,164 bytes, which a
-    fixed of up to 65,280 bytes can be; a raised signal, event, command or query
-    is at most 16,128 bytes and fits. Two options are open:
-    - _A message limit derived from the catalog._ The message limit of a session
-      becomes 36 + the largest limit in its catalog, a member's raised limit or
-      its kind's default ceiling, so at most 36 + 65,280 = 65,316 bytes. A
-      server whose `Config` sets a lower message limit refuses at attach a
-      catalog that needs more, so the refusal comes from the deployment's
-      configuration, not from the catalog.
-    - _Payloads split into parts by the binding._ The binding splits a payload
-      into parts of 4 KiB and reassembles them on the receiving side, so the
-      message limit stays small and fixed. Reassembly is bounded by the member's
-      limit from the catalog, and the parts need a framing rule in the frame
-      specification §11.1.
-
-    Until the choice is recorded here, decisions 10 and 15 keep the message
-    limit of 16,164 bytes, and the frame specification §11.1 is not changed by
-    this amendment.
+    **WebSocket: blocks** (the owner, 2026-10-30: "the catalog is the SSOT,
+    transport and receiver must match, doing blocks if needed").
+    - The limit that the catalog gives an interaction, the default ceiling of
+      its kind or the value a `[limits.interaction]` entry allows, is the one
+      source of truth for the size of its payload. The sender, the binding and
+      the receiver each take their limit for the interaction from it; none of
+      them has its own smaller or larger limit for a payload. A server `Config`
+      cannot refuse a payload that the catalog allows: a `Config` that would
+      refuse one is refused at attach, as a configuration error, and never
+      causes a refusal of one message at run time.
+    - The receiver sizes its receive buffer for an interaction from the
+      catalog's limit, and refuses only a payload above that limit, with the
+      outcome of decision 19 and the frame specification §9.
+    - The binding keeps its bounded message size: 36 + 16,128 = 16,164 bytes
+      (decision 10). A payload that fits one message is carried whole, as today.
+      A payload larger than one message, which only a fixed above 16,128 bytes
+      can be today, is carried in blocks: the sender splits the payload into
+      blocks, each of at most one message, and the receiver reassembles them
+      into the buffer sized from the catalog, then verifies the payload. Ruling
+      of the author of this amendment: the recommended payload of one block is
+      4,096 bytes, one 4 KiB page, which matches the copy rule of decision 16
+      and the owner's intent of blocks aligned to 4 KiB pages; a block is never
+      larger than one message.
+    - Blocks need a new frame version, because the header's field set is closed
+      (frame specification §4), carried by a new binding version offered beside
+      version 1 (§11.1 "Later versions"). The blocks need: a part index or a
+      last-block flag; a bound on reassembly for each session; a rule for a
+      missing, repeated or out-of-order block, and for a total above the
+      member's limit; and a rule on whether the blocks of one payload may
+      interleave with other frames. The layout is left to a design note of the
+      frame specification, tracked in driftsys/ridl#1129.
+    - This replaces the rule of 2026-10-28 that the WebSocket binding refuses at
+      attach a catalog whose fixed is larger than its message limit, and the
+      rule that one payload travels in one message as a rule of the WebSocket
+      binding (decision 1). It is consistent with the ruling of 2026-10-28 that
+      splitting is a concern of the transport: nothing about blocks goes into
+      the catalog, the descriptor or the codecs of `ridl-rt`.
 
 16. **Each kind has a default payload ceiling** (added 2026-10-28). The default
     ceiling of each kind, in bytes of encoded payload, is:
@@ -741,11 +763,10 @@ When accepted, these records gain a dated note or are changed in place:
     sizes of its payloads, and a binding may not refuse it at attach for the
     size of a member. How a binding carries a payload larger than one of its
     messages, whole in a larger message or split into parts, is the binding's
-    rule (decision 1); the rule of the WebSocket binding is not settled yet
-    (decision 15, "WebSocket: to be settled"). A binding may still refuse a
-    catalog for a reason that is not the size of an allowed payload, and a
-    deployment's own configuration may still be refused when it cannot carry its
-    catalog.
+    rule (decision 1); the WebSocket binding uses blocks (decision 15,
+    "WebSocket: blocks"). A binding may still refuse a catalog for a reason that
+    is not the size of an allowed payload, and a deployment's own configuration
+    may still be refused when it cannot carry its catalog.
 
 21. **The language server runs the size checks** (added 2026-10-30). The checks
     of decisions 12, 14 and 17, which `ridlc` runs after lowering (RIDL-151,
@@ -793,8 +814,9 @@ When accepted, these records gain a dated note or are changed in place:
   kind, RIDL-150 retired, and the size checks in the language server (decisions
   7, 17 and 21). The codec records and the frame specification §9: `verify`
   without a length check and the transport's refusal (decisions 4 and 19). The
-  frame specification §11.1 and `docs/design/ridl-transport-ws.md`: the
-  WebSocket rule of decision 15, once it is settled (decision 20).
+  frame specification §11.1 and `docs/design/ridl-transport-ws.md`: the blocks
+  of the WebSocket binding (decisions 15 and 20), once the design note of
+  driftsys/ridl#1129 fixes their layout.
 
 ## Alternatives considered
 
@@ -827,6 +849,11 @@ When accepted, these records gain a dated note or are changed in place:
   above its interaction's limit, which is never above the ceiling, so a second
   check in each codec adds nothing, and the size refusal is made once (decision
   19).
+- **A WebSocket message limit derived from the catalog** (2026-10-30), 36 + the
+  largest limit in the catalog, at most 65,316 bytes, with a lower server
+  `Config` refused at attach. Rejected by the owner for blocks (decision 15):
+  the message size stays bounded, and the memory a message needs does not grow
+  with the largest fixed of a catalog.
 - **Refuse at attach a catalog that a WebSocket provider cannot carry in one
   message** (decision 15 as amended on 2026-10-28). Withdrawn on 2026-10-30: a
   catalog that compiles is valid, and a binding that refuses it moves a limit of
@@ -1015,14 +1042,16 @@ When accepted, these records gain a dated note or are changed in place:
   does. The language server publishes RIDL-151, RIDL-152 and RIDL-157 (decision
   21). The generated FlatBuffers and podbuf `verify` accept a buffer longer than
   their `MAX_SIZE`, a change of run-time behaviour with no change of a public
-  signature (driftsys/ridl#1128). The WebSocket rule for a payload larger than
-  one message is not settled (decision 15).
+  signature (driftsys/ridl#1128). A WebSocket payload larger than one message
+  travels in blocks, a new frame version and binding version (decision 15,
+  driftsys/ridl#1129); until it is built, such a fixed cannot be served over
+  WebSocket, and the refusal at attach of 2026-10-28 is not built either.
 
 ## References
 
 - driftsys/ridl#996, driftsys/ridl#336, driftsys/ridl#264, driftsys/ridl#1045,
   driftsys/ridl#1042, driftsys/ridl#1099, driftsys/ridl#1108,
-  driftsys/ridl#1126, driftsys/ridl#1128
+  driftsys/ridl#1126, driftsys/ridl#1128, driftsys/ridl#1129
 - [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md),
   [ADR-0024](ADR-0024-lint-registry-and-levels.md),
   [ADR-0027](ADR-0027-design-lints-calibrated-on-a-corpus.md),
