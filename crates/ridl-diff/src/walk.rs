@@ -1971,6 +1971,9 @@ pub(crate) fn podbuf_inline_appends(
         let Some(old_def) = struct_def(old, package, name) else {
             continue;
         };
+        // The old head cannot be refused here: `inline_uses` found a holder
+        // whose form the law accepted, and that form holds this head. The
+        // new head can be, when the appended field has no podbuf form.
         let grows = match (
             head_size(old, package, name, old_def),
             head_size(new, package, name, new_def),

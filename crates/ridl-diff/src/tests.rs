@@ -2669,6 +2669,43 @@ mod podbuf {
         );
     }
 
+    /// An appended field the layout law refuses — an optional bare `string`
+    /// with no length bound, which the generic rule accepts because an
+    /// optional reads as absent — leaves the new head without a size, and
+    /// the rule reads such a struct as grown: the earlier, conservative
+    /// verdict.
+    #[test]
+    fn an_append_whose_form_the_law_refuses_is_read_as_grown() {
+        let refused = struct_decl(
+            "SensorReading",
+            vec![
+                field("value", 1, named("Level")),
+                field(
+                    "note",
+                    2,
+                    v2::FieldType {
+                        optional: true,
+                        kind: Some(v2::field_type::Kind::Primitive(
+                            v2::PrimitiveType::String as i32,
+                        )),
+                    },
+                ),
+            ],
+        );
+        let report = diff(
+            &inline_package(reading_v1()),
+            &inline_package(refused),
+            &["podbuf"],
+        );
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .unwrap_or_else(|| panic!("the append is reported: {:?}", report.changes));
+        assert_eq!(change.verdict, Verdict::Breaking);
+        assert_eq!(change.path, "veh.common/SensorReading/note");
+    }
+
     /// A holder that is new on the new side has no published copy of the
     /// struct, so it does not make the append a break: the struct is held
     /// inline nowhere on the old side.
