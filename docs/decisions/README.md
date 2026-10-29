@@ -399,25 +399,30 @@ other entry below is Accepted.
   as-built face this record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
-- **ADR-0024 — The lint registry and levels.** Sixteen decisions: seven agreed
-  in the brainstorming session of spec 0, two taken in the design review, and
-  seven that come partly from the reviewed design (decisions 10, 11 and 12) and
-  partly from the stage driver at implementation (the root-scope rule in 10, the
-  source of the default level in 12, and 13 to 16; driftsys/ridl#678). Every
-  Warning and Info catalogue code is a lint with a stable kebab-case name, and
-  its catalogue severity is its default level unless its row declares `allow`
-  (decisions 1, 8, 12 and 15, as ADR-0026 amends them); a level (`allow`,
-  `info`, `warn` or `deny`) is set only in the `[lints]` table of a `ridl.toml`,
-  never on the command line and never in source; the registry and the one
-  function that applies levels live in `ridl-core`, and the entry points that
-  report diagnostics call it — `ridl check`, `ridl build`, `ridlc check`,
-  `ridlc build`, the language server and the MCP tool `ridl_check` — while
-  `ridl diff`, `ridl test`, `ridl baseline`, `ridl lock` and the other MCP tools
-  compile with the severities the emit sites chose, so a lint at `deny` never
-  changes whether a workspace compiles. Entering at a workspace member loads its
-  workspace and reports on the member, so the root's table applies (decision 9,
-  as ADR-0026 replaces it, #529). A diagnostic takes the levels of the directory
-  that owns its file; a file outside the entry point's tree takes the defaults.
+- **ADR-0024 — The lint registry and levels.** Nineteen decisions: seven agreed
+  in the brainstorming session of spec 0, two taken in the design review, seven
+  that come partly from the reviewed design (decisions 10, 11 and 12) and partly
+  from the stage driver at implementation (the root-scope rule in 10, the source
+  of the default level in 12, and 13 to 16; driftsys/ridl#678), and three added
+  by the amendment of 2026-10-30, which also changes decision 2 in place (17 to
+  19; not built, driftsys/ridl#1124). Every Warning and Info catalogue code is a
+  lint with a stable kebab-case name, and its catalogue severity is its default
+  level unless its row declares `allow` (decisions 1, 8, 12 and 15, as ADR-0026
+  amends them); a level (`allow`, `info`, `warn` or `deny`) is set in the
+  `[lints]` table of a `ridl.toml`, never on the command line, and a
+  `// lint: allow <name> -- <reason>` comment allows a lint on one declaration
+  and wins over `[lints]`, with two `info` lints, `unused-lint-directive` and
+  `malformed-lint-directive`, for its mistakes (decisions 2, 17 to 19, amended
+  2026-10-30); the registry and the one function that applies levels live in
+  `ridl-core`, and the entry points that report diagnostics call it —
+  `ridl check`, `ridl build`, `ridlc check`, `ridlc build`, the language server
+  and the MCP tool `ridl_check` — while `ridl diff`, `ridl test`,
+  `ridl baseline`, `ridl lock` and the other MCP tools compile with the
+  severities the emit sites chose, so a lint at `deny` never changes whether a
+  workspace compiles. Entering at a workspace member loads its workspace and
+  reports on the member, so the root's table applies (decision 9, as ADR-0026
+  replaces it, #529). A diagnostic takes the levels of the directory that owns
+  its file; a file outside the entry point's tree takes the defaults.
   `ridl check --format sarif` writes a SARIF 2.1.0 log with artifact URIs
   relative to the working directory. Amends ADR-0002 §4 and ADR-0010 decision 1
   in place. Amended 2026-10-06 by the workspace design lints record (ADR-0027):
