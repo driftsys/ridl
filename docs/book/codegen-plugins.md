@@ -309,8 +309,7 @@ backend does.
 
 Each `Interaction` also carries `limit`: the payload limit in bytes that a
 `[limits]` entry of the manifest gives the member (its `[limits.interaction]`
-entry, else the entry of its kind in `[limits.kind]`, else `default`, each
-clamped to the default ceiling of its kind), copied from the catalog. It is
+entry, else the entry of its kind in `[limits.kind]`, else `default` clamped to the default ceiling of its kind), copied from the catalog. It is
 absent when no entry applies, and the member then has the default ceiling of
 its kind (3,840 bytes for a `signal` and an `event`, 16,128
 for a `command` and a `query`, 65,280 for a `fixed`). A plugin that emits a

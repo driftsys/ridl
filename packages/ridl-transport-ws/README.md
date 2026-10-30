@@ -18,11 +18,11 @@ The catalog gives every interaction a payload limit: the default ceiling of its
 kind (`SIGNAL_EVENT_CEILING` 3,840 bytes, `CALL_CEILING` 16,128 bytes,
 `FIXED_CEILING` 65,280 bytes, exported by the package) unless a `[limits]` entry
 of the manifest gives it another: the member's `[limits.interaction]` entry,
-else the entry of its kind in `[limits.kind]`, else `default`, each clamped to
-the default ceiling of its kind. The generated `<base>.codec.ts` module carries
-each limit an entry gives in its interface tables, and `connect` takes those
-tables in the `interfaces` option; without them, every member has the default
-ceiling of its kind.
+else the entry of its kind in `[limits.kind]`, else `default` clamped to the
+default ceiling of its kind. The generated `<base>.codec.ts` module carries each
+limit an entry gives in its interface tables, and `connect` takes those tables
+in the `interfaces` option; without them, every member has the default ceiling
+of its kind.
 
 A received payload longer than its member's limit never reaches the application:
 

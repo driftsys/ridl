@@ -415,6 +415,7 @@ test("a reply on a query the generated tables raise resolves up to the raised li
   socket.deliver(
     response(QUERY, 1n, { outcome: "reply", payload: new Uint8Array(20_000) }),
   );
+  await assert.doesNotReject(within);
   assert.equal((await within).length, 20_000);
   const above = session.query(1, 7, new Uint8Array(), BOUND);
   socket.deliver(

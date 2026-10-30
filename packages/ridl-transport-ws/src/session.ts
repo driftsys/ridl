@@ -84,7 +84,7 @@ export interface MemberEntry {
   /**
    * The payload limit a `[limits]` entry of the manifest gives the member:
    * its `[limits.interaction]` entry, else the entry of its kind in
-   * `[limits.kind]`, else `default`, each clamped to the default ceiling of
+   * `[limits.kind]`, else `default` clamped to the default ceiling of
    * its kind.
    */
   readonly limit?: number;

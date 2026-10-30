@@ -351,9 +351,9 @@ from the generated tables.** The catalog is the one source of a payload limit
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13 and
 19): every interaction has the default ceiling of its kind unless a `[limits]`
 entry of the manifest gives it another (the member's `[limits.interaction]`
-entry, else the entry of its kind in `[limits.kind]`, else `default`, each
-clamped to the default ceiling of its kind), and the generated `<base>.codec.ts`
-module writes the resolved value as `limit` on the member's table entry
+entry, else the entry of its kind in `[limits.kind]`, else `default` clamped to
+the default ceiling of its kind), and the generated `<base>.codec.ts` module
+writes the resolved value as `limit` on the member's table entry
 ([`ts-codec-table.md`](ts-codec-table.md)). So `connect` takes the generated
 tables in the `interfaces` option and reads each member's limit from them, keyed
 by `(kind, interface, ordinal)`; a member no table names, and every member when

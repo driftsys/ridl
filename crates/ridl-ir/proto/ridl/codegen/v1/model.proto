@@ -578,7 +578,7 @@ message Interaction {
   repeated Rule rules = 23;
   // The payload limit in bytes that a `[limits]` entry of the catalog gives
   // the member (ADR-0030 decision 13): its `[limits.interaction]` entry, else
-  // the entry of its kind in `[limits.kind]`, else `default`, each clamped to
+  // the entry of its kind in `[limits.kind]`, else `default` clamped to
   // the default ceiling of its kind; copied from the IR's `Decl.limit`.
   // Absent when no entry applies: the member then has the default ceiling of
   // its kind, which `ridl_rt::contract::default_ceiling` states. A plugin
