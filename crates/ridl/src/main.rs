@@ -1521,10 +1521,9 @@ fn default_baseline_dir(entry: &Path) -> PathBuf {
 /// The checked IR is the run's own, `ir` ([`ridlc::CheckedIr`]), so the
 /// workspace is not compiled again; the comparison runs only when a baseline
 /// is actually present, and never on a run that failed for anything but
-/// RIDL-409.
-/// `explicit` — whether
-/// `location` came from a `--baseline` flag rather than auto-discovery — is
-/// passed straight through to [`load_baseline`], which it uses to tell an
+/// RIDL-409. `explicit` — whether `location` came from a `--baseline` flag
+/// rather than auto-discovery — is passed straight through to
+/// [`load_baseline`], which it uses to tell an
 /// explicit `--baseline` holding no snapshot (a refusal) from an
 /// auto-discovered directory holding none (a silent skip).
 fn desk_check(
