@@ -1,6 +1,6 @@
-// The ridl language reference Appendix A example, verbatim. Nothing in this
-// file is adapted for the corpus: it is the reference text, compiled. Any
-// diagnostic it draws is a fact about the reference, recorded in NOTES.
+// The ridl language reference Appendix A example, compiled, with one bound
+// adapted: `FaultPage.faults` is `[FaultEvent; 0..14]`, not `0..64`, to fit the
+// 16,128-byte default ceiling of a query. Diagnostics are recorded in NOTES.
 
 package veh.cluster
 
