@@ -146,11 +146,11 @@ fn check_limits(package: &v2::Package, others: &[&v2::Package]) -> Result<(), Ge
 // Names
 // ---------------------------------------------------------------------
 
-/// Words a C member name must not take: the keywords of C23 (ISO/IEC
-/// 9899:2024 §6.4.1), those of C11 included, with the C23 spellings that have
-/// no underscore prefix (`alignas`, `static_assert`, `bool` and the others),
-/// so that a typl name can reach them; the macro `NULL`; and `asm`, a keyword
-/// of the GNU dialects that GCC and Clang compile by default.
+/// Words a C member name must not take: the C23 keywords (ISO/IEC 9899:2024
+/// §6.4.1) in their unprefixed spellings, the macro `NULL`, and `asm`, a
+/// keyword of the GNU dialects that GCC and Clang compile by default. The
+/// underscore-prefixed keywords (`_Bool`, `_Alignas`, `_Atomic`, ...) are not
+/// listed, because a snake_case member name cannot produce one.
 const C_KEYWORDS: &[&str] = &[
     "auto",
     "break",

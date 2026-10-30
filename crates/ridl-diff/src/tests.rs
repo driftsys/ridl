@@ -2703,8 +2703,8 @@ mod podbuf {
 
     /// Two fields appended at once: `flag: Level`, which first-fit places at
     /// offset 1 in the old pad, and `quality: u64`, which goes to offset 8
-    /// and grows the head. The line is drawn for the field at or past the
-    /// old head size only; the verdict is breaking either way.
+    /// and grows the head. The line is drawn for a field that does not fit
+    /// entirely inside the old head only; the verdict is breaking either way.
     #[test]
     fn a_multi_field_append_draws_a_line_for_the_fields_past_the_old_head_only() {
         let new = struct_decl(
@@ -2769,6 +2769,26 @@ mod podbuf {
     #[test]
     fn an_appended_inline_array_that_straddles_the_old_head_end_is_a_break() {
         let report = appended("block", optional(array(named("Level"), 8, 8)));
+        assert_one_line(&report, "block");
+    }
+
+    /// The boundary of "does not fit": an optional `[Level; 6]` at 2..8 ends
+    /// exactly at the old head's size of 8, fits, and draws no line; an
+    /// optional `[Level; 7]` at 2..9 ends one byte past it and draws the line.
+    #[test]
+    fn a_field_that_ends_exactly_at_the_old_head_size_fits() {
+        let report = appended("block", optional(array(named("Level"), 6, 6)));
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            inline_append_paths(&report).is_empty(),
+            "{:?}",
+            report.changes
+        );
+    }
+
+    #[test]
+    fn a_field_that_ends_one_byte_past_the_old_head_size_does_not_fit() {
+        let report = appended("block", optional(array(named("Level"), 7, 7)));
         assert_one_line(&report, "block");
     }
 

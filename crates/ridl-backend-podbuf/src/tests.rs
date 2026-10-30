@@ -101,9 +101,9 @@ fn a_tuple_member_with_no_name_is_named_by_its_position() {
 
 /// A member whose pinned snake case is a C23 keyword (`staticAssert` is
 /// `static_assert`) is escaped with a trailing underscore, as every reserved
-/// word is, for a struct field and for a tuple member. The eight C23 spellings
-/// added to `C_KEYWORDS` in 0.15 are pinned (`bool`, `true` and `false` were
-/// in the table before them), and so is `asm`, the GNU-dialect keyword.
+/// word is, for a struct field and for a tuple member. The test pins the eight
+/// C23 spellings that are not also C11 keywords, except `bool`, `true` and
+/// `false`, and `asm`, the GNU-dialect keyword.
 #[test]
 fn a_member_named_by_a_c23_keyword_is_escaped() {
     let h = generate_fixture(

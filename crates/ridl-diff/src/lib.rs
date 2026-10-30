@@ -472,12 +472,12 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 ///
 /// Only `podbuf` has rules of its own: a struct field appended that does not
 /// fit inside the old head of a struct another head of the old side holds
-/// inline is
-/// [`Category::PodbufInlineAppend`], an enum value, an enum-set flag or a
-/// union arm appended that changes the integer of the enum or the enum set
-/// or the union's tag is [`Category::PodbufWidthChange`], and an enum value
-/// or an enum-set flag appended is [`Category::PodbufStrictEnumAppend`]; each
-/// is breaking when `podbuf` is in `encodings` and compatible otherwise. An
+/// inline is [`Category::PodbufInlineAppend`], an enum value, an enum-set
+/// flag or a union arm appended that changes the integer of the enum or the
+/// enum set or the union's tag is [`Category::PodbufWidthChange`], and an
+/// enum value or an enum-set flag appended is
+/// [`Category::PodbufStrictEnumAppend`]; each is breaking when `podbuf` is in
+/// `encodings` and compatible otherwise. An
 /// enum-set flag that widens the integer also widens its FlatBuffers scalar,
 /// which no rule under `flatbuffers` reports yet (driftsys/ridl#1120). Every
 /// other category is judged the same under every list, and a name that is
