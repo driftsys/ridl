@@ -1,9 +1,14 @@
 # veh-cluster corpus notes
 
 The ridl reference **Appendix A**, compiled. `cluster/appendix-a.ridl` is the
-appendix text verbatim — no line is adapted for the corpus — so every
+appendix text, with one bound adapted for the corpus, so every other
 diagnostic it draws is a fact about the reference, recorded below rather than
-edited away. `common/` supplies the `veh.common` vocabulary Appendix A imports;
+edited away. The adapted bound is `FaultPage.faults`: the appendix declares
+`[FaultEvent; 0..64]`, whose largest encoding is about 70,000 bytes in
+FlatBuffers, 67,000 in proto3 and 67,000 in podbuf. That is above the default
+ceiling of a query reply, 16,128 bytes. The corpus declares `[FaultEvent; 0..14]`,
+the largest count that fits that ceiling in all three encodings (the largest
+encodings are 15,499, 14,658 and 14,702 bytes). `common/` supplies the `veh.common` vocabulary Appendix A imports;
 it is the typl reference Appendix B example, the same text the `veh-common`
 entry compiles standalone.
 

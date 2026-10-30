@@ -3127,7 +3127,7 @@ impl ::core::default::Default for DiagError {
 pub struct FaultPage {
     /// # Rules
     ///
-    /// - count 0 ..= 64
+    /// - count 0 ..= 14
     pub faults: ::std::vec::Vec<FaultEvent>,
 }
 impl ::core::default::Default for FaultPage {
@@ -6053,8 +6053,8 @@ impl ::ridl_rt::contract::Interface for WheelHistory {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            22, 157, 192, 34, 129, 123, 147, 104, 31, 198, 87, 106, 3, 152, 159, 225,
-            248, 100, 177, 160, 198, 152, 10, 45, 28, 54, 132, 182, 31, 254, 207, 35,
+            98, 179, 240, 63, 94, 101, 252, 55, 200, 28, 204, 66, 38, 55, 150, 12, 141,
+            1, 244, 35, 24, 220, 226, 210, 53, 129, 196, 52, 118, 116, 221, 198,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -6668,8 +6668,8 @@ impl ::ridl_rt::contract::Interface for WheelSummary {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            22, 157, 192, 34, 129, 123, 147, 104, 31, 198, 87, 106, 3, 152, 159, 225,
-            248, 100, 177, 160, 198, 152, 10, 45, 28, 54, 132, 182, 31, 254, 207, 35,
+            98, 179, 240, 63, 94, 101, 252, 55, 200, 28, 204, 66, 38, 55, 150, 12, 141,
+            1, 244, 35, 24, 220, 226, 210, 53, 129, 196, 52, 118, 116, 221, 198,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);

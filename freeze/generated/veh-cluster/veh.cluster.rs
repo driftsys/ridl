@@ -91,7 +91,7 @@ impl ::core::default::Default for DiagError {
 pub struct FaultPage {
     /// # Rules
     ///
-    /// - count 0 ..= 64
+    /// - count 0 ..= 14
     pub faults: ::std::vec::Vec<FaultEvent>,
 }
 impl ::core::default::Default for FaultPage {
@@ -1362,7 +1362,7 @@ pub(crate) fn __ridl_fb_encode_FaultPage(
         offset: 4u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.faults;
-            if __c.len() > 64usize {
+            if __c.len() > 14usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("FaultPage"),
@@ -1393,7 +1393,7 @@ pub(crate) fn __ridl_fb_verify_FaultPage(
         ::core::option::Option::Some(__p) => {
             let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 4usize)
                 .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            if __v.len > 64usize {
+            if __v.len > 14usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("FaultPage"),
@@ -1452,10 +1452,10 @@ pub(crate) fn __ridl_fb_decode_FaultPage(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultPage {
-    /// The largest FlatBuffers buffer any legal `FaultPage` encodes to: 70649 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 70649usize;
-    type Buffer = [::core::primitive::u8; 70649usize];
-    const BUFFER: Self::Buffer = [0u8; 70649usize];
+    /// The largest FlatBuffers buffer any legal `FaultPage` encodes to: 15499 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 15499usize;
+    type Buffer = [::core::primitive::u8; 15499usize];
+    const BUFFER: Self::Buffer = [0u8; 15499usize];
     type View<'a> = FaultPageFbView<'a>;
     fn encode<'o>(
         &self,
@@ -4853,7 +4853,7 @@ pub(crate) fn __ridl_pb_encode_FaultPage(
 ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
     {
         let __c = &value.faults;
-        if __c.len() > 64usize {
+        if __c.len() > 14usize {
             return ::core::result::Result::Err(
                 ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                     type_name: ::core::option::Option::Some("FaultPage"),
@@ -4898,7 +4898,7 @@ pub(crate) fn __ridl_pb_verify_FaultPage(
             }
         }
     }
-    if __c0 > 64usize {
+    if __c0 > 14usize {
         return ::core::result::Result::Err(
             ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
                 type_name: ::core::option::Option::Some("FaultPage"),
@@ -4925,10 +4925,10 @@ pub(crate) fn __ridl_pb_decode_FaultPage(buf: &[::core::primitive::u8]) -> Fault
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for FaultPage {
-    /// The largest proto3 message any legal `FaultPage` encodes to: 67008 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 67008usize;
-    type Buffer = [::core::primitive::u8; 67008usize];
-    const BUFFER: Self::Buffer = [0u8; 67008usize];
+    /// The largest proto3 message any legal `FaultPage` encodes to: 14658 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 14658usize;
+    type Buffer = [::core::primitive::u8; 14658usize];
+    const BUFFER: Self::Buffer = [0u8; 14658usize];
     type View<'a> = ::ridl_rt::proto3::Verified<'a>;
     fn encode<'o>(
         &self,
@@ -8078,7 +8078,7 @@ impl FaultPage {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
         {
             let __c = &self.faults;
-            if __c.len() > 64usize {
+            if __c.len() > 14usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("FaultPage"),
@@ -8207,7 +8207,7 @@ impl FaultPage {
                     8usize,
                 )?;
             }
-            if ::core::primitive::usize::from(__d.len) > 64usize {
+            if ::core::primitive::usize::from(__d.len) > 14usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("FaultPage"),
@@ -8254,11 +8254,11 @@ impl FaultPage {
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for FaultPage {
-    /// The largest podbuf buffer any legal `FaultPage` encodes to: 67152 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 67152usize;
-    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 67152usize]>;
+    /// The largest podbuf buffer any legal `FaultPage` encodes to: 14702 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 14702usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 14702usize]>;
     const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
-        [::core::primitive::u8; 67152usize],
+        [::core::primitive::u8; 14702usize],
     >::zeroed();
     type View<'a> = FaultPagePodbufView<'a>;
     fn encode<'o>(
@@ -11425,8 +11425,8 @@ impl ::ridl_rt::contract::Interface for WheelHistory {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            253, 70, 44, 23, 144, 174, 163, 156, 221, 206, 138, 227, 100, 219, 134, 132,
-            186, 104, 209, 190, 41, 174, 33, 156, 10, 179, 21, 251, 60, 23, 77, 3,
+            216, 142, 84, 116, 88, 165, 14, 134, 135, 142, 159, 229, 204, 2, 175, 134,
+            132, 21, 147, 254, 215, 116, 49, 146, 34, 104, 19, 52, 246, 202, 13, 76,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -12104,8 +12104,8 @@ impl ::ridl_rt::contract::Interface for WheelSummary {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            253, 70, 44, 23, 144, 174, 163, 156, 221, 206, 138, 227, 100, 219, 134, 132,
-            186, 104, 209, 190, 41, 174, 33, 156, 10, 179, 21, 251, 60, 23, 77, 3,
+            216, 142, 84, 116, 88, 165, 14, 134, 135, 142, 159, 229, 204, 2, 175, 134,
+            132, 21, 147, 254, 215, 116, 49, 146, 34, 104, 19, 52, 246, 202, 13, 76,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);

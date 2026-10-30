@@ -33,7 +33,7 @@
 //!
 //! The ridl interaction layer (E2):
 //!
-//! - `veh-cluster/` — the ridl reference Appendix A verbatim, plus authored
+//! - `veh-cluster/` — the ridl reference Appendix A (one bound lowered), plus authored
 //!   §14.5 services. The golden `.ridl` package: both service forms, all five
 //!   interaction kinds, every timing mode, contracts, streams, tombstones. See
 //!   `veh-cluster/NOTES`.
@@ -382,6 +382,62 @@ fn corpus_entries_compile_to_reviewed_snapshots() {
             }
         });
     });
+}
+
+/// Copies the directory tree at `from` to `to`.
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).expect("create a copy directory");
+    for entry in std::fs::read_dir(from).expect("read a corpus directory") {
+        let entry = entry.expect("read a corpus entry");
+        let target = to.join(entry.file_name());
+        if entry.file_type().expect("read a file type").is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target).expect("copy a corpus file");
+        }
+    }
+}
+
+/// Appends the default ceiling of every kind (ADR-0030) to the `[limits.kind]`
+/// table of each unit manifest under `root`, so that a bound above a kind's
+/// default ceiling is reported whatever the rules for a unit with no table.
+fn set_default_ceilings(root: &Path) {
+    for entry in std::fs::read_dir(root).expect("read a corpus directory") {
+        let path = entry.expect("read a corpus entry").path();
+        if path.is_dir() {
+            set_default_ceilings(&path);
+        } else if path.file_name().is_some_and(|name| name == "ridl.toml") {
+            let text = std::fs::read_to_string(&path).expect("read a manifest");
+            if text.contains("[package]") {
+                std::fs::write(
+                    &path,
+                    format!(
+                        "{text}\n[limits.kind]\nsignal = 3840\nevent = 3840\ncommand = 16128\nquery = 16128\n"
+                    ),
+                )
+                .expect("write a manifest");
+            }
+        }
+    }
+}
+
+/// The reply of `getFaultPage` fits the default ceiling of a query in every
+/// encoding the entry enables (flatbuffers, proto3 and podbuf), so the entry
+/// draws no size error when each unit gives the default ceilings.
+#[test]
+fn veh_cluster_payloads_fit_the_default_ceilings() {
+    let copy = tempfile::tempdir().expect("a temp dir");
+    copy_tree(Path::new("tests/corpus/veh-cluster"), copy.path());
+    set_default_ceilings(copy.path());
+    let diagnostics = ridlc::run_check(copy.path(), ridl_core::Frozen::No)
+        .expect("the corpus entry checks")
+        .diagnostics;
+    let sized: Vec<_> = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code.as_str() == "RIDL-151")
+        .map(|diagnostic| diagnostic.message.clone())
+        .collect();
+    assert!(sized.is_empty(), "{sized:#?}");
 }
 
 /// A service composing two interfaces (ADR-0015 decision 12) compiles clean,

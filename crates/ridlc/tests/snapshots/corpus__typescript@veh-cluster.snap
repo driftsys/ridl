@@ -351,9 +351,9 @@ export interface FaultPage {
   /**
    * @remarks
    * Rules:
-   * - count 0 ..= 64
+   * - count 0 ..= 14
    *
-   * @bounds 0..64
+   * @bounds 0..14
    */
   faults: readonly FaultEvent[];
 }
