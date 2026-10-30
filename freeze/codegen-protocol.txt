@@ -339,6 +339,7 @@ ridl.codegen.v1.Interaction.family = 9 singular ridl.codegen.v1.Family
 ridl.codegen.v1.Interaction.fixed = 14 singular ridl.codegen.v1.FixedShape oneof=shape
 ridl.codegen.v1.Interaction.kind = 2 singular ridl.codegen.v1.Kind
 ridl.codegen.v1.Interaction.labels = 5 repeated string
+ridl.codegen.v1.Interaction.limit = 24 optional uint32
 ridl.codegen.v1.Interaction.links = 20 repeated ridl.codegen.v1.DocLink
 ridl.codegen.v1.Interaction.name = 1 singular ridl.codegen.v1.Spellings
 ridl.codegen.v1.Interaction.query = 13 singular ridl.codegen.v1.QueryShape oneof=shape

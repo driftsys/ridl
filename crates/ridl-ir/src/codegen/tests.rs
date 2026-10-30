@@ -4641,3 +4641,20 @@ fn a_named_scalar_has_a_podbuf_box_and_a_struct_does_not() {
         Some(v1::size_state::State::Bounded(_))
     ));
 }
+
+/// The limit a `[limits.interaction]` entry gives a member is copied from
+/// the IR to the model; a member with no entry carries none.
+#[test]
+fn a_member_s_limit_is_copied_from_the_ir() {
+    let mut package = budget_package();
+    let tally = package
+        .interfaces
+        .iter_mut()
+        .find(|interface| interface.name == "Tally")
+        .expect("the Tally interface");
+    tally.interactions[0].limit = Some(64);
+    let model = lower(&package, &[]);
+    let tally = interface_named(&model, "Tally");
+    assert_eq!(live_member(tally, "level").limit, Some(64));
+    assert_eq!(live_member(tally, "ask").limit, None);
+}
