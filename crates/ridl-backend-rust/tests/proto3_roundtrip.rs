@@ -512,7 +512,7 @@ fn an_unbounded_type_is_refused_under_proto3() {
 /// message for the tuple, which no declaration reaches.
 #[test]
 fn an_unbounded_induced_call_is_skipped_under_proto3() {
-    let package = ir::compile_fixture("proto3_unbounded_call.ridl");
+    let package = ir::compile_oversized_fixture("proto3_unbounded_call.ridl");
     let source =
         ridl_backend_rust::generate_pipeline(&package, &[WireEncoding::Proto3], false, &[])
             .expect("the package generates with the interface skipped")

@@ -254,3 +254,44 @@ fn an_interface_tombstone_keeps_its_limit_unset() {
     assert_eq!(tombstones[0].limit, None);
     assert_eq!(limit(&output, "Iface.sig"), Some(300));
 }
+
+/// A raised limit (ADR-0030 decision 18) is an entry like any other: it is
+/// recorded on the interaction and changes the catalog hash, while a unit with
+/// no `[limits]` table keeps its hash.
+#[test]
+fn a_raised_limit_is_recorded_and_changes_the_hash() {
+    let without = compile(SOURCE, "");
+    assert_eq!(hash(&without), hash(&compile(SOURCE, "")));
+    let raised = compile(SOURCE, "[limits.interaction]\n\"Iface.sig\" = 16128\n");
+    assert_eq!(errors(&raised), Vec::<String>::new());
+    assert_eq!(limit(&raised, "Iface.sig"), Some(16_128));
+    assert_ne!(hash(&without), hash(&raised));
+}
+
+/// `default` applies to each kind up to the default ceiling of that kind
+/// (ADR-0030 decision 12), and the clamped value is what the IR records: an
+/// entry applied, so the limit is part of the catalog.
+#[test]
+fn a_clamped_default_records_the_ceiling_of_the_kind() {
+    let output = compile(SOURCE, "[limits]\ndefault = 65280\n");
+    assert_eq!(errors(&output), Vec::<String>::new());
+    assert_eq!(limit(&output, "Iface.sig"), Some(3_840));
+    assert_eq!(limit(&output, "Iface.ev"), Some(3_840));
+    assert_eq!(limit(&output, "Iface.ask"), Some(16_128));
+}
+
+/// An interaction entry above 16,128 bytes that names a member other than a
+/// fixed is MANI-022 and is dropped, so the IR records what the next entry
+/// gives, or nothing.
+#[test]
+fn a_dropped_entry_records_nothing() {
+    let output = compile(SOURCE, "[limits.interaction]\n\"Iface.sig\" = 16129\n");
+    assert_eq!(errors(&output).len(), 1, "{:?}", errors(&output));
+    assert!(errors(&output)[0].starts_with("MANI-022 "));
+    assert_eq!(limit(&output, "Iface.sig"), None);
+    let output = compile(
+        SOURCE,
+        "[limits.kind]\nsignal = 7\n[limits.interaction]\n\"Iface.sig\" = 16129\n",
+    );
+    assert_eq!(limit(&output, "Iface.sig"), Some(7));
+}

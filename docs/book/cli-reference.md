@@ -983,25 +983,29 @@ interfaces or inline services of one unit share a short name, a key that uses
 the name is ambiguous.
 
 An unknown kind in `[limits.kind]` is MANI-021. MANI-022 is a `[limits.kind]`
-value above the default ceiling of its kind, and a `default` or a
-`[limits.interaction]` value above 65,280. A key that names no interaction of the unit, or that is ambiguous, is
-RIDL-152, reported on the key. RIDL-151 is reported on an interaction whose
-payload has a largest encoded size, in an encoding that a `[backend.<name>]`
-table enables (FlatBuffers when no table names one), above the limit that an
-entry of `[limits]` gives it, or no finite bound. A `command` or `query`
-checks its request and its reply against its one limit, and a `fixed` is sized
-too. Both are errors, so they have no name and no level in `[lints]`. A payload
-above the ceiling under a declared limit draws RIDL-150 as well; where no entry
-gives a limit, only RIDL-150 applies. A package with an error that stops
-`ridl build` writing artifacts, or that depends on one, is not checked, and a
-unit with such a package reports no RIDL-152. An error in a manifest stops
-RIDL-150 in every package of the workspace, and RIDL-151 and RIDL-152 only in
-the packages beneath that manifest.
+value above the default ceiling of its kind, a `default` or a
+`[limits.interaction]` value above 65,280, and a `[limits.interaction]` value
+between 16,129 and 65,280 that names a member other than a `fixed`; the last is
+reported on the value by the same pass that sizes the payloads, and the entry
+gives no limit. A key that names no interaction of the unit, or that is
+ambiguous, is RIDL-152, reported on the key. RIDL-151 is reported on an
+interaction whose payload has a largest encoded size, in an encoding that a
+`[backend.<name>]` table enables (FlatBuffers when no table names one), above
+the limit that an entry of `[limits]` gives it, or no finite bound. Where no
+entry gives a limit, the same check against the default ceiling of the kind is
+RIDL-157, so an interaction draws at most one of the two. A `command` or
+`query` checks its request and its reply against its one limit, a fallible
+reply is checked through both of its types, and a `fixed` is sized too. All
+three are errors, so they have no name and no level in `[lints]`. A package
+with an error that stops `ridl build` writing artifacts, or that depends on
+one, is not checked, and a unit with such a package reports no RIDL-152. An
+error in a manifest stops the pass only in the packages beneath that manifest.
 
-A `[limits]` entry that applies to an interaction is recorded in the IR, so
-adding, removing or editing one changes the catalog hash of the interaction's
-unit. An interaction that no entry reaches records no limit, and a unit with no
-`[limits]` table keeps its hash.
+A `[limits]` entry that applies to an interaction is recorded in the IR, with
+`default` clamped to the default ceiling of the kind, so adding, removing or
+editing one changes the catalog hash of the interaction's unit. An interaction
+that no entry reaches records no limit, which means the default ceiling of its
+kind, and a unit with no `[limits]` table keeps its hash.
 
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages

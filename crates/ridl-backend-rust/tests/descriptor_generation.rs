@@ -372,7 +372,7 @@ fn a_proto3_only_package_has_a_face() {
 /// instead (`tests/induced_call_refusals.rs`).
 #[test]
 fn an_interface_with_an_unbounded_payload_is_refused() {
-    let package = ir::compile_fixture("proto3_unbounded_call.ridl");
+    let package = ir::compile_oversized_fixture("proto3_unbounded_call.ridl");
     let error = generate_face_with(&package, &[WireEncoding::Proto3])
         .expect_err("an interface with an unbounded payload is refused");
     assert!(

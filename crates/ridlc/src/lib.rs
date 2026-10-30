@@ -2454,57 +2454,44 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         &resolutions,
         &mut sources,
     ));
-    // RIDL-150 lowers each package to the codegen model, so it skips a package
-    // that has an error, or that depends on one, and still examines the clean
-    // packages of the workspace. The errors that count are the ones that stop
-    // `ridl build` writing any artifact (`blocks_every_artifact`). The
-    // encodings are those of every `[backend.<name>]` table; none named means
-    // FlatBuffers is checked. A workspace with no interface has nothing to
-    // report, so `ridl.std` is not checked for it either.
-    let encodings = enabled_encodings(&backends);
     // RIDL-153 to RIDL-155 read types, not interactions, so they run for a
     // workspace with no interface, whenever a backend table enables podbuf.
-    let podbuf = encodings.iter().any(|name| name == "podbuf");
-    let payloads = checked.iter().any(|pkg| pkg.ir.shapes().next().is_some());
-    if podbuf || payloads {
+    // They lower each package to the codegen model, so they skip a package
+    // that has an error, or that depends on one, and still examine the clean
+    // packages of the workspace. The errors that count are the ones that stop
+    // `ridl build` writing any artifact (`blocks_every_artifact`). The
+    // encodings are those of every `[backend.<name>]` table.
+    let encodings = enabled_encodings(&backends);
+    if encodings.iter().any(|name| name == "podbuf") {
         let std_ir = check_package(db, workspace, std, std).ir;
-        let mut blocked =
-            payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
-        if podbuf {
-            let before = diagnostics.len();
-            diagnostics.extend(design_lints::check_podbuf(
-                db,
-                &packages,
-                &checked,
-                &resolutions,
-                &blocked,
-                &std_ir,
-                &encodings,
-                &mut sources,
-            ));
-            // RIDL-153 to RIDL-155 are errors, and an error blocks the
-            // payload checks of its package and of its dependents, so the
-            // blocked set is read again only when the podbuf checks added
-            // one; the common run computes it once.
-            if payloads && diagnostics[before..].iter().any(blocks_every_artifact) {
-                blocked =
-                    payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
-            }
-        }
-        if payloads {
-            diagnostics.extend(design_lints::check_payload_ceiling(
-                db,
-                &packages,
-                &checked,
-                &resolutions,
-                &blocked,
-                &std_ir,
-                &encodings,
-                &mut sources,
-            ));
-        }
+        let blocked = size_checks_blocked(db, &packages, &checked, &diagnostics, &sources, false);
+        diagnostics.extend(design_lints::check_podbuf(
+            db,
+            &packages,
+            &checked,
+            &resolutions,
+            &blocked,
+            &std_ir,
+            &encodings,
+            &mut sources,
+        ));
     }
     drop_remote_non_errors(&mut diagnostics, &sources, &remote_units);
+    // The size pass raises errors only, so it runs after the remote units'
+    // non-errors are dropped. A podbuf error above blocks its package here.
+    let sized = check_payload_sizes(
+        db,
+        workspace,
+        std,
+        &packages,
+        &checked,
+        &resolutions,
+        &diagnostics,
+        &backends,
+        &unit_limits,
+        &mut sources,
+    );
+    diagnostics.extend(sized);
 
     let mut compiled = Compiled {
         workspace,
@@ -2523,7 +2510,6 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         root_package,
         remote_units,
     };
-    check_unit_limits(db, &packages, &mut compiled);
     // After the checks, which read the IR without a limit, the limit is
     // recorded on the interactions for every consumer of the checked IR.
     design_lints::annotate_payload_limits(db, &packages, &mut compiled.checked, &compiled.limits);
@@ -2542,48 +2528,62 @@ fn enabled_encodings(backends: &BTreeMap<String, ridl_core::BackendTable>) -> Ve
     encodings
 }
 
-/// RIDL-151 and RIDL-152 over the `[limits]` tables that the load carried in
-/// `compiled.limits` (ADR-0030 decisions 12 and 14). Both are errors, so they
-/// are added after the remote units' non-errors are dropped. A package with an
-/// error, and a package that depends on one, is skipped as for RIDL-150. An
-/// error in a manifest stops the checks of the packages beneath that manifest
-/// only, where it stops RIDL-150 in every package.
-fn check_unit_limits(db: &RidlDatabase, packages: &[Package], compiled: &mut Compiled) {
-    if compiled.limits.is_empty() {
-        return;
-    }
-    let blocked = payload_ceiling_blocked(
+/// The size pass over a checked workspace (ADR-0030 decisions 12, 14 and 17):
+/// RIDL-151 (a payload above the limit that a `[limits]` entry gives its
+/// interaction), RIDL-152 (a `[limits.interaction]` key that names no
+/// interaction of its unit), RIDL-157 (a payload above the default ceiling of
+/// its kind where no entry applies) and the MANI-022 of a
+/// `[limits.interaction]` entry above 16,128 bytes that names a member other
+/// than a fixed. Every code is an error, so lint levels do not apply, and a
+/// remote unit's packages are read as targets and never examined.
+///
+/// `packages`, `checked` and `resolutions` describe the same packages in the
+/// same order, as [`check_design_lints`] takes them; `workspace` and `std`
+/// are the handles they were checked against. `diagnostics` are the
+/// diagnostics raised so far: a package with an error that stops `ridl build`
+/// writing any artifact, and a package that depends on one, is skipped, and an
+/// error in a manifest skips the packages beneath that manifest only.
+/// `backends` are the `[backend.<name>]` tables, whose `encodings` are sized
+/// as one set (FlatBuffers when none is named), and `limits` the `[limits]`
+/// table of each unit by unit name. The spans of the returned diagnostics
+/// point into `sources`. `ridl check`, `ridl build` and the language server
+/// run the pass through this function, so they cannot diverge.
+#[allow(clippy::too_many_arguments)]
+pub fn check_payload_sizes(
+    db: &RidlDatabase,
+    workspace: Workspace,
+    std: Package,
+    packages: &[Package],
+    checked: &[CheckedPackage],
+    resolutions: &[Resolution],
+    diagnostics: &[Diagnostic],
+    backends: &BTreeMap<String, ridl_core::BackendTable>,
+    limits: &BTreeMap<String, ridl_core::UnitLimits>,
+    sources: &mut SourceMap,
+) -> Vec<Diagnostic> {
+    let blocked = size_checks_blocked(db, packages, checked, diagnostics, sources, true);
+    let encodings = enabled_encodings(backends);
+    let std_ir = check_package(db, workspace, std, std).ir;
+    design_lints::check_payload_sizes(
         db,
         packages,
-        &compiled.checked,
-        &compiled.diagnostics,
-        &compiled.sources,
-        true,
-    );
-    let encodings = enabled_encodings(&compiled.backends);
-    let std_ir = check_package(db, compiled.workspace, compiled.std, compiled.std).ir;
-    let found = design_lints::check_payload_limits(
-        db,
-        packages,
-        &compiled.checked,
-        &compiled.resolutions,
+        checked,
+        resolutions,
         &blocked,
         &std_ir,
         &encodings,
-        &compiled.limits,
-        &mut compiled.sources,
-    );
-    compiled.diagnostics.extend(found);
+        limits,
+        sources,
+    )
 }
 
-/// Per entry of `packages`, whether the payload checks skip it (RIDL-150,
-/// RIDL-151 and RIDL-152): the package has an error that blocks every
-/// artifact, or depends on a package that does. An error that no package's
-/// source file carries blocks every package, except that with `by_manifest` an
-/// error in a file whose directory holds the files of some packages blocks only
-/// those packages: a manifest error of one unit does not stop the checks of
-/// another unit.
-fn payload_ceiling_blocked(
+/// Per entry of `packages`, whether the size pass and the podbuf checks skip
+/// it: the package has an error that blocks every artifact, or depends on a
+/// package that does. An error that no package's source file carries blocks
+/// every package, except that with `by_manifest` an error in a file whose
+/// directory holds the files of some packages blocks only those packages: a
+/// manifest error of one unit does not stop the checks of another unit.
+fn size_checks_blocked(
     db: &RidlDatabase,
     packages: &[Package],
     checked: &[CheckedPackage],
