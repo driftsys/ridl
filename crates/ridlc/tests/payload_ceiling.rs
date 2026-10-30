@@ -485,12 +485,29 @@ fn bound_above_transfer_thresholds() {
         "{}",
         found[0].message
     );
-    assert!(found[0].message.contains("65280"), "{}", found[0].message);
-    assert!(!found[0].message.contains("16,256"), "{}", found[0].message);
+    assert!(
+        found[0]
+            .message
+            .contains("the largest payload of any kind is 65280 bytes"),
+        "{}",
+        found[0].message
+    );
+    assert!(
+        !found[0].message.contains("do not yet enforce") && !found[0].message.contains("#996"),
+        "{}",
+        found[0].message
+    );
     let found = typl_116("package demo\ntype Blob: bytes [0..65281]\n");
     assert_eq!(found.len(), 1);
     assert!(
         found[0].message.contains("65280 bytes"),
+        "{}",
+        found[0].message
+    );
+    assert!(
+        !found[0].message.contains("do not yet enforce")
+            && !found[0].message.contains("#996")
+            && !found[0].message.contains("16256"),
         "{}",
         found[0].message
     );

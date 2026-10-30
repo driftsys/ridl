@@ -6724,7 +6724,15 @@ mod tests {
         let diagnostic = &checked.diagnostics[0];
         assert_eq!(diagnostic.severity, Severity::Warning);
         assert!(
-            diagnostic.message.contains("65280") && !diagnostic.message.contains("16256."),
+            diagnostic
+                .message
+                .contains("the largest payload of any kind is 65280 bytes"),
+            "{}",
+            diagnostic.message
+        );
+        assert!(
+            !diagnostic.message.contains("do not yet enforce")
+                && !diagnostic.message.contains("#996"),
             "{}",
             diagnostic.message
         );
@@ -6752,6 +6760,16 @@ mod tests {
         assert_eq!(diagnostic.severity, Severity::Warning);
         assert!(
             diagnostic.message.contains("65280 bytes"),
+            "{}",
+            diagnostic.message
+        );
+        assert!(
+            diagnostic
+                .message
+                .contains("the largest payload of any kind is 65280 bytes")
+                && !diagnostic.message.contains("do not yet enforce")
+                && !diagnostic.message.contains("#996")
+                && !diagnostic.message.contains("16256"),
             "{}",
             diagnostic.message
         );

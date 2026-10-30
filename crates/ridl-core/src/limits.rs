@@ -30,8 +30,8 @@ pub const RAISE_MAX: u32 = 16_128;
 
 /// The largest `string` bound, in characters, that TYPL-116 accepts. A string
 /// of this many characters is a multiple of 64 and its encoding fits the
-/// largest payload with room for the overhead of a struct of several fields
-/// (ADR-0030 decision 7).
+/// largest payload with room for the 58 bytes of framing of a payload that is
+/// one string (ADR-0030 decision 7).
 pub const STRING_BOUND_MAX_CHARS: u64 = 16_256;
 
 /// The largest `bytes` bound, in bytes, that TYPL-116 accepts: the largest
@@ -54,7 +54,8 @@ mod tests {
 
     /// The ceilings are whole 4,096-byte pages minus 256 bytes of header, the
     /// largest payload is the largest ceiling, and a string at its bound fits
-    /// four times, plus the overhead of a small struct, in that payload.
+    /// four times, plus the 58 bytes of framing of a payload that is one string, in
+    /// that payload.
     #[test]
     fn the_limits_agree_with_each_other() {
         assert_eq!(SIGNAL_EVENT_CEILING, 4_096 - 256);
