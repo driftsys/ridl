@@ -36,9 +36,10 @@
 //! `ridl check` calls. The workspace is sized under the encodings of the root
 //! manifest's `[backend.<name>]` tables and the `[limits]` table of each unit;
 //! a standalone overlay has neither, so it is sized for FlatBuffers against
-//! the default ceilings. The pass reads the errors found so far, but not the
-//! loader's findings, so a manifest error does not skip the packages beneath
-//! that manifest as it does in `ridl check`. Its diagnostics on a manifest
+//! the default ceilings. Each source set is passed only its own errors, so an
+//! error in one set does not skip the others. The pass also reads the loader's
+//! errors, other than RSDL-7xx, as `ridl check` does, so a manifest error
+//! skips the packages beneath that manifest. Its diagnostics on a manifest
 //! are published for that `ridl.toml`.
 //!
 //! Two scope limits of this task, both by design:
@@ -325,6 +326,11 @@ struct ServerState {
     /// the tables are not valid in a recompute's source map, so each
     /// recompute interns the manifest again.
     unit_limits: BTreeMap<String, SizeManifest>,
+    /// The path and text of the file of each load-time Error that blocks the
+    /// size pass (any code but RSDL-7xx), so the pass skips the same
+    /// packages as `ridl check`. Only the workspace call reads them; they
+    /// are not published here.
+    loader_errors: Vec<(String, String)>,
     /// The directories a remote unit is read from — each loaded unit's
     /// directory, the manifest root's `vendor/` and the cache root
     /// ([`ridlc::remote_dirs`]). A remote unit
@@ -382,6 +388,7 @@ impl ServerState {
             remote_units: Vec::new(),
             backends: BTreeMap::new(),
             unit_limits: BTreeMap::new(),
+            loader_errors: Vec::new(),
             remote_dirs: Vec::new(),
             remote_notice: None,
             edited: HashSet::new(),
@@ -457,6 +464,15 @@ impl ServerState {
             }
         }
         self.remote_dirs = ridlc::remote_dirs(&remote_units, &cache, dir);
+        self.loader_errors = diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Error && !d.code.as_str().starts_with("RSDL-7"))
+            .filter_map(|d| {
+                let path = sources.path(d.primary.file)?.to_string();
+                let text = sources.text(d.primary.file)?.to_string();
+                Some((path, text))
+            })
+            .collect();
         self.backends = backends;
         self.unit_limits = unit_limits
             .into_iter()
@@ -945,6 +961,50 @@ impl ServerState {
                 },
             );
         }
+        // Each source set sees only its own errors: an error in one set must
+        // not skip the packages of another. A diagnostic belongs to the
+        // standalone overlay that holds its file, and otherwise to the
+        // workspace. The loader's blocking errors go to the workspace call
+        // only, as one synthetic error per file, so nothing extra is
+        // published.
+        let overlay_paths: Vec<BTreeSet<String>> = packages[workspace_packages..]
+            .iter()
+            .map(|package| {
+                package
+                    .files(db)
+                    .iter()
+                    .map(|file| file.path(db).to_string())
+                    .collect()
+            })
+            .collect();
+        let mut workspace_errors: Vec<Diagnostic> = Vec::new();
+        let mut overlay_errors: Vec<Vec<Diagnostic>> = vec![Vec::new(); overlay_paths.len()];
+        for diagnostic in &all {
+            let owner = sources
+                .path(diagnostic.primary.file)
+                .and_then(|path| overlay_paths.iter().position(|set| set.contains(path)));
+            match owner {
+                Some(index) => overlay_errors[index].push(diagnostic.clone()),
+                None => workspace_errors.push(diagnostic.clone()),
+            }
+        }
+        for (path, text) in &self.loader_errors {
+            if self.edited.contains(path) {
+                continue;
+            }
+            let file = sources.file_id(path, text);
+            workspace_errors.push(Diagnostic {
+                code: DiagCode("MANI-000"),
+                severity: Severity::Error,
+                message: String::new(),
+                primary: Span {
+                    file,
+                    range: TextRange::default(),
+                },
+                labels: Vec::new(),
+                fixits: Vec::new(),
+            });
+        }
         let sized = ridlc::check_payload_sizes(
             db,
             self.workspace,
@@ -952,7 +1012,7 @@ impl ServerState {
             &packages[..workspace_packages],
             &checked[..workspace_packages],
             &resolutions[..workspace_packages],
-            &all,
+            &workspace_errors,
             &self.backends,
             &limits,
             &mut sources,
@@ -961,6 +1021,7 @@ impl ServerState {
         let no_backends = BTreeMap::new();
         let no_limits = BTreeMap::new();
         for index in workspace_packages..packages.len() {
+            let own = &overlay_errors[index - workspace_packages];
             let sized = ridlc::check_payload_sizes(
                 db,
                 self.workspace,
@@ -968,7 +1029,7 @@ impl ServerState {
                 &packages[index..index + 1],
                 &checked[index..index + 1],
                 &resolutions[index..index + 1],
-                &all,
+                own,
                 &no_backends,
                 &no_limits,
                 &mut sources,

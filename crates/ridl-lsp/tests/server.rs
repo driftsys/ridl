@@ -7072,3 +7072,62 @@ fn a_raise_above_16128_on_a_signal_publishes_mani_022_on_the_manifest() {
     shut_down(&client, 2);
     server.join().expect("thread joins").expect("clean exit");
 }
+
+#[test]
+fn a_broken_standalone_overlay_does_not_silence_the_size_pass_of_the_workspace() {
+    let dir = TempDir::new("size-isolated-workspace");
+    let (_manifest, file) = write_size_unit(&dir, "", &size_source(1000));
+    let (client, server) = start(uri_of(dir.path()));
+    let initial = next_publish(&client, &file);
+    assert_eq!(codes(&initial.diagnostics), vec!["RIDL-157"]);
+
+    let broken = path_to_uri("/ridl-lsp-nowhere/broken.ridl").expect("an absolute synthetic path");
+    did_open(&client, &broken, "package other\ntype T: Nope\n");
+    let after = next_publish(&client, &file);
+    assert_eq!(codes(&after.diagnostics), vec!["RIDL-157"]);
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+#[test]
+fn a_blocking_workspace_error_does_not_silence_the_size_pass_of_an_overlay() {
+    let dir = TempDir::new("size-isolated-overlay");
+    let (_manifest, file) = write_size_unit(&dir, "", "package demo\ntype T: Nope\n");
+    let (client, server) = start(uri_of(dir.path()));
+    let _ = next_publish(&client, &file);
+
+    let sized = path_to_uri("/ridl-lsp-nowhere/sized.ridl").expect("an absolute synthetic path");
+    did_open(&client, &sized, &size_source(1000));
+    let opened = next_publish(&client, &sized);
+    assert_eq!(codes(&opened.diagnostics), vec!["RIDL-157"]);
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+#[test]
+fn a_manifest_error_skips_the_size_pass_of_the_packages_beneath_it() {
+    let dir = TempDir::new("size-manifest-error");
+    let (manifest, file) = write_size_unit(
+        &dir,
+        "[limits.interaction]\n\"I.s\" = \"big\"\n",
+        &size_source(1000),
+    );
+    let (client, server) = start(uri_of(dir.path()));
+    let table = next_publish(&client, &manifest);
+    assert_eq!(codes(&table.diagnostics), vec!["MANI-015"]);
+
+    // An edit of the source republishes it; the manifest error still skips
+    // the package, as `ridl check` does.
+    did_open(&client, &file, &size_source(1001));
+    let source = next_publish(&client, &file);
+    assert!(
+        size_diagnostics(&source.diagnostics).is_empty(),
+        "{:?}",
+        source.diagnostics,
+    );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}

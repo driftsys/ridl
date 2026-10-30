@@ -201,13 +201,12 @@ in the [CLI reference](cli-reference.md) and in
 [ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md).
 
 The three codes are raised by `ridl check`, `ridl build` and the language
-server, by one pass that sizes every interaction after lowering. The pass skips a package that has an
-error that stops `ridl build` writing artifacts, or that references a package
-that has one, and still reports on the other packages of the workspace. An
-RSDL-7xx error does not count, because a build still writes code after it. An
-error in a manifest skips the packages beneath that manifest, except in the
-language server, which does not read the manifest findings of the load into the
-pass. The language server sizes the workspace under the encodings and the
+server, by one pass that sizes every interaction after lowering. The pass skips
+a package that has an error that stops `ridl build` writing artifacts, or that
+references a package that has one, and still reports on the other packages of
+the workspace. An RSDL-7xx error does not count, because a build still writes
+code after it. An error in a manifest skips the packages beneath that manifest.
+The language server sizes the workspace under the encodings and the
 `[limits]` tables that it loaded, and a file open outside the workspace under
 FlatBuffers and the default ceilings. It publishes the diagnostics of a
 `[limits]` table (RIDL-152 and MANI-022) for the `ridl.toml` that holds it, and
