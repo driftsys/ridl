@@ -1111,6 +1111,60 @@ fn the_codec_layout_matches_the_model_projection() {
     );
 }
 
+/// The ros2 corpus under `[Podbuf]`: every package that declares a
+/// `RosString`, a string with no finite length bound, is refused, and the
+/// refusal names the declaration and says that it has no finite podbuf bound.
+/// `builtininterfaces`, which declares no string, generates. The refusal
+/// holds even when no struct uses the named scalar, because the codec carries
+/// a named scalar as a payload root.
+#[test]
+fn the_ros2_corpus_is_refused_under_podbuf() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let std_ir = ridlc::std_ir();
+    let packages = podbuf::compile_workspace(&root.join("evals/corpus/ros2"))
+        .expect("the ros2 corpus compiles");
+    assert!(packages.len() > 1, "the ros2 corpus holds several packages");
+    let mut refused: BTreeMap<String, String> = BTreeMap::new();
+    let mut generated: Vec<String> = Vec::new();
+    for (at, package) in packages.iter().enumerate() {
+        let mut others: Vec<&v2::Package> = packages
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != at)
+            .map(|(_, other)| other)
+            .collect();
+        others.push(&std_ir);
+        match ridl_backend_rust::generate_pipeline(
+            package,
+            &[ridl_backend_rust::WireEncoding::Podbuf],
+            false,
+            &others,
+        ) {
+            Ok(_) => generated.push(package.name.clone()),
+            Err(error) => {
+                refused.insert(package.name.clone(), error.message);
+            }
+        }
+    }
+    assert_eq!(generated, ["builtininterfaces"]);
+    for name in ["stdmsgs", "stdsrvs"] {
+        let message = refused
+            .get(name)
+            .unwrap_or_else(|| panic!("`{name}` is refused under podbuf"));
+        assert!(
+            message.contains("has no finite podbuf bound"),
+            "`{name}` is refused for a missing bound, got: {message}"
+        );
+    }
+    // `stdsrvs` declares `RosString` and no struct that reaches it, so the
+    // refusal comes from the payload root of the named scalar itself.
+    assert!(
+        refused["stdsrvs"].starts_with("`stdsrvs.RosString` has no finite podbuf bound"),
+        "`stdsrvs`'s refusal names `RosString`, got: {}",
+        refused["stdsrvs"]
+    );
+}
+
 // ---------------------------------------------------------------------------
 // The target with no standard library
 // ---------------------------------------------------------------------------
