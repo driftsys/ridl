@@ -29,10 +29,15 @@
 //!   `Handler::serve`, which starts presentation at the members listed, and
 //!   presents every call, because the generated `dispatch` never calls
 //!   `serve`.
-//! - `a_provisioned_fixed_reads_back_and_an_unprovisioned_one_reports_it` —
-//!   `FixedReader`. Provisioning a `fixed` is `Loopback::provision_fixed`, a
-//!   runtime's own API with no port, and `Contract::UnknownInteraction` for an
-//!   unprovisioned one is this runtime's answer with no member table.
+//! - `a_provisioned_fixed_reads_back_and_an_unprovisioned_one_reports_it`
+//!   and `a_fixed_longer_than_its_limit_is_refused_and_reads_as_unprovisioned`
+//!   — `FixedReader`. Provisioning a `fixed` is `Loopback::provision_fixed`,
+//!   a runtime's own API with no port, and `Contract::UnknownInteraction` for
+//!   an unprovisioned one is this runtime's answer with no member table.
+//! - The tests under "Member limits" — a runtime's own API beyond the
+//!   factory: `Loopback::set_limit`, how this runtime is told the limit a
+//!   `[limits.interaction]` entry gives a member. The suite pins the default
+//!   ceiling of each kind, which a runtime with no descriptor applies.
 //! - `every_split_handle_carries_the_catalog` — a runtime's own API beyond
 //!   the factory: `Loopback::split`. The suite checks the catalog on the
 //!   aggregate and on the handles its factory makes.
@@ -162,7 +167,8 @@ use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Ordinal};
 use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{
     Attached, Caller, ClaimId, Clock, EventSink, EventSource, FixedReader, Handler, Interest,
-    ReadError, SendError, SettleError, SignalReader, SignalWriter, Wakeable,
+    RaiseError, ReadError, SendError, SettleError, SignalReader, SignalWriter, Wakeable,
+    WriteError,
 };
 use ridl_rt::sample::{Duration, Freshness, Provenance, Timestamp};
 
@@ -318,7 +324,8 @@ fn a_provisioned_fixed_reads_back_and_an_unprovisioned_one_reports_it() {
         "nothing was provisioned at that ordinal"
     );
 
-    rt.provision_fixed(IFACE, ORD, &[1, 2]);
+    rt.provision_fixed(IFACE, ORD, &[1, 2])
+        .expect("the loopback stores the fixed");
     assert_eq!(rt.read_fixed(IFACE, ORD, &mut out).expect("read"), 2);
     assert_eq!(&out[..2], &[1, 2]);
 
@@ -326,6 +333,179 @@ fn a_provisioned_fixed_reads_back_and_an_unprovisioned_one_reports_it() {
     assert_eq!(
         rt.read_fixed(IFACE, ORD, &mut short),
         Err(ReadError::Short { needed: 2 })
+    );
+}
+
+#[test]
+fn a_fixed_longer_than_its_limit_is_refused_and_reads_as_unprovisioned() {
+    let mut rt = runtime();
+    assert_eq!(
+        rt.provision_fixed(IFACE, ORD, &[0u8; 65_281]),
+        Err(WriteError::TooLarge { cap: 65_280 }),
+        "one byte above the default ceiling of a fixed is refused"
+    );
+    let mut out = [0u8; 8];
+    assert_eq!(
+        rt.read_fixed(IFACE, ORD, &mut out),
+        Err(ReadError::Contract(Contract::UnknownInteraction)),
+        "the refused value was not stored, so the read is answered as for an \
+         unprovisioned fixed"
+    );
+
+    let mut large = vec![0u8; 65_280];
+    rt.provision_fixed(IFACE, ORD, &large)
+        .expect("a value of exactly the default ceiling is stored");
+    assert_eq!(rt.read_fixed(IFACE, ORD, &mut large).expect("read"), 65_280);
+
+    rt.set_limit(IFACE, ORD, 2);
+    assert_eq!(
+        rt.provision_fixed(IFACE, ORD, &[1, 2, 3]),
+        Err(WriteError::TooLarge { cap: 2 }),
+        "a limit given to the loopback lowers the cap of a fixed"
+    );
+    assert_eq!(
+        rt.read_fixed(IFACE, ORD, &mut large).expect("read"),
+        65_280,
+        "a refused provision leaves the stored value as it was"
+    );
+    rt.provision_fixed(IFACE, ORD, &[1, 2])
+        .expect("a value within the given limit is stored");
+    assert_eq!(rt.read_fixed(IFACE, ORD, &mut out).expect("read"), 2);
+}
+
+// ---------------------------------------------------------------------------
+// Member limits: `Loopback::set_limit` in place of the kind's default
+// ceiling, applied by every sending port and by `provision_fixed`.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn a_limit_given_to_the_loopback_lowers_and_raises_a_signals_cap() {
+    let mut rt = runtime();
+    rt.set_limit(IFACE, ORD, 2);
+    assert_eq!(
+        rt.set(IFACE, ORD, &[1, 2, 3]),
+        Err(WriteError::TooLarge { cap: 2 })
+    );
+    rt.set(IFACE, ORD, &[1, 2]).expect("within the given limit");
+    assert_eq!(
+        rt.set(IFACE, OTHER, &[0u8; 3_841]),
+        Err(WriteError::TooLarge { cap: 3_840 }),
+        "another member keeps the default ceiling"
+    );
+
+    rt.set_limit(IFACE, ORD, 16_128);
+    rt.set(IFACE, ORD, &[0u8; 16_128])
+        .expect("a limit above the default ceiling raises the cap");
+    assert_eq!(
+        rt.set(IFACE, ORD, &[0u8; 16_129]),
+        Err(WriteError::TooLarge { cap: 16_128 })
+    );
+}
+
+#[test]
+fn a_limit_given_to_the_loopback_lowers_and_raises_an_events_cap() {
+    let mut rt = runtime();
+    rt.subscribe(IFACE, &[ORD]).expect("subscribe");
+    rt.set_limit(IFACE, ORD, 2);
+    assert_eq!(
+        rt.raise(IFACE, ORD, &[1, 2, 3], None),
+        Err(RaiseError::TooLarge { cap: 2 })
+    );
+    rt.raise(IFACE, ORD, &[1, 2], None)
+        .expect("within the given limit");
+
+    rt.set_limit(IFACE, ORD, 16_128);
+    rt.raise(IFACE, ORD, &[0u8; 16_128], None)
+        .expect("a limit above the default ceiling raises the cap");
+    assert_eq!(
+        rt.raise(IFACE, ORD, &[0u8; 16_129], None),
+        Err(RaiseError::TooLarge { cap: 16_128 })
+    );
+
+    let mut out = vec![0u8; 16_384];
+    let first = rt
+        .next(&mut out)
+        .expect("next")
+        .expect("the first occurrence");
+    assert_eq!((first.len, first.envelope.seq), (2, 1));
+    let second = rt
+        .next(&mut out)
+        .expect("next")
+        .expect("the second occurrence");
+    assert_eq!(
+        (second.len, second.envelope.seq),
+        (16_128, 2),
+        "a refused occurrence draws no sequence number"
+    );
+    assert!(rt.next(&mut out).expect("next").is_none());
+}
+
+#[test]
+fn a_limit_given_to_the_loopback_lowers_and_raises_a_calls_cap() {
+    let mut rt = runtime();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.set_limit(IFACE, ORD, 2);
+    assert_eq!(
+        rt.command(IFACE, ORD, &[1, 2, 3], None),
+        Err(SendError::TooLarge { cap: 2 })
+    );
+    assert_eq!(
+        rt.query(IFACE, ORD, &[1, 2, 3], None),
+        Err(SendError::TooLarge { cap: 2 })
+    );
+    let c = rt
+        .query(IFACE, ORD, &[1, 2], None)
+        .expect("within the given limit");
+    let mut buf = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the accepted call");
+    assert_eq!(
+        claim.envelope.seq, 1,
+        "a refused call draws no sequence number"
+    );
+    assert_eq!(
+        rt.settle(claim.id, Ok(&[1, 2, 3])),
+        Err(SettleError::TooLarge { cap: 2 }),
+        "the reply is held to the same limit"
+    );
+    rt.settle(claim.id, Ok(&[1, 2]))
+        .expect("within the given limit");
+    assert_eq!(rt.reply(c, &mut buf).expect("reply"), Some(Ok(2)));
+    rt.forget(c);
+
+    rt.set_limit(IFACE, ORD, 65_280);
+    let c = rt
+        .query(IFACE, ORD, &[0u8; 65_280], None)
+        .expect("a limit above the default ceiling raises the cap");
+    assert_eq!(
+        rt.query(IFACE, ORD, &[0u8; 65_281], None),
+        Err(SendError::TooLarge { cap: 65_280 })
+    );
+    let mut large = vec![0u8; 65_280];
+    let claim = rt
+        .next_claim(&mut large)
+        .expect("next_claim")
+        .expect("the accepted call");
+    rt.settle(claim.id, Ok(&large))
+        .expect("a reply at the raised limit is recorded");
+    assert_eq!(rt.reply(c, &mut large).expect("reply"), Some(Ok(65_280)));
+}
+
+#[test]
+fn a_limit_is_the_stores_so_an_attached_aggregate_applies_it() {
+    let mut rt = runtime();
+    rt.set_limit(IFACE, ORD, 2);
+    let mut attached = rt.attach();
+    assert_eq!(
+        attached.set(IFACE, ORD, &[1, 2, 3]),
+        Err(WriteError::TooLarge { cap: 2 })
+    );
+    let mut writer = rt.writer();
+    assert_eq!(
+        writer.set(IFACE, ORD, &[1, 2, 3]),
+        Err(WriteError::TooLarge { cap: 2 })
     );
 }
 

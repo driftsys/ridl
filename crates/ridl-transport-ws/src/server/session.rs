@@ -1638,6 +1638,10 @@ mod tests {
     fn a_signal_larger_than_the_first_buffer_is_read_again() {
         let (mut s, mut p, _n) = scanning();
         open(&mut s);
+        // The loopback refuses a signal above its member's limit, so the
+        // member is given one that admits the value; the session's own
+        // limit is what this test observes.
+        p.set_limit(SIGNAL.iface, SIGNAL.ord, 4096);
         let value = vec![0xAB; 4096];
         commit(&mut p, &value);
         let (_, out) = send(&mut s, &msg(Frame::Subscribe(SIGNAL)));
@@ -2297,7 +2301,8 @@ mod tests {
     fn a_read_of_a_fixed_publishes_kind_fixed_seq_0_live() {
         let (mut s, mut p, _n) = scanning();
         open(&mut s);
-        p.provision_fixed(IFACE, Ordinal(5), &[0xF1, 0xF2]);
+        p.provision_fixed(IFACE, Ordinal(5), &[0xF1, 0xF2])
+            .expect("the loopback stores the fixed");
         p.advance(Duration(11));
         let (step, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(step, Step::Continue);
@@ -2321,7 +2326,8 @@ mod tests {
     fn a_read_of_a_fixed_through_polling_is_unknown_interaction() {
         let (mut s, mut p, _n) = polling();
         open(&mut s);
-        p.provision_fixed(IFACE, Ordinal(5), &[1]);
+        p.provision_fixed(IFACE, Ordinal(5), &[1])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(out.len(), 1);
         assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
@@ -2331,7 +2337,8 @@ mod tests {
     fn a_subscribe_of_a_fixed_is_unknown_interaction() {
         let (mut s, mut p, _n) = scanning();
         open(&mut s);
-        p.provision_fixed(IFACE, Ordinal(5), &[1]);
+        p.provision_fixed(IFACE, Ordinal(5), &[1])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Subscribe(FIXED)));
         assert_eq!(out.len(), 1);
         assert_eq!(decode(&out[0]).unwrap(), unknown(FIXED));
@@ -2455,6 +2462,9 @@ mod tests {
         let (mut s, mut p, _n) = scanning();
         open(&mut s);
         send(&mut s, &msg(Frame::Subscribe(EVENT)));
+        // As in `a_signal_larger_than_the_first_buffer_is_read_again`: the
+        // member is given a limit that admits the occurrence.
+        p.set_limit(EVENT.iface, EVENT.ord, 4096);
         let value = vec![0xCD; 4096];
         raise(&mut p, EVENT, &value);
         let (_, out) = tick(&mut s);
@@ -3144,14 +3154,16 @@ mod tests {
         let (mut s, mut p, notes) = limited();
         open(&mut s);
         grow_by_occurrences(&mut s, &mut p);
-        p.provision_fixed(IFACE, Ordinal(5), &vec![3; signal_cap() + 1]);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![3; signal_cap() + 1])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert!(out.is_empty());
         assert!(notes.lock().unwrap().contains(&Note::ValueTooLarge {
             target: FIXED,
             needed: signal_cap() + 1
         }));
-        p.provision_fixed(IFACE, Ordinal(5), &vec![4; signal_cap()]);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![4; signal_cap()])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].len(), LIMIT);
@@ -3205,7 +3217,13 @@ mod tests {
     fn roomy() -> (Session<Scanning<Loopback>>, Loopback, Notes) {
         let notes = Notes::default();
         let rt = Loopback::new(CATALOG);
-        let p = rt.attach();
+        let mut p = rt.attach();
+        // The loopback refuses a signal or an occurrence above its member's
+        // limit, which is below `ROOMY_LIMIT`; the members are given one
+        // that admits a value at the cap and one byte above it, so the
+        // session's limit is what these tests observe.
+        p.set_limit(SIGNAL.iface, SIGNAL.ord, ROOMY_LIMIT);
+        p.set_limit(EVENT.iface, EVENT.ord, ROOMY_LIMIT);
         let config = config(&notes)
             .with_max_message_bytes(ROOMY_LIMIT)
             .expect("above the minimum");
@@ -3243,11 +3261,13 @@ mod tests {
         let (mut s, mut p, notes) = roomy();
         open(&mut s);
         let cap = roomy_cap(publish(FIXED, 0, 0, PublishState::Live(&[])));
-        p.provision_fixed(IFACE, Ordinal(5), &vec![1; cap]);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![1; cap])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].len(), ROOMY_LIMIT);
-        p.provision_fixed(IFACE, Ordinal(5), &vec![2; cap + 1]);
+        p.provision_fixed(IFACE, Ordinal(5), &vec![2; cap + 1])
+            .expect("the loopback stores the fixed");
         let (_, out) = send(&mut s, &msg(Frame::Read(FIXED)));
         assert!(out.is_empty());
         assert_eq!(

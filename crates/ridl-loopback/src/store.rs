@@ -34,16 +34,24 @@
 //! wakers of a closing handle are dropped after the lock is released, because
 //! the last reference to one may own another handle whose `Drop` takes the
 //! lock.
+//!
+//! The member limits live here too, because every handle of the runtime
+//! applies the same limit to one member. A limit given through
+//! [`Loopback::set_limit`](crate::Loopback::set_limit) is kept by member;
+//! a member with none has the default ceiling of its kind, the kind being
+//! the port's (ADR-0030 decision 16). Each sending operation compares the
+//! payload's length with the member's limit and refuses a longer one before
+//! it changes anything.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::task::Waker;
 
-use ridl_rt::contract::{InterfaceNo, Ordinal};
+use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal};
 use ridl_rt::correlate::{Forgotten, Settled, Table, Waiters};
 use ridl_rt::error::{CallError, Transport};
 use ridl_rt::port::{
-    Changed, Claim, ClaimId, Correlation, Interest, RawOccurrence, RawSample, ReadError, SendError,
-    SettleError, Watermark,
+    Changed, Claim, ClaimId, Correlation, Interest, RaiseError, RawOccurrence, RawSample,
+    ReadError, SendError, SettleError, Watermark, WriteError,
 };
 use ridl_rt::sample::{Cause, Envelope, Freshness, Provenance, Timestamp};
 use ridl_rt::trace::TraceContext;
@@ -134,6 +142,16 @@ pub(crate) enum CallKind {
     Query,
 }
 
+impl CallKind {
+    /// The interaction kind of the call, which names its default ceiling.
+    fn kind(self) -> Kind {
+        match self {
+            CallKind::Command => Kind::Command,
+            CallKind::Query => Kind::Query,
+        }
+    }
+}
+
 /// What the loopback keeps for one sent call, by its slot in the table, from
 /// the caller's send until the table reclaims the slot. The outcome status,
 /// whether the call was forgotten, and its `Interest::Outcome` waker are the
@@ -185,6 +203,9 @@ pub(crate) struct Store {
     signals: BTreeMap<Key, SignalEntry>,
     generations: BTreeMap<InterfaceNo, u64>,
     fixed: BTreeMap<Key, Vec<u8>>,
+    /// The limit of each member `set_limit` was given, in bytes. A member
+    /// with no entry has the default ceiling of its kind.
+    limits: BTreeMap<Key, usize>,
     sources: BTreeMap<usize, SourceState>,
     next_source_id: usize,
     table: Calls,
@@ -217,6 +238,7 @@ impl Store {
             signals: BTreeMap::new(),
             generations: BTreeMap::new(),
             fixed: BTreeMap::new(),
+            limits: BTreeMap::new(),
             sources: BTreeMap::new(),
             next_source_id: 0,
             table: Calls::new(None),
@@ -230,6 +252,32 @@ impl Store {
             handlers: BTreeMap::new(),
             next_handler_id: 0,
             fail_next_settle: false,
+        }
+    }
+
+    // -- the member limits -------------------------------------------------
+
+    pub(crate) fn set_limit(&mut self, key: Key, limit: usize) {
+        self.limits.insert(key, limit);
+    }
+
+    /// The limit of member `key` whose port is of `kind`: the one `set_limit`
+    /// gave it, else the default ceiling of `kind`.
+    pub(crate) fn limit(&self, key: Key, kind: Kind) -> usize {
+        self.limits
+            .get(&key)
+            .copied()
+            .unwrap_or(default_ceiling(kind))
+    }
+
+    /// `Ok` when a payload of `len` bytes is within the limit of member
+    /// `key`, else `Err` with that limit.
+    pub(crate) fn admit(&self, key: Key, kind: Kind, len: usize) -> Result<(), usize> {
+        let cap = self.limit(key, kind);
+        if len > cap {
+            Err(cap)
+        } else {
+            Ok(())
         }
     }
 
@@ -394,8 +442,18 @@ impl Store {
 
     // -- `fixed` -----------------------------------------------------------
 
-    pub(crate) fn provision_fixed(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) {
+    /// Stores the value of a `fixed`, or refuses one longer than the member's
+    /// limit and stores nothing: a value stored before stays as it was.
+    pub(crate) fn provision_fixed(
+        &mut self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        bytes: &[u8],
+    ) -> Result<(), WriteError> {
+        self.admit((iface, ord), Kind::Fixed, bytes.len())
+            .map_err(|cap| WriteError::TooLarge { cap })?;
         self.fixed.insert((iface, ord), bytes.to_vec());
+        Ok(())
     }
 
     pub(crate) fn read_fixed(
@@ -466,15 +524,22 @@ impl Store {
     ///
     /// Each source it queues the occurrence for has its `Event` waiter woken,
     /// whatever interface that waiter was registered under.
+    ///
+    /// An occurrence longer than the event's limit is refused with that
+    /// limit and queued for no source; `seq` is read only when the
+    /// occurrence is admitted, so a refusal draws no sequence number.
     pub(crate) fn raise(
         &mut self,
         iface: InterfaceNo,
         ord: Ordinal,
         bytes: &[u8],
-        seq: u64,
+        seq: impl FnOnce() -> u64,
         trace: Option<TraceContext>,
         wake: &mut Vec<Waker>,
-    ) {
+    ) -> Result<(), RaiseError> {
+        self.admit((iface, ord), Kind::Event, bytes.len())
+            .map_err(|cap| RaiseError::TooLarge { cap })?;
+        let seq = seq();
         let envelope = Envelope {
             stamp: self.now,
             seq,
@@ -491,6 +556,7 @@ impl Store {
                 wake.extend(state.waiters.take(Interest::Event(iface)));
             }
         }
+        Ok(())
     }
 
     /// Stores a source's `Interest::Event` waker, or wakes it at once when an
@@ -545,6 +611,9 @@ impl Store {
     /// or answers `SendError::Busy` when every slot is taken. Every handler
     /// that serves the member has its `Claim` waiter woken, whatever
     /// interface that waiter was registered under.
+    ///
+    /// Arguments longer than the call's limit are refused with that limit
+    /// before a slot is taken, so nothing is sent and nothing is woken.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn send(
         &mut self,
@@ -556,6 +625,8 @@ impl Store {
         trace: Option<TraceContext>,
         wake: &mut Vec<Waker>,
     ) -> Result<Correlation, SendError> {
+        self.admit((iface, ord), kind.kind(), args.len())
+            .map_err(|cap| SendError::TooLarge { cap })?;
         // No budget, so the reservation is not read.
         let c = self.table.insert(0).ok_or(SendError::Busy)?;
         let sent = self.next_sent;
@@ -996,6 +1067,10 @@ impl Store {
 
     /// Records a claim's outcome.
     ///
+    /// A reply longer than the call's limit is refused with that limit before
+    /// the injected failure is consumed: no outcome is recorded, the claim
+    /// stays settleable, and the fault is not spent on it.
+    ///
     /// The claim is looked up before the injected failure is consumed, so
     /// `fail_next_settle` fails the next settlement of a claim that exists
     /// rather than being spent on one that does not. An injected failure
@@ -1018,6 +1093,11 @@ impl Store {
             Some(owner) if owner.handler == handler => (owner.call, owner.taken),
             _ => return Err(SettleError::UnknownClaim),
         };
+        if let Ok(reply) = outcome {
+            let entry = self.entry(c);
+            self.admit((entry.iface, entry.ord), entry.kind.kind(), reply.len())
+                .map_err(|cap| SettleError::TooLarge { cap })?;
+        }
         if self.fail_next_settle {
             self.fail_next_settle = false;
             return Err(SettleError::TooLarge { cap: 0 });

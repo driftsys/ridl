@@ -72,11 +72,16 @@
 //! port error's `Contract` variant except
 //! [`FixedReader::read_fixed`]'s, and
 //! `Freshness::Fresh` or `Freshness::Stale`. Nothing detaches, because every
-//! handle holds the store alive, so `Detached` never appears either. The one
-//! bound is the call table's [`Loopback::SLOTS`]: a send with every slot
-//! taken answers `SendError::Busy`. Nothing else is bounded, so `TooLarge`
-//! appears only from [`Loopback::fail_next_settle`], and `Transport::Busy`
-//! reaches a caller only when a provider settles a call with it.
+//! handle holds the store alive, so `Detached` never appears either. Two
+//! things are bounded. The call table's [`Loopback::SLOTS`]: a send with
+//! every slot taken answers `SendError::Busy`. And the size of a payload: a
+//! sending port refuses a payload longer than its member's limit with
+//! `TooLarge { cap }` — the limit [`Loopback::set_limit`] gave the member,
+//! else the default ceiling of the port's kind (ADR-0030 decision 16) — and
+//! [`Loopback::provision_fixed`] refuses a `fixed` the same way. `TooLarge`
+//! comes from that limit, and from [`Loopback::fail_next_settle`], which
+//! reports it with `cap: 0`. `Transport::Busy` reaches a caller only when a
+//! provider settles a call with it.
 //!
 //! # Waking
 //!
@@ -348,11 +353,45 @@ impl<E: Encoding> Loopback<E> {
     /// Supplies the value of a `fixed` (ridl §8), which is provisioned into a
     /// runtime rather than published by application code.
     ///
+    /// A value longer than the member's limit — the one [`set_limit`] gave
+    /// it, else the default ceiling of a `fixed`, 65,280 bytes — is refused
+    /// with `WriteError::TooLarge { cap }`, `cap` being that limit, and
+    /// nothing is stored: a value provisioned before stays as it was.
+    ///
     /// Until a `fixed` is provisioned, reading it answers
     /// `ReadError::Contract(Contract::UnknownInteraction)`: the loopback holds
-    /// no value and, having no member table, cannot say anything narrower.
-    pub fn provision_fixed(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) {
-        lock(&self.shared).provision_fixed(iface, ord, bytes);
+    /// no value and, having no member table, cannot say anything narrower. A
+    /// `fixed` whose only provision was refused reads the same way, so a
+    /// consumer's read of it is answered rather than left waiting.
+    ///
+    /// [`set_limit`]: Loopback::set_limit
+    pub fn provision_fixed(
+        &mut self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        bytes: &[u8],
+    ) -> Result<(), WriteError> {
+        lock(&self.shared).provision_fixed(iface, ord, bytes)
+    }
+
+    /// Gives member `ord` of interface `iface` the limit `limit`, in bytes
+    /// of encoded payload, in place of the default ceiling of its kind.
+    ///
+    /// The loopback holds no catalog descriptor, so this is how a program
+    /// tells it the limit that a `[limits.interaction]` entry gives a member
+    /// (ADR-0030 decision 12). The limit is the store's: every handle and
+    /// every attached aggregate applies it, and a later call replaces it. A
+    /// member with no limit given has the default ceiling of its kind,
+    /// read from the port the payload is sent through
+    /// ([`ridl_rt::contract::default_ceiling`]): 3,840 bytes for a signal
+    /// and an event, 16,128 for a command and a query, 65,280 for a fixed.
+    ///
+    /// A sending port refuses a payload longer than the member's limit with
+    /// its `TooLarge { cap }`, `cap` being that limit, and nothing is staged,
+    /// raised, sent or recorded. The receiving side of this runtime reads
+    /// only what its sending side accepted, so it adds no check.
+    pub fn set_limit(&mut self, iface: InterfaceNo, ord: Ordinal, limit: usize) {
+        lock(&self.shared).set_limit((iface, ord), limit);
     }
 
     /// Makes the next `Handler::settle` on this runtime fail with

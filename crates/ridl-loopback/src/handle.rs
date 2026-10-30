@@ -55,7 +55,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::Waker;
 
-use ridl_rt::contract::{CatalogRef, InterfaceNo, Ordinal};
+use ridl_rt::contract::{CatalogRef, InterfaceNo, Kind, Ordinal};
 use ridl_rt::encoding::{Encoding, FlatBuffers};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
@@ -211,6 +211,8 @@ impl<E: Encoding> CoherentSignals for ReaderHandle<E> {
 /// The staged changes and the per channel sequence counters live on the
 /// handle, not in the store: staging is one provider's private state until its
 /// `commit`, and a sequence number is assigned by the sender (ridl §3.1).
+/// `set` reads the store once, for the signal's limit: a value longer than
+/// it is refused with `WriteError::TooLarge { cap }` and not staged.
 pub struct WriterHandle<E: Encoding = FlatBuffers> {
     shared: Shared,
     catalog: CatalogRef,
@@ -243,6 +245,9 @@ impl<E: Encoding> Encoded for WriterHandle<E> {
 
 impl<E: Encoding> SignalWriter for WriterHandle<E> {
     fn set(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), WriteError> {
+        lock(&self.shared)
+            .admit((iface, ord), Kind::Signal, bytes.len())
+            .map_err(|cap| WriteError::TooLarge { cap })?;
         self.staged
             .insert((iface, ord), Staged::Set(bytes.to_vec()));
         Ok(())
@@ -360,7 +365,9 @@ impl<E: Encoding> Wakeable for SourceHandle<E> {
 /// channel and has the sender assign it. One counter for the whole handle
 /// would make a consumer subscribed to some of this sink's events see a gap in
 /// `seq` where nothing was lost, and `EventSource::next` states that a gap is
-/// a loss.
+/// a loss. An occurrence longer than the event's limit is refused with
+/// `RaiseError::TooLarge { cap }`, raised to no source, and draws no
+/// sequence number.
 pub struct SinkHandle<E: Encoding = FlatBuffers> {
     shared: Shared,
     catalog: CatalogRef,
@@ -376,12 +383,6 @@ impl<E: Encoding> SinkHandle<E> {
             seqs: BTreeMap::new(),
             encoding: PhantomData,
         }
-    }
-
-    fn take_seq(&mut self, key: Key) -> u64 {
-        let counter = self.seqs.entry(key).or_insert(0);
-        *counter += 1;
-        *counter
     }
 }
 
@@ -403,11 +404,15 @@ impl<E: Encoding> EventSink for SinkHandle<E> {
         bytes: &[u8],
         trace: Option<TraceContext>,
     ) -> Result<(), RaiseError> {
-        let seq = self.take_seq((iface, ord));
+        let seqs = &mut self.seqs;
         locked(&self.shared, |store, wake| {
-            store.raise(iface, ord, bytes, seq, trace, wake);
-        });
-        Ok(())
+            let seq = || {
+                let counter = seqs.entry((iface, ord)).or_insert(0);
+                *counter += 1;
+                *counter
+            };
+            store.raise(iface, ord, bytes, seq, trace, wake)
+        })
     }
 }
 
@@ -426,7 +431,9 @@ impl<E: Encoding> Wakeable for SinkHandle<E> {
 /// One counter for the whole handle, not one per channel: on a call the scope
 /// is the caller instance (ADR-0021 decision 5, and driftsys/ridl#308's own
 /// report), so every call this caller sends draws from one sequence. That is
-/// what keeps two callers on one provider from colliding.
+/// what keeps two callers on one provider from colliding. Arguments longer
+/// than the member's limit are refused with `SendError::TooLarge { cap }`,
+/// and, as with `Busy`, nothing is sent and no sequence number is drawn.
 ///
 /// The call table is the runtime's, shared by every caller: with
 /// [`Loopback::SLOTS`](crate::Loopback::SLOTS) calls holding a slot, a send

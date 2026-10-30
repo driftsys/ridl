@@ -626,6 +626,9 @@ fn a_client_that_stops_reading_ends_the_session_at_the_liveness_timeout() {
     let (server, client) = pair();
     let rt = Loopback::new(CATALOG);
     let mut provider = rt.attach();
+    // The loopback refuses a signal above its member's limit, so the member
+    // is given one that admits the values the committer publishes.
+    provider.set_limit(IFACE, Ordinal(1), 60 * 1024);
     let handle = spawn(server, Scanning(rt), config);
     let mut ws = connect(client, "ridl-ws-v1").unwrap();
     attach(&mut ws);

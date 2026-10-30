@@ -200,9 +200,10 @@ Four ways to obtain handles, each with one purpose:
   client's port for as long as they live, so one aggregate serves one face at a
   time (driftsys/ridl#488).
 
-`advance`, `provision_fixed` and `fail_next_settle` are the aggregate's, not any
-role handle's: each acts on the runtime as a whole rather than through a port,
-so it has the same effect whichever aggregate of the store it is called on.
+`advance`, `provision_fixed`, `set_limit` and `fail_next_settle` are the
+aggregate's, not any role handle's: each acts on the runtime as a whole rather
+than through a port, so it has the same effect whichever aggregate of the store
+it is called on.
 
 What an attached aggregate shares follows from the next section's rule: what is
 in the store is shared, and what is on a handle is not carried over. It starts
@@ -699,6 +700,39 @@ interface numbers, ordinals and bytes and names no payload type, so the runtime
 has no `Payload` implementation to call. Giving it one would put the generated
 types below the port, which is the layering ADR-0020 decision 6 fixes.
 
+## Member limits
+
+**A sending port refuses a payload longer than its member's limit, with the
+limit** ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision
+19). `SignalWriter::set` answers `WriteError::TooLarge { cap }`,
+`EventSink::raise` `RaiseError::TooLarge { cap }`, `Caller::command` and
+`Caller::query` `SendError::TooLarge { cap }` for the arguments, and
+`Handler::settle` `SettleError::TooLarge { cap }` for the reply; `cap` is the
+member's limit. A refused value is not staged, a refused occurrence reaches no
+source and draws no sequence number, a refused call takes no slot, wakes no
+handler and draws no sequence number, and a refused reply records no outcome and
+leaves the claim settleable. A `fixed` is provisioned, not sent through a port,
+so `Loopback::provision_fixed` makes the same refusal: it returns
+`Result<(), WriteError>`, stores nothing on `TooLarge`, and a value provisioned
+before stays as it was. A `fixed` whose only provision was refused reads as an
+unprovisioned one, `ReadError::Contract(Contract::UnknownInteraction)`, so a
+consumer's read of it is answered rather than left waiting.
+
+The limit is the one `Loopback::set_limit(iface, ord, limit)` gave the member,
+else the default ceiling of the port's kind
+(`ridl_rt::contract::default_ceiling`: 3,840 bytes for a signal and an event,
+16,128 for a command and a query, 65,280 for a fixed). The loopback holds no
+descriptor, so `set_limit` is how a program tells it the limit a
+`[limits.interaction]` entry gives a member; the table lives in the store, so
+every handle and every attached aggregate applies it. The comparison is made
+under the lock, on the sending path, before anything changes: `set` takes the
+lock once for it, where before it took none, and `raise` draws the occurrence's
+sequence number inside the same critical section, after the check.
+
+The receiving side adds no check. The loopback is not a binding: its reader,
+source, handler and caller read only what its sending side accepted, so a second
+comparison on receive would never refuse anything.
+
 ## What it cannot report
 
 The loopback holds no catalog descriptor. driftsys/ridl#381 writes the
@@ -723,12 +757,12 @@ there is no member table, and therefore:
 
 Three more, for reasons other than the descriptor: nothing detaches, because
 every handle holds the store alive, so `Detached` never appears; nothing but the
-call table is bounded, so the one `Busy` this runtime originates is
-`SendError::Busy` with every slot taken, and it originates no `TooLarge` —
-`TooLarge` appears only from the one injected failure below, and
-`Transport::Busy`, a provider's refusal at admission, reaches a caller only when
-a provider settles a call with it
-(`a_providers_busy_settlement_reaches_the_caller`); and `Attached::catalog`
+call table and the size of a payload is bounded, so the one `Busy` this runtime
+originates is `SendError::Busy` with every slot taken, and `TooLarge` comes from
+a member's limit ("Member limits" above) and from the one injected failure
+below, which reports it with `cap: 0`; and `Transport::Busy`, a provider's
+refusal at admission, reaches a caller only when a provider settles a call with
+it (`a_providers_busy_settlement_reaches_the_caller`); and `Attached::catalog`
 returns the `CatalogRef` the runtime was built with, unexamined. ADR-0021
 decision 3 places the check of it against an interface's own `CATALOG` in the
 generated face's constructor, once, when the face is built; since

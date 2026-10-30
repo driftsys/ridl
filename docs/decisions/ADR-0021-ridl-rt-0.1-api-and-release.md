@@ -202,6 +202,20 @@ item 3). Each decision carries the amendment in place; the as-built records are
 [the `ridl-rt` design record](../design/ridl-rt.md) and
 [the proto3 codec design record](../design/proto3-codec.md).
 
+**Note (2026-10-30) — the default ceilings.** Under
+[ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision 16 as amended on
+2026-10-30, `contract` gains `SIGNAL_EVENT_CEILING` (3,840), `CALL_CEILING`
+(16,128), `FIXED_CEILING` (65,280) and `default_ceiling(kind)`, the default
+ceilings of the catalog rule, which a transport reads to resolve the limit of a
+member whose descriptor row carries none. They are additive under decision 10.
+The crate gains no `PAYLOAD_CEILING` and no `EncodeError::TooLarge`: ADR-0030
+decisions 3 and 4 were withdrawn before they were built, so decision 17 and the
+note of 2026-10-20 stand, and a payload with no finite bound is still refused at
+generation. The `TooLarge { cap }` of the four sending port errors now names the
+member's limit: the limit a `[limits.interaction]` entry gives it, else the
+default ceiling of its kind (ADR-0030 decision 19). `ridl_core::limits` holds
+the same values, and a test in `ridl-backend-rust` keeps the two equal.
+
 **Amendment (2026-10-24) — decision 10: the minimum Rust version is 1.88.**
 `ridl-rt` and the code the Rust codegen emits now require Rust 1.88 instead of
 1.83 (driftsys/ridl#1047). The editions do not change. Decision 10 carries the

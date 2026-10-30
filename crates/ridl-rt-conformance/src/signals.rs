@@ -1,7 +1,7 @@
 //! Signals: staging, the invalid state, the envelope, and a short buffer
 //! (`SignalWriter` and `SignalReader`).
 
-use ridl_rt::port::{Clock, ReadError, SignalReader, SignalWriter};
+use ridl_rt::port::{Clock, ReadError, SignalReader, SignalWriter, WriteError};
 use ridl_rt::sample::{Cause, Duration, Envelope, Provenance};
 
 use crate::{later, runtime, Factory, IFACE, ORD, OTHER};
@@ -243,4 +243,28 @@ pub fn a_short_buffer_reports_what_the_read_needs_and_consumes_nothing<F: Factor
 
     let mut out = [0u8; 8];
     assert_eq!(rt.read(IFACE, ORD, &mut out).expect("read").len, 4);
+}
+
+/// A value longer than the signal's limit is refused with the limit, and
+/// nothing is staged. The suite attaches to a catalog with no descriptor, so
+/// the limit is the default ceiling of a signal, 3,840 bytes (ADR-0030
+/// decision 16); a value of exactly that length is accepted.
+pub fn a_value_longer_than_the_signal_limit_is_refused_and_not_staged<F: Factory>() {
+    let mut rt = runtime::<F>();
+    assert_eq!(
+        rt.set(IFACE, ORD, &[0u8; 3_841]),
+        Err(WriteError::TooLarge { cap: 3_840 }),
+        "one byte above the default ceiling of a signal is refused"
+    );
+    rt.commit();
+
+    let mut out = [0u8; 8];
+    assert_eq!(
+        rt.read(IFACE, ORD, &mut out).expect("read").provenance,
+        Provenance::Init,
+        "the refused value was not staged"
+    );
+
+    rt.set(IFACE, ORD, &[0u8; 3_840])
+        .expect("a value of exactly the default ceiling is accepted");
 }

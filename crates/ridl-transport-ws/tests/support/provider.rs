@@ -48,7 +48,8 @@ pub fn provider() -> Loopback {
     let mut rt = Loopback::new(CATALOG);
     rt.serve(IFACE, &[COMMAND, QUERY])
         .expect("the loopback serves");
-    rt.provision_fixed(IFACE, FIXED, FIXED_VALUE);
+    rt.provision_fixed(IFACE, FIXED, FIXED_VALUE)
+        .expect("the loopback stores the fixed");
     rt
 }
 

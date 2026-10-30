@@ -58,6 +58,39 @@ pub enum Kind {
     Fixed = 5,
 }
 
+/// The default ceiling of a `signal` and an `event`, in bytes of encoded
+/// payload: one 4,096-byte page minus 256 bytes of header (ADR-0030 decision
+/// 16).
+///
+/// The three ceilings are values of the catalog rule, exported so that a
+/// transport resolves the limit of a member whose descriptor row carries
+/// none; a member's limit is the one a `[limits.interaction]` entry gives it,
+/// else the default ceiling of its kind. They are not a guard of a codec: no
+/// `encode` or `verify` compares a length with them. The checker holds the
+/// same values in `ridl_core::limits`, and a test keeps the two equal.
+pub const SIGNAL_EVENT_CEILING: usize = 3_840;
+
+/// The default ceiling of a `command` and a `query`, in bytes of encoded
+/// payload: four 4,096-byte pages minus 256 bytes of header (ADR-0030
+/// decision 16). See [`SIGNAL_EVENT_CEILING`].
+pub const CALL_CEILING: usize = 16_128;
+
+/// The default ceiling of a `fixed`, in bytes of encoded payload: sixteen
+/// 4,096-byte pages minus 256 bytes of header (ADR-0030 decision 16). See
+/// [`SIGNAL_EVENT_CEILING`].
+pub const FIXED_CEILING: usize = 65_280;
+
+/// The default ceiling of an interaction of `kind`, in bytes of encoded
+/// payload (ADR-0030 decision 16): the limit of a member that no
+/// `[limits.interaction]` entry gives one.
+pub const fn default_ceiling(kind: Kind) -> usize {
+    match kind {
+        Kind::Signal | Kind::Event => SIGNAL_EVENT_CEILING,
+        Kind::Command | Kind::Query => CALL_CEILING,
+        Kind::Fixed => FIXED_CEILING,
+    }
+}
+
 /// An interface's descriptor.
 pub trait Interface {
     /// The catalog the interface belongs to.
@@ -331,6 +364,19 @@ mod tests {
         assert_eq!(base, same);
         assert_ne!(base, other_hash);
         assert_ne!(base, other_name);
+    }
+
+    #[test]
+    fn each_kind_has_its_default_ceiling() {
+        use super::{default_ceiling, CALL_CEILING, FIXED_CEILING, SIGNAL_EVENT_CEILING};
+        assert_eq!(SIGNAL_EVENT_CEILING, 4_096 - 256);
+        assert_eq!(CALL_CEILING, 4 * 4_096 - 256);
+        assert_eq!(FIXED_CEILING, 16 * 4_096 - 256);
+        assert_eq!(default_ceiling(Kind::Signal), 3_840);
+        assert_eq!(default_ceiling(Kind::Event), 3_840);
+        assert_eq!(default_ceiling(Kind::Command), 16_128);
+        assert_eq!(default_ceiling(Kind::Query), 16_128);
+        assert_eq!(default_ceiling(Kind::Fixed), 65_280);
     }
 
     #[test]

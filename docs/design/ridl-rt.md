@@ -28,21 +28,21 @@ Nine modules, each public item living in exactly one (ADR-0020 decision 5;
 decision 19; `trace` by ADR-0021 decision 21), plus four that a cargo feature
 adds:
 
-| Module        | Contents                                                                                                                                                                                                                                                                        |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `Podbuf`                                                                                                                                                                                                                          |
-| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`, `TranscodeError`, `transcode`                                                                                                                                       |
-| `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                                    |
-| `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `Sizes<E>`, `reservation`, `table_budget`                                           |
-| `port`        | `Attached`, `Encoded`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors |
-| `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                           |
-| `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                            |
-| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                              |
-| `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                                     |
-| `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter                        |
-| `proto3`      | under the feature of the same name, since 2026-10-20: `WireType`, `Value`, `Field`, `Reader`, `Writer`, `Verified`, `varint_len`, `tag_len`, the zigzag functions, `check_capacity`, `read_varint`, `narrow_u32`, `narrow_i32`, `unzigzag32_checked`, `utf8`                    |
-| `podbuf`      | under the feature of the same name: `PREAMBLE_SIZE`, `Preamble`, `Region`, `Desc`, `ArrayDesc`, `tail_range`, `text`, `scalar_count`, `Writer`, `Aligned`                                                                                                                       |
-| `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                           |
+| Module        | Contents                                                                                                                                                                                                                                                                                                                                                       |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `encoding`    | `Encoding` (sealed), `FlatBuffers`, `Proto3`, `Podbuf`                                                                                                                                                                                                                                                                                                         |
+| `payload`     | `Payload<E>`, `Ref`, `View<'a>`, `Encoded`, `EncodeError`, `VerifyError`, `Malformed`, `Violation`, `Rule`, `TranscodeError`, `transcode`                                                                                                                                                                                                                      |
+| `sample`      | `Timestamp`, `Duration`, `Envelope`, `Provenance`, `Cause`, `Detection`, `Freshness`, `Sample`, `Occurrence`, `EventSeqTracker`, `Continuity`, `TrackerFull`                                                                                                                                                                                                   |
+| `contract`    | `Ordinal`, `InterfaceNo`, `CatalogHash`, `CatalogRef`, `Kind`, `Interface`, `Interaction`, `Signal`, `Event`, `Command`, `Query`, `Fixed`, `Member`, `Timing`, `TimingMode`, `PayloadInfo`, `Sizes<E>`, `reservation`, `table_budget`; `SIGNAL_EVENT_CEILING`, `CALL_CEILING`, `FIXED_CEILING` and `default_ceiling`, the default ceilings of the catalog rule |
+| `port`        | `Attached`, `Encoded`, `Clock`, `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`, `FixedReader`, `ScannableSignals`, `CoherentSignals`, `RawSample`, `RawOccurrence`, `Claim`, `ClaimId`, `Correlation`, `Watermark`, `Changed`, the port errors                                                                                |
+| `correlate`   | since the call-table move: `Table`, `Settled`, `Forgotten`, `Waiters`                                                                                                                                                                                                                                                                                          |
+| `error`       | `Contract`, `Transport`, `CallError`, `ClientError`, `ProviderError`                                                                                                                                                                                                                                                                                           |
+| `face`        | since 2026-09-28 (driftsys/ridl#580): `Bind`, `Events`, `Publish`; `Timeout` under the `std` feature — the traits a generated face implements, the section "The face traits" below                                                                                                                                                                             |
+| `trace`       | `TraceContext`, the optional trace context a call or an event carries across a port (ADR-0021 decision 21); under the `std` feature, `Propagation`, `AlreadySet`, `set_propagation` and `propagation`, the application's hook (decision 22)                                                                                                                    |
+| `flatbuffers` | under the feature of the same name, since 2026-09-20: `Builder`, `Pos`, `Field`, `TableField`, `Vector`, the `read_*` scalar reads, `root`, `follow`, `field`, `string`, `vector`; `Builder::push_offset_vector` joined them with the Rust codec emitter                                                                                                       |
+| `proto3`      | under the feature of the same name, since 2026-10-20: `WireType`, `Value`, `Field`, `Reader`, `Writer`, `Verified`, `varint_len`, `tag_len`, the zigzag functions, `check_capacity`, `read_varint`, `narrow_u32`, `narrow_i32`, `unzigzag32_checked`, `utf8`                                                                                                   |
+| `podbuf`      | under the feature of the same name: `PREAMBLE_SIZE`, `Preamble`, `Region`, `Desc`, `ArrayDesc`, `tail_range`, `text`, `scalar_count`, `Writer`, `Aligned`                                                                                                                                                                                                      |
+| `task`        | under the `std` feature, since 2026-09-25: `block_on`, `noop_waker`; `flag_waker` and `WakeFlag` since 2026-09-28 (driftsys/ridl#568)                                                                                                                                                                                                                          |
 
 Generated code names every item by its full path and imports none, because
 several names here — `Duration`, `Handler`, `Kind` — are also names in `core` or
@@ -182,6 +182,18 @@ crate builds both as struct literals — which is why a field added to either is
 breaking change (ADR-0021 decision 10). `Command` and `Query` return
 `Result<(), ()>` from `require`/`ensure`: the value is decided in ADR-0021
 decision 4.
+
+**The default ceilings are values of the catalog rule, not a guard of a codec.**
+`SIGNAL_EVENT_CEILING` (3,840 bytes), `CALL_CEILING` (16,128 bytes) and
+`FIXED_CEILING` (65,280 bytes) are the default ceiling of each kind
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 16),
+and `default_ceiling(kind)` is a `const fn` over them. A transport reads them to
+resolve the limit of a member whose descriptor row carries none; a runtime with
+no descriptor, such as `ridl-loopback`, applies them to every member it is not
+given a limit for. `ridl_core::limits` holds the same three values for the
+checker, and `crates/ridl-backend-rust/tests/limits_parity.rs` keeps the two
+equal. No `encode` or `verify` compares a length with them: the crate has no
+`PAYLOAD_CEILING` and no `EncodeError::TooLarge` (ADR-0030 decision 4).
 
 **A payload's size in an encoding is not in `PayloadInfo`**: it is the member's
 row of the interface's size table (`Sizes<E>`, "The helpers over the envelope
@@ -439,10 +451,13 @@ only for a buffer shorter than the value, and the face's `BUFFER` is never
 shorter than the value. `Malformed::TooLarge` stays in the enum, because
 removing a variant would change the published API, and no generated codec
 returns it. The size of a payload is refused by the transport, against the
-interaction's limit from the catalog. `BUFFER` is put on the stack by the face
-for a signal, an event, a command and a query, which the catalog's limits keep
-at 16,128 bytes or less; a fixed has no face method, so no `BUFFER` of its
-payload is put on the stack (ADR-0030 decision 5).
+interaction's limit from the catalog: on send, by the port, with its
+`TooLarge { cap }`, `cap` being the member's limit (the section "The `error`
+module and the port errors" below); on receive, by the binding's endpoint,
+before `verify`. `BUFFER` is put on the stack by the face for a signal, an
+event, a command and a query, which the catalog's limits keep at 16,128 bytes or
+less; a fixed has no face method, so no `BUFFER` of its payload is put on the
+stack (ADR-0030 decision 5).
 
 `Malformed::Preamble`, `Stride`, `Terminator` and `KeyOrder` belong to the
 podbuf codec and are not gated by a feature either. `Preamble` is a buffer
@@ -1017,10 +1032,16 @@ call at admission — no slot, no budget, or a call faster than the member's `mi
 the second `Transport` variant to cross after `Corrupt`
 ([frame specification](../specification/frame-specification.md) §9.6, ADR-0021
 decision 14). `SendError::Busy` is the local case, a refusal before anything is
-sent. `Detached` — the runtime behind the port is gone — is local to the port,
-not a stratum. Why `Contract` and `CallError` stay exhaustive while `Transport`
-and the seven port error enums stay `#[non_exhaustive]` is ADR-0021 decision 9.
-Every error type here is `Copy` and owns nothing.
+sent. The `TooLarge { cap }` of `WriteError`, `RaiseError`, `SendError` and
+`SettleError` is the one refusal of a payload's size on send (ADR-0030 decision
+19): the port compares the payload's length with the member's limit — the limit
+a `[limits.interaction]` entry gives it, else the default ceiling of its kind
+(`contract::default_ceiling`) — and refuses a longer one with that limit as
+`cap`, staging, raising, sending or recording nothing. `Detached` — the runtime
+behind the port is gone — is local to the port, not a stratum. Why `Contract`
+and `CallError` stay exhaustive while `Transport` and the seven port error enums
+stay `#[non_exhaustive]` is ADR-0021 decision 9. Every error type here is `Copy`
+and owns nothing.
 
 `ClientError` and `ProviderError` compose these into one error per side of a
 call (ADR-0021 decision 16, note F-1): a generated client call returns
