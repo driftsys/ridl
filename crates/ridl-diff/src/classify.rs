@@ -22,6 +22,8 @@
 //!   breaking. A false "breaking" costs a maintainer one review; a false
 //!   "compatible" ships a wire break.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use ridl_ir::v2;
 
 use crate::{Category, Change, Verdict, frozen};
@@ -407,54 +409,7 @@ fn absence_reads_as_legal(
     }) else {
         return false;
     };
-    if r#type.optional {
-        return true;
-    }
-    use v2::field_type::Kind;
-    match &r#type.kind {
-        Some(Kind::Primitive(primitive)) => matches!(
-            v2::PrimitiveType::try_from(*primitive),
-            Ok(v2::PrimitiveType::Boolean | v2::PrimitiveType::Integer | v2::PrimitiveType::Float)
-        ),
-        Some(Kind::InlineScalar(def)) => scalar_holds_zero(def),
-        Some(Kind::Named(reference)) => {
-            use v2::decl::Kind as Decl;
-            match resolve(home, scope, reference).and_then(|decl| decl.kind.as_ref()) {
-                Some(Decl::TypeDef(def)) => scalar_holds_zero(def),
-                Some(Decl::EnumDef(def)) => ridl_ir::zero::enum_zero_member(&def.values).is_some(),
-                // An enum set at 0 is the empty set.
-                Some(Decl::EnumSetDef(_)) => true,
-                _ => false,
-            }
-        }
-        _ => false,
-    }
-}
-
-/// Whether a named or inline scalar is legal at 0: a boolean, integer, float or
-/// unit backing whose constraint holds 0. A string or bytes backing has no
-/// default at all.
-fn scalar_holds_zero(def: &v2::TypeDef) -> bool {
-    let numeric = match def
-        .backing
-        .as_ref()
-        .and_then(|backing| backing.kind.as_ref())
-    {
-        Some(v2::backing::Kind::Unit(_)) => true,
-        Some(v2::backing::Kind::Primitive(primitive)) => matches!(
-            v2::PrimitiveType::try_from(*primitive),
-            Ok(v2::PrimitiveType::Boolean | v2::PrimitiveType::Integer | v2::PrimitiveType::Float)
-        ),
-        None => false,
-    };
-    numeric
-        && def.constraint.as_ref().is_none_or(|constraint| {
-            ridl_ir::zero::range_holds_zero(
-                constraint.min.as_deref(),
-                constraint.max.as_deref(),
-                constraint.step.as_deref(),
-            )
-        })
+    ridl_ir::zero::field_type_holds_zero(r#type, |reference| resolve(home, scope, reference))
 }
 
 /// The declaration a type reference names on the new side, in the IR's
@@ -485,25 +440,32 @@ fn resolve<'a>(
 /// retired number, which typl §7.4 forbids so a wire value never carries a new
 /// meaning.
 fn appended_slot(old: &[(String, i64)], old_retired: &[i64], new: &[(String, i64)]) -> bool {
+    // The first slot of a name, as a linear search would find it.
+    let mut new_slots: BTreeMap<&str, i64> = BTreeMap::new();
+    for (name, slot) in new {
+        new_slots.entry(name.as_str()).or_insert(*slot);
+    }
     for (name, old_slot) in old {
-        match new.iter().find(|(new_name, _)| new_name == name) {
-            Some((_, new_slot)) if new_slot == old_slot => {}
+        match new_slots.get(name.as_str()) {
+            Some(new_slot) if new_slot == old_slot => {}
             // A surviving member moved, or vanished alongside the addition.
             _ => return false,
         }
     }
 
-    let held = || {
-        old.iter()
-            .map(|(_, slot)| *slot)
-            .chain(old_retired.iter().copied())
-    };
-    let old_names: Vec<&String> = old.iter().map(|(name, _)| name).collect();
+    // The high-water mark of the old body, live and retired slots together,
+    // read once: every new member must be above it (`is_above_high_water`).
+    let mark = old
+        .iter()
+        .map(|(_, slot)| *slot)
+        .chain(old_retired.iter().copied())
+        .max();
+    let old_names: BTreeSet<&str> = old.iter().map(|(name, _)| name.as_str()).collect();
     for (name, slot) in new {
-        if old_names.contains(&name) {
+        if old_names.contains(name.as_str()) {
             continue;
         }
-        if !is_above_high_water(*slot, held()) {
+        if !is_above_high_water(*slot, mark) {
             return false;
         }
     }
@@ -989,7 +951,7 @@ fn member_path(change: &Change) -> Option<(&str, &str)> {
     Some((container, member))
 }
 
-fn find_decl<'a>(package: &'a v2::Package, name: &str) -> Option<&'a v2::Decl> {
+pub(crate) fn find_decl<'a>(package: &'a v2::Package, name: &str) -> Option<&'a v2::Decl> {
     package.decls.iter().find(|decl| decl.name == name)
 }
 
@@ -1508,20 +1470,27 @@ pub fn explain(category: Category) -> &'static str {
         ),
         Category::PodbufInlineAppend => concat!(
             "A struct field appended, compatible under the generic rule, to a\n",
-            "struct that another head holds inline anywhere in the new side: as a\n",
-            "struct field, a tuple member, or an element of an exact-length\n",
-            "array, in a struct, in the argument struct a call with several\n",
-            "parameters induces, or in a tuple reply. The detail names each\n",
-            "inline use. The search mirrors the heads the encoder lays out, a\n",
-            "declaration and a named induced tuple: a struct that is a root of its\n",
-            "own (a single named parameter, a named reply, a signal, event or\n",
-            "fixed payload), that is used only behind a descriptor (the element of\n",
-            "a bounded array, the key or value of a map entry, a union arm), or\n",
-            "only inside an exact-length array that is itself a root (a fixed\n",
-            "payload `[S; 2..2]`, which has no head) is not reported: the root or\n",
-            "the stride gives the producer's size, and the fields past it read as 0.\n",
-            "A tuple inside such a root is a head, and a struct inside that tuple is\n",
-            "a use.\n",
+            "struct another head holds inline on the old side — as a struct field,\n",
+            "a tuple member, or an element of an exact-length array, in a struct,\n",
+            "in the argument struct a call with several parameters induces, or in\n",
+            "a tuple reply — when the field does not fit entirely inside the old\n",
+            "head: the first-fit law places any of its bytes past the old head's\n",
+            "size, so that the head grows. A field the law places entirely inside\n",
+            "the old head, in its pad bytes, draws no line, because `verify` does\n",
+            "not check pads; a field that starts in the pads and ends past the\n",
+            "old size draws it. When several fields are appended at once, each is\n",
+            "judged by its own bytes. Only a holder of the old side counts, because\n",
+            "a holder new on the new side has no published copy;\n",
+            "the detail names each inline use of the old side. The search mirrors\n",
+            "the heads the encoder lays out, a declaration and a named induced\n",
+            "tuple: a struct that is a root of its own (a single named parameter, a\n",
+            "named reply, a signal, event or fixed payload), that is used only\n",
+            "behind a descriptor (the element of a bounded array, the key or value\n",
+            "of a map entry, a union arm), or only inside an exact-length array\n",
+            "that is itself a root (a fixed payload `[S; 2..2]`, which has no head)\n",
+            "is not reported: the root or the stride gives the producer's size, and\n",
+            "the fields past it read as 0. A tuple inside such a root is a head,\n",
+            "and a struct inside that tuple is a use.\n",
             "  breaking    with `--encoding podbuf`: the inline copy cannot grow\n",
             "              without moving the fields after it\n",
             "  compatible  otherwise; listed under the heading \"breaking under\n",

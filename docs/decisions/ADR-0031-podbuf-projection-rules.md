@@ -13,6 +13,12 @@ codec in `ridl-backend-rust`, the C header backend `ridl-backend-podbuf`, the
 `ridl check`, and every codegen plugin that reads the podbuf layout from the
 codegen `Model`.
 
+**Amended 2026-10-29 — decision 10, the inline-append rule, from
+driftsys/ridl#1100.** The rule is narrowed to an append that grows the head of a
+struct a head of the old side holds inline; decision 10 states it and carries
+the dated note, decision 13 points to it, and the negative consequence on a type
+held inline is reworded.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -501,18 +507,38 @@ a field is appended.
     integer turns signed only when an enum with no value gains values), which
     lays out a different integer in every head that holds the enum, the enum set
     or the union; appending a field that cannot read as 0; appending to a struct
-    that is nested inline anywhere in the workspace; changing a strict enum to
-    an open one or the reverse; and removing a field.
+    that a head of the released side holds inline, when the append grows the
+    struct's head; changing a strict enum to an open one or the reverse; and
+    removing a field.
 
     **A strict-enum append is reported (builder's call).** `ridl diff` reports
     an appended enum value or enum-set flag as the category
     `podbuf_strict_enum_append`, because an older reader's `verify` refuses a
     value or a bit its declaration does not name (decision 12).
 
-    **An append to a struct nested inline is a break** (author's call): the
-    inline copy cannot grow without moving the fields after it. The inline uses
-    are a struct field, a tuple member and an element of an exact-length array.
-    Moving such a field behind a descriptor is out of scope.
+    **An append that grows a struct nested inline is a break** (author's call,
+    narrowed 2026-10-29): the inline copy cannot grow without moving the fields
+    after it. The inline uses are a struct field, a tuple member and an element
+    of an exact-length array; moving such a field behind a descriptor is out of
+    scope. The holders are read on the old side: a head that holds the struct
+    inline there is a published copy, where a holder that is new on the new side
+    has none, and `ridl diff` names the old holders. The head grows when an
+    appended field does not fit entirely inside the old head: the layout law
+    places any of its bytes past the old head's size (every head has the
+    alignment `HEAD_ALIGN`, so a change of the head is a change of its size). A
+    field first-fit places entirely inside the old head, in its pad bytes,
+    changes no byte an older reader checks, because `verify` does not check pads
+    (decision 8, "Not checked, by design"), so it is compatible and draws the
+    ordinary `decl_added` line alone; a field that starts in the pads and ends
+    past the old size does not fit, and is a break. When several fields are
+    appended at once, `ridl diff` draws `podbuf_inline_append` for each field
+    that does not fit and for none that does. A new declaration the law refuses
+    is read as grown, which keeps the conservative verdict.
+
+    _Amended (2026-10-29, driftsys/ridl#1100)._ As first written, every append
+    to a struct held inline was a break, on holders of the new side. The two
+    narrowings above (the head must grow, and only an old holder counts) are the
+    amendment.
 
     **The inline-use rule, as built (builder's call).** `ridl diff` finds an
     inline use by asking the layout law what the encoder lays out inline, so the
@@ -577,19 +603,19 @@ a field is appended.
       compatible change as compatible. Three changes are judged by encoding, all
       listed under the heading "breaking under podbuf" and breaking when
       `podbuf` is among the encodings the comparison is judged for, compatible
-      otherwise: the append to an inline struct, the category
-      `podbuf_inline_append`, and an appended enum value, enum-set flag or union
-      arm that changes the podbuf integer of the enum or the enum set or the tag
-      of the union, by width or by signedness, the category
-      `podbuf_width_change`, reported once per declaration with the old and the
-      new integer. The compatible verdict without podbuf holds under proto3; an
-      enum-set flag that widens the integer also widens the enum set's
-      FlatBuffers scalar, which `ridl diff` does not report yet
-      (driftsys/ridl#1120). An appended enum value or enum-set flag is the
-      category `podbuf_strict_enum_append`, reported once per declaration,
-      except that an enum or an enum set whose append changes the integer draws
-      only the `podbuf_width_change` line (builder's call). An appended union
-      arm that keeps the tag is reported as the generic rule judges it,
+      otherwise: the append that grows an inline struct, the category
+      `podbuf_inline_append`; the append that changes the podbuf integer of an
+      enum, an enum set or a union's tag, the category `podbuf_width_change`,
+      reported once per declaration with the old and the new integer; and the
+      append to a strict enum or enum set, the category
+      `podbuf_strict_enum_append`, reported once per declaration, except that an
+      enum or an enum set whose append changes the integer draws only the
+      `podbuf_width_change` line (builder's call). The three rules are stated in
+      decision 10; `ridl diff --explain <category>` states each in full. The
+      compatible verdict without podbuf holds under proto3; an enum-set flag
+      that widens the integer also widens the enum set's FlatBuffers scalar,
+      which `ridl diff` does not report yet (driftsys/ridl#1120). An appended
+      union arm that keeps the tag is reported as the generic rule judges it,
       compatible. When the `open` keyword is built (open item 1), the strict
       enum rule narrows to strict enums and enum sets.
       `ridl diff --encoding <name>` and the `ridl_diff` MCP tool name the
@@ -731,9 +757,10 @@ stated in the decision above; this list is the index.
   struct, because the 8-byte preamble precedes it. The adapter that an ARXML or
   Franca IDL plugin generates covers the difference.
 - **Negative.** A string that contains U+0000 cannot be encoded.
-- **Negative.** An append to a struct held inline is a break, so a type that
-  other types hold inline is frozen at its first release unless its holders
-  change too.
+- **Negative.** An append that grows a struct held inline is a break, so a type
+  that other types hold inline can grow after its first release only by the pad
+  bytes of its head, unless its holders change too (decision 10, as amended
+  2026-10-29).
 - **Negative.** Three encodings are three conformance obligations, and the
   oracle of this one is the layout law itself: no second implementation exists
   to compare against.

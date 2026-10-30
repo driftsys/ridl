@@ -212,6 +212,15 @@ const VALUE_TABLE: &[Row] = &[
         bytes: "10000000 00000000 | 0a 00 02 00 04 00 00 00 00 | 01 09 | 0000000000",
         build: "build_sparse",
     },
+    // §5.3: one descriptor at 0..8 (`off` 16, `len` 1, `elem_size` 8) to one
+    // `Strict` head, `level` at 0 of the element, pad 1..8.
+    Row {
+        name: "Stricts",
+        ty: "Stricts",
+        value: "Stricts { items: vec![Strict { level: 3 }] }",
+        bytes: "08000000 00000000 | 10000000 0100 0800 | 03 00000000000000",
+        build: "build_stricts",
+    },
 ];
 
 /// The values of the table over `podbuf_roundtrip.ridl`.
@@ -288,6 +297,10 @@ fn build_sparse(v: &SparsePodbufView<'_>) -> Sparse {
 
 fn build_blob(v: &BlobPodbufView<'_>) -> Blob {
     Blob { data: v.data().to_vec(), marks: v.marks().collect() }
+}
+
+fn build_stricts(v: &StrictsPodbufView<'_>) -> Stricts {
+    Stricts { items: v.items().map(|s| Strict { level: s.level() }).collect() }
 }
 "#;
 

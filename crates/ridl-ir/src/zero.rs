@@ -1,7 +1,7 @@
 //! Whether the value 0 is a legal value of a typl type.
 //!
 //! 0 is the default a FlatBuffers reader gives an absent scalar or enum
-//! field. Two consumers ask the same question and must agree on the answer:
+//! field. Three consumers ask the same question and must agree on the answer:
 //!
 //! - the FlatBuffers codec of `ridl-backend-rust`, which reads an absent
 //!   non-optional scalar or enum field as 0 when 0 is legal for its type, and
@@ -9,12 +9,17 @@
 //!   (driftsys/ridl#472);
 //! - `ridl-diff`, which classifies appending such a field as compatible only
 //!   when a reader of the new version reads the field absent from an old
-//!   payload as 0 (driftsys/ridl#598).
+//!   payload as 0 (driftsys/ridl#598), and under podbuf accepts an append
+//!   on the same condition (ADR-0031 decision 10);
+//! - the RIDL-155 check of `ridlc`, which reports a deprecated podbuf field
+//!   whose init value is neither declared nor derivable and whose type
+//!   excludes 0.
 //!
-//! The codec reads the lowered codegen model and the diff reads IR v2, so the
-//! two call sites hold different message types. The definitions here take
+//! The codec reads the lowered codegen model and the others read IR v2, so
+//! the call sites hold different message types. The definitions here take
 //! what both types carry: a constraint's exact decimal text, and an enum's
-//! declared values.
+//! declared values; [`field_type_holds_zero`] states the rule once over an
+//! IR v2 field type for the two readers of IR v2.
 
 use crate::v2;
 
@@ -100,6 +105,70 @@ fn decimal_sign(text: &str) -> Option<i8> {
 /// init, when it exists).
 pub fn enum_zero_member(values: &[v2::EnumValue]) -> Option<usize> {
     values.iter().position(|value| value.value == 0)
+}
+
+/// Whether 0 is a legal value of the field type `ty`, the rule `ridl diff`
+/// applies to an appended field and RIDL-155 to a deprecated one: an
+/// optional field, whose flag bit reads 0 and so means absent; a boolean,
+/// integer or float primitive; a named or inline scalar that
+/// [`scalar_holds_zero`]; an enum with a zero member; or an enum set, whose
+/// 0 is the empty set. A string, bytes, array, map, struct, tuple or union
+/// field is not. `resolve` maps a named reference, as the IR writes it, to
+/// the declaration it names; a reference it cannot resolve is not legal at 0.
+pub fn field_type_holds_zero<'a>(
+    ty: &v2::FieldType,
+    resolve: impl FnOnce(&str) -> Option<&'a v2::Decl>,
+) -> bool {
+    if ty.optional {
+        return true;
+    }
+    use v2::field_type::Kind;
+    match &ty.kind {
+        Some(Kind::Primitive(primitive)) => primitive_holds_zero(*primitive),
+        Some(Kind::InlineScalar(def)) => scalar_holds_zero(def),
+        Some(Kind::Named(reference)) => {
+            use v2::decl::Kind as Decl;
+            match resolve(reference).and_then(|decl| decl.kind.as_ref()) {
+                Some(Decl::TypeDef(def)) => scalar_holds_zero(def),
+                Some(Decl::EnumDef(def)) => enum_zero_member(&def.values).is_some(),
+                Some(Decl::EnumSetDef(_)) => true,
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
+/// Whether a named or inline scalar is legal at 0: a boolean, integer, float
+/// or unit backing whose constraint holds 0 ([`range_holds_zero`]). A string
+/// or bytes backing is not.
+pub fn scalar_holds_zero(def: &v2::TypeDef) -> bool {
+    let numeric = match def
+        .backing
+        .as_ref()
+        .and_then(|backing| backing.kind.as_ref())
+    {
+        Some(v2::backing::Kind::Unit(_)) => true,
+        Some(v2::backing::Kind::Primitive(primitive)) => primitive_holds_zero(*primitive),
+        None => false,
+    };
+    numeric
+        && def.constraint.as_ref().is_none_or(|constraint| {
+            range_holds_zero(
+                constraint.min.as_deref(),
+                constraint.max.as_deref(),
+                constraint.step.as_deref(),
+            )
+        })
+}
+
+/// Whether a primitive is numeric, so that 0 is one of its values: a boolean
+/// (`false`), an integer or a float.
+fn primitive_holds_zero(primitive: i32) -> bool {
+    matches!(
+        v2::PrimitiveType::try_from(primitive),
+        Ok(v2::PrimitiveType::Boolean | v2::PrimitiveType::Integer | v2::PrimitiveType::Float)
+    )
 }
 
 /// An exact decimal read from the IR's canonical text: `units / 10^scale`.

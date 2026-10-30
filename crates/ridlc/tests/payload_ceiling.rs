@@ -573,3 +573,26 @@ fn a_manifest_error_turns_the_lint_off_everywhere() {
     );
     assert!(ridl_150(&diagnostics).is_empty(), "{diagnostics:?}");
 }
+
+/// A package with a podbuf error is blocked for RIDL-150 like a package with
+/// any other error. The blocked set is computed before the podbuf checks run,
+/// so it is read again when they add an error: with podbuf enabled, a struct
+/// above `u32::MAX` (RIDL-153) beside a signal whose payload is above the
+/// ceiling draws the RIDL-153 alone, and no RIDL-150.
+#[test]
+fn a_package_with_a_podbuf_error_draws_no_ridl_150() {
+    let source = "package demo\n\
+        type Blob: bytes [60000..60000]\n\
+        struct Huge {\n  first: [Blob; 0..65535]\n  second: [Blob; 0..65535]\n}\n\
+        type Text: string [0..4032]\n\
+        struct Payload { a: Text, b: Text }\n\
+        interface I {\n  signal s: Payload @[10ms..100ms]\n}\n";
+    let diagnostics = check(source, "[backend.rust]\nencodings = [\"podbuf\"]\n");
+    let mut codes: Vec<&str> = diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .filter(|code| code.starts_with("RIDL-15"))
+        .collect();
+    codes.sort_unstable();
+    assert_eq!(codes, ["RIDL-153"], "{diagnostics:?}");
+}

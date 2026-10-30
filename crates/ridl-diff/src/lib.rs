@@ -258,47 +258,26 @@ declare_categories! {
         /// direction.
         VisibilityChanged,
         /// A struct field appended, compatible under the generic rule, to a
-        /// struct that another head of the new side holds inline: as a struct
-        /// field, a tuple member, or an element of an exact-length array,
-        /// anywhere in the workspace, the argument struct a call with several
-        /// parameters induces and a tuple reply included. The inline copy
-        /// cannot grow without
-        /// moving the fields after it, so the append is breaking when the
-        /// comparison is judged for the `podbuf` encoding, and compatible
-        /// otherwise, listed under the heading "breaking under podbuf"
-        /// ([`heading`]). The path is the appended field's; the detail names
-        /// each inline use, a struct field as `<package>/<struct>/<field>`
-        /// and an interaction's request, reply or fixed payload as
-        /// `<package>/<interface>/<interaction>`. The search mirrors the
-        /// heads the encoder lays out — a declaration and a named induced
-        /// tuple — so a struct used only as a root of its own (a single named
-        /// parameter, a named reply, a signal or event payload), only behind
-        /// a descriptor (the element of a bounded array, the key or value of
-        /// a map entry, a union arm), or only inside an exact-length array
-        /// that is itself a root (a fixed payload `[S; 2..2]`, which has no
-        /// head) is not reported: the root or the descriptor's stride gives
-        /// the producer's size, and the fields past it read as 0. A tuple
-        /// inside such a root is a head, and a struct inside that tuple is a
-        /// use.
+        /// struct another head of the old side holds inline, when the field
+        /// does not fit entirely inside the old head: the layout law places
+        /// any of its bytes past the old head's size (ADR-0031 decision 10,
+        /// the inline-append rule;
+        /// `ridl diff --explain podbuf_inline_append` states it in full).
+        /// Breaking when the comparison is judged for the `podbuf` encoding,
+        /// compatible otherwise, listed under the heading "breaking under
+        /// podbuf" ([`heading`]). The path is the appended field's; the
+        /// detail names each inline use of the old side, a struct field as
+        /// `<package>/<struct>/<field>` and an interaction's request, reply
+        /// or fixed payload as `<package>/<interface>/<interaction>`.
         PodbufInlineAppend,
         /// An enum value, an enum-set flag or a union arm appended, compatible
         /// under the generic rule, after which the podbuf integer of the enum
         /// or the enum set or the tag of the union is a different integer, by
-        /// width or by signedness: `u8` to `u16`, `u16` to `u32` or `u32` to
-        /// `u64`. The integer is the narrowest that holds every declared
-        /// value, signed when a value is negative (ADR-0031 decision 5), for
-        /// an enum set its width (the narrowest unsigned integer that holds
-        /// its highest bit) or, for a tag, every arm ordinal. A negative value
-        /// appended to an enum that has values is an insert below its highest
-        /// value, a breaking [`Category::DeclAdded`], so the integer turns
-        /// signed only when an enum with no value gains values. Breaking when
-        /// `podbuf` is among the encodings the comparison is judged for,
-        /// because every head that holds the enum, the enum set or the union
-        /// lays out a different integer; compatible otherwise, which holds
-        /// under proto3. An enum-set flag that widens the integer also widens
-        /// the enum set's FlatBuffers scalar, which no rule reports yet
-        /// (driftsys/ridl#1120). Reported once per declaration, at
-        /// `<package>/<decl>`, with the old and the new integer. An append that keeps the integer draws no such line.
+        /// width or by signedness (ADR-0031 decision 10, the width rule;
+        /// `ridl diff --explain podbuf_width_change` states it in full).
+        /// Breaking when `podbuf` is among the encodings the comparison is
+        /// judged for, compatible otherwise. Reported once per declaration,
+        /// at `<package>/<decl>`, with the old and the new integer.
         PodbufWidthChange,
         /// An enum value or an enum-set flag appended, compatible under the
         /// generic rule, to an enum or an enum set that is strict (ADR-0031
@@ -491,19 +470,22 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 /// encodings` list writes (`flatbuffers`, `proto3`, `podbuf`). A snapshot
 /// does not carry the encodings a workspace builds, so the caller names them.
 ///
-/// Only `podbuf` has rules of its own: a struct field appended to a struct
-/// that another head holds inline is [`Category::PodbufInlineAppend`], and an
-/// enum value, an enum-set flag or a union arm appended that changes the
-/// integer of the enum or the enum set or the union's tag is
-/// [`Category::PodbufWidthChange`]; both are breaking when
-/// `podbuf` is in `encodings` and compatible otherwise. An enum-set flag that
-/// widens the integer also widens its FlatBuffers scalar, which no rule under
-/// `flatbuffers` reports yet (driftsys/ridl#1120). Every other category
-/// is judged the same under every list, and a name that is not `podbuf` adds
-/// no rule. The CLI and the MCP tool refuse a name that is
+/// Only `podbuf` has rules of its own: a struct field appended that does not
+/// fit inside the old head of a struct another head of the old side holds
+/// inline is [`Category::PodbufInlineAppend`], an enum value, an enum-set
+/// flag or a union arm appended that changes the integer of the enum or the
+/// enum set or the union's tag is [`Category::PodbufWidthChange`], and an
+/// enum value or an enum-set flag appended is
+/// [`Category::PodbufStrictEnumAppend`]; each is breaking when `podbuf` is in
+/// `encodings` and compatible otherwise. An
+/// enum-set flag that widens the integer also widens its FlatBuffers scalar,
+/// which no rule under `flatbuffers` reports yet (driftsys/ridl#1120). Every
+/// other category is judged the same under every list, and a name that is
+/// not `podbuf` adds no rule. The CLI and the MCP tool refuse a name that is
 /// not one of the three before calling this; the engine does not check it.
-/// `new` and `context` must not share a package: the podbuf rule searches
-/// both as one scope and would name a use of a shared package twice.
+/// The podbuf rule lays the old side out over `old` and the context packages
+/// `old` does not name, and the new side over `new` and `context`; a package
+/// in both `new` and `context` is read at its first occurrence.
 pub fn diff_refs_with(
     old: &[&Package],
     new: &[&Package],
@@ -521,6 +503,19 @@ pub fn diff_refs_with(
         old.iter().map(|pkg| (pkg.name.as_str(), *pkg)).collect();
     let new_by: BTreeMap<&str, &Package> =
         new.iter().map(|pkg| (pkg.name.as_str(), *pkg)).collect();
+    // The old side as the podbuf rule reads it: the old packages, and the
+    // context packages the old side does not name, which stand for both
+    // sides.
+    let old_scope: Vec<&Package> = old
+        .iter()
+        .copied()
+        .chain(
+            context
+                .iter()
+                .copied()
+                .filter(|pkg| !old_by.contains_key(pkg.name.as_str())),
+        )
+        .collect();
 
     // Each matched pair is walked and classified against its own two snapshots,
     // because the classifier resolves a change's path back into the packages it
@@ -533,9 +528,9 @@ pub fn diff_refs_with(
                 walk::walk_packages(old_pkg, new_pkg, &matching, &mut pair);
                 classify_all(&mut pair, old_pkg, new_pkg, &scope, encodings);
                 // The podbuf rule reads the settled verdicts of the pair and
-                // the heads of the whole new side, so it runs after the walk
+                // the heads of both whole sides, so it runs after the walk
                 // and the classifier of the pair.
-                let mut podbuf = walk::podbuf_inline_appends(&pair, &scope);
+                let mut podbuf = walk::podbuf_inline_appends(&pair, &old_scope, &scope);
                 let mut widths = walk::podbuf_width_changes(&pair, old_pkg, new_pkg);
                 podbuf.append(&mut walk::podbuf_strict_enum_appends(
                     &pair, old_pkg, new_pkg, &widths,
