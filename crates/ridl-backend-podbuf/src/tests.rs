@@ -101,8 +101,9 @@ fn a_tuple_member_with_no_name_is_named_by_its_position() {
 
 /// A member whose pinned snake case is a C23 keyword (`staticAssert` is
 /// `static_assert`) is escaped with a trailing underscore, as every reserved
-/// word is, for a struct field and for a tuple member; each of the eight C23
-/// keywords is pinned.
+/// word is, for a struct field and for a tuple member. Each of the eight C23
+/// keywords that the C11 list did not already hold (`bool`, `true` and
+/// `false` were listed) is pinned, and so is `asm`, the GNU-dialect keyword.
 #[test]
 fn a_member_named_by_a_c23_keyword_is_escaped() {
     let h = generate_fixture(
@@ -110,6 +111,7 @@ fn a_member_named_by_a_c23_keyword_is_escaped() {
          struct S {\n  staticAssert : integer [0..255]\n  typeof : integer [0..255]\n\
          \x20 alignas : integer [0..255]\n  alignof : integer [0..255]\n\
          \x20 threadLocal : integer [0..255]\n  typeofUnqual : integer [0..255]\n\
+         \x20 asm : integer [0..255]\n\
          \x20 t : (constexpr: integer [0..255], nullptr: integer [0..255])\n}\n",
     )
     .header_source;
@@ -121,6 +123,7 @@ fn a_member_named_by_a_c23_keyword_is_escaped() {
         "alignof_",
         "thread_local_",
         "typeof_unqual_",
+        "asm_",
     ] {
         assert!(
             h.contains(&format!("\n  uint8_t {member};")),
@@ -138,6 +141,7 @@ fn a_member_named_by_a_c23_keyword_is_escaped() {
         " alignof;",
         " thread_local;",
         " typeof_unqual;",
+        " asm;",
         " constexpr;",
         " nullptr;",
     ] {

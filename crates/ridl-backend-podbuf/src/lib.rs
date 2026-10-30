@@ -146,9 +146,10 @@ fn check_limits(package: &v2::Package, others: &[&v2::Package]) -> Result<(), Ge
 // Names
 // ---------------------------------------------------------------------
 
-/// Words that C reserves, which a field name must not take: the C11 keywords
-/// and the C23 keywords (ISO/IEC 9899:2024 §6.4.1), which are spelled without
-/// the underscore prefix of their C11 forms, so a typl name can reach them.
+/// Words that C reserves, which a field name must not take: the C11 keywords,
+/// the C23 keywords (ISO/IEC 9899:2024 §6.4.1), which are spelled without the
+/// underscore prefix of their C11 forms, so a typl name can reach them, and
+/// `asm`, a keyword of the GNU dialects that GCC and Clang compile by default.
 const C_KEYWORDS: &[&str] = &[
     "auto",
     "break",
@@ -196,6 +197,7 @@ const C_KEYWORDS: &[&str] = &[
     "thread_local",
     "typeof",
     "typeof_unqual",
+    "asm",
 ];
 
 /// A field name as a C member name: the pinned snake case of ADR-0016, with a
