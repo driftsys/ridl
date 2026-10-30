@@ -2729,6 +2729,97 @@ mod podbuf {
         );
     }
 
+    /// `ty`, optional: its bytes are those of `ty`, its presence a flag bit.
+    fn optional(mut ty: v2::FieldType) -> v2::FieldType {
+        ty.optional = true;
+        ty
+    }
+
+    /// The diff of `SensorReading { value: Level }` against the same struct
+    /// with `(name, ty)` appended, `Label` (`string [0..16]`) declared beside.
+    fn appended(name: &str, ty: v2::FieldType) -> crate::DiffReport {
+        let with_label = |reading: v2::Decl| {
+            let mut package = inline_package(reading);
+            package.decls.push(string_type("Label"));
+            package
+        };
+        let new = struct_decl(
+            "SensorReading",
+            vec![field("value", 1, named("Level")), field(name, 2, ty)],
+        );
+        diff(&with_label(reading_v1()), &with_label(new), &["podbuf"])
+    }
+
+    #[track_caller]
+    fn assert_one_line(report: &crate::DiffReport, field: &str) {
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(report),
+            [format!("veh.common/SensorReading/{field}")],
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// An appended field that starts inside the old head and ends past it
+    /// does not fit inside the old head, so it grows the head and draws the
+    /// line: an optional `[Level; 8]`, eight bytes at alignment 1, which
+    /// first-fit places at 2..10 against an old head of 8 (the flags byte
+    /// takes offset 1).
+    #[test]
+    fn an_appended_inline_array_that_straddles_the_old_head_end_is_a_break() {
+        let report = appended("block", optional(array(named("Level"), 8, 8)));
+        assert_one_line(&report, "block");
+    }
+
+    /// The same for a descriptor: an optional `string [0..16]` is eight bytes
+    /// at alignment 4, placed at 4..12 against an old head of 8.
+    #[test]
+    fn an_appended_descriptor_that_straddles_the_old_head_end_is_a_break() {
+        let report = appended("label", optional(named("Label")));
+        assert_one_line(&report, "label");
+    }
+
+    /// A package passed in both `old` and `context` (as a caller that passes
+    /// its whole workspace as context does) is read once on the old side:
+    /// the detail names each inline use once.
+    #[test]
+    fn a_package_in_both_old_and_context_names_each_use_once() {
+        let old = inline_package(reading_v1());
+        let new = inline_package(reading_v2());
+        let report = diff_refs_with(&[&old], &[&new], &[&old], &["podbuf"]);
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.category == Category::PodbufInlineAppend)
+            .expect("the append is reported");
+        assert_eq!(
+            change.after.as_deref(),
+            Some(
+                "nested inline in veh.common/SensorBounds/pair, \
+                 veh.common/SensorBounds/range, veh.common/SensorBounds/window"
+            )
+        );
+    }
+
+    /// A package passed in both `new` and `context` is read at its first
+    /// occurrence, the new side: the new head holds the appended field, so
+    /// the growing append is a break. Read at the context's copy, the old
+    /// declaration, the field would not be found.
+    #[test]
+    fn a_package_in_both_new_and_context_is_read_from_the_new_side() {
+        let old = inline_package(reading_v1());
+        let new = inline_package(reading_v2());
+        let report = diff_refs_with(&[&old], &[&new], &[&old], &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(&report),
+            ["veh.common/SensorReading/quality"],
+            "{:?}",
+            report.changes
+        );
+    }
+
     /// The appended field's type is declared in another package of the
     /// workspace: the new head is laid out over the whole new side, and the
     /// one-byte field fits in the old pad.

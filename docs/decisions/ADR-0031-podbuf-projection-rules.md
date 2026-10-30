@@ -501,16 +501,18 @@ a field is appended.
     of an exact-length array; moving such a field behind a descriptor is out of
     scope. The holders are read on the old side: a head that holds the struct
     inline there is a published copy, where a holder that is new on the new side
-    has none, and `ridl diff` names the old holders. The head grows when the
-    layout law places an appended field at or past the old head's size (every
-    head has the alignment `HEAD_ALIGN`, so a change of the head is a change of
-    its size); a field first-fit places inside the old head, in its pad bytes,
+    has none, and `ridl diff` names the old holders. The head grows when an
+    appended field does not fit entirely inside the old head: the layout law
+    places any of its bytes past the old head's size (every head has the
+    alignment `HEAD_ALIGN`, so a change of the head is a change of its size). A
+    field first-fit places entirely inside the old head, in its pad bytes,
     changes no byte an older reader checks, because `verify` does not check pads
     (decision 8, "Not checked, by design"), so it is compatible and draws the
-    ordinary `decl_added` line alone. When several fields are appended at once,
-    `ridl diff` draws `podbuf_inline_append` for each field at or past the old
-    size and for none inside it. A new declaration the law refuses is read as
-    grown, which keeps the conservative verdict.
+    ordinary `decl_added` line alone; a field that starts in the pads and ends
+    past the old size does not fit, and is a break. When several fields are
+    appended at once, `ridl diff` draws `podbuf_inline_append` for each field
+    that does not fit and for none that does. A new declaration the law refuses
+    is read as grown, which keeps the conservative verdict.
 
     _Amended (2026-10-29, driftsys/ridl#1100)._ As first written, every append
     to a struct held inline was a break, on holders of the new side. The two

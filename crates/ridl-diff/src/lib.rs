@@ -258,9 +258,10 @@ declare_categories! {
         /// direction.
         VisibilityChanged,
         /// A struct field appended, compatible under the generic rule, to a
-        /// struct another head of the old side holds inline, when the layout
-        /// law places the field at or past the old head's size (ADR-0031
-        /// decision 10, the inline-append rule;
+        /// struct another head of the old side holds inline, when the field
+        /// does not fit entirely inside the old head: the layout law places
+        /// any of its bytes past the old head's size (ADR-0031 decision 10,
+        /// the inline-append rule;
         /// `ridl diff --explain podbuf_inline_append` states it in full).
         /// Breaking when the comparison is judged for the `podbuf` encoding,
         /// compatible otherwise, listed under the heading "breaking under
@@ -469,8 +470,9 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 /// encodings` list writes (`flatbuffers`, `proto3`, `podbuf`). A snapshot
 /// does not carry the encodings a workspace builds, so the caller names them.
 ///
-/// Only `podbuf` has rules of its own: a struct field appended past the old
-/// head of a struct that another head of the old side holds inline is
+/// Only `podbuf` has rules of its own: a struct field appended that does not
+/// fit inside the old head of a struct another head of the old side holds
+/// inline is
 /// [`Category::PodbufInlineAppend`], an enum value, an enum-set flag or a
 /// union arm appended that changes the integer of the enum or the enum set
 /// or the union's tag is [`Category::PodbufWidthChange`], and an enum value

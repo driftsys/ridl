@@ -1910,9 +1910,10 @@ fn signal_init_str(def: &v2::SignalDef) -> String {
 /// The [`Category::PodbufInlineAppend`] changes of one walked and classified
 /// package pair: one per struct field appended compatibly, in `pair`, to a
 /// struct that a head of `old` — every package of the old side, the context
-/// packages included — holds inline, when the layout law places the field at
-/// or past the old head's size. The verdict is the placeholder [`emit`]
-/// stamps; the classifier settles it from the encodings.
+/// packages included — holds inline, when the field does not fit inside the
+/// old head: the layout law places any of its bytes past the old head's
+/// size. The verdict is the placeholder [`emit`] stamps; the classifier
+/// settles it from the encodings.
 ///
 /// Only an append the generic rule accepts is read: a [`Category::DeclAdded`]
 /// at `<package>/<struct>/<field>` whose verdict is compatible. An append the
@@ -1922,14 +1923,15 @@ fn signal_init_str(def: &v2::SignalDef) -> String {
 /// The rule is ADR-0031 decision 10, as amended: the holders are read on the
 /// old side, because a head that holds the struct inline there is a published
 /// copy and a holder new on the new side has none; and a field first-fit
-/// places inside the old head, in its pad bytes, changes no byte an older
-/// reader checks, because `verify` does not check pads (decision 8), so it
-/// draws no line. The old head and the new head are both computed by the
-/// layout law ([`projection::podbuf::struct_head`]) over their own side;
-/// every head has the alignment [`projection::podbuf::HEAD_ALIGN`], so a
-/// field past the old size is what grows the head. A new head the law
-/// refuses is read as grown, with a line per appended field, which keeps the
-/// earlier, conservative verdict.
+/// places entirely inside the old head, in its pad bytes, changes no byte an
+/// older reader checks, because `verify` does not check pads (decision 8),
+/// so it draws no line. A field that starts in the pads and ends past the old
+/// size does not fit, and draws the line. The old head and the new head are
+/// both computed by the layout law ([`projection::podbuf::struct_head`]) over
+/// their own side; every head has the alignment
+/// [`projection::podbuf::HEAD_ALIGN`], so a field past the old size is what
+/// grows the head. A new head the law refuses is read as grown, with a line
+/// per appended field, which keeps the earlier, conservative verdict.
 ///
 /// The struct's inline uses are found with the podbuf layout law
 /// ([`projection::podbuf::field_form`]), so what the rule calls inline is
@@ -1995,7 +1997,7 @@ pub(crate) fn podbuf_inline_appends(
         let past_old_head = match new_head {
             Some(head) => head.fields.iter().any(|placement| {
                 matches!(&placement.source, projection::podbuf::Source::Field { name, .. } if name == field)
-                    && placement.offset >= *old_size
+                    && placement.offset + placement.size > *old_size
             }),
             None => true,
         };
