@@ -151,6 +151,15 @@ fn each_kind_is_checked_against_its_own_default_ceiling() {
             "{member}: {}",
             found[0].message
         );
+        let kind = member.split(' ').next().unwrap();
+        let article = if kind == "event" { "an" } else { "a" };
+        assert!(
+            found[0]
+                .message
+                .contains(&format!("ceiling of {article} {kind} ")),
+            "{member}: {}",
+            found[0].message
+        );
     }
 }
 
@@ -357,6 +366,7 @@ fn an_entry_above_the_largest_raise_is_mani_022_unless_it_names_a_fixed() {
     for body in [
         "command c(data: Payload) @[..1s]",
         "signal c: Payload @[10ms..100ms]",
+        "event c: Payload @[10ms..100ms]",
     ] {
         let run = member(body, "[limits.interaction]\n\"I.c\" = 16129\n");
         assert_eq!(
@@ -372,6 +382,13 @@ fn an_entry_above_the_largest_raise_is_mani_022_unless_it_names_a_fixed() {
         assert_eq!(value, "16129", "{body}: {found:?}");
         assert!(
             found.message.contains("`I.c` is 16129") && found.message.contains("16128 bytes"),
+            "{body}: {}",
+            found.message
+        );
+        let kind = body.split(' ').next().unwrap();
+        let article = if kind == "event" { "an" } else { "a" };
+        assert!(
+            found.message.contains(&format!("give {article} {kind} ")),
             "{body}: {}",
             found.message
         );

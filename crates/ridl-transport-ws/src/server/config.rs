@@ -34,7 +34,8 @@ pub enum Note {
     /// [`Config::max_message_bytes`], or is longer than its member's limit
     /// (frame specification §11.1 "The sizes"). No `publish` and no
     /// `occurrence` is sent for it; a reply is answered `corrupt`, and a
-    /// `read` of a `fixed` is answered `contract(UnknownInteraction)`.
+    /// `read` of a signal or a `fixed` is answered
+    /// `contract(UnknownInteraction)`.
     ValueTooLarge {
         /// The interaction whose value did not fit.
         target: Target,
