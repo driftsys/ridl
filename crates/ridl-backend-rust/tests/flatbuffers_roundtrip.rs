@@ -498,8 +498,9 @@ fn main() {
     rustc::run_program("fb_capacity", &program(&main));
 }
 
-/// `verify` refuses bytes that are not this type's encoding, and refuses a
-/// buffer larger than `MAX_SIZE` before it reads anything (design note D-5).
+/// `verify` refuses bytes that are not this type's encoding. It applies no
+/// length check (ADR-0030 decision 19): a buffer longer than `MAX_SIZE` is
+/// read like any other, and refused only for its structure.
 #[test]
 fn verify_refuses_bytes_it_did_not_write() {
     let main = format!(
@@ -533,14 +534,15 @@ fn main() {
         "an empty buffer is out of bounds"
     );
 
-    // Larger than the bound: refused before the walk (design note D-5).
+    // Larger than the bound and all zero: the root names a table whose vtable
+    // is shorter than its header, so the walk refuses it; the length does not.
     let oversized = vec![0u8; capacity + 1];
     assert!(
         matches!(
             Ref::<'_, Report, FlatBuffers>::verify(&oversized),
-            Err(VerifyError::Structure(Malformed::TooLarge))
+            Err(VerifyError::Structure(Malformed::OutOfBounds))
         ),
-        "a buffer larger than MAX_SIZE is refused on its length"
+        "a malformed buffer larger than MAX_SIZE is refused for its structure"
     );
 }
 "#

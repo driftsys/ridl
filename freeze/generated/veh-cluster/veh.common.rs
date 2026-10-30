@@ -1484,17 +1484,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Speed {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<SpeedFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Speed(buf, table)?;
@@ -1616,17 +1605,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<TemperatureFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Temperature(buf, table)?;
@@ -1745,17 +1723,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RPM {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<RPMFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_RPM(buf, table)?;
@@ -1874,17 +1841,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Ratio {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<RatioFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Ratio(buf, table)?;
@@ -2003,17 +1959,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Counter {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<CounterFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Counter(buf, table)?;
@@ -2132,17 +2077,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Gain {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<GainFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Gain(buf, table)?;
@@ -2266,17 +2200,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosit
         GearPositionFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_GearPosition(buf, table)?;
@@ -2392,17 +2315,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<WarningFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_Warning(buf, table)?;
@@ -2532,17 +2444,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for WarningFl
         WarningFlagsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_WarningFlags(buf, table)?;
@@ -2730,17 +2631,6 @@ for SpeedLimitPayload {
         SpeedLimitPayloadFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_SpeedLimitPayload(buf, table)?;
@@ -3035,17 +2925,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DriverPro
         DriverProfileFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_DriverProfile(buf, table)?;
@@ -3631,17 +3510,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for SensorBou
         SensorBoundsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_SensorBounds(buf, table)?;
@@ -3817,17 +3685,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for SensorRes
         SensorResultFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_SensorResult(buf, table)?;
@@ -4012,17 +3869,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for SensorRea
         SensorReadingFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_SensorReading(buf, table)?;
@@ -4203,17 +4049,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for SensorFau
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<SensorFaultFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_SensorFault(buf, table)?;
@@ -4438,17 +4273,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelF
         RawWheelFrameFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_RawWheelFrame(buf, table)?;
@@ -7957,17 +7781,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for SpeedLimitPayl
         SpeedLimitPayloadPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -8328,17 +8141,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for DriverProfile 
         DriverProfilePodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -9085,17 +8887,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for SensorBounds {
         SensorBoundsPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -9410,17 +9201,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for SensorResult {
         SensorResultPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -9600,17 +9380,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for SensorReading 
         SensorReadingPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -9872,17 +9641,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for SensorFault {
         SensorFaultPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10078,17 +9836,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for RawWheelFrame 
         RawWheelFramePodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10340,17 +10087,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Speed {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<SpeedPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10463,17 +10199,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Temperature {
         TemperaturePodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10580,17 +10305,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for RPM {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<RPMPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10697,17 +10411,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Ratio {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<RatioPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10814,17 +10517,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Counter {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<CounterPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10931,17 +10623,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Gain {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<GainPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -11062,17 +10743,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for GearPosition {
         GearPositionPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -11187,17 +10857,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for Warning {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<WarningPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -11318,17 +10977,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for WarningFlags {
         WarningFlagsPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(

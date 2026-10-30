@@ -659,16 +659,55 @@ fn stride_differs_from_the_reader_in_both_directions_seen_by_version_1() {
     // A byte in the pad of a version 1 entry is not checked by version 1.
     aligned_bytes!(dirty, V1_ENTRIES_DIRTY);
     assert_eq!(verdict::<Entries>(dirty), "OK");
+"#,
+    );
+}
 
-    // `Payload::verify` refuses a buffer longer than the reader's own
-    // `MAX_SIZE`, which the reader sized its receive buffer from, whatever the
-    // content: 8 + 8 + 8 * 8 = 80 bytes for version 1. Unreferenced tail bytes
-    // are not checked, so 40 of them take the 50 bytes of `V2_ENTRIES` past it.
+/// `verify` checks structure, not length (ADR-0030 decision 19). A version 1
+/// reader accepts a version 2 buffer longer than its own `MAX_SIZE`: eight
+/// version 2 entries of 16 bytes take 8 + 8 + 8 * 16 = 144 bytes, against a
+/// version 1 `MAX_SIZE` of 8 + 8 + 8 * 8 = 80. Bytes past what the structure
+/// references are ignored, so a valid buffer with trailing bytes verifies and
+/// decodes to the same value; a malformed buffer longer than `MAX_SIZE` is
+/// refused for its structure, never as `TooLarge`.
+#[test]
+fn a_newer_writers_buffer_longer_than_the_readers_max_size_verifies() {
+    run_evolution(
+        "podbuf_evolution_v1.ridl",
+        "podbuf_evolution_v1_above_max_size",
+        r#"
     assert_eq!(<Entries as Payload<Podbuf>>::MAX_SIZE, 80);
-    let long = format!("{V2_ENTRIES} | {}", "00".repeat(40));
-    aligned_bytes!(too_long, &long);
-    assert_eq!(too_long.len(), 90);
-    assert_eq!(verdict::<Entries>(too_long), "TooLarge");
+
+    // Eight version 2 entries, ids 1 to 8, each `id` at 0, the flags byte at
+    // 1 clear, and a zero descriptor of the absent `note` at 4..12.
+    let mut spec = String::from("08000000 00000000 | 10000000 0800 1000");
+    for id in 1..=8u8 {
+        spec.push_str(&format!(" | {id:02x} 00 0000 0000000000000000 00000000"));
+    }
+    aligned_bytes!(v2_full, &spec);
+    assert_eq!(v2_full.len(), 144, "the probe must pass MAX_SIZE, or it proves nothing");
+    assert_eq!(verdict::<Entries>(v2_full), "OK");
+    let proof = Ref::<Entries, Podbuf>::verify(v2_full).expect("v1 accepts eight v2 entries");
+    assert_eq!(
+        proof.decode(),
+        Entries { items: (1..=8).map(|id| Entry { id }).collect() },
+    );
+
+    // A valid buffer followed by 80 unreferenced bytes.
+    let entries = Entries { items: vec![Entry { id: 3 }, Entry { id: 4 }] };
+    let trailing = format!("{V1_ENTRIES} | {}", "ff".repeat(80));
+    aligned_bytes!(with_tail, &trailing);
+    assert_eq!(with_tail.len(), 112);
+    assert_eq!(verdict::<Entries>(with_tail), "OK");
+    let proof = Ref::<Entries, Podbuf>::verify(with_tail).expect("trailing bytes are ignored");
+    assert_eq!(proof.decode(), entries);
+
+    // The same length, with the array's `off` pointing past the buffer's end:
+    // the structure fault is reported, not the length.
+    let mut past_end = parse(&trailing);
+    past_end[8] = 0xf0;
+    let buf = aligned(&past_end);
+    assert_eq!(verdict::<Entries>(&buf.0[..past_end.len()]), "OutOfBounds");
 "#,
     );
 }

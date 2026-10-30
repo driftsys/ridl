@@ -325,17 +325,20 @@ For the same reason **`verify` applies no `Malformed::TooLarge`** to a proto3
 payload: a buffer from a newer writer may exceed this version's `MAX_SIZE`
 because of the fields this version skips, and
 `a_newer_writers_payload_above_max_size_verifies` pins it. What protects a
-receiver is the buffer its port reads into. `verify` is linear in the bytes it
-reads, except map key uniqueness, which compares each entry's key with the keys
-of the entries before it and so is quadratic in the map's entry count, as the
-FlatBuffers codec's is; the count is checked before each entry's key is
-compared, so at most the declared maximum of entries is compared per entry. Each
-comparison re-reads the message from its first byte, so the walk also passes
-over every field before the entries, unknown fields included: its cost is the
-declared maximum times the fields before the entries, per entry. `verify` needs
-no run-time depth limit: a type is not recursive, so the generated functions
-nest to a depth fixed at generation time, and skipping an unknown
-length-delimited field does not recurse.
+receiver is the transport's refusal of a payload longer than the interaction's
+limit from the catalog, before `verify`
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 19);
+the FlatBuffers and podbuf `verify` apply no length check either. `verify` is
+linear in the bytes it reads, except map key uniqueness, which compares each
+entry's key with the keys of the entries before it and so is quadratic in the
+map's entry count, as the FlatBuffers codec's is; the count is checked before
+each entry's key is compared, so at most the declared maximum of entries is
+compared per entry. Each comparison re-reads the message from its first byte, so
+the walk also passes over every field before the entries, unknown fields
+included: its cost is the declared maximum times the fields before the entries,
+per entry. `verify` needs no run-time depth limit: a type is not recursive, so
+the generated functions nest to a depth fixed at generation time, and skipping
+an unknown length-delimited field does not recurse.
 
 What `verify` refuses as malformed:
 
