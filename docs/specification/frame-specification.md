@@ -763,9 +763,9 @@ decision 6).
 
 **A receiver refuses a payload for its length before `verify`.** The size of a
 payload is the transport's to refuse, against the interaction's limit from the
-catalog: the limit a `[limits.interaction]` entry gives it, carried in the
-descriptor's limit column, or the default ceiling of the interaction's kind when
-the column holds none
+catalog: the limit a `[limits]` entry of the manifest gives it (ADR-0030
+decision 12), carried in the descriptor's limit column, or the default ceiling
+of the interaction's kind when the column holds none
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13, 16
 and 19). Every endpoint of a binding that receives a payload refuses one longer
 than that limit before it verifies the payload, and reports the refusal as the
@@ -999,7 +999,7 @@ its envelope is 20 bytes (`response`), so a data-plane message is at most 36
 bytes plus the payload bound. The largest header of any message is the `attach`
 at 39 + 255 = 294 bytes; it carries no payload, so a receiver's message size
 limit admits at least 294 bytes. A payload is bounded by its interaction's
-limit: the limit the catalog's `[limits.interaction]` entry gives it, or the
+limit: the limit a `[limits]` entry of the catalog's manifest gives it, or the
 default ceiling of its kind, 3,840 bytes for a signal and an event, 16,128 for a
 command and a query, and 65,280 for a `fixed`
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13 and

@@ -739,8 +739,8 @@ fn the_corpus_generates_with_proto3() {
 /// refusal naming that declaration and `NoBound`; `builtininterfaces`,
 /// which declares no string, generates. Every package generates with no
 /// encoding. The corpus pass leaves the workspace out ([`PROTO3_CORPUS`]).
-/// The refusal is the known limit until the platform-wide payload ceiling
-/// of driftsys/ridl#996 lands.
+/// The refusal at generation stands: the cap of such bounds that ADR-0030
+/// decision 3 proposed was withdrawn (driftsys/ridl#996 holds the question).
 #[test]
 fn the_ros2_corpus_is_refused_under_proto3() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");

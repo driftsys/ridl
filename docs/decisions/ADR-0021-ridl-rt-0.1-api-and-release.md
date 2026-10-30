@@ -212,9 +212,10 @@ The crate gains no `PAYLOAD_CEILING` and no `EncodeError::TooLarge`: ADR-0030
 decisions 3 and 4 were withdrawn before they were built, so decision 17 and the
 note of 2026-10-20 stand, and a payload with no finite bound is still refused at
 generation. The `TooLarge { cap }` of the four sending port errors now names the
-member's limit: the limit a `[limits.interaction]` entry gives it, else the
-default ceiling of its kind (ADR-0030 decision 19). `ridl_core::limits` holds
-the same values, and a test in `ridl-backend-rust` keeps the two equal.
+member's limit: the limit a `[limits]` entry of the manifest gives it (ADR-0030
+decision 12), else the default ceiling of its kind (ADR-0030 decision 19).
+`ridl_core::limits` holds the same values, and a test in `ridl-backend-rust`
+keeps the two equal.
 
 **Amendment (2026-10-24) — decision 10: the minimum Rust version is 1.88.**
 `ridl-rt` and the code the Rust codegen emits now require Rust 1.88 instead of

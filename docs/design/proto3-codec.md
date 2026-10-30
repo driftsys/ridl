@@ -162,9 +162,10 @@ them.
 declares or reaches `RosString` is refused under `[Proto3]` with `NoBound`, and
 only `builtininterfaces`, which declares no string, generates;
 `the_ros2_corpus_is_refused_under_proto3` pins it. It is refused under
-`[FlatBuffers]` too, for the same type. This is a known limit until the
-platform-wide payload ceiling of driftsys/ridl#996, which is to cap such bounds
-for both codecs, lands.
+`[FlatBuffers]` too, for the same type. A type with no finite bound is refused
+at generation, and ADR-0030 decision 3, which would have capped such bounds, was
+withdrawn; driftsys/ridl#996 holds the open question of what, if anything,
+replaces it.
 
 `descriptors.rs` emits `Sizes<Proto3>` for every faced interface of a package
 that carries proto3, with each row a const expression over the payloads'
@@ -576,11 +577,11 @@ regenerate byte for byte.
 
 ## Known gaps
 
-| Gap                                                                                                                                                                                 | Issue             |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
-| Neither codec generates a type with no finite bound, so the ros2 corpus packages do not generate with proto3; a platform-wide payload ceiling for both codecs is to cap such bounds | driftsys/ridl#996 |
-| The codec does not reproduce the proto backend's name-collision refusals: a package the `.proto` emitter refuses for a name reason still gets a Rust codec                          | driftsys/ridl#997 |
-| The `.proto` emitter and the codec walk a message separately, held together by the drift test rather than by one shared walk                                                        | driftsys/ridl#690 |
+| Gap                                                                                                                                                                                                               | Issue             |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| Neither codec generates a type with no finite bound, so the ros2 corpus packages do not generate with proto3; the cap of such bounds that ADR-0030 decision 3 proposed was withdrawn, and the question stays open | driftsys/ridl#996 |
+| The codec does not reproduce the proto backend's name-collision refusals: a package the `.proto` emitter refuses for a name reason still gets a Rust codec                                                        | driftsys/ridl#997 |
+| The `.proto` emitter and the codec walk a message separately, held together by the drift test rather than by one shared walk                                                                                      | driftsys/ridl#690 |
 
 ## Alternatives considered
 

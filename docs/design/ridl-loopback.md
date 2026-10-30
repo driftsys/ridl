@@ -722,12 +722,13 @@ The limit is the one `Loopback::set_limit(iface, ord, limit)` gave the member,
 else the default ceiling of the port's kind
 (`ridl_rt::contract::default_ceiling`: 3,840 bytes for a signal and an event,
 16,128 for a command and a query, 65,280 for a fixed). The loopback holds no
-descriptor, so `set_limit` is how a program tells it the limit a
-`[limits.interaction]` entry gives a member; the table lives in the store, so
-every handle and every attached aggregate applies it. The comparison is made
-under the lock, on the sending path, before anything changes: `set` takes the
-lock once for it, where before it took none, and `raise` draws the occurrence's
-sequence number inside the same critical section, after the check.
+descriptor, so `set_limit` is how a program tells it the limit a `[limits]`
+entry of the manifest gives a member (ADR-0030 decision 12); the table lives in
+the store, so every handle and every attached aggregate applies it. The
+comparison is made under the lock, on the sending path, before anything changes:
+`set` takes the lock once for it, where before it took none, and `raise` draws
+the occurrence's sequence number inside the same critical section, after the
+check.
 
 The receiving side adds no check. The loopback is not a binding: its reader,
 source, handler and caller read only what its sending side accepted, so a second

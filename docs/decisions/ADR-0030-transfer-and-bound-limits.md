@@ -156,17 +156,18 @@ When accepted, these records gain a dated note or are changed in place:
   `docs/design/ridl-transport-ws.md`, the frame specification §11.1, and the
   records of the `ridl diff` categories (`docs/book/cli-reference.md`,
   `docs/book/evolving-an-interface.md`).
-- From the amendment of 2026-10-28, when its code lands: ADR-0002 (the note of
-  2026-10-24: the range of a `[limits]` value and MANI-022), ADR-0024 (the note
-  of 2026-10-24: the kinds RIDL-150 checks, and the error RIDL-157), the ridl
-  reference's diagnostics table (the RIDL-150 and RIDL-151 rows, and a new
-  RIDL-157 row), the family overview §7 (the MANI-022 row), the typl reference
-  §4.4 and §4.5 (the ceiling of 16,128 bytes, and the smaller default ceiling of
-  a signal and an event), `docs/book/lints.md` (the paragraphs on
-  `payload-above-ceiling` and on `[limits]`, including the sentence that a
-  `fixed` is not checked), `docs/book/cli-reference.md` (the `[limits]` section:
-  the order that resolves a limit, the raise by a `[limits.interaction]` entry,
-  MANI-022, RIDL-150, RIDL-151 and RIDL-157), `docs/design/interaction-face.md`,
+- From the amendment of 2026-10-28, updated when its code landed on 2026-10-30
+  (driftsys/ridl#1108): ADR-0002 (the note of 2026-10-24: the range of a
+  `[limits]` value and MANI-022), ADR-0024 (the note of 2026-10-24: the kinds
+  RIDL-150 checks, and the error RIDL-157), the ridl reference's diagnostics
+  table (the RIDL-150 and RIDL-151 rows, and a new RIDL-157 row), the family
+  overview §7 (the MANI-022 row), the typl reference §4.4 and §4.5 (the ceiling
+  of 16,128 bytes, and the smaller default ceiling of a signal and an event),
+  `docs/book/lints.md` (the paragraphs on `payload-above-ceiling` and on
+  `[limits]`, including the sentence that a `fixed` is not checked),
+  `docs/book/cli-reference.md` (the `[limits]` section: the order that resolves
+  a limit, the raise by a `[limits.interaction]` entry, MANI-022, RIDL-150,
+  RIDL-151 and RIDL-157), `docs/design/interaction-face.md`,
   `docs/design/ridl-rt.md` and `docs/design/flatbuffers-codec.md` (no `BUFFER`
   above 16,128 bytes on the stack, and a fixed above that read through a view
   and encoded through the caller-buffer API),
@@ -187,9 +188,10 @@ When accepted, these records gain a dated note or are changed in place:
   of RIDL-150; decision 8: no length check in `verify`; open item 2 closed; the
   list of departures from the design) and `docs/decisions/README.md` (the
   summaries of ADR-0030 and ADR-0031).
-- From the amendment of 2026-10-30, to be updated when its code lands: ADR-0021
-  (the entry of the first list above: `ridl-rt` gains no `PAYLOAD_CEILING` and
-  no `EncodeError::TooLarge`, and gains the three default ceilings),
+- From the amendment of 2026-10-30, updated when its code landed on 2026-10-30
+  (driftsys/ridl#1108, driftsys/ridl#1128): ADR-0021 (the entry of the first
+  list above: `ridl-rt` gains no `PAYLOAD_CEILING` and no
+  `EncodeError::TooLarge`, and gains the three default ceilings),
   `docs/design/ridl-rt.md` and `docs/design/interaction-face.md` (the port's
   `TooLarge { cap }` against the member's limit is the one refusal on send),
   ADR-0024 (a note: RIDL-150 retired, its name reserved, RIDL-157 for every
@@ -811,11 +813,12 @@ When accepted, these records gain a dated note or are changed in place:
     has checked, such as the gate of the podbuf trust model (ADR-0031), checks
     the length against the interaction's limit itself.
 
-    The codecs as built differ: the generated FlatBuffers and podbuf `verify`
-    refuse a buffer longer than the type's `MAX_SIZE` with
-    `Malformed::TooLarge`, and the proto3 `verify` applies no length check,
-    because its verifier skips unknown fields (`docs/design/proto3-codec.md`).
-    FlatBuffers and podbuf change to the proto3 behaviour. `Malformed::TooLarge`
+    Before this decision was built, the codecs differed: the generated
+    FlatBuffers and podbuf `verify` refused a buffer longer than the type's
+    `MAX_SIZE` with `Malformed::TooLarge`, and the proto3 `verify` applied no
+    length check, because its verifier skips unknown fields
+    (`docs/design/proto3-codec.md`). FlatBuffers and podbuf were changed to the
+    proto3 behaviour on 2026-10-30 (driftsys/ridl#1108). `Malformed::TooLarge`
     stays in `ridl-rt`, because removing a variant would change its published
     API; the generated code no longer returns it.
 
@@ -853,16 +856,16 @@ When accepted, these records gain a dated note or are changed in place:
     RIDL-152, RIDL-157, and the MANI-022 that the pass of decision 12 raises for
     an entry between 16,129 and 65,280 that does not name a fixed), also run in
     the language server, so an author sees them in the editor, on the
-    interaction, as `ridl check` reports them. Today the lint
-    `payload-above-ceiling` (RIDL-150) and the errors RIDL-151 and RIDL-152 are
+    interaction, as `ridl check` reports them. Before 2026-10-30 the lint
+    `payload-above-ceiling` (RIDL-150) and the errors RIDL-151 and RIDL-152 were
     raised only by `ridl check` and `ridl build`; RIDL-157, and MANI-022 for an
-    entry between 16,129 and 65,280 that does not name a fixed, are not raised
-    yet and come with driftsys/ridl#1108. The language server already reads the
-    lowered IR for its hovers and inlay hints and runs the design lints of
-    `ridlc`; the cost added on each check is the lowering of the workspace where
-    it is not already done, the sizing of each interaction's payload in each
-    enabled encoding and the resolution of the `[limits]` tables. This record
-    does not say how the server schedules that work.
+    entry between 16,129 and 65,280 that does not name a fixed, came with
+    driftsys/ridl#1108, which also built this decision. The language server
+    already read the lowered IR for its hovers and inlay hints and ran the
+    design lints of `ridlc`; the cost added on each check is the lowering of the
+    workspace where it is not already done, the sizing of each interaction's
+    payload in each enabled encoding and the resolution of the `[limits]`
+    tables. This record does not say how the server schedules that work.
 
 ## Where the rules are stated
 

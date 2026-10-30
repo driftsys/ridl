@@ -567,10 +567,10 @@ go wrong at any point in a call's life: `Send(SendError)` when the call was
 never sent, `Call(CallError)` when it was sent and its outcome is a failure, and
 `Read(ReadError)` when the port failed while the outcome was being read.
 
-`SendError` is the failure to _send_: the runtime is busy, the arguments exceed
-the call's capacity, a contract error, or the runtime is gone. It is what the
-`Caller` port itself returns, wrapped in `ClientError::Send` without inventing a
-further conversion.
+`SendError` is the failure to _send_: the runtime is busy, the arguments are
+longer than the member's limit (`TooLarge { cap }`, with `cap` that limit), a
+contract error, or the runtime is gone. It is what the `Caller` port itself
+returns, wrapped in `ClientError::Send` without inventing a further conversion.
 
 `CallError` — `Contract` or `Transport` — is the outcome that comes back from
 the peer, or from the port's own expired-outcome handling at the member's `max`.

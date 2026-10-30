@@ -606,8 +606,8 @@ pub enum ReadError {
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WriteError {
-    /// The value is longer than the signal's limit: the limit a
-    /// `[limits.interaction]` entry gives it, else the default ceiling of a
+    /// The value is longer than the signal's limit: the limit a `[limits]`
+    /// entry of the manifest gives it, else the default ceiling of a
     /// signal ([`contract::default_ceiling`](crate::contract::default_ceiling)).
     /// The value is not staged. This is the one refusal of a payload's size
     /// on send (ADR-0030 decision 19).
@@ -630,8 +630,8 @@ pub enum RaiseError {
     /// The runtime cannot accept an occurrence now. Retryable.
     Busy,
     /// The occurrence is longer than the event's limit: the limit a
-    /// `[limits.interaction]` entry gives it, else the default ceiling of an
-    /// event ([`contract::default_ceiling`](crate::contract::default_ceiling)).
+    /// `[limits]` entry of the manifest gives it, else the default ceiling of
+    /// an event ([`contract::default_ceiling`](crate::contract::default_ceiling)).
     /// Nothing is raised. This is the one refusal of a payload's size on send
     /// (ADR-0030 decision 19).
     TooLarge {
@@ -653,8 +653,8 @@ pub enum SendError {
     /// The runtime cannot accept a call now. Retryable.
     Busy,
     /// The arguments are longer than the call's limit: the limit a
-    /// `[limits.interaction]` entry gives it, else the default ceiling of a
-    /// command or a query
+    /// `[limits]` entry of the manifest gives it, else the default ceiling of
+    /// a command or a query
     /// ([`contract::default_ceiling`](crate::contract::default_ceiling)).
     /// Nothing is sent. This is the one refusal of a payload's size on send
     /// (ADR-0030 decision 19).
@@ -697,8 +697,8 @@ pub enum ServeError {
 pub enum SettleError {
     /// The claim was already settled, or was never issued.
     UnknownClaim,
-    /// The reply is longer than the call's limit: the limit a
-    /// `[limits.interaction]` entry gives it, else the default ceiling of a
+    /// The reply is longer than the call's limit: the limit a `[limits]`
+    /// entry of the manifest gives it, else the default ceiling of a
     /// command or a query
     /// ([`contract::default_ceiling`](crate::contract::default_ceiling)).
     /// No outcome is recorded, and the claim stays settleable. This is the

@@ -378,8 +378,8 @@ impl<E: Encoding> Loopback<E> {
     /// of encoded payload, in place of the default ceiling of its kind.
     ///
     /// The loopback holds no catalog descriptor, so this is how a program
-    /// tells it the limit that a `[limits.interaction]` entry gives a member
-    /// (ADR-0030 decision 12). The limit is the store's: every handle and
+    /// tells it the limit that a `[limits]` entry of the manifest gives a
+    /// member (ADR-0030 decision 12). The limit is the store's: every handle and
     /// every attached aggregate applies it, and a later call replaces it. A
     /// member with no limit given has the default ceiling of its kind,
     /// read from the port the payload is sent through

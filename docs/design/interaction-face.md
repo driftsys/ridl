@@ -1072,7 +1072,10 @@ than 16,128 bytes on the stack
 face itself refuses no payload for its size: the one refusal on send is the
 port's `TooLarge { cap }`, which the runtime raises against the member's limit
 (ADR-0030 decision 19) and the face returns unchanged, as it returns every port
-error; a refused `settle` is answered `corrupt`
+error. A reply the port refuses with `SettleError::TooLarge` is left to the
+handler: the claim stays unsettled, and the dispatch pass continues with the
+next claim. A claim whose arguments do not fit `MAX_BUFFER_SIZE` is a different
+case: it is settled `corrupt` without being read
 (`round_trip_an_oversized_claim_is_settled_corrupt_and_the_claim_behind_it_is_served`
 in `crates/ridl-backend-rust/tests/interaction_face.rs`). The two ways to a
 smaller frame are named here so that a consumer on a target with a smaller stack

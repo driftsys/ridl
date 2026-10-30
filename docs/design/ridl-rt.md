@@ -1036,7 +1036,9 @@ decision 14). `SendError::Busy` is the local case, a refusal before anything is
 sent. The `TooLarge { cap }` of `WriteError`, `RaiseError`, `SendError` and
 `SettleError` is the one refusal of a payload's size on send (ADR-0030 decision
 19): the port compares the payload's length with the member's limit — the limit
-a `[limits.interaction]` entry gives it, else the default ceiling of its kind
+a `[limits]` entry of the manifest gives it (its `[limits.interaction]` entry,
+else the entry of its kind in `[limits.kind]`, else `default` clamped to the
+default ceiling of its kind), else the default ceiling of its kind
 (`contract::default_ceiling`) — and refuses a longer one with that limit as
 `cap`, staging, raising, sending or recording nothing. `Detached` — the runtime
 behind the port is gone — is local to the port, not a stratum. Why `Contract`
