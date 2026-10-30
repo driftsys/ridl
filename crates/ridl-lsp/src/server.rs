@@ -331,6 +331,11 @@ struct ServerState {
     /// packages as `ridl check`. Only the workspace call reads them; they
     /// are not published here.
     loader_errors: Vec<(String, String)>,
+    /// Whether a load-time Error that blocks the size pass has no file (only
+    /// a [`FileId::DETACHED`] span: a remote import that is not cached, for
+    /// example). `ridl check` lets such an error block every package, so the
+    /// size pass of the workspace is skipped while it stands.
+    loader_error_detached: bool,
     /// The directories a remote unit is read from — each loaded unit's
     /// directory, the manifest root's `vendor/` and the cache root
     /// ([`ridlc::remote_dirs`]). A remote unit
@@ -389,6 +394,7 @@ impl ServerState {
             backends: BTreeMap::new(),
             unit_limits: BTreeMap::new(),
             loader_errors: Vec::new(),
+            loader_error_detached: false,
             remote_dirs: Vec::new(),
             remote_notice: None,
             edited: HashSet::new(),
@@ -464,9 +470,13 @@ impl ServerState {
             }
         }
         self.remote_dirs = ridlc::remote_dirs(&remote_units, &cache, dir);
-        self.loader_errors = diagnostics
+        let blocking = diagnostics
             .iter()
-            .filter(|d| d.severity == Severity::Error && !d.code.as_str().starts_with("RSDL-7"))
+            .filter(|d| d.severity == Severity::Error && !d.code.as_str().starts_with("RSDL-7"));
+        self.loader_error_detached = blocking
+            .clone()
+            .any(|d| sources.path(d.primary.file).is_none());
+        self.loader_errors = blocking
             .filter_map(|d| {
                 let path = sources.path(d.primary.file)?.to_string();
                 let text = sources.text(d.primary.file)?.to_string();
@@ -988,24 +998,30 @@ impl ServerState {
                 None => workspace_errors.push(diagnostic.clone()),
             }
         }
+        // Only the file of a marker is read; its code stands for any loader
+        // error.
+        let marker = |file: FileId| Diagnostic {
+            code: DiagCode::MANI_001,
+            severity: Severity::Error,
+            message: String::new(),
+            primary: Span {
+                file,
+                range: TextRange::default(),
+            },
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
         for (path, text) in &self.loader_errors {
             if self.edited.contains(path) {
                 continue;
             }
-            let file = sources.file_id(path, text);
-            workspace_errors.push(Diagnostic {
-                // Only the file of this marker is read; its code stands for any
-                // manifest error.
-                code: DiagCode::MANI_001,
-                severity: Severity::Error,
-                message: String::new(),
-                primary: Span {
-                    file,
-                    range: TextRange::default(),
-                },
-                labels: Vec::new(),
-                fixits: Vec::new(),
-            });
+            workspace_errors.push(marker(sources.file_id(path, text)));
+        }
+        // A detached error has no file an edit could clear, so it blocks the
+        // workspace's size pass until the next load, as it blocks every
+        // package of `ridl check`.
+        if self.loader_error_detached {
+            workspace_errors.push(marker(FileId::DETACHED));
         }
         let sized = ridlc::check_payload_sizes(
             db,

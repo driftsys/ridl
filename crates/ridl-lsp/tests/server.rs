@@ -7131,3 +7131,69 @@ fn a_manifest_error_skips_the_size_pass_of_the_packages_beneath_it() {
     shut_down(&client, 2);
     server.join().expect("thread joins").expect("clean exit");
 }
+
+/// A load-time error with no file, such as a remote import with no
+/// `ridl.lock` entry (MANI-103 under the server's frozen load), blocks every
+/// package of `ridl check`, so the server runs no size pass while it stands:
+/// the oversized signal draws no RIDL-157.
+///
+/// Mutation: drop the detached error from the errors the size pass reads.
+#[test]
+fn a_detached_loader_error_skips_the_size_pass_as_ridl_check_does() {
+    let dir = TempDir::new("size-detached-error");
+    let (_manifest, file) = write_size_unit(
+        &dir,
+        "[imports]\n\"other.dep\" = \"https://registry.example.com/other/dep@v1.0.0\"\n",
+        &size_source(1000),
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    let initial = next_publish(&client, &file);
+    assert!(
+        size_diagnostics(&initial.diagnostics).is_empty(),
+        "{:?}",
+        initial.diagnostics,
+    );
+    // An edit of the source does not clear an error that no file carries.
+    did_open(&client, &file, &size_source(1001));
+    let edited = next_publish(&client, &file);
+    assert!(
+        size_diagnostics(&edited.diagnostics).is_empty(),
+        "{:?}",
+        edited.diagnostics,
+    );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A load-time error carried by a source file (TYPL-002, the package name
+/// does not mirror the directory) skips the size pass of its package until
+/// that file is edited: the loader's finding described the loaded text, so an
+/// edit drops it, and the size pass runs over the new text.
+#[test]
+fn an_edit_of_the_file_that_carries_a_loader_error_lets_the_size_pass_run() {
+    let dir = TempDir::new("size-law-error");
+    let misnamed = size_source(1000).replace("package demo", "package demo.sub");
+    let (_manifest, file) = write_size_unit(&dir, "", &misnamed);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let initial = next_publish(&client, &file);
+    assert!(
+        codes(&initial.diagnostics).contains(&"TYPL-002"),
+        "{:?}",
+        initial.diagnostics
+    );
+    assert!(
+        size_diagnostics(&initial.diagnostics).is_empty(),
+        "{:?}",
+        initial.diagnostics,
+    );
+
+    did_open(&client, &file, &size_source(1000));
+    let edited = next_publish(&client, &file);
+    assert_eq!(codes(&edited.diagnostics), vec!["RIDL-157"]);
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
