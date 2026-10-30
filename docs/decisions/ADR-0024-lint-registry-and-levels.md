@@ -50,6 +50,26 @@ above a limit that a `[limits]` entry of its unit declares, and RIDL-152 reports
 a `[limits.interaction]` key that names no interaction of the unit. RIDL-150
 stays a lint at `warn` where no entry applies.
 
+Amended 2026-10-30 from the owner's decision of that day: decision 2 is changed
+in place, and decisions 17 to 19 are added. A `//` line comment of the form
+`// lint: allow <name> -- <reason>` allows a lint on one declaration and
+everything inside it, and wins over the package's `[lints]` level, `deny`
+included. Two lints join the registry, TYPL-411 `unused-lint-directive` and
+TYPL-412 `malformed-lint-directive`, both at `info` (decision 18). The deferred
+source attribute of the alternatives is taken in this comment form, and the
+`forbid` alternative now has something to forbid and stays deferred. Decision 4
+gains a sentence. Not built: driftsys/ridl#1124. Until it is built,
+[the lints page](../book/lints.md) keeps saying that no source attribute changes
+a level, because the book describes the system as built.
+
+Documents amended by the amendment of 2026-10-30: this record only. When the
+code lands, driftsys/ridl#1124 updates the lints page, adds one sentence to the
+typl reference §13 (decision 17) and adds the two lints to the typl reference
+§16.5. It also updates the two ranges of documentation codes that name §16.5, in
+the rsdl reference §16 (the codes an `.rsdl` file draws) and in the family
+overview §7, to include the two new codes. The ridl reference, the general form
+and ADR-0029 do not change.
+
 It amends two records in place, in the same change:
 [ADR-0002](ADR-0002-module-system.md) §4 (the `[lints]` table and its resolution
 order) and [ADR-0010](ADR-0010-cli-conventions.md) decision 1 (a lint at `deny`
@@ -99,9 +119,74 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
    it to `allow` and make that gate silent for ordinal changes. The book states
    this next to the lint.
 
-2. **A level is set only in the `[lints]` table of a `ridl.toml`** (design D-2).
-   There is no source attribute such as `@allow(...)`. It stays a possible
-   follow-up.
+2. **A level is set in the `[lints]` table of a `ridl.toml`, and a lint is
+   allowed on one declaration by a `//` comment** (design D-2, changed in place
+   2026-10-30; the original decision allowed no source form and kept one as a
+   possible follow-up). The `[lints]` table sets a level for a whole package
+   (decision 10). A **lint directive** allows one or more lints on one
+   declaration:
+
+   ```ridl,ignore
+   // lint: allow missing-docs, unbounded-float -- generated from the legacy DBC
+   type Raw : float
+   ```
+
+   - _Spelling._ The comment text after `//` and optional whitespace is
+     `lint: allow`, one or more lint names separated by commas, then `--` and a
+     reason that is not empty. Only a `//` line comment is read. A `///` doc
+     comment is doc text (typl §14), and a `/* */` comment is not read, even
+     when either starts with `lint:`. Comments are trivia in the CST
+     (`SyntaxKind::LineComment` in `crates/ridl-syntax/src/syntax_kind.rs`), so
+     the grammar does not change, and a source that compiles today compiles the
+     same way.
+   - _Names, not codes._ A directive names a lint by its `[lints]` name
+     (decision 7), never by its code.
+   - _Only `allow`._ A directive cannot set `info`, `warn` or `deny`; a
+     directive with another level word is malformed (decision 18).
+   - _A reason is required._ A directive with no `--` or with an empty reason is
+     malformed and allows nothing.
+   - _Scope._ A directive applies to a declaration, never to a line range. The
+     declarations are the carriers of the typl reference §14.4: `type`, `const`,
+     `struct`, `enum`, `enumset`, `union`, `interface` and `service`; a struct
+     field, an enum value, an enumset bit, a union arm, an interaction
+     (`signal`, `event`, `command`, `query`, `fixed`), a parameter of a
+     `command` or a `query`, and a `reserved` entry; the rsdl `system`,
+     `component`, `distribution`, `deployment` and `machine`, and an rsdl body
+     line (`offers`, `requires`, a bare member reference). The scope is the text
+     range of the declaration's syntax node and of its doc comment, so it covers
+     the declaration's members and attribute blocks. A diagnostic is inside the
+     scope when its primary span is.
+     - A directive on its own line applies to the next declaration. Only doc
+       comment lines and other directive lines may come between them, and no
+       blank line may.
+     - A directive at the end of a line applies to the outermost declaration
+       whose first token, not counting its doc comment, is on that line. On
+       `struct Pose { x: m, y: m } // lint: allow …` that is `Pose`; on the line
+       of one field, it is that field.
+     - A directive that applies to no declaration by these two rules, for
+       example one before `package` or an `import`, one followed by a blank
+       line, or one at the end of a closing `}`, is malformed.
+
+     There is no file-level form and no disable and enable pair: the `[lints]`
+     table covers a whole package. A diagnostic whose primary span is outside
+     every declaration, on `package` or an `import` for example, can only be set
+     by `[lints]`.
+   - _Precedence._ A directive wins over the level of its lint in every
+     `[lints]` table that applies to the file, `deny` included, and over the
+     default level. An allowed diagnostic is removed, as `allow` in `[lints]`
+     removes it, so it does not appear in the text, JSON or SARIF report.
+   - _Errors stay errors._ An Error code has no lint name (decision 1), so no
+     directive can name it, and an error diagnostic inside a scope is reported.
+   - _Where it applies._ A directive applies where levels apply (decision 8), in
+     the same step that applies them (decision 6); the commands that apply no
+     level ignore directives. The language server, the command line and the MCP
+     tool `ridl_check` all read the source, so they see the same directives, and
+     the reason of decision 3 still holds: the editor, the command line and an
+     agent agree on the levels for the same entry point.
+   - _Formatter constraint._ `ridl-fmt` keeps an own-line directive directly
+     above the declaration it precedes, inserts no blank line between them, and
+     keeps an end-of-line directive on the line where its declaration starts.
+     Otherwise formatting a file would change what the directive allows.
 
 3. **The command line does not override levels** (design D-3). There is no
    `--deny-warnings` and no `-A`/`-W`/`-D` flag. A CI that wants stricter checks
@@ -112,7 +197,10 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
    removes the diagnostic. `deny` emits it with Error severity, so ADR-0010's
    rule ("a diagnostic error over the checked source" exits 1) applies with no
    new exit code. There is no `forbid`: without a source attribute there is
-   nothing for it to forbid.
+   nothing for it to forbid. From the amendment of 2026-10-30 a lint directive
+   (decision 2) can lower any level, `deny` included. A `forbid` level that no
+   directive may lower can be added if a team needs one; until then the
+   directive always wins.
 
 5. **The SARIF output carries no `helpUri` yet** (design D-5). The long-form
    error index (roadmap E4.2) is not written, and the MCP tool `ridl_explain`
@@ -242,6 +330,57 @@ decision n** for n from 1 to 9, so a citation of "D-8" is a citation of decision
     `ridl mcp`: they apply levels to the diagnostics they report, and no exit
     code of theirs depends on a level.
 
+17. **The directive is defined in this record, and the typl reference gains one
+    sentence when the code lands** (2026-10-30). The typl reference §13 says a
+    comment is discarded by the compiler, which stops being true for a lint
+    directive, and the reference is where an author reads the meaning of a
+    comment. It gains one sentence in §13: a `//` comment that starts with
+    `lint:` is read by the checker as a lint directive, ADR-0024 decision 2. The
+    reference is included in the book, which describes the system as built, so
+    the sentence is added with the code (driftsys/ridl#1124), not now. The ridl
+    and rsdl references take comments from typl and do not change.
+
+18. **Two lints report directive mistakes, both at `info`** (2026-10-30). Both
+    are TYPL-4xx, the band of the documentation rules (typl §16.5), which read
+    comments and already cover ridl and rsdl sources; they are the next free
+    codes after TYPL-410.
+    - TYPL-411 `unused-lint-directive`: a lint that a directive names raises no
+      diagnostic inside the directive's scope. Whether a diagnostic is raised is
+      decided before any level is applied, so a directive that allows a lint
+      which is `allow` by default, or `allow` in `[lints]`, is used when the
+      emit site raises that lint. A name whose lint the entry point does not
+      raise at all is never unused there: RIDL-150 in the language server, which
+      does not run it, and RIDL-407 outside `ridl check --baseline`.
+    - TYPL-412 `malformed-lint-directive`: a `//` comment that starts with
+      `lint:` and is not a valid directive. It names a word other than `allow`;
+      it names no lint; one of its names is not a lint name, which includes a
+      diagnostic code and a name with no catalogue row; it has no reason; or it
+      applies to no declaration (decision 2). A directive with no reason, with a
+      word other than `allow`, or that applies to no declaration allows nothing.
+      A name that is not a lint name is ignored, and the other names of the same
+      directive still apply, as MANI-010 ignores one `[lints]` entry and keeps
+      the others (decision 11).
+
+    Two lints, not one, because the two findings call for different actions: a
+    malformed directive is a mistake to fix at once, while an unused directive
+    can be left on purpose, for example while a lint's precision changes, and a
+    project may want to set the two levels apart. Both start at `info`, as
+    ADR-0029 decision 2 requires of a new lint, and that decision is not
+    amended. `info` is enough: a malformed directive allows nothing, so the
+    diagnostic it was meant to allow is still reported at its own level, and an
+    unused directive hides nothing.
+
+    A directive cannot allow TYPL-411 or TYPL-412: their primary span is the
+    directive itself, and a directive that could silence the report of its own
+    mistake would hide that mistake. Only `[lints]` sets their levels.
+
+19. **The unused check runs once per report** (2026-10-30). `apply_lint_levels`
+    must stay idempotent (decision 6), and `ridl check --baseline` applies the
+    levels twice. The step that reports TYPL-411 therefore runs over the full
+    list of the diagnostics that the entry point raises, after its last
+    diagnostic is raised, and a second application of the levels does not report
+    a directive as unused because the first one removed what it allowed.
+
 ## Alternatives considered
 
 From the design's §10. The numbers are the decisions that reject them.
@@ -256,6 +395,34 @@ From the design's §10. The numbers are the decisions that reject them.
   without turning a lint off for the whole package, but changes the language
   surface (an ADR, checked against ADR-0011, ADR-0012 and ADR-0015). Deferred
   (decision 2) until real false positives from the planned lints show the need.
+  Taken on 2026-10-30 in a comment form, `// lint: allow <name> -- <reason>`,
+  which gives the same local exception without changing the grammar or the
+  attribute model of the general form (decision 2).
+- **A line-range pair, `// lint: disable <name>` and `// lint: enable <name>`,
+  or a file-level directive.** Rejected for decision 2 on 2026-10-30. A pair has
+  no clear scope when one half is missing, moved or reordered by an edit, and a
+  file-level form duplicates `[lints]`, which already covers a package.
+- **Prior art for the directive** (2026-10-30). TypeScript has `// @ts-ignore`,
+  `// @ts-expect-error`, which is itself an error when nothing on the next line
+  is suppressed, and `// @ts-nocheck` for a file; none of the three selects an
+  error code. ESLint has `// eslint-disable-next-line rule -- reason`, a block
+  pair `/* eslint-disable rule */` and `/* eslint-enable rule */`, and an option
+  that reports a directive which suppresses nothing. Deno lint has
+  `// deno-lint-ignore rule`. Kotlin and detekt use the annotation
+  `@Suppress("...")` on an element. ktlint 1.0 removed its `// ktlint-disable`
+  and `// ktlint-enable` comment directives in favour of `@Suppress`, because
+  the scope of a line-range pair was unclear. This design takes the comment and
+  the required reason of ESLint, the unused report of `@ts-expect-error` and
+  ESLint, and the element scope of `@Suppress`.
+- **One lint for every directive mistake.** Simpler to name, but a project could
+  not keep malformed directives visible while it silences unused ones. Rejected
+  for decision 18.
+- **Start the directive lints at `warn`.** Would need a third exception to
+  ADR-0029 decision 2, and a malformed directive is already visible through the
+  diagnostic it fails to allow. Rejected for decision 18.
+- **A directive that names a diagnostic code.** A `[lints]` key is a name, not a
+  code (decision 11); the directive follows the table so that one vocabulary
+  sets levels. Rejected for decision 2.
 - **`--deny-warnings`, or cargo-style `-A`/`-W`/`-D` flags.** Convenient for CI,
   but the editor and CI could then disagree. Rejected for decision 3.
 - **A `helpUri` into the book, or a long-form help text per code now.** The
@@ -269,7 +436,8 @@ From the design's §10. The numbers are the decisions that reject them.
   fewest files, but three copies drift, and the brief asks for the same results
   everywhere. Rejected for decision 6.
 - **A `forbid` level.** Has nothing to forbid without a source attribute
-  (decision 4).
+  (decision 4). From 2026-10-30 a directive gives it something to forbid; it
+  stays deferred until a team needs a lint that no directive may lower.
 - **Apply the levels inside the shared compile, for every command.** Simpler,
   with one call in `check_loaded`, but a lint at `deny` would then make
   `ridl diff` and `ridl test` exit 2, block `ridl baseline` and `ridl lock`, and
@@ -285,7 +453,9 @@ From the design's §10. The numbers are the decisions that reject them.
   dependency is not worth it (decision 12).
 
 The design records no alternatives for decisions 10, 11 and 13 to 16, and the
-stage driver recorded none for them at implementation.
+stage driver recorded none for them at implementation. The amendment of
+2026-10-30 records alternatives for decisions 2 and 18, above, and none for
+decisions 17 and 19.
 
 ## Consequences
 
@@ -305,6 +475,10 @@ stage driver recorded none for them at implementation.
   restart; and it does not canonicalise paths when it looks up a scope. The
   member entry point gap of the original decision 9 was #529, which ADR-0026
   closes.
+- From the amendment of 2026-10-30: the directive spelling, like a lint name, is
+  something a source file refers to, so once released it is stable as the lint
+  names are (decision 7). Adding it and the two lints is an addition, which
+  ADR-0029 decision 2 does not freeze.
 - Diagnostic codes written in Markdown stay unguarded (#191) except the lint
   table of the book, which `book_lints.rs` compares with the catalogue.
 
