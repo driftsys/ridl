@@ -225,9 +225,10 @@ unit tests use to pass a fake one; the default is
   empty `Uint8Array` when the reply has no bytes. Both reject with a
   `SessionError` whose `failure.category` is `contract` (with the `Contract`,
   and the `Rule` under `invalid-value`), `corrupt` or `busy` as the provider
-  answered, or, detected by the client, `corrupt` (a reply longer than the
-  member's limit, D-19), `undelivered` (a command's bound passed), `timeout` (a
-  query's bound passed) or `down` (the session ended).
+  answered, or, detected by the client, `corrupt` (a reply, or the arguments
+  before they are sent, longer than the member's limit, D-19), `undelivered` (a
+  command's bound passed), `timeout` (a query's bound passed) or `down` (the
+  session ended).
 - `close()` sends a close with code 1000 and rejects every waiting operation
   with `down` at once. `closed` resolves once, with an `Ended`: the close code
   and reason the platform reported (1006 when the connection failed), and
@@ -385,9 +386,13 @@ have a detected invalid value reported, so that nothing fails silently:
   `detected: "corrupt"`, with the envelope of the frame (§9.2); it counts in the
   event's sequence, so no loss is recorded for it.
 
-Nothing is sent back, and the session does not end. The client checks nothing it
-sends: the provider answers a `request` whose arguments are longer than the
-member's limit with `corrupt` (the crate's D-26). A `fixed` whose value is
+Nothing is sent back, and the session does not end. The one payload the client
+sends, the arguments of a `request`, is checked before it is sent: `command` and
+`query` reject with `corrupt` when the arguments are longer than the member's
+limit, and send nothing. That is the answer the provider gives a `request` above
+the limit (the crate's D-26), but only to arguments that one message carries; a
+larger message is above the provider's message limit, which closes the session
+with 1009 and rejects every call in flight with `down`. A `fixed` whose value is
 longer than one message, which the provider cannot serve over this binding until
 driftsys/ridl#1129, is answered by the provider with
 `contract(unknown-interaction)`, which rejects the `read` as any refused read.
@@ -525,7 +530,6 @@ chapter on the package: it is not published, and no generated code uses it yet.
 - Reading a catalog descriptor: the `kind` check, the response bound, the
   time-to-live discard of an occurrence, and compatible earlier hashes. The
   payload limits come from the generated tables instead (D-19).
-- A check of the length of a payload the client sends (D-19).
 - A close code on a protocol violation and a client liveness timer (D-10, D-11;
   driftsys/ridl#991).
 - Publication to JSR (driftsys/ridl#992).

@@ -141,7 +141,9 @@ stage = "connecting";
 const session = await connect(`ws://127.0.0.1:${port}`, {
   catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
   encoding: "flatbuffers",
-  // The generated tables give the session each member's payload limit.
+  // The generated tables give the session the limit of each member a
+// `[limits]` entry raises; cabin has none, so every member keeps the
+// default ceiling of its kind.
   interfaces: [Cabin, Horn],
   onPublish(target, sample) {
     if (!sample.payload || failure) return;

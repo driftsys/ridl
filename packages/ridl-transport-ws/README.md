@@ -35,8 +35,9 @@ A received payload longer than its member's limit never reaches the application:
 - an `occurrence` is delivered with an empty payload and `detected: "corrupt"`,
   and counts in the event's sequence.
 
-A payload the client sends is not checked: the provider answers a `request`
-above its member's limit with `corrupt`.
+The arguments of a command or a query longer than the member's limit reject the
+call with `SessionError` `corrupt` before anything is sent, the answer the
+provider gives a `request` above the limit.
 
 ## Limits
 

@@ -423,3 +423,102 @@ test("a reply on a query the generated tables raise resolves up to the raised li
   );
   await assert.rejects(above, isFailure("corrupt"));
 });
+
+/**
+ * The generated table of an interface whose command `6` and query `7` are
+ * lowered to 100 bytes, below the default ceiling of their kind.
+ */
+const LOWERED_CALLS = {
+  iface: 1,
+  set: { iface: 1, ord: 6, kind: "command", limit: 100 },
+  ask: { iface: 1, ord: 7, kind: "query", limit: 100 },
+} as const;
+
+test("a reply on a query the generated tables lower resolves up to the lowered limit and rejects corrupt above it", async () => {
+  const { socket, session } = await attached({ interfaces: [LOWERED_CALLS] });
+  const within = session.query(1, 7, new Uint8Array(), BOUND);
+  socket.deliver(
+    response(QUERY, 1n, { outcome: "reply", payload: new Uint8Array(100) }),
+  );
+  assert.equal((await within).length, 100);
+  const above = session.query(1, 7, new Uint8Array(), BOUND);
+  socket.deliver(
+    response(QUERY, 2n, { outcome: "reply", payload: new Uint8Array(101) }),
+  );
+  await assert.rejects(above, isFailure("corrupt"));
+});
+
+test("a command whose arguments are above the default ceiling of a command rejects with corrupt and sends nothing", async () => {
+  const { socket, session, notes } = await attached();
+  const sent = frames(socket).length;
+  await assert.rejects(
+    session.command(1, 6, new Uint8Array(16_129), BOUND),
+    isFailure("corrupt"),
+  );
+  assert.equal(frames(socket).length, sent);
+  // The refused call took no caller number: the next request has `seq` 1,
+  // and arguments of exactly the ceiling are sent.
+  const call = session.command(1, 6, new Uint8Array(16_128), BOUND);
+  const request = lastSent(socket);
+  assert.equal(request.form, "request");
+  if (request.form !== "request") return;
+  assert.equal(request.envelope.seq, 1n);
+  assert.equal(request.payload.length, 16_128);
+  socket.deliver(response(COMMAND, 1n, { outcome: "accepted" }));
+  await call;
+  assert.deepEqual(notes, []);
+});
+
+test("a query whose arguments are above the default ceiling of a query rejects with corrupt and sends nothing", async () => {
+  const { socket, session } = await attached();
+  const sent = frames(socket).length;
+  await assert.rejects(
+    session.query(1, 7, new Uint8Array(16_129), BOUND),
+    isFailure("corrupt"),
+  );
+  assert.equal(frames(socket).length, sent);
+});
+
+test("the arguments of a call are checked against the limit the generated tables give the member", async () => {
+  const { socket, session } = await attached({
+    interfaces: [LOWERED_CALLS, RAISED_QUERY],
+  });
+  // The command is lowered to 100 bytes: 101 are refused, 100 are sent.
+  const sent = frames(socket).length;
+  await assert.rejects(
+    session.command(1, 6, new Uint8Array(101), BOUND),
+    isFailure("corrupt"),
+  );
+  assert.equal(frames(socket).length, sent);
+  const within = session.command(1, 6, new Uint8Array(100), BOUND);
+  assert.equal(frames(socket).length, sent + 1);
+  socket.deliver(response(COMMAND, 1n, { outcome: "accepted" }));
+  await within;
+  // A member of another kind with the same numbers keeps its own limit: the
+  // query 6 has no entry, so its arguments are checked against 16,128.
+  const other = session.query(1, 6, new Uint8Array(16_128), BOUND);
+  assert.equal(frames(socket).length, sent + 2);
+  socket.deliver(
+    response({ kind: Kind.Query, iface: 1, ord: 6 }, 2n, {
+      outcome: "reply",
+      payload: new Uint8Array(),
+    }),
+  );
+  await other;
+});
+
+test("the arguments of a query the generated tables raise are sent up to the raised limit", async () => {
+  const { socket, session } = await attached({ interfaces: [RAISED_QUERY] });
+  const sent = frames(socket).length;
+  const within = session.query(1, 7, new Uint8Array(20_000), BOUND);
+  assert.equal(frames(socket).length, sent + 1);
+  socket.deliver(
+    response(QUERY, 1n, { outcome: "reply", payload: new Uint8Array() }),
+  );
+  await within;
+  await assert.rejects(
+    session.query(1, 7, new Uint8Array(20_001), BOUND),
+    isFailure("corrupt"),
+  );
+  assert.equal(frames(socket).length, sent + 1);
+});

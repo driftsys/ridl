@@ -1137,3 +1137,55 @@ Deno.test("a read of a signal answered by a publish above its limit rejects with
   assert.equal(h.session.sample(1, 2)?.detected, "corrupt");
   assert.equal(h.publishes.length, 1);
 });
+
+/**
+ * The generated table of an interface whose signal `2` and event `3` are
+ * lowered to 100 bytes, below the default ceiling of their kind.
+ */
+const LOWERED = {
+  iface: 1,
+  narrow: { iface: 1, ord: 2, kind: "signal", limit: 100 },
+  trickle: { iface: 1, ord: 3, kind: "event", limit: 100 },
+} as const;
+
+Deno.test("a publish on a signal the generated tables lower is live up to the lowered limit and detected corrupt above it", async () => {
+  const h = await attachedWith({ interfaces: [LOWERED] });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 1n, 100));
+  h.socket.deliver(liveOf(SIGNAL, 2n, 101));
+  assert.deepEqual(
+    h.publishes.map((p) => [p.sample.provenance, p.sample.detected]),
+    [["live", undefined], ["invalid", "corrupt"]],
+  );
+  assert.equal(h.publishes[0].sample.payload?.length, 100);
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("a read of a signal the generated tables lower rejects with corrupt above the lowered limit", async () => {
+  const h = await attachedWith({ interfaces: [LOWERED] });
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 1n, 101));
+  await assert.rejects(reading, isFailure("corrupt"));
+});
+
+Deno.test("an occurrence on an event the generated tables lower is delivered up to the lowered limit and detected corrupt above it", async () => {
+  const h = await attachedWith({ interfaces: [LOWERED] });
+  await subscribed(h, EVENT);
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 201n, seq: 1n },
+    payload: new Uint8Array(100),
+  });
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 202n, seq: 2n },
+    payload: new Uint8Array(101),
+  });
+  assert.deepEqual(
+    h.occurrences.map((o) => [o.payload.length, o.detected]),
+    [[100, undefined], [0, "corrupt"]],
+  );
+  assert.deepEqual(h.notes, []);
+});

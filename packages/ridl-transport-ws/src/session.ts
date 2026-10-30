@@ -434,8 +434,10 @@ export class Session {
    * a copy of `args`. Resolves on `accepted`. Rejects with a
    * {@link SessionError}: `contract`, `corrupt` or `busy` as the provider
    * answered, `undelivered` when `opts.bound` milliseconds pass with no
-   * `response`, `down` when the session has ended or ends first. Rejects with
-   * a `RangeError`, and sends nothing, when `opts.bound` is not a finite number
+   * `response`, `down` when the session has ended or ends first; `corrupt`
+   * also, before anything is sent, when `args` is longer than the member's
+   * limit, the refusal the provider would answer. Rejects with a
+   * `RangeError`, and sends nothing, when `opts.bound` is not a finite number
    * of milliseconds greater than 0 and at most 2147483647, or when `iface` or
    * `ord` is not an integer from 1 to 4294967295.
    */
@@ -447,6 +449,7 @@ export class Session {
   ): Promise<void> {
     try {
       checkNumbers(iface, ord);
+      this.#checkArgs({ kind: Kind.Command, iface, ord }, args);
     } catch (e) {
       return Promise.reject(e);
     }
@@ -469,14 +472,16 @@ export class Session {
     args: Uint8Array,
     opts: { bound: number },
   ): Promise<Uint8Array> {
+    const target: Target = { kind: Kind.Query, iface, ord };
     try {
       checkNumbers(iface, ord);
+      this.#checkArgs(target, args);
     } catch (e) {
       return Promise.reject(e);
     }
     return this.#calls.query(
       opts.bound,
-      this.#limitOf({ kind: Kind.Query, iface, ord }),
+      this.#limitOf(target),
       (seq) => this.#request(Kind.Query, iface, ord, seq, args),
     );
   }
@@ -529,6 +534,18 @@ export class Session {
    */
   #limitOf(target: Target): number {
     return this.#limits.get(identity(target)) ?? defaultCeiling(target.kind);
+  }
+
+  /**
+   * Throws the `corrupt` {@link SessionError} when the arguments of a call
+   * are longer than the member's limit: the provider would answer the
+   * `request` so, and a larger message could end the session instead, so the
+   * call is refused before it is sent.
+   */
+  #checkArgs(target: Target, args: Uint8Array): void {
+    if (args.length > this.#limitOf(target)) {
+      throw new SessionError({ category: "corrupt" });
+    }
   }
 
   /**
