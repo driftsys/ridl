@@ -260,7 +260,7 @@ fn limit_short(table: &MemberTable, limit: usize) -> Option<(Target, usize)> {
             } else {
                 member_limit
             };
-            let needed = largest_header() + carried;
+            let needed = largest_header().saturating_add(carried);
             match largest {
                 Some((_, most)) if most >= needed => largest,
                 _ => Some((target, needed)),

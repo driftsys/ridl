@@ -15,7 +15,10 @@ use crate::frame::Target;
 /// [`Described::new`](super::Described::new) can check it against the ports
 /// it is paired with. Each entry maps an interface number and an ordinal to
 /// the member's kind, its `max` bound and its payload limit, the largest
-/// number of argument bytes a `request` to the member may carry. A retired
+/// number of payload bytes the member carries in either direction: the
+/// arguments of a `request` to it, and the value the session sends for it
+/// (a `publish`, an `occurrence` or a `reply`). A member with no limit has
+/// the default ceiling of its kind. A retired
 /// interface and a reserved ordinal have no entry. The embedder builds the
 /// table with [`new`](Self::new) and [`insert`](Self::insert), or, with the
 /// `descriptor` feature, with `from_descriptor` from the bytes of a catalog

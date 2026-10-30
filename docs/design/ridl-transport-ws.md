@@ -278,11 +278,11 @@ have no entry (§6.4). The embedder builds it through `new` and `insert`, or,
 with the `descriptor` feature, with `MemberTable::from_descriptor` from the
 bytes of a `<unit>.catalog.binfb` file. `from_descriptor` verifies the buffer
 with `ridl_descriptor::verify`, adds one entry for each member, with its
-`max_us` as the bound and its `limit` as the payload limit (an absent `limit`
-gives no limit), and adds each hash of the descriptor's `compatible` list; it
-returns `DescriptorError` for a buffer that fails verification, a hash that is
-not 32 bytes, an interface number or an ordinal of 0, and a `max_us` that is not
-a decimal `u64`.
+`max_us` as the bound and its `limit` as the payload limit (a member whose
+`limit` is absent has the default ceiling of its kind as its limit), and adds
+each hash of the descriptor's `compatible` list; it returns `DescriptorError`
+for a buffer that fails verification, a hash that is not 32 bytes, an interface
+number or an ordinal of 0, and a `max_us` that is not a decimal `u64`.
 
 The ports are an associated type rather than supertraits so that an embedder, or
 a test crate, can serve a runtime type it does not own: the orphan rule forbids
@@ -672,8 +672,8 @@ is added, because the frame has none for a configuration error and a new reason
 would change the frozen `wire` surface. The default `Config` carries every
 catalog, a catalog with a large `fixed` included, so a binding never refuses an
 allowed interaction at attach (ADR-0030 decision 20). Without a member table
-there is no check: the message limit alone bounds what is sent, and the default
-ceiling of the frame's `kind` bounds a `request`.
+there is no `Config` check: the default ceiling of the frame's `kind`, under the
+message limit, bounds what the session sends and what a `request` carries.
 
 ## The WebSocket layer (`ws`)
 
