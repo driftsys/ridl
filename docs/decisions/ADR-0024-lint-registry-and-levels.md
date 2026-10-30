@@ -58,9 +58,11 @@ Amended 2026-10-30 by [ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision
 or with no finite bound, for every kind, where no `[limits]` entry gives the
 interaction its limit; it has no lint name and no level (decision 1). Decision
 18 names RIDL-150 as the example of a lint the language server does not run; the
-text stands as written, and when driftsys/ridl#1124 is built,
-`payload-above-ceiling` is not a lint name, so a directive that names it is
-TYPL-412.
+text stands as written. The language server runs the size checks (RIDL-151,
+RIDL-152, RIDL-157 and the MANI-022 of the `[limits]` table) through the same
+`ridlc` function as `ridl check` (ADR-0030 decision 21). When driftsys/ridl#1124
+is built, `payload-above-ceiling` is not a lint name, so a directive that names
+it is TYPL-412.
 
 Amended 2026-10-30 from the owner's decision of that day: decision 2 is changed
 in place, and decisions 17 to 19 are added. A `//` line comment of the form

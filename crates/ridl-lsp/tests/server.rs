@@ -6912,3 +6912,163 @@ fn a_closed_connection_ends_the_session_without_shutdown() {
     let end = server.join().expect("thread joins").expect("no error");
     assert_eq!(end, ridl_lsp::server::SessionEnd::WithoutShutdown);
 }
+
+// ==========================================================================
+// The size pass (ADR-0030): RIDL-151, RIDL-152, RIDL-157 and MANI-022
+// ==========================================================================
+
+/// A signal whose payload is a string of `chars` characters. The payload is
+/// above 3,840 bytes in FlatBuffers for 946 characters or more.
+fn size_source(chars: u32) -> String {
+    format!(
+        "package demo\ntype Payload: string [0..{chars}]\n\
+         interface I {{\n  signal s: Payload @[10ms..100ms]\n}}\n"
+    )
+}
+
+/// Writes a one-package unit whose manifest ends with `extra`, and returns
+/// the URIs of its manifest and of its source file.
+fn write_size_unit(dir: &TempDir, extra: &str, source: &str) -> (lt::Uri, lt::Uri) {
+    let manifest = dir.write(
+        "ridl.toml",
+        &format!("[package]\nname = \"demo\"\nversion = \"1.0.0\"\n{extra}"),
+    );
+    let file = dir.write("m.ridl", source);
+    (uri_of(&manifest), uri_of(&file))
+}
+
+/// The diagnostics whose code is one the size pass raises.
+fn size_diagnostics(diagnostics: &[lt::Diagnostic]) -> Vec<&lt::Diagnostic> {
+    diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            matches!(
+                &diagnostic.code,
+                Some(lt::NumberOrString::String(code))
+                    if matches!(code.as_str(), "RIDL-151" | "RIDL-152" | "RIDL-157" | "MANI-022")
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_payload_above_its_default_ceiling_publishes_ridl_157_until_the_buffer_shrinks_it() {
+    let dir = TempDir::new("size-157");
+    let (_manifest, file) = write_size_unit(&dir, "", &size_source(1000));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let initial = next_publish(&client, &file);
+    let found = size_diagnostics(&initial.diagnostics);
+    assert_eq!(codes(&initial.diagnostics), vec!["RIDL-157"]);
+    assert_eq!(found[0].severity, Some(lt::DiagnosticSeverity::ERROR));
+
+    did_open(&client, &file, &size_source(100));
+    let shrunk = next_publish(&client, &file);
+    assert!(
+        size_diagnostics(&shrunk.diagnostics).is_empty(),
+        "a smaller bound clears the error: {:?}",
+        shrunk.diagnostics,
+    );
+
+    did_open(&client, &file, &size_source(1000));
+    let grown = next_publish(&client, &file);
+    assert_eq!(codes(&grown.diagnostics), vec!["RIDL-157"]);
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+#[test]
+fn the_size_pass_measures_the_encodings_of_the_backend_tables() {
+    let dir = TempDir::new("size-proto3");
+    // 950 characters fit in proto3 (up to 959) and not in FlatBuffers (up to
+    // 945); 960 characters do not fit in proto3.
+    let (_manifest, file) = write_size_unit(
+        &dir,
+        "[backend.rust]\nencodings = [\"proto3\"]\n",
+        &size_source(950),
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    let fits = next_publish(&client, &file);
+    assert!(
+        size_diagnostics(&fits.diagnostics).is_empty(),
+        "{:?}",
+        fits.diagnostics,
+    );
+
+    did_open(&client, &file, &size_source(960));
+    let above = next_publish(&client, &file);
+    let found = size_diagnostics(&above.diagnostics);
+    assert_eq!(codes(&above.diagnostics), vec!["RIDL-157"]);
+    assert!(
+        found[0].message.contains("in proto3"),
+        "{}",
+        found[0].message
+    );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+#[test]
+fn a_standalone_overlay_is_sized_under_flatbuffers() {
+    let file_uri = path_to_uri("/ridl-lsp-nowhere/sized.ridl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    did_open(&client, &file_uri, &size_source(1000));
+    let opened = next_publish(&client, &file_uri);
+    assert_eq!(codes(&opened.diagnostics), vec!["RIDL-157"]);
+
+    did_open(&client, &file_uri, &size_source(100));
+    let shrunk = next_publish(&client, &file_uri);
+    assert!(
+        size_diagnostics(&shrunk.diagnostics).is_empty(),
+        "{:?}",
+        shrunk.diagnostics,
+    );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+#[test]
+fn a_limits_entry_publishes_ridl_151_on_the_source_and_ridl_152_on_the_manifest() {
+    let dir = TempDir::new("size-151");
+    let extra = "[limits.interaction]\n\"I.s\" = 100\n\"I.nope\" = 100\n";
+    let (manifest, file) = write_size_unit(&dir, extra, &size_source(100));
+    let (client, server) = start(uri_of(dir.path()));
+
+    let source = next_publish(&client, &file);
+    assert_eq!(codes(&source.diagnostics), vec!["RIDL-151"]);
+    let table = next_publish(&client, &manifest);
+    assert_eq!(codes(&table.diagnostics), vec!["RIDL-152"]);
+    let text = std::fs::read_to_string(dir.path().join("ridl.toml")).expect("read the manifest");
+    assert_eq!(table.diagnostics[0].range, range_of(&text, "\"I.nope\"", 0));
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+#[test]
+fn a_raise_above_16128_on_a_signal_publishes_mani_022_on_the_manifest() {
+    let dir = TempDir::new("size-mani-022");
+    let (manifest, _file) = write_size_unit(
+        &dir,
+        "[limits.interaction]\n\"I.s\" = 16129\n",
+        &size_source(100),
+    );
+    let (client, server) = start(uri_of(dir.path()));
+
+    let table = next_publish(&client, &manifest);
+    assert_eq!(codes(&table.diagnostics), vec!["MANI-022"]);
+    assert_eq!(
+        table.diagnostics[0].severity,
+        Some(lt::DiagnosticSeverity::ERROR)
+    );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
