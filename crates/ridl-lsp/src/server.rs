@@ -994,7 +994,9 @@ impl ServerState {
             }
             let file = sources.file_id(path, text);
             workspace_errors.push(Diagnostic {
-                code: DiagCode("MANI-000"),
+                // Only the file of this marker is read; its code stands for any
+                // manifest error.
+                code: DiagCode::MANI_001,
                 severity: Severity::Error,
                 message: String::new(),
                 primary: Span {
