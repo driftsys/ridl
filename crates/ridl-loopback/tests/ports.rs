@@ -310,6 +310,32 @@ fn the_injected_settle_failure_is_too_large_with_no_capacity() {
     );
 }
 
+/// A size refusal is made before the armed fault is consumed, so the fault
+/// still fails the next settlement that is within the limit.
+#[test]
+fn a_size_refusal_does_not_use_up_the_armed_settle_failure() {
+    let mut rt = runtime();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    rt.set_limit(IFACE, ORD, 2);
+    rt.query(IFACE, ORD, &[1], None).expect("send");
+    let mut buf = [0u8; 8];
+    let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
+
+    rt.fail_next_settle();
+    assert_eq!(
+        rt.settle(claim.id, Ok(&[1, 2, 3])),
+        Err(SettleError::TooLarge { cap: 2 }),
+        "the size refusal names the member's limit"
+    );
+    assert_eq!(
+        rt.settle(claim.id, Ok(&[1, 2])),
+        Err(SettleError::TooLarge { cap: 0 }),
+        "the armed fault is still there for the next settlement"
+    );
+    rt.settle(claim.id, Ok(&[1, 2]))
+        .expect("the fault was consumed by the settlement it failed");
+}
+
 // ---------------------------------------------------------------------------
 // `fixed`.
 // ---------------------------------------------------------------------------
