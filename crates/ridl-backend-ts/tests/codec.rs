@@ -265,12 +265,15 @@ fn assert_complete(label: &str, model: &v1::Model, source: &str) {
                     );
                 }
                 None => {
-                    let roles: Vec<String> = roles
+                    let mut roles: Vec<String> = roles
                         .iter()
                         .map(|(role, constant)| {
                             format!("{role}: {}", constant.as_ref().expect("bounded"))
                         })
                         .collect();
+                    if let Some(limit) = interaction.limit {
+                        roles.push(format!("limit: {limit}"));
+                    }
                     let line = format!("{entry}, {} }},\n", roles.join(", "));
                     assert!(source.contains(&line), "{label}: no `{line}` in:\n{source}");
                 }
@@ -1159,4 +1162,33 @@ fn an_unused_constant_does_not_collide() {
         "{source}"
     );
     assert_eq!(source.matches("const codecRidlStdName").count(), 1);
+}
+
+/// The mutable live interaction of `model.interfaces[0]` at `slot`.
+fn interaction_at(model: &mut v1::Model, slot: usize) -> &mut v1::Interaction {
+    match model.interfaces[0].slots[slot].occupant.as_mut() {
+        Some(v1::interaction_slot::Occupant::Interaction(interaction)) => interaction,
+        _ => panic!("slot {slot} of the first interface holds a live interaction"),
+    }
+}
+
+/// A member entry carries `limit` when the model records a limit for the
+/// member, and no `limit` otherwise: the consumer reads each member's limit
+/// from the table, so a limit the catalog records must reach it.
+#[test]
+fn a_member_entry_carries_the_recorded_limit() {
+    let mut model = cabin_model();
+    interaction_at(&mut model, 0).limit = Some(64);
+    let source = module(&model, "veh.cabin");
+    assert!(
+        source.contains(
+            "  temperature: { iface: 1, ord: 1, kind: \"signal\", payload: codecTemperature, limit: 64 },\n"
+        ),
+        "the entry of `temperature` carries `limit: 64`:\n{source}"
+    );
+    assert!(
+        source
+            .contains("  warning: { iface: 1, ord: 2, kind: \"event\", payload: codecWarning },\n"),
+        "the entry of `warning`, which has no limit, carries none:\n{source}"
+    );
 }

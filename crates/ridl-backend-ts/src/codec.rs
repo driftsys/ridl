@@ -10,7 +10,8 @@
 //! is exported as an `interface`, or as the type alias
 //! `Record<string, never>` when it has no field. The module also exports the catalog's name
 //! and hash, the qualified names of the payload types, the text of the rule
-//! codes of the wasm module, and one member table per declared interface.
+//! codes of the wasm module, and one member table per declared interface,
+//! whose entry carries the member's payload limit when the model records one.
 //!
 //! A named scalar or an enum set of another package converts by a type
 //! assertion, and a payload type of another package that is one goes through
@@ -1504,6 +1505,11 @@ impl<'a> Codec<'a> {
                     ));
                 }
             };
+            // `limit` is written only when the catalog records one: absent,
+            // the member has the default ceiling of its kind.
+            if let Some(limit) = interaction.limit {
+                roles.push(format!("limit: {limit}"));
+            }
             let _ = writeln!(
                 out,
                 "  {member}: {{ iface: {number}, ord: {}, kind: \"{kind}\", {} }},",

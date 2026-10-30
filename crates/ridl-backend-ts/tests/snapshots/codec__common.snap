@@ -19,7 +19,7 @@ function absent(type: string, field: string): never {
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "veh.common";
 /** The hash of the catalog unit, which the wasm module carries. */
-export const CATALOG_HASH: Uint8Array = Uint8Array.from([26, 62, 47, 136, 248, 117, 101, 174, 9, 155, 240, 142, 247, 122, 171, 193, 42, 100, 144, 169, 135, 197, 63, 191, 113, 57, 144, 155, 176, 161, 21, 42]);
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([92, 20, 226, 14, 243, 132, 5, 26, 138, 0, 31, 104, 226, 62, 220, 97, 165, 214, 30, 168, 143, 112, 107, 12, 140, 113, 117, 50, 235, 127, 202, 4]);
 /** The qualified names of the payload types of this package, which name the wasm type ids. */
 export const PAYLOAD_TYPES = [
   "veh.common.BoundsSummary",
@@ -635,7 +635,7 @@ export const Sensors = {
   profile: { iface: 1, ord: 6, kind: "query", request: codecRidlStdName, reply: codecDriverProfile },
   span: { iface: 1, ord: 7, kind: "query", request: codecSensorsSpanParams, reply: codecSensorsSpanReply },
   setting: { iface: 1, ord: 8, kind: "signal", payload: codecSetting },
-  note: { iface: 1, ord: 9, kind: "signal", payload: codecNote },
+  note: { iface: 1, ord: 9, kind: "signal", payload: codecNote, limit: 4096 },
   fetch: { iface: 1, ord: 10, kind: "query", request: codecCounter },
   extras: { iface: 1, ord: 11, kind: "signal", payload: codecExtras },
   pick: { iface: 1, ord: 12, kind: "signal", payload: codecPick },
