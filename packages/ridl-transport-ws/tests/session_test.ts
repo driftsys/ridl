@@ -998,11 +998,15 @@ function liveOf(target: Target, seq: bigint, length: number): Frame {
   });
 }
 
-/** The generated table of an interface whose signal `2` is raised to 4,096 bytes. */
+/**
+ * The generated table of an interface whose signal `2` and event `3` are
+ * raised to 4,096 bytes.
+ */
 const RAISED = {
   iface: 1,
   wide: { iface: 1, ord: 2, kind: "signal", limit: 4096 },
   narrow: { iface: 1, ord: 4, kind: "signal" },
+  burst: { iface: 1, ord: 3, kind: "event", limit: 4096 },
 } as const;
 
 Deno.test("a publish above the default ceiling of a signal is delivered invalid with detected corrupt and becomes the held sample", async () => {
@@ -1091,6 +1095,28 @@ Deno.test("an occurrence of exactly the default ceiling of an event is delivered
   });
   assert.equal(h.occurrences[0].payload.length, 3_840);
   assert.equal(h.occurrences[0].detected, undefined);
+});
+
+Deno.test("an occurrence on an event the generated tables raise is delivered up to the raised limit and detected corrupt above it", async () => {
+  const h = await attachedWith({ interfaces: [RAISED] });
+  await subscribed(h, EVENT);
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 201n, seq: 1n },
+    payload: new Uint8Array(4_096),
+  });
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 202n, seq: 2n },
+    payload: new Uint8Array(4_097),
+  });
+  assert.deepEqual(
+    h.occurrences.map((o) => [o.payload.length, o.detected]),
+    [[4_096, undefined], [0, "corrupt"]],
+  );
+  assert.deepEqual(h.notes, []);
 });
 
 Deno.test("a read of a fixed above the default ceiling of a fixed rejects with corrupt", async () => {

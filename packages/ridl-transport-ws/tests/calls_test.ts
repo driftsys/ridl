@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { connect, decode, Kind, SessionError, SUBPROTOCOL } from "../mod.ts";
-import type { Frame, Note, ResponseOutcome, Session, Target } from "../mod.ts";
+import type {
+  ConnectOptions,
+  Frame,
+  Note,
+  ResponseOutcome,
+  Session,
+  Target,
+} from "../mod.ts";
 import { FakeSocket } from "./fake_socket.ts";
 
 const HASH = Uint8Array.from({ length: 32 }, (_, i) => i);
@@ -18,7 +25,7 @@ function test(name: string, fn: () => Promise<void>): void {
   Deno.test({ name, sanitizeOps: true, fn });
 }
 
-async function attached() {
+async function attached(extra: Partial<ConnectOptions> = {}) {
   const sockets: FakeSocket[] = [];
   const notes: Note[] = [];
   const pending = connect("ws://127.0.0.1:9000", {
@@ -30,6 +37,7 @@ async function attached() {
       sockets.push(socket);
       return socket as unknown as WebSocket;
     },
+    ...extra,
   });
   const socket = sockets[0];
   socket.open(SUBPROTOCOL);
@@ -381,4 +389,36 @@ test("a reply of exactly the query's default limit resolves", async () => {
     response(QUERY, 1n, { outcome: "reply", payload: new Uint8Array(16_128) }),
   );
   assert.equal((await call).length, 16_128);
+});
+
+test("a reply is checked against the query's limit, not against the limit of the kind its target echoes", async () => {
+  const { socket, session } = await attached();
+  const call = session.query(1, 7, new Uint8Array(), BOUND);
+  // The response echoes the query's numbers under the fixed kind, whose
+  // default ceiling (65,280) would let 20,000 bytes pass.
+  const echoed: Target = { kind: Kind.Fixed, iface: 1, ord: 7 };
+  socket.deliver(
+    response(echoed, 1n, { outcome: "reply", payload: new Uint8Array(20_000) }),
+  );
+  await assert.rejects(call, isFailure("corrupt"));
+});
+
+/** The generated table of an interface whose query `7` is raised to 20,000 bytes. */
+const RAISED_QUERY = {
+  iface: 1,
+  deep: { iface: 1, ord: 7, kind: "query", limit: 20_000 },
+} as const;
+
+test("a reply on a query the generated tables raise resolves up to the raised limit and rejects corrupt above it", async () => {
+  const { socket, session } = await attached({ interfaces: [RAISED_QUERY] });
+  const within = session.query(1, 7, new Uint8Array(), BOUND);
+  socket.deliver(
+    response(QUERY, 1n, { outcome: "reply", payload: new Uint8Array(20_000) }),
+  );
+  assert.equal((await within).length, 20_000);
+  const above = session.query(1, 7, new Uint8Array(), BOUND);
+  socket.deliver(
+    response(QUERY, 2n, { outcome: "reply", payload: new Uint8Array(20_001) }),
+  );
+  await assert.rejects(above, isFailure("corrupt"));
 });

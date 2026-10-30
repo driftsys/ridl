@@ -81,7 +81,12 @@ export interface MemberEntry {
   readonly ord: number;
   /** The interaction kind, as the generated module spells it. */
   readonly kind: "signal" | "event" | "command" | "query" | "fixed";
-  /** The payload limit a `[limits.interaction]` entry gives the member. */
+  /**
+   * The payload limit a `[limits]` entry of the manifest gives the member:
+   * its `[limits.interaction]` entry, else the entry of its kind in
+   * `[limits.kind]`, else `default`, each clamped to the default ceiling of
+   * its kind.
+   */
   readonly limit?: number;
 }
 
@@ -471,6 +476,7 @@ export class Session {
     }
     return this.#calls.query(
       opts.bound,
+      this.#limitOf({ kind: Kind.Query, iface, ord }),
       (seq) => this.#request(Kind.Query, iface, ord, seq, args),
     );
   }
@@ -587,7 +593,7 @@ export class Session {
         this.#onOccurrence(frame);
         return;
       case "response": {
-        const reason = this.#calls.settle(frame, this.#limitOf(frame.target));
+        const reason = this.#calls.settle(frame);
         if (reason) this.#note({ note: "discarded", reason, frame });
         return;
       }
