@@ -520,13 +520,11 @@ A `string` is a sequence of **Unicode scalar values**. `string [N]` bounds the
 count of scalar values — not graphemes, which are unbounded, and not bytes,
 which `bytes` counts. Default `[0..256]` when unspecified (warning).
 
-The largest advised bound is **4,032 characters**. A string of 4,032 characters
-is at most 16,128 bytes of UTF-8, which with the transport header and the
-encoding overhead fits in one transfer of 16,384 bytes
-([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 6). A
-bound above it draws TYPL-116 (warning), reported on the bound. The payload
-ceiling is 16,256 bytes, and the codecs do not yet enforce it
-(driftsys/ridl#996).
+The largest advised bound is **16,256 characters**, 254 times 64. Four times
+that bound, plus 58 bytes of overhead, is within 65,280 bytes, the largest
+payload of any kind
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 7). A
+bound above it draws TYPL-116 (warning), reported on the bound.
 
 Every encoding carries a `string` as **UTF-8**. The in-memory representation is
 the target language's own — UTF-8 in Rust, UTF-16 in TypeScript, Kotlin and C# —
@@ -562,9 +560,9 @@ a rejected alternative of that record.
 Bound is in bytes; constraint syntax mirrors `string` but has no `match`.
 Default `[0..256]` when unspecified (warning).
 
-The largest advised bound is **16,128 bytes**, the byte size of a string at its
-advised bound (§4.4). A bound above it draws TYPL-116 (warning), reported on the
-bound.
+The largest advised bound is **65,280 bytes**, the largest payload of any kind
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 7). A
+bound above it draws TYPL-116 (warning), reported on the bound.
 
 ### 4.6 Byte Order
 
@@ -1395,22 +1393,22 @@ is in ridl §16.4.
 
 ### 16.2 Scalars and Constants (TYPL-1xx)
 
-| Code     | Rule                                                                                                                                                                                                                                                                      | Severity                                           |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| TYPL-101 | `integer` without a range constraint                                                                                                                                                                                                                                      | warning; error if active profile requires          |
-| TYPL-102 | `float` without both a range and a `step`                                                                                                                                                                                                                                 | warning; error if active profile requires          |
-| TYPL-103 | `string`/`bytes` without explicit bounds — default `[0..256]` applied                                                                                                                                                                                                     | warning; error if active profile requires          |
-| TYPL-104 | range `min > max`                                                                                                                                                                                                                                                         | error                                              |
-| TYPL-105 | `step` type mismatch, non-positive, or larger than the range                                                                                                                                                                                                              | error                                              |
-| TYPL-106 | invalid regex syntax in `match` or a regex `const` — a valid pattern the Rust `regex` crate refuses is TYPL-220                                                                                                                                                           | error                                              |
-| TYPL-107 | regex contradicts declared character bound                                                                                                                                                                                                                                | warning                                            |
-| TYPL-108 | `const` value violates its declared type constraints                                                                                                                                                                                                                      | error                                              |
-| TYPL-109 | init `= value` incompatible with the type or field constraints                                                                                                                                                                                                            | error                                              |
-| TYPL-110 | unknown or malformed UCUM unit expression                                                                                                                                                                                                                                 | error                                              |
-| TYPL-111 | integer range bound outside the `int64` domain (`[-2⁶³..2⁶³−1]`)                                                                                                                                                                                                          | error                                              |
-| TYPL-112 | a concrete wire-width name (`uint8` … `float64`) written in source — width is inferred, not written (§5.6)                                                                                                                                                                | error                                              |
-| TYPL-115 | type has no derivable init value and no declared `= value` (§5.8)                                                                                                                                                                                                         | info — escalated by consumers that require an init |
-| TYPL-116 | `string`/`bytes` bound above the advised transfer limit — a `string` bound above 4,032 characters or a `bytes` bound above 16,128 bytes (§4.4, §4.5), reported on the bound; the payload ceiling is 16,256 bytes, which the codecs do not yet enforce (driftsys/ridl#996) | warning                                            |
+| Code     | Rule                                                                                                                                                                                                                          | Severity                                           |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| TYPL-101 | `integer` without a range constraint                                                                                                                                                                                          | warning; error if active profile requires          |
+| TYPL-102 | `float` without both a range and a `step`                                                                                                                                                                                     | warning; error if active profile requires          |
+| TYPL-103 | `string`/`bytes` without explicit bounds — default `[0..256]` applied                                                                                                                                                         | warning; error if active profile requires          |
+| TYPL-104 | range `min > max`                                                                                                                                                                                                             | error                                              |
+| TYPL-105 | `step` type mismatch, non-positive, or larger than the range                                                                                                                                                                  | error                                              |
+| TYPL-106 | invalid regex syntax in `match` or a regex `const` — a valid pattern the Rust `regex` crate refuses is TYPL-220                                                                                                               | error                                              |
+| TYPL-107 | regex contradicts declared character bound                                                                                                                                                                                    | warning                                            |
+| TYPL-108 | `const` value violates its declared type constraints                                                                                                                                                                          | error                                              |
+| TYPL-109 | init `= value` incompatible with the type or field constraints                                                                                                                                                                | error                                              |
+| TYPL-110 | unknown or malformed UCUM unit expression                                                                                                                                                                                     | error                                              |
+| TYPL-111 | integer range bound outside the `int64` domain (`[-2⁶³..2⁶³−1]`)                                                                                                                                                              | error                                              |
+| TYPL-112 | a concrete wire-width name (`uint8` … `float64`) written in source — width is inferred, not written (§5.6)                                                                                                                    | error                                              |
+| TYPL-115 | type has no derivable init value and no declared `= value` (§5.8)                                                                                                                                                             | info — escalated by consumers that require an init |
+| TYPL-116 | `string`/`bytes` bound above the advised transfer limit — a `string` bound above 16,256 characters or a `bytes` bound above 65,280 bytes (§4.4, §4.5), reported on the bound; the largest payload of any kind is 65,280 bytes | warning                                            |
 
 ### 16.3 Composites (TYPL-2xx)
 

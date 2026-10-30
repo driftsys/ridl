@@ -450,7 +450,7 @@ fn an_inline_service_shape_is_named_without_repeating_the_package() {
 /// TYPL-116 takes its level from `[lints]` like any other lint.
 #[test]
 fn bound_above_transfer_takes_its_level_from_the_lints_table() {
-    let source = "package demo\ntype Text: string [0..5000]\n";
+    let source = "package demo\ntype Text: string [0..16257]\n";
     let typl_116 = |extra: &str| {
         check(source, extra)
             .into_iter()
@@ -464,6 +464,36 @@ fn bound_above_transfer_takes_its_level_from_the_lints_table() {
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].severity, Severity::Error);
     assert!(typl_116("[lints]\nbound-above-transfer = \"allow\"\n").is_empty());
+}
+
+/// TYPL-116 thresholds: a `string` bound above 16,256 characters and a
+/// `bytes` bound above 65,280 bytes. The threshold itself draws nothing.
+#[test]
+fn bound_above_transfer_thresholds() {
+    let typl_116 = |source: &str| {
+        check(source, "")
+            .into_iter()
+            .filter(|diagnostic| diagnostic.code.as_str() == "TYPL-116")
+            .collect::<Vec<_>>()
+    };
+    assert!(typl_116("package demo\ntype Text: string [0..16256]\n").is_empty());
+    assert!(typl_116("package demo\ntype Blob: bytes [0..65280]\n").is_empty());
+    let found = typl_116("package demo\ntype Text: string [0..16257]\n");
+    assert_eq!(found.len(), 1);
+    assert!(
+        found[0].message.contains("16256 characters"),
+        "{}",
+        found[0].message
+    );
+    assert!(found[0].message.contains("65280"), "{}", found[0].message);
+    assert!(!found[0].message.contains("16,256"), "{}", found[0].message);
+    let found = typl_116("package demo\ntype Blob: bytes [0..65281]\n");
+    assert_eq!(found.len(), 1);
+    assert!(
+        found[0].message.contains("65280 bytes"),
+        "{}",
+        found[0].message
+    );
 }
 
 /// The error type of a fallible reply is sized too: here it is the large one,

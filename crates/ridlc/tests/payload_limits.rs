@@ -161,14 +161,14 @@ fn resolution_order_is_name_then_kind_then_default() {
                   interface Iface {\n  signal sig: Payload @[10ms..100ms]\n  \
                   event first: Payload @[10ms..100ms]\n  \
                   event second: Payload @[10ms..100ms]\n}\n";
-    let limits = "[limits]\ndefault = 1\n[limits.kind]\nsignal = 10000\n\
-                  [limits.interaction]\n\"Iface.first\" = 10000\n";
+    let limits = "[limits]\ndefault = 1\n[limits.kind]\nsignal = 3000\n\
+                  [limits.interaction]\n\"Iface.first\" = 3000\n";
     let diagnostics = check(source, limits);
     let found = with("RIDL-151", &diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
     assert!(found[0].message.contains("`Iface.second`"), "{found:?}");
     // The name beats the kind and the default, in the lowering direction too.
-    let limits = "[limits]\ndefault = 10000\n[limits.kind]\nsignal = 10000\n\
+    let limits = "[limits]\ndefault = 10000\n[limits.kind]\nsignal = 3000\n\
                   [limits.interaction]\n\"Iface.sig\" = 10\n";
     let diagnostics = check(source, limits);
     let found = with("RIDL-151", &diagnostics);

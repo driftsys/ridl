@@ -14,8 +14,8 @@
 //! `MANI-007` invalid import URL, `MANI-010` a `[lints]` entry that names no
 //! lint or whose value is not a level (warning, ADR-0024 decision 11),
 //! `MANI-015` also a `[limits]` value of the wrong type, `MANI-021` an unknown
-//! kind in `[limits.kind]` and `MANI-022` a limit above the payload ceiling
-//! (ADR-0030 decision 12).
+//! kind in `[limits.kind]` and `MANI-022` a limit above what its entry may give
+//! (ADR-0030 decisions 12 and 18).
 //! `MANI-004` (nested workspace) is defined in
 //! the catalogue but emitted by the package loader, not here: a
 //! manifest read in isolation cannot know it is a workspace member, so a valid
@@ -49,7 +49,7 @@ use serde::Deserialize;
 use toml::Spanned;
 
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
-use crate::limits::PAYLOAD_CEILING;
+use crate::limits::{PAYLOAD_CEILING, default_ceiling};
 use crate::lint::{LintLevel, LintTable, lint_by_name};
 
 /// A parsed `ridl.toml` manifest: its mode-specific [`ManifestKind`], its
@@ -115,18 +115,22 @@ impl LimitKind {
 }
 
 /// One `[limits.interaction]` entry: the key as written, the byte range of the
-/// key in the manifest text, and the limit in bytes. Whether the key names an
-/// interaction of the unit is checked where the interactions are known.
+/// key in the manifest text, the limit in bytes, and the byte range of the
+/// value. Whether the key names an interaction of the unit, and whether the
+/// value is in the range its member's kind allows, is checked where the
+/// interactions are known.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LimitEntry {
     pub name: String,
     pub key: Range<usize>,
     pub value: u32,
+    pub value_span: Range<usize>,
 }
 
 /// The `[limits]` table of one manifest (ADR-0030 decision 12): per-interaction
 /// payload limits in bytes of encoded payload. Every value passed validation
-/// (an integer from 0 to [`PAYLOAD_CEILING`]); an invalid entry is a
+/// (an integer from 0 up to the largest limit its entry may give); an invalid
+/// entry is a
 /// diagnostic and is dropped. Each value carries its byte range in the
 /// manifest text. The table is empty when the manifest has no `[limits]`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -518,12 +522,16 @@ struct RawLimitsInner {
     interaction: Option<Spanned<toml::Value>>,
 }
 
-/// Reads a limit value: an integer from 0 to [`PAYLOAD_CEILING`]. A value that
-/// is not an integer or is negative is MANI-015, and one above the ceiling is
-/// MANI-022; both are on the value and give `None`.
+/// Reads a limit value: an integer from 0 to `max`, the largest limit the
+/// entry may give. A value that is not an integer or is negative is MANI-015,
+/// and one above `max` is MANI-022; both are on the value and give `None`.
+/// `scope` completes the MANI-022 message: it says what `max` is the largest
+/// value of.
 fn limit_value(
     file_id: FileId,
     what: &str,
+    max: u32,
+    scope: &str,
     value: &Spanned<toml::Value>,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<u32> {
@@ -544,13 +552,13 @@ fn limit_value(
         return None;
     };
     match u32::try_from(number) {
-        Ok(limit) if limit <= PAYLOAD_CEILING => Some(limit),
+        Ok(limit) if limit <= max => Some(limit),
         _ => {
             diags.push(error(
                 DiagCode::MANI_022,
                 file_id,
                 value.span(),
-                format!("{what} is {number}, above the payload ceiling of {PAYLOAD_CEILING} bytes"),
+                format!("{what} is {number}, above what the entry may give{scope} ({max} bytes)"),
             ));
             None
         }
@@ -583,8 +591,15 @@ fn collect_limits(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> L
         return limits;
     };
     if let Some(default) = &table.default {
-        limits.default = limit_value(file_id, "`[limits].default`", default, diags)
-            .map(|v| Spanned::new(default.span(), v));
+        limits.default = limit_value(
+            file_id,
+            "`[limits].default`",
+            PAYLOAD_CEILING,
+            "",
+            default,
+            diags,
+        )
+        .map(|v| Spanned::new(default.span(), v));
     }
     let inner = toml::from_str::<RawLimitsSpans>(text)
         .ok()
@@ -605,7 +620,8 @@ fn collect_limits(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> L
                     continue;
                 };
                 let what = format!("`[limits.kind].{}`", key.get_ref());
-                if let Some(v) = limit_value(file_id, &what, &value, diags) {
+                let max = default_ceiling(kind);
+                if let Some(v) = limit_value(file_id, &what, max, " for its kind", &value, diags) {
                     limits.kinds.insert(kind, Spanned::new(value.span(), v));
                 }
             }
@@ -620,11 +636,12 @@ fn collect_limits(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) -> L
         Some(entries) => {
             for (key, value) in entries {
                 let what = format!("`[limits.interaction].\"{}\"`", key.get_ref());
-                if let Some(v) = limit_value(file_id, &what, &value, diags) {
+                if let Some(v) = limit_value(file_id, &what, PAYLOAD_CEILING, "", &value, diags) {
                     limits.interactions.push(LimitEntry {
                         name: key.get_ref().clone(),
                         key: key.span(),
                         value: v,
+                        value_span: value.span(),
                     });
                 }
             }
@@ -1775,12 +1792,12 @@ version = \"1.0.0\"
 
     #[test]
     fn limit_above_the_ceiling_is_an_error() {
-        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 16257\n");
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 65281\n");
         let (manifest, diags) = parse(&text);
         assert_eq!(codes(&diags), vec!["MANI-022"]);
-        assert_eq!(spanned_text(&text, &diags[0]), "16257");
+        assert_eq!(spanned_text(&text, &diags[0]), "65281");
         assert!(manifest.expect("parses").limits.default.is_none());
-        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 16256\n");
+        let text = format!("{PACKAGE_HEAD}[limits]\ndefault = 65280\n");
         let (manifest, diags) = parse(&text);
         assert!(
             diags.is_empty(),
@@ -1792,8 +1809,70 @@ version = \"1.0.0\"
                 .limits
                 .default
                 .map(|v| *v.get_ref()),
-            Some(16256)
+            Some(65280)
         );
+    }
+
+    /// Parses `[limits]` text and returns the codes of the diagnostics.
+    fn limit_codes(limits: &str) -> Vec<String> {
+        let (_, diags) = parse(&format!("{PACKAGE_HEAD}{limits}"));
+        codes(&diags).into_iter().map(str::to_owned).collect()
+    }
+
+    #[test]
+    fn a_kind_entry_above_its_default_is_an_error() {
+        for (entry, default) in [
+            ("signal", 3840),
+            ("event", 3840),
+            ("command", 16128),
+            ("query", 16128),
+            ("fixed", 65280),
+        ] {
+            let at = limit_codes(&format!("[limits.kind]\n{entry} = {default}\n"));
+            assert!(at.is_empty(), "{entry} at its default, got {at:?}");
+            let above = limit_codes(&format!("[limits.kind]\n{entry} = {}\n", default + 1));
+            assert_eq!(above, vec!["MANI-022"], "{entry} above its default");
+        }
+    }
+
+    #[test]
+    fn a_kind_entry_above_its_default_is_dropped_and_reported_on_the_value() {
+        let text = format!("{PACKAGE_HEAD}[limits.kind]\nsignal = 3841\nevent = 3840\n");
+        let (manifest, diags) = parse(&text);
+        assert_eq!(codes(&diags), vec!["MANI-022"]);
+        assert_eq!(spanned_text(&text, &diags[0]), "3841");
+        assert!(
+            diags[0].message.contains("is 3841") && diags[0].message.contains("(3840 bytes)"),
+            "{}",
+            diags[0].message
+        );
+        let limits = manifest.expect("parses").limits;
+        assert!(!limits.kinds.contains_key(&LimitKind::Signal));
+        assert!(limits.kinds.contains_key(&LimitKind::Event));
+    }
+
+    #[test]
+    fn default_is_valid_up_to_the_largest_ceiling() {
+        assert!(limit_codes("[limits]\ndefault = 65280\n").is_empty());
+        assert_eq!(limit_codes("[limits]\ndefault = 65281\n"), vec!["MANI-022"]);
+    }
+
+    #[test]
+    fn an_interaction_entry_is_valid_up_to_the_largest_ceiling() {
+        assert!(limit_codes("[limits.interaction]\n\"A.b\" = 65280\n").is_empty());
+        assert_eq!(
+            limit_codes("[limits.interaction]\n\"A.b\" = 65281\n"),
+            vec!["MANI-022"]
+        );
+    }
+
+    #[test]
+    fn an_interaction_entry_records_the_range_of_its_value() {
+        let text = format!("{PACKAGE_HEAD}[limits.interaction]\n\"A.b\" = 4000\n");
+        let (manifest, diags) = parse(&text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let limits = manifest.expect("parses").limits;
+        assert_eq!(&text[limits.interactions[0].value_span.clone()], "4000");
     }
 
     #[test]

@@ -396,10 +396,9 @@ diag_codes! {
         TYPL_115 = "TYPL-115", Info,
             "type has no derivable init value and no declared `= value`", lint = "no-init-value";
 
-        /// `string` bound above 4,032 characters or `bytes` bound above 16,128
+        /// `string` bound above 16,256 characters or `bytes` bound above 65,280
         /// bytes (typl §4.4–§4.5, §16.2; ADR-0030 decision 7). Warning. The
-        /// payload ceiling is 16,256 bytes; the codecs do not yet enforce it
-        /// (driftsys/ridl#996).
+        /// largest payload of any kind is 65,280 bytes.
         TYPL_116 = "TYPL-116", Warning,
             "`string`/`bytes` bound above the advised transfer limit", lint = "bound-above-transfer";
 
@@ -1507,11 +1506,15 @@ diag_codes! {
         MANI_021 = "MANI-021", Error,
             "unknown kind in `[limits.kind]`";
 
-        /// A `[limits]` value is above the payload ceiling of 16,256 bytes.
-        /// Reported on the value; the entry is dropped. A value that is not an
-        /// integer from 0 up is MANI-015.
+        /// A `[limits]` value is above what its entry may give: a
+        /// `[limits.kind]` entry above the default ceiling of its kind (3,840
+        /// bytes for `signal` and `event`, 16,128 for `command` and `query`,
+        /// 65,280 for `fixed`), or `default` or a `[limits.interaction]` entry
+        /// above 65,280 bytes (ADR-0030 decisions 12 and 18). Reported on the
+        /// value; the entry is dropped. A value that is not an integer from 0
+        /// up is MANI-015.
         MANI_022 = "MANI-022", Error,
-            "payload limit above the payload ceiling of 16,256 bytes";
+            "payload limit above what its entry may give";
 
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).

@@ -11,13 +11,17 @@
 //! that no interaction carries is not reported.
 
 use ridl_core::diag::{DiagCode, Diagnostic};
-use ridl_core::limits::PAYLOAD_CEILING;
 use ridl_core::lint::lint_by_name;
 use ridl_ir::codegen::{self, v1};
 use ridl_ir::projection::size::{self, Ctx as SizeCtx, PayloadShape};
 use ridl_ir::v2;
 
 use super::Ctx;
+
+/// The ceiling this lint checks against: the single payload ceiling that
+/// applied before the ceilings became per kind. The lint keeps this value
+/// until the size pass replaces it.
+const PAYLOAD_CEILING: u32 = 16_256;
 
 /// What one payload's size state says, ordered from the least to the most
 /// serious so that the worst of several is their maximum.

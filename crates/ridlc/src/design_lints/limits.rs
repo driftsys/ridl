@@ -322,6 +322,7 @@ mod tests {
             name: "I.named".to_string(),
             key: 0..0,
             value: 1,
+            value_span: 0..0,
         });
         limits
     }

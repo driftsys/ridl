@@ -968,15 +968,23 @@ catalog hash. The consumer reports no RIDL-151 or RIDL-152 for it.
 
 The limit of an interaction is the first that is found of: its entry in
 `[limits.interaction]`, the entry of its kind in `[limits.kind]`, `default`,
-and the payload ceiling of 16,256 bytes. No limit is above the ceiling. A key
+and the default ceiling of its kind. The default ceiling is 3,840 bytes for a
+`signal` and an `event`, 16,128 for a `command` and a `query`, and 65,280 for a
+`fixed`. A `[limits.kind]` entry may lower the limit of its kind and may not
+raise it above the default ceiling. `default` applies to each kind up to the
+default ceiling of that kind, so `default = 4096` gives a `signal` the limit
+3,840. A `[limits.interaction]` entry may raise one member above the default
+ceiling of its kind, up to 16,128 bytes; a `fixed` is not raised, because its
+default ceiling is already the largest. No value is above 65,280. A key
 of `[limits.interaction]` is the short name of the interface, or of the inline
 `service` (the last segment of its dotted name), then `.`, then the member;
 neither the package nor a dotted service name is part of it. When two
 interfaces or inline services of one unit share a short name, a key that uses
 the name is ambiguous.
 
-An unknown kind in `[limits.kind]` is MANI-021, and a value above 16,256 is
-MANI-022. A key that names no interaction of the unit, or that is ambiguous, is
+An unknown kind in `[limits.kind]` is MANI-021. MANI-022 is a `[limits.kind]`
+value above the default ceiling of its kind, and a `default` or a
+`[limits.interaction]` value above 65,280. A key that names no interaction of the unit, or that is ambiguous, is
 RIDL-152, reported on the key. RIDL-151 is reported on an interaction whose
 payload has a largest encoded size, in an encoding that a `[backend.<name>]`
 table enables (FlatBuffers when no table names one), above the limit that an

@@ -1659,7 +1659,7 @@ expression: log
             {
               "id": "MANI-022",
               "shortDescription": {
-                "text": "payload limit above the payload ceiling of 16,256 bytes"
+                "text": "payload limit above what its entry may give"
               },
               "defaultConfiguration": {
                 "level": "error"

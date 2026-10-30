@@ -129,7 +129,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unbounded-float` | TYPL-102 | warn | `float` without both a range and a `step` |
 | `unbounded-length` | TYPL-103 | warn | `string`/`bytes` without explicit bounds |
 | `no-init-value` | TYPL-115 | info | type has no derivable init value and no declared `= value` |
-| `bound-above-transfer` | TYPL-116 | warn | `string`/`bytes` bound above the advised transfer limit |
+| `bound-above-transfer` | TYPL-116 | warn | `string`/`bytes` bound above 16,256 characters or 65,280 bytes |
 | `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
 | `inconsistent-unit` | TYPL-222 | info | one field name used with different units |
 | `duplicate-shape` | TYPL-224 | info | duplicate declaration shape |
@@ -169,8 +169,9 @@ MANI-010 is itself a lint, so the table can set its level.
 `vendor-source-not-loaded` (MANI-018) is raised in standalone mode only; a
 workspace has no such warning.
 
-`bound-above-transfer` (TYPL-116) reports a `string` bound above 4,032
-characters or a `bytes` bound above 16,128 bytes, on the bound.
+`bound-above-transfer` (TYPL-116) reports a `string` bound above 16,256
+characters or a `bytes` bound above 65,280 bytes, on the bound. Its message
+names 65,280 bytes as the largest payload of any kind.
 `payload-above-ceiling` (RIDL-150) reports a payload whose largest encoded size,
 in an encoding that the workspace manifest enables, is above 16,256 bytes or has no finite
 bound. It reads the encodings from every `[backend.<name>]` table of the
@@ -180,7 +181,7 @@ empty. It reports on the
 interaction that carries the payload, so a type that no interaction carries is
 not reported. A `fixed` is provisioned and never in flight, so it is not
 checked. A `query` whose reply is a fallible `T | E` is checked through both
-types, and the larger problem is reported. Both messages say that the payload
+types, and the larger problem is reported. The `payload-above-ceiling` message says that the payload
 ceiling is 16,256 bytes and that the codecs do not yet enforce it
 (driftsys/ridl#996). Both default to `warn`, and a package can set either to
 `deny`. The limits are stated in
