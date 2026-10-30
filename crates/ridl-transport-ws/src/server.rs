@@ -14,12 +14,16 @@ use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::time::{Duration, Instant};
 
+use ridl_rt::contract::{default_ceiling, InterfaceNo, Kind, Ordinal, CALL_CEILING};
+use ridl_rt::sample::{Envelope, Timestamp};
+
 pub use backend::{Backend, Described, Polling, Scanning, TableMismatch};
 pub use config::{Config, LimitOutOfRange, Note, RetainedTooSmall};
 #[cfg(feature = "descriptor")]
 pub use descriptor::DescriptorError;
 pub use members::MemberTable;
 
+use crate::frame::{Frame, ResponseOutcome, Target, ENVELOPE_BYTES};
 use crate::ws::{self, CloseCode, Event, FrameWriter, Parser, Upgrade};
 use session::{Session, Step};
 
@@ -136,6 +140,14 @@ pub enum Ended {
     /// `UnexpectedEof` is a client that closed the connection without a
     /// close frame.
     Io(io::ErrorKind),
+    /// [`Config::max_message_bytes`] is below what one message of a member
+    /// of the catalog needs (frame specification §11.1 "The sizes"): the
+    /// configuration cannot carry a payload the catalog allows, which is a
+    /// configuration error, not a session event. [`serve`] returned before
+    /// the opening handshake, without reading the connection, and recorded
+    /// [`Note::MessageLimitTooSmall`]; the connection closes when it is
+    /// dropped. Without a member table there is no check.
+    ConfigRefused,
 }
 
 /// The size of the buffer each socket read fills.
@@ -205,14 +217,77 @@ const LINGER: Duration = Duration::from_millis(100);
 /// at most one entry per signal or event member of the catalog. Without a
 /// table, nothing bounds it, and the paragraph above applies.
 ///
+/// With a member table, `serve` first checks that
+/// [`Config::max_message_bytes`] carries one message of every member: 36
+/// bytes of header and envelope plus the member's limit, which is the limit
+/// the table gives it or the default ceiling of its kind, and at most
+/// 16,128 bytes for a `fixed`, what one message carries. A limit below that
+/// is a configuration error: `serve` records [`Note::MessageLimitTooSmall`]
+/// and returns [`Ended::ConfigRefused`] before the opening handshake,
+/// without reading the connection. The default limit carries every catalog.
+///
 /// A zero [`Config::poll_interval`] or [`Config::liveness_timeout`] is
 /// refused by the stream's `set_read_timeout` or `set_write_timeout`, and
 /// `serve` returns [`Ended::Io`] with `InvalidInput`.
 pub fn serve<C: Connection, B: Backend>(mut conn: C, backend: B, config: &Config) -> Ended {
+    if let Some((target, needed)) = backend
+        .members()
+        .and_then(|table| limit_short(table, config.max_message_bytes()))
+    {
+        if let Some(record) = config.record() {
+            record(&Note::MessageLimitTooSmall { target, needed });
+        }
+        return Ended::ConfigRefused;
+    }
     let mut session = Session::new(backend, config);
     let ended = run(&mut conn, &mut session, config);
     session.close();
     ended
+}
+
+/// The member of `table` whose messages need the most bytes, with that
+/// number, when it is above `limit`: the largest data-plane header and
+/// envelope plus the member's limit, at most [`CALL_CEILING`] for a `fixed`,
+/// whose bytes above it one message does not carry. On a tie, the first
+/// member in key order.
+fn limit_short(table: &MemberTable, limit: usize) -> Option<(Target, usize)> {
+    let largest = table
+        .entries()
+        .fold(None, |largest, (target, member_limit)| {
+            let member_limit = member_limit.map_or(default_ceiling(target.kind), |l| l as usize);
+            let carried = if target.kind == Kind::Fixed {
+                member_limit.min(CALL_CEILING)
+            } else {
+                member_limit
+            };
+            let needed = largest_header() + carried;
+            match largest {
+                Some((_, most)) if most >= needed => largest,
+                _ => Some((target, needed)),
+            }
+        });
+    largest.filter(|(_, needed)| *needed > limit)
+}
+
+/// The size of the largest data-plane header with its envelope: a
+/// `response` under `reply` with an empty payload, 36 bytes.
+fn largest_header() -> usize {
+    let header = Frame::Response {
+        target: Target {
+            kind: Kind::Query,
+            iface: InterfaceNo(1),
+            ord: Ordinal(1),
+        },
+        envelope: Envelope {
+            stamp: Timestamp(0),
+            seq: 0,
+        },
+        correlation: 0,
+        outcome: ResponseOutcome::Reply(&[]),
+    }
+    .encoded_len();
+    debug_assert_eq!(header, ENVELOPE_BYTES + 20);
+    header
 }
 
 fn run<C: Connection, B: Backend>(

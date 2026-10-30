@@ -10,7 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use ridl_loopback::Loopback;
-use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal};
+use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal, CALL_CEILING};
 use ridl_rt::error::CallError;
 use ridl_rt::port::{
     Attached, Caller, Clock, Correlation, Encoded, EventSource, Handler, RawOccurrence, RawSample,
@@ -21,7 +21,9 @@ use ridl_rt::trace::TraceContext;
 use ridl_transport_ws::frame::{
     decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState, Target,
 };
-use ridl_transport_ws::{serve, Backend, Config, Connection, Ended, Note, Polling, Scanning};
+use ridl_transport_ws::{
+    serve, Backend, Config, Connection, Described, Ended, MemberTable, Note, Polling, Scanning,
+};
 use tungstenite::client::IntoClientRequest;
 use tungstenite::protocol::frame::coding::CloseCode;
 use tungstenite::protocol::frame::CloseFrame;
@@ -47,6 +49,31 @@ const QUERY: Target = Target {
     iface: IFACE,
     ord: Ordinal(4),
 };
+
+/// The member table of the test catalog: signal 1, event 2, command 3, query
+/// 4 and fixed 5, each with the payload limit `limit` gives it, or none.
+fn table(limit: impl Fn(Target) -> Option<u32>) -> Arc<MemberTable> {
+    let mut t = MemberTable::new(CATALOG.name, CATALOG.hash);
+    let kinds = [
+        Kind::Signal,
+        Kind::Event,
+        Kind::Command,
+        Kind::Query,
+        Kind::Fixed,
+    ];
+    for (ord, kind) in (1..).zip(kinds) {
+        let target = Target {
+            kind,
+            iface: IFACE,
+            ord: Ordinal(ord),
+        };
+        t.insert(IFACE, target.ord, kind, None);
+        if let Some(limit) = limit(target) {
+            assert!(t.set_limit(IFACE, target.ord, limit));
+        }
+    }
+    Arc::new(t)
+}
 
 /// An upgrade request this server accepts, for a client without
 /// `tungstenite`.
@@ -626,10 +653,13 @@ fn a_client_that_stops_reading_ends_the_session_at_the_liveness_timeout() {
     let (server, client) = pair();
     let rt = Loopback::new(CATALOG);
     let mut provider = rt.attach();
-    // The loopback refuses a signal above its member's limit, so the member
-    // is given one that admits the values the committer publishes.
-    provider.set_limit(IFACE, Ordinal(1), 60 * 1024);
-    let handle = spawn(server, Scanning(rt), config);
+    // The signal's limit is raised to 16,128 bytes, the largest raise, in
+    // the member table, which the session applies, and on the loopback,
+    // which refuses a value above its member's limit on send.
+    let limit = |t: Target| (t == SIGNAL).then_some(CALL_CEILING as u32);
+    let backend = Described::new(Scanning(rt), table(limit)).unwrap();
+    provider.set_limit(IFACE, Ordinal(1), CALL_CEILING);
+    let handle = spawn(server, backend, config);
     let mut ws = connect(client, "ridl-ws-v1").unwrap();
     attach(&mut ws);
     send(&mut ws, Frame::Subscribe(SIGNAL));
@@ -638,7 +668,7 @@ fn a_client_that_stops_reading_ends_the_session_at_the_liveness_timeout() {
     // until the session ends.
     let (done, ended) = mpsc::channel();
     let committer = thread::spawn(move || {
-        let mut value = vec![0u8; 60 * 1024];
+        let mut value = vec![0u8; CALL_CEILING];
         while let Err(TryRecvError::Empty) = ended.try_recv() {
             value[0] = value[0].wrapping_add(1);
             provider.set(IFACE, Ordinal(1), &value).unwrap();
@@ -1191,17 +1221,17 @@ fn the_answer_to_a_client_close_is_followed_by_the_end_of_the_stream() {
 #[test]
 fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
     let (server, client) = pair();
-    let config = config().with_max_retained_bytes(16_292).unwrap();
+    let config = config().with_max_retained_bytes(16_164).unwrap();
     let rt = Loopback::new(CATALOG);
     let mut provider = rt.attach();
     provider.serve(IFACE, &[QUERY.ord]).unwrap();
     let handle = spawn(server, Scanning(rt), config);
     let mut ws = connect(client, "ridl-ws-v1").unwrap();
     attach(&mut ws);
-    // Each `request` of the query is settled with 4,037 bytes, and its
-    // `response` is 4,073 bytes; four of them are 16,292 bytes, the cap, and
+    // Each `request` of the query is settled with 4,005 bytes, and its
+    // `response` is 4,041 bytes; four of them are 16,164 bytes, the cap, and
     // the fifth passes it.
-    let reply = vec![1u8; 4037];
+    let reply = vec![1u8; 4005];
     for seq in 1..=5u64 {
         send(
             &mut ws,
@@ -1223,8 +1253,68 @@ fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
             thread::sleep(Duration::from_millis(1));
         };
         provider.settle(claim.id, Ok(&reply)).unwrap();
-        assert_eq!(recv(&mut ws).len(), 4073, "response {seq}");
+        assert_eq!(recv(&mut ws).len(), 4041, "response {seq}");
     }
     assert_eq!(recv_close(&mut ws), Some(CloseCode::Policy));
     assert_eq!(handle.join().0, Ended::ServerClosed(1008));
+}
+
+// -- The `Config` check against the member table (ADR-0030 decision 10) -----
+
+/// A message limit below what one message of a member needs is a
+/// configuration error: `serve` returns before the handshake, records the
+/// member and the limit it needs, and the client sees no upgrade answer.
+///
+/// Mutation: skip the check when the table gives the member no limit.
+#[test]
+fn a_config_that_cannot_carry_a_member_is_refused_before_the_handshake() {
+    let (config, notes) = recording();
+    let config = config.with_max_message_bytes(1000).unwrap();
+    let (server, client) = pair();
+    // Every member but the command is lowered to 900 bytes; the command
+    // keeps the default ceiling of its kind, 16,128 bytes.
+    let limit = |t: Target| (t != COMMAND).then_some(900);
+    let backend = Described::new(Scanning(Loopback::new(CATALOG)), table(limit)).unwrap();
+    let handle = spawn(server, backend, config);
+    assert_eq!(handle.join().0, Ended::ConfigRefused);
+    assert_eq!(
+        *notes.lock().unwrap(),
+        vec![Note::MessageLimitTooSmall {
+            target: COMMAND,
+            needed: 36 + CALL_CEILING
+        }]
+    );
+    assert!(connect(client, "ridl-ws-v1").is_err());
+}
+
+#[test]
+fn a_config_that_carries_every_lowered_member_is_accepted() {
+    let (config, notes) = recording();
+    let config = config.with_max_message_bytes(1000).unwrap();
+    let (server, client) = pair();
+    let backend = Described::new(Scanning(Loopback::new(CATALOG)), table(|_| Some(900))).unwrap();
+    let handle = spawn(server, backend, config);
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    ws.close(None).unwrap();
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+    assert!(notes.lock().unwrap().is_empty());
+}
+
+/// A `fixed` counts at most 16,128 bytes, what one message carries: the part
+/// above it is not counted, so a catalog with a `fixed` of the default limit,
+/// 65,280 bytes, is served at the default `Config`.
+///
+/// Mutation: count the fixed's whole limit.
+#[test]
+fn the_default_config_is_accepted_for_a_catalog_with_a_fixed_of_default_limit() {
+    let (config, notes) = recording();
+    let (server, client) = pair();
+    let backend = Described::new(Scanning(Loopback::new(CATALOG)), table(|_| None)).unwrap();
+    let handle = spawn(server, backend, config);
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    attach(&mut ws);
+    ws.close(None).unwrap();
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+    assert!(notes.lock().unwrap().is_empty());
 }

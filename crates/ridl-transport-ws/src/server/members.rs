@@ -6,6 +6,8 @@ use std::time::Duration;
 
 use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal};
 
+use crate::frame::Target;
+
 /// The members of one catalog, as the server needs them to refuse an
 /// interaction the catalog does not hold (frame specification §6.4).
 ///
@@ -119,6 +121,18 @@ impl MemberTable {
         self.members
             .get(&(iface, ord))
             .map(|entry| (entry.kind, entry.max))
+    }
+
+    /// Every member, in key order, with its payload limit when it has one.
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (Target, Option<u32>)> + '_ {
+        self.members.iter().map(|(&(iface, ord), entry)| {
+            let target = Target {
+                kind: entry.kind,
+                iface,
+                ord,
+            };
+            (target, entry.limit)
+        })
     }
 
     /// The number of members.

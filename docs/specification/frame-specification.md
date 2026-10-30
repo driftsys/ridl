@@ -29,13 +29,14 @@ Version: 0.2.0
 > of its catalog, which the embedder supplies, it accepts an `attach` naming a
 > listed earlier hash (§6.1); without one it applies the exact-match rule. With
 > a member table it keeps each settled response until its bound has passed (§7);
-> without one, or for a member with no bound, it keeps the last 64. With a
-> member table that gives a member a payload limit, it also answers a `request`
-> whose payload is longer than that limit `corrupt` (§11.1). The runtime here,
-> `ridl-loopback`, runs in process: it carries bytes from a provider handle to a
-> consumer handle over one in-memory store, opens no socket, and has no wire
-> format ([its design record](../design/ridl-loopback.md)). Neither the crate
-> nor `ridl-loopback` enforces a timing rule or a contract clause on the
+> without one, or for a member with no bound, it keeps the last 64. It answers a
+> `request` whose payload is longer than its member's limit `corrupt` before any
+> `verify`, and sends no value longer than its member's limit, the limit being
+> the member table's or the default ceiling of the kind (§9, §11.1). The runtime
+> here, `ridl-loopback`, runs in process: it carries bytes from a provider
+> handle to a consumer handle over one in-memory store, opens no socket, and has
+> no wire format ([its design record](../design/ridl-loopback.md)). Neither the
+> crate nor `ridl-loopback` enforces a timing rule or a contract clause on the
 > provider side, so every sentence below about those describes the
 > specification, not behaviour a shipped runtime performs. The first binding is
 > the WebSocket transport (driftsys/ridl#265); the second is a runtime's own
@@ -760,6 +761,25 @@ port, which the layering forbids
 ([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 6).
 
+**A receiver refuses a payload for its length before `verify`.** The size of a
+payload is the transport's to refuse, against the interaction's limit from the
+catalog: the limit a `[limits.interaction]` entry gives it, carried in the
+descriptor's limit column, or the default ceiling of the interaction's kind when
+the column holds none
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13, 16
+and 19). Every endpoint of a binding that receives a payload refuses one longer
+than that limit before it verifies the payload, and reports the refusal as the
+structure failure of the kind in §9.1 to §9.4: a signal's sample is
+`Invalid(Detected(Corrupt))`, an event's occurrence carries `Err(Corrupt)`, a
+`request` is answered `corrupt`, a reply is `CallError::Transport(Corrupt)`, and
+a `fixed`'s read reports the detection. The check is of length, not a
+verification, so the rule above that a runtime never verifies is unchanged.
+`Payload::verify` itself refuses no buffer for its length: it reads what the
+structure references and ignores the bytes past it. The providing endpoint also
+sends no value longer than its interaction's limit: it holds one only from a
+runtime that does not refuse on send, and what it does instead is the binding's
+(§11.1 for the WebSocket provider).
+
 **A sender does not verify its encoded bytes.** `Ref::encode` calls
 `Payload::encode` without running `Payload::verify` on the result
 ([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 7).
@@ -978,12 +998,26 @@ no bytes — and is handed to the generated binding as it is.
 its envelope is 20 bytes (`response`), so a data-plane message is at most 36
 bytes plus the payload bound. The largest header of any message is the `attach`
 at 39 + 255 = 294 bytes; it carries no payload, so a receiver's message size
-limit admits at least 294 bytes. Under the payload ceiling of 16,256 bytes
-([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 2), the
-largest data-plane message is 36 + 16,256 = 16,292 bytes. The Rust provider
-`ridl-transport-ws` limits a message to 16,292 bytes by default and refuses a
-configured limit above it (ADR-0030 decision 10). The codegen model carries the
-data-plane numbers as the `websocket` row, binding version `"1"`,
+limit admits at least 294 bytes. A payload is bounded by its interaction's
+limit: the limit the catalog's `[limits.interaction]` entry gives it, or the
+default ceiling of its kind, 3,840 bytes for a signal and an event, 16,128 for a
+command and a query, and 65,280 for a `fixed`
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13 and
+16). The largest payload one message carries is 16,128 bytes, so the largest
+data-plane message is 36 + 16,128 = 16,164 bytes. The Rust provider
+`ridl-transport-ws` limits a message to 16,164 bytes by default and refuses a
+configured limit above it (ADR-0030 decision 10); with a member table it also
+refuses, before the opening handshake, a configured limit below what one message
+of a member of the catalog needs, 36 bytes plus the member's limit, at most
+16,128 for a `fixed`, so a limit the provider accepts carries every payload the
+catalog allows in one message. Until the binding carries a `fixed` in blocks
+(driftsys/ridl#1129), a `fixed` above 16,128 bytes, within its limit, is not
+served over this binding: the Rust provider sends no `publish` for it, records
+the value, and answers the `read` with an `answer` carrying
+`contract(UnknownInteraction)`, the one refusal §6.3 defines for a `read`, so
+that the read ends instead of waiting until the session ends; every other member
+of the catalog is served, and the catalog is attached. The codegen model carries
+the data-plane numbers as the `websocket` row, binding version `"1"`,
 `frame_header_max_bytes` 20, `envelope_bytes` 16
 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is derived from this layout:
 the layout is frozen through the vectors below, and the row is a derived value,
@@ -1009,15 +1043,17 @@ discarded and recorded (§9.5). A frame whose header says it carries a payload i
 never answered or discarded for the payload's length: the payload, zero bytes
 included, goes to `Payload::verify`, and a payload that fails to decode follows
 §9 — a `request`'s is answered `corrupt` (§5.3). So the `request` of §9.5 whose
-payload is absent does not occur on this binding. One exception: a provider that
-holds the member limits of its catalog answers a `request` whose payload is
-longer than its member's limit `corrupt` without verifying it (ADR-0030 decision
-15). A message above the receiver's configured size limit, which admits at least
-294 bytes, is closed with 1009. Either side ends the session on purpose with
-1000, the provider with 1001 when it shuts down; after `attached(refused)` the
-provider closes with 1000, and the reason is in the frame. A provider may close
-with 1008 when a session passes a resource limit it states, such as a cap on the
-responses it keeps for §7. The binding defines no close code of its own.
+payload is absent does not occur on this binding. One exception: a provider
+answers a `request` whose payload is longer than its member's limit — the limit
+its member table gives the member, or the default ceiling of the request's
+`kind`, 16,128 bytes, when the table gives none or the provider holds no table —
+`corrupt` without verifying it (§9; ADR-0030 decisions 15 and 19). A message
+above the receiver's configured size limit, which admits at least 294 bytes, is
+closed with 1009. Either side ends the session on purpose with 1000, the
+provider with 1001 when it shuts down; after `attached(refused)` the provider
+closes with 1000, and the reason is in the frame. A provider may close with 1008
+when a session passes a resource limit it states, such as a cap on the responses
+it keeps for §7. The binding defines no close code of its own.
 
 **5. The caller's identity** for §7 is the connection. It does not survive a
 reconnect: a reconnect is a new session, its counters start over, and the calls

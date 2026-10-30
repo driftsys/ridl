@@ -454,10 +454,11 @@ returns it. The size of a payload is refused by the transport, against the
 interaction's limit from the catalog: on send, by the port, with its
 `TooLarge { cap }`, `cap` being the member's limit (the section "The `error`
 module and the port errors" below); on receive, by the binding's endpoint,
-before `verify`. `BUFFER` is put on the stack by the face for a signal, an
-event, a command and a query, which the catalog's limits keep at 16,128 bytes or
-less; a fixed has no face method, so no `BUFFER` of its payload is put on the
-stack (ADR-0030 decision 5).
+before `verify`, as the WebSocket provider does for a `request`
+([its design record](ridl-transport-ws.md)). `BUFFER` is put on the stack by the
+face for a signal, an event, a command and a query, which the catalog's limits
+keep at 16,128 bytes or less; a fixed has no face method, so no `BUFFER` of its
+payload is put on the stack (ADR-0030 decision 5).
 
 `Malformed::Preamble`, `Stride`, `Terminator` and `KeyOrder` belong to the
 podbuf codec and are not gated by a feature either. `Preamble` is a buffer

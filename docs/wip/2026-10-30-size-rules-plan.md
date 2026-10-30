@@ -446,12 +446,13 @@ now comes from the limit, not only from `fail_next_settle`).
   is never refused at the default `Config` (decision 20). No attach refusal for
   a fixed is added.
 - A fixed above 16,128 bytes and within its limit, until driftsys/ridl#1129
-  lands (R-8): the session cannot carry it in one message. A `read` of it is
-  answered by no `publish`; the session records
-  `Note::ValueTooLarge { target, needed }`. The catalog is still attached and
-  every other member is served. A fixed above its limit is never stored by a
-  runtime that refuses on send (task 6), and a read of a fixed with no value is
-  answered `contract(UnknownInteraction)` through the existing
+  lands (R-8, amended): the session cannot carry it in one message. No `publish`
+  is sent for it; the session records `Note::ValueTooLarge { target, needed }`
+  and answers the `read` with an `answer` carrying
+  `contract(UnknownInteraction)`, so the read ends. The catalog is still
+  attached and every other member is served. A fixed above its limit is never
+  stored by a runtime that refuses on send (task 6), and a read of a fixed with
+  no value is answered `contract(UnknownInteraction)` through the existing
   `ReadError::Contract` path.
 
 **Failing test first.** `Config::default().with_max_message_bytes(16_165)`
@@ -610,11 +611,17 @@ task 5 start. If it lands mid-task, the implementer rebases before the review.
   member table there is no check.
 - **R-8. A fixed above 16,128 bytes within its limit, until
   driftsys/ridl#1129.** The ADR says only that such a fixed cannot be served
-  over WebSocket. Default: as today, the session records `ValueTooLarge` and
-  sends no `publish`; the consumer's `read` stays pending until the session
-  ends; nothing is refused at attach. Alternative: answer the `read` with
-  `answer(contract(...))`, which needs a contract category that does not
-  describe the case and so is not proposed.
+  over WebSocket. R-8 (amended, 2026-10-30): the session records `ValueTooLarge`
+  and sends no `publish`, nothing is refused at attach, and the consumer's
+  `read` is answered with an `answer` carrying the read's identity and
+  `contract(UnknownInteraction)`, so that the read ends with an error instead of
+  waiting until the session ends. That is the one refusal §6.3 of the frame
+  specification defines for a `read`, the consuming runtime already maps it to
+  `ReadError::Contract(UnknownInteraction)`, and it is the same answer a
+  consumer gets for a fixed with no stored value (the loopback reads a fixed
+  refused above its limit as unprovisioned): no new wire value, no new code, no
+  new reason. The earlier default, a read that stays pending, is withdrawn
+  because the read must end.
 - **R-9. The WebSocket send side.** `ridl-transport-ws` implements no sending
   port. Default: the session refuses a value longer than its member's limit as
   it refuses one above the message cap today (no frame and a note; a reply

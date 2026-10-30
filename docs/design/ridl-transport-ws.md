@@ -21,7 +21,7 @@ contracts the server reads and calls. The wire rules are the frame specification
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
-decisions below keep their numbers D-1 to D-25, because comments in
+decisions below keep their numbers D-1 to D-26, because comments in
 `crates/ridl-transport-ws/src/server/session.rs` and in the `justfile` cite
 them. Read this record together with [the `ridl-rt` design record](ridl-rt.md),
 whose "The ports" section states the contract the server consumes.
@@ -390,9 +390,10 @@ client is written to this rule.
   invalidity and loses only the cause. A `ridl-rt` runtime does not verify
   payloads (§9), so `ridl-loopback` never reports `Detected`.
 - A read that returns `ReadError::Short { needed }` is retried with a buffer of
-  `needed` bytes, up to `max_message_bytes` minus the 27-byte `publish` header;
-  a larger value is not sent, and is recorded as `Note::ValueTooLarge`. The
-  signal stays subscribed and is tried again on its next change.
+  `needed` bytes, up to the smaller of `max_message_bytes` minus the 27-byte
+  `publish` header and the member's limit (D-26); a larger value is not sent,
+  and is recorded as `Note::ValueTooLarge`. The signal stays subscribed and is
+  tried again on its next change.
 
 The state of each signal the client subscribes, or reads after a publication,
 lasts as long as the session, with no bound in the crate, because a channel's
@@ -470,11 +471,13 @@ raises continuously cannot hold the tick, at the cost of up to one
 retried with a larger buffer, as for signals. The occurrence's trace context is
 dropped: the frame does not carry one (§2).
 
-An occurrence larger than `max_message_bytes` is dropped and noted as
-`ValueTooLarge`, and the session `seq` of its channel is advanced, so the client
-sees a gap and records a loss (§5.2) instead of a silent drop. Because the
-backend subscribes before the `answer` is sent and nothing is drained until the
-next tick, no occurrence reaches the client before its `answer`.
+An occurrence larger than `max_message_bytes`, or longer than its member's limit
+(D-26), is dropped and noted as `ValueTooLarge`, and the session `seq` of its
+channel is advanced, so the client sees a gap and records a loss (§5.2) instead
+of a silent drop. The occurrence's identity is known only once it is read, so
+the member's limit is applied after the read. Because the backend subscribes
+before the `answer` is sent and nothing is drained until the next tick, no
+occurrence reaches the client before its `answer`.
 
 ### Calls
 
@@ -490,13 +493,14 @@ responses kept for duplicates are `server/calls.rs`.
   encoding of its type, the same reasoning ADR-0021 decision 5 gives for
   `ShortClaim`.
 - A `request` for a command or a query whose arguments are longer than the
-  member's payload limit in the member table is answered `corrupt` without a
-  call to the backend (ADR-0030 decision 15). The server places the `seq` first,
-  then checks that the member is known, then checks the length, so a repeat gets
-  the kept response again and an unknown member is
+  member's limit (D-26) is answered `corrupt` without a call to the backend and
+  before any `verify` (ADR-0030 decisions 15 and 19). The server places the
+  `seq` first, then checks that the member is known, then checks the length, so
+  a repeat gets the kept response again and an unknown member is
   `contract(UnknownInteraction)` whatever the length. No note is recorded. With
-  no member table, or a member with no limit, the message limit alone bounds the
-  arguments. A `publish` is not checked.
+  no member table, the limit is the default ceiling of the frame's `kind`,
+  16,128 bytes, which is what the default message limit carries. A `publish` is
+  not checked.
 - Each tick the server polls `ack` for each command in flight and `reply` for
   each query in flight. A known outcome becomes one `response` with
   `correlation` = the client's `seq`, `seq` = the next value of the server's
@@ -515,9 +519,12 @@ responses kept for duplicates are `server/calls.rs`.
   The last row follows §9.6: those three are the absence of a frame and are
   never sent. The client's own bound reports them.
 
-- A settled reply larger than `max_message_bytes` is recorded and forgotten with
-  no frame, so the client's own bound reports `Timeout`; `corrupt` would blame
-  the arguments. A `request` with `seq` 0 is recorded and dropped.
+- A settled reply larger than `max_message_bytes`, or longer than its member's
+  limit (D-26), is answered `corrupt`, recorded as `ValueTooLarge` and
+  forgotten: the backend holds a value the catalog does not allow, which is a
+  provider defect the client reads as `Transport::Corrupt`, and the call ends at
+  once instead of at the client's bound. A `request` with `seq` 0 is recorded
+  and dropped.
 - **Abandoned calls.** A call whose outcome is still unknown
   `config.call_abandon_after` (default 60 s) after it was sent is forgotten on
   the backend, noted as `CallAbandoned`, and nothing is sent: the client's own
@@ -549,13 +556,13 @@ responses kept for duplicates are `server/calls.rs`.
   the server keeps the last 64 as before: a stated deviation from §11.1 item 6
   (driftsys/ridl#986, ruled a deviation of this crate on 2026-10-23). The
   retained bytes of a session are capped by `Config::max_retained_bytes` (16 MiB
-  by default, and never below 16,292 bytes, the largest message limit); when a
+  by default, and never below 16,164 bytes, the largest message limit); when a
   response makes the kept bytes pass the cap, the response is sent, then the
   session closes with 1008, which `serve` returns as
   `Ended::ServerClosed(1008)`. The cap applies to the last 64 as well, so a
   server with no table, or one whose members have no bound, closes with 1008
   when its replies are large enough to pass the cap before the ring holds 64. At
-  the default message limit, 64 replies are at most 64 × 16,292 = 1,042,688
+  the default message limit, 64 replies are at most 64 × 16,164 = 1,034,496
   bytes, below the 16 MiB default cap; an embedder that lowers the cap keeps it
   at least 64 times its message limit, lowering the message limit too, so that
   the ring alone bounds it. Expired responses also go when a `request` arrives,
@@ -568,6 +575,18 @@ one `publish` with `kind` `Fixed`, state `Live` with the value, `seq` 0, and
 `contract(c)`. A `subscribe` of a `fixed` is answered
 `contract(UnknownInteraction)` (D-12). Through `Polling`, every `read` of a
 `fixed` is answered `contract(UnknownInteraction)`.
+
+A `fixed` that one message cannot carry — longer than `max_message_bytes` minus
+the 27-byte `publish` header, which at the default limit is every `fixed` above
+16,128 bytes although its default limit is 65,280 (D-26) — is not sent: the
+session records `ValueTooLarge` and answers the `read` with an `answer` carrying
+`contract(UnknownInteraction)`, the one refusal §6.3 defines for a `read` and
+the same answer a `read` of a `fixed` with no value gets, so the client's read
+ends with `ReadError::Contract(UnknownInteraction)` instead of waiting until the
+session ends. The catalog is still attached and every other member is served.
+This is an interim rule until the binding carries such a `fixed` in blocks
+(driftsys/ridl#1129). A `fixed` longer than its member's limit, which a runtime
+that refuses on send never stores, is answered the same way.
 
 ### The end of a session
 
@@ -584,6 +603,7 @@ call ends the session with close 1001, because the provider is going away.
 | `Rejected`           | the handshake was answered `400` or `403` (D-19, D-20)                                                                                                 |
 | `LivenessTimeout`    | the handshake did not finish within `liveness_timeout`, no message arrived for that long after it, or a write waited that long; no close frame is sent |
 | `Io(kind)`           | a read or a write failed; `UnexpectedEof` is a client that closed the connection without a close frame                                                 |
+| `ConfigRefused`      | the message limit of the `Config` cannot carry one message of a member of the catalog (D-26); returned before the handshake, nothing is read or sent   |
 
 The embedder may also receive `Note` values through `Config::with_record`; with
 no hook nothing is recorded and recording costs nothing. A `Note` is one of:
@@ -591,22 +611,69 @@ no hook nothing is recorded and recording costs nothing. A `Note` is one of:
 (closes 1002), `UnexpectedDirection` (closes 1002), `KindNotAdmitted` (an
 `unsubscribe` of a kind the form does not admit; dropped), `ValueTooLarge`,
 `DuplicateDropped`, `CallAbandoned`, `RuleNotCarried` (a violation's rule the
-frame has no code for; the outcome is replaced) and `UnknownInteraction` (an
-interaction the member table does not hold; dropped or answered as D-12 says).
+frame has no code for; the outcome is replaced), `UnknownInteraction` (an
+interaction the member table does not hold; dropped or answered as D-12 says)
+and `MessageLimitTooSmall` (the member whose messages the `Config` cannot carry,
+with the limit it needs; `serve` returns `ConfigRefused`, D-26).
 
 ### `Config`
 
 `Config` (`server/config.rs`) has four public durations — `poll_interval` (20
 ms), `ping_interval` (5 s), `liveness_timeout` (15 s) and `call_abandon_after`
-(60 s) — and four settings behind methods: `with_max_message_bytes` (16,292
+(60 s) — and four settings behind methods: `with_max_message_bytes` (16,164
 bytes, `MAX_MESSAGE_LIMIT`, the largest data-plane message: the limit can only
-be lowered, and a value outside the range 294 to 16,292 is refused with
-`LimitOutOfRange`), `with_max_retained_bytes` (16 MiB; a value below 16,292 is
-refused with `RetainedTooSmall`, whatever the message limit, and a session
+be lowered, and a value outside the range 294 to 16,164 is refused with
+`LimitOutOfRange`), `with_max_retained_bytes` (16 MiB; a value below 16,164 is
+refused with `RetainedTooSmall`, whatever the message limit, so that one
+response of the largest message never closes a session on its own, and a session
 applies the cap as set), `with_record` and `with_origin_check`. A
 `ping_interval` at or above `liveness_timeout` ends an idle client's session
 before the first ping, because a client that is not pinged sends nothing; the
 rustdoc says so.
+
+### The sizes
+
+**D-26. The limit of a member, on both sides.** The size of a payload is the
+transport's to refuse, against the interaction's limit from the catalog
+(ADR-0030 decision 19). The session resolves a member's limit as the limit the
+member table gives it, or, when the table gives none or the backend has no
+table, the default ceiling of the member's kind, which `ridl-rt` exports: 3,840
+bytes for a signal and an event, 16,128 for a command and a query, 65,280 for a
+`fixed` (ADR-0030 decision 16). Without a table the kind is the frame's `kind`.
+
+- On receive, the arguments of a `request` longer than the member's limit are
+  answered `corrupt` without a call to the backend and before any `verify`
+  (D-16). Every `request` is checked, with or without a table.
+- On send, a value longer than its member's limit is refused as a value that
+  does not fit one message is refused: a signal's `publish` and an `occurrence`
+  are not sent and the value is recorded as `ValueTooLarge` (D-13, D-15), a
+  reply is answered `corrupt` and recorded (D-16), and a `read` of a `fixed` is
+  answered `contract(UnknownInteraction)` and recorded (D-17). The crate
+  implements no sending port, so this is where its send side is. With a runtime
+  that refuses a value above its member's limit on send, as `ridl-loopback`
+  does, the path is reached only by a backend that does not.
+
+**The message limit.** `MAX_MESSAGE_LIMIT` is 36 + 16,128 = 16,164 bytes: the
+largest data-plane header with its envelope plus the default ceiling of a
+command and a query, the largest payload one message carries (ADR-0030 decision
+10). It is the default of `max_message_bytes` and the largest value accepted,
+and the smallest `max_retained_bytes` accepted.
+
+**The `Config` check.** With a member table, `serve` first checks that
+`max_message_bytes` is at least 36 plus the largest limit over the members of
+what one message carries: each member's limit, and for a `fixed` at most 16,128
+bytes, because the part of a `fixed` above 16,128 is to be carried in blocks
+(driftsys/ridl#1129) and not in one message. A limit below that cannot carry a
+payload the catalog allows, which is a configuration error, not a session event:
+`serve` records `MessageLimitTooSmall` with the member and the limit it needs,
+returns `Ended::ConfigRefused` before the opening handshake without reading the
+connection, and the connection closes when it is dropped. No `attached` reason
+is added, because the frame has none for a configuration error and a new reason
+would change the frozen `wire` surface. The default `Config` carries every
+catalog, a catalog with a large `fixed` included, so a binding never refuses an
+allowed interaction at attach (ADR-0030 decision 20). Without a member table
+there is no check: the message limit alone bounds what is sent, and the default
+ceiling of the frame's `kind` bounds a `request`.
 
 ## The WebSocket layer (`ws`)
 
@@ -649,7 +716,7 @@ Fragmented messages are reassembled, also when a frame is split across socket
 reads. A data message whose total size passes `max_message_bytes` closes with
 1009 as soon as the length is known, before it is buffered; the limit applies to
 data messages, not to control frames, which RFC 6455 caps at 125 bytes.
-`max_message_bytes` is at least 294 and at most 16,292 (§11.1 "The sizes").
+`max_message_bytes` is at least 294 and at most 16,164 (§11.1 "The sizes").
 Client frames that are not masked close with 1002 (RFC 6455 §5.1). A ping is
 answered with a pong carrying its payload.
 
@@ -657,7 +724,7 @@ Each frame the server sends, header and payload, is assembled in one buffer the
 session reuses and written with one write call, so that with `TCP_NODELAY` off
 the payload does not wait for the peer's delayed acknowledgement of the header.
 The buffer keeps the capacity of the largest frame sent, which
-`max_message_bytes` bounds (16,292 bytes by default per idle session after a
+`max_message_bytes` bounds (16,164 bytes by default per idle session after a
 large message).
 
 **D-22. Liveness.** The server sends a ping every `ping_interval` and ends the

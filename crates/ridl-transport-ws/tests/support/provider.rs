@@ -4,9 +4,9 @@
 use std::time::Duration;
 
 use ridl_loopback::Loopback;
-use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal};
+use ridl_rt::contract::{CatalogHash, CatalogRef, InterfaceNo, Kind, Ordinal, CALL_CEILING};
 use ridl_rt::error::{CallError, Contract};
-use ridl_rt::port::{EventSink, Handler, SignalWriter};
+use ridl_rt::port::{EventSink, Handler, RaiseError, SignalWriter, WriteError};
 use ridl_transport_ws::MemberTable;
 
 /// The test catalog: the unit `test.ws` with a hash of thirty-two 7s.
@@ -56,19 +56,28 @@ pub fn provider() -> Loopback {
 /// Makes one pass over the claims waiting on `rt` and settles each.
 ///
 /// - [`COMMAND`]: settles `Ok(&[])`, then sets [`SIGNAL`] to the argument,
-///   commits, and raises [`EVENT`] with the argument.
+///   commits, and raises [`EVENT`] with the argument. An argument longer
+///   than the limit of the signal or the event, 3,840 bytes, is refused by
+///   the loopback on send, and that member is left as it is.
 /// - [`QUERY`]: settles with a reply whose byte `i` is argument byte `i` plus
 ///   1, wrapping at 256.
 pub fn provider_step(rt: &mut Loopback) {
-    let mut args = [0u8; 64];
+    // The arguments of a command or a query are at most the default ceiling
+    // of their kind, so every claim fits.
+    let mut args = vec![0u8; CALL_CEILING];
     while let Some(claim) = rt.next_claim(&mut args).expect("a claim fits") {
         let arg = &args[..claim.len];
         match claim.ord {
             COMMAND => {
                 rt.settle(claim.id, Ok(&[])).expect("settled");
-                rt.set(IFACE, SIGNAL, arg).expect("staged");
-                rt.commit();
-                rt.raise(IFACE, EVENT, arg, None).expect("raised");
+                match rt.set(IFACE, SIGNAL, arg) {
+                    Ok(()) | Err(WriteError::TooLarge { .. }) => rt.commit(),
+                    Err(e) => panic!("staged: {e:?}"),
+                }
+                match rt.raise(IFACE, EVENT, arg, None) {
+                    Ok(()) | Err(RaiseError::TooLarge { .. }) => {}
+                    Err(e) => panic!("raised: {e:?}"),
+                }
             }
             QUERY => {
                 let reply: Vec<u8> = arg.iter().map(|b| b.wrapping_add(1)).collect();
