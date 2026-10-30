@@ -3971,6 +3971,36 @@ mod tests {
         assert_eq!(out[0].len(), crate::frame::MAX_MESSAGE_LIMIT);
     }
 
+    /// The reply cap is the member's limit from the table when the table
+    /// gives one, below the message cap: a reply one byte above it is
+    /// answered `corrupt` and recorded, one of exactly the limit is sent.
+    #[test]
+    fn a_reply_above_the_limit_its_table_entry_gives_is_answered_corrupt_and_recorded() {
+        let (mut s, mut p, notes) = described_with(limited_table(900, true), |c| c);
+        permissive(&mut p);
+        open(&mut s);
+        let out = settled(&mut s, &mut p, QUERY, 1, Ok(&vec![1; 901]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 1, 1, ResponseOutcome::Corrupt)
+        );
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: QUERY,
+                needed: 901
+            }]
+        );
+        let out = settled(&mut s, &mut p, QUERY, 2, Ok(&vec![2; 900]));
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            decode(&out[0]).unwrap(),
+            response(QUERY, 0, 2, 2, ResponseOutcome::Reply(&[2; 900]))
+        );
+        assert_eq!(notes.lock().unwrap().len(), 1);
+    }
+
     /// Until the binding carries a `fixed` in blocks (driftsys/ridl#1129), a
     /// `fixed` above what one message carries is not served: the read is
     /// answered `contract(UnknownInteraction)`, the refusal is recorded, and
