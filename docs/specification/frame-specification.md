@@ -1011,13 +1011,16 @@ refuses, before the opening handshake, a configured limit below what one message
 of a member of the catalog needs, 36 bytes plus the member's limit, at most
 16,128 for a `fixed`, so a limit the provider accepts carries every payload the
 catalog allows in one message. Until the binding carries a `fixed` in blocks
-(driftsys/ridl#1129), a `fixed` above 16,128 bytes, within its limit, is not
+(driftsys/ridl#1129), a `fixed` above the message limit minus the 27-byte
+`publish` header, 16,137 bytes at the default limit, within its limit, is not
 served over this binding: the Rust provider sends no `publish` for it, records
 the value, and answers the `read` with an `answer` carrying
 `contract(UnknownInteraction)`, the one refusal §6.3 defines for a `read`, so
 that the read ends instead of waiting until the session ends; every other member
-of the catalog is served, and the catalog is attached. The codegen model carries
-the data-plane numbers as the `websocket` row, binding version `"1"`,
+of the catalog is served, and the catalog is attached. The Rust provider answers
+a `read` of a signal or of a `fixed` whose value is above the member's limit the
+same way, so that no read waits on a value that is not sent. The codegen model
+carries the data-plane numbers as the `websocket` row, binding version `"1"`,
 `frame_header_max_bytes` 20, `envelope_bytes` 16
 (`crates/ridl-ir/src/codegen/bindings.rs`). The row is derived from this layout:
 the layout is frozen through the vectors below, and the row is a derived value,

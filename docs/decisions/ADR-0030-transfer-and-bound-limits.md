@@ -111,12 +111,22 @@ Built 2026-10-30 (driftsys/ridl#1108, driftsys/ridl#1128): the amendments of
   `verify`, and the codegen model carries the limit.
 
 What waits for driftsys/ridl#1129 (decisions 15 and 20): the WebSocket blocks.
-Until then, a fixed whose payload is above one message and within its limit is
-not carried over WebSocket: the session records `ValueTooLarge` and sends no
-`publish`, nothing is refused at attach, and the WebSocket provider answers a
-`read` of it with `answer` and `contract(UnknownInteraction)`; the TypeScript
-client rejects a payload above the limit as `corrupt`. The fixed itself is
-accepted by the catalog and by the loopback.
+Until then, a fixed whose payload is above one message (16,137 bytes at the
+default message limit) and within its limit is not carried over WebSocket: the
+session records `ValueTooLarge` and sends no `publish`, nothing is refused at
+attach, and the WebSocket provider answers a `read` of it with `answer` and
+`contract(UnknownInteraction)`; the TypeScript client rejects a payload above
+the limit as `corrupt`. The fixed itself is accepted by the catalog and by the
+loopback.
+
+Departure from decision 19, on the providing side of the WebSocket binding: a
+`read` of a signal or of a fixed whose value is above the member's limit is
+answered `answer` with `contract(UnknownInteraction)` and recorded as
+`ValueTooLarge`, with no `publish`, so that no read waits on a value the
+provider does not send; the decision's "a fixed's read reports the detection" is
+what the client side reports for a payload it receives above the limit. The
+provider reaches that path only behind a runtime that does not refuse the value
+on send, which `ridl-loopback` does.
 
 Note 2026-10-30, on decision 19: the rationale says the FlatBuffers verifier is
 bounded by its depth and table limits. No code returns `Malformed::TooDeep` or

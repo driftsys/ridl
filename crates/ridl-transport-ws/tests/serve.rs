@@ -1301,6 +1301,30 @@ fn a_config_that_carries_every_lowered_member_is_accepted() {
     assert!(notes.lock().unwrap().is_empty());
 }
 
+/// When two members need the same number of bytes, the first in key order
+/// is the one recorded.
+///
+/// Mutation: let a later member of equal need replace the first.
+#[test]
+fn the_member_recorded_on_a_tie_is_the_first_in_key_order() {
+    let (config, notes) = recording();
+    let config = config.with_max_message_bytes(1000).unwrap();
+    let (server, client) = pair();
+    // The signal (ordinal 1) and the query (ordinal 4) need the same bytes.
+    let limit = |t: Target| Some(if t == SIGNAL || t == QUERY { 2000 } else { 900 });
+    let backend = Described::new(Scanning(Loopback::new(CATALOG)), table(limit)).unwrap();
+    let handle = spawn(server, backend, config);
+    assert_eq!(handle.join().0, Ended::ConfigRefused);
+    assert_eq!(
+        *notes.lock().unwrap(),
+        vec![Note::MessageLimitTooSmall {
+            target: SIGNAL,
+            needed: 36 + 2000
+        }]
+    );
+    assert!(connect(client, "ridl-ws-v1").is_err());
+}
+
 /// A `fixed` counts at most 16,128 bytes, what one message carries: the part
 /// above it is not counted, so a catalog with a `fixed` of the default limit,
 /// 65,280 bytes, is served at the default `Config`.

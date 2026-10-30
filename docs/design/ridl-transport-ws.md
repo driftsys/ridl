@@ -393,7 +393,9 @@ client is written to this rule.
   `needed` bytes, up to the smaller of `max_message_bytes` minus the 27-byte
   `publish` header and the member's limit (D-26); a larger value is not sent,
   and is recorded as `Note::ValueTooLarge`. The signal stays subscribed and is
-  tried again on its next change.
+  tried again on its next change. A `read` of a signal whose value is larger is
+  answered `contract(UnknownInteraction)` and recorded, as a `read` of a `fixed`
+  is (D-17), so that the client's read ends.
 
 The state of each signal the client subscribes, or reads after a publication,
 lasts as long as the session, with no bound in the crate, because a channel's
@@ -578,7 +580,7 @@ one `publish` with `kind` `Fixed`, state `Live` with the value, `seq` 0, and
 
 A `fixed` that one message cannot carry — longer than `max_message_bytes` minus
 the 27-byte `publish` header, which at the default limit is every `fixed` above
-16,128 bytes although its default limit is 65,280 (D-26) — is not sent: the
+16,137 bytes although its default limit is 65,280 (D-26) — is not sent: the
 session records `ValueTooLarge` and answers the `read` with an `answer` carrying
 `contract(UnknownInteraction)`, the one refusal §6.3 defines for a `read` and
 the same answer a `read` of a `fixed` with no value gets, so the client's read
@@ -586,7 +588,8 @@ ends with `ReadError::Contract(UnknownInteraction)` instead of waiting until the
 session ends. The catalog is still attached and every other member is served.
 This is an interim rule until the binding carries such a `fixed` in blocks
 (driftsys/ridl#1129). A `fixed` longer than its member's limit, which a runtime
-that refuses on send never stores, is answered the same way.
+that refuses on send never stores, is answered the same way, and so is a `read`
+of a signal whose value is longer than the signal's limit or than one message.
 
 ### The end of a session
 
@@ -647,11 +650,11 @@ bytes for a signal and an event, 16,128 for a command and a query, 65,280 for a
 - On send, a value longer than its member's limit is refused as a value that
   does not fit one message is refused: a signal's `publish` and an `occurrence`
   are not sent and the value is recorded as `ValueTooLarge` (D-13, D-15), a
-  reply is answered `corrupt` and recorded (D-16), and a `read` of a `fixed` is
-  answered `contract(UnknownInteraction)` and recorded (D-17). The crate
-  implements no sending port, so this is where its send side is. With a runtime
-  that refuses a value above its member's limit on send, as `ridl-loopback`
-  does, the path is reached only by a backend that does not.
+  reply is answered `corrupt` and recorded (D-16), and a `read` of a `fixed` or
+  of a signal is answered `contract(UnknownInteraction)` and recorded (D-17).
+  The crate implements no sending port, so this is where its send side is. With
+  a runtime that refuses a value above its member's limit on send, as
+  `ridl-loopback` does, the path is reached only by a backend that does not.
 
 **The message limit.** `MAX_MESSAGE_LIMIT` is 36 + 16,128 = 16,164 bytes: the
 largest data-plane header with its envelope plus the default ceiling of a

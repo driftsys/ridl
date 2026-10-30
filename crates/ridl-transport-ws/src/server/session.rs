@@ -686,7 +686,17 @@ impl<B: Backend> Session<B> {
         match target.kind {
             Kind::Signal => match self.fetch_signal((target.iface, target.ord)) {
                 Fetch::Sample(sample) => self.publish_signal(target, sample, false, out),
-                Fetch::TooLarge(needed) => self.note(Note::ValueTooLarge { target, needed }),
+                // A value that is not sent is answered as a `fixed` that is
+                // not sent is (`read_fixed`), so that the read ends instead
+                // of waiting until the session ends.
+                Fetch::TooLarge(needed) => {
+                    self.note(Note::ValueTooLarge { target, needed });
+                    self.answer(
+                        target,
+                        AnswerOutcome::Contract(Contract::UnknownInteraction),
+                        out,
+                    );
+                }
                 Fetch::Contract(c) => self.answer(target, AnswerOutcome::Contract(c), out),
                 Fetch::Gone => return Step::Close(CloseCode::GOING_AWAY.0),
             },
@@ -705,7 +715,9 @@ impl<B: Backend> Session<B> {
     /// carry, or that is longer than the member's limit, is not sent: the
     /// read is answered `contract(UnknownInteraction)`, as a `fixed` with no
     /// value is, and recorded. Until the binding carries a `fixed` in blocks
-    /// (driftsys/ridl#1129), that is every `fixed` above 16,128 bytes.
+    /// (driftsys/ridl#1129), that is every `fixed` above `max_message_bytes`
+    /// minus the 27-byte `publish` header, 16,137 bytes at the default
+    /// limit. A `read` of a signal above its limit is answered the same way.
     fn read_fixed(&mut self, target: Target, out: &mut Vec<Vec<u8>>) -> Step {
         let cap = self.payload_cap.min(self.limit(target));
         let len = loop {
@@ -4055,6 +4067,60 @@ mod tests {
         assert_eq!(
             decode(&out[0]).unwrap(),
             publish(FIXED, 0, 0, PublishState::Live(&[2; 8]))
+        );
+    }
+
+    /// A `read` of a signal whose value is above the limit its table entry
+    /// gives is answered `contract(UnknownInteraction)`, as a `read` of a
+    /// `fixed` above its limit is, so that the client's read ends; the value
+    /// is recorded and no `publish` is sent.
+    ///
+    /// Mutation: record the value and send no frame.
+    #[test]
+    fn a_signal_read_above_the_limit_its_table_entry_gives_is_answered_unknown_interaction() {
+        let mut t = (*table()).clone();
+        assert!(t.set_limit(IFACE, SIGNAL.ord, 4096));
+        let (mut s, mut p, notes) = described_with(t, |c| c);
+        permissive(&mut p);
+        open(&mut s);
+        commit(&mut p, &vec![1; 4097]);
+        let (step, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(step, Step::Continue);
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(SIGNAL));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: SIGNAL,
+                needed: 4097
+            }]
+        );
+        // The read did not subscribe, and a value within the limit is read.
+        commit(&mut p, &vec![2; 4096]);
+        let (_, out) = tick(&mut s);
+        assert!(out.is_empty());
+        let (_, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].len(), 4096 + PUBLISH_HEADER);
+    }
+
+    /// The same without a table: the signal is read against the default
+    /// ceiling of its kind.
+    #[test]
+    fn a_signal_read_above_the_default_ceiling_of_its_kind_is_answered_unknown_interaction() {
+        let (mut s, mut p, notes) = scanning();
+        permissive(&mut p);
+        open(&mut s);
+        commit(&mut p, &vec![1; SIGNAL_EVENT_CEILING + 1]);
+        let (_, out) = send(&mut s, &msg(Frame::Read(SIGNAL)));
+        assert_eq!(out.len(), 1);
+        assert_eq!(decode(&out[0]).unwrap(), unknown(SIGNAL));
+        assert_eq!(
+            *notes.lock().unwrap(),
+            vec![Note::ValueTooLarge {
+                target: SIGNAL,
+                needed: SIGNAL_EVENT_CEILING + 1
+            }]
         );
     }
 
