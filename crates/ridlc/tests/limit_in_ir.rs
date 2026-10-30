@@ -268,6 +268,17 @@ fn a_raised_limit_is_recorded_and_changes_the_hash() {
     assert_ne!(hash(&without), hash(&raised));
 }
 
+/// A `fixed` may be given up to 65,280 bytes (ADR-0030 decision 18), so an
+/// entry above 16,128 on a fixed is not dropped: it is recorded in the IR.
+#[test]
+fn a_fixed_entry_above_the_largest_raise_is_recorded() {
+    let source = "package demo\ntype Payload: bytes [0..100]\n\
+                  interface Iface {\n  fixed f: Payload\n}\n";
+    let output = compile(source, "[limits.interaction]\n\"Iface.f\" = 20000\n");
+    assert_eq!(errors(&output), Vec::<String>::new());
+    assert_eq!(limit(&output, "Iface.f"), Some(20_000));
+}
+
 /// `default` applies to each kind up to the default ceiling of that kind
 /// (ADR-0030 decision 12), and the clamped value is what the IR records: an
 /// entry applied, so the limit is part of the catalog.

@@ -400,7 +400,8 @@ fn the_codec_fixture_copies_the_corpus_common_typl() {
 
 /// The three members that carry the largest payloads of the fixture fit the
 /// default ceiling of their kind (ADR-0030): a signal and an event carry at
-/// most 3,840 bytes in FlatBuffers, the encoding the fixture enables.
+/// most 3,840 bytes in FlatBuffers, the encoding the fixture enables. A
+/// manifest error would skip the size pass, so one fails the test too.
 #[test]
 fn the_codec_fixture_fits_the_default_ceilings() {
     let copy = tempfile::tempdir().expect("a temp dir");
@@ -423,7 +424,9 @@ fn the_codec_fixture_fits_the_default_ceilings() {
         .diagnostics;
     let sized: Vec<_> = diagnostics
         .iter()
-        .filter(|diagnostic| diagnostic.code.as_str() == "RIDL-151")
+        .filter(|diagnostic| {
+            diagnostic.code.as_str() == "RIDL-151" || diagnostic.code.as_str().starts_with("MANI-")
+        })
         .map(|diagnostic| diagnostic.message.clone())
         .collect();
     assert!(sized.is_empty(), "{sized:#?}");

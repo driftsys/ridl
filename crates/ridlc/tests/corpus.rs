@@ -423,7 +423,8 @@ fn set_default_ceilings(root: &Path) {
 
 /// The reply of `getFaultPage` fits the default ceiling of a query in every
 /// encoding the entry enables (flatbuffers, proto3 and podbuf), so the entry
-/// draws no size error when each unit gives the default ceilings.
+/// draws no size error when each unit gives the default ceilings. A manifest
+/// error would skip the size pass, so one fails the test too.
 #[test]
 fn veh_cluster_payloads_fit_the_default_ceilings() {
     let copy = tempfile::tempdir().expect("a temp dir");
@@ -434,7 +435,9 @@ fn veh_cluster_payloads_fit_the_default_ceilings() {
         .diagnostics;
     let sized: Vec<_> = diagnostics
         .iter()
-        .filter(|diagnostic| diagnostic.code.as_str() == "RIDL-151")
+        .filter(|diagnostic| {
+            diagnostic.code.as_str() == "RIDL-151" || diagnostic.code.as_str().starts_with("MANI-")
+        })
         .map(|diagnostic| diagnostic.message.clone())
         .collect();
     assert!(sized.is_empty(), "{sized:#?}");

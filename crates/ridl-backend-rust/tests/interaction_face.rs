@@ -990,7 +990,7 @@ fn round_trip_an_oversized_claim_is_settled_corrupt_and_the_claim_behind_it_is_s
             &oversized,
             None,
         )
-        .expect("the loopback bounds no argument size");
+        .expect("the oversized claim is within the member's limit, so the loopback accepts it");
     let second = send_level_raw(&mut rt, 3);
 
     let mut provider = TestProvider::new(0);

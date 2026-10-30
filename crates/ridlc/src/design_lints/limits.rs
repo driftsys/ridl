@@ -72,15 +72,16 @@ fn resolve(limits: &Limits, kind: LimitKind, owner: Option<&str>, member: &str) 
         })
 }
 
-/// The kind as a manifest spells it, for a message.
-fn kind_name(kind: LimitKind) -> &'static str {
-    match kind {
-        LimitKind::Signal => "signal",
-        LimitKind::Fixed => "fixed",
-        LimitKind::Event => "event",
-        LimitKind::Command => "command",
-        LimitKind::Query => "query",
-    }
+/// The kind with its indefinite article, for a message: `a signal`, `an
+/// event`.
+fn a_kind(kind: LimitKind) -> String {
+    let name = kind.name();
+    let article = if name.starts_with(['a', 'e', 'i', 'o', 'u']) {
+        "an"
+    } else {
+        "a"
+    };
+    format!("{article} {name}")
 }
 
 /// The last segment of the name of a shape.
@@ -261,10 +262,10 @@ pub(crate) fn check(
                             code: DiagCode::MANI_022,
                             severity: Severity::Error,
                             message: format!(
-                                "`{name}` is {}, above what the entry may give a {} \
+                                "`{name}` is {}, above what the entry may give {} \
                                  ({RAISE_MAX} bytes); only a `fixed` may be given more",
                                 entry.value,
-                                kind_name(kind),
+                                a_kind(kind),
                             ),
                             primary: Span {
                                 file: unit_limits.manifest,
@@ -326,10 +327,10 @@ pub(crate) fn check(
                             None => (
                                 DiagCode::RIDL_157,
                                 format!(
-                                    "the {} of `{name}` has {found}; the default ceiling of a {} \
+                                    "the {} of `{name}` has {found}; the default ceiling of {} \
                                      is {limit} bytes{}",
                                     payload.role,
-                                    kind_name(kind),
+                                    a_kind(kind),
                                     raise_hint(kind),
                                 ),
                             ),
@@ -493,6 +494,13 @@ mod tests {
             resolve(&limits, LimitKind::Command, Some("I"), "named"),
             Some(16_128)
         );
+    }
+
+    #[test]
+    fn the_article_of_a_kind_fits_its_name() {
+        assert_eq!(a_kind(LimitKind::Signal), "a signal");
+        assert_eq!(a_kind(LimitKind::Event), "an event");
+        assert_eq!(a_kind(LimitKind::Fixed), "a fixed");
     }
 
     #[test]

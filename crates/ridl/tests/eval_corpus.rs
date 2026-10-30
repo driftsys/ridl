@@ -174,7 +174,8 @@ fn set_default_ceilings(root: &Path) {
 
 /// Every payload of an interaction in the corpus has a finite bound that fits
 /// the default ceiling of its kind, so the corpus draws no size error when
-/// each unit gives the default ceilings.
+/// each unit gives the default ceilings. A manifest error would skip the size
+/// pass, so one fails the test too.
 #[test]
 fn every_corpus_payload_fits_the_default_ceilings() {
     for dir in corpus_dirs() {
@@ -196,7 +197,10 @@ fn every_corpus_payload_fits_the_default_ceilings() {
             });
         let sized: Vec<_> = diagnostics
             .iter()
-            .filter(|diagnostic| diagnostic["code"] == "RIDL-151")
+            .filter(|diagnostic| {
+                let code = diagnostic["code"].as_str().unwrap_or_default();
+                code == "RIDL-151" || code.starts_with("MANI-")
+            })
             .map(|diagnostic| diagnostic["message"].as_str().unwrap_or_default())
             .collect();
         assert!(sized.is_empty(), "{}: {sized:#?}", dir.display());

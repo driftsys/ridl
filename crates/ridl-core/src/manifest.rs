@@ -112,6 +112,17 @@ impl LimitKind {
             _ => None,
         }
     }
+
+    /// The kind as a manifest spells it: the name [`LimitKind::parse`] reads.
+    pub fn name(self) -> &'static str {
+        match self {
+            LimitKind::Signal => "signal",
+            LimitKind::Fixed => "fixed",
+            LimitKind::Event => "event",
+            LimitKind::Command => "command",
+            LimitKind::Query => "query",
+        }
+    }
 }
 
 /// One `[limits.interaction]` entry: the key as written, the byte range of the

@@ -386,15 +386,65 @@ fn an_entry_above_the_largest_raise_is_mani_022_unless_it_names_a_fixed() {
         "{:?}",
         run.diagnostics
     );
-    // A dropped entry gives no limit, so the kind's ceiling is checked.
-    let run = member(
-        "signal c: Payload @[10ms..100ms]",
-        "[limits.interaction]\n\"I.c\" = 16129\n",
+    // A dropped entry gives no limit, so the kind's ceiling is checked: a
+    // signal of 4,000 bytes, within the dropped 16,129, is RIDL-157 against
+    // 3,840, not RIDL-151 against the entry.
+    let diagnostics = check_files(
+        &[(
+            "demo",
+            vec![
+                (
+                    "m.ridl",
+                    "package demo\ntype Payload: bytes [0..4000]\ninterface I {\n  \
+                     signal c: Payload @[10ms..100ms]\n}\n",
+                ),
+                (
+                    "ridl.toml",
+                    "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\
+                     [limits.interaction]\n\"I.c\" = 16129\n",
+                ),
+            ],
+        )],
+        PROTO3,
+    );
+    assert_eq!(
+        size_codes(&diagnostics),
+        ["MANI-022", "RIDL-157"],
+        "{diagnostics:?}"
+    );
+}
+
+/// The MANI-022 of the size pass needs the member's kind, so a package with
+/// an error that blocks the pass draws none, and no RIDL-152, for an entry
+/// above 16,128 bytes that names one of its members.
+#[test]
+fn a_blocked_package_draws_no_mani_022_from_the_size_pass() {
+    let diagnostics = check_files(
+        &[(
+            "demo",
+            vec![
+                (
+                    "m.ridl",
+                    "package demo\ntype Payload: bytes [0..100]\ntype Broken: Nope\n\
+                     interface I {\n  signal c: Payload @[10ms..100ms]\n}\n",
+                ),
+                (
+                    "ridl.toml",
+                    "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\
+                     [limits.interaction]\n\"I.c\" = 16129\n",
+                ),
+            ],
+        )],
+        "",
     );
     assert!(
-        with("RIDL-151", &run.diagnostics).is_empty(),
-        "{:?}",
-        run.diagnostics
+        diagnostics.iter().any(|d| d.severity == Severity::Error),
+        "{diagnostics:?}"
+    );
+    assert_eq!(
+        size_codes(&diagnostics),
+        Vec::<&str>::new(),
+        "{diagnostics:?}"
     );
 }
 

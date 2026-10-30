@@ -2561,6 +2561,17 @@ pub fn check_payload_sizes(
     limits: &BTreeMap<String, ridl_core::UnitLimits>,
     sources: &mut SourceMap,
 ) -> Vec<Diagnostic> {
+    // With no interaction to size and no entry to match, the pass has
+    // nothing to report, so the site index and the std IR are not built.
+    let nothing_to_size = checked
+        .iter()
+        .all(|package| package.ir.shapes().next().is_none())
+        && limits
+            .values()
+            .all(|table| table.limits.interactions.is_empty());
+    if nothing_to_size {
+        return Vec::new();
+    }
     let blocked = size_checks_blocked(db, packages, checked, diagnostics, sources, true);
     let encodings = enabled_encodings(backends);
     let std_ir = check_package(db, workspace, std, std).ir;
