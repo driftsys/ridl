@@ -165,11 +165,13 @@ no IR to size from, and refuses a declaration whose state is not bounded
 are described in
 [the catalog descriptor](catalog-descriptor.md#the-size-states). Each
 `Interaction` also carries `limit` (field 24, additive): the payload limit in
-bytes that a `[limits.interaction]` entry gives the member, copied from the IR's
-`Decl.limit`, and absent when no entry applies, so that the member has the
-default ceiling of its kind. The TypeScript backend writes it into the member
-table of `<base>.codec.ts`, from which the TypeScript client reads each member's
-limit ([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)).
+bytes that a `[limits]` entry gives the member (its `[limits.interaction]`
+entry, else the entry of its kind in `[limits.kind]`, else `default`, each
+clamped to the default ceiling of its kind), copied from the IR's `Decl.limit`,
+and absent when no entry applies, so that the member has the default ceiling of
+its kind. The TypeScript backend writes it into the member table of
+`<base>.codec.ts`, from which the TypeScript client reads each member's limit
+([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)).
 
 **Documentation fields.** Every doc carrier of the model (`Declaration`,
 `Field`, `EnumValue`, `Arm`, `Interface`, `Interaction`, `Service` and `Param`)

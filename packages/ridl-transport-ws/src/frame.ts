@@ -35,7 +35,8 @@ export type Kind = (typeof Kind)[keyof typeof Kind];
 /**
  * The default ceiling of a `signal` and an `event`, in bytes of encoded
  * payload: one 4,096-byte page minus 256 bytes of header. The limit of a
- * member that no `[limits.interaction]` entry of the catalog gives one. The
+ * member that no `[limits]` entry of the catalog (`[limits.interaction]`,
+ * `[limits.kind]` or `default`) gives one. The
  * Rust crate `ridl-rt` holds the same three values in `ridl_rt::contract`, and
  * a test of `ridl-transport-ws` keeps the two sides equal.
  */

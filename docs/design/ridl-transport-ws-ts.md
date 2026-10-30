@@ -349,18 +349,20 @@ rule on a request stamp.
 **D-19. The size of a received payload is checked against the member's limit
 from the generated tables.** The catalog is the one source of a payload limit
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13 and
-19): every interaction has the default ceiling of its kind unless a
-`[limits.interaction]` entry of the manifest gives it another, and the generated
-`<base>.codec.ts` module writes that entry's value as `limit` on the member's
-table entry ([`ts-codec-table.md`](ts-codec-table.md)). So `connect` takes the
-generated tables in the `interfaces` option and reads each member's limit from
-them, keyed by `(kind, interface, ordinal)`; a member no table names, and every
-member when no table is given, has the default ceiling of its kind, which
-`frame.ts` exports as `SIGNAL_EVENT_CEILING` (3,840 bytes), `CALL_CEILING`
-(16,128) and `FIXED_CEILING` (65,280) with `defaultCeiling`. No hand-written
-limit option exists, so that a limit cannot be stated twice. The Rust crate
-`ridl-rt` holds the same three values in `ridl_rt::contract`, and the crate's
-test `tests/ts_ceilings.rs` reads `frame.ts` and compares them.
+19): every interaction has the default ceiling of its kind unless a `[limits]`
+entry of the manifest gives it another (the member's `[limits.interaction]`
+entry, else the entry of its kind in `[limits.kind]`, else `default`, each
+clamped to the default ceiling of its kind), and the generated `<base>.codec.ts`
+module writes the resolved value as `limit` on the member's table entry
+([`ts-codec-table.md`](ts-codec-table.md)). So `connect` takes the generated
+tables in the `interfaces` option and reads each member's limit from them, keyed
+by `(kind, interface, ordinal)`; a member no table names, and every member when
+no table is given, has the default ceiling of its kind, which `frame.ts` exports
+as `SIGNAL_EVENT_CEILING` (3,840 bytes), `CALL_CEILING` (16,128) and
+`FIXED_CEILING` (65,280) with `defaultCeiling`. No hand-written limit option
+exists, so that a limit cannot be stated twice. The Rust crate `ridl-rt` holds
+the same three values in `ridl_rt::contract`, and the crate's test
+`tests/ts_ceilings.rs` reads `frame.ts` and compares them.
 
 The check runs on receive, before a payload reaches the application, and
 compares the payload's length with the limit: a payload of exactly the limit
@@ -369,6 +371,9 @@ have a detected invalid value reported, so that nothing fails silently:
 
 - a `reply` longer than the query's limit rejects the query with `SessionError`
   `corrupt`, the category the provider uses for a request it refuses for size;
+  the limit is the one of the member the query named when it was sent, not one
+  read from the response's `target`, which a `contract` echo may carry under
+  another kind (§6.4);
 - a `publish` that answers a `read`, of a signal or of a `fixed`, rejects the
   read with `corrupt`;
 - a `publish` of a subscribed signal is delivered through `onPublish` as a
