@@ -65,8 +65,10 @@ a level, because the book describes the system as built.
 Documents amended by the amendment of 2026-10-30: this record only. When the
 code lands, driftsys/ridl#1124 updates the lints page, adds one sentence to the
 typl reference §13 (decision 17) and adds the two lints to the typl reference
-§16.5. The ridl and rsdl references, the general form and ADR-0029 do not
-change.
+§16.5. It also updates the two ranges of documentation codes that name §16.5, in
+the rsdl reference §16 (the codes an `.rsdl` file draws) and in the family
+overview §7, to include the two new codes. The ridl reference, the general form
+and ADR-0029 do not change.
 
 It amends two records in place, in the same change:
 [ADR-0002](ADR-0002-module-system.md) §4 (the `[lints]` table and its resolution
