@@ -399,25 +399,30 @@ other entry below is Accepted.
   as-built face this record's decisions produced is
   [the interaction-face design record](../design/interaction-face.md).
 
-- **ADR-0024 — The lint registry and levels.** Sixteen decisions: seven agreed
-  in the brainstorming session of spec 0, two taken in the design review, and
-  seven that come partly from the reviewed design (decisions 10, 11 and 12) and
-  partly from the stage driver at implementation (the root-scope rule in 10, the
-  source of the default level in 12, and 13 to 16; driftsys/ridl#678). Every
-  Warning and Info catalogue code is a lint with a stable kebab-case name, and
-  its catalogue severity is its default level unless its row declares `allow`
-  (decisions 1, 8, 12 and 15, as ADR-0026 amends them); a level (`allow`,
-  `info`, `warn` or `deny`) is set only in the `[lints]` table of a `ridl.toml`,
-  never on the command line and never in source; the registry and the one
-  function that applies levels live in `ridl-core`, and the entry points that
-  report diagnostics call it — `ridl check`, `ridl build`, `ridlc check`,
-  `ridlc build`, the language server and the MCP tool `ridl_check` — while
-  `ridl diff`, `ridl test`, `ridl baseline`, `ridl lock` and the other MCP tools
-  compile with the severities the emit sites chose, so a lint at `deny` never
-  changes whether a workspace compiles. Entering at a workspace member loads its
-  workspace and reports on the member, so the root's table applies (decision 9,
-  as ADR-0026 replaces it, #529). A diagnostic takes the levels of the directory
-  that owns its file; a file outside the entry point's tree takes the defaults.
+- **ADR-0024 — The lint registry and levels.** Nineteen decisions: seven agreed
+  in the brainstorming session of spec 0, two taken in the design review, seven
+  that come partly from the reviewed design (decisions 10, 11 and 12) and partly
+  from the stage driver at implementation (the root-scope rule in 10, the source
+  of the default level in 12, and 13 to 16; driftsys/ridl#678), and three added
+  by the amendment of 2026-10-30, which also changes decision 2 in place (17 to
+  19; not built, driftsys/ridl#1124). Every Warning and Info catalogue code is a
+  lint with a stable kebab-case name, and its catalogue severity is its default
+  level unless its row declares `allow` (decisions 1, 8, 12 and 15, as ADR-0026
+  amends them); a level (`allow`, `info`, `warn` or `deny`) is set in the
+  `[lints]` table of a `ridl.toml`, never on the command line, and a
+  `// lint: allow <name> -- <reason>` comment allows a lint on one declaration
+  and wins over `[lints]`, with two `info` lints, `unused-lint-directive` and
+  `malformed-lint-directive`, for its mistakes (decisions 2, 17 to 19, amended
+  2026-10-30); the registry and the one function that applies levels live in
+  `ridl-core`, and the entry points that report diagnostics call it —
+  `ridl check`, `ridl build`, `ridlc check`, `ridlc build`, the language server
+  and the MCP tool `ridl_check` — while `ridl diff`, `ridl test`,
+  `ridl baseline`, `ridl lock` and the other MCP tools compile with the
+  severities the emit sites chose, so a lint at `deny` never changes whether a
+  workspace compiles. Entering at a workspace member loads its workspace and
+  reports on the member, so the root's table applies (decision 9, as ADR-0026
+  replaces it, #529). A diagnostic takes the levels of the directory that owns
+  its file; a file outside the entry point's tree takes the defaults.
   `ridl check --format sarif` writes a SARIF 2.1.0 log with artifact URIs
   relative to the working directory. Amends ADR-0002 §4 and ADR-0010 decision 1
   in place. Amended 2026-10-06 by the workspace design lints record (ADR-0027):
@@ -519,34 +524,51 @@ other entry below is Accepted.
   transfer is at most 16,384 bytes with a header of up to 128 bytes, so the
   payload ceiling is 16,256 bytes for every encoding and transport; each backend
   caps `MAX_SIZE` at the ceiling while the IR size states stay as computed, so a
-  type with no finite bound will generate; encode will refuse a larger value
-  with a new `EncodeError::TooLarge`, which the face will map to the port
-  errors' `TooLarge`, and verify will refuse it with `Malformed::TooLarge`;
-  `BUFFER` stays; the `MAX_SIZE` cap and the run-time refusal are not built yet
-  (driftsys/ridl#996); TYPL-116 `bound-above-transfer` warns on a `string` bound
-  above 4,032 characters or a `bytes` bound above 16,128 bytes, and RIDL-150
-  `payload-above-ceiling` on a payload above the ceiling, both at `warn` under
-  an amendment of ADR-0029 decision 2; the `[0..256]` default stays; larger data
-  is a stream (driftsys/ridl#996). Amended 2026-10-24 (driftsys/ridl#1045), now
-  fifteen decisions: each interaction has its own payload limit, set in a
-  `[limits]` table of `ridl.toml` by name, by kind or as a default, never above
-  the ceiling (built, with RIDL-151 for a payload above a declared limit and
-  RIDL-152 for an entry that names no interaction); the limit is covered by the
-  catalog hash and carried in a column of the catalog descriptor (built); the
-  WebSocket message limit is at most 16,292 bytes, which an embedder can lower
-  but not raise, and a request above its member's limit is answered `corrupt`
-  (built). Amended 2026-10-28, now eighteen decisions: each kind has a default
-  payload ceiling that bounds the longest copy nothing can interrupt: 3,840
-  bytes for a signal and an event, 16,128 bytes for a command and a query,
-  lowered from 16,256, and 65,280 bytes for a fixed, which is read in place; a
-  `[limits.interaction]` entry may raise one member up to 16,128 bytes, recorded
-  in the IR and the descriptor; a signal or an event above 3,840 bytes with no
-  entry is the new error RIDL-157, and a `[limits]` entry above what its kind
-  allows is MANI-022; no `BUFFER` above 16,128 bytes goes on the stack, and a
-  larger fixed is read in place; the WebSocket message limit becomes 16,164
-  bytes, one payload per message, and a provider refuses at attach a catalog
-  whose fixed does not fit one message; breaking, and not built yet
-  (driftsys/ridl#1108).
+  type with no finite bound will generate (withdrawn on 2026-10-30, unbuilt);
+  encode will refuse a larger value with a new `EncodeError::TooLarge`, which
+  the face will map to the port errors' `TooLarge`, and verify will refuse it
+  with `Malformed::TooLarge`; `BUFFER` stays; the `MAX_SIZE` cap and the
+  run-time refusal are not built yet (driftsys/ridl#996); TYPL-116
+  `bound-above-transfer` warns on a `string` bound above 4,032 characters or a
+  `bytes` bound above 16,128 bytes, and RIDL-150 `payload-above-ceiling` on a
+  payload above the ceiling, both at `warn` under an amendment of ADR-0029
+  decision 2; the `[0..256]` default stays; larger data is a stream
+  (driftsys/ridl#996). Amended 2026-10-24 (driftsys/ridl#1045), now fifteen
+  decisions: each interaction has its own payload limit, set in a `[limits]`
+  table of `ridl.toml` by name, by kind or as a default, never above the ceiling
+  (built, with RIDL-151 for a payload above a declared limit and RIDL-152 for an
+  entry that names no interaction); the limit is covered by the catalog hash and
+  carried in a column of the catalog descriptor (built); the WebSocket message
+  limit is at most 16,292 bytes, which an embedder can lower but not raise, and
+  a request above its member's limit is answered `corrupt` (built). Amended
+  2026-10-28, now eighteen decisions: each kind has a default payload ceiling
+  that bounds the longest copy nothing can interrupt: 3,840 bytes for a signal
+  and an event, 16,128 bytes for a command and a query, lowered from 16,256, and
+  65,280 bytes for a fixed, which is read in place; a `[limits.interaction]`
+  entry may raise one member up to 16,128 bytes, recorded in the IR and the
+  descriptor; a signal or an event above 3,840 bytes with no entry is the new
+  error RIDL-157, and a `[limits]` entry above what its kind allows is MANI-022;
+  no `BUFFER` above 16,128 bytes goes on the stack, and a larger fixed is read
+  in place; the WebSocket message limit becomes 16,164 bytes, one payload per
+  message, and a provider refuses at attach a catalog whose fixed does not fit
+  one message; breaking, and not built yet (driftsys/ridl#1108). Amended
+  2026-10-30, now twenty-one decisions: one rule for every kind, so a payload
+  above its kind's default ceiling or with no finite bound, with no
+  `[limits.interaction]` entry, is the error RIDL-157 for a command, a query and
+  a fixed too, and the lint RIDL-150 `payload-above-ceiling` is retired, its
+  name reserved; TYPL-116 warns only on a bound no kind can carry, a `string`
+  above 16,256 characters or `bytes` above 65,280 bytes; the language server
+  runs the size checks; `verify` checks structure only, the codec guard
+  (`EncodeError::TooLarge`, `PAYLOAD_CEILING`) and the cap on `MAX_SIZE` are
+  withdrawn, so a type with no finite bound still has no codec, and the
+  transport refuses a payload longer than its interaction's limit, on send and
+  on receive, which answers ADR-0031 open item 2 (driftsys/ridl#1128); the
+  catalog's limit is the one source of truth for the sender, the binding and the
+  receiver, and a binding never refuses an interaction the catalog allows, so
+  the refusal at attach is withdrawn; the WebSocket binding keeps messages of
+  16,164 bytes and carries a larger payload, today only a fixed, from provider
+  to consumer, in blocks, a new frame version whose layout is tracked in
+  driftsys/ridl#1129; breaking, and not built yet (driftsys/ridl#1108).
 
 - **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
   _Accepted._ The projection record that ADR-0020 decision 4 asks for. Fifteen
@@ -565,7 +587,9 @@ other entry below is Accepted.
   RIDL-156 `podbuf-padding-order`; and what the backend generates and exposes in
   the codegen model. It lists where it departs from the design it restates,
   which is archived, and carries five open items. Amends ADR-0020 decision 4 and
-  closes its open item 1.
+  closes its open item 1. Amended 2026-10-30 by ADR-0030: `verify` no longer
+  refuses a buffer longer than its own `MAX_SIZE`, which closes open item 2, and
+  RIDL-157 replaces RIDL-150; not built yet (driftsys/ridl#1128).
 
 - **ADR-0032 — Byte streams.** _Proposed._ Eight decisions: the use case is a
   file or document of unknown size, downloaded or uploaded and read or written
