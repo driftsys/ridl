@@ -553,14 +553,16 @@ other entry below is Accepted.
   `payload-above-ceiling` is retired, its name reserved; TYPL-116 warns only on
   a bound no kind can carry, a `string` above 16,256 characters or `bytes` above
   65,280 bytes; the language server runs the size checks; `verify` checks
-  structure only and the transport refuses a payload longer than its
-  interaction's limit, once, which answers ADR-0031 open item 2
-  (driftsys/ridl#1128); the catalog's limit is the one source of truth for the
+  structure only, the codec guard (`EncodeError::TooLarge`, `PAYLOAD_CEILING`)
+  is withdrawn, and the transport refuses a payload longer than its
+  interaction's limit, on send and on receive, which answers ADR-0031 open item
+  2 (driftsys/ridl#1128); the catalog's limit is the one source of truth for the
   sender, the binding and the receiver, and a binding never refuses an
   interaction the catalog allows, so the refusal at attach is withdrawn; the
-  WebSocket binding keeps messages of 16,164 bytes and carries a larger payload
-  in blocks, a new frame version whose layout is tracked in driftsys/ridl#1129;
-  breaking, and not built yet (driftsys/ridl#1108).
+  WebSocket binding keeps messages of 16,164 bytes and carries a larger payload,
+  today only a fixed, from provider to consumer, in blocks, a new frame version
+  whose layout is tracked in driftsys/ridl#1129; breaking, and not built yet
+  (driftsys/ridl#1108).
 
 - **ADR-0031 — The podbuf projection: the byte layout, verify, and evolution.**
   _Accepted._ The projection record that ADR-0020 decision 4 asks for. Fifteen
