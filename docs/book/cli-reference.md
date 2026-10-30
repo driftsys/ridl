@@ -1547,48 +1547,23 @@ category's classification rule without comparing anything.
 names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
 `proto3`, `podbuf`); repeat the flag for several. A snapshot does not record
 the encodings a workspace builds, so the command does not read them from a
-manifest. Only `podbuf` has rules of its own, three of them. A struct field
-appended to a struct that another struct, a tuple or an exact-length array
-holds inline anywhere in the new side — in a struct, in the argument struct a
-call with several parameters induces, or in a tuple reply — is
-`podbuf_inline_append`, breaking with `--encoding podbuf` and compatible
-without it, because the inline copy cannot grow without moving the fields
-after it. An enum value, an enum-set flag or a union arm appended after which
-the podbuf integer of the enum, of the enum set or the tag of the union is a
-different integer, by width or by signedness — a value above 255, a flag at
-bit 8 or an arm past ordinal 255 widens a `u8` to a `u16`, a value above 65535
-or a flag at bit 16 a `u16` to a `u32`, and a value above 4294967295 or a flag
-at bit 32 a `u32` to a `u64`; an enum's integer is signed when a value is
-negative, and since a negative value appended to an enum that has values is an
-insert below its highest value, a breaking `decl_added`, the integer turns
-signed only when an enum with no value gains values — is
+manifest. Only `podbuf` has rules of its own, three of them, each breaking
+with `--encoding podbuf` and compatible without it, and each listed under the
+heading `breaking under podbuf` either way, so that a workspace that does not
+build podbuf still sees it. A struct field appended that grows the podbuf head
+of a struct another head of the old side holds inline is
+`podbuf_inline_append`, whose line names each inline use. An enum value, an
+enum-set flag or a union arm appended after which the podbuf integer of the
+enum, the enum set or the union's tag is a different integer is
 `podbuf_width_change`, reported once per declaration with the old and the new
-integer, breaking with `--encoding podbuf` because every head that holds the enum, the enum set or the union lays out a
-different integer; an append that keeps the integer draws no such line. Without
-the flag the line is reported compatible, which holds under proto3; an enum-set
-flag that widens the integer also widens the enum set's FlatBuffers scalar,
-which `ridl diff --encoding flatbuffers` does not report yet
-(driftsys/ridl#1120). An enum value or an enum-set flag appended is
+integer. An enum value or an enum-set flag appended is
 `podbuf_strict_enum_append`, reported once per declaration with the appended
-names, breaking with `--encoding podbuf` and compatible without it, because
-every enum and enum set is strict and the `verify` of an older reader refuses
-a value or a bit its declaration does not name; an enum or an enum set whose
-append changes the integer draws only the `podbuf_width_change` line. The
-`podbuf_inline_append` line names each inline use, a struct field as
-`<package>/<struct>/<field>` and an interaction's request, reply or fixed
-payload as `<package>/<interface>/<interaction>`, and sits under the heading
-`breaking under podbuf` either way, so that a workspace that does not build
-podbuf still sees it. The search mirrors the heads the encoder lays out, a
-declaration and a named induced tuple: a struct that is a root of its own (a
-single named parameter, a named reply, a signal, event or fixed payload), that
-is used only behind a descriptor (the element of a bounded array, the key or
-value of a map entry, a union arm), or only inside an exact-length array that
-is itself a root (a fixed payload `[S; 2..2]`, which has no head) draws no
-such line: the root or the descriptor's stride gives the producer's size. A
-tuple inside such a root is a head, and a struct inside that tuple is a use.
-A name outside the three is a usage error,
-exit 2. With `Reading` held
-inline by `Bounds` and a field appended to it:
+names, except that an enum or an enum set whose append changes the integer
+draws only the `podbuf_width_change` line. The three rules are stated in
+[ADR-0031][adr-0031] decision 10, and `ridl diff --explain <category>` states
+each in full. A name outside the three is a usage error, exit 2. With
+`Reading` held inline by `Bounds` and an eight-byte field appended to it,
+which grows its head:
 
 ```sh
 ridl diff --encoding podbuf v1.typl v2.typl
@@ -2739,5 +2714,6 @@ argument.
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md
 [adr-0014]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0014-ir-encodings.md
 [adr-0020]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
+[adr-0031]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0031-podbuf-projection-rules.md
 [issue-196]: https://github.com/driftsys/ridl/issues/196
 [clig]: https://clig.dev

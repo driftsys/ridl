@@ -899,19 +899,45 @@ impl CliRun {
 /// workspace member, the compile diagnostics are those of the member's files
 /// and of the remote units ([`retain_in_report_scope`]).
 pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
+    run_check_with_ir(entry, frozen).map(|(run, _)| run)
+}
+
+/// What [`run_check_with_ir`] returns beside the run: the checked workspace
+/// a caller reads after the run, so that it does not compile the workspace a
+/// second time. `ridl check` reads it for the desk check against the
+/// baseline and for the podbuf padding lint.
+pub struct CheckedIr {
+    /// Every checked package of the workspace, the remote units' included,
+    /// in the loader's order.
+    pub checked: Vec<CheckedPackage>,
+    /// The remote units the load took; their packages are in `checked`.
+    pub remote_units: BTreeMap<String, MaterializedUnit>,
+    /// The member directory the entry lies in, when the entry is inside a
+    /// workspace member ([`retain_in_report_scope`]).
+    pub report_scope: Option<PathBuf>,
+    /// The diagnostics of the whole workspace with the severities the emit
+    /// sites chose, before the report scope and the lint levels are applied
+    /// to the run's own list: the gate a whole-workspace pass reads.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// [`run_check`], returning the checked workspace as well ([`CheckedIr`]).
+pub fn run_check_with_ir(entry: &Path, frozen: Frozen) -> std::io::Result<(CliRun, CheckedIr)> {
     let mut db = RidlDatabase::default();
     let cache = Cache::user_default();
     let Compiled {
-        mut diagnostics,
+        diagnostics: unfiltered,
         sources,
         lints,
         report_scope,
         remote_units,
+        checked,
         ..
     } = load_and_check(&mut db, entry, &[], RemoteAccess::new(frozen, &cache))
         .map_err(load_io_error)?;
     // An entry inside a member reports on the member only (ADR-0024 decision
     // 9, as ADR-0026 amends it).
+    let mut diagnostics = unfiltered.clone();
     retain_in_report_scope(
         &mut diagnostics,
         &sources,
@@ -919,12 +945,20 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
         &remote_dirs(&remote_units, &cache, entry),
     );
     apply_lint_levels(&mut diagnostics, &sources, &lints);
-    Ok(CliRun {
-        diagnostics,
-        sources,
-        lints,
-        usage_error: false,
-    })
+    Ok((
+        CliRun {
+            diagnostics,
+            sources,
+            lints,
+            usage_error: false,
+        },
+        CheckedIr {
+            checked,
+            remote_units,
+            report_scope,
+            diagnostics: unfiltered,
+        },
+    ))
 }
 
 /// Runs `build`: everything [`run_check`] does, plus it writes the selected
@@ -2430,35 +2464,45 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
     let encodings = enabled_encodings(&backends);
     // RIDL-153 to RIDL-155 read types, not interactions, so they run for a
     // workspace with no interface, whenever a backend table enables podbuf.
-    if encodings.iter().any(|name| name == "podbuf") {
-        let blocked =
-            payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
+    let podbuf = encodings.iter().any(|name| name == "podbuf");
+    let payloads = checked.iter().any(|pkg| pkg.ir.shapes().next().is_some());
+    if podbuf || payloads {
         let std_ir = check_package(db, workspace, std, std).ir;
-        diagnostics.extend(design_lints::check_podbuf(
-            db,
-            &packages,
-            &checked,
-            &resolutions,
-            &blocked,
-            &std_ir,
-            &encodings,
-            &mut sources,
-        ));
-    }
-    if checked.iter().any(|pkg| pkg.ir.shapes().next().is_some()) {
-        let blocked =
+        let mut blocked =
             payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
-        let std_ir = check_package(db, workspace, std, std).ir;
-        diagnostics.extend(design_lints::check_payload_ceiling(
-            db,
-            &packages,
-            &checked,
-            &resolutions,
-            &blocked,
-            &std_ir,
-            &encodings,
-            &mut sources,
-        ));
+        if podbuf {
+            let before = diagnostics.len();
+            diagnostics.extend(design_lints::check_podbuf(
+                db,
+                &packages,
+                &checked,
+                &resolutions,
+                &blocked,
+                &std_ir,
+                &encodings,
+                &mut sources,
+            ));
+            // RIDL-153 to RIDL-155 are errors, and an error blocks the
+            // payload checks of its package and of its dependents, so the
+            // blocked set is read again only when the podbuf checks added
+            // one; the common run computes it once.
+            if payloads && diagnostics[before..].iter().any(blocks_every_artifact) {
+                blocked =
+                    payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
+            }
+        }
+        if payloads {
+            diagnostics.extend(design_lints::check_payload_ceiling(
+                db,
+                &packages,
+                &checked,
+                &resolutions,
+                &blocked,
+                &std_ir,
+                &encodings,
+                &mut sources,
+            ));
+        }
     }
     drop_remote_non_errors(&mut diagnostics, &sources, &remote_units);
 
