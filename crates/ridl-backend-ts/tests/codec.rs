@@ -395,6 +395,37 @@ fn the_codec_fixture_copies_the_corpus_common_typl() {
     );
 }
 
+/// The three members that carry the largest payloads of the fixture fit the
+/// default ceiling of their kind (ADR-0030): a signal and an event carry at
+/// most 3,840 bytes in FlatBuffers, the encoding the fixture enables.
+#[test]
+fn the_codec_fixture_fits_the_default_ceilings() {
+    let copy = tempfile::tempdir().expect("a temp dir");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codec");
+    for entry in std::fs::read_dir(&fixture).expect("read the fixture") {
+        let entry = entry.expect("read a fixture file");
+        std::fs::copy(entry.path(), copy.path().join(entry.file_name())).expect("copy a file");
+    }
+    let manifest = copy.path().join("ridl.toml");
+    let text = std::fs::read_to_string(&manifest).expect("read the manifest");
+    std::fs::write(
+        &manifest,
+        format!(
+            "{text}\n[limits.kind]\nsignal = 3840\nevent = 3840\ncommand = 16128\nquery = 16128\n"
+        ),
+    )
+    .expect("write the manifest");
+    let diagnostics = ridlc::run_check(copy.path(), ridl_core::Frozen::No)
+        .expect("the fixture checks")
+        .diagnostics;
+    let sized: Vec<_> = diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.code.as_str() == "RIDL-151")
+        .map(|diagnostic| diagnostic.message.clone())
+        .collect();
+    assert!(sized.is_empty(), "{sized:#?}");
+}
+
 /// The model of the fixture `tests/fixtures/codec`, package `veh.common`,
 /// lowered with the workspace's `ridl.std` as the one other package, so the
 /// foreign `ridl.std.Label`, `Name`, `Message` and `Timestamp` resolve.
@@ -403,15 +434,13 @@ fn common_model() -> v1::Model {
     let entry = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/codec");
     let output = ridlc::compile_workspace(&mut db, &entry)
         .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
-    // TYPL-406 (`missing-docs`), RIDL-406 (an info on `SensorReading.timestamp`),
-    // RIDL-150 (the payload ceiling `bounds` and `note` are above, which the
-    // codecs do not enforce), TYPL-116 (the bound of `Free` is above the
-    // advised limit) and RIDL-414 (an info on the cohesion of `Sensors`) are
-    // the diagnostics the fixture draws.
+    // TYPL-406 (`missing-docs`), RIDL-406 (an info on `SensorReading.timestamp`)
+    // and RIDL-414 (an info on the cohesion of `Sensors`) are the diagnostics
+    // the fixture draws.
     assert!(
         output.diagnostics.iter().all(|diagnostic| matches!(
             diagnostic.code.as_str(),
-            "TYPL-406" | "RIDL-406" | "RIDL-150" | "TYPL-116" | "RIDL-414"
+            "TYPL-406" | "RIDL-406" | "RIDL-414"
         )),
         "the fixture must compile with no error, got: {:?}",
         output.diagnostics,
@@ -536,7 +565,7 @@ fn the_common_codec_module() {
     for line in [
         "latest: { iface: 1, ord: 1, kind: \"signal\", payload: codecSensorReading }",
         "result: { iface: 1, ord: 3, kind: \"event\", payload: codecSensorResult }",
-        "bounds: { iface: 1, ord: 4, kind: \"event\", payload: codecSensorBounds }",
+        "bounds: { iface: 1, ord: 4, kind: \"event\", payload: codecBoundsSummary }",
         &format!("setLimit: {{ iface: 1, ord: 5, kind: \"command\", request: codec{set_limit} }}"),
         "profile: { iface: 1, ord: 6, kind: \"query\", request: codecRidlStdName, reply: codecDriverProfile }",
         &format!(

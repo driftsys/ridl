@@ -19,20 +19,23 @@ function absent(type: string, field: string): never {
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "veh.common";
 /** The hash of the catalog unit, which the wasm module carries. */
-export const CATALOG_HASH: Uint8Array = Uint8Array.from([25, 244, 177, 124, 125, 238, 238, 72, 181, 225, 56, 137, 205, 13, 187, 142, 190, 215, 11, 159, 128, 248, 115, 203, 202, 172, 163, 30, 21, 156, 102, 137]);
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([26, 62, 47, 136, 248, 117, 101, 174, 9, 155, 240, 142, 247, 122, 171, 193, 42, 100, 144, 169, 135, 197, 63, 191, 113, 57, 144, 155, 176, 161, 21, 42]);
 /** The qualified names of the payload types of this package, which name the wasm type ids. */
 export const PAYLOAD_TYPES = [
+  "veh.common.BoundsSummary",
   "veh.common.Counter",
   "veh.common.DriverProfile",
   "veh.common.Extras",
   "veh.common.Gain",
   "veh.common.GearPosition",
   "veh.common.Mode",
+  "veh.common.Note",
   "veh.common.Outcome",
   "veh.common.Pick",
   "veh.common.RPM",
   "veh.common.Ratio",
   "veh.common.RawWheelFrame",
+  "veh.common.Remark",
   "veh.common.SensorBounds",
   "veh.common.SensorFault",
   "veh.common.SensorReading",
@@ -386,6 +389,63 @@ function unpackOutcome(object: fb.OutcomeT): t.Outcome {
   }
 }
 
+/** Encodes a `veh.common.Remark` payload. */
+export function encodeRemark(value: t.Remark): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new fb.RemarkBoxT(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Remark` payload the codec has verified. */
+export function decodeRemark(bytes: Uint8Array): t.Remark {
+  return fb.RemarkBox.getRootAsRemarkBox(new flatbuffers.ByteBuffer(bytes)).unpack().value as t.Remark;
+}
+
+/** Encodes a `veh.common.Note` payload. */
+export function encodeNote(value: t.Note): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packNote(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.Note` payload the codec has verified. */
+export function decodeNote(bytes: Uint8Array): t.Note {
+  return unpackNote(fb.Note.getRootAsNote(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packNote(value: t.Note): fb.NoteT {
+  const object = new fb.NoteT();
+  object.text = value.text;
+  return object;
+}
+function unpackNote(object: fb.NoteT): t.Note {
+  return {
+    text: object.text as t.Remark,
+  };
+}
+
+/** Encodes a `veh.common.BoundsSummary` payload. */
+export function encodeBoundsSummary(value: t.BoundsSummary): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packBoundsSummary(value).pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `veh.common.BoundsSummary` payload the codec has verified. */
+export function decodeBoundsSummary(bytes: Uint8Array): t.BoundsSummary {
+  return unpackBoundsSummary(fb.BoundsSummary.getRootAsBoundsSummary(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packBoundsSummary(value: t.BoundsSummary): fb.BoundsSummaryT {
+  const object = new fb.BoundsSummaryT();
+  object.range = packBoundsSummaryRange(value.range);
+  object.readings = [...value.readings];
+  return object;
+}
+function unpackBoundsSummary(object: fb.BoundsSummaryT): t.BoundsSummary {
+  return {
+    range: object.range === null ? absent("veh.common.BoundsSummary", "range") : unpackBoundsSummaryRange(object.range),
+    readings: object.readings.map((element) => element as t.Speed),
+  };
+}
+
 /** Encodes a `veh.common.Extras` payload. */
 export function encodeExtras(value: t.Extras): Uint8Array {
   const builder = new flatbuffers.Builder();
@@ -470,6 +530,16 @@ function unpackSensorBoundsRange(object: fb.SensorBoundsRangeT): { min: t.Speed;
   return { min: object.field1 as t.Speed, max: object.field2 as t.Speed };
 }
 
+function packBoundsSummaryRange(value: { min: t.Speed; max: t.Speed }): fb.BoundsSummaryRangeT {
+  const tuple = new fb.BoundsSummaryRangeT();
+  tuple.field1 = value.min;
+  tuple.field2 = value.max;
+  return tuple;
+}
+function unpackBoundsSummaryRange(object: fb.BoundsSummaryRangeT): { min: t.Speed; max: t.Speed } {
+  return { min: object.field1 as t.Speed, max: object.field2 as t.Speed };
+}
+
 function packExtrasWide(value: { big: bigint; sparse: readonly t.Speed[] }): fb.ExtrasWideT {
   const tuple = new fb.ExtrasWideT();
   tuple.field1 = value.big;
@@ -543,10 +613,11 @@ function unpackSensorsSpanReply(object: fb.SensorsSpanReplyT): SensorsSpanReply 
 
 const codecCounter: PayloadCodec<t.Counter> = { type: "veh.common.Counter", encode: encodeCounter, decode: decodeCounter };
 const codecDriverProfile: PayloadCodec<t.DriverProfile> = { type: "veh.common.DriverProfile", encode: encodeDriverProfile, decode: decodeDriverProfile };
-const codecSensorBounds: PayloadCodec<t.SensorBounds> = { type: "veh.common.SensorBounds", encode: encodeSensorBounds, decode: decodeSensorBounds };
 const codecSensorResult: PayloadCodec<t.SensorResult> = { type: "veh.common.SensorResult", encode: encodeSensorResult, decode: decodeSensorResult };
 const codecSensorReading: PayloadCodec<t.SensorReading> = { type: "veh.common.SensorReading", encode: encodeSensorReading, decode: decodeSensorReading };
 const codecSetting: PayloadCodec<t.Setting> = { type: "veh.common.Setting", encode: encodeSetting, decode: decodeSetting };
+const codecNote: PayloadCodec<t.Note> = { type: "veh.common.Note", encode: encodeNote, decode: decodeNote };
+const codecBoundsSummary: PayloadCodec<t.BoundsSummary> = { type: "veh.common.BoundsSummary", encode: encodeBoundsSummary, decode: decodeBoundsSummary };
 const codecExtras: PayloadCodec<t.Extras> = { type: "veh.common.Extras", encode: encodeExtras, decode: decodeExtras };
 const codecPick: PayloadCodec<t.Pick> = { type: "veh.common.Pick", encode: encodePick, decode: decodePick };
 const codecSensorsSetLimitParams: PayloadCodec<SensorsSetLimitParams> = { type: "veh.common.SensorsSetLimitParams", encode: encodeSensorsSetLimitParams, decode: decodeSensorsSetLimitParams };
@@ -559,12 +630,12 @@ export const Sensors = {
   iface: 1,
   latest: { iface: 1, ord: 1, kind: "signal", payload: codecSensorReading },
   result: { iface: 1, ord: 3, kind: "event", payload: codecSensorResult },
-  bounds: { iface: 1, ord: 4, kind: "event", payload: codecSensorBounds },
+  bounds: { iface: 1, ord: 4, kind: "event", payload: codecBoundsSummary },
   setLimit: { iface: 1, ord: 5, kind: "command", request: codecSensorsSetLimitParams },
   profile: { iface: 1, ord: 6, kind: "query", request: codecRidlStdName, reply: codecDriverProfile },
   span: { iface: 1, ord: 7, kind: "query", request: codecSensorsSpanParams, reply: codecSensorsSpanReply },
   setting: { iface: 1, ord: 8, kind: "signal", payload: codecSetting },
-  // note has no entry: veh.common.Note has no finite FlatBuffers bound
+  note: { iface: 1, ord: 9, kind: "signal", payload: codecNote },
   fetch: { iface: 1, ord: 10, kind: "query", request: codecCounter },
   extras: { iface: 1, ord: 11, kind: "signal", payload: codecExtras },
   pick: { iface: 1, ord: 12, kind: "signal", payload: codecPick },

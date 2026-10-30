@@ -155,8 +155,8 @@ Deno.test("a union with a scalar arm and an enum arm round-trips through each ar
   }
 });
 
-Deno.test("an unbounded payload has no entry and a fallible query has no reply", () => {
-  assert.equal("note" in codec.Sensors, false);
+Deno.test("a bounded payload has an entry and a fallible query has no reply", () => {
+  assert.equal(codec.Sensors.note.kind, "signal");
   assert.equal(codec.Sensors.fetch.request.type, "veh.common.Counter");
   assert.equal("reply" in codec.Sensors.fetch, false);
 });
