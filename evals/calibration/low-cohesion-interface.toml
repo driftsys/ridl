@@ -2,6 +2,7 @@
 # `final` is the agreed label where the two labels agree; where they disagree, it is the label Sebastien set at adjudication (2026-10-06). Every finding has a `final`.
 # Agreement sample seed: 20261005.
 # Sample algorithm: rank each agreed finding by SHA-256 of the UTF-8 string "20261005:low-cohesion-interface:<finding-id>" (lowercase hex, ascending); take the first 10.
+# Id shift: the ros2 ids in this file were shifted to new byte offsets on 2026-10-30, when the corpus was bounded. The sample above is the one drawn from the ids before the shift; the algorithm does not reproduce it from the shifted ids.
 # Agreed findings: 16. Sampled: 10. Shortfall: 0.
 # Sampled: low-cohesion-interface:vss:vehicle.cabin.hvac/contract.ridl:8608-8612:0
 # Sampled: low-cohesion-interface:vss:vehicle.cabin.hvac.station.row4.driver/contract.ridl:1498-1504:0

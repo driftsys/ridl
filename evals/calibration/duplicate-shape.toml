@@ -2,6 +2,7 @@
 # `final` is the agreed label where the two labels agree; where they disagree, it is the label Sebastien set at adjudication (2026-10-06). Every finding has a `final`.
 # Agreement sample seed: 20261005.
 # Sample algorithm: rank each agreed finding by SHA-256 of the UTF-8 string "20261005:duplicate-shape:<finding-id>" (lowercase hex, ascending); take the first 10.
+# Id shift: the ros2 ids in this file were shifted to new byte offsets on 2026-10-30, when the corpus was bounded. The sample above is the one drawn from the ids before the shift; the algorithm does not reproduce it from the shifted ids.
 # Agreed findings: 15. Sampled: 10. Shortfall: 0.
 # Sampled: duplicate-shape:vss:vehicle.cabin.hvac.station.row3.passenger/contract.ridl:1440-1455:0
 # Sampled: duplicate-shape:ros2:nav2_msgs/interactions.ridl:6013-6025:0

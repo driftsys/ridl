@@ -121,13 +121,18 @@ Every mapping below uses the changed logical package name.
 Every payload of an interaction fits the default ceiling of its kind: 3,840
 bytes for a signal or an event, 16,128 bytes for a command or a query
 (ADR-0030). The corpus names no backend table, so FlatBuffers is the encoding
-that `ridl check` sizes. A string or sequence that no interaction carries keeps
-the maximal mechanical bound above, and the six `RosString` declarations are
-unchanged. The bounds below are a RIDL representation choice, not an upstream
-limit. Each string bound counts Unicode scalar values and each sequence bound
-counts elements. Each bound was measured with `ridl check`: it is the largest
-multiple of 64 (strings) or the largest count (sequences) that keeps the largest
-member that carries the field within its ceiling, except where noted.
+that `ridl check` sizes. The bounds sit on the shared message types themselves
+(`stdmsgs.Header.frameId`, `navmsgs.OccupancyGrid.data`, `navmsgs.Path.poses`,
+`sensormsgs.CameraInfo.distortionModel` and `.d`, `nav2msgs.Costmap.data` and
+`nav2msgs.CostmapMetaData.layer`), not on copies local to the interactions, so
+every message that holds one of these types inherits its bound. A string or
+sequence that no message of an interaction holds keeps the maximal mechanical
+bound above, and the six `RosString` declarations are unchanged. The bounds
+below are a RIDL representation choice, not an upstream limit. Each string bound
+counts Unicode scalar values and each sequence bound counts elements. Each bound
+was measured with `ridl check`: it is the largest multiple of 64 (strings) or
+the largest count (sequences) that keeps the largest member that carries the
+field within its ceiling, except where noted.
 
 - `stdmsgs.RosFrameId` is `string [0..64]` and replaces `RosString` in
   `stdmsgs.Header.frameId`. It is not the largest bound that fits: a Header is
