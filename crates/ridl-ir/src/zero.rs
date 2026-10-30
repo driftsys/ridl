@@ -1,7 +1,7 @@
 //! Whether the value 0 is a legal value of a typl type.
 //!
 //! 0 is the default a FlatBuffers reader gives an absent scalar or enum
-//! field. Two consumers ask the same question and must agree on the answer:
+//! field. Three consumers ask the same question and must agree on the answer:
 //!
 //! - the FlatBuffers codec of `ridl-backend-rust`, which reads an absent
 //!   non-optional scalar or enum field as 0 when 0 is legal for its type, and

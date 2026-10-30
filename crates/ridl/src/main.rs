@@ -1518,10 +1518,10 @@ fn default_baseline_dir(entry: &Path) -> PathBuf {
 /// label to every RIDL-409 whose orphan entry has exactly one same-shape
 /// candidate ([`rename_labels`]).
 ///
-/// The workspace is compiled a second time here, through
-/// [`ridlc::compile_workspace`], because `run_check` renders diagnostics but
-/// does not hand back the IR. The cost is paid only when a baseline is actually
-/// present, and never on a run that failed for anything but RIDL-409.
+/// The checked IR is the run's own, `ir` ([`ridlc::CheckedIr`]), so the
+/// workspace is not compiled again; the comparison runs only when a baseline
+/// is actually present, and never on a run that failed for anything but
+/// RIDL-409.
 /// `explicit` — whether
 /// `location` came from a `--baseline` flag rather than auto-discovery — is
 /// passed straight through to [`load_baseline`], which it uses to tell an
