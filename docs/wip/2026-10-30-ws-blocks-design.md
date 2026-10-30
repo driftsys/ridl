@@ -225,9 +225,15 @@ bytes, when the column holds none (ADR-0030 decisions 13 and 16). A `block` with
 `index` 0 whose `total` is above that limit is refused before a byte is copied
 (B-6). A consumer may allocate one buffer per session with the capacity of the
 largest fixed limit of its catalog and reuse it, or allocate `total` bytes per
-payload; both are bounded by the limit. A consumer that holds no member table
-(the TypeScript package today) uses 65,280 bytes, which bounds the limit of
-every fixed, because no entry raises a fixed above it (decision 18).
+payload; both are bounded by the limit.
+
+**Ruling R-B1 (the coordinator, 2026-10-30, for the owner's review): the
+TypeScript consumer takes each member's limit from the generated codec module.**
+The generated `<base>.codec.ts` module carries the catalog limits, so that the
+catalog stays the single source of a limit. `ConnectOptions` gains no limit
+field. For a member with no limit entry, the default ceiling of its kind from
+the catalog rules applies: 65,280 bytes for a fixed. The TypeScript backend
+(`crates/ridl-backend-ts`) emits the member limits into that module (task 6a).
 
 A consumer attached under a compatible earlier hash (§6.1) has the same limits
 as the provider: a change of a limit is breaking (ADR-0030 decision 13), so it
@@ -269,8 +275,9 @@ Why a sequence error ends the session rather than dropping the payload: the
 transport is reliable and ordered (§11.1 item 5), so a missing, repeated or
 reordered block can only be a defect of the sender, and §11.1 item 4 already
 ends the session on a frame the receiver cannot read. Dropping the payload and
-going on would leave the `read` waiting, because a `read` has no bound of its
-own in either package; ending the session reports `Down` at once.
+going on would leave the `read` waiting, because a `read` of the TypeScript
+package has no bound of its own (the Rust crate is the provider and has no
+`read`); ending the session reports `Down` at once.
 
 Why a payload above the limit does not end the session: decision 19 makes the
 refusal of a size a structure failure of the kind, which for a fixed is the
@@ -344,22 +351,23 @@ the receiver side of driftsys/ridl#1128 (a consumer checks a payload's length
 against its member's limit). It is a breaking release of both packages, which
 #1108's release already is.
 
-| # | Task                                                                                                                                                                                                                                                                                                                                                                                             | Estimate |
-| - | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| 1 | Rust codec (`crates/ridl-transport-ws/src/frame.rs`): `FRAME_VERSION` 2, `SUBPROTOCOL` `ridl-ws-v2` and a constant for `ridl-ws-v1`, `BLOCK_BYTES` 4,096, `Frame::Block` (`Frame` is `#[non_exhaustive]`), its encoder and decoder with the single-block checks of B-6, and the version 2 vectors in `tests/vectors.rs`                                                                          | 0.5 day  |
-| 2 | Rust handshake (`src/ws.rs`): select `ridl-ws-v2` when offered, else `ridl-ws-v1`, else 400; the session refuses `frame_version` 1 with the existing code path; a received `block` is a consumer-side form and closes with 1002                                                                                                                                                                  | 0.5 day  |
-| 3 | Rust provider (`src/server/session.rs`): `read_fixed` reads the value into a buffer bounded by the member's limit, or by 65,280 bytes with no member table, in place of the one-message `payload_cap`; sends one `publish` when it fits the message limit and blocks otherwise; the `Config` check at attach of decision 10 for a message limit below 4,130 bytes with a fixed that needs blocks | 1 day    |
-| 4 | Rust tests: unit tests in `session.rs` (the boundary of B-4, the block sequence, a `block` received), `tests/serve.rs` (the 65,280-byte round trip through `tungstenite`), and the freeze dumps (`wire` gains the version 2 rows, `runtime-crates` the new constants and variant)                                                                                                                | 1 day    |
-| 5 | TypeScript codec (`packages/ridl-transport-ws/src/frame.ts`): `FRAME_VERSION` 2, both subprotocol names, the `block` form and its single-block checks; `tests/vectors_test.ts` and `tests/decode_errors_test.ts`                                                                                                                                                                                 | 0.5 day  |
-| 6 | TypeScript session (`src/session.ts`): offer `ridl-ws-v2, ridl-ws-v1` and attach with the selected version; the reassembly slot (collecting or skipping) and the rules of B-6; a fixed limit taken from a new `ConnectOptions` field that maps a member to its limit, with 65,280 bytes as the default; a `read` that rejects with `corrupt` for a payload above the limit                       | 1 day    |
-| 7 | TypeScript tests: `tests/session_test.ts` over `tests/fake_socket.ts` (every row of B-6), `tests/version_test.ts` (both subprotocols)                                                                                                                                                                                                                                                            | 1 day    |
-| 8 | End-to-end: the three fixed values in `examples/loopback_server.rs` and `e2e/catalog.ts`, read by `e2e/deno_test.ts` and `e2e/browser_test.ts`                                                                                                                                                                                                                                                   | 0.5 day  |
-| 9 | Records: amend the frame specification (§4, §5.5, §5.6, §6.3, §9.4, §10 with a tenth item, "Blocks", §11.1 with the version 2 section and its vectors, §12 items 17 to 24, §13 streams at version 3), both design records, the binding rationale technote, the `websocket` row of the codegen model (`version` `"2"`), and garden this note                                                      | 1 day    |
+| #  | Task                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Estimate |
+| -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| 1  | Rust codec (`crates/ridl-transport-ws/src/frame.rs`): `FRAME_VERSION` 2, `SUBPROTOCOL` `ridl-ws-v2` and a constant for `ridl-ws-v1`, `BLOCK_BYTES` 4,096, `Frame::Block` (`Frame` is `#[non_exhaustive]`), its encoder and decoder with the single-block checks of B-6, and the version 2 vectors in `tests/vectors.rs`                                                                                                                                                                                                                                       | 0.5 day  |
+| 2  | Rust handshake (`src/ws.rs`): select `ridl-ws-v2` when offered, else `ridl-ws-v1`, else 400; the session refuses `frame_version` 1 with the existing code path; a received `block` is a consumer-side form and closes with 1002                                                                                                                                                                                                                                                                                                                               | 0.5 day  |
+| 3  | Rust provider (`src/server/session.rs`): `read_fixed` reads the value into a buffer bounded by the member's limit, or by 65,280 bytes with no member table, in place of the one-message `payload_cap`; sends one `publish` when it fits the message limit and blocks otherwise; the `Config` check at attach of decision 10 for a message limit below 4,130 bytes with a fixed that needs blocks                                                                                                                                                              | 1 day    |
+| 4  | Rust tests: unit tests in `session.rs` (the boundary of B-4, the block sequence, a `block` received), `tests/serve.rs` (the 65,280-byte round trip through `tungstenite`), and the freeze dumps (`wire` gains the version 2 rows, `runtime-crates` the new constants and variant)                                                                                                                                                                                                                                                                             | 1 day    |
+| 5  | TypeScript codec (`packages/ridl-transport-ws/src/frame.ts`): `FRAME_VERSION` 2, both subprotocol names, the `block` form and its single-block checks; `tests/vectors_test.ts` and `tests/decode_errors_test.ts`                                                                                                                                                                                                                                                                                                                                              | 0.5 day  |
+| 6  | TypeScript session (`src/session.ts`): offer `ridl-ws-v2, ridl-ws-v1` and attach with the selected version; the reassembly slot (collecting or skipping) and the rules of B-6; each fixed's limit taken from the generated codec module (R-B1), with the default ceiling of the kind for a member with no entry; a `read` that rejects with `corrupt` for a payload above the limit                                                                                                                                                                           | 1 day    |
+| 6a | TypeScript backend (`crates/ridl-backend-ts`): emit each member's payload limit from the catalog into the generated `<base>.codec.ts` module (R-B1), with its tests. If the size-rules lane (driftsys/ridl#1128) lands first and already emits the limits, this task is done there                                                                                                                                                                                                                                                                            | 0.5 day  |
+| 7  | TypeScript tests: `tests/session_test.ts` over `tests/fake_socket.ts` (every row of B-6), `tests/version_test.ts` (both subprotocols)                                                                                                                                                                                                                                                                                                                                                                                                                         | 1 day    |
+| 8  | End-to-end: the three fixed values in `examples/loopback_server.rs` and `e2e/catalog.ts`, read by `e2e/deno_test.ts` and `e2e/browser_test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                | 0.5 day  |
+| 9  | Records: amend the frame specification as "Records to amend when the code lands" places each part (§4 the form, its code and its fields; §5.5, §6.3 and §9.4 the receiver rules of B-5 and B-6; §10 a tenth item for the block size and when the sender splits only; §11.1 the version 2 section, its values and its vectors; §12 items 17 to 24; §13 streams at version 3), ADR-0030 decision 15's threshold sentence, both design records, the binding rationale technote, the `websocket` row of the codegen model (`version` `"2"`), and garden this note | 1 day    |
 
-Total: about 7 days of implementer time, in three pull requests: the Rust side
-(tasks 1 to 4), the TypeScript side (tasks 5 to 7), and the end-to-end test with
-the records (tasks 8 and 9). The TypeScript side can be written in parallel with
-the Rust side from this note; the end-to-end test needs both.
+Total: about 7.5 days of implementer time, in three pull requests: the Rust side
+(tasks 1 to 4), the TypeScript side (tasks 5 to 7, with 6a), and the end-to-end
+test with the records (tasks 8 and 9). The TypeScript side can be written in
+parallel with the Rust side from this note; the end-to-end test needs both.
 
 ## 5. Alternatives considered
 
@@ -382,9 +390,10 @@ set puts them on every `publish`.
 
 **A first block that carries the header and later blocks that carry only an
 index.** Two forms in place of one, and a later block that cannot be attributed
-to its interaction without session state. Repeating the 26 bytes of identity and
-envelope costs 416 bytes for the largest fixed and lets the decoder check each
-block by itself.
+to its interaction without session state. Repeating the identity, the envelope
+and `total` in every block costs under 30 bytes per block after the first, under
+500 bytes for the largest fixed, and lets the decoder check each block by
+itself.
 
 **A last-block flag in place of `total`.** The receiver would learn the size
 only at the end, so it could not refuse a payload above the limit before copying
@@ -420,23 +429,37 @@ version 1 only for some catalogs.
 reports a failed handshake as a close with 1006 and no reason, whereas
 `attached(refused(frame_version_unsupported))` tells the consumer why.
 
-## 6. Open points
+## 6. Dependencies and open points
 
-- The TypeScript package reads no catalog descriptor
-  ([its design record](../design/ridl-transport-ws-ts.md), "What is not built").
-  Task 6 gives it the fixed limits through a `ConnectOptions` field, filled by
-  the application or by a later generated face; without it the package bounds a
-  reassembly at 65,280 bytes. Whether the generated TypeScript codec module
-  (`<base>.codec.ts`) should carry each member's limit is a question for that
-  module's record, not for this note.
-- What the provider sends when a provisioned fixed is longer than its member's
-  limit belongs to the sending side of driftsys/ridl#1128. Today it records
-  `ValueTooLarge` and sends nothing, which leaves the consumer's `read` waiting.
+- Dependency on the size-rules lane (driftsys/ridl#1128): a provisioned fixed
+  longer than its member's limit is refused by the provider's port when the
+  provider sets the value. Until that lands, the Rust provider records
+  `ValueTooLarge` for such a value and sends nothing, which leaves the
+  consumer's `read` waiting with no bound.
+
 - The Rust provider reads the whole fixed from its backend in one call
   (`FixedReader::read_fixed` into one buffer), up to 65,280 bytes. That copy is
   the port's, not the binding's, and this note does not change the port.
 
 ## Records to amend when the code lands
+
+Which record owns each part of this note (the coordinator's ruling, 2026-10-30).
+§10 says a binding does not decide what a receiver does with a frame, so the
+receiver rules belong to the frame, not to the binding:
+
+| Part                                                                             | Owner                                                           |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| the `block` form, its code 11, the fields `total` and `index`                    | frame specification §4 (and the table of §5.6)                  |
+| the receiver behaviour: reassembly, B-5 and the failure table of B-6             | frame specification §5.5, §6.3 and §9.4                         |
+| what a binding decides: the block size, and when the sender splits               | frame specification §10, a tenth item that names these two only |
+| the WebSocket values: 4,096 bytes, the 34-byte layout, `ridl-ws-v2`, the vectors | frame specification §11.1, a binding version 2 section          |
+| the conformance items 17 to 24                                                   | frame specification §12                                         |
+
+ADR-0030 decision 15, "WebSocket: blocks", says that "only a fixed above 16,128
+bytes, of up to 65,280 bytes, is sent in blocks". The precise threshold is
+16,137 bytes (B-4). When the code lands, that sentence is corrected to "only a
+fixed above what one `publish` carries, 16,137 bytes at the 16,164-byte message
+limit, of up to 65,280 bytes, is sent in blocks".
 
 The frame specification (§4, §5.5, §5.6, §6.3, §9.4, §10, §11.1, §12, §13),
 [`../design/ridl-transport-ws.md`](../design/ridl-transport-ws.md),
