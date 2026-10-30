@@ -2131,7 +2131,7 @@ error enum DiagError {           // failure vocabulary — typl §10.1
 }
 
 struct FaultPage {
-  faults : [FaultEvent; 0..64]
+  faults : [FaultEvent; 0..14]
 }
 
 // --- the contract ---

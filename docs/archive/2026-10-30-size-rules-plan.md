@@ -660,3 +660,35 @@ task 5 start. If it lands mid-task, the implementer rebases before the review.
   an added optional field `detected: "corrupt"` on `Sample` and `Occurrence`,
   with `payload: null` on a sample and an empty payload on an occurrence.
 - **R-20. TS send side.** Default: no local check in this lane.
+- **R-21. Where the ros2 bounds were put.** Decided during Task 1, and it
+  departs from R-14. The bounds are on the shared message types
+  (`stdmsgs.Header.frameId`, `navmsgs.OccupancyGrid.data`, `navmsgs.Path.poses`,
+  `sensormsgs.CameraInfo.distortionModel` and `.d`, `nav2msgs.Costmap.data`, and
+  `CostmapMetaData.layer`), not on local copies, because local copies would
+  duplicate `Header`, `PoseStamped` and `Path`. Every message that holds one of
+  these types inherits the bound. `PROVENANCE.md` of the corpus records each
+  change.
+- **R-22. Appendix A of the language reference.** Decided during Task 9.
+  Appendix A of the ridl language reference and the `ridl-syntax` test data
+  (`appendix_a_full_example.ridl`) declare `[FaultEvent; 0..14]` in place of
+  `[FaultEvent; 0..64]`, because 14 is the largest count that fits the
+  16,128-byte default ceiling of a query in FlatBuffers, proto3 and podbuf. The
+  veh-cluster corpus already used 14.
+- **R-23. The MANI-022 message for `default` and `[limits.interaction]`.** The
+  message reads "... above what the entry may give (65280 bytes)", without "for
+  its kind", because 65,280 bytes is not the ceiling of a kind. It is the
+  largest value any entry may give.
+- **R-24. Commit trailers.** Every commit of this lane ends with the one line
+  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- **R-25. A `[limits.interaction]` value that is too large for its member.** A
+  value from 16,129 to 65,280 bytes on a member that is not a fixed draws
+  MANI-022 and gives no limit. Resolution continues to the `[limits.kind]`
+  entry, then to the `default` entry clamped to the kind's ceiling, then to no
+  limit, which RIDL-157 reports. This is the same drop-and-continue rule as the
+  manifest reader.
+- **R-26. `proto3_unbounded_call.ridl`.** The fixture
+  `crates/ridl-backend-rust/tests/fixtures/proto3_unbounded_call.ridl` keeps an
+  interaction with an unbounded payload. A test helper compiles it and requires
+  RIDL-157 and no other error. The test guards the backend API against IR that
+  the checker did not check or that a plugin produced. This departs from the
+  default of R-17.

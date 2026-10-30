@@ -129,7 +129,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unbounded-float` | TYPL-102 | warn | `float` without both a range and a `step` |
 | `unbounded-length` | TYPL-103 | warn | `string`/`bytes` without explicit bounds |
 | `no-init-value` | TYPL-115 | info | type has no derivable init value and no declared `= value` |
-| `bound-above-transfer` | TYPL-116 | warn | `string`/`bytes` bound above the advised transfer limit |
+| `bound-above-transfer` | TYPL-116 | warn | `string`/`bytes` bound above what the largest payload of any kind can carry |
 | `duplicate-reserved` | TYPL-211 | warn | duplicate `reserved` entry |
 | `inconsistent-unit` | TYPL-222 | info | one field name used with different units |
 | `duplicate-shape` | TYPL-224 | info | duplicate declaration shape |

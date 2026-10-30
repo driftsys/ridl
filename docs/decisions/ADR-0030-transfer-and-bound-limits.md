@@ -81,21 +81,48 @@ Built 2026-10-28: the two lints of decisions 6 to 9 (driftsys/ridl#1013), the
 `[limits]` table and RIDL-151 of decisions 12 and 14 (driftsys/ridl#1063), the
 limit in the IR and the catalog hash of decision 13 (driftsys/ridl#1065), and
 the WebSocket limits of decisions 10 and 15 with the descriptor's limit column
-(driftsys/ridl#1098). Decisions 3 and 4 are not built: `MAX_SIZE` is not capped
-at the ceiling, and `ridl-rt` has no `PAYLOAD_CEILING` and no
-`EncodeError::TooLarge` (driftsys/ridl#996). The amendment of 2026-10-28 is not
-built (driftsys/ridl#1108): the code still uses 16,256 as the ceiling, the
-WebSocket limits of decisions 10 and 15 are built at 16,292, and decisions 16 to
-18 are not built. The amendment of 2026-10-30 is not built: TYPL-116 still uses
-4,032 characters and 16,128 bytes, RIDL-150 is still raised at `warn` for a
-signal, an event, a command and a query and does not size a fixed, the language
-server does not run RIDL-150, RIDL-151 or RIDL-152, and the generated
-FlatBuffers and podbuf `verify` still refuse a buffer longer than the type's
-`MAX_SIZE` (driftsys/ridl#1108, driftsys/ridl#1128), no sending side refuses a
-payload longer than its member's limit from the catalog (the port's
-`TooLarge { cap }` reports the capacity of the runtime's slot today, and
-`ridl-loopback` never returns it; driftsys/ridl#1128), and the WebSocket binding
-has no blocks (driftsys/ridl#1129).
+(driftsys/ridl#1098). Decisions 3 and 4 were not built, and were withdrawn on
+2026-10-30 (driftsys/ridl#996).
+
+Built 2026-10-30 (driftsys/ridl#1108, driftsys/ridl#1128): the amendments of
+2026-10-28 and 2026-10-30, except what waits for driftsys/ridl#1129. Built:
+
+- `ridl_core::limits` holds the three default ceilings (3,840, 16,128 and 65,280
+  bytes), the largest raise, and the TYPL-116 thresholds (16,256 characters and
+  65,280 bytes). TYPL-116 warns only on a bound that no kind can carry.
+- The `ridlc` size pass resolves each interaction's limit (the
+  `[limits.interaction]` entry, else the `[limits.kind]` entry, else `default`
+  clamped to the kind's ceiling) and raises RIDL-151 against it, and RIDL-157
+  where no entry gives the limit and the payload is above the default ceiling of
+  its kind or has no finite bound, for a signal, an event, a command, a query
+  and a fixed. RIDL-150 is retired and its lint name is reserved, so a `[lints]`
+  key that names it draws MANI-010. MANI-022 follows decisions 12 and 18.
+- The language server publishes RIDL-151, RIDL-152, RIDL-157 and the MANI-022 of
+  the limits pass (decision 21).
+- The generated FlatBuffers and podbuf `verify` check structure only (decision
+  19). Decision 3 and decision 4 stay withdrawn: `MAX_SIZE` is not capped, and
+  `ridl-rt` has no `PAYLOAD_CEILING` and no `EncodeError::TooLarge`.
+- `ridl-rt` exports the three default ceilings. A sending port refuses a payload
+  above its member's limit with `TooLarge { cap }`, and `ridl-loopback` returns
+  it. The WebSocket transport applies the limit of each member on both sides,
+  carries a message of at most 16,164 bytes, and refuses a `Config` that cannot
+  carry an allowed payload. The TypeScript client reads each member's limit from
+  the generated codec module and rejects a received payload above it before
+  `verify`, and the codegen model carries the limit.
+
+What waits for driftsys/ridl#1129 (decisions 15 and 20): the WebSocket blocks.
+Until then, a fixed whose payload is above one message and within its limit is
+not carried over WebSocket: the session records `ValueTooLarge` and sends no
+`publish`, nothing is refused at attach, and the WebSocket provider answers a
+`read` of it with `answer` and `contract(UnknownInteraction)`; the TypeScript
+client rejects a payload above the limit as `corrupt`. The fixed itself is
+accepted by the catalog and by the loopback.
+
+Note 2026-10-30, on decision 19: the rationale says the FlatBuffers verifier is
+bounded by its depth and table limits. No code returns `Malformed::TooDeep` or
+`Malformed::TooManyTables`. The work of the FlatBuffers verifier is bounded by
+the maxima that the type declares and by the nesting of the type, as
+`docs/design/flatbuffers-codec.md` states.
 
 When accepted, these records gain a dated note or are changed in place:
 

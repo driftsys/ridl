@@ -337,7 +337,7 @@ expression: log
               "id": "TYPL-116",
               "name": "bound-above-transfer",
               "shortDescription": {
-                "text": "`string`/`bytes` bound above the advised transfer limit"
+                "text": "`string`/`bytes` bound above what the largest payload of any kind can carry"
               },
               "defaultConfiguration": {
                 "level": "warning"

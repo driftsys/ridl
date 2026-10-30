@@ -412,7 +412,7 @@ diag_codes! {
         /// bytes (typl §4.4–§4.5, §16.2; ADR-0030 decision 7). Warning. The
         /// largest payload of any kind is 65,280 bytes.
         TYPL_116 = "TYPL-116", Warning,
-            "`string`/`bytes` bound above the advised transfer limit", lint = "bound-above-transfer";
+            "`string`/`bytes` bound above what the largest payload of any kind can carry", lint = "bound-above-transfer";
 
         /// Array without explicit bounds (typl §16.3).
         TYPL_201 = "TYPL-201", Error,
