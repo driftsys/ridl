@@ -435,14 +435,14 @@ No codec refuses a payload for its size
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 4 and
 19). `verify` applies no length check in any encoding: it reads what the
 structure references and ignores the bytes past it. `encode` returns `Capacity`
-only for a buffer shorter than the value, as the face's `BUFFER` is never.
-`Malformed::TooLarge` stays in the enum, because removing a variant would change
-the published API, and no generated codec returns it. The size of a payload is
-refused by the transport, against the interaction's limit from the catalog.
-`BUFFER` is put on the stack by the face for a signal, an event, a command and a
-query, which the catalog's limits keep at 16,128 bytes or less; a fixed has no
-face method, so no `BUFFER` of its payload is put on the stack (ADR-0030
-decision 5).
+only for a buffer shorter than the value, and the face's `BUFFER` is never
+shorter than the value. `Malformed::TooLarge` stays in the enum, because
+removing a variant would change the published API, and no generated codec
+returns it. The size of a payload is refused by the transport, against the
+interaction's limit from the catalog. `BUFFER` is put on the stack by the face
+for a signal, an event, a command and a query, which the catalog's limits keep
+at 16,128 bytes or less; a fixed has no face method, so no `BUFFER` of its
+payload is put on the stack (ADR-0030 decision 5).
 
 `Malformed::Preamble`, `Stride`, `Terminator` and `KeyOrder` belong to the
 podbuf codec and are not gated by a feature either. `Preamble` is a buffer

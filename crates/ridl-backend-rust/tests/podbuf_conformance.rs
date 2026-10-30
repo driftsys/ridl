@@ -973,6 +973,13 @@ fn compare(package: &v2::Package, others: &[&v2::Package], mismatches: &mut Vec<
                         Some(v2::decl::Kind::UnionDef(def)) => {
                             union_head(packages, &decl.name, def)
                         }
+                        // A named scalar is carried as a payload root in a
+                        // one-field head; one with no finite bound (the
+                        // unbounded `RosString` of the ros2 corpus) is
+                        // refused even when no struct uses it.
+                        Some(v2::decl::Kind::TypeDef(_)) => {
+                            return max_size(packages, decl).is_none();
+                        }
                         _ => return false,
                     };
                     head.is_ok_and(|head| exceeds_descriptor_limits(&head))
