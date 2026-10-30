@@ -80,10 +80,13 @@ export class Calls {
    * Returns why the response was not used, and changes nothing, when
    * `correlation` names no call in flight (`unknown-correlation`) or names a
    * call whose kind the outcome does not fit (`unexpected-outcome`):
-   * `accepted` settles only a command and `reply` only a query.
+   * `accepted` settles only a command and `reply` only a query. A `reply`
+   * whose payload is longer than `limit` bytes, the member's limit, rejects
+   * the query with `corrupt` and is not handed out.
    */
   settle(
     frame: Response,
+    limit: number,
   ): "unknown-correlation" | "unexpected-outcome" | null {
     const call = this.#inFlight.get(frame.correlation);
     if (!call) return "unknown-correlation";
@@ -103,7 +106,12 @@ export class Calls {
         if (call.kind === Kind.Command) call.resolve();
         return null;
       case "reply":
-        if (call.kind === Kind.Query) call.resolve(outcome.payload);
+        if (call.kind !== Kind.Query) return null; // ruled out above
+        if (outcome.payload.length > limit) {
+          call.reject(new SessionError({ category: "corrupt" }));
+        } else {
+          call.resolve(outcome.payload);
+        }
         return null;
       case "contract":
         call.reject(

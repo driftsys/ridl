@@ -46,6 +46,7 @@ import {
   Cabin,
   CATALOG_HASH,
   CATALOG_NAME,
+  Horn,
   PAYLOAD_TYPES,
   RULES,
 } from "./generated/veh.cabin.codec.ts";
@@ -140,6 +141,8 @@ stage = "connecting";
 const session = await connect(`ws://127.0.0.1:${port}`, {
   catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
   encoding: "flatbuffers",
+  // The generated tables give the session each member's payload limit.
+  interfaces: [Cabin, Horn],
   onPublish(target, sample) {
     if (!sample.payload || failure) return;
     if (

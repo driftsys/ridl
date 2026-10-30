@@ -6,9 +6,11 @@ TypeScript side of the WebSocket binding that
 defines. It is the **consuming side** of a frame session, for Deno and for the
 browser: it opens one WebSocket with the subprotocol `ridl-ws-v1`, sends
 `attach`, `subscribe`, `unsubscribe`, `read` and `request`, and applies the
-consumer's rules that need no catalog and no payload decoding. It carries
-payload bytes without reading them: a payload is a `Uint8Array` that the package
-hands to its caller as it arrived, and sends as the caller gave it.
+consumer's rules that need no payload decoding. It carries payload bytes without
+reading them: a payload is a `Uint8Array` that the package hands to its caller
+as it arrived, and sends as the caller gave it. The one thing it checks of a
+payload is its length, against the member's limit from the generated interface
+tables (D-19).
 
 The Rust crate `ridl-transport-ws` is the providing side of the same binding;
 its as-built record is [`ridl-transport-ws.md`](ridl-transport-ws.md), which
@@ -48,9 +50,11 @@ test-harness drivers (driftsys/ridl#291) are planned on top of this package.
 
 **What it does not do.** It decodes, verifies and encodes no payload. It reads
 no catalog descriptor: no `kind` check against a catalog, no response bound read
-from one, no compatible-hash list. It is not the providing side, and it has no
-TLS or authentication of its own (`wss://` works because the platform's
-`WebSocket` supports it). It is not yet published to JSR (D-3).
+from one, no compatible-hash list; the one fact of the catalog it uses, each
+member's payload limit, comes from the generated interface tables the caller
+passes (D-19). It is not the providing side, and it has no TLS or authentication
+of its own (`wss://` works because the platform's `WebSocket` supports it). It
+is not yet published to JSR (D-3).
 
 **What it must never do.** Differ from §11.1 on the wire, so that a client
 written from the specification alone and this one behave differently against the
@@ -130,9 +134,10 @@ the runtime package holds them.
 session file at a readable size.
 
 The codec defines `FRAME_VERSION` (1), `SUBPROTOCOL` (`ridl-ws-v1`),
-`MIN_MESSAGE_LIMIT` (294) and `ENVELOPE_BYTES` (16), the `Kind` codes, and
-`encodingTag`, which maps `flatbuffers`, `proto3` and `podbuf` to 1, 2 and 3. As
-in the crate's D-3, the payload rules are in the types: a `publish` carries a
+`MIN_MESSAGE_LIMIT` (294) and `ENVELOPE_BYTES` (16), the `Kind` codes,
+`encodingTag`, which maps `flatbuffers`, `proto3` and `podbuf` to 1, 2 and 3,
+and the three default ceilings of a payload with `defaultCeiling(kind)` (D-19).
+As in the crate's D-3, the payload rules are in the types: a `publish` carries a
 `PublishState` (`init`, `live` with a payload, or `invalid`), a `response` a
 `ResponseOutcome` (`accepted`, `reply` with a payload, `contract`, `corrupt` or
 `busy`), and an `occurrence` or a `request` always carries a payload, which may
@@ -172,6 +177,7 @@ into the message, and the session keeps no reference to it.
 const session = await connect("ws://127.0.0.1:9000", {
   catalog: { name: "veh.cabin", hash }, // hash: Uint8Array, 32 bytes
   encoding: "flatbuffers", // or "proto3" or "podbuf"; the default is "proto3"
+  interfaces: [Cabin, Horn], // the generated tables, for each member's limit (D-19)
   onPublish(target, sample) {}, // each accepted publish of a subscribed signal
   onOccurrence(occurrence) {}, // each accepted occurrence, in arrival order
   onNote(note) {}, // violations, discarded frames and losses
@@ -205,18 +211,23 @@ unit tests use to pass a fake one; the default is
   makes `subscribe`, `read`, `command` and `query` reject with a `RangeError`,
   and `unsubscribe` throw one, and nothing is sent.
 - A `Sample` is
-  `{ provenance: "init" | "live" | "invalid", envelope, payload }`, with
-  `payload` a `Uint8Array` under `live` and `null` otherwise. `invalid` is
-  `Invalid(Declared)`: the package does not verify a payload, so it never
-  produces `Invalid(Detected)` (§9.6). The last good value of §5.1 step 5 is
-  kept by the caller, who sees each sample in `onPublish`.
+  `{ provenance: "init" | "live" | "invalid", envelope, payload, detected? }`,
+  with `payload` a `Uint8Array` under `live` and `null` otherwise. `invalid`
+  with no `detected` is `Invalid(Declared)`, as the provider published it;
+  `invalid` with `detected: "corrupt"` is the session's own refusal of a `live`
+  payload longer than the member's limit (D-19), the one `Invalid(Detected)` the
+  package produces, because it verifies no payload (§9.6). The last good value
+  of §5.1 step 5 is kept by the caller, who sees each sample in `onPublish`. An
+  `Occurrence` carries `detected: "corrupt"` and an empty `payload` in the same
+  case.
 - `command(iface, ord, args, { bound })` resolves on `accepted`;
   `query(iface, ord, args, { bound })` resolves with the reply's payload, an
   empty `Uint8Array` when the reply has no bytes. Both reject with a
   `SessionError` whose `failure.category` is `contract` (with the `Contract`,
   and the `Rule` under `invalid-value`), `corrupt` or `busy` as the provider
-  answered, or, detected by the client, `undelivered` (a command's bound
-  passed), `timeout` (a query's bound passed) or `down` (the session ended).
+  answered, or, detected by the client, `corrupt` (a reply longer than the
+  member's limit, D-19), `undelivered` (a command's bound passed), `timeout` (a
+  query's bound passed) or `down` (the session ended).
 - `close()` sends a close with code 1000 and rejects every waiting operation
   with `down` at once. `closed` resolves once, with an `Ended`: the close code
   and reason the platform reported (1006 when the connection failed), and
@@ -227,7 +238,8 @@ waits on a callback or a promise. An async iterator can be added over the
 listeners later without a break.
 
 **D-9. The consumer's rules the session applies.** Those of §5 to §9 that need
-no catalog and no payload decoding:
+no payload decoding, with the one fact of the catalog they need, each member's
+limit, read from the generated tables (D-19):
 
 - **Signals (§5.1, §7).** One held sample per subscribed signal. A `publish`
   whose `seq` is less than the held sample's is discarded and recorded
@@ -306,10 +318,12 @@ the session ends with 1006, see D-8), or a form the provider must not send at
 that point (`unexpected-form`: a first message other than `attached`, a second
 `attached`, a consumer form) the session calls `close()` with no code, which
 sends a close frame with no status (the server sees 1005), records the violation
-through `onNote`, and ends with `violation` set in `Ended`. A message larger
-than a limit is not checked: the platform sets the limit, and the client cannot
-close with 1009. driftsys/ridl#991 asks the frame specification to state the
-close of a client that cannot choose a close code.
+through `onNote`, and ends with `violation` set in `Ended`. A message is not
+checked against a message limit: the platform sets the limit of the connection,
+and the client cannot close with 1009. What is checked is the length of each
+received payload against its member's limit (D-19), which refuses the payload
+and does not end the session. driftsys/ridl#991 asks the frame specification to
+state the close of a client that cannot choose a close code.
 
 **D-11. No client liveness timer.** §11.1 item 1 has either end treat no message
 of any kind within its liveness timeout as the end of the session. A browser's
@@ -331,6 +345,47 @@ specification to state what a client that cannot see pings does.
 clock; the default is `Date.now()` times 1000, which differs from TAI by the
 leap seconds. The README states this. The server as built evaluates no timing
 rule on a request stamp.
+
+**D-19. The size of a received payload is checked against the member's limit
+from the generated tables.** The catalog is the one source of a payload limit
+([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decisions 13 and
+19): every interaction has the default ceiling of its kind unless a
+`[limits.interaction]` entry of the manifest gives it another, and the generated
+`<base>.codec.ts` module writes that entry's value as `limit` on the member's
+table entry ([`ts-codec-table.md`](ts-codec-table.md)). So `connect` takes the
+generated tables in the `interfaces` option and reads each member's limit from
+them, keyed by `(kind, interface, ordinal)`; a member no table names, and every
+member when no table is given, has the default ceiling of its kind, which
+`frame.ts` exports as `SIGNAL_EVENT_CEILING` (3,840 bytes), `CALL_CEILING`
+(16,128) and `FIXED_CEILING` (65,280) with `defaultCeiling`. No hand-written
+limit option exists, so that a limit cannot be stated twice. The Rust crate
+`ridl-rt` holds the same three values in `ridl_rt::contract`, and the crate's
+test `tests/ts_ceilings.rs` reads `frame.ts` and compares them.
+
+The check runs on receive, before a payload reaches the application, and
+compares the payload's length with the limit: a payload of exactly the limit
+passes. What is refused is reported as the frame specification §9.1 and §9.2
+have a detected invalid value reported, so that nothing fails silently:
+
+- a `reply` longer than the query's limit rejects the query with `SessionError`
+  `corrupt`, the category the provider uses for a request it refuses for size;
+- a `publish` that answers a `read`, of a signal or of a `fixed`, rejects the
+  read with `corrupt`;
+- a `publish` of a subscribed signal is delivered through `onPublish` as a
+  sample with provenance `invalid`, `payload` `null` and `detected: "corrupt"`,
+  with the envelope of the frame (§9.1), and becomes the held sample; the
+  sequence rules of D-9 apply to it as to any publish, and the next `publish`
+  within the limit returns the signal to `live`;
+- an `occurrence` is delivered through `onOccurrence` with an empty payload and
+  `detected: "corrupt"`, with the envelope of the frame (§9.2); it counts in the
+  event's sequence, so no loss is recorded for it.
+
+Nothing is sent back, and the session does not end. The client checks nothing it
+sends: the provider answers a `request` whose arguments are longer than the
+member's limit with `corrupt` (the crate's D-26). A `fixed` whose value is
+longer than one message, which the provider cannot serve over this binding until
+driftsys/ridl#1129, is answered by the provider with
+`contract(unknown-interaction)`, which rejects the `read` as any refused read.
 
 ## The end-to-end tests
 
@@ -447,11 +502,11 @@ for not forcing a global change. `just story-id-check` scans `packages/`.
 ## Records
 
 **D-18.** This record and the package's README state the two limits of D-10 and
-D-11 and the UTC default stamp of D-12 with the `clock` option. The frame
-specification's "As built" note and §11 and §11.1 name the package and its path.
-ADR-0020 carries the dated amendment of decision 6 (D-4) and a note on open item
-2 (D-1). The book has no chapter on the package: it is not published, and no
-generated code uses it yet.
+D-11, the UTC default stamp of D-12 with the `clock` option, and the size checks
+of D-19 with the `interfaces` option. The frame specification's "As built" note
+and §11 and §11.1 name the package and its path. ADR-0020 carries the dated
+amendment of decision 6 (D-4) and a note on open item 2 (D-1). The book has no
+chapter on the package: it is not published, and no generated code uses it yet.
 
 ## What is not built
 
@@ -463,7 +518,9 @@ generated code uses it yet.
 - The providing side in TypeScript, an emulator (driftsys/ridl#290), and the
   stand-in roles of the crate's "Adding the stand-in ports later".
 - Reading a catalog descriptor: the `kind` check, the response bound, the
-  time-to-live discard of an occurrence, and compatible earlier hashes.
+  time-to-live discard of an occurrence, and compatible earlier hashes. The
+  payload limits come from the generated tables instead (D-19).
+- A check of the length of a payload the client sends (D-19).
 - A close code on a protocol violation and a client liveness timer (D-10, D-11;
   driftsys/ridl#991).
 - Publication to JSR (driftsys/ridl#992).

@@ -362,3 +362,23 @@ test("a response whose outcome does not fit the call's kind is discarded and the
   assert.deepEqual(await query, Uint8Array.of(2));
   await command;
 });
+
+test("a reply longer than the query's default limit rejects with corrupt", async () => {
+  const { socket, session, notes } = await attached();
+  const call = session.query(1, 7, new Uint8Array(), BOUND);
+  // A reply of 16,129 bytes: one byte above the default ceiling of a query.
+  socket.deliver(
+    response(QUERY, 1n, { outcome: "reply", payload: new Uint8Array(16_129) }),
+  );
+  await assert.rejects(call, isFailure("corrupt"));
+  assert.deepEqual(notes, []);
+});
+
+test("a reply of exactly the query's default limit resolves", async () => {
+  const { socket, session } = await attached();
+  const call = session.query(1, 7, new Uint8Array(), BOUND);
+  socket.deliver(
+    response(QUERY, 1n, { outcome: "reply", payload: new Uint8Array(16_128) }),
+  );
+  assert.equal((await call).length, 16_128);
+});
