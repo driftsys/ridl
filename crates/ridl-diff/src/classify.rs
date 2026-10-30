@@ -453,17 +453,19 @@ fn appended_slot(old: &[(String, i64)], old_retired: &[i64], new: &[(String, i64
         }
     }
 
-    let held = || {
-        old.iter()
-            .map(|(_, slot)| *slot)
-            .chain(old_retired.iter().copied())
-    };
+    // The high-water mark of the old body, live and retired slots together,
+    // read once: every new member must be above it (`is_above_high_water`).
+    let mark = old
+        .iter()
+        .map(|(_, slot)| *slot)
+        .chain(old_retired.iter().copied())
+        .max();
     let old_names: BTreeSet<&str> = old.iter().map(|(name, _)| name.as_str()).collect();
     for (name, slot) in new {
         if old_names.contains(name.as_str()) {
             continue;
         }
-        if !is_above_high_water(*slot, held()) {
+        if !is_above_high_water(*slot, mark) {
             return false;
         }
     }
@@ -949,7 +951,7 @@ fn member_path(change: &Change) -> Option<(&str, &str)> {
     Some((container, member))
 }
 
-fn find_decl<'a>(package: &'a v2::Package, name: &str) -> Option<&'a v2::Decl> {
+pub(crate) fn find_decl<'a>(package: &'a v2::Package, name: &str) -> Option<&'a v2::Decl> {
     package.decls.iter().find(|decl| decl.name == name)
 }
 
@@ -1467,15 +1469,15 @@ pub fn explain(category: Category) -> &'static str {
             "              direction involving an unset visibility is breaking"
         ),
         Category::PodbufInlineAppend => concat!(
-            "A struct field appended, compatible under the generic rule, that\n",
-            "grows the podbuf head of a struct another head holds inline on the\n",
-            "old side: as a struct field, a tuple member, or an element of an\n",
-            "exact-length array, in a struct, in the argument struct a call with\n",
-            "several parameters induces, or in a tuple reply. The head grows when\n",
-            "its size under the first-fit law differs between the old and the new\n",
-            "declaration; an appended field that the law places in the pad bytes\n",
-            "of the old head keeps the size, and `verify` does not check pads, so\n",
-            "such an append draws no such line. Only a holder of the old side\n",
+            "A struct field appended, compatible under the generic rule, to a\n",
+            "struct another head holds inline on the old side — as a struct field,\n",
+            "a tuple member, or an element of an exact-length array, in a struct,\n",
+            "in the argument struct a call with several parameters induces, or in\n",
+            "a tuple reply — when the first-fit law places the field at or past\n",
+            "the old head's size, so that the head grows. A field the law places\n",
+            "inside the old head, in its pad bytes, draws no line, because\n",
+            "`verify` does not check pads; when several fields are appended at\n",
+            "once, each is judged by its own offset. Only a holder of the old side\n",
             "counts, because a holder new on the new side has no published copy;\n",
             "the detail names each inline use of the old side. The search mirrors\n",
             "the heads the encoder lays out, a declaration and a named induced\n",

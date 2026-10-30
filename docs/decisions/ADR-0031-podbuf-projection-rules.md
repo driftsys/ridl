@@ -14,14 +14,10 @@ codec in `ridl-backend-rust`, the C header backend `ridl-backend-podbuf`, the
 codegen `Model`.
 
 **Amended 2026-10-29 — decision 10, the inline-append rule, from
-driftsys/ridl#1100.** An append to a struct that another head holds inline is a
-break only when the struct's podbuf head changes between the old and the new
-declaration, by size (every head has the alignment `HEAD_ALIGN`, so a change of
-the head is a change of its size), and only a holder of the old side counts. An
-appended field that first-fit places in the pad bytes of the old head is
-compatible, because `verify` does not check pads (decision 8). Decision 10
-carries the dated note, decision 13 points to it, and the negative consequence
-on a type held inline is reworded.
+driftsys/ridl#1100.** The rule is narrowed to an append that grows the head of a
+struct a head of the old side holds inline; decision 10 states it and carries
+the dated note, decision 13 points to it, and the negative consequence on a type
+held inline is reworded.
 
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -499,26 +495,27 @@ a field is appended.
     `podbuf_strict_enum_append`, because an older reader's `verify` refuses a
     value or a bit its declaration does not name (decision 12).
 
-    **An append that grows a struct nested inline is a break** (author's call):
-    the inline copy cannot grow without moving the fields after it. The inline
-    uses are a struct field, a tuple member and an element of an exact-length
-    array. Moving such a field behind a descriptor is out of scope.
-
-    _Amended (2026-10-29, driftsys/ridl#1100)._ The rule as first written made
-    every append to a struct held inline a break. Two conditions narrow it.
-    First, the break is a change of the struct's podbuf head: `ridl diff`
-    computes the head of the old and of the new declaration with the layout law
-    and reports `podbuf_inline_append` only when the head size differs (every
+    **An append that grows a struct nested inline is a break** (author's call,
+    narrowed 2026-10-29): the inline copy cannot grow without moving the fields
+    after it. The inline uses are a struct field, a tuple member and an element
+    of an exact-length array; moving such a field behind a descriptor is out of
+    scope. The holders are read on the old side: a head that holds the struct
+    inline there is a published copy, where a holder that is new on the new side
+    has none, and `ridl diff` names the old holders. The head grows when the
+    layout law places an appended field at or past the old head's size (every
     head has the alignment `HEAD_ALIGN`, so a change of the head is a change of
-    its size). An appended field that first-fit places in the pad bytes of the
-    old head changes no byte an older reader checks, because `verify` does not
-    check pads (decision 8, "Not checked, by design"), so such an append is
-    compatible and draws the ordinary `decl_added` line alone. Second, only a
-    holder of the old side counts: a head that holds the struct inline on the
-    old side is a published copy that cannot grow, where a holder that is new on
-    the new side has no published copy. The detail names the old holders only. A
-    struct the law refuses on either side is read as grown, which keeps the
-    earlier, conservative verdict.
+    its size); a field first-fit places inside the old head, in its pad bytes,
+    changes no byte an older reader checks, because `verify` does not check pads
+    (decision 8, "Not checked, by design"), so it is compatible and draws the
+    ordinary `decl_added` line alone. When several fields are appended at once,
+    `ridl diff` draws `podbuf_inline_append` for each field at or past the old
+    size and for none inside it. A new declaration the law refuses is read as
+    grown, which keeps the conservative verdict.
+
+    _Amended (2026-10-29, driftsys/ridl#1100)._ As first written, every append
+    to a struct held inline was a break, on holders of the new side. The two
+    narrowings above (the head must grow, and only an old holder counts) are the
+    amendment.
 
     **The inline-use rule, as built (builder's call).** `ridl diff` finds an
     inline use by asking the layout law what the encoder lays out inline, so the

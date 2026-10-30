@@ -2669,6 +2669,152 @@ mod podbuf {
         );
     }
 
+    /// A `u8` type declared in the package `name`, for a field whose type
+    /// lives in another package or in the context.
+    fn level_package(name: &str) -> v2::Package {
+        package(name, vec![int_type("Level", "0", "100")])
+    }
+
+    /// `veh.common` holding `SensorReading` with the given members, and the
+    /// holder `SensorBounds { range: SensorReading }`.
+    fn held(members: Vec<v2::StructMember>) -> v2::Package {
+        package(
+            "veh.common",
+            vec![
+                int_type("Level", "0", "100"),
+                struct_decl("SensorReading", members),
+                struct_decl(
+                    "SensorBounds",
+                    vec![field("range", 1, named("SensorReading"))],
+                ),
+            ],
+        )
+    }
+
+    #[track_caller]
+    fn inline_append_paths(report: &crate::DiffReport) -> Vec<&str> {
+        report
+            .changes
+            .iter()
+            .filter(|change| change.category == Category::PodbufInlineAppend)
+            .map(|change| change.path.as_str())
+            .collect()
+    }
+
+    /// Two fields appended at once: `flag: Level`, which first-fit places at
+    /// offset 1 in the old pad, and `quality: u64`, which goes to offset 8
+    /// and grows the head. The line is drawn for the field at or past the
+    /// old head size only; the verdict is breaking either way.
+    #[test]
+    fn a_multi_field_append_draws_a_line_for_the_fields_past_the_old_head_only() {
+        let new = struct_decl(
+            "SensorReading",
+            vec![
+                field("value", 1, named("Level")),
+                field("flag", 2, named("Level")),
+                field("quality", 3, wide()),
+            ],
+        );
+        let report = diff(
+            &inline_package(reading_v1()),
+            &inline_package(new),
+            &["podbuf"],
+        );
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(&report),
+            ["veh.common/SensorReading/quality"],
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The appended field's type is declared in another package of the
+    /// workspace: the new head is laid out over the whole new side, and the
+    /// one-byte field fits in the old pad.
+    #[test]
+    fn a_pad_fit_append_whose_type_is_in_another_package_is_not_a_break() {
+        let other = level_package("veh.other");
+        let old = [held(vec![field("value", 1, named("Level"))]), other.clone()];
+        let new = [
+            held(vec![
+                field("value", 1, named("Level")),
+                field("quality", 2, named("veh.other.Level")),
+            ]),
+            other,
+        ];
+        let old: Vec<&v2::Package> = old.iter().collect();
+        let new: Vec<&v2::Package> = new.iter().collect();
+        let report = diff_refs_with(&old, &new, &[], &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            inline_append_paths(&report).is_empty(),
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The struct's fields are typed from a context package, as `ridl.std`
+    /// is passed: both heads are laid out over the context too, and the
+    /// one-byte appended field fits in the old pad.
+    #[test]
+    fn a_pad_fit_append_whose_type_is_in_the_context_is_not_a_break() {
+        let context = level_package("ridl.std");
+        let old = held(vec![field("value", 1, named("ridl.std.Level"))]);
+        let new = held(vec![
+            field("value", 1, named("ridl.std.Level")),
+            field("quality", 2, named("ridl.std.Level")),
+        ]);
+        let report = diff_refs_with(&[&old], &[&new], &[&context], &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            inline_append_paths(&report).is_empty(),
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The old struct's field is typed from the context: the old side is
+    /// laid out with the context packages, so the old head has a size and
+    /// the growing append is a break.
+    #[test]
+    fn a_growing_append_to_a_struct_with_a_context_typed_field_is_a_break() {
+        let context = level_package("ridl.std");
+        let old = held(vec![field("value", 1, named("ridl.std.Level"))]);
+        let new = held(vec![
+            field("value", 1, named("ridl.std.Level")),
+            field("quality", 2, wide()),
+        ]);
+        let report = diff_refs_with(&[&old], &[&new], &[&context], &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Breaking, "{:?}", report.changes);
+        assert_eq!(
+            inline_append_paths(&report),
+            ["veh.common/SensorReading/quality"],
+            "{:?}",
+            report.changes
+        );
+    }
+
+    /// The appended field's type is itself new on the new side: the new head
+    /// is laid out over the new side, where the type resolves, and the
+    /// one-byte field fits in the old pad.
+    #[test]
+    fn a_pad_fit_append_whose_type_is_new_on_the_new_side_is_not_a_break() {
+        let old = held(vec![field("value", 1, named("Level"))]);
+        let mut new = held(vec![
+            field("value", 1, named("Level")),
+            field("quality", 2, named("Fresh")),
+        ]);
+        new.decls.push(int_type("Fresh", "0", "10"));
+        let report = diff(&old, &new, &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            inline_append_paths(&report).is_empty(),
+            "{:?}",
+            report.changes
+        );
+    }
+
     /// An appended field the layout law refuses — an optional bare `string`
     /// with no length bound, which the generic rule accepts because an
     /// optional reads as absent — leaves the new head without a size, and
@@ -2786,7 +2932,7 @@ mod podbuf {
         assert_eq!(report.verdict, Verdict::Compatible);
     }
 
-    /// An inline use in another package of the new side is found and named:
+    /// An inline use in another package of the old side is found and named:
     /// the search covers the whole workspace, not the package of the struct.
     #[test]
     fn an_inline_use_in_another_package_is_named() {

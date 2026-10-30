@@ -1903,44 +1903,53 @@ fn signal_init_str(def: &v2::SignalDef) -> String {
 }
 
 // ==========================================================================
-// The podbuf break rule: an append to a struct nested inline in a head.
+// The podbuf break rule: an append that grows a struct nested inline in a
+// head of the old side.
 // ==========================================================================
 
 /// The [`Category::PodbufInlineAppend`] changes of one walked and classified
 /// package pair: one per struct field appended compatibly, in `pair`, to a
 /// struct that a head of `old` — every package of the old side, the context
-/// packages included — holds inline, when the append grows the struct's
-/// podbuf head. The verdict is the placeholder [`emit`] stamps; the
-/// classifier settles it from the encodings.
+/// packages included — holds inline, when the layout law places the field at
+/// or past the old head's size. The verdict is the placeholder [`emit`]
+/// stamps; the classifier settles it from the encodings.
 ///
 /// Only an append the generic rule accepts is read: a [`Category::DeclAdded`]
 /// at `<package>/<struct>/<field>` whose verdict is compatible. An append the
 /// generic rule refuses is breaking already, and a second line for the same
 /// field would say nothing new.
 ///
-/// Two conditions narrow the rule (ADR-0031 decision 10, as amended):
-///
-/// - The holders are read on the old side: a head that holds the struct
-///   inline there is a published copy that cannot grow. A holder that is new
-///   on the new side has no published copy, so it does not make the append a
-///   break, and the detail names the old holders only.
-/// - The head must grow: the first-fit law can place the appended field in
-///   the pad bytes of the old head, and `verify` does not check pads
-///   (decision 8), so such an append changes no byte an older reader checks.
-///   The old and the new head are both computed by the layout law
-///   ([`projection::podbuf::struct_head`]); every head has the alignment
-///   [`projection::podbuf::HEAD_ALIGN`], so a change of the head is a change
-///   of its size. A head the law refuses on either side is read as grown,
-///   which keeps the earlier, conservative verdict.
+/// The rule is ADR-0031 decision 10, as amended: the holders are read on the
+/// old side, because a head that holds the struct inline there is a published
+/// copy and a holder new on the new side has none; and a field first-fit
+/// places inside the old head, in its pad bytes, changes no byte an older
+/// reader checks, because `verify` does not check pads (decision 8), so it
+/// draws no line. The old head and the new head are both computed by the
+/// layout law ([`projection::podbuf::struct_head`]) over their own side;
+/// every head has the alignment [`projection::podbuf::HEAD_ALIGN`], so a
+/// field past the old size is what grows the head. A new head the law
+/// refuses is read as grown, with a line per appended field, which keeps the
+/// earlier, conservative verdict.
 ///
 /// The struct's inline uses are found with the podbuf layout law
 /// ([`projection::podbuf::field_form`]), so what the rule calls inline is
-/// what the encoder lays out inline.
+/// what the encoder lays out inline. They are computed once per struct, as
+/// are the two heads.
 pub(crate) fn podbuf_inline_appends(
     pair: &[Change],
     old: &[&v2::Package],
     new: &[&v2::Package],
 ) -> Vec<Change> {
+    /// What the rule reads once per struct: the old side's inline uses, the
+    /// old head size, and the new head, `None` when the law refuses it.
+    struct Held {
+        uses: String,
+        old_size: u32,
+        new_head: Option<projection::podbuf::Head>,
+    }
+    // `None` for a struct no old head holds inline, or that is not a struct
+    // on both sides.
+    let mut held: BTreeMap<(&str, &str), Option<Held>> = BTreeMap::new();
     let mut changes = Vec::new();
     for change in pair {
         if change.category != Category::DeclAdded || change.verdict != Verdict::Compatible {
@@ -1958,30 +1967,39 @@ pub(crate) fn podbuf_inline_appends(
         let Some(new_def) = struct_def(new, package, name) else {
             continue;
         };
-        let is_struct_field = new_def.members.iter().any(|slot| {
-            matches!(&slot.member, Some(v2::struct_member::Member::Field(f)) if f.name == field)
+        let entry = held.entry((package, name)).or_insert_with(|| {
+            let uses = inline_uses(old, package, name);
+            if uses.is_empty() {
+                return None;
+            }
+            // The old head cannot be refused here: `inline_uses` found a
+            // holder whose form the law accepted, and that form holds this
+            // head.
+            let old_size = struct_def(old, package, name)
+                .and_then(|def| head(old, package, name, def))?
+                .size;
+            Some(Held {
+                uses: uses.join(", "),
+                old_size,
+                new_head: head(new, package, name, new_def),
+            })
         });
-        if !is_struct_field {
-            continue;
-        }
-        let uses = inline_uses(old, package, name);
-        if uses.is_empty() {
-            continue;
-        }
-        let Some(old_def) = struct_def(old, package, name) else {
+        let Some(Held {
+            uses,
+            old_size,
+            new_head,
+        }) = entry
+        else {
             continue;
         };
-        // The old head cannot be refused here: `inline_uses` found a holder
-        // whose form the law accepted, and that form holds this head. The
-        // new head can be, when the appended field has no podbuf form.
-        let grows = match (
-            head_size(old, package, name, old_def),
-            head_size(new, package, name, new_def),
-        ) {
-            (Some(before), Some(after)) => before != after,
-            _ => true,
+        let past_old_head = match new_head {
+            Some(head) => head.fields.iter().any(|placement| {
+                matches!(&placement.source, projection::podbuf::Source::Field { name, .. } if name == field)
+                    && placement.offset >= *old_size
+            }),
+            None => true,
         };
-        if !grows {
+        if !past_old_head {
             continue;
         }
         emit(
@@ -1989,7 +2007,7 @@ pub(crate) fn podbuf_inline_appends(
             change.path.clone(),
             Category::PodbufInlineAppend,
             None,
-            Some(format!("nested inline in {}", uses.join(", "))),
+            Some(format!("nested inline in {uses}")),
         );
     }
     changes
@@ -2002,37 +2020,38 @@ fn struct_def<'p>(
     name: &str,
 ) -> Option<&'p v2::StructDef> {
     let home = scope.iter().copied().find(|pkg| pkg.name == package)?;
-    home.decls
-        .iter()
-        .find(|decl| decl.name == name)
-        .and_then(|decl| match &decl.kind {
-            Some(v2::decl::Kind::StructDef(def)) => Some(def),
-            _ => None,
-        })
+    match &crate::classify::find_decl(home, name)?.kind {
+        Some(v2::decl::Kind::StructDef(def)) => Some(def),
+        _ => None,
+    }
 }
 
-/// The podbuf head size of the struct `name` of `package`, laid out by the
-/// law over `scope`; `None` when the law refuses the struct.
-fn head_size(
-    scope: &[&v2::Package],
-    package: &str,
-    name: &str,
-    def: &v2::StructDef,
-) -> Option<u32> {
-    let index = scope.iter().position(|pkg| pkg.name == package)?;
-    let others: Vec<&v2::Package> = scope
+/// The packages of `scope` other than the one at `index`: the `others` of a
+/// [`Packages`](ridl_ir::projection::flatbuffers::Packages) rooted there.
+fn others_of<'p>(scope: &[&'p v2::Package], index: usize) -> Vec<&'p v2::Package> {
+    scope
         .iter()
         .enumerate()
         .filter(|(other, _)| *other != index)
         .map(|(_, pkg)| *pkg)
-        .collect();
+        .collect()
+}
+
+/// The podbuf head of the struct `name` of `package`, laid out by the law
+/// over `scope`; `None` when the law refuses the struct.
+fn head(
+    scope: &[&v2::Package],
+    package: &str,
+    name: &str,
+    def: &v2::StructDef,
+) -> Option<projection::podbuf::Head> {
+    let index = scope.iter().position(|pkg| pkg.name == package)?;
+    let others = others_of(scope, index);
     let packages = ridl_ir::projection::flatbuffers::Packages {
         package: scope[index],
         others: &others,
     };
-    projection::podbuf::struct_head(packages, name, def)
-        .ok()
-        .map(|head| head.size)
+    projection::podbuf::struct_head(packages, name, def).ok()
 }
 
 /// The `(declaration, member)` names of every compatible member append in
@@ -2188,12 +2207,7 @@ fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String>
     };
     let mut uses = Vec::new();
     for (index, home) in scope.iter().enumerate() {
-        let others: Vec<&v2::Package> = scope
-            .iter()
-            .enumerate()
-            .filter(|(other, _)| *other != index)
-            .map(|(_, pkg)| *pkg)
-            .collect();
+        let others = others_of(scope, index);
         let packages = Packages {
             package: home,
             others: &others,

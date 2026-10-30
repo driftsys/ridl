@@ -257,9 +257,10 @@ declare_categories! {
         /// every out-of-package consumer (ADR-0002 §8), so the change has a
         /// direction.
         VisibilityChanged,
-        /// A struct field appended, compatible under the generic rule, that
-        /// grows the podbuf head of a struct another head of the old side
-        /// holds inline (ADR-0031 decision 10, the inline-append rule;
+        /// A struct field appended, compatible under the generic rule, to a
+        /// struct another head of the old side holds inline, when the layout
+        /// law places the field at or past the old head's size (ADR-0031
+        /// decision 10, the inline-append rule;
         /// `ridl diff --explain podbuf_inline_append` states it in full).
         /// Breaking when the comparison is judged for the `podbuf` encoding,
         /// compatible otherwise, listed under the heading "breaking under
@@ -468,19 +469,21 @@ pub fn diff_refs_in(old: &[&Package], new: &[&Package], context: &[&Package]) ->
 /// encodings` list writes (`flatbuffers`, `proto3`, `podbuf`). A snapshot
 /// does not carry the encodings a workspace builds, so the caller names them.
 ///
-/// Only `podbuf` has rules of its own: a struct field appended to a struct
-/// that another head holds inline is [`Category::PodbufInlineAppend`], and an
-/// enum value, an enum-set flag or a union arm appended that changes the
-/// integer of the enum or the enum set or the union's tag is
-/// [`Category::PodbufWidthChange`]; both are breaking when
-/// `podbuf` is in `encodings` and compatible otherwise. An enum-set flag that
-/// widens the integer also widens its FlatBuffers scalar, which no rule under
-/// `flatbuffers` reports yet (driftsys/ridl#1120). Every other category
-/// is judged the same under every list, and a name that is not `podbuf` adds
-/// no rule. The CLI and the MCP tool refuse a name that is
+/// Only `podbuf` has rules of its own: a struct field appended past the old
+/// head of a struct that another head of the old side holds inline is
+/// [`Category::PodbufInlineAppend`], an enum value, an enum-set flag or a
+/// union arm appended that changes the integer of the enum or the enum set
+/// or the union's tag is [`Category::PodbufWidthChange`], and an enum value
+/// or an enum-set flag appended is [`Category::PodbufStrictEnumAppend`]; each
+/// is breaking when `podbuf` is in `encodings` and compatible otherwise. An
+/// enum-set flag that widens the integer also widens its FlatBuffers scalar,
+/// which no rule under `flatbuffers` reports yet (driftsys/ridl#1120). Every
+/// other category is judged the same under every list, and a name that is
+/// not `podbuf` adds no rule. The CLI and the MCP tool refuse a name that is
 /// not one of the three before calling this; the engine does not check it.
-/// `new` and `context` must not share a package: the podbuf rule searches
-/// both as one scope and would name a use of a shared package twice.
+/// The podbuf rule lays the old side out over `old` and the context packages
+/// `old` does not name, and the new side over `new` and `context`; a package
+/// in both `new` and `context` is read at its first occurrence.
 pub fn diff_refs_with(
     old: &[&Package],
     new: &[&Package],
