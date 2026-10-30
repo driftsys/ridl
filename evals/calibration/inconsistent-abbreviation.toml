@@ -6,13 +6,13 @@
 # Sampled: inconsistent-abbreviation:mavlink:common/enums.typl:23410-23442:0
 # Sampled: inconsistent-abbreviation:mavlink:common/enums.typl:9909-9937:1
 # Sampled: inconsistent-abbreviation:mavlink:common/messages.typl:30749-30755:0
-# Sampled: inconsistent-abbreviation:ros2:std_msgs/messages.typl:515-524:3
+# Sampled: inconsistent-abbreviation:ros2:std_msgs/messages.typl:548-557:3
 # Sampled: inconsistent-abbreviation:mavlink:common/enums.typl:23562-23591:0
 # Sampled: inconsistent-abbreviation:mavlink:common/enums.typl:21974-21994:2
-# Sampled: inconsistent-abbreviation:ros2:std_msgs/messages.typl:11376-11392:1
-# Sampled: inconsistent-abbreviation:ros2:nav_msgs/messages.typl:506-515:2
+# Sampled: inconsistent-abbreviation:ros2:std_msgs/messages.typl:11410-11426:1
+# Sampled: inconsistent-abbreviation:ros2:nav_msgs/messages.typl:547-556:2
 # Sampled: inconsistent-abbreviation:mavlink:minimal/enums.typl:2838-2860:0
-# Sampled: inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35884-35910:1
+# Sampled: inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35915-35941:1
 # Adjudication: done by Sebastien on 2026-10-06.
 # Agreement sample: Sebastien reviewed every sampled agreement above and agreed with each; the agreed `final` labels stand.
 # Adjudicated disagreements: 0 (no disagreements).
@@ -5386,7 +5386,7 @@ sol_reason = "int means integer in RosInt32, so matching it to interest does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:930-937:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:919-926:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:37"
 message = "`cost` in `maxCost` abbreviates `costmap`, used in `ClearEntireCostmapRequest`"
@@ -5397,7 +5397,7 @@ sol_reason = "cost is a complete word with its own meaning in maxCost, rather th
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:2356-2397:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:2350-2391:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:72"
 message = "`data` in `LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_DATA` abbreviates `datatype`, used in `datatype`"
@@ -5408,7 +5408,7 @@ sol_reason = "data is a complete word with its own meaning in LOAD_MAP_RESPONSE_
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:4431-4444:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:4453-4466:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:120"
 message = "`time` in `timeAllowance` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5419,7 +5419,7 @@ sol_reason = "time is a complete word with its own meaning in timeAllowance, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:4431-4444:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:4453-4466:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:120"
 message = "`time` in `timeAllowance` abbreviates `timestamp`, used in `timestamp`"
@@ -5430,7 +5430,7 @@ sol_reason = "time is a complete word with its own meaning in timeAllowance, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:5224-5240:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:5246-5262:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:136"
 message = "`time` in `totalElapsedTime` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5441,7 +5441,7 @@ sol_reason = "time is a complete word with its own meaning in totalElapsedTime, 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:5224-5240:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:5246-5262:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:136"
 message = "`time` in `totalElapsedTime` abbreviates `timestamp`, used in `timestamp`"
@@ -5452,7 +5452,7 @@ sol_reason = "time is a complete word with its own meaning in totalElapsedTime, 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:5911-5924:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:5933-5946:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:158"
 message = "`time` in `timeAllowance` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5463,7 +5463,7 @@ sol_reason = "time is a complete word with its own meaning in timeAllowance, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:5911-5924:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:5933-5946:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:158"
 message = "`time` in `timeAllowance` abbreviates `timestamp`, used in `timestamp`"
@@ -5474,7 +5474,7 @@ sol_reason = "time is a complete word with its own meaning in timeAllowance, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:6761-6777:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:6783-6799:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:176"
 message = "`time` in `totalElapsedTime` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5485,7 +5485,7 @@ sol_reason = "time is a complete word with its own meaning in totalElapsedTime, 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:6761-6777:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:6783-6799:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:176"
 message = "`time` in `totalElapsedTime` abbreviates `timestamp`, used in `timestamp`"
@@ -5496,7 +5496,7 @@ sol_reason = "time is a complete word with its own meaning in totalElapsedTime, 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:9705-9740:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:9755-9790:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:242"
 message = "`control` in `FOLLOW_PATH_RESULT_NO_VALID_CONTROL` abbreviates `controller`, used in `FOLLOW_PATH_RESULT_CONTROLLER_TIMED_OUT`"
@@ -5507,7 +5507,7 @@ sol_reason = "control and controller express different grammatical forms or conc
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:12302-12316:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:12341-12355:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:305"
 message = "`time` in `navigationTime` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5518,7 +5518,7 @@ sol_reason = "time is a complete word with its own meaning in navigationTime, ra
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:12302-12316:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:12341-12355:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:305"
 message = "`time` in `navigationTime` abbreviates `timestamp`, used in `timestamp`"
@@ -5529,7 +5529,7 @@ sol_reason = "time is a complete word with its own meaning in navigationTime, ra
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:12330-12352:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:12369-12391:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:306"
 message = "`time` in `estimatedTimeRemaining` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5540,7 +5540,7 @@ sol_reason = "time is a complete word with its own meaning in estimatedTimeRemai
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:12330-12352:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:12369-12391:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:306"
 message = "`time` in `estimatedTimeRemaining` abbreviates `timestamp`, used in `timestamp`"
@@ -5551,7 +5551,7 @@ sol_reason = "time is a complete word with its own meaning in estimatedTimeRemai
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:13034-13047:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:13073-13086:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:323"
 message = "`time` in `timeAllowance` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5562,7 +5562,7 @@ sol_reason = "time is a complete word with its own meaning in timeAllowance, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:13034-13047:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:13073-13086:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:323"
 message = "`time` in `timeAllowance` abbreviates `timestamp`, used in `timestamp`"
@@ -5573,7 +5573,7 @@ sol_reason = "time is a complete word with its own meaning in timeAllowance, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:13776-13792:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:13815-13831:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:340"
 message = "`time` in `totalElapsedTime` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5584,7 +5584,7 @@ sol_reason = "time is a complete word with its own meaning in totalElapsedTime, 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:13776-13792:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:13815-13831:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:340"
 message = "`time` in `totalElapsedTime` abbreviates `timestamp`, used in `timestamp`"
@@ -5595,7 +5595,7 @@ sol_reason = "time is a complete word with its own meaning in totalElapsedTime, 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14343-14347:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14382-14386:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:359"
 message = "`time` in `time` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5606,7 +5606,7 @@ sol_reason = "time is a complete word with its own meaning in time, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14343-14347:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14382-14386:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:359"
 message = "`time` in `time` abbreviates `timestamp`, used in `timestamp`"
@@ -5617,7 +5617,7 @@ sol_reason = "time is a complete word with its own meaning in time, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14404-14420:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14443-14459:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:364"
 message = "`time` in `totalElapsedTime` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5628,7 +5628,7 @@ sol_reason = "time is a complete word with its own meaning in totalElapsedTime, 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14404-14420:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14443-14459:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:364"
 message = "`time` in `totalElapsedTime` abbreviates `timestamp`, used in `timestamp`"
@@ -5639,7 +5639,7 @@ sol_reason = "time is a complete word with its own meaning in totalElapsedTime, 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14899-14907:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14938-14946:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:377"
 message = "`time` in `timeLeft` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
@@ -5650,7 +5650,7 @@ sol_reason = "time is a complete word with its own meaning in timeLeft, rather t
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14899-14907:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:14938-14946:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:377"
 message = "`time` in `timeLeft` abbreviates `timestamp`, used in `timestamp`"
@@ -5661,7 +5661,7 @@ sol_reason = "time is a complete word with its own meaning in timeLeft, rather t
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:15158-15178:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:15197-15217:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:384"
 message = "`nav` in `Nav2MsgsInteractions` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
@@ -5672,7 +5672,7 @@ sol_reason = "nav is an established abbreviation in Nav2MsgsInteractions, while 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:15158-15178:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:15197-15217:1"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:384"
 message = "`nav` in `Nav2MsgsInteractions` abbreviates `navigation`, used in `navigationTime`"
@@ -5683,7 +5683,7 @@ sol_reason = "nav is an established abbreviation in Nav2MsgsInteractions, while 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:15367-15374:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/interactions.ridl:15406-15413:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:387"
 message = "`cost` in `maxCost` abbreviates `costmap`, used in `ClearEntireCostmapRequest`"
@@ -5694,9 +5694,9 @@ sol_reason = "cost is a complete word with its own meaning in maxCost, rather th
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:394-403:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:434-443:0"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:13"
+location = "nav2_msgs/messages.typl:14"
 message = "`int` in `RosUInt16` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5705,9 +5705,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to intensities does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:394-403:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:434-443:1"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:13"
+location = "nav2_msgs/messages.typl:14"
 message = "`int` in `RosUInt16` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5716,9 +5716,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to intensity does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:394-403:2"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:434-443:2"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:13"
+location = "nav2_msgs/messages.typl:14"
 message = "`int` in `RosUInt16` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5727,9 +5727,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to interactions doe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:394-403:3"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:434-443:3"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:13"
+location = "nav2_msgs/messages.typl:14"
 message = "`int` in `RosUInt16` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5738,9 +5738,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to interest does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:430-439:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:470-479:0"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:14"
+location = "nav2_msgs/messages.typl:15"
 message = "`int` in `RosUInt32` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5749,9 +5749,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to intensities does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:430-439:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:470-479:1"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:14"
+location = "nav2_msgs/messages.typl:15"
 message = "`int` in `RosUInt32` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5760,9 +5760,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to intensity does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:430-439:2"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:470-479:2"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:14"
+location = "nav2_msgs/messages.typl:15"
 message = "`int` in `RosUInt32` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5771,9 +5771,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to interactions doe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:430-439:3"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:470-479:3"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:14"
+location = "nav2_msgs/messages.typl:15"
 message = "`int` in `RosUInt32` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5782,9 +5782,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to interest does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:471-479:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:511-519:0"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:15"
+location = "nav2_msgs/messages.typl:16"
 message = "`int` in `RosUInt8` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5793,9 +5793,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to intensities does 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:471-479:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:511-519:1"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:15"
+location = "nav2_msgs/messages.typl:16"
 message = "`int` in `RosUInt8` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5804,9 +5804,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to intensity does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:471-479:2"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:511-519:2"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:15"
+location = "nav2_msgs/messages.typl:16"
 message = "`int` in `RosUInt8` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5815,9 +5815,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to interactions does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:471-479:3"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:511-519:3"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:15"
+location = "nav2_msgs/messages.typl:16"
 message = "`int` in `RosUInt8` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -5826,9 +5826,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to interest does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1356-1360:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1396-1400:0"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:39"
+location = "nav2_msgs/messages.typl:40"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -5837,9 +5837,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1455-1470:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1480-1495:0"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:42"
+location = "nav2_msgs/messages.typl:43"
 message = "`data` in `CostmapMetaData` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "MetaData mirrors the upstream ROS type name; not naming drift"
@@ -5848,9 +5848,9 @@ sol_reason = "data is a complete word with its own meaning in CostmapMetaData, r
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1455-1470:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1480-1495:1"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:42"
+location = "nav2_msgs/messages.typl:43"
 message = "`meta` in `CostmapMetaData` abbreviates `metadata`, used in `metadata`"
 claude = "dismiss"
 claude_reason = "MetaData mirrors the upstream ROS type name; not naming drift"
@@ -5859,9 +5859,9 @@ sol_reason = "CostmapMetaData spells metadata as MetaData, so the token match do
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1595-1606:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1620-1631:0"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:46"
+location = "nav2_msgs/messages.typl:47"
 message = "`time` in `mapLoadTime` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -5870,9 +5870,9 @@ sol_reason = "time is a complete word with its own meaning in mapLoadTime, rathe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1595-1606:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1620-1631:1"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:46"
+location = "nav2_msgs/messages.typl:47"
 message = "`time` in `mapLoadTime` abbreviates `timestamp`, used in `timestamp`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -5881,9 +5881,9 @@ sol_reason = "time is a complete word with its own meaning in mapLoadTime, rathe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1659-1669:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1684-1694:0"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:49"
+location = "nav2_msgs/messages.typl:50"
 message = "`time` in `updateTime` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -5892,9 +5892,9 @@ sol_reason = "time is a complete word with its own meaning in updateTime, rather
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1659-1669:1"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:1684-1694:1"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:49"
+location = "nav2_msgs/messages.typl:50"
 message = "`time` in `updateTime` abbreviates `timestamp`, used in `timestamp`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -5903,9 +5903,9 @@ sol_reason = "time is a complete word with its own meaning in updateTime, rather
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:3704-3708:0"
+id = "inconsistent-abbreviation:ros2:nav2_msgs/messages.typl:3736-3740:0"
 workspace = "ros2"
-location = "nav2_msgs/messages.typl:115"
+location = "nav2_msgs/messages.typl:116"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -5969,7 +5969,7 @@ sol_reason = "start is a complete word with its own meaning in start, rather tha
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/interactions.ridl:2008-2049:0"
+id = "inconsistent-abbreviation:ros2:nav_msgs/interactions.ridl:2015-2056:0"
 workspace = "ros2"
 location = "nav_msgs/interactions.ridl:58"
 message = "`data` in `LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_DATA` abbreviates `datatype`, used in `datatype`"
@@ -5980,7 +5980,7 @@ sol_reason = "data is a complete word with its own meaning in LOAD_MAP_RESPONSE_
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/interactions.ridl:2571-2590:0"
+id = "inconsistent-abbreviation:ros2:nav_msgs/interactions.ridl:2578-2597:0"
 workspace = "ros2"
 location = "nav_msgs/interactions.ridl:77"
 message = "`nav` in `NavMsgsInteractions` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
@@ -5991,7 +5991,7 @@ sol_reason = "nav is an established abbreviation in NavMsgsInteractions, while N
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/interactions.ridl:2571-2590:1"
+id = "inconsistent-abbreviation:ros2:nav_msgs/interactions.ridl:2578-2597:1"
 workspace = "ros2"
 location = "nav_msgs/interactions.ridl:77"
 message = "`nav` in `NavMsgsInteractions` abbreviates `navigation`, used in `navigationTime`"
@@ -6002,7 +6002,7 @@ sol_reason = "nav is an established abbreviation in NavMsgsInteractions, while n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/interactions.ridl:2642-2647:0"
+id = "inconsistent-abbreviation:ros2:nav_msgs/interactions.ridl:2649-2654:0"
 workspace = "ros2"
 location = "nav_msgs/interactions.ridl:79"
 message = "`start` in `start` abbreviates `startup`, used in `MANAGE_LIFECYCLE_NODES_REQUEST_STARTUP`"
@@ -6013,9 +6013,9 @@ sol_reason = "start is a complete word with its own meaning in start, rather tha
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:421-428:0"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:462-469:0"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:14"
+location = "nav_msgs/messages.typl:15"
 message = "`int` in `RosInt8` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6024,9 +6024,9 @@ sol_reason = "int means integer in RosInt8, so matching it to intensities does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:421-428:1"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:462-469:1"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:14"
+location = "nav_msgs/messages.typl:15"
 message = "`int` in `RosInt8` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6035,9 +6035,9 @@ sol_reason = "int means integer in RosInt8, so matching it to intensity does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:421-428:2"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:462-469:2"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:14"
+location = "nav_msgs/messages.typl:15"
 message = "`int` in `RosInt8` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6046,9 +6046,9 @@ sol_reason = "int means integer in RosInt8, so matching it to interactions does 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:421-428:3"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:462-469:3"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:14"
+location = "nav_msgs/messages.typl:15"
 message = "`int` in `RosInt8` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6057,9 +6057,9 @@ sol_reason = "int means integer in RosInt8, so matching it to interest does not 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:506-515:0"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:547-556:0"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:16"
+location = "nav_msgs/messages.typl:17"
 message = "`int` in `RosUInt32` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6068,9 +6068,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to intensities does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:506-515:1"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:547-556:1"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:16"
+location = "nav_msgs/messages.typl:17"
 message = "`int` in `RosUInt32` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6079,9 +6079,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to intensity does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:506-515:2"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:547-556:2"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:16"
+location = "nav_msgs/messages.typl:17"
 message = "`int` in `RosUInt32` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6090,9 +6090,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to interactions doe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:506-515:3"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:547-556:3"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:16"
+location = "nav_msgs/messages.typl:17"
 message = "`int` in `RosUInt32` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6101,9 +6101,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to interest does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:1611-1622:0"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:1652-1663:0"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:48"
+location = "nav_msgs/messages.typl:49"
 message = "`data` in `MapMetaData` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "MapMetaData mirrors the upstream ROS type name; not naming drift"
@@ -6112,9 +6112,9 @@ sol_reason = "data is a complete word with its own meaning in MapMetaData, rathe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:1611-1622:1"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:1652-1663:1"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:48"
+location = "nav_msgs/messages.typl:49"
 message = "`meta` in `MapMetaData` abbreviates `metadata`, used in `metadata`"
 claude = "dismiss"
 claude_reason = "MapMetaData mirrors the upstream ROS type name; not naming drift"
@@ -6123,9 +6123,9 @@ sol_reason = "MapMetaData spells metadata as MetaData, so the token match does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:1746-1757:0"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:1787-1798:0"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:52"
+location = "nav_msgs/messages.typl:53"
 message = "`time` in `mapLoadTime` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -6134,9 +6134,9 @@ sol_reason = "time is a complete word with its own meaning in mapLoadTime, rathe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:1746-1757:1"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:1787-1798:1"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:52"
+location = "nav_msgs/messages.typl:53"
 message = "`time` in `mapLoadTime` abbreviates `timestamp`, used in `timestamp`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -6145,9 +6145,9 @@ sol_reason = "time is a complete word with its own meaning in mapLoadTime, rathe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:2598-2602:0"
+id = "inconsistent-abbreviation:ros2:nav_msgs/messages.typl:2639-2643:0"
 workspace = "ros2"
-location = "nav_msgs/messages.typl:81"
+location = "nav_msgs/messages.typl:82"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -6156,9 +6156,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:471-479:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:511-519:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:17"
+location = "sensor_msgs/messages.typl:18"
 message = "`int` in `RosInt32` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6167,9 +6167,9 @@ sol_reason = "int means integer in RosInt32, so matching it to intensities does 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:471-479:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:511-519:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:17"
+location = "sensor_msgs/messages.typl:18"
 message = "`int` in `RosInt32` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6178,9 +6178,9 @@ sol_reason = "int means integer in RosInt32, so matching it to intensity does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:471-479:2"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:511-519:2"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:17"
+location = "sensor_msgs/messages.typl:18"
 message = "`int` in `RosInt32` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6189,9 +6189,9 @@ sol_reason = "int means integer in RosInt32, so matching it to interactions does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:471-479:3"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:511-519:3"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:17"
+location = "sensor_msgs/messages.typl:18"
 message = "`int` in `RosInt32` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6200,9 +6200,9 @@ sol_reason = "int means integer in RosInt32, so matching it to interest does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:521-528:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:561-568:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:18"
+location = "sensor_msgs/messages.typl:19"
 message = "`int` in `RosInt8` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6211,9 +6211,9 @@ sol_reason = "int means integer in RosInt8, so matching it to intensities does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:521-528:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:561-568:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:18"
+location = "sensor_msgs/messages.typl:19"
 message = "`int` in `RosInt8` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6222,9 +6222,9 @@ sol_reason = "int means integer in RosInt8, so matching it to intensity does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:521-528:2"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:561-568:2"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:18"
+location = "sensor_msgs/messages.typl:19"
 message = "`int` in `RosInt8` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6233,9 +6233,9 @@ sol_reason = "int means integer in RosInt8, so matching it to interactions does 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:521-528:3"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:561-568:3"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:18"
+location = "sensor_msgs/messages.typl:19"
 message = "`int` in `RosInt8` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6244,9 +6244,9 @@ sol_reason = "int means integer in RosInt8, so matching it to interest does not 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:709-718:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:749-758:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:25"
+location = "sensor_msgs/messages.typl:26"
 message = "`int` in `RosUInt16` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6255,9 +6255,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to intensities does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:709-718:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:749-758:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:25"
+location = "sensor_msgs/messages.typl:26"
 message = "`int` in `RosUInt16` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6266,9 +6266,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to intensity does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:709-718:2"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:749-758:2"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:25"
+location = "sensor_msgs/messages.typl:26"
 message = "`int` in `RosUInt16` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6277,9 +6277,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to interactions doe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:709-718:3"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:749-758:3"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:25"
+location = "sensor_msgs/messages.typl:26"
 message = "`int` in `RosUInt16` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6288,9 +6288,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to interest does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:745-754:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:785-794:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:26"
+location = "sensor_msgs/messages.typl:27"
 message = "`int` in `RosUInt32` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6299,9 +6299,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to intensities does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:745-754:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:785-794:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:26"
+location = "sensor_msgs/messages.typl:27"
 message = "`int` in `RosUInt32` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6310,9 +6310,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to intensity does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:745-754:2"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:785-794:2"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:26"
+location = "sensor_msgs/messages.typl:27"
 message = "`int` in `RosUInt32` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6321,9 +6321,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to interactions doe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:745-754:3"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:785-794:3"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:26"
+location = "sensor_msgs/messages.typl:27"
 message = "`int` in `RosUInt32` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6332,9 +6332,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to interest does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:786-794:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:826-834:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:27"
+location = "sensor_msgs/messages.typl:28"
 message = "`int` in `RosUInt8` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6343,9 +6343,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to intensities does 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:786-794:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:826-834:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:27"
+location = "sensor_msgs/messages.typl:28"
 message = "`int` in `RosUInt8` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6354,9 +6354,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to intensity does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:786-794:2"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:826-834:2"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:27"
+location = "sensor_msgs/messages.typl:28"
 message = "`int` in `RosUInt8` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6365,9 +6365,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to interactions does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:786-794:3"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:826-834:3"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:27"
+location = "sensor_msgs/messages.typl:28"
 message = "`int` in `RosUInt8` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -6376,9 +6376,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to interest does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:6953-6995:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:6993-7035:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:104"
+location = "sensor_msgs/messages.typl:105"
 message = "`life` in `BATTERY_STATE_POWER_SUPPLY_TECHNOLOGY_LIFE` abbreviates `lifecycle`, used in `MANAGE_LIFECYCLE_NODES_REQUEST_CLEANUP`"
 claude = "dismiss"
 claude_reason = "LIFE names the LiFePO4 battery chemistry per the ROS spec, not lifecycle"
@@ -6387,9 +6387,9 @@ sol_reason = "life means lithium iron phosphate in BATTERY_STATE_POWER_SUPPLY_TE
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:17853-17857:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:17884-17888:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:312"
+location = "sensor_msgs/messages.typl:313"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -6398,9 +6398,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:20982-20986:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:21013-21017:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:379"
+location = "sensor_msgs/messages.typl:380"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -6409,9 +6409,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:24972-24981:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:25003-25012:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:475"
+location = "sensor_msgs/messages.typl:476"
 message = "`echo` in `LaserEcho` abbreviates `echoes`, used in `echoes`"
 claude = "dismiss"
 claude_reason = "echo is the singular of echoes, not an abbreviation"
@@ -6420,9 +6420,9 @@ sol_reason = "echo and echoes express different grammatical forms or concepts he
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:26182-26195:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:26213-26226:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:501"
+location = "sensor_msgs/messages.typl:502"
 message = "`time` in `timeIncrement` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -6431,9 +6431,9 @@ sol_reason = "time is a complete word with its own meaning in timeIncrement, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:26182-26195:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:26213-26226:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:501"
+location = "sensor_msgs/messages.typl:502"
 message = "`time` in `timeIncrement` abbreviates `timestamp`, used in `timestamp`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -6442,9 +6442,9 @@ sol_reason = "time is a complete word with its own meaning in timeIncrement, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:26400-26408:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:26431-26439:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:504"
+location = "sensor_msgs/messages.typl:505"
 message = "`time` in `scanTime` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -6453,9 +6453,9 @@ sol_reason = "time is a complete word with its own meaning in scanTime, rather t
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:26400-26408:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:26431-26439:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:504"
+location = "sensor_msgs/messages.typl:505"
 message = "`time` in `scanTime` abbreviates `timestamp`, used in `timestamp`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -6464,9 +6464,9 @@ sol_reason = "time is a complete word with its own meaning in scanTime, rather t
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:29639-29657:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:29670-29688:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:569"
+location = "sensor_msgs/messages.typl:570"
 message = "`echo` in `MultiEchoLaserScan` abbreviates `echoes`, used in `echoes`"
 claude = "dismiss"
 claude_reason = "echo is the singular of echoes, not an abbreviation"
@@ -6475,9 +6475,9 @@ sol_reason = "echo and echoes express different grammatical forms or concepts he
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:30531-30544:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:30562-30575:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:587"
+location = "sensor_msgs/messages.typl:588"
 message = "`time` in `timeIncrement` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -6486,9 +6486,9 @@ sol_reason = "time is a complete word with its own meaning in timeIncrement, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:30531-30544:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:30562-30575:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:587"
+location = "sensor_msgs/messages.typl:588"
 message = "`time` in `timeIncrement` abbreviates `timestamp`, used in `timestamp`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -6497,9 +6497,9 @@ sol_reason = "time is a complete word with its own meaning in timeIncrement, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:30749-30757:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:30780-30788:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:590"
+location = "sensor_msgs/messages.typl:591"
 message = "`time` in `scanTime` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -6508,9 +6508,9 @@ sol_reason = "time is a complete word with its own meaning in scanTime, rather t
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:30749-30757:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:30780-30788:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:590"
+location = "sensor_msgs/messages.typl:591"
 message = "`time` in `scanTime` abbreviates `timestamp`, used in `timestamp`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -6519,9 +6519,9 @@ sol_reason = "time is a complete word with its own meaning in scanTime, rather t
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:31519-31528:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:31550-31559:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:604"
+location = "sensor_msgs/messages.typl:605"
 message = "`nav` in `NavSatFix` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6530,9 +6530,9 @@ sol_reason = "nav is an established abbreviation in NavSatFix, while NAVIGATE_TO
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:31519-31528:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:31550-31559:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:604"
+location = "sensor_msgs/messages.typl:605"
 message = "`nav` in `NavSatFix` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6541,9 +6541,9 @@ sol_reason = "nav is an established abbreviation in NavSatFix, while navigationT
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33480-33515:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33511-33546:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:651"
+location = "sensor_msgs/messages.typl:652"
 message = "`nav` in `NAV_SAT_FIX_COVARIANCE_TYPE_UNKNOWN` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6552,9 +6552,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_FIX_COVARIANCE_TYPE_
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33480-33515:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33511-33546:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:651"
+location = "sensor_msgs/messages.typl:652"
 message = "`nav` in `NAV_SAT_FIX_COVARIANCE_TYPE_UNKNOWN` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6563,9 +6563,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_FIX_COVARIANCE_TYPE_
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33537-33577:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33568-33608:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:652"
+location = "sensor_msgs/messages.typl:653"
 message = "`nav` in `NAV_SAT_FIX_COVARIANCE_TYPE_APPROXIMATED` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6574,9 +6574,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_FIX_COVARIANCE_TYPE_
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33537-33577:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33568-33608:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:652"
+location = "sensor_msgs/messages.typl:653"
 message = "`nav` in `NAV_SAT_FIX_COVARIANCE_TYPE_APPROXIMATED` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6585,9 +6585,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_FIX_COVARIANCE_TYPE_
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33599-33641:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33630-33672:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:653"
+location = "sensor_msgs/messages.typl:654"
 message = "`nav` in `NAV_SAT_FIX_COVARIANCE_TYPE_DIAGONAL_KNOWN` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6596,9 +6596,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_FIX_COVARIANCE_TYPE_
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33599-33641:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33630-33672:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:653"
+location = "sensor_msgs/messages.typl:654"
 message = "`nav` in `NAV_SAT_FIX_COVARIANCE_TYPE_DIAGONAL_KNOWN` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6607,9 +6607,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_FIX_COVARIANCE_TYPE_
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33663-33696:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33694-33727:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:654"
+location = "sensor_msgs/messages.typl:655"
 message = "`nav` in `NAV_SAT_FIX_COVARIANCE_TYPE_KNOWN` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6618,9 +6618,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_FIX_COVARIANCE_TYPE_
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33663-33696:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33694-33727:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:654"
+location = "sensor_msgs/messages.typl:655"
 message = "`nav` in `NAV_SAT_FIX_COVARIANCE_TYPE_KNOWN` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6629,9 +6629,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_FIX_COVARIANCE_TYPE_
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33765-33777:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33796-33808:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:656"
+location = "sensor_msgs/messages.typl:657"
 message = "`nav` in `NavSatStatus` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6640,9 +6640,9 @@ sol_reason = "nav is an established abbreviation in NavSatStatus, while NAVIGATE
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33765-33777:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:33796-33808:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:656"
+location = "sensor_msgs/messages.typl:657"
 message = "`nav` in `NavSatStatus` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6651,9 +6651,9 @@ sol_reason = "nav is an established abbreviation in NavSatStatus, while navigati
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35335-35364:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35366-35395:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:682"
+location = "sensor_msgs/messages.typl:683"
 message = "`nav` in `NAV_SAT_STATUS_STATUS_UNKNOWN` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6662,9 +6662,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_STATUS_UNKNOW
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35335-35364:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35366-35395:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:682"
+location = "sensor_msgs/messages.typl:683"
 message = "`nav` in `NAV_SAT_STATUS_STATUS_UNKNOWN` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6673,9 +6673,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_STATUS_UNKNOW
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35411-35439:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35442-35470:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:683"
+location = "sensor_msgs/messages.typl:684"
 message = "`nav` in `NAV_SAT_STATUS_STATUS_NO_FIX` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6684,9 +6684,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_STATUS_NO_FIX
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35411-35439:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35442-35470:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:683"
+location = "sensor_msgs/messages.typl:684"
 message = "`nav` in `NAV_SAT_STATUS_STATUS_NO_FIX` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6695,9 +6695,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_STATUS_NO_FIX
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35487-35512:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35518-35543:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:684"
+location = "sensor_msgs/messages.typl:685"
 message = "`nav` in `NAV_SAT_STATUS_STATUS_FIX` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6706,9 +6706,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_STATUS_FIX, w
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35487-35512:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35518-35543:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:684"
+location = "sensor_msgs/messages.typl:685"
 message = "`nav` in `NAV_SAT_STATUS_STATUS_FIX` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6717,9 +6717,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_STATUS_FIX, w
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35552-35582:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35583-35613:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:685"
+location = "sensor_msgs/messages.typl:686"
 message = "`nav` in `NAV_SAT_STATUS_STATUS_SBAS_FIX` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6728,9 +6728,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_STATUS_SBAS_F
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35552-35582:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35583-35613:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:685"
+location = "sensor_msgs/messages.typl:686"
 message = "`nav` in `NAV_SAT_STATUS_STATUS_SBAS_FIX` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6739,9 +6739,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_STATUS_SBAS_F
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35640-35670:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35671-35701:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:686"
+location = "sensor_msgs/messages.typl:687"
 message = "`nav` in `NAV_SAT_STATUS_STATUS_GBAS_FIX` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6750,9 +6750,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_STATUS_GBAS_F
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35640-35670:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35671-35701:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:686"
+location = "sensor_msgs/messages.typl:687"
 message = "`nav` in `NAV_SAT_STATUS_STATUS_GBAS_FIX` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6761,9 +6761,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_STATUS_GBAS_F
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35725-35755:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35756-35786:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:687"
+location = "sensor_msgs/messages.typl:688"
 message = "`nav` in `NAV_SAT_STATUS_SERVICE_UNKNOWN` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6772,9 +6772,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_SERVICE_UNKNO
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35725-35755:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35756-35786:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:687"
+location = "sensor_msgs/messages.typl:688"
 message = "`nav` in `NAV_SAT_STATUS_SERVICE_UNKNOWN` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6783,9 +6783,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_SERVICE_UNKNO
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35884-35910:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35915-35941:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:688"
+location = "sensor_msgs/messages.typl:689"
 message = "`nav` in `NAV_SAT_STATUS_SERVICE_GPS` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6794,9 +6794,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_SERVICE_GPS, 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35884-35910:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35915-35941:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:688"
+location = "sensor_msgs/messages.typl:689"
 message = "`nav` in `NAV_SAT_STATUS_SERVICE_GPS` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6805,9 +6805,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_SERVICE_GPS, 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35933-35963:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35964-35994:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:689"
+location = "sensor_msgs/messages.typl:690"
 message = "`nav` in `NAV_SAT_STATUS_SERVICE_GLONASS` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6816,9 +6816,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_SERVICE_GLONA
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35933-35963:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35964-35994:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:689"
+location = "sensor_msgs/messages.typl:690"
 message = "`nav` in `NAV_SAT_STATUS_SERVICE_GLONASS` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6827,9 +6827,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_SERVICE_GLONA
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35986-36016:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:36017-36047:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:690"
+location = "sensor_msgs/messages.typl:691"
 message = "`nav` in `NAV_SAT_STATUS_SERVICE_COMPASS` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6838,9 +6838,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_SERVICE_COMPA
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:35986-36016:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:36017-36047:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:690"
+location = "sensor_msgs/messages.typl:691"
 message = "`nav` in `NAV_SAT_STATUS_SERVICE_COMPASS` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6849,9 +6849,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_SERVICE_COMPA
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:36059-36089:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:36090-36120:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:691"
+location = "sensor_msgs/messages.typl:692"
 message = "`nav` in `NAV_SAT_STATUS_SERVICE_GALILEO` abbreviates `navigate`, used in `NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6860,9 +6860,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_SERVICE_GALIL
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:36059-36089:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:36090-36120:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:691"
+location = "sensor_msgs/messages.typl:692"
 message = "`nav` in `NAV_SAT_STATUS_SERVICE_GALILEO` abbreviates `navigation`, used in `navigationTime`"
 claude = "dismiss"
 claude_reason = "NavSat mirrors the upstream ROS sensor_msgs type name; not casual drift"
@@ -6871,9 +6871,9 @@ sol_reason = "nav is an established abbreviation in NAV_SAT_STATUS_SERVICE_GALIL
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:37913-37917:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:37944-37948:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:737"
+location = "sensor_msgs/messages.typl:738"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -6882,9 +6882,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39219-39235:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39250-39266:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:763"
+location = "sensor_msgs/messages.typl:764"
 message = "`int` in `POINT_FIELD_INT8` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -6893,9 +6893,9 @@ sol_reason = "int means integer in POINT_FIELD_INT8, so matching it to intensiti
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39219-39235:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39250-39266:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:763"
+location = "sensor_msgs/messages.typl:764"
 message = "`int` in `POINT_FIELD_INT8` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -6904,9 +6904,9 @@ sol_reason = "int means integer in POINT_FIELD_INT8, so matching it to intensity
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39219-39235:2"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39250-39266:2"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:763"
+location = "sensor_msgs/messages.typl:764"
 message = "`int` in `POINT_FIELD_INT8` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -6915,9 +6915,9 @@ sol_reason = "int means integer in POINT_FIELD_INT8, so matching it to interacti
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39219-39235:3"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39250-39266:3"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:763"
+location = "sensor_msgs/messages.typl:764"
 message = "`int` in `POINT_FIELD_INT8` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -6926,9 +6926,9 @@ sol_reason = "int means integer in POINT_FIELD_INT8, so matching it to interest 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39296-39313:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39327-39344:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:765"
+location = "sensor_msgs/messages.typl:766"
 message = "`int` in `POINT_FIELD_INT16` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -6937,9 +6937,9 @@ sol_reason = "int means integer in POINT_FIELD_INT16, so matching it to intensit
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39296-39313:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39327-39344:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:765"
+location = "sensor_msgs/messages.typl:766"
 message = "`int` in `POINT_FIELD_INT16` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -6948,9 +6948,9 @@ sol_reason = "int means integer in POINT_FIELD_INT16, so matching it to intensit
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39296-39313:2"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39327-39344:2"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:765"
+location = "sensor_msgs/messages.typl:766"
 message = "`int` in `POINT_FIELD_INT16` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -6959,9 +6959,9 @@ sol_reason = "int means integer in POINT_FIELD_INT16, so matching it to interact
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39296-39313:3"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39327-39344:3"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:765"
+location = "sensor_msgs/messages.typl:766"
 message = "`int` in `POINT_FIELD_INT16` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -6970,9 +6970,9 @@ sol_reason = "int means integer in POINT_FIELD_INT16, so matching it to interest
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39375-39392:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39406-39423:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:767"
+location = "sensor_msgs/messages.typl:768"
 message = "`int` in `POINT_FIELD_INT32` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -6981,9 +6981,9 @@ sol_reason = "int means integer in POINT_FIELD_INT32, so matching it to intensit
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39375-39392:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39406-39423:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:767"
+location = "sensor_msgs/messages.typl:768"
 message = "`int` in `POINT_FIELD_INT32` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -6992,9 +6992,9 @@ sol_reason = "int means integer in POINT_FIELD_INT32, so matching it to intensit
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39375-39392:2"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39406-39423:2"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:767"
+location = "sensor_msgs/messages.typl:768"
 message = "`int` in `POINT_FIELD_INT32` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -7003,9 +7003,9 @@ sol_reason = "int means integer in POINT_FIELD_INT32, so matching it to interact
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39375-39392:3"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39406-39423:3"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:767"
+location = "sensor_msgs/messages.typl:768"
 message = "`int` in `POINT_FIELD_INT32` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -7014,9 +7014,9 @@ sol_reason = "int means integer in POINT_FIELD_INT32, so matching it to interest
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39536-39553:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39567-39584:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:771"
+location = "sensor_msgs/messages.typl:772"
 message = "`int` in `POINT_FIELD_INT64` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -7025,9 +7025,9 @@ sol_reason = "int means integer in POINT_FIELD_INT64, so matching it to intensit
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39536-39553:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39567-39584:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:771"
+location = "sensor_msgs/messages.typl:772"
 message = "`int` in `POINT_FIELD_INT64` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -7036,9 +7036,9 @@ sol_reason = "int means integer in POINT_FIELD_INT64, so matching it to intensit
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39536-39553:2"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39567-39584:2"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:771"
+location = "sensor_msgs/messages.typl:772"
 message = "`int` in `POINT_FIELD_INT64` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -7047,9 +7047,9 @@ sol_reason = "int means integer in POINT_FIELD_INT64, so matching it to interact
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39536-39553:3"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39567-39584:3"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:771"
+location = "sensor_msgs/messages.typl:772"
 message = "`int` in `POINT_FIELD_INT64` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "INT in point field type names means integer; the expansion is a false match"
@@ -7058,9 +7058,9 @@ sol_reason = "int means integer in POINT_FIELD_INT64, so matching it to interest
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39616-39632:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:39647-39663:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:773"
+location = "sensor_msgs/messages.typl:774"
 message = "`bool` in `POINT_FIELD_BOOL` abbreviates `boolean`, used in `RosBoolean`"
 claude = "dismiss"
 claude_reason = "BOOL is the standard type name, not a casual abbreviation of boolean"
@@ -7069,9 +7069,9 @@ sol_reason = "bool is an established abbreviation in POINT_FIELD_BOOL, while Ros
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:44184-44197:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:44215-44228:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:871"
+location = "sensor_msgs/messages.typl:872"
 message = "`time` in `TimeReference` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -7080,9 +7080,9 @@ sol_reason = "time is a complete word with its own meaning in TimeReference, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:44184-44197:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:44215-44228:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:871"
+location = "sensor_msgs/messages.typl:872"
 message = "`time` in `TimeReference` abbreviates `timestamp`, used in `timestamp`"
 claude = "dismiss"
 claude_reason = "time is a complete word, not short for timeout or timestamp"
@@ -7091,9 +7091,9 @@ sol_reason = "time is a complete word with its own meaning in TimeReference, rat
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:44429-44436:0"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:44460-44467:0"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:877"
+location = "sensor_msgs/messages.typl:878"
 message = "`ref` in `timeRef` abbreviates `reference`, used in `referenceFrameId`"
 claude = "dismiss"
 claude_reason = "timeRef mirrors the ROS sensor_msgs time_ref field from the spec"
@@ -7102,9 +7102,9 @@ sol_reason = "ref is an established abbreviation in timeRef, while referenceFram
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:44429-44436:1"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:44460-44467:1"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:877"
+location = "sensor_msgs/messages.typl:878"
 message = "`time` in `timeRef` abbreviates `timeout`, used in `ASSISTED_TELEOP_RESULT_TELEOP_INPUT_TIMEOUT`"
 claude = "dismiss"
 claude_reason = "timeRef mirrors the ROS sensor_msgs time_ref field from the spec"
@@ -7113,9 +7113,9 @@ sol_reason = "time is a complete word with its own meaning in timeRef, rather th
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:44429-44436:2"
+id = "inconsistent-abbreviation:ros2:sensor_msgs/messages.typl:44460-44467:2"
 workspace = "ros2"
-location = "sensor_msgs/messages.typl:877"
+location = "sensor_msgs/messages.typl:878"
 message = "`time` in `timeRef` abbreviates `timestamp`, used in `timestamp`"
 claude = "dismiss"
 claude_reason = "timeRef mirrors the ROS sensor_msgs time_ref field from the spec"
@@ -7146,9 +7146,9 @@ sol_reason = "char means character in RosChar, so matching it to charging does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:272-280:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:305-313:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:9"
+location = "std_msgs/messages.typl:10"
 message = "`int` in `RosInt16` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7157,9 +7157,9 @@ sol_reason = "int means integer in RosInt16, so matching it to intensities does 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:272-280:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:305-313:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:9"
+location = "std_msgs/messages.typl:10"
 message = "`int` in `RosInt16` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7168,9 +7168,9 @@ sol_reason = "int means integer in RosInt16, so matching it to intensity does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:272-280:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:305-313:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:9"
+location = "std_msgs/messages.typl:10"
 message = "`int` in `RosInt16` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7179,9 +7179,9 @@ sol_reason = "int means integer in RosInt16, so matching it to interactions does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:272-280:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:305-313:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:9"
+location = "std_msgs/messages.typl:10"
 message = "`int` in `RosInt16` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7190,9 +7190,9 @@ sol_reason = "int means integer in RosInt16, so matching it to interest does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:312-320:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:345-353:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:10"
+location = "std_msgs/messages.typl:11"
 message = "`int` in `RosInt32` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7201,9 +7201,9 @@ sol_reason = "int means integer in RosInt32, so matching it to intensities does 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:312-320:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:345-353:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:10"
+location = "std_msgs/messages.typl:11"
 message = "`int` in `RosInt32` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7212,9 +7212,9 @@ sol_reason = "int means integer in RosInt32, so matching it to intensity does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:312-320:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:345-353:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:10"
+location = "std_msgs/messages.typl:11"
 message = "`int` in `RosInt32` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7223,9 +7223,9 @@ sol_reason = "int means integer in RosInt32, so matching it to interactions does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:312-320:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:345-353:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:10"
+location = "std_msgs/messages.typl:11"
 message = "`int` in `RosInt32` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7234,9 +7234,9 @@ sol_reason = "int means integer in RosInt32, so matching it to interest does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:362-370:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:395-403:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:11"
+location = "std_msgs/messages.typl:12"
 message = "`int` in `RosInt64` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7245,9 +7245,9 @@ sol_reason = "int means integer in RosInt64, so matching it to intensities does 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:362-370:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:395-403:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:11"
+location = "std_msgs/messages.typl:12"
 message = "`int` in `RosInt64` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7256,9 +7256,9 @@ sol_reason = "int means integer in RosInt64, so matching it to intensity does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:362-370:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:395-403:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:11"
+location = "std_msgs/messages.typl:12"
 message = "`int` in `RosInt64` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7267,9 +7267,9 @@ sol_reason = "int means integer in RosInt64, so matching it to interactions does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:362-370:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:395-403:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:11"
+location = "std_msgs/messages.typl:12"
 message = "`int` in `RosInt64` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7278,9 +7278,9 @@ sol_reason = "int means integer in RosInt64, so matching it to interest does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:430-437:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:463-470:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:12"
+location = "std_msgs/messages.typl:13"
 message = "`int` in `RosInt8` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7289,9 +7289,9 @@ sol_reason = "int means integer in RosInt8, so matching it to intensities does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:430-437:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:463-470:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:12"
+location = "std_msgs/messages.typl:13"
 message = "`int` in `RosInt8` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7300,9 +7300,9 @@ sol_reason = "int means integer in RosInt8, so matching it to intensity does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:430-437:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:463-470:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:12"
+location = "std_msgs/messages.typl:13"
 message = "`int` in `RosInt8` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7311,9 +7311,9 @@ sol_reason = "int means integer in RosInt8, so matching it to interactions does 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:430-437:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:463-470:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:12"
+location = "std_msgs/messages.typl:13"
 message = "`int` in `RosInt8` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7322,9 +7322,9 @@ sol_reason = "int means integer in RosInt8, so matching it to interest does not 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:515-524:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:548-557:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:14"
+location = "std_msgs/messages.typl:15"
 message = "`int` in `RosUInt16` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7333,9 +7333,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to intensities does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:515-524:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:548-557:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:14"
+location = "std_msgs/messages.typl:15"
 message = "`int` in `RosUInt16` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7344,9 +7344,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to intensity does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:515-524:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:548-557:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:14"
+location = "std_msgs/messages.typl:15"
 message = "`int` in `RosUInt16` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7355,9 +7355,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to interactions doe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:515-524:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:548-557:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:14"
+location = "std_msgs/messages.typl:15"
 message = "`int` in `RosUInt16` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7366,9 +7366,9 @@ sol_reason = "int means integer in RosUInt16, so matching it to interest does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:551-560:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:584-593:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:15"
+location = "std_msgs/messages.typl:16"
 message = "`int` in `RosUInt32` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7377,9 +7377,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to intensities does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:551-560:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:584-593:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:15"
+location = "std_msgs/messages.typl:16"
 message = "`int` in `RosUInt32` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7388,9 +7388,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to intensity does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:551-560:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:584-593:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:15"
+location = "std_msgs/messages.typl:16"
 message = "`int` in `RosUInt32` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7399,9 +7399,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to interactions doe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:551-560:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:584-593:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:15"
+location = "std_msgs/messages.typl:16"
 message = "`int` in `RosUInt32` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7410,9 +7410,9 @@ sol_reason = "int means integer in RosUInt32, so matching it to interest does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:592-601:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:625-634:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:16"
+location = "std_msgs/messages.typl:17"
 message = "`int` in `RosUInt64` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7421,9 +7421,9 @@ sol_reason = "int means integer in RosUInt64, so matching it to intensities does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:592-601:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:625-634:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:16"
+location = "std_msgs/messages.typl:17"
 message = "`int` in `RosUInt64` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7432,9 +7432,9 @@ sol_reason = "int means integer in RosUInt64, so matching it to intensity does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:592-601:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:625-634:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:16"
+location = "std_msgs/messages.typl:17"
 message = "`int` in `RosUInt64` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7443,9 +7443,9 @@ sol_reason = "int means integer in RosUInt64, so matching it to interactions doe
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:592-601:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:625-634:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:16"
+location = "std_msgs/messages.typl:17"
 message = "`int` in `RosUInt64` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7454,9 +7454,9 @@ sol_reason = "int means integer in RosUInt64, so matching it to interest does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:619-627:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:652-660:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:17"
+location = "std_msgs/messages.typl:18"
 message = "`int` in `RosUInt8` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7465,9 +7465,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to intensities does 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:619-627:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:652-660:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:17"
+location = "std_msgs/messages.typl:18"
 message = "`int` in `RosUInt8` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7476,9 +7476,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to intensity does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:619-627:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:652-660:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:17"
+location = "std_msgs/messages.typl:18"
 message = "`int` in `RosUInt8` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7487,9 +7487,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to interactions does
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:619-627:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:652-660:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:17"
+location = "std_msgs/messages.typl:18"
 message = "`int` in `RosUInt8` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7498,9 +7498,9 @@ sol_reason = "int means integer in RosUInt8, so matching it to interest does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:689-693:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:722-726:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:19"
+location = "std_msgs/messages.typl:20"
 message = "`bool` in `Bool` abbreviates `boolean`, used in `RosBoolean`"
 claude = "dismiss"
 claude_reason = "Bool mirrors the standard ROS std_msgs type name, not a casual abbreviation"
@@ -7509,9 +7509,9 @@ sol_reason = "bool is an established abbreviation in Bool, while RosBoolean name
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:953-957:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:986-990:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:25"
+location = "std_msgs/messages.typl:26"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7520,9 +7520,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:1279-1283:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:1312-1316:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:34"
+location = "std_msgs/messages.typl:35"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7531,9 +7531,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:1782-1786:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:1815-1819:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:47"
+location = "std_msgs/messages.typl:48"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7542,9 +7542,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:1885-1889:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:1918-1922:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:50"
+location = "std_msgs/messages.typl:51"
 message = "`char` in `Char` abbreviates `charge`, used in `charge`"
 claude = "dismiss"
 claude_reason = "Char is the character type name, not short for charge or charging"
@@ -7553,9 +7553,9 @@ sol_reason = "char means character in Char, so matching it to charge does not id
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:1885-1889:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:1918-1922:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:50"
+location = "std_msgs/messages.typl:51"
 message = "`char` in `Char` abbreviates `charging`, used in `BATTERY_STATE_POWER_SUPPLY_STATUS_CHARGING`"
 claude = "dismiss"
 claude_reason = "Char is the character type name, not short for charge or charging"
@@ -7564,9 +7564,9 @@ sol_reason = "char means character in Char, so matching it to charging does not 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:2149-2153:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:2182-2186:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:56"
+location = "std_msgs/messages.typl:57"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7575,9 +7575,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:2660-2664:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:2693-2697:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:75"
+location = "std_msgs/messages.typl:76"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7586,9 +7586,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:3172-3176:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:3205-3209:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:88"
+location = "std_msgs/messages.typl:89"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7597,9 +7597,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:3548-3552:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:3581-3585:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:97"
+location = "std_msgs/messages.typl:98"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7608,9 +7608,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4060-4064:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4093-4097:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:110"
+location = "std_msgs/messages.typl:111"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7619,9 +7619,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4404-4409:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4437-4442:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:119"
+location = "std_msgs/messages.typl:120"
 message = "`stamp` in `stamp` abbreviates `stamped`, used in `AccelStamped`"
 claude = "dismiss"
 claude_reason = "stamp is the exact ROS header field name; Stamped is a type suffix"
@@ -7630,9 +7630,9 @@ sol_reason = "stamp and stamped express different grammatical forms or concepts 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4540-4545:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4574-4579:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:125"
+location = "std_msgs/messages.typl:126"
 message = "`int` in `Int16` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7641,9 +7641,9 @@ sol_reason = "int means integer in Int16, so matching it to intensities does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4540-4545:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4574-4579:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:125"
+location = "std_msgs/messages.typl:126"
 message = "`int` in `Int16` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7652,9 +7652,9 @@ sol_reason = "int means integer in Int16, so matching it to intensity does not i
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4540-4545:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4574-4579:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:125"
+location = "std_msgs/messages.typl:126"
 message = "`int` in `Int16` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7663,9 +7663,9 @@ sol_reason = "int means integer in Int16, so matching it to interactions does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4540-4545:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4574-4579:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:125"
+location = "std_msgs/messages.typl:126"
 message = "`int` in `Int16` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7674,9 +7674,9 @@ sol_reason = "int means integer in Int16, so matching it to interest does not id
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4805-4809:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4839-4843:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:131"
+location = "std_msgs/messages.typl:132"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7685,9 +7685,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4876-4891:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4910-4925:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:134"
+location = "std_msgs/messages.typl:135"
 message = "`int` in `Int16MultiArray` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7696,9 +7696,9 @@ sol_reason = "int means integer in Int16MultiArray, so matching it to intensitie
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4876-4891:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4910-4925:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:134"
+location = "std_msgs/messages.typl:135"
 message = "`int` in `Int16MultiArray` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7707,9 +7707,9 @@ sol_reason = "int means integer in Int16MultiArray, so matching it to intensity 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4876-4891:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4910-4925:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:134"
+location = "std_msgs/messages.typl:135"
 message = "`int` in `Int16MultiArray` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7718,9 +7718,9 @@ sol_reason = "int means integer in Int16MultiArray, so matching it to interactio
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4876-4891:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:4910-4925:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:134"
+location = "std_msgs/messages.typl:135"
 message = "`int` in `Int16MultiArray` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7729,9 +7729,9 @@ sol_reason = "int means integer in Int16MultiArray, so matching it to interest d
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5311-5315:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5345-5349:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:144"
+location = "std_msgs/messages.typl:145"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7740,9 +7740,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5416-5421:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5450-5455:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:147"
+location = "std_msgs/messages.typl:148"
 message = "`int` in `Int32` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7751,9 +7751,9 @@ sol_reason = "int means integer in Int32, so matching it to intensities does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5416-5421:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5450-5455:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:147"
+location = "std_msgs/messages.typl:148"
 message = "`int` in `Int32` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7762,9 +7762,9 @@ sol_reason = "int means integer in Int32, so matching it to intensity does not i
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5416-5421:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5450-5455:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:147"
+location = "std_msgs/messages.typl:148"
 message = "`int` in `Int32` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7773,9 +7773,9 @@ sol_reason = "int means integer in Int32, so matching it to interactions does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5416-5421:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5450-5455:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:147"
+location = "std_msgs/messages.typl:148"
 message = "`int` in `Int32` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7784,9 +7784,9 @@ sol_reason = "int means integer in Int32, so matching it to interest does not id
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5681-5685:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5715-5719:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:153"
+location = "std_msgs/messages.typl:154"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7795,9 +7795,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5752-5767:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5786-5801:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:156"
+location = "std_msgs/messages.typl:157"
 message = "`int` in `Int32MultiArray` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7806,9 +7806,9 @@ sol_reason = "int means integer in Int32MultiArray, so matching it to intensitie
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5752-5767:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5786-5801:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:156"
+location = "std_msgs/messages.typl:157"
 message = "`int` in `Int32MultiArray` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7817,9 +7817,9 @@ sol_reason = "int means integer in Int32MultiArray, so matching it to intensity 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5752-5767:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5786-5801:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:156"
+location = "std_msgs/messages.typl:157"
 message = "`int` in `Int32MultiArray` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7828,9 +7828,9 @@ sol_reason = "int means integer in Int32MultiArray, so matching it to interactio
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5752-5767:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:5786-5801:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:156"
+location = "std_msgs/messages.typl:157"
 message = "`int` in `Int32MultiArray` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7839,9 +7839,9 @@ sol_reason = "int means integer in Int32MultiArray, so matching it to interest d
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6187-6191:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6221-6225:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:166"
+location = "std_msgs/messages.typl:167"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7850,9 +7850,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6292-6297:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6326-6331:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:169"
+location = "std_msgs/messages.typl:170"
 message = "`int` in `Int64` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7861,9 +7861,9 @@ sol_reason = "int means integer in Int64, so matching it to intensities does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6292-6297:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6326-6331:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:169"
+location = "std_msgs/messages.typl:170"
 message = "`int` in `Int64` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7872,9 +7872,9 @@ sol_reason = "int means integer in Int64, so matching it to intensity does not i
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6292-6297:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6326-6331:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:169"
+location = "std_msgs/messages.typl:170"
 message = "`int` in `Int64` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7883,9 +7883,9 @@ sol_reason = "int means integer in Int64, so matching it to interactions does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6292-6297:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6326-6331:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:169"
+location = "std_msgs/messages.typl:170"
 message = "`int` in `Int64` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7894,9 +7894,9 @@ sol_reason = "int means integer in Int64, so matching it to interest does not id
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6557-6561:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6591-6595:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:175"
+location = "std_msgs/messages.typl:176"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7905,9 +7905,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6628-6643:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6662-6677:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:178"
+location = "std_msgs/messages.typl:179"
 message = "`int` in `Int64MultiArray` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7916,9 +7916,9 @@ sol_reason = "int means integer in Int64MultiArray, so matching it to intensitie
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6628-6643:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6662-6677:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:178"
+location = "std_msgs/messages.typl:179"
 message = "`int` in `Int64MultiArray` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7927,9 +7927,9 @@ sol_reason = "int means integer in Int64MultiArray, so matching it to intensity 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6628-6643:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6662-6677:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:178"
+location = "std_msgs/messages.typl:179"
 message = "`int` in `Int64MultiArray` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7938,9 +7938,9 @@ sol_reason = "int means integer in Int64MultiArray, so matching it to interactio
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6628-6643:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:6662-6677:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:178"
+location = "std_msgs/messages.typl:179"
 message = "`int` in `Int64MultiArray` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7949,9 +7949,9 @@ sol_reason = "int means integer in Int64MultiArray, so matching it to interest d
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7063-7067:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7097-7101:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:188"
+location = "std_msgs/messages.typl:189"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -7960,9 +7960,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7167-7171:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7201-7205:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:191"
+location = "std_msgs/messages.typl:192"
 message = "`int` in `Int8` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7971,9 +7971,9 @@ sol_reason = "int means integer in Int8, so matching it to intensities does not 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7167-7171:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7201-7205:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:191"
+location = "std_msgs/messages.typl:192"
 message = "`int` in `Int8` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7982,9 +7982,9 @@ sol_reason = "int means integer in Int8, so matching it to intensity does not id
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7167-7171:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7201-7205:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:191"
+location = "std_msgs/messages.typl:192"
 message = "`int` in `Int8` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -7993,9 +7993,9 @@ sol_reason = "int means integer in Int8, so matching it to interactions does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7167-7171:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7201-7205:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:191"
+location = "std_msgs/messages.typl:192"
 message = "`int` in `Int8` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8004,9 +8004,9 @@ sol_reason = "int means integer in Int8, so matching it to interest does not ide
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7431-7435:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7465-7469:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:197"
+location = "std_msgs/messages.typl:198"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8015,9 +8015,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7500-7514:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7534-7548:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:200"
+location = "std_msgs/messages.typl:201"
 message = "`int` in `Int8MultiArray` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8026,9 +8026,9 @@ sol_reason = "int means integer in Int8MultiArray, so matching it to intensities
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7500-7514:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7534-7548:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:200"
+location = "std_msgs/messages.typl:201"
 message = "`int` in `Int8MultiArray` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8037,9 +8037,9 @@ sol_reason = "int means integer in Int8MultiArray, so matching it to intensity d
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7500-7514:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7534-7548:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:200"
+location = "std_msgs/messages.typl:201"
 message = "`int` in `Int8MultiArray` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8048,9 +8048,9 @@ sol_reason = "int means integer in Int8MultiArray, so matching it to interaction
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7500-7514:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7534-7548:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:200"
+location = "std_msgs/messages.typl:201"
 message = "`int` in `Int8MultiArray` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8059,9 +8059,9 @@ sol_reason = "int means integer in Int8MultiArray, so matching it to interest do
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7934-7938:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:7968-7972:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:210"
+location = "std_msgs/messages.typl:211"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8070,9 +8070,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:9635-9638:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:9669-9672:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:254"
+location = "std_msgs/messages.typl:255"
 message = "`dim` in `dim` abbreviates `dimension`, used in `MultiArrayDimension`"
 claude = "dismiss"
 claude_reason = "dim is the exact ROS MultiArrayLayout field name from upstream"
@@ -8081,9 +8081,9 @@ sol_reason = "dim is an established abbreviation in dim, while MultiArrayDimensi
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:9723-9733:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:9757-9767:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:255"
+location = "std_msgs/messages.typl:256"
 message = "`data` in `dataOffset` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8092,9 +8092,9 @@ sol_reason = "data is a complete word with its own meaning in dataOffset, rather
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10092-10096:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10126-10130:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:264"
+location = "std_msgs/messages.typl:265"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8103,9 +8103,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10155-10161:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10189-10195:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:267"
+location = "std_msgs/messages.typl:268"
 message = "`int` in `UInt16` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8114,9 +8114,9 @@ sol_reason = "int means integer in UInt16, so matching it to intensities does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10155-10161:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10189-10195:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:267"
+location = "std_msgs/messages.typl:268"
 message = "`int` in `UInt16` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8125,9 +8125,9 @@ sol_reason = "int means integer in UInt16, so matching it to intensity does not 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10155-10161:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10189-10195:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:267"
+location = "std_msgs/messages.typl:268"
 message = "`int` in `UInt16` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8136,9 +8136,9 @@ sol_reason = "int means integer in UInt16, so matching it to interactions does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10155-10161:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10189-10195:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:267"
+location = "std_msgs/messages.typl:268"
 message = "`int` in `UInt16` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8147,9 +8147,9 @@ sol_reason = "int means integer in UInt16, so matching it to interest does not i
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10421-10425:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10455-10459:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:273"
+location = "std_msgs/messages.typl:274"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8158,9 +8158,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10494-10510:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10528-10544:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:276"
+location = "std_msgs/messages.typl:277"
 message = "`int` in `UInt16MultiArray` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8169,9 +8169,9 @@ sol_reason = "int means integer in UInt16MultiArray, so matching it to intensiti
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10494-10510:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10528-10544:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:276"
+location = "std_msgs/messages.typl:277"
 message = "`int` in `UInt16MultiArray` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8180,9 +8180,9 @@ sol_reason = "int means integer in UInt16MultiArray, so matching it to intensity
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10494-10510:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10528-10544:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:276"
+location = "std_msgs/messages.typl:277"
 message = "`int` in `UInt16MultiArray` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8191,9 +8191,9 @@ sol_reason = "int means integer in UInt16MultiArray, so matching it to interacti
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10494-10510:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10528-10544:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:276"
+location = "std_msgs/messages.typl:277"
 message = "`int` in `UInt16MultiArray` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8202,9 +8202,9 @@ sol_reason = "int means integer in UInt16MultiArray, so matching it to interest 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10930-10934:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:10964-10968:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:286"
+location = "std_msgs/messages.typl:287"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8213,9 +8213,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11037-11043:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11071-11077:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:289"
+location = "std_msgs/messages.typl:290"
 message = "`int` in `UInt32` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8224,9 +8224,9 @@ sol_reason = "int means integer in UInt32, so matching it to intensities does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11037-11043:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11071-11077:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:289"
+location = "std_msgs/messages.typl:290"
 message = "`int` in `UInt32` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8235,9 +8235,9 @@ sol_reason = "int means integer in UInt32, so matching it to intensity does not 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11037-11043:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11071-11077:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:289"
+location = "std_msgs/messages.typl:290"
 message = "`int` in `UInt32` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8246,9 +8246,9 @@ sol_reason = "int means integer in UInt32, so matching it to interactions does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11037-11043:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11071-11077:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:289"
+location = "std_msgs/messages.typl:290"
 message = "`int` in `UInt32` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8257,9 +8257,9 @@ sol_reason = "int means integer in UInt32, so matching it to interest does not i
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11303-11307:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11337-11341:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:295"
+location = "std_msgs/messages.typl:296"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8268,9 +8268,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11376-11392:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11410-11426:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:298"
+location = "std_msgs/messages.typl:299"
 message = "`int` in `UInt32MultiArray` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8279,9 +8279,9 @@ sol_reason = "int means integer in UInt32MultiArray, so matching it to intensiti
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11376-11392:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11410-11426:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:298"
+location = "std_msgs/messages.typl:299"
 message = "`int` in `UInt32MultiArray` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8290,9 +8290,9 @@ sol_reason = "int means integer in UInt32MultiArray, so matching it to intensity
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11376-11392:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11410-11426:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:298"
+location = "std_msgs/messages.typl:299"
 message = "`int` in `UInt32MultiArray` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8301,9 +8301,9 @@ sol_reason = "int means integer in UInt32MultiArray, so matching it to interacti
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11376-11392:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11410-11426:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:298"
+location = "std_msgs/messages.typl:299"
 message = "`int` in `UInt32MultiArray` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8312,9 +8312,9 @@ sol_reason = "int means integer in UInt32MultiArray, so matching it to interest 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11812-11816:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11846-11850:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:308"
+location = "std_msgs/messages.typl:309"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8323,9 +8323,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11919-11925:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11953-11959:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:311"
+location = "std_msgs/messages.typl:312"
 message = "`int` in `UInt64` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8334,9 +8334,9 @@ sol_reason = "int means integer in UInt64, so matching it to intensities does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11919-11925:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11953-11959:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:311"
+location = "std_msgs/messages.typl:312"
 message = "`int` in `UInt64` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8345,9 +8345,9 @@ sol_reason = "int means integer in UInt64, so matching it to intensity does not 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11919-11925:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11953-11959:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:311"
+location = "std_msgs/messages.typl:312"
 message = "`int` in `UInt64` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8356,9 +8356,9 @@ sol_reason = "int means integer in UInt64, so matching it to interactions does n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11919-11925:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:11953-11959:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:311"
+location = "std_msgs/messages.typl:312"
 message = "`int` in `UInt64` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8367,9 +8367,9 @@ sol_reason = "int means integer in UInt64, so matching it to interest does not i
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12185-12189:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12219-12223:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:317"
+location = "std_msgs/messages.typl:318"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8378,9 +8378,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12258-12274:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12292-12308:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:320"
+location = "std_msgs/messages.typl:321"
 message = "`int` in `UInt64MultiArray` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8389,9 +8389,9 @@ sol_reason = "int means integer in UInt64MultiArray, so matching it to intensiti
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12258-12274:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12292-12308:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:320"
+location = "std_msgs/messages.typl:321"
 message = "`int` in `UInt64MultiArray` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8400,9 +8400,9 @@ sol_reason = "int means integer in UInt64MultiArray, so matching it to intensity
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12258-12274:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12292-12308:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:320"
+location = "std_msgs/messages.typl:321"
 message = "`int` in `UInt64MultiArray` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8411,9 +8411,9 @@ sol_reason = "int means integer in UInt64MultiArray, so matching it to interacti
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12258-12274:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12292-12308:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:320"
+location = "std_msgs/messages.typl:321"
 message = "`int` in `UInt64MultiArray` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8422,9 +8422,9 @@ sol_reason = "int means integer in UInt64MultiArray, so matching it to interest 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12694-12698:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12728-12732:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:330"
+location = "std_msgs/messages.typl:331"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8433,9 +8433,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12800-12805:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12834-12839:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:333"
+location = "std_msgs/messages.typl:334"
 message = "`int` in `UInt8` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8444,9 +8444,9 @@ sol_reason = "int means integer in UInt8, so matching it to intensities does not
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12800-12805:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12834-12839:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:333"
+location = "std_msgs/messages.typl:334"
 message = "`int` in `UInt8` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8455,9 +8455,9 @@ sol_reason = "int means integer in UInt8, so matching it to intensity does not i
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12800-12805:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12834-12839:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:333"
+location = "std_msgs/messages.typl:334"
 message = "`int` in `UInt8` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8466,9 +8466,9 @@ sol_reason = "int means integer in UInt8, so matching it to interactions does no
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12800-12805:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:12834-12839:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:333"
+location = "std_msgs/messages.typl:334"
 message = "`int` in `UInt8` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8477,9 +8477,9 @@ sol_reason = "int means integer in UInt8, so matching it to interest does not id
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13065-13069:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13099-13103:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:339"
+location = "std_msgs/messages.typl:340"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8488,9 +8488,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13136-13151:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13170-13185:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:342"
+location = "std_msgs/messages.typl:343"
 message = "`int` in `UInt8MultiArray` abbreviates `intensities`, used in `intensities`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8499,9 +8499,9 @@ sol_reason = "int means integer in UInt8MultiArray, so matching it to intensitie
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13136-13151:1"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13170-13185:1"
 workspace = "ros2"
-location = "std_msgs/messages.typl:342"
+location = "std_msgs/messages.typl:343"
 message = "`int` in `UInt8MultiArray` abbreviates `intensity`, used in `intensity`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8510,9 +8510,9 @@ sol_reason = "int means integer in UInt8MultiArray, so matching it to intensity 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13136-13151:2"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13170-13185:2"
 workspace = "ros2"
-location = "std_msgs/messages.typl:342"
+location = "std_msgs/messages.typl:343"
 message = "`int` in `UInt8MultiArray` abbreviates `interactions`, used in `Nav2MsgsInteractions`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8521,9 +8521,9 @@ sol_reason = "int means integer in UInt8MultiArray, so matching it to interactio
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13136-13151:3"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13170-13185:3"
 workspace = "ros2"
-location = "std_msgs/messages.typl:342"
+location = "std_msgs/messages.typl:343"
 message = "`int` in `UInt8MultiArray` abbreviates `interest`, used in `RegionOfInterest`"
 claude = "dismiss"
 claude_reason = "Int in integer type names means integer; the expansion is a false match"
@@ -8532,9 +8532,9 @@ sol_reason = "int means integer in UInt8MultiArray, so matching it to interest d
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13571-13575:0"
+id = "inconsistent-abbreviation:ros2:std_msgs/messages.typl:13605-13609:0"
 workspace = "ros2"
-location = "std_msgs/messages.typl:352"
+location = "std_msgs/messages.typl:353"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8543,9 +8543,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_srvs/interactions.ridl:306-320:0"
+id = "inconsistent-abbreviation:ros2:std_srvs/interactions.ridl:347-361:0"
 workspace = "ros2"
-location = "std_srvs/interactions.ridl:12"
+location = "std_srvs/interactions.ridl:13"
 message = "`bool` in `SetBoolRequest` abbreviates `boolean`, used in `RosBoolean`"
 claude = "dismiss"
 claude_reason = "SetBool mirrors the exact ROS std_srvs service name from upstream"
@@ -8554,9 +8554,9 @@ sol_reason = "bool is an established abbreviation in SetBoolRequest, while RosBo
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_srvs/interactions.ridl:325-329:0"
+id = "inconsistent-abbreviation:ros2:std_srvs/interactions.ridl:366-370:0"
 workspace = "ros2"
-location = "std_srvs/interactions.ridl:13"
+location = "std_srvs/interactions.ridl:14"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"
@@ -8565,9 +8565,9 @@ sol_reason = "data is a complete word with its own meaning in data, rather than 
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_srvs/interactions.ridl:394-409:0"
+id = "inconsistent-abbreviation:ros2:std_srvs/interactions.ridl:435-450:0"
 workspace = "ros2"
-location = "std_srvs/interactions.ridl:15"
+location = "std_srvs/interactions.ridl:16"
 message = "`bool` in `SetBoolResponse` abbreviates `boolean`, used in `RosBoolean`"
 claude = "dismiss"
 claude_reason = "SetBool mirrors the exact ROS std_srvs service name from upstream"
@@ -8576,9 +8576,9 @@ sol_reason = "bool is an established abbreviation in SetBoolResponse, while RosB
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_srvs/interactions.ridl:848-855:0"
+id = "inconsistent-abbreviation:ros2:std_srvs/interactions.ridl:903-910:0"
 workspace = "ros2"
-location = "std_srvs/interactions.ridl:30"
+location = "std_srvs/interactions.ridl:31"
 message = "`bool` in `setBool` abbreviates `boolean`, used in `RosBoolean`"
 claude = "dismiss"
 claude_reason = "SetBool mirrors the exact ROS std_srvs service name from upstream"
@@ -8587,9 +8587,9 @@ sol_reason = "bool is an established abbreviation in setBool, while RosBoolean n
 final = "dismiss"
 
 [[finding]]
-id = "inconsistent-abbreviation:ros2:std_srvs/interactions.ridl:856-860:0"
+id = "inconsistent-abbreviation:ros2:std_srvs/interactions.ridl:911-915:0"
 workspace = "ros2"
-location = "std_srvs/interactions.ridl:30"
+location = "std_srvs/interactions.ridl:31"
 message = "`data` in `data` abbreviates `datatype`, used in `datatype`"
 claude = "dismiss"
 claude_reason = "data is a complete word, not short for datatype"

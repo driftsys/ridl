@@ -10,6 +10,7 @@ import geometrymsgs.Twist
 import geometrymsgs.TwistWithCovariance
 import geometrymsgs.Wrench
 import stdmsgs.Header
+type RosBoundedString : string [0..3968]
 type RosFloat32 : float
 type RosInt8 : integer [-128..127]
 type RosString : string [0..18446744073709551615]
@@ -78,7 +79,7 @@ struct OccupancyGrid {
 // The values inside are application dependent, but frequently, 
 // 0 represents unoccupied, 1 represents definitely occupied, and
 // -1 represents unknown. 
-  data : [RosInt8; 0..18446744073709551615]
+  data : [RosInt8; 0..14313]
 }
 // Upstream: nav_msgs/msg/Odometry.msg
 struct Odometry {
@@ -106,7 +107,7 @@ struct Path {
   header : Header
 
 // Array of poses to follow.
-  poses : [PoseStamped; 0..18446744073709551615]
+  poses : [PoseStamped; 0..18]
 }
 // Upstream: nav_msgs/msg/Trajectory.msg
 struct Trajectory {

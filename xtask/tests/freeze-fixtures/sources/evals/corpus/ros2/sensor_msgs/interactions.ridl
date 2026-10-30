@@ -15,7 +15,7 @@ struct SetCameraInfoRequest {
 struct SetCameraInfoResponse {
 
   success : RosBoolean // True if the call succeeded
-  statusMessage : RosString // Used to give details about success
+  statusMessage : RosBoundedString // Used to give details about success
 }
 interface SensorMsgsInteractions {
   query setCameraInfo(cameraInfo: CameraInfo): SetCameraInfoResponse

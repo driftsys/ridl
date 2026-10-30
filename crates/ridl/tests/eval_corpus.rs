@@ -136,6 +136,73 @@ fn every_corpus_workspace_checks_without_an_error() {
     }
 }
 
+/// Copies the directory tree at `from` to `to`.
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).expect("create a copy directory");
+    for entry in std::fs::read_dir(from).expect("read a corpus directory") {
+        let entry = entry.expect("read a corpus entry");
+        let target = to.join(entry.file_name());
+        if entry.file_type().expect("read a file type").is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target).expect("copy a corpus file");
+        }
+    }
+}
+
+/// Appends the default ceiling of every kind (ADR-0030) to the `[limits.kind]`
+/// table of each unit manifest under `root`.
+fn set_default_ceilings(root: &Path) {
+    for entry in std::fs::read_dir(root).expect("read a corpus directory") {
+        let path = entry.expect("read a corpus entry").path();
+        if path.is_dir() {
+            set_default_ceilings(&path);
+        } else if path.file_name().is_some_and(|name| name == "ridl.toml") {
+            let text = std::fs::read_to_string(&path).expect("read a manifest");
+            if text.contains("[package]") {
+                std::fs::write(
+                    &path,
+                    format!(
+                        "{text}\n[limits.kind]\nsignal = 3840\nevent = 3840\ncommand = 16128\nquery = 16128\n"
+                    ),
+                )
+                .expect("write a manifest");
+            }
+        }
+    }
+}
+
+/// Every payload of an interaction in the corpus has a finite bound that fits
+/// the default ceiling of its kind, so the corpus draws no size error when
+/// each unit gives the default ceilings.
+#[test]
+fn every_corpus_payload_fits_the_default_ceilings() {
+    for dir in corpus_dirs() {
+        let copy = tempfile::tempdir().expect("a temp dir");
+        copy_tree(&dir, copy.path());
+        set_default_ceilings(copy.path());
+        let output = Command::new(env!("CARGO_BIN_EXE_ridl"))
+            .args(["check", "--format", "json"])
+            .arg(copy.path())
+            .output()
+            .expect("run ridl check on a corpus copy");
+        let diagnostics: Vec<serde_json::Value> = serde_json::from_slice(&output.stdout)
+            .unwrap_or_else(|error| {
+                panic!(
+                    "{}: invalid diagnostic JSON: {error}\nstderr: {}",
+                    dir.display(),
+                    String::from_utf8_lossy(&output.stderr),
+                )
+            });
+        let sized: Vec<_> = diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic["code"] == "RIDL-151")
+            .map(|diagnostic| diagnostic["message"].as_str().unwrap_or_default())
+            .collect();
+        assert!(sized.is_empty(), "{}: {sized:#?}", dir.display());
+    }
+}
+
 #[test]
 fn the_corpus_stays_inside_its_budget() {
     let root = corpus_root();

@@ -686,7 +686,7 @@ id = "review-0002:1"
 applicable = true
 reason = "The issue is an interface that combines unrelated responsibilities, which is the property this check measures."
 findings = [
-  "low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15158-15178:0",
+  "low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15197-15217:0",
 ]
 
 [[check.issue]]

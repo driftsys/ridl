@@ -2749,6 +2749,8 @@ proto ros2/nav2msgs.proto [Particle] geometrymsgs.Pose pose = 1;
 proto ros2/nav2msgs.proto [Particle] }
 proto ros2/nav2msgs.proto [RosBooleanBox] bool value = 1;
 proto ros2/nav2msgs.proto [RosBooleanBox] }
+proto ros2/nav2msgs.proto [RosBoundedStringBox] string value = 1;
+proto ros2/nav2msgs.proto [RosBoundedStringBox] }
 proto ros2/nav2msgs.proto [RosFloat32Box] double value = 1;
 proto ros2/nav2msgs.proto [RosFloat32Box] }
 proto ros2/nav2msgs.proto [RosFloat64Box] double value = 1;
@@ -2858,6 +2860,7 @@ proto ros2/nav2msgs.proto message NavigateToPoseResult {
 proto ros2/nav2msgs.proto message Particle {
 proto ros2/nav2msgs.proto message ParticleCloud {
 proto ros2/nav2msgs.proto message RosBooleanBox {
+proto ros2/nav2msgs.proto message RosBoundedStringBox {
 proto ros2/nav2msgs.proto message RosFloat32Box {
 proto ros2/nav2msgs.proto message RosFloat64Box {
 proto ros2/nav2msgs.proto message RosInt16Box {
@@ -2936,6 +2939,8 @@ proto ros2/navmsgs.proto [Path] stdmsgs.Header header = 1;
 proto ros2/navmsgs.proto [Path] }
 proto ros2/navmsgs.proto [RosBooleanBox] bool value = 1;
 proto ros2/navmsgs.proto [RosBooleanBox] }
+proto ros2/navmsgs.proto [RosBoundedStringBox] string value = 1;
+proto ros2/navmsgs.proto [RosBoundedStringBox] }
 proto ros2/navmsgs.proto [RosFloat32Box] double value = 1;
 proto ros2/navmsgs.proto [RosFloat32Box] }
 proto ros2/navmsgs.proto [RosInt8Box] sint32 value = 1;
@@ -2982,6 +2987,7 @@ proto ros2/navmsgs.proto message OccupancyGrid {
 proto ros2/navmsgs.proto message Odometry {
 proto ros2/navmsgs.proto message Path {
 proto ros2/navmsgs.proto message RosBooleanBox {
+proto ros2/navmsgs.proto message RosBoundedStringBox {
 proto ros2/navmsgs.proto message RosFloat32Box {
 proto ros2/navmsgs.proto message RosInt8Box {
 proto ros2/navmsgs.proto message RosMetresBox {
@@ -3158,6 +3164,8 @@ proto ros2/sensormsgs.proto [RosAmperesBox] double value = 1;
 proto ros2/sensormsgs.proto [RosAmperesBox] }
 proto ros2/sensormsgs.proto [RosBooleanBox] bool value = 1;
 proto ros2/sensormsgs.proto [RosBooleanBox] }
+proto ros2/sensormsgs.proto [RosBoundedStringBox] string value = 1;
+proto ros2/sensormsgs.proto [RosBoundedStringBox] }
 proto ros2/sensormsgs.proto [RosCelsiusBox] double value = 1;
 proto ros2/sensormsgs.proto [RosCelsiusBox] }
 proto ros2/sensormsgs.proto [RosFloat32Box] double value = 1;
@@ -3236,6 +3244,7 @@ proto ros2/sensormsgs.proto message RelativeHumidity {
 proto ros2/sensormsgs.proto message RosAmpereHoursBox {
 proto ros2/sensormsgs.proto message RosAmperesBox {
 proto ros2/sensormsgs.proto message RosBooleanBox {
+proto ros2/sensormsgs.proto message RosBoundedStringBox {
 proto ros2/sensormsgs.proto message RosCelsiusBox {
 proto ros2/sensormsgs.proto message RosFloat32Box {
 proto ros2/sensormsgs.proto message RosFloat64Box {
@@ -3322,6 +3331,8 @@ proto ros2/stdmsgs.proto [RosFloat32Box] double value = 1;
 proto ros2/stdmsgs.proto [RosFloat32Box] }
 proto ros2/stdmsgs.proto [RosFloat64Box] double value = 1;
 proto ros2/stdmsgs.proto [RosFloat64Box] }
+proto ros2/stdmsgs.proto [RosFrameIdBox] string value = 1;
+proto ros2/stdmsgs.proto [RosFrameIdBox] }
 proto ros2/stdmsgs.proto [RosInt16Box] sint32 value = 1;
 proto ros2/stdmsgs.proto [RosInt16Box] }
 proto ros2/stdmsgs.proto [RosInt32Box] sint32 value = 1;
@@ -3389,6 +3400,7 @@ proto ros2/stdmsgs.proto message RosByteBox {
 proto ros2/stdmsgs.proto message RosCharBox {
 proto ros2/stdmsgs.proto message RosFloat32Box {
 proto ros2/stdmsgs.proto message RosFloat64Box {
+proto ros2/stdmsgs.proto message RosFrameIdBox {
 proto ros2/stdmsgs.proto message RosInt16Box {
 proto ros2/stdmsgs.proto message RosInt32Box {
 proto ros2/stdmsgs.proto message RosInt64Box {
@@ -3413,6 +3425,8 @@ proto ros2/stdsrvs.proto [EmptyRequest] }
 proto ros2/stdsrvs.proto [EmptyResponse] }
 proto ros2/stdsrvs.proto [RosBooleanBox] bool value = 1;
 proto ros2/stdsrvs.proto [RosBooleanBox] }
+proto ros2/stdsrvs.proto [RosBoundedStringBox] string value = 1;
+proto ros2/stdsrvs.proto [RosBoundedStringBox] }
 proto ros2/stdsrvs.proto [RosStringBox] string value = 1;
 proto ros2/stdsrvs.proto [RosStringBox] }
 proto ros2/stdsrvs.proto [SetBoolRequest] bool data = 1;
@@ -3435,6 +3449,7 @@ proto ros2/stdsrvs.proto enum StdSrvsInteractionsOrdinal {
 proto ros2/stdsrvs.proto message EmptyRequest {
 proto ros2/stdsrvs.proto message EmptyResponse {
 proto ros2/stdsrvs.proto message RosBooleanBox {
+proto ros2/stdsrvs.proto message RosBoundedStringBox {
 proto ros2/stdsrvs.proto message RosStringBox {
 proto ros2/stdsrvs.proto message SetBoolRequest {
 proto ros2/stdsrvs.proto message SetBoolResponse {

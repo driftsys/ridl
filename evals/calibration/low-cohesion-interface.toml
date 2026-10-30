@@ -10,9 +10,9 @@
 # Sampled: low-cohesion-interface:mavlink:common/interactions.ridl:662-677:0
 # Sampled: low-cohesion-interface:vss:vehicle.cabin.hvac.station.row3.passenger/contract.ridl:1504-1513:0
 # Sampled: low-cohesion-interface:vss:vehicle.cabin.hvac.station.row3.driver/contract.ridl:1498-1504:0
-# Sampled: low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15158-15178:0
+# Sampled: low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15197-15217:0
 # Sampled: low-cohesion-interface:vss:vehicle.cabin.hvac.station.row4.passenger/contract.ridl:1504-1513:0
-# Sampled: low-cohesion-interface:ros2:std_srvs/interactions.ridl:787-806:0
+# Sampled: low-cohesion-interface:ros2:std_srvs/interactions.ridl:842-861:0
 # Adjudication: done by Sebastien on 2026-10-06.
 # Agreement sample: Sebastien reviewed every sampled agreement above and agreed with each; the agreed `final` labels stand.
 # Adjudicated disagreements: 0 (no disagreements).
@@ -78,7 +78,7 @@ groups = 6
 min_group_size = 1
 
 [[finding]]
-id = "low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15158-15178:0"
+id = "low-cohesion-interface:ros2:nav2_msgs/interactions.ridl:15197-15217:0"
 workspace = "ros2"
 location = "nav2_msgs/interactions.ridl:384"
 message = "interface `Nav2MsgsInteractions` splits into 17 groups of members that share no type: [clearEntireCostmap], [getCostmap], [isPathValid, loadMap, manageLifecycleNodes, saveMap], [assistedTeleop], [assistedTeleopFeedback], [backUp], [backUpFeedback], [followPath], [followPathFeedback], [followWaypoints], [followWaypointsFeedback], [navigateToPose], [navigateToPoseFeedback], [spin], [spinFeedback], [wait], [waitFeedback]"
@@ -93,7 +93,7 @@ groups = 17
 min_group_size = 1
 
 [[finding]]
-id = "low-cohesion-interface:ros2:nav_msgs/interactions.ridl:2571-2590:0"
+id = "low-cohesion-interface:ros2:nav_msgs/interactions.ridl:2578-2597:0"
 workspace = "ros2"
 location = "nav_msgs/interactions.ridl:77"
 message = "interface `NavMsgsInteractions` splits into 4 groups of members that share no type: [getMap], [getPlan], [loadMap], [setMap]"
@@ -108,9 +108,9 @@ groups = 4
 min_group_size = 1
 
 [[finding]]
-id = "low-cohesion-interface:ros2:std_srvs/interactions.ridl:787-806:0"
+id = "low-cohesion-interface:ros2:std_srvs/interactions.ridl:842-861:0"
 workspace = "ros2"
-location = "std_srvs/interactions.ridl:28"
+location = "std_srvs/interactions.ridl:29"
 message = "interface `StdSrvsInteractions` splits into 3 groups of members that share no type: [empty], [setBool], [trigger]"
 claude = "dismiss"
 claude_reason = "std_srvs is deliberately a tiny set of generic utility services; splitting three members gains nothing"
