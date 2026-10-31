@@ -805,16 +805,16 @@ such as this one, adapted to your output directory:
 generated/** linguist-generated=true
 ```
 
-**The generated code is clippy-clean.** The emitted `lib.rs` switches no lint
-off. Each allow the emitter needs is on the generated item that needs it:
+**The crate root switches no lint off.** Each allow the emitter needs is on the generated item that needs it:
 `clippy::derivable_impls` on a `Default` it writes out rather than derives,
 `clippy::module_inception` on the face module of an interface named after its
 package (`veh.cabin` and `Cabin`), and `clippy::collapsible_if`, which only
-edition 2024 reports, on the functions that decode a proto3 message. The
+edition 2024 reports, on the functions that decode or verify a proto3 message. The
 repository's `just demo` runs clippy with `-D warnings` on the generated crates
 for `examples/cabin` and the veh-cluster corpus, as edition 2021 and as edition
-2024. Single-file mode writes no `lib.rs`, and a consumer that includes the
-generated file with `include!` adds no allow. Explicit crate-root links in the
+2024; a shape of declaration that neither crate holds is not linted. Because
+the allows are on the items, a file included with `include!` carries them too,
+and single-file mode, which writes no `lib.rs`, needs none of its own. Explicit crate-root links in the
 generated docs can be unresolved when the file is included inside another
 module
 ([Documentation in the generated code](generated-code.md#documentation-in-the-generated-code)).

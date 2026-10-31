@@ -961,7 +961,7 @@ demo: _cabin-generate
     # Both generated crates are linted as edition 2024 too, which a user
     # reaches by copying the emitted source into an edition 2024 crate: the
     # emitted manifests say 2021, and the trap restores them on any exit.
-    trap 'for c in generated generated-corpus; do mv "examples/cabin/$c/Cargo.toml.bak" "examples/cabin/$c/Cargo.toml"; done' EXIT
+    trap 'for c in generated generated-corpus; do if [ -f "examples/cabin/$c/Cargo.toml.bak" ]; then mv "examples/cabin/$c/Cargo.toml.bak" "examples/cabin/$c/Cargo.toml"; fi; done' EXIT
     for c in generated generated-corpus; do
         sed -i.bak 's/^edition = "2021"$/edition = "2024"/' "examples/cabin/$c/Cargo.toml"
         if ! grep -q '^edition = "2024"$' "examples/cabin/$c/Cargo.toml"; then
