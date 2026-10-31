@@ -401,7 +401,7 @@ fn a_request_without_origin_passes_none_to_the_check() {
 #[test]
 fn a_handshake_that_does_not_finish_ends_at_the_liveness_timeout() {
     let mut config = config();
-    config.liveness_timeout = Duration::from_millis(300);
+    config.liveness_timeout = Duration::from_secs(1);
     let bound = config.liveness_timeout + Duration::from_millis(200);
     let (server, mut client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
@@ -510,7 +510,7 @@ fn a_client_ping_is_answered_with_a_pong_carrying_its_payload() {
 fn a_silent_client_ends_the_session_at_the_liveness_timeout() {
     let mut config = config();
     config.poll_interval = Duration::from_millis(20);
-    config.liveness_timeout = Duration::from_millis(300);
+    config.liveness_timeout = Duration::from_secs(1);
     let bound = config.liveness_timeout + config.poll_interval + Duration::from_millis(100);
     let liveness = config.liveness_timeout;
 
@@ -700,12 +700,13 @@ impl Caller for Watched {
 #[test]
 fn a_client_that_stops_reading_ends_the_session_at_the_liveness_timeout() {
     let mut config = config();
-    config.liveness_timeout = Duration::from_millis(300);
+    config.liveness_timeout = Duration::from_secs(1);
     // A full send buffer blocks a write for at most the liveness timeout, and
     // the last message arrived at most one liveness timeout earlier. The
-    // margin is large, because a loaded runner delays the threads; it is
-    // still far below the 15 s default, so a missing timeout fails the test.
-    let bound = 2 * config.liveness_timeout + Duration::from_secs(4);
+    // margin is one second, so a loaded runner has room, and the bound stays
+    // below three liveness timeouts, so a write timeout that is a multiple of
+    // the liveness timeout fails the test.
+    let bound = 2 * config.liveness_timeout + Duration::from_secs(1);
     let (server, client) = pair();
     let rt = Loopback::new(CATALOG);
     let mut provider = rt.attach();
@@ -776,7 +777,7 @@ fn a_text_message_closes_1003_and_the_client_sees_it() {
 #[test]
 fn a_data_message_resets_the_liveness_clock() {
     let mut config = config();
-    config.liveness_timeout = Duration::from_millis(300);
+    config.liveness_timeout = Duration::from_secs(1);
     // No ping, so that the client sends no pong: only data messages arrive.
     config.ping_interval = TEST_LIMIT;
     let (server, client) = pair();
@@ -970,7 +971,7 @@ fn a_change_reaches_a_fast_sender_within_two_poll_intervals() {
 #[test]
 fn a_control_frame_resets_the_liveness_clock() {
     let mut config = config();
-    config.liveness_timeout = Duration::from_millis(300);
+    config.liveness_timeout = Duration::from_secs(1);
     config.ping_interval = TEST_LIMIT;
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
@@ -1477,7 +1478,7 @@ fn a_fixed_below_one_block_message_is_counted_as_36_bytes_plus_its_limit() {
 /// The largest limit a table can give a `fixed` still counts one block
 /// message. On a 64-bit host this pins the result of the clamp, not the order
 /// of the clamp and the addition: the order matters on a 32-bit `usize`,
-/// where this test is not run.
+/// where the gates do not run this test; they run it on 64-bit hosts.
 ///
 /// Mutation: count a `fixed` at its limit, with no clamp.
 #[test]
@@ -1554,12 +1555,13 @@ fn a_fixed_of_65_280_bytes_crosses_as_16_block_messages() {
 #[test]
 fn a_client_that_reads_a_large_fixed_and_stops_reading_ends_at_the_liveness_timeout() {
     let mut config = config();
-    config.liveness_timeout = Duration::from_millis(300);
+    config.liveness_timeout = Duration::from_secs(1);
     // A full send buffer blocks a write for at most the liveness timeout, and
     // the last message arrived at most one liveness timeout earlier. The
-    // margin is large, because a loaded runner delays the threads; it is
-    // still far below the 15 s default, so a missing timeout fails the test.
-    let bound = 2 * config.liveness_timeout + Duration::from_secs(4);
+    // margin is one second, so a loaded runner has room, and the bound stays
+    // below three liveness timeouts, so a write timeout that is a multiple of
+    // the liveness timeout fails the test.
+    let bound = 2 * config.liveness_timeout + Duration::from_secs(1);
     let (server, client) = pair();
     let rt = Loopback::new(CATALOG);
     rt.attach()

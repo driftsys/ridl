@@ -526,7 +526,8 @@ fn envelope_at(msg: &[u8], at: usize) -> Envelope {
 /// Every step is in `u32`, which is 32 bits on every target, so the result
 /// does not depend on the width of `usize`. A rewrite in `usize` would
 /// overflow on a 32-bit target for the largest `total`; the assertions below
-/// guard such a rewrite.
+/// are evaluated at the `usize` of the compiled target, so a build for a
+/// 32-bit target (wasm32, thumbv7em) catches such a rewrite.
 const fn block_len(total: u32, index: u32) -> Option<u32> {
     if total == 0 {
         return None;
@@ -543,7 +544,8 @@ const fn block_len(total: u32, index: u32) -> Option<u32> {
 }
 
 // The largest `total` and its last block must not overflow. The computation is
-// in `u32`, so these assertions guard a future rewrite, not a target.
+// in `u32`. The assertions are evaluated at the `usize` of the compiled
+// target, so a 32-bit build catches a rewrite in `usize`.
 const _: () = assert!(matches!(block_len(u32::MAX, 1_048_575), Some(4_095)));
 const _: () = assert!(block_len(u32::MAX, u32::MAX).is_none());
 

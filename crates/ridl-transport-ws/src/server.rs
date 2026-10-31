@@ -269,9 +269,9 @@ pub fn serve<C: Connection, B: Backend>(mut conn: C, backend: B, config: &Config
 /// envelope plus the member's limit. A `fixed` needs at most one block
 /// message, 4,130 bytes, because a value that one `publish` does not carry
 /// crosses in blocks: the smaller of 36 bytes plus its limit and 4,130. The
-/// limit is clamped before the header is added, so that the sum does not
-/// overflow a 32-bit `usize` for any `u32` limit; the header is added with a
-/// saturating addition as well. On a tie, the first member in key order.
+/// code clamps the limit of a `fixed` before it adds the header and adds with
+/// `saturating_add`; no test on a 64-bit host checks the order of these
+/// steps. On a tie, the first member in key order.
 fn limit_short(table: &MemberTable, limit: usize) -> Option<(Target, usize)> {
     let header = largest_header();
     let block_cap = block_message() - header;
@@ -315,9 +315,9 @@ fn largest_header() -> usize {
 }
 
 /// The size of one `block` message with a full block: the 34-byte header
-/// and [`BLOCK_BYTES`] bytes, 4,130 bytes. The session splits a value by this
-/// size and `serve` checks the message limit against it, so both take it
-/// from here.
+/// and [`BLOCK_BYTES`] bytes, 4,130 bytes. `serve` checks the message limit
+/// against it, and the session uses it to decide whether it can send blocks;
+/// the session splits a value by [`BLOCK_BYTES`].
 fn block_message() -> usize {
     let header = Frame::Block {
         target: Target {
