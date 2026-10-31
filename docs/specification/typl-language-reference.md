@@ -1472,8 +1472,8 @@ a `.ridl` file, as its row says:
 | TYPL-408 | doc tag other than `@see`, `@since`, `@deprecated` and `@labels`                                                                                        | warning  |
 | TYPL-409 | `@see` or `@since` with a missing or malformed value                                                                                                    | warning  |
 | TYPL-410 | doc comment written as `/** */` — `allow` by default                                                                                                    | warning  |
-| TYPL-411 | `// lint: allow …` directive names a lint that no diagnostic in its scope raises                                                                        | info     |
-| TYPL-412 | `// lint:` comment that is not a valid directive — a word other than `allow`, no lint name, an unknown name, no reason, or no declaration to apply to   | info     |
+| TYPL-411 | lint directive allows a lint that no diagnostic in its scope raises                                                                                     | info     |
+| TYPL-412 | malformed lint directive — a word other than `allow`, no lint name, a name that is not a lint name, no reason, or no declaration to apply to            | info     |
 
 ---
 
