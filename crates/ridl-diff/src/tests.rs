@@ -3090,6 +3090,28 @@ mod podbuf {
         );
     }
 
+    /// The holder is a stream of the struct whose head cannot be laid out: a
+    /// stream has no form and holds nothing in a head, so no use by shape
+    /// either, and the append is compatible.
+    #[test]
+    fn a_growing_append_to_a_struct_streamed_whose_old_head_cannot_be_laid_out_is_not_a_break() {
+        let streamed = v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                element: Some(v2::stream_type::Element::Named("SensorReading".to_string())),
+            })),
+        };
+        let old = held_unresolved(vec![], streamed.clone());
+        let new = held_unresolved(vec![field("quality", 2, wide())], streamed);
+        let report = diff(&old, &new, &["podbuf"]);
+        assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+        assert!(
+            inline_append_paths(&report).is_empty(),
+            "{:?}",
+            report.changes
+        );
+    }
+
     /// The holder is a bounded array with a non-zero minimum: still a tail
     /// block with a stride, not an exact-length array, so no use by shape.
     #[test]

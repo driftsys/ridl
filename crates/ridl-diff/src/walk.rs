@@ -1909,11 +1909,11 @@ fn signal_init_str(def: &v2::SignalDef) -> String {
 
 /// The [`Category::PodbufInlineAppend`] changes of one walked and classified
 /// package pair: one per struct field appended compatibly, in `pair`, to a
-/// struct that a head of `old` — every package of the old side, the context
-/// packages included — holds inline, when the field does not fit inside the
-/// old head: the layout law places any of its bytes past the old head's
-/// size. The verdict is the placeholder [`emit`] stamps; the classifier
-/// settles it from the encodings.
+/// struct that a head of `holders` — the compared packages of the old side,
+/// resolved against `old`, the whole old side with the context packages —
+/// holds inline, when the field does not fit inside the old head: the layout
+/// law places any of its bytes past the old head's size. The verdict is the
+/// placeholder [`emit`] stamps; the classifier settles it from the encodings.
 ///
 /// Only an append the generic rule accepts is read: a [`Category::DeclAdded`]
 /// at `<package>/<struct>/<field>` whose verdict is compatible. An append the
