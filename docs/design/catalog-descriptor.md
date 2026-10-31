@@ -213,8 +213,8 @@ otherwise a spelling in the typl syntax over the IR's canonical values (which
 are not always the source's literals): a tuple or a request of several
 parameters `(a: T, b: U)`, an exact-length array `[T; N]`, a bounded array
 `[T; min..max]`, a map `[K: V; min..max]`, an inline scalar such as
-`km/h [0..250 step 0.5]`, a stream `<T>`, and a fallible reply `T | E`. An
-optional type carries `?`. No reader parses these strings.
+`km/h [0..250 step 0.5]`, the reply of a stream `<T>`, and a fallible reply
+`T | E`. An optional type carries `?`. No reader parses these strings.
 
 Not contained: type layouts, field lists, and constraints other than the bounds
 that size a payload. A consumer that needs a payload's shape reads the schema
@@ -406,9 +406,11 @@ is sized, through the projection the wire backend emits:
   implementation of the bound. A request of several parameters has no row, as in
   the other two encodings.
 
-**Absent by shape.** A stream payload (`<T>`), a request of zero or of several
-parameters, and an inline `T | E` reply have no rows in any column, until a
-codec defines their encoding. A payload `T?` is sized as `T`.
+**Absent by shape.** The response payload of a stream reply (`<T>`), a request
+of zero or of several non-stream parameters, and an inline `T | E` reply have no
+rows in any column, until a codec defines their encoding. The element of a
+stream carries its rows in its `StreamPayload` entry under `Elements`; `Bytes`
+and `Text` have none. A payload `T?` is sized as `T`.
 
 **Strings.** A `string [min..max]` bound counts Unicode scalar values, and its
 byte capacity is four bytes per scalar value (`string_max_bytes`), in both
@@ -613,7 +615,7 @@ the status in the code and the rejected alternatives in short form.
 | D-1 Two descriptors; the system descriptor is self-contained | Half built: a catalog descriptor for every unit with an interface shape. The system descriptor is not built.                                                                                                                                                                                                | A system descriptor that references catalogs by hash only; one file per machine.                                                                                              |
 | D-2 Descriptors are FlatBuffers; the IR stays protobuf       | Built. ADR-0014 is unchanged for the IR.                                                                                                                                                                                                                                                                    | Protobuf descriptors; JSON or TOML as the artifact; both encodings.                                                                                                           |
 | D-3 Hand-written, versioned, append-only schemas             | Built for the one schema, `catalog.fbs`. The CI check that compiles the schemas with both `flatc` and `flatcc` is not built; it waits for a C engine.                                                                                                                                                       | A descriptor schema generated from the IR schema.                                                                                                                             |
-| D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states, including the `compatible` list appended to the catalog table. Of the member's bounds and quality-of-service terms, the timing and the optional payload limit are carried. Including the `streams` list of each member.                                         | —                                                                                                                                                                             |
+| D-4 What the catalog descriptor contains                     | Built, as "What a catalog contains" states, including the `compatible` list appended to the catalog table. Of the member's bounds and quality-of-service terms, the timing and the optional payload limit are carried, and so is the `streams` list of each member.                                         | —                                                                                                                                                                             |
 | D-5 What the system descriptor contains                      | Not built.                                                                                                                                                                                                                                                                                                  | —                                                                                                                                                                             |
 | D-6 A size state per payload and encoding                    | Built for proto3, FlatBuffers and podbuf, as "The size states" states. The max-size conformance test is built for FlatBuffers and, since 2026-10-20, for proto3.                                                                                                                                            | One number per payload; a number per type rather than per interaction; an induced message, request message or `ok`/`err` union for a payload that is not a struct or a union. |
 | D-7 Not in version 1                                         | Holds: no `.bfbs` payload layouts, no transport per crossing, no envelope or framing overhead.                                                                                                                                                                                                              | —                                                                                                                                                                             |

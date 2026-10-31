@@ -15,8 +15,9 @@ Written from the owner's decisions of 2026-10-28 (decisions 1 to 8) and of
 2026-10-31 (decisions 9 to 14, which answer the six open questions the record
 was proposed with). It adds no syntax, no interaction kind and no diagnostic
 code. The documents in "Documents amended" are changed with the acceptance.
-Nothing in this record is built: streams have no port, no transport framing and
-no generated code (driftsys/ridl#336, driftsys/ridl#1116).
+Built: the stream port of `ridl-rt` and the `streams` entries of the catalog
+descriptor. Not built: the frame version and the generated face
+(driftsys/ridl#1116).
 
 Amended 2026-10-31. Decision 10's example spelled the result union inline as
 `<DocChunk | DocError>`, which the grammar does not admit; the example now
