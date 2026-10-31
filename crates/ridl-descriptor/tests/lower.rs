@@ -6,8 +6,8 @@
 
 use ridl_descriptor::lower::LowerError;
 use ridl_descriptor::{
-    CatalogRef, Encoding, InterfaceRef, Kind, SCHEMA_VERSION, SizeStateTag, UnboundedCause, lower,
-    verify,
+    CatalogRef, Encoding, InterfaceRef, Kind, MaxSizeRef, MemberRef, SCHEMA_VERSION, SizeStateTag,
+    StreamForm, UnboundedCause, lower, verify,
 };
 use ridl_ir::projection::flatbuffers::{Packages, max_size};
 use ridl_ir::projection::podbuf;
@@ -674,7 +674,8 @@ fn an_unset_limit_is_absent() {
 
 #[test]
 fn a_stream_response_has_absent_sizes_and_a_spelled_type_name() {
-    // Driver §4 answer 10: no `stream` flag, no per-element bound yet (#336).
+    // The payload row of a streamed reply carries no sizes: the stream's
+    // entry in `Member.streams` carries the element's bound.
     let bytes = lower_one(&package()).unwrap();
     let catalog = verify(&bytes).unwrap();
     let trace = vehicle(catalog).members().unwrap().get(5).unwrap().unwrap();
@@ -1234,4 +1235,360 @@ fn a_unit_of_two_packages_lowers_to_one_descriptor_with_qualified_names() {
         lower("u", &[&root, &cluster, &other, &sibling], &[]).unwrap(),
         bytes
     );
+}
+
+/// A field type that is a stream of `element`.
+fn stream_of(element: stream_type::Element) -> FieldType {
+    ty(field_type::Kind::Stream(StreamType {
+        element: Some(element),
+    }))
+}
+
+fn param(name: &str, r#type: FieldType) -> Param {
+    Param {
+        name: name.to_owned(),
+        r#type: Some(r#type),
+        ..Default::default()
+    }
+}
+
+fn streamed_reply(element: &str) -> Option<ReturnType> {
+    Some(ReturnType {
+        kind: Some(return_type::Kind::Value(stream_of(
+            stream_type::Element::Named(element.to_owned()),
+        ))),
+    })
+}
+
+/// A struct declaration with one `Coord` field.
+fn one_field_struct(name: &str) -> Decl {
+    Decl {
+        name: name.to_owned(),
+        kind: Some(decl::Kind::StructDef(StructDef {
+            members: vec![StructMember {
+                member: Some(struct_member::Member::Field(Box::new(Field {
+                    name: "x".to_owned(),
+                    ordinal: 1,
+                    r#type: Some(named("Coord")),
+                    ..Default::default()
+                }))),
+            }],
+            fixed_layout: false,
+        })),
+        ..Default::default()
+    }
+}
+
+fn coord() -> Decl {
+    Decl {
+        name: "Coord".to_owned(),
+        kind: Some(decl::Kind::TypeDef(i16_def())),
+        ..Default::default()
+    }
+}
+
+/// `veh.cluster` with one member per stream position, beside `veh.hvac`,
+/// which declares the element `FilterState`. The signals `faults`, `filter`
+/// and `doc` carry the element types alone, so a test can compare a stream
+/// entry's rows with the rows of the same type as a payload.
+fn streams_packages() -> (Package, Package) {
+    let hvac = Package {
+        name: "veh.hvac".to_owned(),
+        decls: vec![coord(), one_field_struct("FilterState")],
+        ..Default::default()
+    };
+    let filter_state = || stream_type::Element::Named("veh.hvac.FilterState".to_owned());
+    let bytes = || stream_type::Element::Primitive(PrimitiveType::Bytes as i32);
+    let text = || stream_type::Element::Primitive(PrimitiveType::String as i32);
+    let signal = |name: &str, ordinal: u32, payload: &str| {
+        interaction(
+            name,
+            ordinal,
+            decl::Kind::SignalDef(SignalDef {
+                payload: payload.to_owned(),
+                ..Default::default()
+            }),
+        )
+    };
+    let cluster = Package {
+        name: "veh.cluster".to_owned(),
+        decls: vec![
+            coord(),
+            one_field_struct("FaultEvent"),
+            one_field_struct("DocInfo"),
+        ],
+        interfaces: vec![Interface {
+            name: "Vehicle".to_owned(),
+            number: 1,
+            interactions: vec![
+                interaction(
+                    "replayTrace",
+                    1,
+                    decl::Kind::CommandDef(CommandDef {
+                        params: vec![param("samples", stream_of(filter_state()))],
+                        ..Default::default()
+                    }),
+                ),
+                interaction(
+                    "put",
+                    2,
+                    decl::Kind::CommandDef(CommandDef {
+                        params: vec![
+                            param("info", named("DocInfo")),
+                            param("data", stream_of(bytes())),
+                        ],
+                        ..Default::default()
+                    }),
+                ),
+                interaction(
+                    "streamFaults",
+                    3,
+                    decl::Kind::QueryDef(QueryDef {
+                        params: vec![param("filter", named("DocInfo"))],
+                        return_type: streamed_reply("FaultEvent"),
+                        ..Default::default()
+                    }),
+                ),
+                interaction(
+                    "rebalance",
+                    4,
+                    decl::Kind::QueryDef(QueryDef {
+                        params: vec![param("samples", stream_of(filter_state()))],
+                        return_type: streamed_reply("FaultEvent"),
+                        ..Default::default()
+                    }),
+                ),
+                interaction(
+                    "log",
+                    5,
+                    decl::Kind::CommandDef(CommandDef {
+                        params: vec![param("lines", stream_of(text()))],
+                        ..Default::default()
+                    }),
+                ),
+                interaction(
+                    "upload",
+                    6,
+                    decl::Kind::CommandDef(CommandDef {
+                        params: vec![
+                            param("data", stream_of(bytes())),
+                            param("info", named("DocInfo")),
+                            param("notes", stream_of(text())),
+                            param("size", named("Coord")),
+                        ],
+                        ..Default::default()
+                    }),
+                ),
+                interaction("stop", 7, decl::Kind::CommandDef(CommandDef::default())),
+                signal("faults", 8, "FaultEvent"),
+                signal("filter", 9, "veh.hvac.FilterState"),
+                signal("doc", 10, "DocInfo"),
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    (cluster, hvac)
+}
+
+fn lower_streams() -> Vec<u8> {
+    let (cluster, hvac) = streams_packages();
+    lower("veh.cluster", &[&cluster, &hvac], &[]).unwrap()
+}
+
+fn member_named<'a>(catalog: CatalogRef<'a>, name: &str) -> MemberRef<'a> {
+    vehicle(catalog)
+        .members()
+        .unwrap()
+        .iter()
+        .map(Result::unwrap)
+        .find(|m| m.name().unwrap() == name)
+        .unwrap_or_else(|| panic!("no member `{name}`"))
+}
+
+type Row = (Encoding, SizeStateTag, u32, UnboundedCause);
+
+fn size_rows<'a>(sizes: impl IntoIterator<Item = planus::Result<MaxSizeRef<'a>>>) -> Vec<Row> {
+    sizes
+        .into_iter()
+        .map(|s| {
+            let s = s.unwrap();
+            (
+                s.encoding().unwrap(),
+                s.state().unwrap(),
+                s.bytes().unwrap(),
+                s.cause().unwrap(),
+            )
+        })
+        .collect()
+}
+
+/// Every field of every stream entry of `member`: (no, form, element, rows).
+fn streams_of(member: MemberRef<'_>) -> Vec<(u8, StreamForm, Option<String>, Vec<Row>)> {
+    member
+        .streams()
+        .unwrap()
+        .expect("the lowering writes the list")
+        .iter()
+        .map(|entry| {
+            let entry = entry.unwrap();
+            (
+                entry.no().unwrap(),
+                entry.form().unwrap(),
+                entry.element().unwrap().map(str::to_owned),
+                size_rows(entry.max_sizes().unwrap()),
+            )
+        })
+        .collect()
+}
+
+/// The rows of the one payload of the signal `name`.
+fn signal_rows(catalog: CatalogRef<'_>, name: &str) -> Vec<Row> {
+    rows(
+        member_named(catalog, name)
+            .payloads()
+            .unwrap()
+            .get(0)
+            .unwrap()
+            .unwrap(),
+    )
+}
+
+fn type_names(member: MemberRef<'_>) -> Vec<String> {
+    member
+        .payloads()
+        .unwrap()
+        .iter()
+        .map(|p| p.unwrap().type_name().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn a_stream_parameter_is_an_entry_and_the_request_spells_the_other_parameters() {
+    let bytes = lower_streams();
+    let catalog = verify(&bytes).unwrap();
+    let filter_rows = signal_rows(catalog, "filter");
+    assert!(!filter_rows.is_empty(), "FilterState is sized");
+
+    let replay = member_named(catalog, "replayTrace");
+    assert_eq!(type_names(replay), vec!["()".to_owned()]);
+    assert!(rows(replay.payloads().unwrap().get(0).unwrap().unwrap()).is_empty());
+    assert_eq!(
+        streams_of(replay),
+        vec![(
+            1,
+            StreamForm::Elements,
+            Some("veh.hvac.FilterState".to_owned()),
+            filter_rows
+        )]
+    );
+
+    // The one non-stream parameter is the request, spelled and sized as its
+    // type.
+    let put = member_named(catalog, "put");
+    assert_eq!(type_names(put), vec!["DocInfo".to_owned()]);
+    let doc_rows = signal_rows(catalog, "doc");
+    assert!(!doc_rows.is_empty(), "DocInfo is sized");
+    assert_eq!(
+        rows(put.payloads().unwrap().get(0).unwrap().unwrap()),
+        doc_rows
+    );
+    assert_eq!(streams_of(put), vec![(1, StreamForm::Bytes, None, vec![])]);
+
+    // Several non-stream parameters are spelled as a list without the
+    // streams; the streams are numbered from 1, counting only streams.
+    let upload = member_named(catalog, "upload");
+    assert_eq!(
+        type_names(upload),
+        vec!["(info: DocInfo, size: Coord)".to_owned()]
+    );
+    assert_eq!(
+        streams_of(upload),
+        vec![
+            (1, StreamForm::Bytes, None, vec![]),
+            (2, StreamForm::Text, None, vec![]),
+        ]
+    );
+}
+
+#[test]
+fn a_streamed_reply_is_entry_zero_and_the_response_keeps_its_spelling() {
+    let bytes = lower_streams();
+    let catalog = verify(&bytes).unwrap();
+    let faults = member_named(catalog, "streamFaults");
+    assert_eq!(
+        type_names(faults),
+        vec!["DocInfo".to_owned(), "<FaultEvent>".to_owned()]
+    );
+    // The response of a streamed reply keeps no row; the entry carries the
+    // element's rows.
+    assert!(rows(faults.payloads().unwrap().get(1).unwrap().unwrap()).is_empty());
+    let fault_rows = signal_rows(catalog, "faults");
+    assert!(!fault_rows.is_empty(), "FaultEvent is sized");
+    assert_eq!(
+        streams_of(faults),
+        vec![(
+            0,
+            StreamForm::Elements,
+            Some("veh.cluster.FaultEvent".to_owned()),
+            fault_rows
+        )]
+    );
+}
+
+#[test]
+fn a_bidirectional_query_has_entries_zero_then_one() {
+    let bytes = lower_streams();
+    let catalog = verify(&bytes).unwrap();
+    let rebalance = member_named(catalog, "rebalance");
+    assert_eq!(
+        type_names(rebalance),
+        vec!["()".to_owned(), "<FaultEvent>".to_owned()]
+    );
+    assert_eq!(
+        streams_of(rebalance),
+        vec![
+            (
+                0,
+                StreamForm::Elements,
+                Some("veh.cluster.FaultEvent".to_owned()),
+                signal_rows(catalog, "faults")
+            ),
+            (
+                1,
+                StreamForm::Elements,
+                Some("veh.hvac.FilterState".to_owned()),
+                signal_rows(catalog, "filter")
+            ),
+        ]
+    );
+}
+
+#[test]
+fn a_text_stream_is_text_with_no_size_row() {
+    let bytes = lower_streams();
+    let catalog = verify(&bytes).unwrap();
+    let log = member_named(catalog, "log");
+    assert_eq!(type_names(log), vec!["()".to_owned()]);
+    assert_eq!(streams_of(log), vec![(1, StreamForm::Text, None, vec![])]);
+}
+
+#[test]
+fn a_member_with_no_stream_has_an_empty_list() {
+    let bytes = lower_streams();
+    let catalog = verify(&bytes).unwrap();
+    for name in ["stop", "faults", "filter", "doc"] {
+        assert_eq!(streams_of(member_named(catalog, name)), vec![], "{name}");
+    }
+    // Every member of the fixture without streams, of every kind.
+    let bytes = lower_one(&package()).unwrap();
+    let catalog = verify(&bytes).unwrap();
+    for member in vehicle(catalog).members().unwrap().iter() {
+        let member = member.unwrap();
+        let name = member.name().unwrap().to_owned();
+        if name == "trace" {
+            continue;
+        }
+        assert_eq!(streams_of(member), vec![], "{name}");
+    }
 }

@@ -43,7 +43,8 @@ use planus::ReadAsRoot;
 pub use generated::ridl::descriptor::{
     Catalog, CatalogRef, EarlierCatalog, EarlierCatalogRef, Encoding, Interface, InterfaceRef,
     Kind, MaxSize, MaxSizeRef, Member, MemberRef, Payload, PayloadRef, RetiredInterface,
-    RetiredInterfaceRef, SizeState as SizeStateTag, Timing, TimingMode, TimingRef, UnboundedCause,
+    RetiredInterfaceRef, SizeState as SizeStateTag, StreamForm, StreamPayload, StreamPayloadRef,
+    Timing, TimingMode, TimingRef, UnboundedCause,
 };
 #[cfg(feature = "std")]
 pub use lower::lower;
@@ -171,11 +172,19 @@ fn walk(catalog: CatalogRef<'_>) -> planus::Result<()> {
                 payload.role()?;
                 payload.type_name()?;
                 for size in payload.max_sizes()? {
-                    let size = size?;
-                    size.encoding()?;
-                    size.bytes()?;
-                    size.state()?;
-                    size.cause()?;
+                    walk_size(size?)?;
+                }
+            }
+            // Absent in a file written before the field existed.
+            if let Some(streams) = member.streams()? {
+                for stream in streams {
+                    let stream = stream?;
+                    stream.no()?;
+                    stream.form()?;
+                    stream.element()?;
+                    for size in stream.max_sizes()? {
+                        walk_size(size?)?;
+                    }
                 }
             }
         }
@@ -191,5 +200,14 @@ fn walk(catalog: CatalogRef<'_>) -> planus::Result<()> {
             earlier?.hash()?;
         }
     }
+    Ok(())
+}
+
+/// Touches every field of one size row.
+fn walk_size(size: MaxSizeRef<'_>) -> planus::Result<()> {
+    size.encoding()?;
+    size.bytes()?;
+    size.state()?;
+    size.cause()?;
     Ok(())
 }

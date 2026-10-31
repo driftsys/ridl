@@ -2680,6 +2680,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Temperature",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -2695,6 +2696,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Warning",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(3),
@@ -2710,6 +2712,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Level",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(4),
@@ -2728,6 +2731,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Average",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -4735,6 +4739,7 @@ impl ::ridl_rt::contract::Interface for Horn {
                     type_name: "Health",
                 },
             ],
+            streams: &[],
         },
     ];
 }

@@ -46,12 +46,32 @@ table MaxSize {
 table Payload {
   role: string (required);
   // The canonical type name of a payload that is one named type; otherwise
-  // a spelling of the shape: `<T>` for a stream, `(a: T, b: U)` for a
-  // request of several parameters, `T | E` for a fallible reply.
+  // a spelling of the shape: `<T>` for a stream reply, `(a: T, b: U)` for a
+  // request of several parameters, `T | E` for a fallible reply. A request
+  // spells only the parameters that are not streams; `Member.streams` lists
+  // the streams.
   type_name: string (required);
   // One row per encoding that has a state; empty when every encoding is
-  // absent (a stream, a request of zero or several parameters, a `T | E`
-  // reply, until a record defines their encoding).
+  // absent (a stream, a request of zero or several non-stream parameters, a
+  // `T | E` reply, until a record defines their encoding).
+  max_sizes: [MaxSize] (required);
+}
+
+// What a stream carries: elements of a named type (`<T>`), bytes
+// (`<bytes>`) or text (`<string>`).
+enum StreamForm : ubyte { Elements = 0, Bytes = 1, Text = 2 }
+
+// One stream of a call. `no` is the stream number on the call: 0 is the
+// reply stream of a query, and k from 1 is the k-th stream parameter,
+// counting only the stream parameters, in declaration order. `element` is the
+// element type's name, qualified by its declaring package, under `Elements`,
+// and absent under `Bytes` and `Text`. `max_sizes` holds the element's rows
+// under `Elements`, as a payload of that type would, and is empty under
+// `Bytes` and `Text`.
+table StreamPayload {
+  no: ubyte;
+  form: StreamForm;
+  element: string;
   max_sizes: [MaxSize] (required);
 }
 
@@ -73,6 +93,9 @@ table Member {
   // gives the member (ADR-0030 decisions 12 and 13). Absent when no entry
   // applies, and in a file written before the field existed.
   limit: uint32 = null;
+  // One entry per stream of the call, in ascending `no`; empty for a member
+  // with no stream. Absent in a file written before the field existed.
+  streams: [StreamPayload];
 }
 
 table Interface {

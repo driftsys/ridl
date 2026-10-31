@@ -72,6 +72,7 @@ expression: stdout
               "type_name": "Speed"
             }
           ],
+          "streams": [],
           "timing": {
             "max_us": "10000",
             "min_us": "10000",
@@ -109,6 +110,7 @@ expression: stdout
               "type_name": "DoorState"
             }
           ],
+          "streams": [],
           "timing": {
             "max_us": "1000000",
             "min_us": "100000",
@@ -146,6 +148,7 @@ expression: stdout
               "type_name": "DoorState"
             }
           ],
+          "streams": [],
           "timing": {
             "max_us": "1000000",
             "min_us": "100000",
@@ -183,6 +186,7 @@ expression: stdout
               "type_name": "DoorState"
             }
           ],
+          "streams": [],
           "timing": {
             "max_us": "1000000",
             "min_us": "100000",
@@ -220,6 +224,7 @@ expression: stdout
               "type_name": "Speed"
             }
           ],
+          "streams": [],
           "timing": {
             "max_us": "10000",
             "min_us": "10000",
@@ -265,6 +270,7 @@ expression: stdout
               "type_name": "Speed"
             }
           ],
+          "streams": [],
           "timing": {
             "max_us": "5000000",
             "min_us": "500000",
@@ -302,6 +308,7 @@ expression: stdout
               "type_name": "DoorState"
             }
           ],
+          "streams": [],
           "timing": {
             "max_us": "1000000",
             "min_us": "100000",

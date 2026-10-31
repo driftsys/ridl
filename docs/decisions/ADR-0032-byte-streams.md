@@ -8,15 +8,22 @@ in that position, the generated surface intended for such a stream in each
 target language, and the rules every stream shares: its end, its failures, its
 response bound and the size of its chunks. It binds the ridl and typl
 references, the checkers, the backends that generate a stream, the stream port
-of `ridl-rt` when it is built, and every transport binding that carries a
-stream.
+of `ridl-rt`, and every transport binding that carries a stream.
 
 Written from the owner's decisions of 2026-10-28 (decisions 1 to 8) and of
 2026-10-31 (decisions 9 to 14, which answer the six open questions the record
 was proposed with). It adds no syntax, no interaction kind and no diagnostic
 code. The documents in "Documents amended" are changed with the acceptance.
-Nothing in this record is built: streams have no port, no transport framing and
-no generated code (driftsys/ridl#336, driftsys/ridl#1116).
+Built: the stream port of `ridl-rt` and the `streams` entries of the catalog
+descriptor. Not built: the frame version and the generated face
+(driftsys/ridl#1116).
+
+Amended 2026-10-31. Decision 10's example spelled the result union inline as
+`<DocChunk | DocError>`, which the grammar does not admit; the example now
+declares a named union (`union DocChunkResult`) and writes `<DocChunkResult>`,
+as ridl §12.4 does. Decisions 9 and 11 are built as the stream port of `ridl-rt`
+0.x (the signatures are in [the ridl-rt design](../design/ridl-rt.md)); the
+frame version and the generated face are still to come (driftsys/ridl#1116).
 
 ## Context
 
@@ -171,10 +178,13 @@ order the questions were listed.
     returning `DocInfo | DocError`). A failure the producer meets during the
     transfer reaches the consumer of a byte stream only as an interrupted
     transfer (decision 11). An author who needs the reason inside the stream
-    declares a named element type that is a result union
-    (`<DocChunk | DocError>`, decision 4, ridl §12.4). In the upload direction,
-    a `command` carries no functional result (ridl §6.1), so a provider's
-    failure of an upload is state, or the author declares a
+    declares a named element type that is a result union, as in
+    `union DocChunkResult { chunk : DocChunk, failure : DocError }` with
+    `query fetch(id: DocId): <DocChunkResult>` (decision 4, ridl §12.4). The
+    element of a stream is one named type, so the union is declared and named:
+    the grammar admits one path inside `<…>`. In the upload direction, a
+    `command` carries no functional result (ridl §6.1), so a provider's failure
+    of an upload is state, or the author declares a
     `query put(...): PutResult | PutError` whose reply follows the upload.
 
 11. **The end of a stream is explicit.** A stream ends when its producer ends
@@ -322,14 +332,15 @@ These documents were changed with the acceptance of 2026-10-31.
 | [`docs/specification/ridl-language-reference.md`](../specification/ridl-language-reference.md) | §12 introduction: the two forms of a stream, a `<bytes>` example and the note that no runtime carries a stream today (decision 1). §12.3 "Maps to": the I/O mapping (decision 6). §12.2: a bare `bytes` element is a byte stream and a bare `string` element a UTF-8 text stream, with no element bound and no contracted chunk boundary, each chunk bounded by the interaction's limit; a named element keeps its bound (decisions 2 to 4, 14). §12.4: the explicit end (decision 11), invalid UTF-8 (decision 12), the failure paths of a byte stream (decision 10). §9.3: the response bound on a stream (decision 13). The glossary entry "stream" |
 | [`docs/specification/typl-language-reference.md`](../specification/typl-language-reference.md) | §4.4 and §4.5: the `[0..256]` default and TYPL-103 do not apply to a bare `string` or `bytes` in ridl stream element position (decision 2). §12.2: the map-key paragraph's "the same as every other position". §15.3: the stream exception states that the element has no bound                                                                                                                                                                                                                                                                                                                                                                        |
 | [ADR-0030](ADR-0030-transfer-and-bound-limits.md)                                              | decision 11: data larger than one transfer is a byte stream or a stream of bounded elements (decision 8). decision 16: the interaction's limit bounds each chunk or element of a stream (decision 14). Status: a paragraph for the amendment of 2026-10-31                                                                                                                                                                                                                                                                                                                                                                                             |
-| [`docs/design/ridl-rt.md`](../design/ridl-rt.md)                                               | "What 0.1 leaves out": the stream port follows decision 9 and is not built (driftsys/ridl#1116)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| [`docs/design/ridl-rt.md`](../design/ridl-rt.md)                                               | "What 0.1 leaves out": the stream port follows decision 9 and is not built (driftsys/ridl#1116). Built since: the record describes `StreamCaller` and `StreamHandler` as built                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | §5: a decision-ledger row for this record                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | [`docs/book/getting-started.md`](../book/getting-started.md)                                   | "Collections and streams": a byte stream example with `<bytes>`, and the distinction from a stream of named elements such as `<FwBlock>`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | [`docs/decisions/README.md`](README.md)                                                        | the entry for this record loses its _Proposed_ mark and summarises decisions 9 to 14                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ## References
 
-- driftsys/ridl#336 — `ridl-rt` has no port for a stream.
+- driftsys/ridl#336 — the request for a stream port in `ridl-rt`, built since as
+  `StreamCaller` and `StreamHandler`.
 - driftsys/ridl#1116 — the stream work: the port's signatures, the frame version
   that adds streams, and the generated face.
 - driftsys/ridl#1109 — the ADR-0030 amendment: payload ceilings by kind, and

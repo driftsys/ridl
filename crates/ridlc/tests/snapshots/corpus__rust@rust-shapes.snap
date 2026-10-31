@@ -1192,6 +1192,14 @@ impl ::core::default::Default for ArchiveBoundsReply {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ArchiveReplayParams {}
+#[allow(clippy::derivable_impls)]
+impl ::core::default::Default for ArchiveReplayParams {
+    fn default() -> Self {
+        ArchiveReplayParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(dead_code)]
 pub(crate) struct ProbeSampleParams {}
 #[allow(clippy::derivable_impls)]
@@ -5902,6 +5910,98 @@ for ArchiveBoundsReply {
         __ridl_fb_decode_ArchiveBoundsReply(__view.buf, __view.table)
     }
 }
+/// A `ArchiveReplayParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct ArchiveReplayParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for ArchiveReplayParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> ArchiveReplayParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_ArchiveReplayParams(
+    _value: &ArchiveReplayParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_ArchiveReplayParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_ArchiveReplayParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ArchiveReplayParams {
+    ArchiveReplayParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for ArchiveReplayParams {
+    /// The largest FlatBuffers buffer any legal `ArchiveReplayParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = ArchiveReplayParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ArchiveReplayParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_ArchiveReplayParams(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ArchiveReplayParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ArchiveReplayParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_ArchiveReplayParams(buf, table)?;
+        ::core::result::Result::Ok(ArchiveReplayParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_ArchiveReplayParams(__view.buf, __view.table)
+    }
+}
 /// A `ProbeSampleParams` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
@@ -6173,6 +6273,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Count",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -6188,6 +6289,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Heat",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(3),
@@ -6203,6 +6305,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Modes",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(4),
@@ -6218,6 +6321,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Inner",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(5),
@@ -6233,6 +6337,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Panel",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(6),
@@ -6248,6 +6353,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "StationSetParams",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(7),
@@ -6263,6 +6369,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Count",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(9),
@@ -6281,6 +6388,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Panel",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(10),
@@ -6299,6 +6407,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Outcome",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(11),
@@ -6317,6 +6426,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Checked",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(12),
@@ -6335,6 +6445,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "StationBoundsReply",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(13),
@@ -6346,6 +6457,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Label",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(14),
@@ -6364,6 +6476,7 @@ impl ::ridl_rt::contract::Interface for Station {
                     type_name: "Count",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -11333,6 +11446,7 @@ impl ::ridl_rt::contract::Interface for Probe {
                     type_name: "Raw",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -11351,6 +11465,7 @@ impl ::ridl_rt::contract::Interface for Probe {
                     type_name: "Raw",
                 },
             ],
+            streams: &[],
         },
     ];
 }

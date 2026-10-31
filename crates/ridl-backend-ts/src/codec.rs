@@ -256,6 +256,12 @@ impl<'a> Codec<'a> {
                 else {
                     continue;
                 };
+                // A member that carries a stream has no entry: its request
+                // holds only the non-stream parameters, so it is not a plain
+                // call. The Rust backend leaves it out of the face the same.
+                if !interaction.streams.is_empty() {
+                    continue;
+                }
                 let member = interaction
                     .name
                     .as_ref()
@@ -1475,6 +1481,11 @@ impl<'a> Codec<'a> {
                 .name
                 .as_ref()
                 .map_or("", |name| name.declared.as_str());
+            // A member that carries a stream has no entry (see `Codec::new`).
+            if !interaction.streams.is_empty() {
+                let _ = writeln!(out, "  // {member} has no entry: it carries a stream");
+                continue;
+            }
             let mut roles = Vec::new();
             let mut missing = None;
             for (role, payload) in self.roles(interaction, name, member)? {

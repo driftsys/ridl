@@ -1,8 +1,9 @@
 //! The port contract suite of `ridl-rt-conformance`, run over this runtime.
 //!
 //! Every test the suite has runs here, including those of both signal
-//! extensions and of `Wakeable`, which the loopback implements, and those of
-//! the `trace` arm, because the loopback carries the trace context. The tests
+//! extensions, of `Wakeable` and of the two stream extensions, which the
+//! loopback implements, and those of the `trace` arm, because the loopback
+//! carries the trace context. The tests
 //! of what only this runtime can express are in `tests/ports.rs`.
 
 use ridl_loopback::{CallerHandle, HandlerHandle, Loopback, SourceHandle};
@@ -48,4 +49,4 @@ impl Factory for LoopbackFactory {
     }
 }
 
-ridl_rt_conformance::suite!(LoopbackFactory; scannable, coherent, wakeable, trace);
+ridl_rt_conformance::suite!(LoopbackFactory; scannable, coherent, wakeable, trace, streams);

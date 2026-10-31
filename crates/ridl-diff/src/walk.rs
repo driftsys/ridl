@@ -2250,7 +2250,7 @@ fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String>
 /// as it is — a query's reply (a value as declared; the two arms of a fallible
 /// reply), and a fixed payload. A signal or event payload is a named type, a
 /// root on its own, and holds nothing at a fixed offset of another head, so it
-/// is not listed. A request with a stream parameter induces no struct.
+/// is not listed. A stream parameter is not part of the request.
 /// [`root_holds_inline`] reads each one.
 fn interaction_payloads(decl: &v2::Decl) -> Vec<v2::FieldType> {
     use v2::decl::Kind;
@@ -2262,16 +2262,24 @@ fn interaction_payloads(decl: &v2::Decl) -> Vec<v2::FieldType> {
         }
     }
     fn request(params: &[v2::Param]) -> Option<v2::FieldType> {
-        if let [param] = params
-            && let Some(ty) = param.r#type.as_ref()
-            && matches!(ty.kind, Some(v2::field_type::Kind::Named(_)))
-        {
-            return Some(ty.clone());
+        use projection::size::PayloadShape;
+
+        // The lowering's own rule: a stream parameter is not part of the
+        // request.
+        let induced = ridl_ir::codegen::params_as_tuple(params);
+        match ridl_ir::codegen::request_shape(params, induced.as_ref()) {
+            PayloadShape::Named(reference) => Some(named(reference)),
+            PayloadShape::Tuple(tuple) => Some(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Tuple(tuple.clone())),
+            }),
+            PayloadShape::Params([param]) => param
+                .r#type
+                .as_ref()
+                .filter(|ty| matches!(ty.kind, Some(v2::field_type::Kind::Named(_))))
+                .cloned(),
+            _ => None,
         }
-        ridl_ir::codegen::params_as_tuple(params).map(|tuple| v2::FieldType {
-            optional: false,
-            kind: Some(v2::field_type::Kind::Tuple(tuple)),
-        })
     }
 
     let mut payloads = Vec::new();

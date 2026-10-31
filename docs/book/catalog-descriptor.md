@@ -111,6 +111,7 @@ The member `average`, a query, as it appears in `members`:
       "type_name": "Average"
     }
   ],
+  "streams": [],
   "timing": { "max_us": "200000", "min_us": null, "mode": "Range" }
 }
 ```
@@ -142,19 +143,28 @@ does not read, makes `ridl describe` exit with code 2. The
   the rule for the names and the numbers.
 - **Each member**: its `name`, its `ordinal` (its position in the interface
   body), its `kind`, its `payloads`, its `timing` when the member declares
-  one, and its `limit`, the payload limit in bytes that a `[limits]` entry of
-  the unit's `ridl.toml` gives it, absent when no entry applies.
+  one, its `limit`, the payload limit in bytes that a `[limits]` entry of
+  the unit's `ridl.toml` gives it, absent when no entry applies, and its
+  `streams`, one entry per stream of the call. An entry has its `no` (0 for a
+  query's reply stream, `k` for the `k`-th stream parameter, counting only the
+  stream parameters), its `form` (`Elements`, `Bytes` or `Text`), its
+  `element`, the element type's name qualified by its package under
+  `Elements` and `null` otherwise, and its `max_sizes`, the element's rows
+  under `Elements` and none otherwise. A member with no stream, and every
+  member of a file written before the field existed, prints `[]`.
 - **Each payload**: its `role` (`value` for a signal or a `fixed`, `occurrence`
   for an event, `request` for a command or a query, `response` for a query's
-  reply), its `type_name`, and one `max_sizes` row per encoding. A row is
+  reply), its `type_name`, and one `max_sizes` row per encoding. A request
+  spells only the parameters that are not streams. A row is
   `Bounded`, with `bytes` the maximum encoded size of the payload, envelope and
   framing excluded; or `Unbounded`, with `bytes` 0 and a `cause` that says why
   the compiler cannot bound it in that encoding. For example, a FlatBuffers row
   is `Unbounded` when the payload's largest encoding would exceed 4 GiB, the
   most that FlatBuffers' 32-bit offsets can address. An encoding with no row
-  has no size computed by this toolchain. A stream payload, a request of zero
-  or of several parameters, and an inline `T | E` reply have no row in any
-  encoding. A `podbuf` row is present for a payload with a podbuf root, sized
+  has no size computed by this toolchain. The response payload of a stream
+  reply (`<T>`), a request of zero or of several non-stream parameters, and an
+  inline `T | E` reply have no row in any encoding; a stream's element carries
+  its rows in the member's `streams` entry. A `podbuf` row is present for a payload with a podbuf root, sized
   by `ridl_ir::projection::podbuf::max_size`, and a proto3 row is present only
   for a payload that is a struct, a union, a named scalar, an enum or an enum
   set, the kinds the proto3 schema gives a message of their own. A named

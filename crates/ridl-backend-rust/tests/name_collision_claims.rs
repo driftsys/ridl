@@ -205,10 +205,12 @@ fn a_skipped_face_claims_nothing() {
 
 type Level : integer [0..100]
 
+type Fault : integer [0..10]
+
 interface Cabin {
   signal XY : Level @10ms
   signal x_y : Level @10ms
-  command set(samples: <Level>) @[..50ms]
+  query read(first: Level): Level | Fault @[..50ms]
 }
 ";
     let output = ridlc::compile("x08b.ridl", source);

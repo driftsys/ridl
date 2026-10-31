@@ -1526,3 +1526,180 @@ interface Tank {
         "MAX_BUFFER_SIZE counts no fixed: {claim}"
     );
 }
+
+/// A streamed reply has no row of the size table: the query's reservation is
+/// its request alone, and a stream's element is never a term. The codegen
+/// model agrees: every member of the interface has a sized reservation, and
+/// so has the interface's table budget, which a plugin that emits a member
+/// table reads instead of computing it.
+#[test]
+fn a_streamed_reply_reserves_its_request_alone_in_the_table_and_the_model() {
+    let package = ir::compile_fixture("streams.ridl");
+    let face = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source;
+    let d = dense(&face);
+    let rows = sizes_item(
+        sizes_impl(&d, "Cabin"),
+        "RESERVATIONS",
+        "constMAX_BUFFER_SIZE",
+    );
+    assert!(
+        !rows.contains(&max_size_path("FilterState")),
+        "a stream's element is not a term of any row: {rows}"
+    );
+    assert_eq!(
+        rows.matches(&max_size_path("ClimateReport")).count(),
+        1,
+        "only lookup's named reply is a term, not rebalance's streamed one: {rows}"
+    );
+
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let cabin = model
+        .interfaces
+        .iter()
+        .find(|interface| {
+            matches!(
+                interface.identity.as_ref(),
+                Some(v1::interface::Identity::Declared(name)) if name.declared == "Cabin"
+            )
+        })
+        .expect("the Cabin interface");
+    let sized = |reservation: &Option<v1::Reservation>| {
+        matches!(
+            reservation
+                .as_ref()
+                .and_then(|r| r.flatbuffers.as_ref())
+                .and_then(|s| s.state.as_ref()),
+            Some(v1::reservation_state::State::Bytes(_))
+        )
+    };
+    for slot in &cabin.slots {
+        if let Some(v1::interaction_slot::Occupant::Interaction(member)) = &slot.occupant {
+            assert!(sized(&member.reservation), "{:?}", member.name);
+        }
+    }
+    assert!(
+        sized(&cabin.table_budget),
+        "the model's table budget is sized, as the table is"
+    );
+}
+
+/// A member's row lists its streams: the reply stream is number 0 and each
+/// stream parameter follows in declaration order. A member with no stream
+/// has an empty list, and a stream call has an induced argument struct.
+#[test]
+fn a_member_row_lists_its_streams() {
+    let package = ir::compile_fixture("streams.ridl");
+    let face = generate_face_with(&package, &[WireEncoding::FlatBuffers])
+        .expect("generate_face_with")
+        .rust_source;
+    let source = dense(&face);
+
+    // The `streams:` list of the row named `name`, up to its closing bracket.
+    // No element name holds a bracket.
+    let row = |name: &str| -> String {
+        let at = source
+            .find(&format!("name:\"{name}\","))
+            .unwrap_or_else(|| panic!("a row named {name}:\n{face}"));
+        let rest = &source[at..];
+        let from = rest.find("streams:").expect("the row has streams");
+        let end = from + rest[from..].find(']').expect("the list closes");
+        rest[from..=end].to_string()
+    };
+    let info = |no: u8, form: &str, element: &str| {
+        format!(
+            "::ridl_rt::contract::StreamInfo{{no:::ridl_rt::contract::StreamNo({no}),\
+             form:::ridl_rt::contract::StreamForm::{form},element:\"{element}\",}}"
+        )
+    };
+
+    assert_eq!(
+        row("rebalance"),
+        format!(
+            "streams:&[{},{},]",
+            info(0, "Elements", "veh.hvac.ClimateReport"),
+            info(1, "Elements", "veh.hvac.FilterState"),
+        )
+    );
+    assert_eq!(
+        row("replayTrace"),
+        format!(
+            "streams:&[{},]",
+            info(1, "Elements", "veh.hvac.FilterState")
+        )
+    );
+    assert_eq!(
+        row("streamFilterHistory"),
+        format!(
+            "streams:&[{},]",
+            info(0, "Elements", "veh.hvac.FilterState")
+        )
+    );
+    assert_eq!(
+        row("putBlob"),
+        format!("streams:&[{},]", info(1, "Bytes", ""))
+    );
+    assert_eq!(
+        row("readNotes"),
+        format!("streams:&[{},]", info(0, "Text", ""))
+    );
+    assert_eq!(row("cabinTemp"), "streams:&[]");
+    assert_eq!(
+        row("lookup"),
+        format!(
+            "streams:&[{},]",
+            info(1, "Elements", "veh.hvac.FilterState")
+        )
+    );
+
+    // A streamed reply keeps the reference text of the IR, as a payload does,
+    // not the qualified name of the stream entry.
+    assert!(source.contains("type_name:\"<ClimateReport>\""), "{face}");
+    assert!(source.contains("type_name:\"<FilterState>\""), "{face}");
+    assert!(source.contains("type_name:\"<string>\""), "{face}");
+    assert!(!source.contains("type_name:\"<veh.hvac"), "{face}");
+
+    // A member with a stream has its row and its `Interaction` impl, and no
+    // `Command` or `Query` impl, whichever position the stream is in.
+    for streamed in [
+        "CabinReplayTrace",
+        "CabinPutBlob",
+        "CabinRebalance",
+        "CabinStreamFilterHistory",
+        "CabinLookup",
+        "CabinReadNotes",
+    ] {
+        assert!(
+            source.contains(&format!(
+                "impl::ridl_rt::contract::Interactionfor{streamed}{{"
+            )),
+            "{streamed} has an Interaction impl:\n{face}"
+        );
+        for kind in ["Command", "Query"] {
+            assert!(
+                !source.contains(&format!("impl::ridl_rt::contract::{kind}for{streamed}{{")),
+                "{streamed} has no {kind} impl:\n{face}"
+            );
+        }
+    }
+
+    assert!(
+        source.contains("structCabinReplayTraceParams{}"),
+        "the induced struct of replayTrace:\n{face}"
+    );
+    assert!(source.contains("structCabinRebalanceParams{}"), "{face}");
+
+    // The emitted source compiles, and the descriptor of a stream call reads
+    // its streams through `Interaction::MEMBER`.
+    let program = format!(
+        "#![allow(dead_code)]\n{face}\n\
+         fn main() {{\n\
+             use ::ridl_rt::contract::Interaction;\n\
+             assert_eq!(CabinRebalance::MEMBER.streams.len(), 2);\n\
+             assert_eq!(CabinStreamFilterHistory::MEMBER.streams.len(), 1);\n\
+             assert!(CabinCabinTemp::MEMBER.streams.is_empty());\n\
+         }}\n"
+    );
+    rustc::run_program("stream_rows", &program);
+}

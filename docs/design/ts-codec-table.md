@@ -77,7 +77,10 @@ Its exports:
   ([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)). A tombstone has no
   entry. A query with a fallible `T | E` reply has no `reply`. An interaction
   whose payload has no finite bound has no entry, and a comment stands at its
-  place.
+  place. An interaction that carries a stream, as a parameter or as its reply,
+  has no entry either, and the comment
+  `// <member> has no entry: it carries a
+  stream` stands at its place.
 
 An `internal` payload type is listed in `PAYLOAD_TYPES`, so that the list equals
 the package's part of `WASM_PAYLOAD_TYPES`, but gets no `encode` or `decode`,

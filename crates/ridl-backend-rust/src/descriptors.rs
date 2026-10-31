@@ -17,6 +17,10 @@
 //! - one unit struct per interaction with an `Interaction` impl (the three
 //!   required items, `type Iface`, `const MEMBER` and `const ROW`) and the
 //!   kind's trait — `Signal`, `Event`, `Command`, `Query` or `Fixed`.
+//!   A member with a stream, as a parameter or as the reply, has no `Command`
+//!   or `Query` impl until the face carries streams, so a generic caller
+//!   cannot send it without its stream; its `MEMBERS` row is written all the
+//!   same, and every row lists the member's streams.
 //!
 //! It is reached from [`crate::generate_pipeline`], which is
 //! what `ridl build --emit rust` calls, as well as from
@@ -374,7 +378,10 @@ fn member_row(
             timing,
             vec![
                 payload_named(query_param_type(ctx, query, member)?),
-                payload_named(query_reply_type(ctx, query, member)?),
+                match stream_reply(interaction) {
+                    Some(spelled) => payload_named(&spelled),
+                    None => payload_named(query_reply_type(ctx, query, member)?),
+                },
             ],
         ),
         Some(v1::interaction::Shape::Fixed(fixed)) => (
@@ -385,6 +392,8 @@ fn member_row(
         None => return Err(not_an_interaction(member)),
     };
 
+    let streams = stream_infos(interaction);
+
     Ok(quote! {
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(#ordinal),
@@ -392,6 +401,7 @@ fn member_row(
             name: #name,
             timing: #timing,
             payloads: &[ #(#payloads),* ],
+            streams: #streams,
         }
     })
 }
@@ -452,6 +462,28 @@ fn interaction_item(
                     type Payload = #payload;
                 }
             }
+        }
+        // A member with a stream, as a parameter or as the reply, gets no
+        // `Command` or `Query` impl until the face carries streams: a generic
+        // caller of such an impl could send the call without its stream. Its
+        // row of `MEMBERS` and its size-table row are written all the same;
+        // a streamed reply has no reply type and no row of the table.
+        Some(v1::interaction::Shape::Command(command)) if has_stream(interaction) => {
+            let arg_name = single_param_type(ctx, command, member)?;
+            row.push(arg_name.to_string());
+            sizes.calls.push(arg_name.to_string());
+            TokenStream::new()
+        }
+        Some(v1::interaction::Shape::Query(query)) if has_stream(interaction) => {
+            let arg_name = query_param_type(ctx, query, member)?;
+            row.push(arg_name.to_string());
+            sizes.calls.push(arg_name.to_string());
+            if stream_reply(interaction).is_none() {
+                let reply_name = query_reply_type(ctx, query, member)?;
+                row.push(reply_name.to_string());
+                sizes.calls.push(reply_name.to_string());
+            }
+            TokenStream::new()
         }
         Some(v1::interaction::Shape::Command(command)) => {
             let arg_name = single_param_type(ctx, command, member)?;
@@ -574,6 +606,65 @@ fn payload_named(type_name: &str) -> TokenStream {
     }
 }
 
+/// The `streams` slice of one member's row: one `StreamInfo` per stream of
+/// the interaction, in the model's order (the reply stream first, then each
+/// stream parameter). The element is the package-qualified name under
+/// `Elements` and `""` under `Bytes` and `Text`.
+fn stream_infos(interaction: &v1::Interaction) -> TokenStream {
+    let entries = interaction.streams.iter().map(|stream| {
+        let no = Literal::u32_unsuffixed(stream.no);
+        let (form, element) = match v1::StreamForm::try_from(stream.form) {
+            Ok(v1::StreamForm::Bytes) => (quote! { Bytes }, String::new()),
+            Ok(v1::StreamForm::Text) => (quote! { Text }, String::new()),
+            _ => (quote! { Elements }, stream_element(stream)),
+        };
+        quote! {
+            ::ridl_rt::contract::StreamInfo {
+                no: ::ridl_rt::contract::StreamNo(#no),
+                form: ::ridl_rt::contract::StreamForm::#form,
+                element: #element,
+            }
+        }
+    });
+    quote! { &[ #(#entries),* ] }
+}
+
+/// The package-qualified canonical name of a stream's element type, the form
+/// the catalog descriptor writes. A reference no package declares keeps its
+/// canonical string.
+fn stream_element(stream: &v1::StreamShape) -> String {
+    let Some(element) = stream.element.as_ref() else {
+        return String::new();
+    };
+    if element.resolved && !element.package.is_empty() {
+        let name = element
+            .reference
+            .rsplit_once('.')
+            .map_or(element.reference.as_str(), |(_, name)| name);
+        format!("{}.{name}", element.package)
+    } else {
+        element.reference.clone()
+    }
+}
+
+/// The spelling of a query's reply when it is a stream (`<T>`, `<bytes>` or
+/// `<string>`), or `None` when the reply is not a stream. A streamed reply
+/// has no payload type, so it has no `Reply` and no row of the size table.
+/// The element is spelled as the IR reference text, as a payload is.
+fn stream_reply(interaction: &v1::Interaction) -> Option<String> {
+    let stream = interaction.streams.iter().find(|stream| stream.no == 0)?;
+    let inner = match v1::StreamForm::try_from(stream.form) {
+        Ok(v1::StreamForm::Bytes) => "bytes".to_string(),
+        Ok(v1::StreamForm::Text) => "string".to_string(),
+        _ => stream
+            .element
+            .as_ref()
+            .map(|element| element.reference.clone())
+            .unwrap_or_default(),
+    };
+    Some(format!("<{inner}>"))
+}
+
 /// One row of the size table: the sum, as a `u64`, of the `MAX_SIZE` paths
 /// of a member's payloads — one for most kinds, the request and then the
 /// reply for a query — or `0u64` for a fixed, which has none.
@@ -686,8 +777,8 @@ fn payload_reference(payload: Option<&v1::Payload>) -> &str {
 
 /// The call's argument type: the single declared named parameter, or the
 /// induced argument struct the lowering named for every other parameter list,
-/// zero parameters included. Refuses only a shape no struct field can hold —
-/// a parameter with no declared type, and a stream.
+/// zero parameters included. A stream parameter adds no field to it. Refuses a
+/// parameter with no declared type.
 pub(crate) fn single_param_type<'a>(
     ctx: &Ctx<'a>,
     command: &'a v1::CommandShape,
@@ -701,7 +792,7 @@ pub(crate) fn single_param_type<'a>(
         command.request_tuple.as_ref(),
         command.request_sizes.as_ref(),
     )?
-    .ok_or_else(|| no_single_param(&command.params, member))
+    .ok_or_else(|| no_single_param(member))
 }
 
 /// [`single_param_type`] for a query, which carries the same request shape.
@@ -718,7 +809,7 @@ pub(crate) fn query_param_type<'a>(
         query.request_tuple.as_ref(),
         query.request_sizes.as_ref(),
     )?
-    .ok_or_else(|| no_single_param(&query.params, member))
+    .ok_or_else(|| no_single_param(member))
 }
 
 /// The Rust name of the induced tuple `reference` names, when it names one.
@@ -826,16 +917,22 @@ pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
         .collect())
 }
 
-/// Why a call has no argument type. Every parameter list induces one, so the
-/// two causes left are a parameter the struct cannot hold.
-fn no_single_param(params: &[v1::Param], member: &str) -> GenerateError {
-    let untyped = params.iter().any(|param| param.r#type.is_none());
-    let message = if untyped {
-        format!("interaction `{member}` declares a parameter with no type")
-    } else {
-        format!("interaction `{member}` declares a stream parameter, which has no payload type")
-    };
-    GenerateError { message }
+/// Whether the interaction has a stream, as a parameter or as its reply. The
+/// face leaves such a member out; its descriptor row is written all the same.
+pub(crate) fn has_stream(interaction: &v1::Interaction) -> bool {
+    !interaction.streams.is_empty()
+}
+
+/// Whether a query replies with a stream: its stream number 0.
+pub(crate) fn has_stream_reply(interaction: &v1::Interaction) -> bool {
+    stream_reply(interaction).is_some()
+}
+
+/// Why a call has no argument type: a parameter with no declared type.
+fn no_single_param(member: &str) -> GenerateError {
+    GenerateError {
+        message: format!("interaction `{member}` declares a parameter with no type"),
+    }
 }
 
 /// A query's reply type: the declared named type, or the induced reply struct

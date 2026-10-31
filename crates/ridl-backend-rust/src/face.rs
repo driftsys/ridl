@@ -105,7 +105,7 @@
 //! its future, and `blocking` the `blocking` module.
 
 use crate::descriptors::{
-    declared_name, descriptor_ident, interactions, query_param_type, query_reply_type,
+    declared_name, descriptor_ident, has_stream, interactions, query_param_type, query_reply_type,
     single_param_type,
 };
 use crate::docs::{self, DocLines, DocParts, Links};
@@ -253,6 +253,11 @@ pub(crate) fn one_interface(
     let mut queries: Vec<Call> = Vec::new();
 
     for (ordinal, interaction) in interactions(interface) {
+        // The face carries no method for a call with a stream; its descriptor
+        // is emitted all the same.
+        if has_stream(interaction) {
+            continue;
+        }
         let name = declared(interaction.name.as_ref());
         let member = Member {
             ordinal: {
@@ -803,21 +808,23 @@ pub(crate) fn is_internal(interface: &v1::Interface) -> bool {
 /// The interaction kinds the face module carries: a signal, an event, a
 /// command and a query. An interface that declares at least one live member
 /// of those kinds gets a face module when its face is emitted, and one that
-/// declares none (only `fixed` members, or no member) gets none, which is
+/// declares none (only `fixed` members, members with a stream, or no member)
+/// gets none, which is
 /// when [`one_interface`] returns `None`. An `internal` interface gets none
 /// either (see [`is_internal`]).
 pub(crate) fn emits_module(interface: &v1::Interface) -> bool {
     !is_internal(interface)
         && interactions(interface).iter().any(|(_, interaction)| {
-            matches!(
-                interaction.shape.as_ref(),
-                Some(
-                    v1::interaction::Shape::Signal(_)
-                        | v1::interaction::Shape::Event(_)
-                        | v1::interaction::Shape::Command(_)
-                        | v1::interaction::Shape::Query(_)
+            !has_stream(interaction)
+                && matches!(
+                    interaction.shape.as_ref(),
+                    Some(
+                        v1::interaction::Shape::Signal(_)
+                            | v1::interaction::Shape::Event(_)
+                            | v1::interaction::Shape::Command(_)
+                            | v1::interaction::Shape::Query(_)
+                    )
                 )
-            )
         })
 }
 

@@ -53,6 +53,7 @@ fn sample() -> Catalog {
                     max_us: None,
                 })),
                 limit: None,
+                streams: None,
             }],
             reserved_ordinals: vec![5],
         }],

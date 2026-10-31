@@ -4101,6 +4101,52 @@ fn a_parameter_doc_reaches_the_induced_field() {
     assert_eq!(induced.fields[1].doc, "");
 }
 
+/// A stream parameter has no field in the induced argument struct, so each
+/// field takes the doc of the non-stream parameter it stands for, not the doc
+/// of the parameter at the same position in the declared list.
+#[test]
+fn a_stream_parameter_does_not_shift_the_docs_of_the_induced_fields() {
+    let mut package = call_package();
+    let documented = |name: &str, ty: v2::FieldType, doc: &str| v2::Param {
+        name: name.to_string(),
+        r#type: Some(ty),
+        doc: doc.to_string(),
+        ..Default::default()
+    };
+    let bytes = v2::FieldType {
+        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+            element: Some(v2::stream_type::Element::Primitive(
+                v2::PrimitiveType::Bytes as i32,
+            )),
+        })),
+        ..Default::default()
+    };
+    calls_interface(&mut package).interactions.push(call_decl(
+        "upload",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                documented("data", bytes, "The data."),
+                documented("info", named("Pair"), "The info."),
+                documented("size", named("Pair"), "The size."),
+            ],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let induced = model
+        .tuples
+        .iter()
+        .find(|tuple| {
+            tuple
+                .name
+                .as_ref()
+                .is_some_and(|name| name.rust == "CallsUploadParams")
+        })
+        .expect("the induced argument struct");
+    let docs: Vec<&str> = induced.fields.iter().map(|f| f.doc.as_str()).collect();
+    assert_eq!(docs, vec!["The info.", "The size."]);
+}
+
 /// The doc reaches the field of the argument struct only. A tuple written
 /// inside a parameter is a type of its own, and its fields carry no doc, as
 /// the IR has none for them.
@@ -4657,4 +4703,348 @@ fn a_member_s_limit_is_copied_from_the_ir() {
     let tally = interface_named(&model, "Tally");
     assert_eq!(live_member(tally, "level").limit, Some(64));
     assert_eq!(live_member(tally, "ask").limit, None);
+}
+
+/// `call_package` with calls that carry streams: `put` takes a `Pair` and a
+/// stream of bytes, `mirror` takes a stream of `Pair` and a stream of
+/// `Tagged`, `describe` takes a `SpeedKph` and replies with a stream of text,
+/// and the four that follow: `replayTrace` takes a
+/// stream of `Tagged` and nothing else, `streamFilterHistory` takes a
+/// `SpeedKph` and replies with a stream of `Pair`, `rebalance` takes a stream
+/// of `Tagged` and replies with a stream of `Pair`, and `fetch` takes a
+/// `SpeedKph` and replies with a stream of bytes.
+fn stream_package() -> v2::Package {
+    let stream_of = |element: v2::stream_type::Element| v2::FieldType {
+        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+            element: Some(element),
+        })),
+        ..Default::default()
+    };
+    let of_named = |name: &str| stream_of(v2::stream_type::Element::Named(name.to_string()));
+    let bytes = stream_of(v2::stream_type::Element::Primitive(
+        v2::PrimitiveType::Bytes as i32,
+    ));
+    let param = |name: &str, ty: v2::FieldType| v2::Param {
+        name: name.to_string(),
+        r#type: Some(ty),
+        ..Default::default()
+    };
+    let reply = |ty: v2::FieldType| {
+        Some(v2::ReturnType {
+            kind: Some(v2::return_type::Kind::Value(ty)),
+        })
+    };
+    let text = stream_of(v2::stream_type::Element::Primitive(
+        v2::PrimitiveType::String as i32,
+    ));
+    let mut package = call_package();
+    let calls = calls_interface(&mut package);
+    calls.interactions.push(call_decl(
+        "put",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                param("info", named("Pair")),
+                param(
+                    "data",
+                    stream_of(v2::stream_type::Element::Primitive(
+                        v2::PrimitiveType::Bytes as i32,
+                    )),
+                ),
+            ],
+            ..Default::default()
+        }),
+    ));
+    calls.interactions.push(call_decl(
+        "mirror",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                param("first", of_named("Pair")),
+                param("second", of_named("Tagged")),
+            ],
+            ..Default::default()
+        }),
+    ));
+    calls.interactions.push(call_decl(
+        "describe",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: vec![param("id", named("SpeedKph"))],
+            return_type: reply(text),
+            ..Default::default()
+        }),
+    ));
+    calls.interactions.push(call_decl(
+        "replayTrace",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![param("samples", of_named("Tagged"))],
+            ..Default::default()
+        }),
+    ));
+    calls.interactions.push(call_decl(
+        "streamFilterHistory",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: vec![param("limit", named("SpeedKph"))],
+            return_type: reply(of_named("Pair")),
+            ..Default::default()
+        }),
+    ));
+    calls.interactions.push(call_decl(
+        "rebalance",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: vec![param("samples", of_named("Tagged"))],
+            return_type: reply(of_named("Pair")),
+            ..Default::default()
+        }),
+    ));
+    calls.interactions.push(call_decl(
+        "fetch",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: vec![param("id", named("SpeedKph"))],
+            return_type: reply(bytes),
+            ..Default::default()
+        }),
+    ));
+    package
+}
+
+/// The lowered interaction of the `Calls` interface called `name`.
+fn call_named<'m>(model: &'m v1::Model, name: &str) -> &'m v1::Interaction {
+    let interface = model
+        .interfaces
+        .iter()
+        .find(|interface| declared_name(interface) == "Calls")
+        .expect("the Calls interface");
+    interface
+        .slots
+        .iter()
+        .find_map(|slot| match slot.occupant.as_ref() {
+            Some(v1::interaction_slot::Occupant::Interaction(interaction))
+                if interaction.name.as_ref().map(|n| n.declared.as_str()) == Some(name) =>
+            {
+                Some(interaction)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("an interaction called {name}"))
+}
+
+fn is_absent(state: &Option<v1::SizeState>) -> bool {
+    matches!(
+        state.as_ref().and_then(|s| s.state.as_ref()),
+        Some(v1::size_state::State::Absent(absent))
+            if absent.cause == v1::AbsentCause::EncodingUndefined as i32
+    )
+}
+
+fn is_bounded(state: &Option<v1::SizeState>) -> bool {
+    matches!(
+        state.as_ref().and_then(|s| s.state.as_ref()),
+        Some(v1::size_state::State::Bounded(_))
+    )
+}
+
+/// A call whose only parameter is a stream induces an argument struct with no
+/// field for it, and carries no named request.
+#[test]
+fn a_stream_parameter_induces_a_params_struct_with_no_field_for_it() {
+    let model = lower(&stream_package(), &[]);
+    let Some(v1::interaction::Shape::Command(command)) =
+        call_named(&model, "replayTrace").shape.as_ref()
+    else {
+        panic!("a command");
+    };
+    assert!(command.request.is_none());
+    let reference = command
+        .request_tuple
+        .as_ref()
+        .expect("the induced argument struct");
+    let induced = &model.tuples[reference.index as usize];
+    assert!(induced.fields.is_empty());
+    assert!(is_bounded(
+        &command.request_sizes.as_ref().expect("sizes").flatbuffers
+    ));
+}
+
+/// The text of an unsized request names the parameters the request is made
+/// of, which are the non-stream parameters: a stream parameter is not part of
+/// the request, so the text does not name it.
+#[test]
+fn an_unsized_request_beside_a_stream_parameter_names_only_the_non_stream_parameters() {
+    let param = |name: &str, ty: v2::FieldType| v2::Param {
+        name: name.to_string(),
+        r#type: Some(ty),
+        ..Default::default()
+    };
+    let bytes = v2::FieldType {
+        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+            element: Some(v2::stream_type::Element::Primitive(
+                v2::PrimitiveType::Bytes as i32,
+            )),
+        })),
+        ..Default::default()
+    };
+    let mut package = stream_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "annotate",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                param("info", named("Pair")),
+                param("tag", named("Tagged")),
+                param("data", bytes),
+            ],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let annotate = call_named(&model, "annotate");
+    for proto3 in [true, false] {
+        assert_eq!(
+            reserved(&annotate.reservation, proto3),
+            &unsized_by("annotate.request: (info, tag)")
+        );
+    }
+}
+
+/// Each stream of a member has one entry, in ascending number: 0 the reply
+/// stream, then the stream parameters from 1.
+#[test]
+fn a_member_lists_one_stream_shape_per_stream_in_ascending_number() {
+    let model = lower(&stream_package(), &[]);
+    let rebalance = call_named(&model, "rebalance");
+    let numbers: Vec<u32> = rebalance.streams.iter().map(|s| s.no).collect();
+    assert_eq!(numbers, vec![0, 1]);
+    let reply = &rebalance.streams[0];
+    let parameter = &rebalance.streams[1];
+    assert_eq!(reply.form, v1::StreamForm::Elements as i32);
+    assert_eq!(parameter.form, v1::StreamForm::Elements as i32);
+    let reference = |stream: &v1::StreamShape| {
+        stream
+            .element
+            .as_ref()
+            .expect("an element")
+            .reference
+            .clone()
+    };
+    assert_eq!(reference(reply), "Pair");
+    assert_eq!(reference(parameter), "Tagged");
+    assert!(is_bounded(
+        &reply.sizes.as_ref().expect("sizes").flatbuffers
+    ));
+
+    let history = call_named(&model, "streamFilterHistory");
+    assert_eq!(history.streams.len(), 1);
+    assert_eq!(history.streams[0].no, 0);
+
+    let signal = model.interfaces[0]
+        .slots
+        .iter()
+        .find_map(|slot| match &slot.occupant {
+            Some(v1::interaction_slot::Occupant::Interaction(i)) => Some(i),
+            _ => None,
+        });
+    assert!(signal.expect("a signal").streams.is_empty());
+}
+
+/// A stream of bytes has no element and no size state.
+#[test]
+fn a_byte_stream_shape_has_no_element_and_absent_sizes() {
+    let model = lower(&stream_package(), &[]);
+    let fetch = call_named(&model, "fetch");
+    let [stream] = fetch.streams.as_slice() else {
+        panic!("one stream");
+    };
+    assert_eq!(stream.no, 0);
+    assert_eq!(stream.form, v1::StreamForm::Bytes as i32);
+    assert!(stream.element.is_none());
+    let sizes = stream.sizes.as_ref().expect("sizes");
+    assert!(is_absent(&sizes.proto3));
+    assert!(is_absent(&sizes.flatbuffers));
+    assert!(is_absent(&sizes.podbuf));
+}
+
+/// The reply sizes of a streamed reply stay absent; the request sizes are the
+/// request struct's, as for any other call.
+#[test]
+fn a_streamed_reply_keeps_reply_sizes_absent_and_sizes_the_request_struct() {
+    let model = lower(&stream_package(), &[]);
+    let Some(v1::interaction::Shape::Query(query)) =
+        call_named(&model, "streamFilterHistory").shape.as_ref()
+    else {
+        panic!("a query");
+    };
+    let reply = query.reply_sizes.as_ref().expect("reply sizes");
+    assert!(is_absent(&reply.proto3));
+    assert!(is_absent(&reply.flatbuffers));
+    assert!(is_absent(&reply.podbuf));
+    let request = query.request_sizes.as_ref().expect("request sizes");
+    assert!(is_bounded(&request.flatbuffers));
+    assert!(is_bounded(&request.proto3));
+}
+
+/// A streamed reply has no response payload, so a query that replies with a
+/// stream reserves its request alone, as the Rust backend's size table does,
+/// and does not make its interface's table budget unsized.
+#[test]
+fn a_streamed_reply_reserves_its_request_alone() {
+    let model = lower(&stream_package(), &[]);
+    let history = call_named(&model, "streamFilterHistory");
+    let Some(v1::interaction::Shape::Query(query)) = history.shape.as_ref() else {
+        panic!("a query");
+    };
+    for proto3 in [true, false] {
+        let request = match state(&query.request_sizes, proto3) {
+            v1::size_state::State::Bounded(size) => u64::from(*size),
+            other => panic!("a bounded request, got {other:?}"),
+        };
+        assert_eq!(
+            reserved(&history.reservation, proto3),
+            &bytes(request),
+            "proto3 {proto3}: the request alone"
+        );
+    }
+}
+
+/// A named parameter beside a stream parameter is the whole request: no
+/// induced struct, the named type's own sizes, and the stream is entry 1.
+#[test]
+fn a_named_parameter_beside_a_stream_is_the_request() {
+    let model = lower(&stream_package(), &[]);
+    let put = call_named(&model, "put");
+    let Some(v1::interaction::Shape::Command(command)) = put.shape.as_ref() else {
+        panic!("a command");
+    };
+    let request = command.request.as_ref().expect("a named request");
+    assert_eq!(request.r#type.as_ref().expect("a type").reference, "Pair");
+    assert!(command.request_tuple.is_none());
+    assert_eq!(command.request_sizes, request.sizes);
+    let [stream] = put.streams.as_slice() else {
+        panic!("one stream");
+    };
+    assert_eq!(stream.no, 1);
+    assert_eq!(stream.form, v1::StreamForm::Bytes as i32);
+}
+
+/// Stream parameters are numbered 1, 2, ... in declaration order.
+#[test]
+fn stream_parameters_are_numbered_from_one_in_order() {
+    let model = lower(&stream_package(), &[]);
+    let mirror = call_named(&model, "mirror");
+    let numbers: Vec<u32> = mirror.streams.iter().map(|s| s.no).collect();
+    assert_eq!(numbers, vec![1, 2]);
+    let references: Vec<&str> = mirror
+        .streams
+        .iter()
+        .map(|s| s.element.as_ref().expect("an element").reference.as_str())
+        .collect();
+    assert_eq!(references, vec!["Pair", "Tagged"]);
+}
+
+/// A stream of strings is a text stream.
+#[test]
+fn a_string_stream_is_a_text_stream() {
+    let model = lower(&stream_package(), &[]);
+    let [stream] = call_named(&model, "describe").streams.as_slice() else {
+        panic!("one stream");
+    };
+    assert_eq!(stream.form, v1::StreamForm::Text as i32);
+    assert!(stream.element.is_none());
 }

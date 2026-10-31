@@ -13,6 +13,7 @@ const fn member(kind: Kind, timing: Option<Timing>) -> Member {
         name: "lock",
         timing,
         payloads: &[] as &[PayloadInfo],
+        streams: &[],
     }
 }
 

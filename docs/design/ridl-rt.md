@@ -166,22 +166,28 @@ pub struct Member {
     pub name: &'static str,
     pub timing: Option<Timing>,           // None: no Timing in the IR (a bare call, a fixed)
     pub payloads: &'static [PayloadInfo], // one per payload; two for a query (request, then reply); a fixed has one, and both its size-table row and its model reservation are 0
+    pub streams: &'static [StreamInfo],   // one per stream, in ascending `no`; empty for a member with no stream
 }
 pub enum TimingMode { StrictPeriodic, Range }
 pub struct Timing { pub mode: TimingMode, pub min: Option<Duration>, pub max: Option<Duration> }
 pub struct PayloadInfo { pub type_name: &'static str }
+pub struct StreamNo(pub u8);                 // 0 is the reply stream (`port::REPLY_STREAM`); k from 1 is the k-th stream parameter
+#[non_exhaustive] pub enum StreamForm { Elements, Bytes, Text }
+pub struct StreamInfo { pub no: StreamNo, pub form: StreamForm, pub element: &'static str } // element: the canonical element type name; "" under Bytes and Text
 ```
 
 `min` and `max` are each independently optional, because the IR leaves a
 half-open side unset (`@[..500ms]` gives only a `max`, `@[20ms..]` only a
 `min`); a strict period (`@Xms`) is its own `TimingMode` because both bounds
 then hold the same value. `max` is a signal's staleness bound, an event's time
-to live, and a call's response bound, depending on the member's `kind`. `Member`
-and `PayloadInfo` are not `#[non_exhaustive]`, because generated code in another
-crate builds both as struct literals — which is why a field added to either is a
-breaking change (ADR-0021 decision 10). `Command` and `Query` return
-`Result<(), ()>` from `require`/`ensure`: the value is decided in ADR-0021
-decision 4.
+to live, and a call's response bound, depending on the member's `kind`.
+`Member`, `PayloadInfo` and `StreamInfo` are not `#[non_exhaustive]`, because
+generated code in another crate builds all three as struct literals — which is
+why a field added to any of them is a breaking change (ADR-0021 decision 10).
+`StreamForm` is `#[non_exhaustive]`, because generated code only constructs it
+and never matches it, so a form added later is not a breaking change. `Command`
+and `Query` return `Result<(), ()>` from `require`/`ensure`: the value is
+decided in ADR-0021 decision 4.
 
 **The default ceilings are values of the catalog rule, not a guard of a codec.**
 `SIGNAL_EVENT_CEILING` (3,840 bytes), `CALL_CEILING` (16,128 bytes) and
@@ -208,9 +214,8 @@ package whose `encodings` list names `podbuf`.
 
 Not carried by a descriptor: the toolchain version (not identity), retired
 interfaces and reserved ordinals (a runtime answers
-`Contract::UnknownInteraction` for either), the stream element type and flag
-(streams are out of 0.1), and `default_applied` (no runtime behaviour depends on
-it).
+`Contract::UnknownInteraction` for either), and `default_applied` (no runtime
+behaviour depends on it).
 
 ## Time and the envelope
 
@@ -363,18 +368,19 @@ pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64;
   `podbuf`), not a run-time error. `RESERVATIONS` is one row per member of
   `Interface::MEMBERS`, in order: the sum, as a `u64`, of `MAX_SIZE` over the
   member's payloads — the request then the reply for a query, `0` for a fixed,
-  which is never in flight. The codegen model's `Interaction.reservation` and
-  `Interface.table_budget` count a fixed member as `0` for the same reason, so
-  the model's numbers and this table's agree for every interface.
-  `Interaction::ROW` is the index of the descriptor's `MEMBER` in `MEMBERS`,
-  which is its row in every table of the interface, so `reservation::<X, E>()`
-  reads an interaction's row without a scan, and `table_budget::<I, E>()` sums
-  the rows, saturating; both are `const fn`, so a runtime whose set of
-  interfaces is known statically sums `table_budget::<I, E>()` terms in a
-  `const` and sizes a `static` table from it at compile time, with no allocator.
-  A runtime driven by data instead takes `<I as Sizes<E>>::RESERVATIONS` — a
-  `&'static [u64]` parallel to `I::MEMBERS` — at the one point where the
-  interface type is known, for example
+  which is never in flight, and no reply term for a query whose reply is a
+  stream, whose chunks the call table does not hold. The codegen model's
+  `Interaction.reservation` and `Interface.table_budget` count a fixed member as
+  `0` and a streamed reply as nothing for the same reasons, so the model's
+  numbers and this table's agree for every interface. `Interaction::ROW` is the
+  index of the descriptor's `MEMBER` in `MEMBERS`, which is its row in every
+  table of the interface, so `reservation::<X, E>()` reads an interaction's row
+  without a scan, and `table_budget::<I, E>()` sums the rows, saturating; both
+  are `const fn`, so a runtime whose set of interfaces is known statically sums
+  `table_budget::<I, E>()` terms in a `const` and sizes a `static` table from it
+  at compile time, with no allocator. A runtime driven by data instead takes
+  `<I as Sizes<E>>::RESERVATIONS` — a `&'static [u64]` parallel to `I::MEMBERS`
+  — at the one point where the interface type is known, for example
   `runtime.register(Cabin::MEMBERS, <Cabin as Sizes<FlatBuffers>>::RESERVATIONS)`,
   and reaches a row by the member's position from then on. The two buffer types
   are interface-wide because a face fills them before it knows the payload type:
@@ -714,8 +720,50 @@ pub trait CoherentSignals: SignalReader {
 pub trait Wakeable {
     fn wake_on(&self, what: Interest, waker: &core::task::Waker);
 }
-pub enum Interest { Outcome(Correlation), Slot, Event(InterfaceNo), Claim(InterfaceNo) }
+pub enum Interest {
+    Outcome(Correlation), Slot, Event(InterfaceNo), Claim(InterfaceNo),
+    Stream(Correlation, StreamNo),    // kept with the call, one waker per stream
+    ClaimStream(ClaimId, StreamNo),   // kept with the claim, one waker per stream
+}
+
+/// Extension: the streams of a call (ridl §12). A runtime may omit both.
+pub const REPLY_STREAM: StreamNo = StreamNo(0);   // StreamNo(k), k >= 1: the k-th stream parameter
+pub trait StreamCaller: Caller {
+    fn pull(&mut self, c: Correlation, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError>;
+    fn push(&mut self, c: Correlation, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError>; // chunk.len() or 0
+    fn end(&mut self, c: Correlation, s: StreamNo) -> Result<(), PushError>;
+    fn abort(&mut self, c: Correlation, s: StreamNo, e: CallError) -> Result<(), PushError>;
+}
+pub trait StreamHandler: Handler {
+    fn pull_claim(&mut self, claim: ClaimId, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError>;
+    fn push_claim(&mut self, claim: ClaimId, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError>;
+    fn end_claim(&mut self, claim: ClaimId, s: StreamNo) -> Result<(), PushError>; // REPLY_STREAM: settles Ok(&[])
+    fn abort_claim(&mut self, claim: ClaimId, s: StreamNo, e: CallError) -> Result<(), PushError>;
+}
+#[must_use] pub enum Pull { Chunk(usize), End, Pending, Failed(CallError) }
 ```
+
+`StreamCaller` and `StreamHandler` are extensions, as `Wakeable`,
+`ScannableSignals` and `CoherentSignals` are: no other port names them as a
+bound, so a runtime without streams stays a complete runtime. A stream is keyed
+by its call — the `Correlation` on the calling side, the `ClaimId` on the
+providing side — and a `StreamNo`. The unit is the chunk: a port never splits or
+merges one, so a pull copies one chunk, `ReadError::Short` does not consume it,
+and a push takes the whole chunk or nothing, answering `chunk.len()`, or 0 when
+the stream's window is full and a non-empty chunk was not taken. An empty chunk
+is a chunk and is always taken, whatever the window: its push answers 0 and the
+receiver pulls `Pull::Chunk(0)`, so 0 is backpressure only for a non-empty
+chunk, and the window bounds the non-empty chunks. `end_claim` on `REPLY_STREAM`
+is the claim's settlement, `Ok(&[])`, and `settle(claim, Err(e))` ends the reply
+stream with `e` after the chunks already pushed. A side stops a stream on
+purpose with `abort` or `abort_claim`; a producer interrupts with
+`CallError::Transport(Transport::Interrupted)`, and a caller's `forget` stops
+with it every stream of the call that its producer has not ended, and keeps
+every stream that was ended. The errors have two layers, as `Caller::reply`'s
+do: `ReadError`, and `PushError::Contract` and `PushError::Detached`, are the
+port call itself; `Pull::Failed` and `PushError::Failed` are the other side's
+verdict on the stream. Both traits are implemented for `&mut P`, and
+`ridl-loopback` implements both.
 
 `Watermark` has no sequence number; see
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10's
@@ -914,7 +962,7 @@ compile-time assertion, `fn assert_sync<T: Sync>()` applied to a reader handle.
 records the reasoning and the alternative it rejects, one runtime struct behind
 a mutex. The first runtime to this shape is [`ridl-loopback`](ridl-loopback.md):
 six handles, a `Send + Sync` reader handle, and an aggregate implementing all
-twelve traits by delegation.
+fourteen traits by delegation.
 
 ## The correlation table
 
@@ -935,8 +983,12 @@ impl<const N: usize> Table<N> {
     pub fn outcome(&self, c: Correlation) -> Option<Result<(), CallError>>;
     pub fn forget(&mut self, c: Correlation) -> Forgotten;
     pub fn wake_on(&mut self, c: Correlation, waker: &Waker) -> Option<Waker>;
+    pub fn wake_on_stream(&mut self, c: Correlation, s: StreamNo, waker: &Waker) -> Option<Waker>;
+    pub fn take_stream(&mut self, c: Correlation, s: StreamNo) -> Option<Waker>;
+    pub fn take_streams(&mut self, slot: usize) -> impl Iterator<Item = Waker> + use<N>;
     pub fn slot(c: Correlation) -> usize;
 }
+pub const STREAM_WAKERS: usize = 4;                       // stream wakers per slot
 #[must_use] pub enum Settled   { Recorded(Option<Waker>), Reclaimed, Unknown }
 #[must_use] pub enum Forgotten { Reclaimed, Marked(Option<Waker>), Unknown }
 
@@ -999,20 +1051,54 @@ stored waker under a settled or forgotten call would never be woken. A settled
 slot never holds a waker, because its settlement took it, so the three cases
 never need two wakers at once.
 
+**A slot holds one `Stream` waker for each of up to `STREAM_WAKERS` (4) streams
+of its call**, whatever their numbers — a query's reply stream and three stream
+parameters, or four stream parameters of a command — inline, because the table
+allocates nothing. `wake_on_stream` follows `wake_on`'s rule for one stream —
+the displaced waker of another task, nothing on a refresh, `waker` itself for a
+forgotten call or an unknown correlation — with two differences. A settled call
+still stores the waker, because a command is settled at its acknowledgment and
+its parameter streams go on after it. A registration on a fifth stream of one
+call is handed back unstored, so its waiter is woken at once on every
+registration, which is a busy loop: the task reads again and registers again,
+and does not sleep while all four cells are occupied. A cell stays occupied
+until `take_stream` or `take_streams` takes its waker. The cap of four is a
+ruling of the port's build, kept because `Table` is fixed-size and allocates
+nothing; `ridl check` reports nothing for a member with five streams, so the
+cost falls on that member's fifth waiter, which does not sleep. Every slot
+carries the four cells, about 96 bytes, in a runtime that implements no stream
+extension too, and `insert` clears them: the table has one shape, and a runtime
+without streams pays the cells rather than a second table type. `take_stream`
+takes one stream's waker, for a chunk, an end or a freed window. A settlement, a
+forget and a reclaim stop or change every stream of the call, so after each
+`settle` and each `forget` that did not answer `Unknown` the runtime calls
+`take_streams(Table::slot(c))` under the same lock and wakes what it returns
+after releasing the lock; after `Unknown` it does not, because the slot of a
+stale correlation may hold another live call. A runtime that skips the call
+leaves that call's stream waiters asleep, and the stream tests of
+`ridl-rt-conformance` check that they are woken. The hand-back is an accessor
+keyed by the slot index, not a payload of `Settled` or `Forgotten`, so that
+those two enums keep their shape, and so that it reaches the wakers of a
+reclaimed slot whose correlation already answers as unknown; a reclaim keeps the
+stream wakers for `take_streams`, and the slot's next `insert` drops any left.
+
 **`Waiters` holds one waker per kind of key** — `Slot`, `Event`, `Claim` —
 whatever interface an `Event` or `Claim` key names, so any key of the kind takes
 it (ADR-0021 decision 13). `register` returns the displaced waker of another
 task, nothing on a refresh, and, for `Interest::Outcome`, which a `Table` holds,
-`waker` itself, not stored: a registration there could never be taken. Whether a
-key's change has already happened is the runtime's to know, so a runtime
-registers and then `take`s the waker back when the change is already visible.
-`take_all` is for a runtime with one unkeyed "something changed" source; it
-clears every kind when it is called, whether or not the iterator is consumed,
-and the iterator does not borrow the registry (`+ use<>`, precise capturing,
-stable since Rust 1.82 and so within the crate's 1.88 floor), so a runtime can
-register again while it still holds the iterator. `Waiters` implements `Default`
-beside `new`, as `EventSeqTracker` does, because Clippy's `new_without_default`
-lint fails the gate on a public `new` with no argument and no `Default`.
+`waker` itself, not stored: a registration there could never be taken. The same
+holds for `Interest::Stream`, which a `Table` holds, and
+`Interest::ClaimStream`, which the providing runtime keeps with its claim.
+Whether a key's change has already happened is the runtime's to know, so a
+runtime registers and then `take`s the waker back when the change is already
+visible. `take_all` is for a runtime with one unkeyed "something changed"
+source; it clears every kind when it is called, whether or not the iterator is
+consumed, and the iterator does not borrow the registry (`+ use<>`, precise
+capturing, stable since Rust 1.82 and so within the crate's 1.88 floor), so a
+runtime can register again while it still holds the iterator. `Waiters`
+implements `Default` beside `new`, as `EventSeqTracker` does, because Clippy's
+`new_without_default` lint fails the gate on a public `new` with no argument and
+no `Default`.
 
 **What a `Slot` waiter is woken by is the runtime's**: on a reclaim it wakes
 every `Slot` waiter it holds, one per handle, and the first to send again takes
@@ -1027,7 +1113,7 @@ correlation").
 ```rust
 // error::
 pub enum Contract  { InvalidValue(Violation), PreconditionFailed, ContractBroken, UnknownInteraction }
-#[non_exhaustive] pub enum Transport { Timeout, Undelivered, Down, Corrupt, Busy }
+#[non_exhaustive] pub enum Transport { Timeout, Undelivered, Down, Corrupt, Busy, Interrupted }
 pub enum CallError { Contract(Contract), Transport(Transport) }
 #[non_exhaustive] pub enum ClientError   { Send(SendError), Call(CallError), Read(ReadError) }
 #[non_exhaustive] pub enum ProviderError { Serve(ServeError), Claim(ReadError) }
@@ -1040,6 +1126,7 @@ pub enum CallError { Contract(Contract), Transport(Transport) }
 #[non_exhaustive] pub enum SubscribeError { Contract(Contract), Detached }
 #[non_exhaustive] pub enum ServeError     { Contract(Contract), NotOwner, Detached }
 #[non_exhaustive] pub enum SettleError    { UnknownClaim, TooLarge { cap: usize }, Detached }
+#[non_exhaustive] pub enum PushError      { TooLarge { cap: usize }, Ended, Failed(CallError), Contract(Contract), Detached }
 ```
 
 `Contract` is ridl §10.2's four categories; `Transport` is §10.3's detected
@@ -1049,8 +1136,10 @@ call at admission — no slot, no budget, or a call faster than the member's `mi
 the second `Transport` variant to cross after `Corrupt`
 ([frame specification](../specification/frame-specification.md) §9.6, ADR-0021
 decision 14). `SendError::Busy` is the local case, a refusal before anything is
-sent. The `TooLarge { cap }` of `WriteError`, `RaiseError`, `SendError` and
-`SettleError` is the one refusal of a payload's size on send (ADR-0030 decision
+sent. `Transport::Interrupted` is a stream stopped without its end, on purpose
+or because the call was forgotten; no frame carries it yet. The
+`TooLarge { cap }` of `WriteError`, `RaiseError`, `SendError`, `SettleError` and
+`PushError` is the one refusal of a payload's size on send (ADR-0030 decision
 19): the port compares the payload's length with the member's limit — the limit
 a `[limits]` entry of the manifest gives it (its `[limits.interaction]` entry,
 else the entry of its kind in `[limits.kind]`, else `default` clamped to the
@@ -1059,7 +1148,8 @@ default ceiling of its kind), else the default ceiling of its kind
 `cap`, staging, raising, sending or recording nothing. `Detached` — the runtime
 behind the port is gone — is local to the port, not a stratum. Why `Contract`
 and `CallError` stay exhaustive while `Transport` and the seven port error enums
-stay `#[non_exhaustive]` is ADR-0021 decision 9. Every error type here is `Copy`
+that decision names stay `#[non_exhaustive]` is ADR-0021 decision 9;
+`PushError`, the eighth, follows the same rule. Every error type here is `Copy`
 and owns nothing.
 
 `ClientError` and `ProviderError` compose these into one error per side of a
@@ -1079,19 +1169,21 @@ Generated code returns both since the async client: a call future's output is
 
 ## What 0.1 leaves out
 
-Streams (`stream`-typed fields) and `Inline` payloads; `Constrained` (nothing
-calls it in 0.1); `Family` (the IR carries no family field yet); `ServiceId`
-(dropped, ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's
-wire tag values — the frame specification fixed the values, 1 FlatBuffers, 2
-proto3, 3 `podbuf`; the constant itself is a later 0.x minor); `Access` (the
-trust constant the Rust codegen generates once the rsdl lowering exists); the
-three payload codecs; the runtimes — `ridl-loopback` is its own crate
+The frame framing of a stream and the generated face of a stream parameter or
+reply (driftsys/ridl#1116); `Inline` payloads; `Constrained` (nothing calls it
+in 0.1); `Family` (the IR carries no family field yet); `ServiceId` (dropped,
+ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's wire tag
+values — the frame specification fixed the values, 1 FlatBuffers, 2 proto3, 3
+`podbuf`; the constant itself is a later 0.x minor); `Access` (the trust
+constant the Rust codegen generates once the rsdl lowering exists); the three
+payload codecs; the runtimes — `ridl-loopback` is its own crate
 ([its design record](ridl-loopback.md)) and `ridl-transport-ws` is its own
 crate, built; and the engine. `Family` returns as a `Member` field, which is a
 breaking change (ADR-0021 decision 10).
 [ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 9 fixes the principle
 of the stream port — a pull API over caller-supplied buffers that never waits,
-keyed by the call — and the port is not built (driftsys/ridl#1116).
+keyed by the call — and the port is built to it: `StreamCaller` and
+`StreamHandler`, which `ridl-loopback` implements.
 
 ## Versioning
 

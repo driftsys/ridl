@@ -32,21 +32,23 @@ them has a `&mut self` method, and checks this itself.
 
 ## The port traits
 
-| Trait              | Role                                                          | Used by                                                            |
-| ------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------ |
-| `Attached`         | names the catalog the port serves                             | the face, when it binds; a supertrait of every interaction port    |
-| `Encoded`          | states the encoding of the bytes the port carries             | the face: every port a face is bound to; a conformance fixture need not |
-| `Clock`            | gives the time envelopes are stamped with                     | the runtime; a `Client` with calls, to measure a call's bound      |
-| `SignalReader`     | reads a signal's current value                                | the consumer: `Client`                                             |
-| `SignalWriter`     | stages signal changes and publishes them with `commit`        | the producer: `Publisher`                                          |
-| `EventSource`      | subscribes to events and takes the next occurrence            | the consumer: `Client`                                             |
-| `EventSink`        | raises an occurrence                                          | the producer: `Publisher`                                          |
-| `Caller`           | sends a command or a query and reads its outcome              | the consumer: `Client`                                             |
-| `Handler`          | serves members, takes each call, and settles it               | the provider: `serve`                                              |
-| `FixedReader`      | reads a provisioned `fixed` value                             | the application, directly; the face has no method over it          |
-| `ScannableSignals` | walks the signals that changed since a mark (extension)       | a consumer that scans a store; no generated face calls it          |
-| `CoherentSignals`  | reads several signals from one publication (extension)        | a consumer that needs one coherent set; no generated face calls it |
-| `Wakeable`         | wakes a waiting task when a port may have changed (extension) | a `Client` with events or calls, and `serve`                       |
+| Trait              | Role                                                             | Used by                                                                 |
+| ------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `Attached`         | names the catalog the port serves                                | the face, when it binds; a supertrait of every interaction port         |
+| `Encoded`          | states the encoding of the bytes the port carries                | the face: every port a face is bound to; a conformance fixture need not |
+| `Clock`            | gives the time envelopes are stamped with                        | the runtime; a `Client` with calls, to measure a call's bound           |
+| `SignalReader`     | reads a signal's current value                                   | the consumer: `Client`                                                  |
+| `SignalWriter`     | stages signal changes and publishes them with `commit`           | the producer: `Publisher`                                               |
+| `EventSource`      | subscribes to events and takes the next occurrence               | the consumer: `Client`                                                  |
+| `EventSink`        | raises an occurrence                                             | the producer: `Publisher`                                               |
+| `Caller`           | sends a command or a query and reads its outcome                 | the consumer: `Client`                                                  |
+| `Handler`          | serves members, takes each call, and settles it                  | the provider: `serve`                                                   |
+| `FixedReader`      | reads a provisioned `fixed` value                                | the application, directly; the face has no method over it               |
+| `ScannableSignals` | walks the signals that changed since a mark (extension)          | a consumer that scans a store; no generated face calls it               |
+| `CoherentSignals`  | reads several signals from one publication (extension)           | a consumer that needs one coherent set; no generated face calls it      |
+| `Wakeable`         | wakes a waiting task when a port may have changed (extension)    | a `Client` with events or calls, and `serve`                            |
+| `StreamCaller`     | pushes, pulls, ends and aborts the streams of a call (extension) | a consumer that streams; no generated face calls it yet                 |
+| `StreamHandler`    | the same on the provider's side, keyed by the claim (extension)  | a provider that streams; no generated face calls it yet                 |
 
 **`Attached` and `Clock`.** `Attached` has one method, `catalog`, which returns
 the `CatalogRef` the port serves; every interaction port has it as a
@@ -102,15 +104,17 @@ the reply bytes, or the `CallError` the caller sees. A send fails with
 It fails with `ReadError`. How a value is provisioned into the runtime is the
 runtime's own API, not a port.
 
-**Extensions.** A runtime may omit `ScannableSignals` and `CoherentSignals`,
-because they describe mechanisms that some runtimes have.
+**Extensions.** A runtime may omit `ScannableSignals`, `CoherentSignals`,
+`StreamCaller` and `StreamHandler`, because they describe mechanisms that some
+runtimes have.
 `ScannableSignals` reports a generation counter for each interface and writes
 the signals that changed since a `Watermark`; neither method returns an error.
 `CoherentSignals::read_coherent` answers several ordinals of one interface from
 one publication and fails with `ReadError`. A runtime whose transport delivers
 each field separately cannot present it. `Wakeable::wake_on` stores a waker
-for an `Interest` — a call's outcome, a free call slot, an event, or a claim —
-and wakes it when that interest may have changed. A runtime that serves a
+for an `Interest` — a call's outcome, a free call slot, an event, a claim, or
+a stream of a call or of a claim — and wakes it when that interest may have
+changed. A runtime that serves a
 generated async client implements `Wakeable`, because every face future that
 waits is bounded on it.
 
@@ -181,9 +185,11 @@ ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace);
 
 The `wakeable` flag also requires that the three role handles implement
 `Wakeable`, and that the factory and the handles are `'static`, because one
-test runs on a thread of its own. The working example is
+test runs on a thread of its own. The `streams` flag runs the tests of
+`StreamCaller` and `StreamHandler`, and requires that the runtime implements
+both and `Wakeable`. The working example is
 [`crates/ridl-loopback/tests/conformance.rs`][loopback-conformance], which runs
-every test of the suite, with all four flags, over `ridl-loopback`.
+every test of the suite, with all five flags, over `ridl-loopback`.
 
 The suite does not test every case. The one list of
 what it leaves out is the section [What the suite leaves out][leaves-out] of the

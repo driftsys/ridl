@@ -1195,3 +1195,91 @@ fn a_member_entry_carries_the_recorded_limit() {
         "the entry of `warning`, which has no limit, carries none:\n{source}"
     );
 }
+
+/// The package `veh.hvac` of the Rust backend's `streams.ridl` fixture, without
+/// its three members that reply with a stream: every stream it holds is a
+/// parameter.
+const STREAM_PARAMETERS: &str = "\
+package veh.hvac
+
+/// A temperature, in degrees Celsius.
+type Temperature : integer [-40..85]
+
+/// A fan level.
+type FanLevel : integer [0..10]
+
+/// A filter state.
+struct FilterState {
+  level: FanLevel
+}
+
+/// A climate report.
+struct ClimateReport {
+  temperature: Temperature
+}
+
+/// The cabin climate.
+interface Cabin {
+  /// The cabin temperature.
+  signal cabinTemp : Temperature @1s
+
+  /// A stream parameter and no other.
+  command replayTrace(samples: <FilterState>) @[..50ms]
+
+  /// A stream of bytes beside a named parameter.
+  command putBlob(level: FanLevel, data: <bytes>) @[..50ms]
+
+  /// A stream parameter and a named reply.
+  query lookup(samples: <FilterState>): ClimateReport @[..50ms]
+}
+";
+
+/// A member that carries a stream is left out of the interface table, as the
+/// Rust backend leaves it out of the face: its request holds only the
+/// non-stream parameters, so a plain call would carry an incomplete request.
+/// A member of the same interface without a stream keeps its entry. Every
+/// stream of the package is a parameter, so the members would otherwise have
+/// a representable entry: without the skip, the table lists them.
+#[test]
+fn a_stream_member_has_no_entry_in_the_interface_table() {
+    let output = ridlc::compile("stream-parameters.ridl", STREAM_PARAMETERS);
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity != ridl_core::diag::Severity::Error),
+        "the package must compile with no error, got: {:?}",
+        output.diagnostics,
+    );
+    let model = codegen::lower(&output.package, &[]);
+    let source = module(&model, "veh.hvac");
+    assert!(
+        source.contains("  cabinTemp: { iface: "),
+        "`cabinTemp` has no entry in:\n{source}"
+    );
+    for member in ["replayTrace", "putBlob", "lookup"] {
+        assert!(
+            !source.contains(&format!("  {member}: {{")),
+            "`{member}` has an entry in:\n{source}"
+        );
+        let note = format!("  // {member} has no entry: it carries a stream\n");
+        assert!(
+            source.contains(&note),
+            "the skip of `{member}` has no note in:\n{source}"
+        );
+    }
+}
+
+/// A package whose members reply with a stream, and take one, is accepted:
+/// the codec does not try to represent the payload of a stream member.
+#[test]
+fn a_package_with_stream_replies_is_accepted() {
+    let model = codegen::lower(&rust_fixture("streams.ridl"), &[]);
+    match generate_codec(&model, "veh.hvac") {
+        Ok(Some(_)) => {}
+        Ok(None) => panic!("streams.ridl must have a codec module, got no file"),
+        Err(GenerateError::Unrepresentable(message)) => {
+            panic!("streams.ridl must be accepted, got: {message}")
+        }
+    }
+}

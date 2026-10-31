@@ -4539,6 +4539,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Temperature",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -4554,6 +4555,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Warning",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(3),
@@ -4569,6 +4571,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Level",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(4),
@@ -4587,6 +4590,7 @@ impl ::ridl_rt::contract::Interface for Cabin {
                     type_name: "Average",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -4825,6 +4829,7 @@ impl ::ridl_rt::contract::Interface for Horn {
                     type_name: "Health",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -4914,6 +4919,7 @@ impl ::ridl_rt::contract::Interface for Siren {
                     type_name: "Warning",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -5030,6 +5036,7 @@ impl ::ridl_rt::contract::Interface for Valve {
                     type_name: "Level",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -5048,6 +5055,7 @@ impl ::ridl_rt::contract::Interface for Valve {
                     type_name: "Average",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(3),
@@ -5063,6 +5071,7 @@ impl ::ridl_rt::contract::Interface for Valve {
                     type_name: "ValveSetBothParams",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(4),
@@ -5081,6 +5090,7 @@ impl ::ridl_rt::contract::Interface for Valve {
                     type_name: "Health",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -5308,6 +5318,7 @@ impl ::ridl_rt::contract::Interface for Wiper {
                     type_name: "Level",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -5323,6 +5334,7 @@ impl ::ridl_rt::contract::Interface for Wiper {
                     type_name: "Level",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -5424,6 +5436,7 @@ impl ::ridl_rt::contract::Interface for Zone {
                     type_name: "Level",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -5439,6 +5452,7 @@ impl ::ridl_rt::contract::Interface for Zone {
                     type_name: "Level",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(3),
@@ -5457,6 +5471,7 @@ impl ::ridl_rt::contract::Interface for Zone {
                     type_name: "Average",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -5637,6 +5652,7 @@ impl ::ridl_rt::contract::Interface for ZoneLog {
                     type_name: "Log",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -5652,6 +5668,7 @@ impl ::ridl_rt::contract::Interface for ZoneLog {
                     type_name: "Log",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(3),
@@ -5670,6 +5687,7 @@ impl ::ridl_rt::contract::Interface for ZoneLog {
                     type_name: "Log",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(4),
@@ -5688,6 +5706,7 @@ impl ::ridl_rt::contract::Interface for ZoneLog {
                     type_name: "Tally",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -5905,6 +5924,7 @@ impl ::ridl_rt::contract::Interface for ZonePayload {
                     type_name: "InlinePayload",
                 },
             ],
+            streams: &[],
         },
     ];
 }

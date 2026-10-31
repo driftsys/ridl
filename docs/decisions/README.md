@@ -618,8 +618,11 @@ other entry below is Accepted.
   ends a `<string>` stream as `INVALID_VALUE`; `max` on a streamed reply bounds
   its first chunk or its end, and on a query with a stream parameter is measured
   from the end of the upload; and the interaction's limit bounds each chunk, so
-  an entry can only lower the chunk size. Not built (driftsys/ridl#336,
-  driftsys/ridl#1116).
+  an entry can only lower the chunk size. Amended 2026-10-31: decision 10's
+  example declares a named result union instead of the inline `<A | B>`, which
+  the grammar does not admit. The stream port of `ridl-rt` (decisions 9 and 11)
+  is built; the frame version and the generated face are not
+  (driftsys/ridl#1116).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
