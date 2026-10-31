@@ -40,9 +40,9 @@
 //! `package veh` with `type CommonSpeed` and `package veh.common` with
 //! `struct Speed` both derive `veh_common_speed_head`. Each claim carries the
 //! identity of the entity it names (`Identity`: the declaring package, a key
-//! for the entity, the role of the name), and one name claimed by two headers
-//! for two identities is refused with both claimants and their packages
-//! named. A head that another package declares and this package lays out
+//! for the entity, the role of the name), and a name claimed by two or more
+//! headers for two or more identities is refused once, with every claimant
+//! and its package named. A head that another package declares and this package lays out
 //! inline has the identity the declaring header gives it, so its second
 //! definition is not a clash.
 //!
@@ -385,17 +385,19 @@ const PREAMBLE_NAMES: [&str; 12] = [
 /// of `veh.CommonSpeed` and a head of `veh.common.Speed`, both
 /// `veh_common_speed_head`; the accessor `x_y_z_head` of `x.Y.zHead` and the
 /// head of `x.y.Z`; a constant of one package equal to the include guard of
-/// another header) is one error, which names both claimants and their
-/// packages. A head one package declares and another lays out inline is one
+/// another header) is one error per name, which names every claimant and its
+/// package. A head one package declares and another lays out inline is one
 /// entity, and is not an error. Each package is lowered over `packages`, as
 /// `ridl build` lowers it; a package whose own header is refused is skipped
 /// here, because its own generation reports that refusal.
 ///
-/// The errors are sorted by name. Two headers of two separate builds are not
+/// The errors are in name order. Two headers of two separate builds are not
 /// checked against each other.
 pub fn check_c_names(packages: &[&v2::Package]) -> Result<(), Vec<GenerateError>> {
-    let mut seen: BTreeMap<String, (Claim, String)> = BTreeMap::new();
-    let mut errors = Vec::new();
+    // Per name, the claimants of the headers of the build, in build order,
+    // one per identity: the first header that claims a name for an identity
+    // speaks for every header that claims it for the same identity.
+    let mut claimants: BTreeMap<String, Vec<(Claim, String)>> = BTreeMap::new();
     for package in packages {
         let model = codegen::lower(package, packages);
         let Some(projection) = model.podbuf.as_ref() else {
@@ -408,27 +410,35 @@ pub fn check_c_names(packages: &[&v2::Package]) -> Result<(), Vec<GenerateError>
             continue;
         };
         for (name, claim) in claims.by_name {
-            match seen.get(&name) {
-                Some((first, first_package)) if first.identity != claim.identity => {
-                    errors.push(GenerateError {
-                        message: format!(
-                            "the C name `{name}` is claimed by {} in the header of `{first_package}` \
-                             and by {} in the header of `{}`",
-                            first.what, claim.what, package.name
-                        ),
-                    });
-                }
-                Some(_) => {}
-                None => {
-                    seen.insert(name, (claim, package.name.clone()));
-                }
+            let entry = claimants.entry(name).or_default();
+            if !entry
+                .iter()
+                .any(|(seen, _)| seen.identity == claim.identity)
+            {
+                entry.push((claim, package.name.clone()));
             }
         }
     }
+    let errors: Vec<GenerateError> = claimants
+        .into_iter()
+        .filter(|(_, claimants)| claimants.len() > 1)
+        .map(|(name, claimants)| {
+            let texts: Vec<String> = claimants
+                .iter()
+                .map(|(claim, package)| format!("{} in the header of `{package}`", claim.what))
+                .collect();
+            let (last, first) = texts.split_last().expect("two claimants or more");
+            GenerateError {
+                message: format!(
+                    "the C name `{name}` is claimed by {} and by {last}",
+                    first.join(", by ")
+                ),
+            }
+        })
+        .collect();
     if errors.is_empty() {
         Ok(())
     } else {
-        errors.sort_by(|a, b| a.message.cmp(&b.message));
         Err(errors)
     }
 }
@@ -1100,7 +1110,7 @@ impl<'a> Header<'a> {
         let guard = self.guard(at);
         claims.claim(
             &guard,
-            format!("the guard of `{name}`"),
+            format!("the guard of {}", self.owner_text(at)),
             self.identity(at, "guard"),
         )?;
 

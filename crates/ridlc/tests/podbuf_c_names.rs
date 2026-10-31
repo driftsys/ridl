@@ -108,7 +108,10 @@ fn two_packages_deriving_one_head_name_are_refused_naming_both() {
     assert!(
         guard
             .message
-            .contains("the guard of `veh_common_speed_head`"),
+            .contains("the guard of the head of `CommonSpeed` in the header of `veh`")
+            && guard
+                .message
+                .contains("the guard of the head of `Speed` in the header of `veh.common`"),
         "{}",
         guard.message
     );
@@ -276,4 +279,73 @@ fn an_inline_redefinition_of_a_foreign_tuple_head_is_not_a_clash() {
     assert_eq!(files_with(out.path(), "h"), vec!["a.h", "b.h"]);
     let b = std::fs::read_to_string(out.path().join("b.h")).unwrap();
     assert!(b.contains("typedef struct a_hub_size_head {"), "{b}");
+}
+
+/// Three headers claiming one name for three entities give one error that
+/// lists all three: the accessor `x_w_ya_z_head` of the field `yaZHead` of
+/// `x.W`, the head of the tuple at `x.w.Ya.z` and the head of `x.w.ya.Z`.
+#[test]
+fn three_claimants_of_one_name_are_one_error_naming_all_three() {
+    let (diagnostics, out) = build(
+        &[
+            (
+                "x",
+                "x",
+                "package x\nstruct W { yaZHead : integer [0..10] }\n",
+            ),
+            (
+                "xw",
+                "x.w",
+                "package x.w\nstruct Ya { z : (p: integer [0..10], q: integer [0..10]) }\n",
+            ),
+            (
+                "xwya",
+                "x.w.ya",
+                "package x.w.ya\nstruct Z { r : integer [0..10] }\n",
+            ),
+        ],
+        &[Emit::Podbuf],
+    );
+    let error = error_naming(&diagnostics, "x_w_ya_z_head");
+    assert!(
+        error
+            .message
+            .contains("the accessor of `ya_z_head` of the head of `W` in the header of `x`")
+            && error
+                .message
+                .contains("the head of the tuple at `Ya.z` in the header of `x.w`")
+            && error
+                .message
+                .contains("the head of `Z` in the header of `x.w.ya`"),
+        "{}",
+        error.message
+    );
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
+}
+
+/// `ridl.std` is in the scope of the check whenever the build writes its
+/// header: `package ridl` with `type StdTimestamp` derives
+/// `ridl_std_timestamp_head`, the head of `ridl.std.Timestamp`.
+#[test]
+fn a_head_name_equal_to_a_ridl_std_head_is_refused() {
+    let (diagnostics, out) = build(
+        &[(
+            "ridl",
+            "ridl",
+            "package ridl\ntype StdTimestamp : integer [0..10]\nstruct S { t : Timestamp }\n",
+        )],
+        &[Emit::Podbuf],
+    );
+    let error = error_naming(&diagnostics, "ridl_std_timestamp_head");
+    assert!(
+        error
+            .message
+            .contains("the head of `StdTimestamp` in the header of `ridl`")
+            && error
+                .message
+                .contains("the head of `Timestamp` in the header of `ridl.std`"),
+        "{}",
+        error.message
+    );
+    assert_eq!(files_with(out.path(), "h"), Vec::<String>::new());
 }

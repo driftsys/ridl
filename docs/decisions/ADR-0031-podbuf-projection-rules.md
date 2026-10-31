@@ -434,12 +434,12 @@ a field is appended.
    against each other once, before any header is written. Each claim carries the
    identity of the entity it names, (declaring package, entity, role), so a head
    one package declares and another lays out inline is one identity under two
-   definitions, and is not refused. One name claimed by two headers for two
-   identities is one detached error naming both claimants and their packages, no
-   header is written for the build, every other emit proceeds, and the build
-   exits 1. Two headers of two separate builds are not checked against each
-   other; [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) lists the
-   gap.
+   definitions, and is not refused. A name claimed by two or more headers for
+   two or more identities is one detached error naming every claimant and its
+   package, no header is written for the build, every other emit proceeds, and
+   the build exits 1. Two headers of two separate builds are not checked against
+   each other; [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) lists
+   the gap.
 
 8. **Verify.** `verify(buf) -> Result` is generated per type, in Rust only,
    because the gate is Rust (author's call). It checks, over the data present:

@@ -1519,9 +1519,11 @@ fn run_build_inner<E: From<std::io::Error>>(
         // The podbuf headers of one build are written for a C file that
         // includes any of them together, so their C names are checked
         // against each other once per build, over every package a header is
-        // written for. A clash is one detached error per name, and no header
-        // is written for the build; the other emits proceed
-        // (`write_emits`'s doc comment).
+        // written for. A clash is one detached error per name, naming every
+        // claimant, and no header is written for the build; the other emits
+        // proceed (`write_emits`'s doc comment). With the podbuf emit
+        // dropped, a package's own podbuf refusal is not reported in this
+        // run; it is reported once the clash is repaired.
         let podbuf_names_clash = emits.contains(&Emit::Podbuf)
             && match ridl_backend_podbuf::check_c_names(&others) {
                 Ok(()) => false,
@@ -3122,8 +3124,10 @@ fn write_catalogs(
 /// before this function runs for any package: a C file includes any of them
 /// together, so a C name two packages derive for two different entities
 /// (`ridl_backend_podbuf::check_c_names`, over `others`) is a detached error
-/// per name, [`Emit::Podbuf`] is dropped from the build's emits so that no
-/// header is written, and every other emit proceeds; the build exits 1.
+/// per name, naming every claimant; [`Emit::Podbuf`] is dropped from the
+/// build's emits so that no header is written, and every other emit proceeds;
+/// the build exits 1. In that run the podbuf backend is not called, so a
+/// package's own podbuf refusal is reported only once the clash is repaired.
 ///
 /// [`Emit::Catalog`] calls no backend and writes nothing here: the catalogs
 /// are per unit, not per package, and [`write_catalogs`] writes them once

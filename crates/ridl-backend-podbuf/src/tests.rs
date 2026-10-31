@@ -450,7 +450,7 @@ fn a_constant_equal_to_a_head_guard_is_refused() {
     assert!(
         err.message.contains("`P_G_GEAR_HEAD_DEFINED`")
             && err.message.contains("the enum value `HEAD_DEFINED`")
-            && err.message.contains("the guard of `p_g_gear_head`"),
+            && err.message.contains("the guard of the head of `Gear`"),
         "{}",
         err.message
     );
@@ -461,7 +461,7 @@ fn a_constant_equal_to_a_head_guard_is_refused() {
     assert!(
         err.message.contains("`P_G_GEAR_BOX_HEAD_DEFINED`")
             && err.message.contains("the enum value `BOX_HEAD_DEFINED`")
-            && err.message.contains("the guard of `p_g_gear_box_head`"),
+            && err.message.contains("the guard of the head of `GearBox`"),
         "{}",
         err.message
     );

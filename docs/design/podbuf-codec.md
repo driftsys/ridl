@@ -263,11 +263,13 @@ name in its package, a tuple by its wire name in the package that declares it
 (`NestedTuple.package` and `NestedTuple.wire` for a tuple of another package), a
 union arm by its union and ordinal, a map entry by its qualified path, so a head
 one package declares and another lays out inline is one identity under two
-definitions, and is not refused. One name claimed by two headers for two
-identities is one detached error, which names both claimants and their packages;
-on any clash no `.h` is written for the build, every other emit proceeds, and
-the build exits 1. A package whose own header is refused is skipped by the
-check, because its own generation reports that refusal.
+definitions, and is not refused. A name claimed by two or more headers for two
+or more identities is one detached error, which names every claimant and its
+package; on any clash no `.h` is written for the build, every other emit
+proceeds, and the build exits 1. A package whose own header is refused is
+skipped by the check, because its own generation reports that refusal; in a run
+that found a clash the podbuf backend is not called, so that refusal is reported
+only once the clash is repaired.
 
 ## Determinism
 
