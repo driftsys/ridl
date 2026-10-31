@@ -78,8 +78,7 @@ without a pull request.
    section after the newest tag, so without them the next section repeats every
    entry of the failed version. The tags start `crates-io-release.yml`,
    `npm-release.yml` and `vscode-release.yaml`. The Marketplace job then waits
-   for approval in the `marketplace` environment. The Open VSX job is turned off
-   until an `OVSX_PAT` secret exists.
+   for approval in the `marketplace` environment, and so does the Open VSX job.
 
 A tag is not moved after it is pushed. A publish workflow that starts from a tag
 runs that tag's commit, and a re-run of it also uses the workflow file of that
