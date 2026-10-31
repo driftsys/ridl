@@ -375,6 +375,9 @@ macro_rules! suite {
             streams::a_pull_by_the_producer_and_a_push_by_the_receiver_are_unknown,
             streams::a_claim_only_offered_has_no_streams_until_it_is_taken,
             streams::a_querys_settlement_drops_the_unread_chunks_of_its_parameter_streams,
+            streams::a_settlement_with_an_error_drops_the_unread_chunks_of_the_parameter_streams,
+            streams::a_settle_ok_after_the_callers_refusal_leaves_the_refusal_on_the_reply_stream,
+            streams::a_receivers_abort_of_an_ended_stream_drops_its_unread_chunks,
         );
     };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {

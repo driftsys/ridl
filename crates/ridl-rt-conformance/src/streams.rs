@@ -1112,3 +1112,104 @@ where
         );
     }
 }
+
+/// A settlement with an error drops the unread chunks of the stream
+/// parameters, for a query and for a command, which the error refuses as a
+/// whole: the provider's pull after the settlement answers `End` for a stream
+/// the caller ended, and `Failed(Interrupted)` for one it did not, never the
+/// chunk.
+pub fn a_settlement_with_an_error_drops_the_unread_chunks_of_the_parameter_streams<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let interrupted = CallError::Transport(Transport::Interrupted);
+    let error = CallError::Contract(Contract::PreconditionFailed);
+    for command in [false, true] {
+        for ended in [false, true] {
+            let mut rt = runtime::<F>();
+            rt.serve(IFACE, &[ORD]).expect("serve");
+            let c = if command {
+                rt.command(IFACE, ORD, &[1], None).expect("command sent")
+            } else {
+                rt.query(IFACE, ORD, &[1], None).expect("query sent")
+            };
+            let claim = claim_next(&mut rt);
+            assert_eq!(rt.push(c, PARAM_1, &[1]), Ok(1));
+            if ended {
+                rt.end(c, PARAM_1).expect("end");
+            }
+            rt.settle(claim, Err(error)).expect("the refusal");
+            let expected = if ended {
+                Pull::End
+            } else {
+                Pull::Failed(interrupted)
+            };
+            let mut out = [0u8; 8];
+            assert_eq!(
+                rt.pull_claim(claim, PARAM_1, &mut out),
+                Ok(expected),
+                "command {command}, ended {ended}: the unread chunk was dropped at the settlement"
+            );
+        }
+    }
+}
+
+/// `settle(Ok(&[]))` after the caller refused the reply stream records `Ok`
+/// and leaves the refusal on the stream: the caller's pull of the reply
+/// stream answers `Failed` with its own refusal, not `End`.
+pub fn a_settle_ok_after_the_callers_refusal_leaves_the_refusal_on_the_reply_stream<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, claim) = claimed_query::<F>();
+    let refusal = CallError::Contract(Contract::PreconditionFailed);
+    rt.abort(c, REPLY_STREAM, refusal)
+        .expect("the caller refuses");
+    rt.settle(claim, Ok(&[])).expect("settle");
+    let mut out = [0u8; 8];
+    assert_eq!(
+        rt.pull(c, REPLY_STREAM, &mut out),
+        Ok(Pull::Failed(refusal)),
+        "the settlement does not turn the refused stream into an ended one"
+    );
+    assert_eq!(
+        rt.reply(c, &mut out),
+        Ok(Some(Ok(0))),
+        "settle records Ok, unlike end_claim"
+    );
+}
+
+/// A receiver's abort of a stream that already ended answers `Ended` and
+/// drops the receiver's unread chunks: its later pulls answer `End`. The
+/// provider aborts a stream parameter the caller ended, and the caller
+/// aborts the reply stream the provider ended.
+pub fn a_receivers_abort_of_an_ended_stream_drops_its_unread_chunks<F>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let (mut rt, c, claim) = claimed_query::<F>();
+    let refusal = CallError::Contract(Contract::PreconditionFailed);
+    let mut out = [0u8; 8];
+    assert_eq!(rt.push(c, PARAM_1, &[1]), Ok(1));
+    rt.end(c, PARAM_1).expect("end");
+    assert_eq!(
+        rt.abort_claim(claim, PARAM_1, refusal),
+        Err(PushError::Ended)
+    );
+    assert_eq!(
+        rt.pull_claim(claim, PARAM_1, &mut out),
+        Ok(Pull::End),
+        "the provider's abort dropped the unread chunk of the ended stream"
+    );
+    assert_eq!(rt.push_claim(claim, REPLY_STREAM, &[1]), Ok(1));
+    rt.end_claim(claim, REPLY_STREAM).expect("end_claim");
+    assert_eq!(rt.abort(c, REPLY_STREAM, refusal), Err(PushError::Ended));
+    assert_eq!(
+        rt.pull(c, REPLY_STREAM, &mut out),
+        Ok(Pull::End),
+        "the caller's abort dropped the unread chunk of the ended stream"
+    );
+}

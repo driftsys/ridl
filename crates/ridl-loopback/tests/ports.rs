@@ -206,18 +206,15 @@
 //!   `the_window_counts_only_the_non_empty_chunks` names this runtime's window
 //!   of four; `a_settle_ok_on_a_streamed_reply_ends_the_stream_and_reports_the_bytes`
 //!   pins what the contract leaves to a runtime for non-empty bytes;
-//!   `a_settle_ok_after_the_callers_refusal_leaves_the_refusal_on_the_reply_stream`
-//!   and
 //!   `abort_claim_after_the_callers_refusal_is_ended_and_settles_with_the_providers_error`
-//!   pin which outcome this runtime records after the caller's refusal;
+//!   pins which outcome this runtime records after the caller's refusal;
 //!   `a_settlement_refused_through_end_claim_answers_too_large` pins the
 //!   injected fault's report, which the suite leaves to a runtime; and
 //!   `a_providers_push_and_end_on_the_reply_stream_after_a_deferred_forget_are_interrupted`,
-//!   `end_claim_after_the_callers_refusal_settles_the_claim_with_the_refusal`,
-//!   `the_providers_push_after_its_own_abort_of_the_reply_stream_is_ended` and
-//!   `a_receivers_abort_of_an_ended_stream_drops_its_unread_chunks` pin a
-//!   contract rule on a path of this store the suite's form of the same rule
-//!   does not take.
+//!   `end_claim_after_the_callers_refusal_settles_the_claim_with_the_refusal`
+//!   and `the_providers_push_after_its_own_abort_of_the_reply_stream_is_ended`
+//!   pin a contract rule on a path of this store the suite's form of the same
+//!   rule does not take.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc};
@@ -3303,54 +3300,6 @@ fn a_second_forget_of_a_deferred_call_leaves_its_slot_held() {
     );
     rt.command(IFACE, ORD, &[1], None)
         .expect("the slot came back once the provider was done");
-}
-
-#[test]
-fn a_settle_ok_after_the_callers_refusal_leaves_the_refusal_on_the_reply_stream() {
-    let mut rt = runtime();
-    let mut buf = [0u8; 8];
-    let c = rt.query(IFACE, ORD, &[1], None).expect("send");
-    let claim = take_claim(&mut rt);
-    let refusal = CallError::Contract(Contract::PreconditionFailed);
-    rt.abort(c, REPLY_STREAM, refusal)
-        .expect("the caller refuses");
-    rt.settle(claim, Ok(&[])).expect("settle");
-    assert_eq!(
-        rt.pull(c, REPLY_STREAM, &mut buf),
-        Ok(Pull::Failed(refusal)),
-        "the settlement does not turn the refused stream into an ended one"
-    );
-    assert_eq!(
-        rt.reply(c, &mut buf),
-        Ok(Some(Ok(0))),
-        "settle records its own outcome, unlike end_claim"
-    );
-}
-
-#[test]
-fn a_receivers_abort_of_an_ended_stream_drops_its_unread_chunks() {
-    let mut rt = runtime();
-    let mut buf = [0u8; 8];
-    let param = StreamNo(1);
-    let refusal = CallError::Contract(Contract::PreconditionFailed);
-    let c = rt.query(IFACE, ORD, &[1], None).expect("send");
-    let claim = take_claim(&mut rt);
-    assert_eq!(rt.push(c, param, &[1]), Ok(1));
-    rt.end(c, param).expect("end");
-    assert_eq!(rt.abort_claim(claim, param, refusal), Err(PushError::Ended));
-    assert_eq!(
-        rt.pull_claim(claim, param, &mut buf),
-        Ok(Pull::End),
-        "the provider's abort dropped the unread chunk of the ended stream"
-    );
-    assert_eq!(rt.push_claim(claim, REPLY_STREAM, &[1]), Ok(1));
-    rt.end_claim(claim, REPLY_STREAM).expect("end_claim");
-    assert_eq!(rt.abort(c, REPLY_STREAM, refusal), Err(PushError::Ended));
-    assert_eq!(
-        rt.pull(c, REPLY_STREAM, &mut buf),
-        Ok(Pull::End),
-        "the caller's abort dropped the unread chunk of the ended stream"
-    );
 }
 
 #[test]
