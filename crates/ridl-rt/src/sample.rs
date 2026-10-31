@@ -17,6 +17,18 @@ pub struct Timestamp(pub i64);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Duration(pub i64);
 
+impl Duration {
+    /// The same length of time as a `core::time::Duration`. `None` when it is
+    /// negative, which `core::time::Duration` cannot hold.
+    pub const fn to_core(self) -> Option<core::time::Duration> {
+        if self.0 < 0 {
+            None
+        } else {
+            Some(core::time::Duration::from_micros(self.0 as u64))
+        }
+    }
+}
+
 /// The sender's timestamp and sequence number (ridl §3.1). The runtime stamps
 /// it from its clock, and no relay changes it.
 ///
@@ -282,6 +294,16 @@ impl<const N: usize> Default for EventSeqTracker<N> {
 mod tests {
     use super::{Cause, Detection, Duration, Envelope, Freshness, Provenance, Sample, Timestamp};
     use crate::payload::{Rule, Violation};
+
+    #[test]
+    fn a_duration_converts_to_core_unless_it_is_negative() {
+        assert_eq!(
+            Duration(1_500).to_core(),
+            Some(core::time::Duration::from_micros(1_500))
+        );
+        assert_eq!(Duration(0).to_core(), Some(core::time::Duration::ZERO));
+        assert_eq!(Duration(-1).to_core(), None);
+    }
 
     fn sample(provenance: Provenance, freshness: Freshness) -> Sample<u8> {
         Sample {

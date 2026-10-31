@@ -299,6 +299,26 @@ impl Member {
     pub fn call_deadline(&self) -> Option<Duration> {
         self.timing.and_then(|timing| timing.max)
     }
+
+    /// The rate floor of the member's `timing` ([`Timing::rate_floor`]).
+    /// `None` when the member has no timing, which is the case of a `fixed`,
+    /// or when its timing declares no `min`.
+    pub const fn rate_floor(&self) -> Option<Duration> {
+        match self.timing {
+            Some(timing) => timing.rate_floor(),
+            None => None,
+        }
+    }
+
+    /// The staleness bound of the member's `timing`
+    /// ([`Timing::staleness_bound`]). `None` when the member has no timing,
+    /// which is the case of a `fixed`, or when its timing declares no `max`.
+    pub const fn staleness_bound(&self) -> Option<Duration> {
+        match self.timing {
+            Some(timing) => timing.staleness_bound(),
+            None => None,
+        }
+    }
 }
 
 /// The form of a timing annotation (ridl §9).
@@ -328,6 +348,31 @@ pub struct Timing {
     pub max: Option<Duration>,
 }
 
+impl Timing {
+    /// The rate floor: `min`, the shortest interval between two publications
+    /// of a signal or two raises of an event (ridl §9). `None` when the range
+    /// declares no lower bound, as in `@[..2s]`. Under `StrictPeriodic` it is
+    /// the period.
+    ///
+    /// The function reads `min` whatever the member's kind; on a `command` or
+    /// a `query`, `min` is the interval a caller keeps between two calls.
+    pub const fn rate_floor(&self) -> Option<Duration> {
+        self.min
+    }
+
+    /// The staleness bound: `max`, the longest a signal's value stays fresh
+    /// without a new publication (ridl §9). `None` when the range declares no
+    /// upper bound, as in `@[200ms..]`. Under `StrictPeriodic` it is the
+    /// period.
+    ///
+    /// The function reads `max` whatever the member's kind; on an `event`
+    /// `max` is the time to live, and on a `command` or a `query` it is the
+    /// response bound, which [`Member::call_deadline`] reads.
+    pub const fn staleness_bound(&self) -> Option<Duration> {
+        self.max
+    }
+}
+
 /// One payload of a member.
 ///
 /// A payload's size in an encoding is not here: it is the member's row of the
@@ -342,6 +387,73 @@ pub struct PayloadInfo {
 #[cfg(test)]
 mod tests {
     use super::{CatalogHash, CatalogRef, Kind};
+    use crate::contract::{Member, Ordinal, Timing, TimingMode};
+    use crate::sample::Duration;
+
+    fn timing(min: Option<i64>, max: Option<i64>) -> Timing {
+        Timing {
+            mode: TimingMode::Range,
+            min: min.map(Duration),
+            max: max.map(Duration),
+        }
+    }
+
+    fn member(kind: Kind, timing: Option<Timing>) -> Member {
+        Member {
+            ordinal: Ordinal(1),
+            kind,
+            name: "member",
+            timing,
+            payloads: &[],
+        }
+    }
+
+    #[test]
+    fn the_rate_floor_is_min_and_the_staleness_bound_is_max() {
+        let both = timing(Some(100_000), Some(1_000_000));
+        assert_eq!(both.rate_floor(), Some(Duration(100_000)));
+        assert_eq!(both.staleness_bound(), Some(Duration(1_000_000)));
+        let floor_only = timing(Some(200_000), None);
+        assert_eq!(floor_only.rate_floor(), Some(Duration(200_000)));
+        assert_eq!(floor_only.staleness_bound(), None);
+        let bound_only = timing(None, Some(2_000_000));
+        assert_eq!(bound_only.rate_floor(), None);
+        assert_eq!(bound_only.staleness_bound(), Some(Duration(2_000_000)));
+    }
+
+    #[test]
+    fn a_member_reads_its_bounds_from_its_timing() {
+        let signal = member(Kind::Signal, Some(timing(Some(20_000), Some(100_000))));
+        assert_eq!(signal.rate_floor(), Some(Duration(20_000)));
+        assert_eq!(signal.staleness_bound(), Some(Duration(100_000)));
+        let fixed = member(Kind::Fixed, None);
+        assert_eq!(fixed.rate_floor(), None);
+        assert_eq!(fixed.staleness_bound(), None);
+    }
+
+    #[test]
+    fn the_bounds_are_usable_in_a_const_item() {
+        const SIGNAL: Member = Member {
+            ordinal: Ordinal(1),
+            kind: Kind::Signal,
+            name: "member",
+            timing: Some(Timing {
+                mode: TimingMode::StrictPeriodic,
+                min: Some(Duration(10_000)),
+                max: Some(Duration(10_000)),
+            }),
+            payloads: &[],
+        };
+        const FLOOR: Option<Duration> = SIGNAL.rate_floor();
+        const BOUND: Option<Duration> = SIGNAL.staleness_bound();
+        const PERIOD: Option<core::time::Duration> = match FLOOR {
+            Some(floor) => floor.to_core(),
+            None => None,
+        };
+        assert_eq!(FLOOR, Some(Duration(10_000)));
+        assert_eq!(BOUND, Some(Duration(10_000)));
+        assert_eq!(PERIOD, Some(core::time::Duration::from_millis(10)));
+    }
 
     #[test]
     fn catalog_refs_are_equal_only_when_name_and_hash_are_equal() {
