@@ -1459,3 +1459,146 @@ fn a_build_with_imports_and_an_empty_list_still_gets_the_note() {
         "the empty list is explained: {stderr}"
     );
 }
+
+// ==========================================================================
+// The root manifest's encodings judge the history (driftsys/ridl#1095)
+// ==========================================================================
+
+/// `MANIFEST` with a `rust` backend table that lists `podbuf`.
+const PODBUF_MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n\n\
+                               [backend.rust]\nencodings = [\"podbuf\"]\n";
+
+/// `Reading` held inline by `Bounds`, the payload of the interface's signal.
+const INLINE_BASE: &str = "package veh.cluster
+type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
+struct Reading {
+  value: Level
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+interface Sensors {
+  signal bounds: Bounds @10ms
+}
+";
+
+/// `INLINE_BASE` with an eight-byte field appended to `Reading`: the field
+/// does not fit inside the old head, so it is a podbuf break
+/// (`podbuf_inline_append`) and compatible under every other encoding.
+const INLINE_GROWN: &str = "package veh.cluster
+type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
+struct Reading {
+  value: Level
+  quality: Wide
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+interface Sensors {
+  signal bounds: Bounds @10ms
+}
+";
+
+/// `INLINE_BASE` with a one-byte field appended to `Reading`: the field fits
+/// in the pad bytes of the old head, so it is compatible under podbuf too.
+const INLINE_IN_PADS: &str = "package veh.cluster
+type Level: integer [0..100]
+type Wide: integer [0..9223372036854775807]
+struct Reading {
+  value: Level
+  quality: Level
+}
+struct Bounds {
+  range: Reading
+  limit: Level
+}
+interface Sensors {
+  signal bounds: Bounds @10ms
+}
+";
+
+/// Writes `manifest` and `source` as the workspace and records its interface
+/// numbers with plain `ridl lock`.
+fn set_workspace(dir: &TempDir, manifest: &str, source: &str) -> PathBuf {
+    dir.write("ridl.toml", manifest);
+    dir.write("cluster.ridl", source);
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's lock is allocated: {stderr}");
+    root
+}
+
+/// Publishes `INLINE_BASE` under `manifest`, changes the source to `edited`,
+/// and returns `(baseline_hash, built_compatible, published_history,
+/// new_hash)`: the hash published first, the `compatible` list `ridl build`
+/// writes for the edit, the history `ridl baseline` then publishes, and the
+/// hash of the edit.
+fn judge_edit(
+    label: &str,
+    manifest: &str,
+    edited: &str,
+) -> (String, Vec<String>, Vec<String>, String) {
+    let dir = TempDir::new(label);
+    let first = TempDir::new(&format!("{label}-first"));
+    let out = TempDir::new(&format!("{label}-out"));
+    let root = set_workspace(&dir, manifest, INLINE_BASE);
+    publish(&root);
+    let baseline_hash = describe_hash(&root, first.path(), UNIT);
+    set_workspace(&dir, manifest, edited);
+    build_catalog(&root, out.path());
+    let built = compatible_of(out.path(), UNIT);
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    assert_ne!(new_hash, baseline_hash, "the edit changes the catalog");
+    publish(&root);
+    (baseline_hash, built, history_lines(&root), new_hash)
+}
+
+/// Under `[backend.rust] encodings = ["podbuf"]`, a field appended to a struct
+/// held inline that does not fit inside the old head is a podbuf break, so
+/// `ridl build` lists no earlier catalog and `ridl baseline` restarts the
+/// chain.
+#[test]
+fn a_podbuf_break_ends_the_history_when_the_manifest_lists_podbuf() {
+    let (_, built, history, new_hash) = judge_edit("podbuf-break", PODBUF_MANIFEST, INLINE_GROWN);
+    assert_eq!(built, Vec::<String>::new(), "ridl build lists nothing");
+    assert_eq!(history, vec![new_hash], "ridl baseline restarts the chain");
+}
+
+/// The same append with no backend table listing `podbuf` is compatible, so
+/// both commands carry the chain.
+#[test]
+fn the_same_append_carries_the_history_without_podbuf() {
+    let (baseline_hash, built, history, new_hash) = judge_edit("no-podbuf", MANIFEST, INLINE_GROWN);
+    assert_eq!(
+        built,
+        vec![baseline_hash.clone()],
+        "ridl build carries the chain"
+    );
+    assert_eq!(
+        history,
+        vec![new_hash, baseline_hash],
+        "ridl baseline carries the chain"
+    );
+}
+
+/// Under podbuf, an appended field that fits in the pad bytes of the old head
+/// is not a podbuf break, so both commands carry the chain.
+#[test]
+fn an_append_that_fits_in_the_pads_carries_the_history_under_podbuf() {
+    let (baseline_hash, built, history, new_hash) =
+        judge_edit("podbuf-pads", PODBUF_MANIFEST, INLINE_IN_PADS);
+    assert_eq!(
+        built,
+        vec![baseline_hash.clone()],
+        "ridl build carries the chain"
+    );
+    assert_eq!(
+        history,
+        vec![new_hash, baseline_hash],
+        "ridl baseline carries the chain"
+    );
+}

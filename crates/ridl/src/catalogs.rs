@@ -30,7 +30,9 @@ use crate::{default_baseline_dir, report_diff_side_error};
 /// file's hashes less the unit's current catalog hash when the unit's verdict
 /// is compatible or identical, or when the current catalog hash is the file's
 /// first hash: the catalog did not change, so every hash the file lists still
-/// applies. Otherwise the unit's list is empty.
+/// applies. Otherwise the unit's list is empty. The verdict is judged for the
+/// root manifest's encodings ([`crate::root_manifest_encodings`]), so under
+/// `podbuf` a podbuf break empties the list as any other break does.
 ///
 /// A history is carried only when its first hash is the hash recomputed from
 /// the published snapshots of that unit, so a history that does not describe
@@ -58,7 +60,9 @@ pub(crate) fn compatible_catalogs(
         .map_err(report_diff_side_error)?
         .packages;
     let old_refs: Vec<&Package> = old.iter().collect();
-    let report = ridl_diff::diff_refs_in(&old_refs, checked, &[std]);
+    let encodings = crate::root_manifest_encodings(entry);
+    let encodings: Vec<&str> = encodings.iter().map(String::as_str).collect();
+    let report = ridl_diff::diff_refs_with(&old_refs, checked, &[std], &encodings);
     let verdicts = ridl_diff::UnitVerdicts::from_refs(&report, &old_refs, checked);
     let scope = ridlc::catalog_scope(checked, Some(std));
     let published_scope = ridlc::catalog_scope(&old_refs, Some(std));
@@ -101,7 +105,12 @@ pub(crate) fn compatible_catalogs(
 }
 
 /// Writes `staging/<unit>.catalogs` for every unit of the snapshots `fresh`
-/// (the ones in `staging`) that has at least one interface shape.
+/// (the ones in `staging`) that has at least one interface shape. The
+/// verdicts are judged for `encodings`, the root manifest's
+/// ([`crate::root_manifest_encodings`]), as [`compatible_catalogs`] judges
+/// them, so `ridl baseline` and `ridl build` give one verdict. A snapshot
+/// does not record encodings: a baseline published before `podbuf` was
+/// listed is judged by the podbuf rules once it is.
 ///
 /// Each file holds the unit's catalog hash, computed over `fresh` as
 /// `ridl build --emit catalog` computes it. When the unit's verdict between
@@ -127,15 +136,16 @@ pub(crate) fn write_catalog_histories(
     published: &Path,
     old: &[Package],
     fresh: &[Package],
+    encodings: &[&str],
 ) -> Result<(), ExitCode> {
     let std = ridlc::std_ir();
-    let report =
-        (!old.is_empty()).then(|| ridl_diff::diff_sets_in(old, fresh, std::slice::from_ref(&std)));
+    let fresh_refs: Vec<&Package> = fresh.iter().collect();
+    let old_refs: Vec<&Package> = old.iter().collect();
+    let report = (!old.is_empty())
+        .then(|| ridl_diff::diff_refs_with(&old_refs, &fresh_refs, &[&std], encodings));
     let verdicts = report
         .as_ref()
         .map(|report| ridl_diff::UnitVerdicts::new(report, old, fresh));
-    let fresh_refs: Vec<&Package> = fresh.iter().collect();
-    let old_refs: Vec<&Package> = old.iter().collect();
     let scope = ridlc::catalog_scope(&fresh_refs, Some(&std));
     let published_scope = ridlc::catalog_scope(&old_refs, Some(&std));
     for unit in shaped_units(fresh.iter()) {
