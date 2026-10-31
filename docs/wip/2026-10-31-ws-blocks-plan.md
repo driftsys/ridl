@@ -61,6 +61,8 @@ note differ, the plan's section "Decisions this plan takes" says why.
   cargo test --locked -p ridl-transport-ws --no-default-features
   cargo test --locked -p ridl-transport-ws --features descriptor --test descriptor
   cargo clippy --locked -p ridl-transport-ws --features descriptor --all-targets -- -D warnings
+  cargo check --locked --target wasm32-unknown-unknown -p ridl-transport-ws --no-default-features
+  cargo check --locked --target thumbv7em-none-eabihf -p ridl-transport-ws --no-default-features
   cargo fmt --all --check
   # lane ts, from packages/ridl-transport-ws
   deno test --allow-read tests/
@@ -71,9 +73,12 @@ note differ, the plan's section "Decisions this plan takes" says why.
 
   The clippy line is the one `just lint` runs for this crate: with the
   `descriptor` feature on top of the default features, so that the code and the
-  test target of that feature are linted too. `deno publish --dry-run` is the
-  one check of the new exports against JSR's rules on slow types, as in
-  `just ts-check`.
+  test target of that feature are linted too. The two `cargo check` lines are
+  the ones `just wasm-check` runs for this crate: they evaluate the `const`
+  assertions of `frame.rs` (R1 Step 4) at the 32-bit width of `usize`, which no
+  host test does. Both targets are in `rust-toolchain.toml`.
+  `deno publish --dry-run` is the one check of the new exports against JSR's
+  rules on slow types, as in `just ts-check`.
 - **A red test fails on an assertion.** When a test names something new, first
   add the declaration with a body that keeps today's behaviour (for example
   `decode` still answering `UnknownCode` for form 11), then write the test, and
@@ -217,9 +222,31 @@ Where the design note is silent, or the code has moved since it was written.
   that identity between two of its blocks can only be a sender defect. Without
   the rule, `#onAnswer` would shift the `read` the blocks are answering, and the
   payload would then settle the next `read`. An `answer` of any other identity
-  is applied. The frame specification §10 leaves what a receiver does with a
-  frame to the frame, not the binding, so A2 writes this rule into the
-  specification's receiver rules beside the whole-`publish` exception.
+  is applied: the check is whether the slot holds the answer's `target`, never
+  whether a payload is in progress. The T3 test of frames between two blocks
+  checks both halves, with an `answer` of the same numbers under another kind,
+  an `answer` of another `fixed` and a `response` between two blocks. The frame
+  specification §10 leaves what a receiver does with a frame to the frame, not
+  the binding, so A2 writes this rule into the specification's receiver rules
+  beside the whole-`publish` exception.
+- **P-11. The checks between two blocks compare the kind too.** B-6 (the row of
+  a whole `publish`) makes a whole `publish` that names the
+  `(interface, ordinal)` of the reassembly in progress a protocol violation.
+  This plan runs that check, and the `answer` check of P-10, on
+  `(kind, interface, ordinal)`: a frame is of the interaction being reassembled
+  when its `kind` is `Fixed` and its `interface` and `ordinal` are the slot's
+  (`Reassembly.holds`). A `publish` or an `answer` of another kind with the same
+  numbers is applied. The reasons: the TypeScript session keys every queue of
+  waiting operations by `identity(t)`, which holds the kind, so a frame of
+  another kind settles or shifts another queue and cannot change the reads that
+  the blocks answer; and the frame specification §4 makes a frame whose `kind`
+  is not the receiver's catalog's kind for its `(interface, ordinal)` a frame of
+  an unknown interaction (§6.4), not a frame of the interaction the catalog
+  holds there. For a receiver that holds the whole catalog, the two rules give
+  the same result for every frame its catalog allows; they differ only for a
+  frame whose kind disagrees with the catalog, and for that frame this plan
+  keeps the rule of §4. A2 writes `(kind, interface, ordinal)` into the receiver
+  rules of §5.5 and §6.3 and into conformance item 20.
 
 ## Review Focus
 
@@ -490,9 +517,12 @@ in its body that the records follow in the third pull request.
   // block_len(0, 0) == None
   ```
 
-  Its `u32` parameters fix the width of the arithmetic, so the test overflows (a
-  panic in the test build) on any host, 64-bit included, when the helper
-  computes `4,096 × (index + 1)` or `total + 4,095`.
+  The test overflows (a panic in the test build) on any host when the helper
+  computes `4,096 × (index + 1)` or `total + 4,095` in `u32`. It does not catch
+  a body that converts `total` and `index` to `usize` before it computes, as the
+  rest of `frame.rs` computes lengths: on a 64-bit host that computation does
+  not overflow, and the test passes. The `const` assertions of Step 4 catch that
+  body; the host test does not.
 
 - [ ] **Step 3: Run the tests and see them fail on their assertions.**
 
@@ -517,15 +547,29 @@ in its body that the records follow in the third pull request.
       no test of this lane or of CI runs the decoder on such a target
       (`just wasm-check` only runs `cargo check`). Only the result of
       `block_len` is converted to `usize`, to compare it with the number of
-      bytes after the header. The encoder writes the common 10 bytes, `stamp`,
-      `seq`, `total`, `index` (little-endian) and the payload. Update the module
-      doc so that it names the `block` form.
+      bytes after the header. So that a check catches a computation in `usize`,
+      add in `frame.rs`, outside the test module:
+
+  ```rust
+  const _: () = assert!(matches!(block_len(u32::MAX, 1_048_575), Some(4_095)));
+  const _: () = assert!(block_len(u32::MAX, u32::MAX).is_none());
+  ```
+
+  `block_len` is a `const fn` and `Option::is_none` is `const`, so `cargo check`
+  evaluates both for the target it checks. The wasm32 and thumbv7em checks of
+  Step 5 evaluate them at 32-bit width: a body that computes
+  `total as usize + 4_095` fails there with error E0080 ("attempt to compute
+  `usize::MAX + 4095_usize`, which would overflow"), and passes the host test.
+  They are added in this step, not in Step 2: with the scaffold's `block_len`,
+  which returns `None`, the first one stops the crate compiling. The encoder
+  writes the common 10 bytes, `stamp`, `seq`, `total`, `index` (little-endian)
+  and the payload. Update the module doc so that it names the `block` form.
 
 - [ ] **Step 5: Run the tests and see them pass.** Run:
       `cargo test --locked -p ridl-transport-ws` and
       `cargo test --locked -p ridl-transport-ws --no-default-features`, then the
-      clippy and fmt commands of the Global Constraints. Expected: PASS, no
-      warning.
+      clippy, the two `cargo check` lines for wasm32 and thumbv7em, and the fmt
+      command of the Global Constraints. Expected: PASS, no warning.
 
 - [ ] **Step 6: Commit.**
 
@@ -607,8 +651,16 @@ not `FRAME_VERSION` (P-1); the order of the other checks is unchanged.
       `Upgrade::Accepted(frame::FRAME_VERSION)`: it follows the constant, and
       the nine frame-level tests that use it (lines 953 to 1161) pass before and
       after Step 4. Correct its doc comment, which says it "offers
-      `ridl-ws-v1`", to say it offers `frame::SUBPROTOCOL`. Every existing test
-      passes. (Step 2 makes `GOOD_HEAD` offer `ridl-ws-v2`, and its assertions
+      `ridl-ws-v1`", to say it offers `frame::SUBPROTOCOL`. Change the one match
+      on the variant outside the tests, the arm in `run` (`server.rs:304`), to
+      `Ok(Upgrade::Accepted(_)) => {}`, which stops compiling (E0532) once the
+      variant carries a `u32`; Step 4 replaces it with
+      `Ok(Upgrade::Accepted(v)) => session.upgraded(v)`. The scaffold makes no
+      call of `upgraded` in `run`, so that the guard
+      `an_attach_of_frame_version_2_on_a_ridl_ws_v1_connection_is_refused` and
+      its mutation (Step 3) hold as described. Nothing outside `ws.rs` and
+      `server.rs` names `Upgrade`. Every existing test passes. (Step 2 makes
+      `GOOD_HEAD` offer `ridl-ws-v2`, and its assertions
       `Upgrade::Accepted(2)`.)
 
 - [ ] **Step 2: Write the failing tests.**
@@ -671,10 +723,14 @@ not `FRAME_VERSION` (P-1); the order of the other checks is unchanged.
   and in `the_attach_checks_run_in_the_design_order` (line 2250) the first row's
   version 2 becomes 1, and rows 2 to 4, version 1 today, use `FRAME_VERSION`.
 
-  `tests/serve.rs`: every `"ridl-ws-v1"` in `connect(…)` and in
-  `UPGRADE_REQUEST` becomes `SUBPROTOCOL`'s value, and every `Attach::new(1, …)`
-  becomes `Attach::new(FRAME_VERSION, …)` (import both from
-  `ridl_transport_ws::frame`). New:
+  `tests/serve.rs`: every `connect(client, "ridl-ws-v1")` takes `SUBPROTOCOL`,
+  and every `Attach::new(1, …)` becomes `Attach::new(FRAME_VERSION, …)` (import
+  both from `ridl_transport_ws::frame`). In the byte literal `UPGRADE_REQUEST`,
+  which cannot name the constant, write `ridl-ws-v2`, not the value
+  `SUBPROTOCOL` has at this step. Correct the comment of
+  `a_rejected_handshake_returns_rejected` ("Without `ridl-ws-v1` offered, the
+  server answers 400", line 260): without `ridl-ws-v2` or `ridl-ws-v1` offered,
+  the server answers 400. New:
 
   ```rust
   fn a_client_offering_both_versions_is_upgraded_with_v2_and_attached()
@@ -701,7 +757,14 @@ not `FRAME_VERSION` (P-1); the order of the other checks is unchanged.
       and `cargo test --locked -p ridl-transport-ws --test serve`. Expected:
       FAIL; a client offering only `ridl-ws-v2` gets `Rejected`, an `attach` of
       frame 1 is accepted, an `attach` of frame 2 is refused, and `upgraded(1)`
-      changes nothing.
+      changes nothing. The ten tests of `tests/serve.rs` that send
+      `UPGRADE_REQUEST` (directly, through `upgrade_request_from`, or as the
+      request of the `Failing` and `Scripted` connections) fail too, because the
+      scaffold answers 400 to an offer of `ridl-ws-v2` alone: on the 101
+      assertion of `read_upgrade_answer`, on the 403 assertion of
+      `a_refused_origin_is_answered_403_and_returns_rejected`, or on the
+      expected `Ended` (`Rejected` in place of `LivenessTimeout`). They pass
+      after Step 4.
 
   These pass already, as guards through the change, each with the mutation it
   catches:
@@ -779,9 +842,15 @@ over the cap is recorded `Note::ValueTooLarge` and answered
 is one `publish` (`Live`, `seq` 0, the backend's clock), as today. A larger one
 is `push_blocks` with that same envelope in every block, pushed one after the
 other with no frame between them. `limit_short`: a `fixed` needs
-`min(largest_header() + member_limit, block message)`, where `member_limit` is
-the table's limit or the default ceiling of the kind (P-4); every other kind is
-unchanged.
+`largest_header() + member_limit.min(block_message - largest_header())`, where
+`member_limit` is the table's limit or the default ceiling of the kind (P-4),
+which is the smaller of 36 + `member_limit` and 4,130; every other kind is
+unchanged. The clamp comes before the addition, as `.min(CALL_CEILING)` does
+today, or the addition stays `saturating_add`: the arithmetic must not overflow
+a 32-bit `usize`. A table can hold any `u32` (P-5), and on a 32-bit provider
+`36 + 4,294,967,295` overflows, which panics a debug build and wraps to 35 in a
+release build, so that `serve` would accept a message limit below 4,130 and
+refuse every large `fixed` at the read with `ValueTooLarge`.
 
 - [ ] **Step 1: Write the failing tests.** In the `session.rs` tests, add
       `fn pattern(len: usize) -> Vec<u8>` (byte `i` is `i % 251`) and a helper
@@ -844,6 +913,11 @@ unchanged.
   fn a_fixed_below_one_block_message_is_counted_as_36_bytes_plus_its_limit()
   // fixed limit 3_000, others 900: max 3_035 → refused, needed 3_036; max 3_036 → accepted
   // (P-4: the check counts the largest header, 9 bytes above the 27 a publish needs)
+  fn a_fixed_of_the_largest_table_limit_is_counted_as_one_block_message()
+  // table(|t| Some(if t.kind == Kind::Fixed { u32::MAX } else { 900 })):
+  // max 4_130 → attach accepted, no note; max 4_129 → Ended::ConfigRefused,
+  // notes == [MessageLimitTooSmall { target: FIXED, needed: 4_130 }]
+  // (on a 64-bit host it pins the result; the order of the rule covers the 32-bit width)
   fn a_fixed_of_65_280_bytes_crosses_as_16_block_messages()
   // Loopback with P(65280) provisioned at ordinal 5; tungstenite read of FIXED →
   // 16 binary messages, lengths 15 × 4_130 then 3_874, each a Block with index k,
@@ -1224,7 +1298,12 @@ its `index` is 0, is not the next expected, or its `iface`, `ord`, `stamp`,
 when skipping) and the last one ends the payload (`complete`, or `skipping` with
 the slot empty).
 
-**Behaviour of the session** (frame-version-2 session, after `attached`):
+**Behaviour of the session** (after `attached`). The `block` case and the checks
+between two blocks are of a frame-version-2 session only: on a frame-version-1
+session a message whose first byte is 11 never reaches the slot (T2, P-6). The
+`#limitOf` change and the `over-limit` note of a whole `publish` in `#onPublish`
+apply on both frame versions, so that the report of a `fixed` does not depend on
+the provider (P-2).
 
 - `#limitOf` returns, for a `fixed`, `fixedLimit` of the table's limit or of the
   default ceiling, so that the two paths below, the block path and the
@@ -1241,17 +1320,29 @@ the slot empty).
   `SessionError` `corrupt`, as `#onPublish` does for an oversized `publish`, and
   records `{ note: "discarded", reason: "over-limit", frame }` with the first
   block as `frame`;
+- `collecting` and `skipping` change nothing in the session: no `read` settles
+  or rejects, and no note is recorded. A `read` of the same `fixed` that the
+  application sends while a payload is collected or skipped (from the rejection
+  handler of an `over-limit`, for example) waits for the next payload;
 - `sequence` is `#violate("block-sequence")`;
 - a whole `publish` whose `target` the slot `holds` is
   `#violate("block-sequence")`; a `publish` of another kind with the same
   `iface` and `ord` is another identity (`identity(t)` keys every queue by kind)
-  and is applied;
-- an `answer` whose `target` the slot `holds` is `#violate("block-sequence")`
-  (P-10): the provider answers the reads of one identity in request order, so an
-  answer between two blocks of that identity can only be a sender defect, as for
-  the whole `publish` above. Without the rule, `#onAnswer` would shift the read
-  the blocks are answering, and the payload would then settle the next read. An
-  `answer` of another identity is applied;
+  and is applied (P-11);
+- an `answer` for which `holds(frame.target)` is true is
+  `#violate("block-sequence")` (P-10). The check is `holds(frame.target)`, never
+  "a payload is in progress": the provider answers the reads of one identity in
+  request order, so an answer between two blocks of that identity can only be a
+  sender defect, as for the whole `publish` above. Without the rule, `#onAnswer`
+  would shift the read the blocks are answering, and the payload would then
+  settle the next read. An `answer` of another identity, the same numbers under
+  another kind included (P-11), and every `response`, are applied;
+- a frame the codec discards (`{ ok: false, class: "discard" }`: a `publish`
+  under `init` or `invalid`, or a `response` that is not a `reply`, with bytes
+  after its header) is recorded `discarded` as today, whatever the slot holds,
+  and the reassembly goes on. The codec returns no target with a discard, and
+  `decodeFrame` keeps returning none; the `holds` checks apply only to a decoded
+  `publish` or `answer`;
 - in `#onPublish`, a `live` payload of a `fixed` above its limit (a whole
   `publish`) rejects the reads as today and records
   `{ note: "discarded", reason: "over-limit", frame }`, in place of the
@@ -1292,14 +1383,18 @@ the slot empty).
   // complete P(8193) and keep the returned buffer; then complete 8,193 bytes of 0xff;
   // the first buffer still equals P(8193) (the slot allocates a new buffer per payload)
   Deno.test("holds compares the kind as well", ...)
-  // block 0 of total 8193 → collecting; holds(FIXED) true; holds({ kind: Kind.Signal, iface: 1, ord: 5 }) false
+  // block 0 of total 8193 → collecting; holds(FIXED) true; holds({ kind: Kind.Signal, iface: 1, ord: 5 }),
+  // holds({ kind: Kind.Fixed, iface: 2, ord: 5 }) and holds({ kind: Kind.Fixed, iface: 1, ord: 6 }) false
   Deno.test("a missing, a repeated and a reordered block are sequence errors", ...)  // n = 3: 0,2 / 0,1,1 / 0,2,1
   Deno.test("an index above 0 with nothing in progress is a sequence error", ...)
   // first accept(block(0, 1, P(1))) → complete (so the test fails on the scaffold), then
   // block(1, 8193, …) with nothing in progress → sequence
   Deno.test("an index 0 while a payload is in progress is a sequence error, for the same identity too", ...)
   Deno.test("a block whose interface, ordinal, stamp, seq or total differs is a sequence error", ...)
-  Deno.test("the sequence of a skipped payload is still checked", ...) // over-limit, then index 2 → sequence
+  Deno.test("the sequence of a skipped payload is still checked", ...)
+  // limit 8192, block 0 of total 8193 → over-limit, then index 2 → sequence; then, each on a
+  // fresh Reassembly after the same over-limit block 0, a block 1 with ord 6, one with seq 1n,
+  // and one with total 8194 → sequence in each case (identity, envelope and total, B-6)
   Deno.test("after a payload completes, the next index 0 starts a new payload", ...)
   Deno.test("clear drops the payload in progress", ...) // 0, clear, 1 → sequence; 0 → collecting
   ```
@@ -1312,19 +1407,37 @@ the slot empty).
   // deliver the exact bytes; payload length 4098, P(4096) then ab cd; SHA-256 8830a559…; notes []
   Deno.test("a read of a 65,280-byte fixed is settled by its 16 blocks", ...) // payload deepEqual P(65280)
   Deno.test("frames of other forms between two blocks are applied and the payload is still delivered", ...)
-  // block 0; an occurrence of a subscribed EVENT (delivered); a whole publish of another fixed
-  // (ord 6) that settles its own read; a publish of a subscribed signal of interface 1,
-  // ordinal 5 (another identity: the kind differs), applied; block 1 → the first read resolves
+  // in the shape of "the waiting queue is per kind" (line 910). Before block 0: EVENT
+  // subscribed; read(FIXED); a read of the fixed at ord 6; a read of the fixed at ord 7; a
+  // subscribe of { kind: Kind.Signal, iface: 1, ord: 5 }; one command on interface 1, ordinal 9,
+  // with a bound. Between block 0 and block 1, in this order: an occurrence of EVENT (delivered);
+  // a whole publish of the fixed at ord 6 (settles its own read); refusedAnswer of the fixed at
+  // ord 7 (an answer of another fixed: its read rejects contract unknown-interaction); accepted
+  // of the signal at 1/5 (an answer of the same numbers under another kind, P-11: the subscribe
+  // resolves); a publish of that signal (applied: sample(1, 5) holds it); the response(accepted)
+  // of the command (the command resolves). Then socket.closes is [] and notes is []; block 1 →
+  // the read of FIXED resolves with the payload, and notes is still []
+  Deno.test("a frame the codec discards between two blocks is recorded and the payload is still delivered", ...)
+  // read(FIXED); block 0 of P(4098); the bytes of an init publish of FIXED with one byte
+  // appended after its header; block 1 → notes is exactly
+  // [{ note: "discarded", reason: "unexpected-payload" }], and the read resolves with P(4098)
   Deno.test("a total above the lowered limit of a fixed rejects the read with corrupt before any copy and the session goes on", ...)
   // const BIG = { iface: 1, blob: { iface: 1, ord: 5, kind: "fixed", limit: 20000 } } as const,
-  // written as RAISED and LOWERED are; attachedWith({ interfaces: [BIG] }): total 20001 → read
-  // rejects corrupt; notes [{ note: "discarded", reason: "over-limit", frame: block 0 }]; the
-  // other 4 blocks add nothing; a new read answered by a whole publish resolves; total 20000 in
-  // blocks resolves
+  // written as RAISED and LOWERED are; attachedWith({ interfaces: [BIG] }); read(FIXED) twice,
+  // then block 0 of total 20001 → both reads reject corrupt, and notes is exactly
+  // [{ note: "discarded", reason: "over-limit", frame: block 0 }]; then a third read(FIXED),
+  // sent after block 0 and before blocks 1 to 4; the other 4 blocks add nothing: the third
+  // read is still pending (a flag that its then and catch set is still false after an await of
+  // a resolved promise) and notes still holds the one over-limit note; a whole publish then
+  // resolves the third read; a new read and total 20000 in blocks resolves
   Deno.test("a whole publish of a fixed above its lowered limit rejects the read with corrupt and records over-limit", ...)
   // attachedWith({ interfaces: [BIG] }); read(FIXED); deliver liveOf(FIXED, 0n, 20_001) → the read
   // rejects corrupt; notes [{ note: "discarded", reason: "over-limit", frame: that publish }];
   // then the same publish with no read waiting → one more over-limit note, and no not-subscribed note
+  Deno.test("on a frame version 1 session a whole publish of a fixed above its lowered limit is over-limit too", ...)
+  // a session opened with SUBPROTOCOL_V1 (as attachedWith opens one with SUBPROTOCOL), with
+  // interfaces [BIG]; read(FIXED); deliver liveOf(FIXED, 0n, 20_001) → the read rejects corrupt;
+  // notes [{ note: "discarded", reason: "over-limit", frame: that publish }]
   Deno.test("a total above the default ceiling of a fixed is over-limit without tables", ...)
   // no tables and no read waiting: deliver the 16 blocks of total 65281 → notes is exactly
   // [{ note: "discarded", reason: "over-limit", frame: block 0 }], with no not-subscribed note
@@ -1345,6 +1458,12 @@ the slot empty).
   Deno.test("blocks delivered after close are ignored", ...)            // no note, no throw
   Deno.test("two reads of one fixed are settled by the first payload and the second is discarded not-subscribed", ...)
   Deno.test("a block payload no read waits for is reassembled and discarded not-subscribed", ...)
+  // no tables: the blocks of P(5000) for FIXED with no read waiting → notes is exactly one
+  // not-subscribed note, whose frame is the reassembled publish; and attachedWith({ interfaces:
+  // [RAISED] }), whose ordinal 2 is a signal raised to 4,096: the blocks of a 5,000-byte payload
+  // for { kind: Kind.Fixed, iface: 1, ord: 2 } with no read waiting → notes is exactly one
+  // not-subscribed note, whose frame is the reassembled publish, and no over-limit note (P-3:
+  // the block path takes the limit of the fixed identity, keyed by kind)
   ```
 
   Change the existing test "a read of a fixed above the default ceiling of a
@@ -1368,7 +1487,12 @@ the slot empty).
       of `Session.read` (a `fixed` may arrive in blocks), and a README section
       that states the limit (at most 65,280 bytes), the `corrupt` rejection with
       the `over-limit` note for a `fixed` above its limit whether it crossed
-      whole or in blocks, and the end of the session on a sequence error.
+      whole or in blocks, on either frame version, and the end of the session on
+      a sequence error. The section also states that against a version 1
+      provider (`ridl-ws-v1` selected) a `fixed` larger than one message is not
+      reassembled, because that provider does not send it: it answers the `read`
+      `contract(UnknownInteraction)`, so the read rejects with `contract`
+      `unknown-interaction`, the same error an unknown member gives.
 
 - [ ] **Step 5: Run the package's commands.** Expected: PASS.
 
@@ -1390,12 +1514,17 @@ the slot empty).
   `e2e/deno_test.ts` and `e2e/browser_test.ts` with `onNote` recording no
   discard; and `crates/ridl-transport-ws/tests/ts_ceilings.rs` extended so that
   `BLOCK_BYTES`, `FRAME_VERSION`, `SUBPROTOCOL` and `SUBPROTOCOL_V1` are equal
-  on both sides. The three values go on new ordinals, and ordinal 5 keeps
-  `FIXED_VALUE`: the ws rig of `tests/scenario.rs` shares `provider.rs` and
-  reads the `fixed` of ordinal 5 into a 64-byte buffer through the test-only
-  consumer `WsClient` (`tests/support/client.rs`), whose `apply` has no block
-  form and panics on a `Frame::Block` ("the provider sent a consumer's frame"),
-  so the scenario must never receive a block.
+  on both sides. Its reader `ts_constant` parses the value of
+  `export const X = …;` as a `usize` and panics for anything else, so it reads
+  `BLOCK_BYTES` and `FRAME_VERSION` only; the test gains a string reader beside
+  it, which strips the quotes from `export const X = "…";`, and compares the
+  result with `frame::SUBPROTOCOL` and `frame::SUBPROTOCOL_V1`. The three values
+  go on new ordinals, and ordinal 5 keeps `FIXED_VALUE`: the ws rig of
+  `tests/scenario.rs` shares `provider.rs` and reads the `fixed` of ordinal 5
+  into a 64-byte buffer through the test-only consumer `WsClient`
+  (`tests/support/client.rs`), whose `apply` has no block form and panics on a
+  `Frame::Block` ("the provider sent a consumer's frame"), so the scenario must
+  never receive a block.
 - **A2, records (design task 9).** The frame specification (§4, §5.5, §5.6,
   §6.1, §6.3, §9.4, §10, §11.1 with a binding version 2 section and its vector
   table, §12 items 17 to 24, §13 streams at version 3; the §11.1 "The sizes"
@@ -1413,16 +1542,22 @@ the slot empty).
   36 + its limit and 4,130, and a limit the provider accepts carries every
   payload, whole or in blocks. The receiver rules of §5.5 and §6.3 state the
   `answer` exception of P-10 beside the whole-`publish` exception, with the
-  order of answers it rests on; conformance item 19 reads "a frame of another
-  form, other than a whole `publish` or an `answer` of the interaction being
-  reassembled, sent between two blocks of one payload is applied", and item 20
-  adds "an `answer` of the interaction being reassembled" to its list. The
+  order of answers it rests on. Both exceptions name the interaction being
+  reassembled by `(kind, interface, ordinal)` (P-11), and both apply only to a
+  frame the receiver decodes: a frame discarded for bytes after its header is
+  recorded and the reassembly goes on. Conformance item 19 reads "a frame of
+  another form, other than a whole `publish` or an `answer` of the interaction
+  being reassembled, sent between two blocks of one payload is applied", and
+  item 20 adds "an `answer` of the interaction being reassembled" to its list,
+  with both of its whole-`publish` and `answer` cases stated for a decoded frame
+  whose kind, interface and ordinal are those of the reassembly in progress. The
   design note's own list leaves out §6.1, §12 item 14, the `Config` sentence of
-  §11.1, the P-10 rule and `docs/decisions/README.md`, so add them there when
-  the note is gardened. Then `xtask/src/freeze/wire.rs` (`check_attach` requires
-  frame version 1, `check_vector` knows forms 1 to 10, `frame_vectors` reads the
-  first Id/Vector/Hex table only, and the header-table test lists ten forms),
-  then `cargo xtask freeze update`, which adds the `frame-vector` lines of the
+  §11.1, the P-10 and P-11 rules, `docs/decisions/README.md`, and two passages
+  of ADR-0030 named below, so add them there when the note is gardened. Then
+  `xtask/src/freeze/wire.rs` (`check_attach` requires frame version 1,
+  `check_vector` knows forms 1 to 10, `frame_vectors` reads the first
+  Id/Vector/Hex table only, and the header-table test lists ten forms), then
+  `cargo xtask freeze update`, which adds the `frame-vector` lines of the
   version 2 table; `tests/vectors.rs` and `tests/vectors_test.ts` read
   `attach-2` and `block-last` from the specification's version 2 table in place
   of those two constants, and every other shared vector (`block-one`,
@@ -1439,12 +1574,18 @@ the slot empty).
   tables, not the real row, and stay); ADR-0030 decision 15's threshold sentence
   and its Status sentence, with the ADR-0030 entry of `docs/decisions/README.md`
   (570–572, "built … except the blocks, which wait for driftsys/ridl#1129"),
-  which summarises that Status sentence; `docs/design/ridl-transport-ws.md`
-  (constants at 131, D-11 at 307 "`frame_version` not 1", the paragraph at
-  581–591 that says a `fixed` above 16,137 bytes is not sent "until the binding
-  carries such a `fixed` in blocks", the `Config` check at 665–679, D-20 at 708,
-  and "offered beside `ridl-ws-v1`" at 864),
-  `docs/design/ridl-transport-ws-ts.md` (7, 136, 194, D-19 at 395–398),
+  which summarises that Status sentence, and two more passages of ADR-0030 that
+  become false when blocks are built: the Consequences sentence at 1166–1170
+  ("until it is built, such a fixed cannot be served over WebSocket, and the
+  refusal at attach of 2026-10-28 is not built either"), and the pending entry
+  of "Where the rules are stated" at 910–919, which keeps the frame
+  specification §11.1 and `docs/design/ridl-transport-ws.md` pending "once the
+  design note of driftsys/ridl#1129 fixes their layout";
+  `docs/design/ridl-transport-ws.md` (constants at 131, D-11 at 307
+  "`frame_version` not 1", the paragraph at 581–591 that says a `fixed` above
+  16,137 bytes is not sent "until the binding carries such a `fixed` in blocks",
+  the `Config` check at 665–679, D-20 at 708, and "offered beside `ridl-ws-v1`"
+  at 864), `docs/design/ridl-transport-ws-ts.md` (7, 136, 194, D-19 at 395–398),
   `docs/technotes/websocket-binding-rationale.md` (the count of forms at 101,
   "enough for ten forms"; 194, and streams at version 3; and a new section on
   blocks, as the design note's list says),
@@ -1501,7 +1642,9 @@ Checked against `main` at 94b52730.
     sections §4, §5.5, §5.6, §6.3, §9.4, §10, §11.1, §12 and §13, and leaves out
     §6.1, whose `attach` table says `frame_version` is 1, §12 item 14 (one
     `publish` per `read` of a `fixed`), the `Config` sentence of §11.1 "The
-    sizes", and the ADR-0030 entry of `docs/decisions/README.md` (A2).
+    sizes", the ADR-0030 entry of `docs/decisions/README.md`, and two passages
+    of ADR-0030 besides decision 15 and its Status: the Consequences sentence on
+    blocks and the pending entry of "Where the rules are stated" (A2).
 13. B-6 states that a payload above its limit is recorded only for a `block`
     with `index` 0; the TypeScript package records nothing today for a whole
     `publish` of a `fixed` above its limit, so the report would depend on the
@@ -1509,3 +1652,9 @@ Checked against `main` at 94b52730.
 14. B-6 and §3 item 19 apply every frame of another form between two blocks,
     except a whole `publish` of the interaction being reassembled; an `answer`
     of that interaction would shift the `read` the blocks answer (P-10).
+15. B-6 names the interaction being reassembled by `(interface, ordinal)` in its
+    whole-`publish` row; this plan compares the kind too, in that check and in
+    the `answer` check of P-10, as the TypeScript session keys its queues and as
+    the frame specification §4 treats a frame whose kind disagrees with the
+    catalog (P-11). B-6 also gives no rule for a frame the codec discards
+    between two blocks; it is recorded and the reassembly goes on (T3).
