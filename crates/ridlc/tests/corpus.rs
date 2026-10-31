@@ -33,7 +33,7 @@
 //!
 //! The ridl interaction layer (E2):
 //!
-//! - `veh-cluster/` — the ridl reference Appendix A verbatim, plus authored
+//! - `veh-cluster/` — the ridl reference Appendix A (one bound lowered), plus authored
 //!   §14.5 services. The golden `.ridl` package: both service forms, all five
 //!   interaction kinds, every timing mode, contracts, streams, tombstones. See
 //!   `veh-cluster/NOTES`.
@@ -384,6 +384,65 @@ fn corpus_entries_compile_to_reviewed_snapshots() {
     });
 }
 
+/// Copies the directory tree at `from` to `to`.
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).expect("create a copy directory");
+    for entry in std::fs::read_dir(from).expect("read a corpus directory") {
+        let entry = entry.expect("read a corpus entry");
+        let target = to.join(entry.file_name());
+        if entry.file_type().expect("read a file type").is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target).expect("copy a corpus file");
+        }
+    }
+}
+
+/// Appends the default ceiling of every kind (ADR-0030) to the `[limits.kind]`
+/// table of each unit manifest under `root`, so that a bound above a kind's
+/// default ceiling is reported whatever the rules for a unit with no table.
+fn set_default_ceilings(root: &Path) {
+    for entry in std::fs::read_dir(root).expect("read a corpus directory") {
+        let path = entry.expect("read a corpus entry").path();
+        if path.is_dir() {
+            set_default_ceilings(&path);
+        } else if path.file_name().is_some_and(|name| name == "ridl.toml") {
+            let text = std::fs::read_to_string(&path).expect("read a manifest");
+            if text.contains("[package]") {
+                std::fs::write(
+                    &path,
+                    format!(
+                        "{text}\n[limits.kind]\nsignal = 3840\nevent = 3840\ncommand = 16128\nquery = 16128\n"
+                    ),
+                )
+                .expect("write a manifest");
+            }
+        }
+    }
+}
+
+/// The reply of `getFaultPage` fits the default ceiling of a query in every
+/// encoding the entry enables (flatbuffers, proto3 and podbuf), so the entry
+/// draws no size error when each unit gives the default ceilings. A manifest
+/// error would skip the size pass, so one fails the test too.
+#[test]
+fn veh_cluster_payloads_fit_the_default_ceilings() {
+    let copy = tempfile::tempdir().expect("a temp dir");
+    copy_tree(Path::new("tests/corpus/veh-cluster"), copy.path());
+    set_default_ceilings(copy.path());
+    let diagnostics = ridlc::run_check(copy.path(), ridl_core::Frozen::No)
+        .expect("the corpus entry checks")
+        .diagnostics;
+    let sized: Vec<_> = diagnostics
+        .iter()
+        .filter(|diagnostic| {
+            diagnostic.code.as_str() == "RIDL-151" || diagnostic.code.as_str().starts_with("MANI-")
+        })
+        .map(|diagnostic| diagnostic.message.clone())
+        .collect();
+    assert!(sized.is_empty(), "{sized:#?}");
+}
+
 /// A service composing two interfaces (ADR-0015 decision 12) compiles clean,
 /// lowers each reference canonicalized on its own, and survives both
 /// interchange encodings unchanged — the list is package data the encodings
@@ -514,18 +573,6 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-145", Showcase),
     ("RIDL-149", Showcase),
     (
-        "RIDL-150",
-        Elsewhere {
-            fixture: "crates/ridlc/tests/payload_ceiling.rs",
-            reason: "the payload ceiling check runs inside the shared check pass, over the codegen \
-                     model and the manifest's `[backend.<name>]` encodings, and the corpus \
-                     runner assembles its own passes, so the showcase compile never reaches \
-                     it. Provoked by \
-                     `a_struct_of_two_strings_at_the_advised_bound_is_above_the_ceiling` \
-                     and the other tests in `crates/ridlc/tests/payload_ceiling.rs`",
-        },
-    ),
-    (
         "RIDL-151",
         Elsewhere {
             fixture: "crates/ridlc/tests/payload_limits.rs",
@@ -587,6 +634,17 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      Provoked by \
                      `a_struct_whose_order_wastes_padding_draws_ridl_156_with_both_sizes_and_the_saving_order` \
                      in `crates/ridl/tests/lints.rs`",
+        },
+    ),
+    (
+        "RIDL-157",
+        Elsewhere {
+            fixture: "crates/ridlc/tests/payload_ceiling.rs",
+            reason: "the size pass runs inside the shared check pass, over the codegen model \
+                     and the manifest's `[backend.<name>]` encodings, and the corpus runner \
+                     assembles its own passes, so the showcase compile never reaches it. \
+                     Provoked by `a_signal_above_its_default_ceiling_draws_ridl_157` and the \
+                     other tests in `crates/ridlc/tests/payload_ceiling.rs`",
         },
     ),
     ("RIDL-201", Showcase),
@@ -1134,8 +1192,8 @@ fn rsdl_reference_rules_match_the_catalogue_summaries() {
 }
 
 /// The codes a reference table specifies that the catalogue has no entry for,
-/// each with the reason: the codes the checker does not emit yet, and the
-/// codes the lock retired.
+/// each with the reason: the codes the checker does not emit yet, the codes
+/// the lock retired, and the retired lint RIDL-150.
 /// Each code is a prefix and a number, because the guard that finds code
 /// literals in Rust sources (`codes_written_as_string_literals_are_all_catalogued`)
 /// reads a quoted code as an emitted one, and none of these is catalogued.
@@ -1179,6 +1237,12 @@ const DEFERRED_OR_RETIRED: &[(&str, u16, &str)] = &[
         "RIDL",
         148,
         "retired by the lock: `reserved` in a service's list is a parse error",
+    ),
+    (
+        "RIDL",
+        150,
+        "retired: the error RIDL-157 reports a payload above the default ceiling of its kind \
+         (ADR-0030 decision 7 as amended)",
     ),
     (
         "RIDL",

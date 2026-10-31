@@ -2,7 +2,7 @@
 //! deployment section against the frames this codec writes.
 
 use ridl_ir::codegen::known_bindings;
-use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal};
+use ridl_rt::contract::{CatalogHash, InterfaceNo, Kind, Ordinal, CALL_CEILING};
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_transport_ws::frame::{
     Attach, Frame, PublishState, ResponseOutcome, Target, ENVELOPE_BYTES, MAX_MESSAGE_LIMIT,
@@ -102,8 +102,9 @@ fn the_largest_attach_is_294_bytes() {
 
 #[test]
 fn the_largest_message_limit_is_the_largest_data_plane_message() {
-    assert_eq!(MAX_MESSAGE_LIMIT, ENVELOPE_BYTES + 20 + 16_256);
-    let payload = vec![0u8; 16_256];
+    assert_eq!(MAX_MESSAGE_LIMIT, ENVELOPE_BYTES + 20 + 16_128);
+    assert_eq!(MAX_MESSAGE_LIMIT, ENVELOPE_BYTES + 20 + CALL_CEILING);
+    let payload = vec![0u8; 16_128];
     let frame = Frame::Response {
         target: target(Kind::Query),
         envelope: envelope(),

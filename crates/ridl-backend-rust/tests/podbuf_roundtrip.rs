@@ -46,7 +46,7 @@ fn run(fixture: &str, name: &str, body: &str) {
 /// The helpers every program draws on.
 const HELPERS: &str = r#"
 use ridl_rt::encoding::Podbuf;
-use ridl_rt::payload::{EncodeError, Payload, Ref, VerifyError};
+use ridl_rt::payload::{EncodeError, Malformed, Payload, Ref, VerifyError};
 use ridl_rt::podbuf::Aligned;
 
 /// Encodes `value` into the type's own buffer, verifies the bytes through
@@ -247,22 +247,30 @@ fn an_exact_length_bytes_view_reads_the_bytes_in_place() {
     );
 }
 
+/// `verify` applies no length check (ADR-0030 decision 19): a buffer longer
+/// than `MAX_SIZE` verifies when its structure does, and is refused for its
+/// structure, not its length, when it does not.
 #[test]
-fn a_buffer_above_max_size_does_not_verify() {
+fn a_buffer_above_max_size_verifies_when_its_structure_does() {
     run(
         "podbuf_roundtrip.ridl",
-        "podbuf_payload_too_large",
+        "podbuf_payload_above_max_size",
         r#"
+    assert_eq!(<DoorPayload as Payload<Podbuf>>::MAX_SIZE, 16);
+    // An all-zero buffer is a preamble with a head of size 0, whose fields
+    // read as 0: valid at MAX_SIZE, and at any length past it.
     let big = Aligned([0u8; 64]);
+    for len in [16, 17, 24, 64] {
+        let proof = Ref::<DoorPayload, Podbuf>::verify(&big.0[..len]).expect("structure, not length");
+        assert_eq!(proof.decode(), DoorPayload { sensor_id: 0, is_open: false });
+    }
+    // Past MAX_SIZE with a head_size that reaches past the buffer: the
+    // structure fault is reported.
+    let mut bad = Aligned([0u8; 64]);
+    bad.0[0] = 24;
     assert!(matches!(
-        Ref::<DoorPayload, Podbuf>::verify(&big.0[..24]),
-        Err(VerifyError::Structure(_))
-    ));
-    // Exactly MAX_SIZE (16) is not too large; one byte more is.
-    assert!(Ref::<DoorPayload, Podbuf>::verify(&big.0[..16]).is_ok());
-    assert!(matches!(
-        Ref::<DoorPayload, Podbuf>::verify(&big.0[..17]),
-        Err(VerifyError::Structure(_))
+        Ref::<DoorPayload, Podbuf>::verify(&bad.0[..17]),
+        Err(VerifyError::Structure(Malformed::Preamble))
     ));
     "#,
     );

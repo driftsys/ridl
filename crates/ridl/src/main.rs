@@ -707,7 +707,9 @@ const MEMBER_CATEGORIES: [ridl_diff::Category; 3] = [
 /// docs/book/cli-reference.md): the run reports the denied lint and the
 /// RIDL-407 together.
 fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFormat) -> ExitCode {
-    let mut run = match ridlc::run_check(path, frozen.into()) {
+    // The desk check and the padding lint read the checked IR of the same
+    // compile, so the workspace is compiled once.
+    let (mut run, ir) = match ridlc::run_check_with_ir(path, frozen.into()) {
         Ok(run) => run,
         Err(err) => {
             eprintln!("error: {err}");
@@ -730,11 +732,13 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
             Err(code) => return code,
         };
         if let Some(location) = &location
-            && let Err(code) = desk_check(path, location, baseline.is_some(), &mut run)
+            && let Err(code) = desk_check(path, location, baseline.is_some(), &ir, &mut run)
         {
             return code;
         }
-        if let Err(code) = padding_check(path, location.as_deref(), baseline.is_some(), &mut run) {
+        if let Err(code) =
+            padding_check(path, location.as_deref(), baseline.is_some(), &ir, &mut run)
+        {
             return code;
         }
     }
@@ -1514,19 +1518,19 @@ fn default_baseline_dir(entry: &Path) -> PathBuf {
 /// label to every RIDL-409 whose orphan entry has exactly one same-shape
 /// candidate ([`rename_labels`]).
 ///
-/// The workspace is compiled a second time here, through
-/// [`ridlc::compile_workspace`], because `run_check` renders diagnostics but
-/// does not hand back the IR. The cost is paid only when a baseline is actually
-/// present, and never on a run that failed for anything but RIDL-409.
-/// `explicit` — whether
-/// `location` came from a `--baseline` flag rather than auto-discovery — is
-/// passed straight through to [`load_baseline`], which it uses to tell an
-/// explicit `--baseline` holding no snapshot (a refusal) from an
-/// auto-discovered directory holding none (a silent skip).
+/// The checked IR is the run's own, `ir` ([`ridlc::CheckedIr`]), so the
+/// workspace is not compiled again; the comparison runs only when a baseline
+/// is actually present, and never on a run that failed for anything but
+/// RIDL-409. `explicit` — whether `location` came from a `--baseline` flag
+/// rather than auto-discovery — is passed straight through to
+/// [`load_baseline`], which it uses to tell an explicit `--baseline` holding
+/// no snapshot (a refusal) from an auto-discovered directory holding none (a
+/// silent skip).
 fn desk_check(
     entry: &Path,
     location: &Path,
     explicit: bool,
+    ir: &ridlc::CheckedIr,
     run: &mut CliRun,
 ) -> Result<(), ExitCode> {
     let baseline = load_baseline(location, explicit)?;
@@ -1534,29 +1538,21 @@ fn desk_check(
         return Ok(());
     }
 
-    let mut db = ridl_core::RidlDatabase::default();
-    let output = match ridlc::compile_workspace(&mut db, entry) {
-        Ok(output) => output,
-        Err(err) => {
-            eprintln!("error: {}: {err}", entry.display());
-            return Err(ExitCode::from(2));
-        }
-    };
     // The caller's gate read the diagnostics of the entry's member only. The
     // desk check compares the whole workspace, so it runs only when no member
     // has an error other than RIDL-409. These diagnostics carry the emit
     // severities, so a lint is never an error here.
-    if !lock::only_lock_orphans(&output.diagnostics) {
+    if !lock::only_lock_orphans(&ir.diagnostics) {
         return Ok(());
     }
-    let report_scope = output.report_scope;
+    let report_scope = ir.report_scope.as_deref();
     // The baseline holds the consumer's packages only (`run_baseline`), so
     // the desk compares the same set: a remote unit is its owner's contract.
-    let current: Vec<ridl_ir::v2::Package> = output
+    let current: Vec<ridl_ir::v2::Package> = ir
         .checked
-        .into_iter()
-        .filter(|checked| !ridlc::is_remote(&checked.ir, &output.remote_units))
-        .map(|checked| checked.ir)
+        .iter()
+        .filter(|checked| !ridlc::is_remote(&checked.ir, &ir.remote_units))
+        .map(|checked| checked.ir.clone())
         .collect();
 
     // `ridl.std` is context, as in `run_diff`, so the desk reads the verdict
@@ -1591,7 +1587,7 @@ fn desk_check(
     // 9, as ADR-0026 amends it).
     // RIDL-407 is raised on the consumer's own declarations, so no remote
     // unit directory is passed.
-    ridlc::retain_in_report_scope(&mut warnings, &run.sources, report_scope.as_deref(), &[]);
+    ridlc::retain_in_report_scope(&mut warnings, &run.sources, report_scope, &[]);
     run.diagnostics.extend(warnings);
     rename_labels(&baseline, &current, &index, run);
     Ok(())
@@ -1621,16 +1617,18 @@ fn manifest_enables_podbuf(entry: &Path) -> bool {
         })
 }
 
-/// RIDL-156 (`podbuf-padding-order`) over the checked workspace, appended to
-/// `run`. It runs when a `[backend.<name>]` table enables `podbuf` and the
-/// compile produced no error other than RIDL-409, and it only ever adds
-/// diagnostics. A struct is released when a snapshot under `location` declares
-/// it; with no baseline every struct is unreleased. `ridlc` reads no baseline
-/// (ADR-0008 decisions 9 and 14), so the lint belongs to `ridl check`.
+/// RIDL-156 (`podbuf-padding-order`) over the checked workspace `ir`,
+/// appended to `run`. It runs when a `[backend.<name>]` table enables
+/// `podbuf` and the compile produced no error other than RIDL-409, and it
+/// only ever adds diagnostics. A struct is released when a snapshot under
+/// `location` declares it; with no baseline every struct is unreleased.
+/// `ridlc` reads no baseline (ADR-0008 decisions 9 and 14), so the lint
+/// belongs to `ridl check`.
 fn padding_check(
     entry: &Path,
     location: Option<&Path>,
     explicit: bool,
+    ir: &ridlc::CheckedIr,
     run: &mut CliRun,
 ) -> Result<(), ExitCode> {
     if !manifest_enables_podbuf(entry) {
@@ -1654,25 +1652,16 @@ fn padding_check(
             .collect(),
         None => BTreeSet::new(),
     };
-    let mut db = ridl_core::RidlDatabase::default();
-    let output = match ridlc::compile_workspace(&mut db, entry) {
-        Ok(output) => output,
-        Err(err) => {
-            eprintln!("error: {}: {err}", entry.display());
-            return Err(ExitCode::from(2));
-        }
-    };
-    if !lock::only_lock_orphans(&output.diagnostics) {
+    if !lock::only_lock_orphans(&ir.diagnostics) {
         return Ok(());
     }
-    let all: Vec<&ridl_ir::v2::Package> =
-        output.checked.iter().map(|checked| &checked.ir).collect();
+    let all: Vec<&ridl_ir::v2::Package> = ir.checked.iter().map(|checked| &checked.ir).collect();
     // A remote unit is its owner's contract, so it is a target of references
     // and never a subject.
     let subjects: Vec<&ridl_ir::v2::Package> = all
         .iter()
         .copied()
-        .filter(|package| !ridlc::is_remote(package, &output.remote_units))
+        .filter(|package| !ridlc::is_remote(package, &ir.remote_units))
         .collect();
     let std = ridlc::std_ir();
     let index = DeclIndex::build(entry);
@@ -1684,12 +1673,7 @@ fn padding_check(
         &mut run.sources,
         |package, name, sources| index.shape_span(package, name, sources),
     );
-    ridlc::retain_in_report_scope(
-        &mut findings,
-        &run.sources,
-        output.report_scope.as_deref(),
-        &[],
-    );
+    ridlc::retain_in_report_scope(&mut findings, &run.sources, ir.report_scope.as_deref(), &[]);
     run.diagnostics.extend(findings);
     Ok(())
 }

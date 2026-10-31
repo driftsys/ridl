@@ -354,6 +354,13 @@ execution handoff and the Kotlin heads-up and release-note draft
 the work landed and its material was gardened into ADR-0002, ADR-0014 decision
 15, ADR-0015, ADR-0022 decision 6 and the design records they name.
 
+The size rules plan (`2026-10-30-size-rules-plan.md`) was archived on
+2026-10-30, once the work landed;
+[ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) and the records
+its Status names are the durable records. Its postponed companion,
+`2026-10-28-payload-ceilings-postponed.md`, stays here: its section 1 stays
+postponed until the owner decides.
+
 ## Files that stay after the 0.10.0 gardening pass (2026-10-13)
 
 Each file below was read against the code and the issue tracker on 2026-10-13

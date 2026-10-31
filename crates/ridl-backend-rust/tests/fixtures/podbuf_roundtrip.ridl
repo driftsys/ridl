@@ -237,3 +237,14 @@ struct IntKeyed {
 struct BoolKeyed {
   byFlag : [boolean : Weight; 0..2]
 }
+
+/// A field whose check refuses 0: `level` at 0, pad 1..8.
+struct Strict {
+  level : integer [1..9]
+}
+
+/// An array of `Strict` heads: a descriptor whose `elem_size` is 0 reads
+/// every field of every element as 0, which `level` refuses.
+struct Stricts {
+  items : [Strict; 0..4]
+}

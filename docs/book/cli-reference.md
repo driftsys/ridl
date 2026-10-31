@@ -822,6 +822,15 @@ the `mod` that wraps the `include!`. Explicit crate-root links in the generated
 docs can be unresolved when the file is included inside another module
 ([Documentation in the generated code](generated-code.md#documentation-in-the-generated-code)).
 
+**`rustfmt` skips the generated files.** The generated Rust is formatted with
+the `prettyplease` crate, whose layout is not the layout of `rustfmt`, and every
+doc comment in it is written with `///`. The emitted `lib.rs` puts
+`#[rustfmt::skip]` on each `mod` that is loaded from a generated file, so
+`cargo fmt --check` over a crate that holds the generated crate passes and
+leaves those files as they are. The `lib.rs` itself is formatted as `rustfmt`
+formats it. `rustfmt` does not read a file reached through `include!`, so a
+consumer that includes a generated file that way needs no attribute.
+
 **Two things it may leave out, each with a note in the source it writes.** A
 type whose size the compiler cannot bound — one that reaches itself, or a
 stream — carries no codec, and gets a `__RIDL_FB_NO_CODEC_<NAME>` constant
@@ -968,32 +977,44 @@ catalog hash. The consumer reports no RIDL-151 or RIDL-152 for it.
 
 The limit of an interaction is the first that is found of: its entry in
 `[limits.interaction]`, the entry of its kind in `[limits.kind]`, `default`,
-and the payload ceiling of 16,256 bytes. No limit is above the ceiling. A key
+and the default ceiling of its kind. The default ceiling is 3,840 bytes for a
+`signal` and an `event`, 16,128 for a `command` and a `query`, and 65,280 for a
+`fixed`. A `[limits.kind]` entry may lower the limit of its kind and may not
+raise it above the default ceiling. `default` applies to each kind up to the
+default ceiling of that kind, so `default = 4096` gives a `signal` the limit
+3,840. A `[limits.interaction]` entry may raise one member above the default
+ceiling of its kind, up to 16,128 bytes; a `fixed` is not raised, because its
+default ceiling is already the largest. No value is above 65,280. A key
 of `[limits.interaction]` is the short name of the interface, or of the inline
 `service` (the last segment of its dotted name), then `.`, then the member;
 neither the package nor a dotted service name is part of it. When two
 interfaces or inline services of one unit share a short name, a key that uses
 the name is ambiguous.
 
-An unknown kind in `[limits.kind]` is MANI-021, and a value above 16,256 is
-MANI-022. A key that names no interaction of the unit, or that is ambiguous, is
-RIDL-152, reported on the key. RIDL-151 is reported on an interaction whose
-payload has a largest encoded size, in an encoding that a `[backend.<name>]`
-table enables (FlatBuffers when no table names one), above the limit that an
-entry of `[limits]` gives it, or no finite bound. A `command` or `query`
-checks its request and its reply against its one limit, and a `fixed` is sized
-too. Both are errors, so they have no name and no level in `[lints]`. A payload
-above the ceiling under a declared limit draws RIDL-150 as well; where no entry
-gives a limit, only RIDL-150 applies. A package with an error that stops
-`ridl build` writing artifacts, or that depends on one, is not checked, and a
-unit with such a package reports no RIDL-152. An error in a manifest stops
-RIDL-150 in every package of the workspace, and RIDL-151 and RIDL-152 only in
-the packages beneath that manifest.
+An unknown kind in `[limits.kind]` is MANI-021. MANI-022 is a `[limits.kind]`
+value above the default ceiling of its kind, a `default` or a
+`[limits.interaction]` value above 65,280, and a `[limits.interaction]` value
+between 16,129 and 65,280 that names a member other than a `fixed`; the last is
+reported on the value by the same pass that sizes the payloads, and the entry
+gives no limit. A key that names no interaction of the unit, or that is
+ambiguous, is RIDL-152, reported on the key. RIDL-151 is reported on an
+interaction whose payload has a largest encoded size, in an encoding that a
+`[backend.<name>]` table enables (FlatBuffers when no table names one), above
+the limit that an entry of `[limits]` gives it, or no finite bound. Where no
+entry gives a limit, the same check against the default ceiling of the kind is
+RIDL-157, so an interaction draws at most one of the two. A `command` or
+`query` checks its request and its reply against its one limit, a fallible
+reply is checked through both of its types, and a `fixed` is sized too. All
+three are errors, so they have no name and no level in `[lints]`. A package
+with an error that stops `ridl build` writing artifacts, or that depends on
+one, is not checked, and a unit with such a package reports no RIDL-152. An
+error in a manifest stops the pass only in the packages beneath that manifest.
 
-A `[limits]` entry that applies to an interaction is recorded in the IR, so
-adding, removing or editing one changes the catalog hash of the interaction's
-unit. An interaction that no entry reaches records no limit, and a unit with no
-`[limits]` table keeps its hash.
+A `[limits]` entry that applies to an interaction is recorded in the IR, with
+`default` clamped to the default ceiling of the kind, so adding, removing or
+editing one changes the catalog hash of the interaction's unit. An interaction
+that no entry reaches records no limit, which means the default ceiling of its
+kind, and a unit with no `[limits]` table keeps its hash.
 
 **`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
 surface — structs, enums, enum sets and unions, projected to proto3 messages
@@ -1539,48 +1560,23 @@ category's classification rule without comparing anything.
 names a manifest's `[backend.<name>] encodings` list takes (`flatbuffers`,
 `proto3`, `podbuf`); repeat the flag for several. A snapshot does not record
 the encodings a workspace builds, so the command does not read them from a
-manifest. Only `podbuf` has rules of its own, three of them. A struct field
-appended to a struct that another struct, a tuple or an exact-length array
-holds inline anywhere in the new side — in a struct, in the argument struct a
-call with several parameters induces, or in a tuple reply — is
-`podbuf_inline_append`, breaking with `--encoding podbuf` and compatible
-without it, because the inline copy cannot grow without moving the fields
-after it. An enum value, an enum-set flag or a union arm appended after which
-the podbuf integer of the enum, of the enum set or the tag of the union is a
-different integer, by width or by signedness — a value above 255, a flag at
-bit 8 or an arm past ordinal 255 widens a `u8` to a `u16`, a value above 65535
-or a flag at bit 16 a `u16` to a `u32`, and a value above 4294967295 or a flag
-at bit 32 a `u32` to a `u64`; an enum's integer is signed when a value is
-negative, and since a negative value appended to an enum that has values is an
-insert below its highest value, a breaking `decl_added`, the integer turns
-signed only when an enum with no value gains values — is
+manifest. Only `podbuf` has rules of its own, three of them, each breaking
+with `--encoding podbuf` and compatible without it, and each listed under the
+heading `breaking under podbuf` either way, so that a workspace that does not
+build podbuf still sees it. A struct field appended that grows the podbuf head
+of a struct another head of the old side holds inline is
+`podbuf_inline_append`, whose line names each inline use. An enum value, an
+enum-set flag or a union arm appended after which the podbuf integer of the
+enum, the enum set or the union's tag is a different integer is
 `podbuf_width_change`, reported once per declaration with the old and the new
-integer, breaking with `--encoding podbuf` because every head that holds the enum, the enum set or the union lays out a
-different integer; an append that keeps the integer draws no such line. Without
-the flag the line is reported compatible, which holds under proto3; an enum-set
-flag that widens the integer also widens the enum set's FlatBuffers scalar,
-which `ridl diff --encoding flatbuffers` does not report yet
-(driftsys/ridl#1120). An enum value or an enum-set flag appended is
+integer. An enum value or an enum-set flag appended is
 `podbuf_strict_enum_append`, reported once per declaration with the appended
-names, breaking with `--encoding podbuf` and compatible without it, because
-every enum and enum set is strict and the `verify` of an older reader refuses
-a value or a bit its declaration does not name; an enum or an enum set whose
-append changes the integer draws only the `podbuf_width_change` line. The
-`podbuf_inline_append` line names each inline use, a struct field as
-`<package>/<struct>/<field>` and an interaction's request, reply or fixed
-payload as `<package>/<interface>/<interaction>`, and sits under the heading
-`breaking under podbuf` either way, so that a workspace that does not build
-podbuf still sees it. The search mirrors the heads the encoder lays out, a
-declaration and a named induced tuple: a struct that is a root of its own (a
-single named parameter, a named reply, a signal, event or fixed payload), that
-is used only behind a descriptor (the element of a bounded array, the key or
-value of a map entry, a union arm), or only inside an exact-length array that
-is itself a root (a fixed payload `[S; 2..2]`, which has no head) draws no
-such line: the root or the descriptor's stride gives the producer's size. A
-tuple inside such a root is a head, and a struct inside that tuple is a use.
-A name outside the three is a usage error,
-exit 2. With `Reading` held
-inline by `Bounds` and a field appended to it:
+names, except that an enum or an enum set whose append changes the integer
+draws only the `podbuf_width_change` line. The three rules are stated in
+[ADR-0031][adr-0031] decision 10, and `ridl diff --explain <category>` states
+each in full. A name outside the three is a usage error, exit 2. With
+`Reading` held inline by `Bounds` and an eight-byte field appended to it,
+which grows its head:
 
 ```sh
 ridl diff --encoding podbuf v1.typl v2.typl
@@ -2731,5 +2727,6 @@ argument.
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md
 [adr-0014]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0014-ir-encodings.md
 [adr-0020]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
+[adr-0031]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0031-podbuf-projection-rules.md
 [issue-196]: https://github.com/driftsys/ridl/issues/196
 [clig]: https://clig.dev

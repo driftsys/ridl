@@ -11,7 +11,7 @@ use ridl_rt::error::{CallError, Contract, Transport};
 use ridl_rt::port::{Caller, ClaimId, Handler, ReadError, SendError, SettleError};
 use ridl_rt::trace::TraceContext;
 
-use crate::{runtime, Factory, IFACE, ORD, TRACE_A, TRACE_B, TRACE_ZERO};
+use crate::{fill, runtime, Factory, IFACE, ORD, TRACE_A, TRACE_B, TRACE_ZERO};
 
 /// A command reaches the handler with its arguments, and the settlement is
 /// observable through `ack`.
@@ -952,4 +952,82 @@ pub fn a_reused_call_slot_does_not_keep_the_previous_context<F: Factory>() {
         .expect("next_claim")
         .expect("the new call");
     assert_eq!(claim.trace, None);
+}
+
+/// Arguments longer than the call's limit are refused with the limit, and
+/// nothing is sent: no handler is presented a claim, and no slot is taken.
+/// The suite attaches to a catalog with no descriptor, so the limit is the
+/// default ceiling of a command and a query, 16,128 bytes (ADR-0030 decision
+/// 16); arguments of exactly that length are sent.
+pub fn arguments_longer_than_the_call_limit_are_refused_and_not_sent<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    assert_eq!(
+        rt.command(IFACE, ORD, &[0u8; 16_129], None),
+        Err(SendError::TooLarge { cap: 16_128 }),
+        "one byte above the default ceiling of a command is refused"
+    );
+    assert_eq!(
+        rt.query(IFACE, ORD, &[0u8; 16_129], None),
+        Err(SendError::TooLarge { cap: 16_128 }),
+        "one byte above the default ceiling of a query is refused"
+    );
+
+    let mut buf = vec![0u8; 16_384];
+    assert!(
+        rt.next_claim(&mut buf).expect("next_claim").is_none(),
+        "a refused call is presented to no handler"
+    );
+
+    let c = rt
+        .command(IFACE, ORD, &[0u8; 16_128], None)
+        .expect("arguments of exactly the default ceiling are sent");
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("the accepted call is waiting");
+    assert_eq!(claim.len, 16_128);
+    rt.settle(claim.id, Ok(&[])).expect("settle");
+    rt.forget(c);
+
+    let _ = fill::<F>(&mut rt);
+    assert_eq!(
+        rt.command(IFACE, ORD, &[1], None),
+        Err(SendError::Busy),
+        "the refused calls took no slot: the table fills with SLOTS calls"
+    );
+}
+
+/// A reply longer than the call's limit is refused with the limit, no
+/// outcome is recorded, and the claim stays settleable with a reply within
+/// the limit. The limit is the default ceiling of a query, 16,128 bytes, as
+/// for the arguments; a reply of exactly that length is recorded.
+pub fn a_reply_longer_than_the_call_limit_is_refused_and_not_recorded<F: Factory>() {
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let correlation = rt.query(IFACE, ORD, &[1], None).expect("query sent");
+    let mut buf = [0u8; 8];
+    let claim = rt
+        .next_claim(&mut buf)
+        .expect("next_claim")
+        .expect("a claim is waiting");
+
+    assert_eq!(
+        rt.settle(claim.id, Ok(&[0u8; 16_129])),
+        Err(SettleError::TooLarge { cap: 16_128 }),
+        "one byte above the default ceiling of a query is refused"
+    );
+    let mut out = vec![0u8; 16_384];
+    assert_eq!(
+        rt.reply(correlation, &mut out).expect("reply"),
+        None,
+        "a refused settle records no outcome"
+    );
+
+    rt.settle(claim.id, Ok(&[0u8; 16_128]))
+        .expect("a reply of exactly the default ceiling is recorded");
+    assert_eq!(
+        rt.reply(correlation, &mut out).expect("reply"),
+        Some(Ok(16_128))
+    );
 }

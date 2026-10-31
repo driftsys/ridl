@@ -91,7 +91,7 @@ impl ::core::default::Default for DiagError {
 pub struct FaultPage {
     /// # Rules
     ///
-    /// - count 0 ..= 64
+    /// - count 0 ..= 14
     pub faults: ::std::vec::Vec<FaultEvent>,
 }
 impl ::core::default::Default for FaultPage {
@@ -695,17 +695,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorPaylo
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<DoorPayloadFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_DoorPayload(buf, table)?;
@@ -899,17 +888,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagFilte
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<DiagFilterFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_DiagFilter(buf, table)?;
@@ -1144,17 +1122,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultEven
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<FaultEventFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_FaultEvent(buf, table)?;
@@ -1273,17 +1240,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<DiagErrorFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_DiagError(buf, table)?;
@@ -1362,7 +1318,7 @@ pub(crate) fn __ridl_fb_encode_FaultPage(
         offset: 4u16,
         value: ::ridl_rt::flatbuffers::Field::Offset({
             let __c = &value.faults;
-            if __c.len() > 64usize {
+            if __c.len() > 14usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("FaultPage"),
@@ -1393,7 +1349,7 @@ pub(crate) fn __ridl_fb_verify_FaultPage(
         ::core::option::Option::Some(__p) => {
             let __v = ::ridl_rt::flatbuffers::vector(buf, __p, 4usize)
                 .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-            if __v.len > 64usize {
+            if __v.len > 14usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("FaultPage"),
@@ -1452,10 +1408,10 @@ pub(crate) fn __ridl_fb_decode_FaultPage(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultPage {
-    /// The largest FlatBuffers buffer any legal `FaultPage` encodes to: 70649 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 70649usize;
-    type Buffer = [::core::primitive::u8; 70649usize];
-    const BUFFER: Self::Buffer = [0u8; 70649usize];
+    /// The largest FlatBuffers buffer any legal `FaultPage` encodes to: 15499 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 15499usize;
+    type Buffer = [::core::primitive::u8; 15499usize];
+    const BUFFER: Self::Buffer = [0u8; 15499usize];
     type View<'a> = FaultPageFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1479,17 +1435,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FaultPage
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<FaultPageFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_FaultPage(buf, table)?;
@@ -1621,17 +1566,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawTickCo
         RawTickCountFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_RawTickCount(buf, table)?;
@@ -1862,17 +1796,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for RawWheelS
         RawWheelSpanFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_RawWheelSpan(buf, table)?;
@@ -1992,17 +1915,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanLevel 
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<FanLevelFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_FanLevel(buf, table)?;
@@ -2187,17 +2099,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FilterSta
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<FilterStateFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_FilterState(buf, table)?;
@@ -2429,17 +2330,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for ClimateRe
         ClimateReportFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_ClimateReport(buf, table)?;
@@ -2558,17 +2448,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for HvacError
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<HvacErrorFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_HvacError(buf, table)?;
@@ -2687,17 +2566,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for FanTag {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<FanTagFbView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_FanTag(buf, table)?;
@@ -2797,17 +2665,6 @@ for WheelDiagnosticsReadTicksParams {
         WheelDiagnosticsReadTicksParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_WheelDiagnosticsReadTicksParams(buf, table)?;
@@ -2910,17 +2767,6 @@ for WheelDiagnosticsReadSpanParams {
         WheelDiagnosticsReadSpanParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_WheelDiagnosticsReadSpanParams(buf, table)?;
@@ -3118,17 +2964,6 @@ for WheelDiagnosticsReadSpanReply {
         WheelDiagnosticsReadSpanReplyFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_WheelDiagnosticsReadSpanReply(buf, table)?;
@@ -3221,17 +3056,6 @@ for VehHvacCabinGetBoundsParams {
         VehHvacCabinGetBoundsParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_VehHvacCabinGetBoundsParams(buf, table)?;
@@ -3422,17 +3246,6 @@ for VehHvacCabinGetBoundsReply {
         VehHvacCabinGetBoundsReplyFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_VehHvacCabinGetBoundsReply(buf, table)?;
@@ -3525,17 +3338,6 @@ for VehHvacCabinGetClimateParams {
         VehHvacCabinGetClimateParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_VehHvacCabinGetClimateParams(buf, table)?;
@@ -3631,17 +3433,6 @@ for VehHvacCabinGetCabinTempParams {
         VehHvacCabinGetCabinTempParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_VehHvacCabinGetCabinTempParams(buf, table)?;
@@ -3734,17 +3525,6 @@ for VehHvacCabinScaledFanParams {
         VehHvacCabinScaledFanParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::FlatBuffers,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         __ridl_fb_verify_VehHvacCabinScaledFanParams(buf, table)?;
@@ -4853,7 +4633,7 @@ pub(crate) fn __ridl_pb_encode_FaultPage(
 ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
     {
         let __c = &value.faults;
-        if __c.len() > 64usize {
+        if __c.len() > 14usize {
             return ::core::result::Result::Err(
                 ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                     type_name: ::core::option::Option::Some("FaultPage"),
@@ -4898,7 +4678,7 @@ pub(crate) fn __ridl_pb_verify_FaultPage(
             }
         }
     }
-    if __c0 > 64usize {
+    if __c0 > 14usize {
         return ::core::result::Result::Err(
             ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
                 type_name: ::core::option::Option::Some("FaultPage"),
@@ -4925,10 +4705,10 @@ pub(crate) fn __ridl_pb_decode_FaultPage(buf: &[::core::primitive::u8]) -> Fault
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for FaultPage {
-    /// The largest proto3 message any legal `FaultPage` encodes to: 67008 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 67008usize;
-    type Buffer = [::core::primitive::u8; 67008usize];
-    const BUFFER: Self::Buffer = [0u8; 67008usize];
+    /// The largest proto3 message any legal `FaultPage` encodes to: 14658 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 14658usize;
+    type Buffer = [::core::primitive::u8; 14658usize];
+    const BUFFER: Self::Buffer = [0u8; 14658usize];
     type View<'a> = ::ridl_rt::proto3::Verified<'a>;
     fn encode<'o>(
         &self,
@@ -7409,17 +7189,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for DoorPayload {
         DoorPayloadPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -7726,17 +7495,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for DiagFilter {
         DiagFilterPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -8030,17 +7788,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for FaultEvent {
         FaultEventPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -8078,7 +7825,7 @@ impl FaultPage {
     ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
         {
             let __c = &self.faults;
-            if __c.len() > 64usize {
+            if __c.len() > 14usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::EncodeError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("FaultPage"),
@@ -8207,7 +7954,7 @@ impl FaultPage {
                     8usize,
                 )?;
             }
-            if ::core::primitive::usize::from(__d.len) > 64usize {
+            if ::core::primitive::usize::from(__d.len) > 14usize {
                 return ::core::result::Result::Err(
                     ::ridl_rt::payload::VerifyError::Contract(::ridl_rt::payload::Violation {
                         type_name: ::core::option::Option::Some("FaultPage"),
@@ -8254,11 +8001,11 @@ impl FaultPage {
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for FaultPage {
-    /// The largest podbuf buffer any legal `FaultPage` encodes to: 67152 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 67152usize;
-    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 67152usize]>;
+    /// The largest podbuf buffer any legal `FaultPage` encodes to: 14702 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 14702usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 14702usize]>;
     const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
-        [::core::primitive::u8; 67152usize],
+        [::core::primitive::u8; 14702usize],
     >::zeroed();
     type View<'a> = FaultPagePodbufView<'a>;
     fn encode<'o>(
@@ -8286,17 +8033,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for FaultPage {
         FaultPagePodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -8502,17 +8238,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for RawWheelSpan {
         RawWheelSpanPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -8698,17 +8423,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for FilterState {
         FilterStatePodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -8917,17 +8631,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for ClimateReport 
         ClimateReportPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -9375,17 +9078,6 @@ for WheelDiagnosticsReadTicksParams {
         WheelDiagnosticsReadTicksParamsPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -9526,17 +9218,6 @@ for WheelDiagnosticsReadSpanParams {
         WheelDiagnosticsReadSpanParamsPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -9741,17 +9422,6 @@ for WheelDiagnosticsReadSpanReply {
         WheelDiagnosticsReadSpanReplyPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10049,17 +9719,6 @@ for VehHvacCabinGetBoundsParams {
         VehHvacCabinGetBoundsParamsPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10250,17 +9909,6 @@ for VehHvacCabinGetBoundsReply {
         VehHvacCabinGetBoundsReplyPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10392,17 +10040,6 @@ for VehHvacCabinGetClimateParams {
         VehHvacCabinGetClimateParamsPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10534,17 +10171,6 @@ for VehHvacCabinGetCabinTempParams {
         VehHvacCabinGetCabinTempParamsPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10676,17 +10302,6 @@ for VehHvacCabinScaledFanParams {
         VehHvacCabinScaledFanParamsPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10807,17 +10422,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for DiagError {
         DiagErrorPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -10935,17 +10539,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for RawTickCount {
         RawTickCountPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -11058,17 +10651,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for FanLevel {
         FanLevelPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -11189,17 +10771,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for HvacError {
         HvacErrorPodbufView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -11381,17 +10952,6 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for FanTag {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<FanTagPodbufView<'_>, ::ridl_rt::payload::VerifyError> {
-        if buf.len()
-            > <Self as ::ridl_rt::payload::Payload<
-                ::ridl_rt::encoding::Podbuf,
-            >>::MAX_SIZE
-        {
-            return ::core::result::Result::Err(
-                ::ridl_rt::payload::VerifyError::Structure(
-                    ::ridl_rt::payload::Malformed::TooLarge,
-                ),
-            );
-        }
         Self::__ridl_podbuf_verify(buf)
     }
     fn decode(
@@ -11413,20 +10973,20 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf> for FanTag {
 /// (interaction-face design rule 2).
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_NO_FACE_VehicleStatus: () = ();
-/**Descriptor for interface `WheelHistory`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
-
-Its size table in FlatBuffers is `<WheelHistory as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
-
-Its size table in proto3 is `<WheelHistory as Sizes<Proto3>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
-
-Its size table in podbuf is `<WheelHistory as Sizes<Podbuf>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
+/// Descriptor for interface `WheelHistory`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
+///
+/// Its size table in FlatBuffers is `<WheelHistory as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+///
+/// Its size table in proto3 is `<WheelHistory as Sizes<Proto3>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+///
+/// Its size table in podbuf is `<WheelHistory as Sizes<Podbuf>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
 pub struct WheelHistory;
 impl ::ridl_rt::contract::Interface for WheelHistory {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            253, 70, 44, 23, 144, 174, 163, 156, 221, 206, 138, 227, 100, 219, 134, 132,
-            186, 104, 209, 190, 41, 174, 33, 156, 10, 179, 21, 251, 60, 23, 77, 3,
+            216, 142, 84, 116, 88, 165, 14, 134, 135, 142, 159, 229, 204, 2, 175, 134,
+            132, 21, 147, 254, 215, 116, 49, 146, 34, 104, 19, 52, 246, 202, 13, 76,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -11838,11 +11398,11 @@ pub mod wheel_history {
         crate::veh::common::Ratio: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Port = P;
-        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
-
-# Panics
-
-Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelHistory as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelHistory` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelHistory as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelHistory` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
         #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
@@ -12012,11 +11572,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         crate::veh::common::Ratio: ::ridl_rt::payload::Payload<W::Encoding>,
     {
         type Port = W;
-        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
-
-# Panics
-
-Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelHistory as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelHistory` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelHistory as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelHistory` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
         #[track_caller]
         fn new(port: W) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
@@ -12092,20 +11652,20 @@ Panics when `port` is attached to a catalog other than the one this face was gen
 /// (interaction-face design, "The consumer face").
 #[allow(dead_code, non_upper_case_globals)]
 const __RIDL_NO_FACE_WheelDiagnostics: () = ();
-/**Descriptor for interface `WheelSummary`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
-
-Its size table in FlatBuffers is `<WheelSummary as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
-
-Its size table in proto3 is `<WheelSummary as Sizes<Proto3>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
-
-Its size table in podbuf is `<WheelSummary as Sizes<Podbuf>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
+/// Descriptor for interface `WheelSummary`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
+///
+/// Its size table in FlatBuffers is `<WheelSummary as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+///
+/// Its size table in proto3 is `<WheelSummary as Sizes<Proto3>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+///
+/// Its size table in podbuf is `<WheelSummary as Sizes<Podbuf>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
 pub struct WheelSummary;
 impl ::ridl_rt::contract::Interface for WheelSummary {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            253, 70, 44, 23, 144, 174, 163, 156, 221, 206, 138, 227, 100, 219, 134, 132,
-            186, 104, 209, 190, 41, 174, 33, 156, 10, 179, 21, 251, 60, 23, 77, 3,
+            216, 142, 84, 116, 88, 165, 14, 134, 135, 142, 159, 229, 204, 2, 175, 134,
+            132, 21, 147, 254, 215, 116, 49, 146, 34, 104, 19, 52, 246, 202, 13, 76,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
@@ -12309,11 +11869,11 @@ pub mod wheel_summary {
         super::FanLevel: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Port = P;
-        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
-
-# Panics
-
-Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelSummary as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelSummary` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelSummary as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelSummary` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
         #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
@@ -12387,11 +11947,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
         super::FanLevel: ::ridl_rt::payload::Payload<W::Encoding>,
     {
         type Port = W;
-        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
-
-# Panics
-
-Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelSummary as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelSummary` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <WheelSummary as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `WheelSummary` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
         #[track_caller]
         fn new(port: W) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));

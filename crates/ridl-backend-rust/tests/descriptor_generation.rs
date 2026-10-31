@@ -372,7 +372,7 @@ fn a_proto3_only_package_has_a_face() {
 /// instead (`tests/induced_call_refusals.rs`).
 #[test]
 fn an_interface_with_an_unbounded_payload_is_refused() {
-    let package = ir::compile_fixture("proto3_unbounded_call.ridl");
+    let package = ir::compile_oversized_fixture("proto3_unbounded_call.ridl");
     let error = generate_face_with(&package, &[WireEncoding::Proto3])
         .expect_err("an interface with an unbounded payload is refused");
     assert!(
@@ -1432,5 +1432,97 @@ fn a_two_parameter_call_carries_a_face() {
     assert!(
         !d.contains("__RIDL_NO_FACE_Valve"),
         "and the interface is not skipped:\n{face}"
+    );
+}
+
+/// A fixed is provisioned, never in flight (ADR-0030 decision 5): the face
+/// carries no method for it, so no `BUFFER` of its payload type is put on the
+/// stack, and `MAX_BUFFER_SIZE` counts no fixed. With a fixed whose payload
+/// is 20,000 bytes, the face names no `BUFFER` of that type, and the
+/// interface's `MAX_BUFFER_SIZE` is the largest call payload.
+#[test]
+fn a_fixed_above_the_call_ceiling_sizes_no_buffer_of_the_face() {
+    let output = ridlc::compile(
+        "tank.ridl",
+        r#"
+package veh.tank
+
+/// A control level.
+type Level : integer [0..100]
+
+/// A provisioned map of 20,000 bytes.
+struct Map {
+  cells : bytes [0..20000]
+}
+
+/// A tank with a provisioned map, a command and a signal.
+interface Tank {
+  /// The map.
+  fixed   map   : Map
+  /// Sets the level.
+  command set(level: Level) @[..50ms]
+  /// The level.
+  signal  level : Level @10ms
+}
+"#,
+    );
+    let errors: Vec<_> = output
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| matches!(diagnostic.severity, ridl_core::diag::Severity::Error))
+        .collect();
+    assert!(
+        errors.is_empty(),
+        "the source compiles with no error: {errors:?}"
+    );
+    let source = ridl_backend_rust::generate_pipeline(
+        &output.package,
+        &[WireEncoding::FlatBuffers],
+        false,
+        &[],
+    )
+    .expect("the source generates")
+    .rust_source;
+    let d = dense(&source);
+
+    // Positive control: the signal's payload is sized into a buffer.
+    assert!(
+        d.contains("<super::Levelas::ridl_rt::payload::Payload<P::Encoding,>>::BUFFER")
+            || d.contains("<super::Levelas::ridl_rt::payload::Payload<P::Encoding>>::BUFFER"),
+        "the face sizes a buffer of `Level`, or this test proves nothing:\n{source}"
+    );
+    assert!(
+        !d.contains("Mapas::ridl_rt::payload::Payload<"),
+        "the face names no buffer of the fixed's payload `Map`:\n{source}"
+    );
+
+    let tank = sizes_impl(&d, "Tank");
+    let rows = sizes_item(tank, "RESERVATIONS", "constMAX_BUFFER_SIZE");
+    let expected_rows = format!(
+        "&'static[::core::primitive::u64]=&[0u64,{level}>>::MAX_SIZEas::core::primitive::u64,\
+         {level}>>::MAX_SIZEas::core::primitive::u64,];",
+        level = max_size_path("Level"),
+    );
+    let without_trailing_commas = |text: &str| text.replace(",>", ">").replace(",]", "]");
+    assert_eq!(
+        without_trailing_commas(rows),
+        without_trailing_commas(&expected_rows),
+        "the fixed's row is 0, then the command's and the signal's MAX_SIZE"
+    );
+    let claim = without_trailing_commas(sizes_item(
+        tank,
+        "MAX_BUFFER_SIZE",
+        "constEVENT_SOURCE_BUFFER_SIZE",
+    ));
+    assert!(
+        claim.contains(&format!(
+            "letsizes=[{}>>::MAX_SIZE];",
+            max_size_path("Level")
+        )),
+        "MAX_BUFFER_SIZE is the maximum over the one call payload `Level`: {claim}"
+    );
+    assert!(
+        !claim.contains("Map"),
+        "MAX_BUFFER_SIZE counts no fixed: {claim}"
     );
 }

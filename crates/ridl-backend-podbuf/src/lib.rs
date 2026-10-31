@@ -146,12 +146,59 @@ fn check_limits(package: &v2::Package, others: &[&v2::Package]) -> Result<(), Ge
 // Names
 // ---------------------------------------------------------------------
 
-/// Words that C reserves, which a field name must not take.
+/// Words a C member name must not take: the C23 keywords (ISO/IEC 9899:2024
+/// §6.4.1) in their unprefixed spellings, the macro `NULL`, and `asm`, a
+/// keyword of the GNU dialects that GCC and Clang compile by default. The
+/// underscore-prefixed keywords (`_Bool`, `_Alignas`, `_Atomic`, ...) are not
+/// listed, because a snake_case member name cannot produce one.
 const C_KEYWORDS: &[&str] = &[
-    "auto", "break", "case", "char", "const", "continue", "default", "do", "double", "else",
-    "enum", "extern", "float", "for", "goto", "if", "inline", "int", "long", "register",
-    "restrict", "return", "short", "signed", "sizeof", "static", "struct", "switch", "typedef",
-    "union", "unsigned", "void", "volatile", "while", "bool", "true", "false", "NULL",
+    "auto",
+    "break",
+    "case",
+    "char",
+    "const",
+    "continue",
+    "default",
+    "do",
+    "double",
+    "else",
+    "enum",
+    "extern",
+    "float",
+    "for",
+    "goto",
+    "if",
+    "inline",
+    "int",
+    "long",
+    "register",
+    "restrict",
+    "return",
+    "short",
+    "signed",
+    "sizeof",
+    "static",
+    "struct",
+    "switch",
+    "typedef",
+    "union",
+    "unsigned",
+    "void",
+    "volatile",
+    "while",
+    "bool",
+    "true",
+    "false",
+    "NULL",
+    "alignas",
+    "alignof",
+    "constexpr",
+    "nullptr",
+    "static_assert",
+    "thread_local",
+    "typeof",
+    "typeof_unqual",
+    "asm",
 ];
 
 /// A field name as a C member name: the pinned snake case of ADR-0016, with a

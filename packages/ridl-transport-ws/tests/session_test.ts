@@ -989,3 +989,203 @@ Deno.test("an interface number or an ordinal outside 1 to 4294967295 is a RangeE
   h.session.close();
   await assert.rejects(reading, isFailure("down"));
 });
+
+/** A `live` publish whose payload is `length` zero bytes. */
+function liveOf(target: Target, seq: bigint, length: number): Frame {
+  return publish(target, seq, {
+    provenance: "live",
+    payload: new Uint8Array(length),
+  });
+}
+
+/**
+ * The generated table of an interface whose signal `2` and event `3` are
+ * raised to 4,096 bytes.
+ */
+const RAISED = {
+  iface: 1,
+  wide: { iface: 1, ord: 2, kind: "signal", limit: 4096 },
+  narrow: { iface: 1, ord: 4, kind: "signal" },
+  burst: { iface: 1, ord: 3, kind: "event", limit: 4096 },
+} as const;
+
+Deno.test("a publish above the default ceiling of a signal is delivered invalid with detected corrupt and becomes the held sample", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 7n, 3_841));
+  const invalid: Sample = {
+    provenance: "invalid",
+    envelope: { stamp: 107n, seq: 7n },
+    payload: null,
+    detected: "corrupt",
+  };
+  assert.deepEqual(h.publishes, [{ target: SIGNAL, sample: invalid }]);
+  assert.deepEqual(h.session.sample(1, 2), invalid);
+  assert.deepEqual(h.notes, []);
+  // A later publish within the limit returns the signal to live.
+  h.socket.deliver(liveOf(SIGNAL, 8n, 3_840));
+  assert.equal(h.publishes[1].sample.provenance, "live");
+  assert.equal(h.publishes[1].sample.payload?.length, 3_840);
+  assert.equal(h.publishes[1].sample.detected, undefined);
+});
+
+Deno.test("a publish on a member the generated tables raise is live up to the raised limit and detected corrupt above it", async () => {
+  const h = await attachedWith({ interfaces: [RAISED] });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 1n, 4_096));
+  h.socket.deliver(liveOf(SIGNAL, 2n, 4_097));
+  assert.deepEqual(
+    h.publishes.map((p) => [p.sample.provenance, p.sample.detected]),
+    [["live", undefined], ["invalid", "corrupt"]],
+  );
+  assert.equal(h.publishes[0].sample.payload?.length, 4_096);
+  // A member the tables do not raise keeps the default ceiling of its kind.
+  const narrow: Target = { kind: Kind.Signal, iface: 1, ord: 4 };
+  await subscribed(h, narrow);
+  h.socket.deliver(liveOf(narrow, 1n, 3_841));
+  assert.deepEqual(h.publishes[2].sample.detected, "corrupt");
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("the limit of a raised member is keyed by its kind: a read of a fixed with the same numbers keeps the fixed ceiling", async () => {
+  const h = await attachedWith({ interfaces: [RAISED] });
+  const fixed: Target = { kind: Kind.Fixed, iface: 1, ord: 2 };
+  const reading = h.session.read(fixed);
+  h.socket.deliver(liveOf(fixed, 0n, 65_280));
+  assert.equal((await reading).payload?.length, 65_280);
+});
+
+Deno.test("an occurrence above the default ceiling of an event is delivered empty with detected corrupt", async () => {
+  const h = await attached();
+  await subscribed(h, EVENT);
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 201n, seq: 1n },
+    payload: new Uint8Array(3_841),
+  });
+  h.socket.deliver(occurrence(EVENT, 2n, [1]));
+  assert.deepEqual(h.occurrences, [
+    {
+      iface: 1,
+      ord: 3,
+      envelope: { stamp: 201n, seq: 1n },
+      payload: new Uint8Array(),
+      detected: "corrupt",
+    },
+    {
+      iface: 1,
+      ord: 3,
+      envelope: { stamp: 202n, seq: 2n },
+      payload: Uint8Array.from([1]),
+    },
+  ]);
+  // The refused occurrence counts in the sequence: no loss is recorded.
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("an occurrence of exactly the default ceiling of an event is delivered with its payload", async () => {
+  const h = await attached();
+  await subscribed(h, EVENT);
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 201n, seq: 1n },
+    payload: new Uint8Array(3_840),
+  });
+  assert.equal(h.occurrences[0].payload.length, 3_840);
+  assert.equal(h.occurrences[0].detected, undefined);
+});
+
+Deno.test("an occurrence on an event the generated tables raise is delivered up to the raised limit and detected corrupt above it", async () => {
+  const h = await attachedWith({ interfaces: [RAISED] });
+  await subscribed(h, EVENT);
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 201n, seq: 1n },
+    payload: new Uint8Array(4_096),
+  });
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 202n, seq: 2n },
+    payload: new Uint8Array(4_097),
+  });
+  assert.deepEqual(
+    h.occurrences.map((o) => [o.payload.length, o.detected]),
+    [[4_096, undefined], [0, "corrupt"]],
+  );
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("a read of a fixed above the default ceiling of a fixed rejects with corrupt", async () => {
+  const h = await attached();
+  const reading = h.session.read(FIXED);
+  h.socket.deliver(liveOf(FIXED, 0n, 65_281));
+  await assert.rejects(reading, isFailure("corrupt"));
+  assert.deepEqual(h.publishes, []);
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("a read of a signal answered by a publish above its limit rejects with corrupt, and a subscribed signal holds the invalid sample", async () => {
+  const h = await attached();
+  await subscribed(h, SIGNAL);
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 3n, 3_841));
+  await assert.rejects(reading, isFailure("corrupt"));
+  assert.equal(h.session.sample(1, 2)?.detected, "corrupt");
+  assert.equal(h.publishes.length, 1);
+});
+
+/**
+ * The generated table of an interface whose signal `2` and event `3` are
+ * lowered to 100 bytes, below the default ceiling of their kind.
+ */
+const LOWERED = {
+  iface: 1,
+  narrow: { iface: 1, ord: 2, kind: "signal", limit: 100 },
+  trickle: { iface: 1, ord: 3, kind: "event", limit: 100 },
+} as const;
+
+Deno.test("a publish on a signal the generated tables lower is live up to the lowered limit and detected corrupt above it", async () => {
+  const h = await attachedWith({ interfaces: [LOWERED] });
+  await subscribed(h, SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 1n, 100));
+  h.socket.deliver(liveOf(SIGNAL, 2n, 101));
+  assert.deepEqual(
+    h.publishes.map((p) => [p.sample.provenance, p.sample.detected]),
+    [["live", undefined], ["invalid", "corrupt"]],
+  );
+  assert.equal(h.publishes[0].sample.payload?.length, 100);
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("a read of a signal the generated tables lower rejects with corrupt above the lowered limit", async () => {
+  const h = await attachedWith({ interfaces: [LOWERED] });
+  const reading = h.session.read(SIGNAL);
+  h.socket.deliver(liveOf(SIGNAL, 1n, 101));
+  await assert.rejects(reading, isFailure("corrupt"));
+});
+
+Deno.test("an occurrence on an event the generated tables lower is delivered up to the lowered limit and detected corrupt above it", async () => {
+  const h = await attachedWith({ interfaces: [LOWERED] });
+  await subscribed(h, EVENT);
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 201n, seq: 1n },
+    payload: new Uint8Array(100),
+  });
+  h.socket.deliver({
+    form: "occurrence",
+    target: EVENT,
+    envelope: { stamp: 202n, seq: 2n },
+    payload: new Uint8Array(101),
+  });
+  assert.deepEqual(
+    h.occurrences.map((o) => [o.payload.length, o.detected]),
+    [[100, undefined], [0, "corrupt"]],
+  );
+  assert.deepEqual(h.notes, []);
+});

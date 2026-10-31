@@ -442,23 +442,7 @@ const CORPUS: &[(&str, &[&str])] = &[
         ],
     ),
     ("evals/corpus/mavlink", &[]),
-    (
-        "evals/corpus/ros2",
-        &[
-            // The argument messages of the four calls whose parameters reach
-            // `RosString`, a string with no finite bound: each has no proto3
-            // bound, so, as under the FlatBuffers codec, the tuple gets no
-            // codec and its interface is skipped with a note
-            // (`docs/design/interaction-face.md`, design rule 2). The schema
-            // emitter still appends the message. The layout runs over the
-            // package whatever the ros2 refusal of its declarations, which
-            // `the_ros2_corpus_is_refused_under_proto3` pins separately.
-            "nav2msgs.Nav2MsgsInteractionsIsPathValidParams",
-            "nav2msgs.Nav2MsgsInteractionsSaveMapParams",
-            "navmsgs.NavMsgsInteractionsGetPlanParams",
-            "navmsgs.NavMsgsInteractionsSetMapParams",
-        ],
-    ),
+    ("evals/corpus/ros2", &[]),
     ("evals/corpus/vss", &[]),
 ];
 
@@ -755,8 +739,8 @@ fn the_corpus_generates_with_proto3() {
 /// refusal naming that declaration and `NoBound`; `builtininterfaces`,
 /// which declares no string, generates. Every package generates with no
 /// encoding. The corpus pass leaves the workspace out ([`PROTO3_CORPUS`]).
-/// The refusal is the known limit until the platform-wide payload ceiling
-/// of driftsys/ridl#996 lands.
+/// The refusal at generation stands: the cap of such bounds that ADR-0030
+/// decision 3 proposed was withdrawn (driftsys/ridl#996 holds the question).
 #[test]
 fn the_ros2_corpus_is_refused_under_proto3() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");

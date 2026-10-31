@@ -12,6 +12,33 @@ The wire format is in the
 [frame specification](../../docs/specification/frame-specification.md), section
 11.1.
 
+## Payload sizes
+
+The catalog gives every interaction a payload limit: the default ceiling of its
+kind (`SIGNAL_EVENT_CEILING` 3,840 bytes, `CALL_CEILING` 16,128 bytes,
+`FIXED_CEILING` 65,280 bytes, exported by the package) unless a `[limits]` entry
+of the manifest gives it another: the member's `[limits.interaction]` entry,
+else the entry of its kind in `[limits.kind]`, else `default` clamped to the
+default ceiling of its kind. The generated `<base>.codec.ts` module carries each
+limit an entry gives in its interface tables, and `connect` takes those tables
+in the `interfaces` option; without them, every member has the default ceiling
+of its kind.
+
+A received payload longer than its member's limit never reaches the application:
+
+- a `reply` longer than the limit rejects the query with `SessionError`
+  `corrupt`;
+- a `publish` that answers a `read` rejects the read with `corrupt`;
+- a `publish` of a subscribed signal is delivered as a sample with provenance
+  `invalid`, `payload` `null` and `detected: "corrupt"`, and becomes the held
+  sample; the next `publish` within the limit returns the signal to `live`;
+- an `occurrence` is delivered with an empty payload and `detected: "corrupt"`,
+  and counts in the event's sequence.
+
+The arguments of a command or a query longer than the member's limit reject the
+call with `SessionError` `corrupt` before anything is sent, the answer the
+provider gives a `request` above the limit.
+
 ## Limits
 
 - On a protocol violation, the client closes the socket without a close code,

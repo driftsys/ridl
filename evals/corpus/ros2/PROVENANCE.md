@@ -97,7 +97,9 @@ Every mapping below uses the changed logical package name.
   limit. Fixed arrays keep their exact sizes. ROS strings use the same maximal
   finite scalar-count bound to avoid RIDL's implicit 256-character default. ROS
   UTF-8 byte-count length and RIDL Unicode scalar-count length differ. This port
-  is not a byte-compatible ROS serialization schema.
+  is not a byte-compatible ROS serialization schema. Exception: a string or
+  sequence that an interaction carries has a finite bound below this maximum,
+  set under "Payload ceiling bounds".
 - Explicit defaults become field init values. Integer-looking float defaults are
   spelled with a decimal point as RIDL requires. Query and command parameters
   cannot have init values; defaults remain in the request/goal structs. ROS
@@ -113,6 +115,49 @@ Every mapping below uses the changed logical package name.
   Only primitive integer widths and Time/Duration's explicitly stated nanosecond
   domain [0, 1e9) become ranges (closed [0..999999999]), avoiding stricter NaN
   sentinel validation and new enforcement of prose conditions.
+
+## Payload ceiling bounds
+
+Every payload of an interaction fits the default ceiling of its kind: 3,840
+bytes for a signal or an event, 16,128 bytes for a command or a query
+(ADR-0030). The corpus names no backend table, so FlatBuffers is the encoding
+that `ridl check` sizes. The bounds sit on the shared message types themselves
+(`stdmsgs.Header.frameId`, `navmsgs.OccupancyGrid.data`, `navmsgs.Path.poses`,
+`sensormsgs.CameraInfo.distortionModel` and `.d`, `nav2msgs.Costmap.data` and
+`nav2msgs.CostmapMetaData.layer`), not on copies local to the interactions, so
+every message that holds one of these types inherits its bound. A string or
+sequence that no message of an interaction holds keeps the maximal mechanical
+bound above, and the six `RosString` declarations are unchanged. The bounds
+below are a RIDL representation choice, not an upstream limit. Each string bound
+counts Unicode scalar values and each sequence bound counts elements. Each bound
+was measured with `ridl check`: it is the largest multiple of 64 (strings) or
+the largest count (sequences) that keeps the largest member that carries the
+field within its ceiling, except where noted.
+
+- `stdmsgs.RosFrameId` is `string [0..64]` and replaces `RosString` in
+  `stdmsgs.Header.frameId`. It is not the largest bound that fits: a Header is
+  repeated in every `PoseStamped` of a path, so a larger frame name would shrink
+  every path.
+- `stdsrvs.RosBoundedString` is `string [0..3968]` and replaces `RosString` in
+  `stdsrvs.SetBoolResponse.message` and `stdsrvs.TriggerResponse.message`.
+- `sensormsgs.RosBoundedString` is `string [0..256]` and replaces `RosString` in
+  `sensormsgs.CameraInfo.distortionModel` and
+  `sensormsgs.SetCameraInfoResponse.statusMessage`. `sensormsgs.CameraInfo.d` is
+  `[RosFloat64; 0..1773]`.
+- `navmsgs.RosBoundedString` is `string [0..3968]` and replaces `RosString` in
+  `navmsgs.LoadMapRequest.mapUrl` and in the `mapUrl` parameter of `loadMap`.
+  `navmsgs.OccupancyGrid.data` is `[RosInt8; 0..14313]` and `navmsgs.Path.poses`
+  is `[PoseStamped; 0..18]`.
+- `nav2msgs.RosBoundedString` is `string [0..256]` and replaces `RosString` in
+  the request and goal fields of `nav2msgs` listed under its type below, and in
+  the matching parameters of `isPathValid`, `loadMap` and `saveMap`. It is not
+  the largest bound that fits a single field: `saveMap` and `followPath` carry
+  four strings each. `nav2msgs.Costmap.data` is `[RosUInt8; 0..14186]`,
+  `nav2msgs.ClearEntireCostmapRequest.plugins` is `[RosBoundedString; 0..15]`,
+  `nav2msgs.IsPathValidResponse.invalidPoseIndices` is `[RosInt32; 0..4012]` and
+  `nav2msgs.FollowWaypointsGoal.poses` is `[PoseStamped; 0..25]`.
+- The two feedback events, `followPathFeedback` and `navigateToPoseFeedback`,
+  fit 3,840 bytes through `stdmsgs.RosFrameId` alone.
 
 ## Units retained only in comments
 
@@ -290,7 +335,7 @@ Output: `std_msgs/messages.typl`. Pin:
 | Source field or constant | Qualified output         | Representation | Explicit default or constant value |
 | ------------------------ | ------------------------ | -------------- | ---------------------------------- |
 | `stamp`                  | `stdmsgs.Header.stamp`   | `Time`         | —                                  |
-| `frame_id`               | `stdmsgs.Header.frameId` | `RosString`    | —                                  |
+| `frame_id`               | `stdmsgs.Header.frameId` | `RosFrameId`   | —                                  |
 
 ### `common-interfaces/std_msgs/msg/Int16.msg`
 
@@ -1013,19 +1058,19 @@ Output: `sensor_msgs/messages.typl`. Pin:
 
 - message: `sensormsgs.CameraInfo`.
 
-| Source field or constant | Qualified output                        | Representation                          | Explicit default or constant value |
-| ------------------------ | --------------------------------------- | --------------------------------------- | ---------------------------------- |
-| `header`                 | `sensormsgs.CameraInfo.header`          | `Header`                                | —                                  |
-| `height`                 | `sensormsgs.CameraInfo.height`          | `RosUInt32`                             | —                                  |
-| `width`                  | `sensormsgs.CameraInfo.width`           | `RosUInt32`                             | —                                  |
-| `distortion_model`       | `sensormsgs.CameraInfo.distortionModel` | `RosString`                             | —                                  |
-| `d`                      | `sensormsgs.CameraInfo.d`               | `[RosFloat64; 0..18446744073709551615]` | —                                  |
-| `k`                      | `sensormsgs.CameraInfo.k`               | `[RosFloat64; 9]`                       | —                                  |
-| `r`                      | `sensormsgs.CameraInfo.r`               | `[RosFloat64; 9]`                       | —                                  |
-| `p`                      | `sensormsgs.CameraInfo.p`               | `[RosFloat64; 12]`                      | —                                  |
-| `binning_x`              | `sensormsgs.CameraInfo.binningX`        | `RosUInt32`                             | —                                  |
-| `binning_y`              | `sensormsgs.CameraInfo.binningY`        | `RosUInt32`                             | —                                  |
-| `roi`                    | `sensormsgs.CameraInfo.roi`             | `RegionOfInterest`                      | —                                  |
+| Source field or constant | Qualified output                        | Representation          | Explicit default or constant value |
+| ------------------------ | --------------------------------------- | ----------------------- | ---------------------------------- |
+| `header`                 | `sensormsgs.CameraInfo.header`          | `Header`                | —                                  |
+| `height`                 | `sensormsgs.CameraInfo.height`          | `RosUInt32`             | —                                  |
+| `width`                  | `sensormsgs.CameraInfo.width`           | `RosUInt32`             | —                                  |
+| `distortion_model`       | `sensormsgs.CameraInfo.distortionModel` | `RosBoundedString`      | —                                  |
+| `d`                      | `sensormsgs.CameraInfo.d`               | `[RosFloat64; 0..1773]` | —                                  |
+| `k`                      | `sensormsgs.CameraInfo.k`               | `[RosFloat64; 9]`       | —                                  |
+| `r`                      | `sensormsgs.CameraInfo.r`               | `[RosFloat64; 9]`       | —                                  |
+| `p`                      | `sensormsgs.CameraInfo.p`               | `[RosFloat64; 12]`      | —                                  |
+| `binning_x`              | `sensormsgs.CameraInfo.binningX`        | `RosUInt32`             | —                                  |
+| `binning_y`              | `sensormsgs.CameraInfo.binningY`        | `RosUInt32`             | —                                  |
+| `roi`                    | `sensormsgs.CameraInfo.roi`             | `RegionOfInterest`      | —                                  |
 
 ### `common-interfaces/sensor_msgs/msg/ChannelFloat32.msg`
 
@@ -1462,11 +1507,11 @@ Output: `sensor_msgs/interactions.ridl`. Pin:
 - Response: `sensormsgs.SetCameraInfoResponse`.
 - query: `sensormsgs.SensorMsgsInteractions.setCameraInfo`.
 
-| Source field or constant  | Qualified output                                 | Representation | Explicit default or constant value |
-| ------------------------- | ------------------------------------------------ | -------------- | ---------------------------------- |
-| `Request.camera_info`     | `sensormsgs.SetCameraInfoRequest.cameraInfo`     | `CameraInfo`   | —                                  |
-| `Response.success`        | `sensormsgs.SetCameraInfoResponse.success`       | `RosBoolean`   | —                                  |
-| `Response.status_message` | `sensormsgs.SetCameraInfoResponse.statusMessage` | `RosString`    | —                                  |
+| Source field or constant  | Qualified output                                 | Representation     | Explicit default or constant value |
+| ------------------------- | ------------------------------------------------ | ------------------ | ---------------------------------- |
+| `Request.camera_info`     | `sensormsgs.SetCameraInfoRequest.cameraInfo`     | `CameraInfo`       | —                                  |
+| `Response.success`        | `sensormsgs.SetCameraInfoResponse.success`       | `RosBoolean`       | —                                  |
+| `Response.status_message` | `sensormsgs.SetCameraInfoResponse.statusMessage` | `RosBoundedString` | —                                  |
 
 ### `common-interfaces/nav_msgs/msg/Goals.msg`
 
@@ -1516,11 +1561,11 @@ Output: `nav_msgs/messages.typl`. Pin:
 
 - message: `navmsgs.OccupancyGrid`.
 
-| Source field or constant | Qualified output               | Representation                       | Explicit default or constant value |
-| ------------------------ | ------------------------------ | ------------------------------------ | ---------------------------------- |
-| `header`                 | `navmsgs.OccupancyGrid.header` | `Header`                             | —                                  |
-| `info`                   | `navmsgs.OccupancyGrid.info`   | `MapMetaData`                        | —                                  |
-| `data`                   | `navmsgs.OccupancyGrid.data`   | `[RosInt8; 0..18446744073709551615]` | —                                  |
+| Source field or constant | Qualified output               | Representation        | Explicit default or constant value |
+| ------------------------ | ------------------------------ | --------------------- | ---------------------------------- |
+| `header`                 | `navmsgs.OccupancyGrid.header` | `Header`              | —                                  |
+| `info`                   | `navmsgs.OccupancyGrid.info`   | `MapMetaData`         | —                                  |
+| `data`                   | `navmsgs.OccupancyGrid.data`   | `[RosInt8; 0..14313]` | —                                  |
 
 ### `common-interfaces/nav_msgs/msg/Odometry.msg`
 
@@ -1543,10 +1588,10 @@ Output: `nav_msgs/messages.typl`. Pin:
 
 - message: `navmsgs.Path`.
 
-| Source field or constant | Qualified output      | Representation                           | Explicit default or constant value |
-| ------------------------ | --------------------- | ---------------------------------------- | ---------------------------------- |
-| `header`                 | `navmsgs.Path.header` | `Header`                                 | —                                  |
-| `poses`                  | `navmsgs.Path.poses`  | `[PoseStamped; 0..18446744073709551615]` | —                                  |
+| Source field or constant | Qualified output      | Representation         | Explicit default or constant value |
+| ------------------------ | --------------------- | ---------------------- | ---------------------------------- |
+| `header`                 | `navmsgs.Path.header` | `Header`               | —                                  |
+| `poses`                  | `navmsgs.Path.poses`  | `[PoseStamped; 0..18]` | —                                  |
 
 ### `common-interfaces/nav_msgs/msg/Trajectory.msg`
 
@@ -1622,16 +1667,16 @@ Output: `nav_msgs/interactions.ridl`. Pin:
   `navmsgs.LOAD_MAP_RESPONSE_RESULT_UNDEFINED_FAILURE`.
 - query: `navmsgs.NavMsgsInteractions.loadMap`.
 
-| Source field or constant               | Qualified output                                        | Representation  | Explicit default or constant value |
-| -------------------------------------- | ------------------------------------------------------- | --------------- | ---------------------------------- |
-| `Request.map_url`                      | `navmsgs.LoadMapRequest.mapUrl`                         | `RosString`     | —                                  |
-| `constant RESULT_SUCCESS`              | `navmsgs.LOAD_MAP_RESPONSE_RESULT_SUCCESS`              | `RosUInt8`      | `0`                                |
-| `constant RESULT_MAP_DOES_NOT_EXIST`   | `navmsgs.LOAD_MAP_RESPONSE_RESULT_MAP_DOES_NOT_EXIST`   | `RosUInt8`      | `1`                                |
-| `constant RESULT_INVALID_MAP_DATA`     | `navmsgs.LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_DATA`     | `RosUInt8`      | `2`                                |
-| `constant RESULT_INVALID_MAP_METADATA` | `navmsgs.LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_METADATA` | `RosUInt8`      | `3`                                |
-| `constant RESULT_UNDEFINED_FAILURE`    | `navmsgs.LOAD_MAP_RESPONSE_RESULT_UNDEFINED_FAILURE`    | `RosUInt8`      | `255`                              |
-| `Response.map`                         | `navmsgs.LoadMapResponse.map`                           | `OccupancyGrid` | —                                  |
-| `Response.result`                      | `navmsgs.LoadMapResponse.result`                        | `RosUInt8`      | —                                  |
+| Source field or constant               | Qualified output                                        | Representation     | Explicit default or constant value |
+| -------------------------------------- | ------------------------------------------------------- | ------------------ | ---------------------------------- |
+| `Request.map_url`                      | `navmsgs.LoadMapRequest.mapUrl`                         | `RosBoundedString` | —                                  |
+| `constant RESULT_SUCCESS`              | `navmsgs.LOAD_MAP_RESPONSE_RESULT_SUCCESS`              | `RosUInt8`         | `0`                                |
+| `constant RESULT_MAP_DOES_NOT_EXIST`   | `navmsgs.LOAD_MAP_RESPONSE_RESULT_MAP_DOES_NOT_EXIST`   | `RosUInt8`         | `1`                                |
+| `constant RESULT_INVALID_MAP_DATA`     | `navmsgs.LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_DATA`     | `RosUInt8`         | `2`                                |
+| `constant RESULT_INVALID_MAP_METADATA` | `navmsgs.LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_METADATA` | `RosUInt8`         | `3`                                |
+| `constant RESULT_UNDEFINED_FAILURE`    | `navmsgs.LOAD_MAP_RESPONSE_RESULT_UNDEFINED_FAILURE`    | `RosUInt8`         | `255`                              |
+| `Response.map`                         | `navmsgs.LoadMapResponse.map`                           | `OccupancyGrid`    | —                                  |
+| `Response.result`                      | `navmsgs.LoadMapResponse.result`                        | `RosUInt8`         | —                                  |
 
 ### `common-interfaces/nav_msgs/srv/SetMap.srv`
 
@@ -1666,11 +1711,11 @@ Output: `std_srvs/interactions.ridl`. Pin:
 - Response: `stdsrvs.SetBoolResponse`.
 - query: `stdsrvs.StdSrvsInteractions.setBool`.
 
-| Source field or constant | Qualified output                  | Representation | Explicit default or constant value |
-| ------------------------ | --------------------------------- | -------------- | ---------------------------------- |
-| `Request.data`           | `stdsrvs.SetBoolRequest.data`     | `RosBoolean`   | —                                  |
-| `Response.success`       | `stdsrvs.SetBoolResponse.success` | `RosBoolean`   | —                                  |
-| `Response.message`       | `stdsrvs.SetBoolResponse.message` | `RosString`    | —                                  |
+| Source field or constant | Qualified output                  | Representation     | Explicit default or constant value |
+| ------------------------ | --------------------------------- | ------------------ | ---------------------------------- |
+| `Request.data`           | `stdsrvs.SetBoolRequest.data`     | `RosBoolean`       | —                                  |
+| `Response.success`       | `stdsrvs.SetBoolResponse.success` | `RosBoolean`       | —                                  |
+| `Response.message`       | `stdsrvs.SetBoolResponse.message` | `RosBoundedString` | —                                  |
 
 ### `common-interfaces/std_srvs/srv/Trigger.srv`
 
@@ -1681,10 +1726,10 @@ Output: `std_srvs/interactions.ridl`. Pin:
 - Response: `stdsrvs.TriggerResponse`.
 - query: `stdsrvs.StdSrvsInteractions.trigger`.
 
-| Source field or constant | Qualified output                  | Representation | Explicit default or constant value |
-| ------------------------ | --------------------------------- | -------------- | ---------------------------------- |
-| `Response.success`       | `stdsrvs.TriggerResponse.success` | `RosBoolean`   | —                                  |
-| `Response.message`       | `stdsrvs.TriggerResponse.message` | `RosString`    | —                                  |
+| Source field or constant | Qualified output                  | Representation     | Explicit default or constant value |
+| ------------------------ | --------------------------------- | ------------------ | ---------------------------------- |
+| `Response.success`       | `stdsrvs.TriggerResponse.success` | `RosBoolean`       | —                                  |
+| `Response.message`       | `stdsrvs.TriggerResponse.message` | `RosBoundedString` | —                                  |
 
 ### `navigation2/nav2_msgs/msg/BehaviorTreeLog.msg`
 
@@ -1720,11 +1765,11 @@ Output: `nav2_msgs/messages.typl`. Pin:
 
 - message: `nav2msgs.Costmap`.
 
-| Source field or constant | Qualified output            | Representation                        | Explicit default or constant value |
-| ------------------------ | --------------------------- | ------------------------------------- | ---------------------------------- |
-| `header`                 | `nav2msgs.Costmap.header`   | `Header`                              | —                                  |
-| `metadata`               | `nav2msgs.Costmap.metadata` | `CostmapMetaData`                     | —                                  |
-| `data`                   | `nav2msgs.Costmap.data`     | `[RosUInt8; 0..18446744073709551615]` | —                                  |
+| Source field or constant | Qualified output            | Representation         | Explicit default or constant value |
+| ------------------------ | --------------------------- | ---------------------- | ---------------------------------- |
+| `header`                 | `nav2msgs.Costmap.header`   | `Header`               | —                                  |
+| `metadata`               | `nav2msgs.Costmap.metadata` | `CostmapMetaData`      | —                                  |
+| `data`                   | `nav2msgs.Costmap.data`     | `[RosUInt8; 0..14186]` | —                                  |
 
 ### `navigation2/nav2_msgs/msg/CostmapMetaData.msg`
 
@@ -1733,15 +1778,15 @@ Output: `nav2_msgs/messages.typl`. Pin:
 
 - message: `nav2msgs.CostmapMetaData`.
 
-| Source field or constant | Qualified output                       | Representation | Explicit default or constant value |
-| ------------------------ | -------------------------------------- | -------------- | ---------------------------------- |
-| `map_load_time`          | `nav2msgs.CostmapMetaData.mapLoadTime` | `Time`         | —                                  |
-| `update_time`            | `nav2msgs.CostmapMetaData.updateTime`  | `Time`         | —                                  |
-| `layer`                  | `nav2msgs.CostmapMetaData.layer`       | `RosString`    | —                                  |
-| `resolution`             | `nav2msgs.CostmapMetaData.resolution`  | `RosFloat32`   | —                                  |
-| `size_x`                 | `nav2msgs.CostmapMetaData.sizeX`       | `RosUInt32`    | —                                  |
-| `size_y`                 | `nav2msgs.CostmapMetaData.sizeY`       | `RosUInt32`    | —                                  |
-| `origin`                 | `nav2msgs.CostmapMetaData.origin`      | `Pose`         | —                                  |
+| Source field or constant | Qualified output                       | Representation     | Explicit default or constant value |
+| ------------------------ | -------------------------------------- | ------------------ | ---------------------------------- |
+| `map_load_time`          | `nav2msgs.CostmapMetaData.mapLoadTime` | `Time`             | —                                  |
+| `update_time`            | `nav2msgs.CostmapMetaData.updateTime`  | `Time`             | —                                  |
+| `layer`                  | `nav2msgs.CostmapMetaData.layer`       | `RosBoundedString` | —                                  |
+| `resolution`             | `nav2msgs.CostmapMetaData.resolution`  | `RosFloat32`       | —                                  |
+| `size_x`                 | `nav2msgs.CostmapMetaData.sizeX`       | `RosUInt32`        | —                                  |
+| `size_y`                 | `nav2msgs.CostmapMetaData.sizeY`       | `RosUInt32`        | —                                  |
+| `origin`                 | `nav2msgs.CostmapMetaData.origin`      | `Pose`             | —                                  |
 
 ### `navigation2/nav2_msgs/msg/Particle.msg`
 
@@ -1849,10 +1894,10 @@ Output: `nav2_msgs/interactions.ridl`. Pin:
 - Response: `nav2msgs.ClearEntireCostmapResponse`.
 - query: `nav2msgs.Nav2MsgsInteractions.clearEntireCostmap`.
 
-| Source field or constant | Qualified output                              | Representation                         | Explicit default or constant value |
-| ------------------------ | --------------------------------------------- | -------------------------------------- | ---------------------------------- |
-| `Request.plugins`        | `nav2msgs.ClearEntireCostmapRequest.plugins`  | `[RosString; 0..18446744073709551615]` | —                                  |
-| `Response.success`       | `nav2msgs.ClearEntireCostmapResponse.success` | `RosBoolean`                           | —                                  |
+| Source field or constant | Qualified output                              | Representation              | Explicit default or constant value |
+| ------------------------ | --------------------------------------------- | --------------------------- | ---------------------------------- |
+| `Request.plugins`        | `nav2msgs.ClearEntireCostmapRequest.plugins`  | `[RosBoundedString; 0..15]` | —                                  |
+| `Response.success`       | `nav2msgs.ClearEntireCostmapResponse.success` | `RosBoolean`                | —                                  |
 
 ### `navigation2/nav2_msgs/srv/GetCostmap.srv`
 
@@ -1877,18 +1922,18 @@ Output: `nav2_msgs/interactions.ridl`. Pin:
 - Response: `nav2msgs.IsPathValidResponse`.
 - query: `nav2msgs.Nav2MsgsInteractions.isPathValid`.
 
-| Source field or constant               | Qualified output                                        | Representation                        | Explicit default or constant value |
-| -------------------------------------- | ------------------------------------------------------- | ------------------------------------- | ---------------------------------- |
-| `Request.path`                         | `nav2msgs.IsPathValidRequest.path`                      | `Path`                                | —                                  |
-| `Request.max_cost`                     | `nav2msgs.IsPathValidRequest.maxCost`                   | `RosUInt8`                            | `254`                              |
-| `Request.consider_unknown_as_obstacle` | `nav2msgs.IsPathValidRequest.considerUnknownAsObstacle` | `RosBoolean`                          | `false`                            |
-| `Request.layer_name`                   | `nav2msgs.IsPathValidRequest.layerName`                 | `RosString`                           | `""`                               |
-| `Request.footprint`                    | `nav2msgs.IsPathValidRequest.footprint`                 | `RosString`                           | `""`                               |
-| `Request.stop_at_first_collision`      | `nav2msgs.IsPathValidRequest.stopAtFirstCollision`      | `RosBoolean`                          | `true`                             |
-| `Request.max_lookahead_distance`       | `nav2msgs.IsPathValidRequest.maxLookaheadDistance`      | `RosFloat64`                          | `-1.0`                             |
-| `Response.success`                     | `nav2msgs.IsPathValidResponse.success`                  | `RosBoolean`                          | —                                  |
-| `Response.is_valid`                    | `nav2msgs.IsPathValidResponse.isValid`                  | `RosBoolean`                          | —                                  |
-| `Response.invalid_pose_indices`        | `nav2msgs.IsPathValidResponse.invalidPoseIndices`       | `[RosInt32; 0..18446744073709551615]` | —                                  |
+| Source field or constant               | Qualified output                                        | Representation        | Explicit default or constant value |
+| -------------------------------------- | ------------------------------------------------------- | --------------------- | ---------------------------------- |
+| `Request.path`                         | `nav2msgs.IsPathValidRequest.path`                      | `Path`                | —                                  |
+| `Request.max_cost`                     | `nav2msgs.IsPathValidRequest.maxCost`                   | `RosUInt8`            | `254`                              |
+| `Request.consider_unknown_as_obstacle` | `nav2msgs.IsPathValidRequest.considerUnknownAsObstacle` | `RosBoolean`          | `false`                            |
+| `Request.layer_name`                   | `nav2msgs.IsPathValidRequest.layerName`                 | `RosBoundedString`    | `""`                               |
+| `Request.footprint`                    | `nav2msgs.IsPathValidRequest.footprint`                 | `RosBoundedString`    | `""`                               |
+| `Request.stop_at_first_collision`      | `nav2msgs.IsPathValidRequest.stopAtFirstCollision`      | `RosBoolean`          | `true`                             |
+| `Request.max_lookahead_distance`       | `nav2msgs.IsPathValidRequest.maxLookaheadDistance`      | `RosFloat64`          | `-1.0`                             |
+| `Response.success`                     | `nav2msgs.IsPathValidResponse.success`                  | `RosBoolean`          | —                                  |
+| `Response.is_valid`                    | `nav2msgs.IsPathValidResponse.isValid`                  | `RosBoolean`          | —                                  |
+| `Response.invalid_pose_indices`        | `nav2msgs.IsPathValidResponse.invalidPoseIndices`       | `[RosInt32; 0..4012]` | —                                  |
 
 ### `navigation2/nav2_msgs/srv/LoadMap.srv`
 
@@ -1908,16 +1953,16 @@ Output: `nav2_msgs/interactions.ridl`. Pin:
   `nav2msgs.LOAD_MAP_RESPONSE_RESULT_UNDEFINED_FAILURE`.
 - query: `nav2msgs.Nav2MsgsInteractions.loadMap`.
 
-| Source field or constant               | Qualified output                                         | Representation  | Explicit default or constant value |
-| -------------------------------------- | -------------------------------------------------------- | --------------- | ---------------------------------- |
-| `Request.map_url`                      | `nav2msgs.LoadMapRequest.mapUrl`                         | `RosString`     | —                                  |
-| `constant RESULT_SUCCESS`              | `nav2msgs.LOAD_MAP_RESPONSE_RESULT_SUCCESS`              | `RosUInt8`      | `0`                                |
-| `constant RESULT_MAP_DOES_NOT_EXIST`   | `nav2msgs.LOAD_MAP_RESPONSE_RESULT_MAP_DOES_NOT_EXIST`   | `RosUInt8`      | `1`                                |
-| `constant RESULT_INVALID_MAP_DATA`     | `nav2msgs.LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_DATA`     | `RosUInt8`      | `2`                                |
-| `constant RESULT_INVALID_MAP_METADATA` | `nav2msgs.LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_METADATA` | `RosUInt8`      | `3`                                |
-| `constant RESULT_UNDEFINED_FAILURE`    | `nav2msgs.LOAD_MAP_RESPONSE_RESULT_UNDEFINED_FAILURE`    | `RosUInt8`      | `255`                              |
-| `Response.map`                         | `nav2msgs.LoadMapResponse.map`                           | `OccupancyGrid` | —                                  |
-| `Response.result`                      | `nav2msgs.LoadMapResponse.result`                        | `RosUInt8`      | —                                  |
+| Source field or constant               | Qualified output                                         | Representation     | Explicit default or constant value |
+| -------------------------------------- | -------------------------------------------------------- | ------------------ | ---------------------------------- |
+| `Request.map_url`                      | `nav2msgs.LoadMapRequest.mapUrl`                         | `RosBoundedString` | —                                  |
+| `constant RESULT_SUCCESS`              | `nav2msgs.LOAD_MAP_RESPONSE_RESULT_SUCCESS`              | `RosUInt8`         | `0`                                |
+| `constant RESULT_MAP_DOES_NOT_EXIST`   | `nav2msgs.LOAD_MAP_RESPONSE_RESULT_MAP_DOES_NOT_EXIST`   | `RosUInt8`         | `1`                                |
+| `constant RESULT_INVALID_MAP_DATA`     | `nav2msgs.LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_DATA`     | `RosUInt8`         | `2`                                |
+| `constant RESULT_INVALID_MAP_METADATA` | `nav2msgs.LOAD_MAP_RESPONSE_RESULT_INVALID_MAP_METADATA` | `RosUInt8`         | `3`                                |
+| `constant RESULT_UNDEFINED_FAILURE`    | `nav2msgs.LOAD_MAP_RESPONSE_RESULT_UNDEFINED_FAILURE`    | `RosUInt8`         | `255`                              |
+| `Response.map`                         | `nav2msgs.LoadMapResponse.map`                           | `OccupancyGrid`    | —                                  |
+| `Response.result`                      | `nav2msgs.LoadMapResponse.result`                        | `RosUInt8`         | —                                  |
 
 ### `navigation2/nav2_msgs/srv/ManageLifecycleNodes.srv`
 
@@ -1957,15 +2002,15 @@ Output: `nav2_msgs/interactions.ridl`. Pin:
 - Response: `nav2msgs.SaveMapResponse`.
 - query: `nav2msgs.Nav2MsgsInteractions.saveMap`.
 
-| Source field or constant  | Qualified output                         | Representation | Explicit default or constant value |
-| ------------------------- | ---------------------------------------- | -------------- | ---------------------------------- |
-| `Request.map_topic`       | `nav2msgs.SaveMapRequest.mapTopic`       | `RosString`    | —                                  |
-| `Request.map_url`         | `nav2msgs.SaveMapRequest.mapUrl`         | `RosString`    | —                                  |
-| `Request.image_format`    | `nav2msgs.SaveMapRequest.imageFormat`    | `RosString`    | —                                  |
-| `Request.map_mode`        | `nav2msgs.SaveMapRequest.mapMode`        | `RosString`    | —                                  |
-| `Request.free_thresh`     | `nav2msgs.SaveMapRequest.freeThresh`     | `RosFloat32`   | —                                  |
-| `Request.occupied_thresh` | `nav2msgs.SaveMapRequest.occupiedThresh` | `RosFloat32`   | —                                  |
-| `Response.result`         | `nav2msgs.SaveMapResponse.result`        | `RosBoolean`   | —                                  |
+| Source field or constant  | Qualified output                         | Representation     | Explicit default or constant value |
+| ------------------------- | ---------------------------------------- | ------------------ | ---------------------------------- |
+| `Request.map_topic`       | `nav2msgs.SaveMapRequest.mapTopic`       | `RosBoundedString` | —                                  |
+| `Request.map_url`         | `nav2msgs.SaveMapRequest.mapUrl`         | `RosBoundedString` | —                                  |
+| `Request.image_format`    | `nav2msgs.SaveMapRequest.imageFormat`    | `RosBoundedString` | —                                  |
+| `Request.map_mode`        | `nav2msgs.SaveMapRequest.mapMode`        | `RosBoundedString` | —                                  |
+| `Request.free_thresh`     | `nav2msgs.SaveMapRequest.freeThresh`     | `RosFloat32`       | —                                  |
+| `Request.occupied_thresh` | `nav2msgs.SaveMapRequest.occupiedThresh` | `RosFloat32`       | —                                  |
+| `Response.result`         | `nav2msgs.SaveMapResponse.result`        | `RosBoolean`       | —                                  |
 
 ### `navigation2/nav2_msgs/action/AssistedTeleop.action`
 
@@ -2074,10 +2119,10 @@ Output: `nav2_msgs/interactions.ridl`. Pin:
 | Source field or constant           | Qualified output                                      | Representation     | Explicit default or constant value |
 | ---------------------------------- | ----------------------------------------------------- | ------------------ | ---------------------------------- |
 | `Goal.path`                        | `nav2msgs.FollowPathGoal.path`                        | `Path`             | —                                  |
-| `Goal.controller_id`               | `nav2msgs.FollowPathGoal.controllerId`                | `RosString`        | —                                  |
-| `Goal.goal_checker_id`             | `nav2msgs.FollowPathGoal.goalCheckerId`               | `RosString`        | —                                  |
-| `Goal.progress_checker_id`         | `nav2msgs.FollowPathGoal.progressCheckerId`           | `RosString`        | —                                  |
-| `Goal.path_handler_id`             | `nav2msgs.FollowPathGoal.pathHandlerId`               | `RosString`        | —                                  |
+| `Goal.controller_id`               | `nav2msgs.FollowPathGoal.controllerId`                | `RosBoundedString` | —                                  |
+| `Goal.goal_checker_id`             | `nav2msgs.FollowPathGoal.goalCheckerId`               | `RosBoundedString` | —                                  |
+| `Goal.progress_checker_id`         | `nav2msgs.FollowPathGoal.progressCheckerId`           | `RosBoundedString` | —                                  |
+| `Goal.path_handler_id`             | `nav2msgs.FollowPathGoal.pathHandlerId`               | `RosBoundedString` | —                                  |
 | `constant NONE`                    | `nav2msgs.FOLLOW_PATH_RESULT_NONE`                    | `RosUInt16`        | `0`                                |
 | `constant GOAL_REJECTED`           | `nav2msgs.FOLLOW_PATH_RESULT_GOAL_REJECTED`           | `RosUInt16`        | `1`                                |
 | `constant SEND_GOAL_FAILURE`       | `nav2msgs.FOLLOW_PATH_RESULT_SEND_GOAL_FAILURE`       | `RosUInt16`        | `2`                                |
@@ -2118,7 +2163,7 @@ Output: `nav2_msgs/interactions.ridl`. Pin:
 | ---------------------------------- | ---------------------------------------------------------- | ------------------------------------------- | ---------------------------------- |
 | `Goal.number_of_loops`             | `nav2msgs.FollowWaypointsGoal.numberOfLoops`               | `RosUInt32`                                 | —                                  |
 | `Goal.goal_index`                  | `nav2msgs.FollowWaypointsGoal.goalIndex`                   | `RosUInt32`                                 | `0`                                |
-| `Goal.poses`                       | `nav2msgs.FollowWaypointsGoal.poses`                       | `[PoseStamped; 0..18446744073709551615]`    | —                                  |
+| `Goal.poses`                       | `nav2msgs.FollowWaypointsGoal.poses`                       | `[PoseStamped; 0..25]`                      | —                                  |
 | `constant NONE`                    | `nav2msgs.FOLLOW_WAYPOINTS_RESULT_NONE`                    | `RosUInt16`                                 | `0`                                |
 | `constant UNKNOWN`                 | `nav2msgs.FOLLOW_WAYPOINTS_RESULT_UNKNOWN`                 | `RosUInt16`                                 | `600`                              |
 | `constant TASK_EXECUTOR_FAILED`    | `nav2msgs.FOLLOW_WAYPOINTS_RESULT_TASK_EXECUTOR_FAILED`    | `RosUInt16`                                 | `601`                              |
@@ -2150,26 +2195,26 @@ Output: `nav2_msgs/interactions.ridl`. Pin:
 - goal command: `nav2msgs.Nav2MsgsInteractions.navigateToPose`.
 - feedback event: `nav2msgs.Nav2MsgsInteractions.navigateToPoseFeedback`.
 
-| Source field or constant                | Qualified output                                                | Representation | Explicit default or constant value |
-| --------------------------------------- | --------------------------------------------------------------- | -------------- | ---------------------------------- |
-| `Goal.pose`                             | `nav2msgs.NavigateToPoseGoal.pose`                              | `PoseStamped`  | —                                  |
-| `Goal.behavior_tree`                    | `nav2msgs.NavigateToPoseGoal.behaviorTree`                      | `RosString`    | —                                  |
-| `constant NONE`                         | `nav2msgs.NAVIGATE_TO_POSE_RESULT_NONE`                         | `RosUInt16`    | `0`                                |
-| `constant GOAL_REJECTED`                | `nav2msgs.NAVIGATE_TO_POSE_RESULT_GOAL_REJECTED`                | `RosUInt16`    | `1`                                |
-| `constant SEND_GOAL_FAILURE`            | `nav2msgs.NAVIGATE_TO_POSE_RESULT_SEND_GOAL_FAILURE`            | `RosUInt16`    | `2`                                |
-| `constant UNKNOWN`                      | `nav2msgs.NAVIGATE_TO_POSE_RESULT_UNKNOWN`                      | `RosUInt16`    | `9000`                             |
-| `constant FAILED_TO_LOAD_BEHAVIOR_TREE` | `nav2msgs.NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE` | `RosUInt16`    | `9001`                             |
-| `constant TF_ERROR`                     | `nav2msgs.NAVIGATE_TO_POSE_RESULT_TF_ERROR`                     | `RosUInt16`    | `9002`                             |
-| `constant TIMEOUT`                      | `nav2msgs.NAVIGATE_TO_POSE_RESULT_TIMEOUT`                      | `RosUInt16`    | `9003`                             |
-| `Result.error_code`                     | `nav2msgs.NavigateToPoseResult.errorCode`                       | `RosUInt16`    | —                                  |
-| `Result.error_msg`                      | `nav2msgs.NavigateToPoseResult.errorMsg`                        | `RosString`    | —                                  |
-| `Feedback.current_pose`                 | `nav2msgs.NavigateToPoseFeedback.currentPose`                   | `PoseStamped`  | —                                  |
-| `Feedback.navigation_time`              | `nav2msgs.NavigateToPoseFeedback.navigationTime`                | `Duration`     | —                                  |
-| `Feedback.estimated_time_remaining`     | `nav2msgs.NavigateToPoseFeedback.estimatedTimeRemaining`        | `Duration`     | —                                  |
-| `Feedback.number_of_recoveries`         | `nav2msgs.NavigateToPoseFeedback.numberOfRecoveries`            | `RosInt16`     | —                                  |
-| `Feedback.distance_remaining`           | `nav2msgs.NavigateToPoseFeedback.distanceRemaining`             | `RosFloat32`   | —                                  |
-| `Feedback.position_tracking_error`      | `nav2msgs.NavigateToPoseFeedback.positionTrackingError`         | `RosFloat32`   | —                                  |
-| `Feedback.heading_tracking_error`       | `nav2msgs.NavigateToPoseFeedback.headingTrackingError`          | `RosFloat32`   | —                                  |
+| Source field or constant                | Qualified output                                                | Representation     | Explicit default or constant value |
+| --------------------------------------- | --------------------------------------------------------------- | ------------------ | ---------------------------------- |
+| `Goal.pose`                             | `nav2msgs.NavigateToPoseGoal.pose`                              | `PoseStamped`      | —                                  |
+| `Goal.behavior_tree`                    | `nav2msgs.NavigateToPoseGoal.behaviorTree`                      | `RosBoundedString` | —                                  |
+| `constant NONE`                         | `nav2msgs.NAVIGATE_TO_POSE_RESULT_NONE`                         | `RosUInt16`        | `0`                                |
+| `constant GOAL_REJECTED`                | `nav2msgs.NAVIGATE_TO_POSE_RESULT_GOAL_REJECTED`                | `RosUInt16`        | `1`                                |
+| `constant SEND_GOAL_FAILURE`            | `nav2msgs.NAVIGATE_TO_POSE_RESULT_SEND_GOAL_FAILURE`            | `RosUInt16`        | `2`                                |
+| `constant UNKNOWN`                      | `nav2msgs.NAVIGATE_TO_POSE_RESULT_UNKNOWN`                      | `RosUInt16`        | `9000`                             |
+| `constant FAILED_TO_LOAD_BEHAVIOR_TREE` | `nav2msgs.NAVIGATE_TO_POSE_RESULT_FAILED_TO_LOAD_BEHAVIOR_TREE` | `RosUInt16`        | `9001`                             |
+| `constant TF_ERROR`                     | `nav2msgs.NAVIGATE_TO_POSE_RESULT_TF_ERROR`                     | `RosUInt16`        | `9002`                             |
+| `constant TIMEOUT`                      | `nav2msgs.NAVIGATE_TO_POSE_RESULT_TIMEOUT`                      | `RosUInt16`        | `9003`                             |
+| `Result.error_code`                     | `nav2msgs.NavigateToPoseResult.errorCode`                       | `RosUInt16`        | —                                  |
+| `Result.error_msg`                      | `nav2msgs.NavigateToPoseResult.errorMsg`                        | `RosString`        | —                                  |
+| `Feedback.current_pose`                 | `nav2msgs.NavigateToPoseFeedback.currentPose`                   | `PoseStamped`      | —                                  |
+| `Feedback.navigation_time`              | `nav2msgs.NavigateToPoseFeedback.navigationTime`                | `Duration`         | —                                  |
+| `Feedback.estimated_time_remaining`     | `nav2msgs.NavigateToPoseFeedback.estimatedTimeRemaining`        | `Duration`         | —                                  |
+| `Feedback.number_of_recoveries`         | `nav2msgs.NavigateToPoseFeedback.numberOfRecoveries`            | `RosInt16`         | —                                  |
+| `Feedback.distance_remaining`           | `nav2msgs.NavigateToPoseFeedback.distanceRemaining`             | `RosFloat32`       | —                                  |
+| `Feedback.position_tracking_error`      | `nav2msgs.NavigateToPoseFeedback.positionTrackingError`         | `RosFloat32`       | —                                  |
+| `Feedback.heading_tracking_error`       | `nav2msgs.NavigateToPoseFeedback.headingTrackingError`          | `RosFloat32`       | —                                  |
 
 ### `navigation2/nav2_msgs/action/Spin.action`
 
@@ -2621,7 +2666,7 @@ Output: `builtin_interfaces/messages.typl`. Pin:
 - `sensor_msgs/messages.typl`, `sensormsgs.BatteryState.cellTemperature`:
   `float32[]` → variable-length array with the maximal mechanical bound above.
 - `sensor_msgs/messages.typl`, `sensormsgs.CameraInfo.d`: `float64[]` →
-  variable-length array with the maximal mechanical bound above.
+  variable-length array with the bound set under "Payload ceiling bounds".
 - `sensor_msgs/messages.typl`, `sensormsgs.ChannelFloat32.values`: `float32[]` →
   variable-length array with the maximal mechanical bound above.
 - `sensor_msgs/messages.typl`, `sensormsgs.CompressedImage.data`: `uint8[]` →
@@ -2679,28 +2724,29 @@ Output: `builtin_interfaces/messages.typl`. Pin:
 - `nav_msgs/messages.typl`, `navmsgs.GridCells.cells`: `geometry_msgs/Point[]` →
   variable-length array with the maximal mechanical bound above.
 - `nav_msgs/messages.typl`, `navmsgs.OccupancyGrid.data`: `int8[]` →
-  variable-length array with the maximal mechanical bound above.
+  variable-length array with the bound set under "Payload ceiling bounds".
 - `nav_msgs/messages.typl`, `navmsgs.Path.poses`: `geometry_msgs/PoseStamped[]`
-  → variable-length array with the maximal mechanical bound above.
+  → variable-length array with the bound set under "Payload ceiling bounds".
 - `nav_msgs/messages.typl`, `navmsgs.Trajectory.points`: `TrajectoryPoint[]` →
   variable-length array with the maximal mechanical bound above.
 - `nav2_msgs/messages.typl`, `nav2msgs.BehaviorTreeLog.eventLog`:
   `BehaviorTreeStatusChange[]` → variable-length array with the maximal
   mechanical bound above.
 - `nav2_msgs/messages.typl`, `nav2msgs.Costmap.data`: `uint8[]` →
-  variable-length array with the maximal mechanical bound above.
+  variable-length array with the bound set under "Payload ceiling bounds".
 - `nav2_msgs/messages.typl`, `nav2msgs.ParticleCloud.particles`: `Particle[]` →
   variable-length array with the maximal mechanical bound above.
 - `nav2_msgs/messages.typl`, `nav2msgs.VoxelGrid.data`: `uint32[]` →
   variable-length array with the maximal mechanical bound above.
 - `nav2_msgs/interactions.ridl`, `nav2msgs.ClearEntireCostmapRequest.plugins`:
-  `string[]` → variable-length array with the maximal mechanical bound above.
+  `string[]` → variable-length array with the bound set under "Payload ceiling
+  bounds".
 - `nav2_msgs/interactions.ridl`,
   `nav2msgs.IsPathValidResponse.invalidPoseIndices`: `int32[]` → variable-length
-  array with the maximal mechanical bound above.
+  array with the bound set under "Payload ceiling bounds".
 - `nav2_msgs/interactions.ridl`, `nav2msgs.FollowWaypointsGoal.poses`:
-  `geometry_msgs/PoseStamped[]` → variable-length array with the maximal
-  mechanical bound above.
+  `geometry_msgs/PoseStamped[]` → variable-length array with the bound set under
+  "Payload ceiling bounds".
 - `nav2_msgs/interactions.ridl`,
   `nav2msgs.FollowWaypointsResult.missedWaypoints`: `WaypointStatus[]` →
   variable-length array with the maximal mechanical bound above.
@@ -2864,6 +2910,17 @@ They are declared once per package and reused by that package source files.
   `nav2msgs.ManageLifecycleNodesResponse.success`,
   `nav2msgs.SaveMapResponse.result`, `nav2msgs.SpeedLimit.percentage`,
   `nav2msgs.SpinGoal.disableCollisionChecks`.
+- `nav2msgs.RosBoundedString` in `nav2_msgs/messages.typl`: `string [0..256]`;
+  used by `nav2msgs.ClearEntireCostmapRequest.plugins`,
+  `nav2msgs.CostmapMetaData.layer`, `nav2msgs.FollowPathGoal.controllerId`,
+  `nav2msgs.FollowPathGoal.goalCheckerId`,
+  `nav2msgs.FollowPathGoal.pathHandlerId`,
+  `nav2msgs.FollowPathGoal.progressCheckerId`,
+  `nav2msgs.IsPathValidRequest.footprint`,
+  `nav2msgs.IsPathValidRequest.layerName`, `nav2msgs.LoadMapRequest.mapUrl`,
+  `nav2msgs.NavigateToPoseGoal.behaviorTree`,
+  `nav2msgs.SaveMapRequest.imageFormat`, `nav2msgs.SaveMapRequest.mapMode`,
+  `nav2msgs.SaveMapRequest.mapTopic`, `nav2msgs.SaveMapRequest.mapUrl`.
 - `nav2msgs.RosFloat32` in `nav2_msgs/messages.typl`: `float`; used by
   `nav2msgs.BackUpFeedback.distanceTraveled`, `nav2msgs.BackUpGoal.speed`,
   `nav2msgs.CostmapMetaData.resolution`,
@@ -2893,21 +2950,10 @@ They are declared once per package and reused by that package source files.
   `nav2msgs.BehaviorTreeStatusChange.currentStatus`,
   `nav2msgs.BehaviorTreeStatusChange.nodeName`,
   `nav2msgs.BehaviorTreeStatusChange.previousStatus`,
-  `nav2msgs.ClearEntireCostmapRequest.plugins`,
-  `nav2msgs.CostmapMetaData.layer`, `nav2msgs.FollowPathGoal.controllerId`,
-  `nav2msgs.FollowPathGoal.goalCheckerId`,
-  `nav2msgs.FollowPathGoal.pathHandlerId`,
-  `nav2msgs.FollowPathGoal.progressCheckerId`,
   `nav2msgs.FollowPathResult.errorMsg`,
   `nav2msgs.FollowWaypointsResult.errorMsg`,
-  `nav2msgs.IsPathValidRequest.footprint`,
-  `nav2msgs.IsPathValidRequest.layerName`, `nav2msgs.LoadMapRequest.mapUrl`,
-  `nav2msgs.NavigateToPoseGoal.behaviorTree`,
-  `nav2msgs.NavigateToPoseResult.errorMsg`,
-  `nav2msgs.SaveMapRequest.imageFormat`, `nav2msgs.SaveMapRequest.mapMode`,
-  `nav2msgs.SaveMapRequest.mapTopic`, `nav2msgs.SaveMapRequest.mapUrl`,
-  `nav2msgs.SpinResult.errorMsg`, `nav2msgs.WaitResult.errorMsg`,
-  `nav2msgs.WaypointStatus.errorMsg`.
+  `nav2msgs.NavigateToPoseResult.errorMsg`, `nav2msgs.SpinResult.errorMsg`,
+  `nav2msgs.WaitResult.errorMsg`, `nav2msgs.WaypointStatus.errorMsg`.
 - `nav2msgs.RosUInt16` in `nav2_msgs/messages.typl`: `integer [0..65535]`; used
   by `nav2msgs.ASSISTED_TELEOP_RESULT_GOAL_REJECTED`,
   `nav2msgs.ASSISTED_TELEOP_RESULT_NONE`,
@@ -2987,6 +3033,8 @@ They are declared once per package and reused by that package source files.
   `nav2msgs.WaypointStatus.waypointStatus`.
 - `navmsgs.RosBoolean` in `nav_msgs/interactions.ridl`: `boolean`; used by
   `navmsgs.SetMapResponse.success`.
+- `navmsgs.RosBoundedString` in `nav_msgs/messages.typl`: `string [0..3968]`;
+  used by `navmsgs.LoadMapRequest.mapUrl`.
 - `navmsgs.RosFloat32` in `nav_msgs/messages.typl`: `float`; used by
   `navmsgs.GridCells.cellHeight`, `navmsgs.GridCells.cellWidth`,
   `navmsgs.MapMetaData.resolution`.
@@ -2995,8 +3043,7 @@ They are declared once per package and reused by that package source files.
 - `navmsgs.RosMetres` in `nav_msgs/interactions.ridl`: `m`; used by
   `navmsgs.GetPlanRequest.tolerance`.
 - `navmsgs.RosString` in `nav_msgs/messages.typl`:
-  `string [0..18446744073709551615]`; used by `navmsgs.LoadMapRequest.mapUrl`,
-  `navmsgs.Odometry.childFrameId`.
+  `string [0..18446744073709551615]`; used by `navmsgs.Odometry.childFrameId`.
 - `navmsgs.RosUInt32` in `nav_msgs/messages.typl`: `integer [0..4294967295]`;
   used by `navmsgs.MapMetaData.height`, `navmsgs.MapMetaData.width`.
 - `navmsgs.RosUInt8` in `nav_msgs/interactions.ridl`: `integer [0..255]`; used
@@ -3015,6 +3062,9 @@ They are declared once per package and reused by that package source files.
   `sensormsgs.BatteryState.present`, `sensormsgs.PointCloud2.isBigendian`,
   `sensormsgs.PointCloud2.isDense`, `sensormsgs.RegionOfInterest.doRectify`,
   `sensormsgs.SetCameraInfoResponse.success`.
+- `sensormsgs.RosBoundedString` in `sensor_msgs/messages.typl`:
+  `string [0..256]`; used by `sensormsgs.CameraInfo.distortionModel`,
+  `sensormsgs.SetCameraInfoResponse.statusMessage`.
 - `sensormsgs.RosCelsius` in `sensor_msgs/messages.typl`: `Cel`; used by
   `sensormsgs.BatteryState.temperature`, `sensormsgs.Temperature.temperature`.
 - `sensormsgs.RosFloat32` in `sensor_msgs/messages.typl`: `float`; used by
@@ -3067,11 +3117,9 @@ They are declared once per package and reused by that package source files.
 - `sensormsgs.RosString` in `sensor_msgs/messages.typl`:
   `string [0..18446744073709551615]`; used by
   `sensormsgs.BatteryState.location`, `sensormsgs.BatteryState.serialNumber`,
-  `sensormsgs.CameraInfo.distortionModel`, `sensormsgs.ChannelFloat32.name`,
-  `sensormsgs.CompressedImage.format`, `sensormsgs.Image.encoding`,
-  `sensormsgs.JointState.name`, `sensormsgs.MultiDOFJointState.jointNames`,
-  `sensormsgs.PointField.name`,
-  `sensormsgs.SetCameraInfoResponse.statusMessage`,
+  `sensormsgs.ChannelFloat32.name`, `sensormsgs.CompressedImage.format`,
+  `sensormsgs.Image.encoding`, `sensormsgs.JointState.name`,
+  `sensormsgs.MultiDOFJointState.jointNames`, `sensormsgs.PointField.name`,
   `sensormsgs.TimeReference.source`.
 - `sensormsgs.RosUInt16` in `sensor_msgs/messages.typl`: `integer [0..65535]`;
   used by `sensormsgs.NAV_SAT_STATUS_SERVICE_COMPASS`,
@@ -3148,6 +3196,8 @@ They are declared once per package and reused by that package source files.
   `stdmsgs.Float32MultiArray.data`.
 - `stdmsgs.RosFloat64` in `std_msgs/messages.typl`: `float`; used by
   `stdmsgs.Float64.data`, `stdmsgs.Float64MultiArray.data`.
+- `stdmsgs.RosFrameId` in `std_msgs/messages.typl`: `string [0..64]`; used by
+  `stdmsgs.Header.frameId`.
 - `stdmsgs.RosInt16` in `std_msgs/messages.typl`: `integer [-32768..32767]`;
   used by `stdmsgs.Int16.data`, `stdmsgs.Int16MultiArray.data`.
 - `stdmsgs.RosInt32` in `std_msgs/messages.typl`:
@@ -3159,7 +3209,7 @@ They are declared once per package and reused by that package source files.
 - `stdmsgs.RosInt8` in `std_msgs/messages.typl`: `integer [-128..127]`; used by
   `stdmsgs.Int8.data`, `stdmsgs.Int8MultiArray.data`.
 - `stdmsgs.RosString` in `std_msgs/messages.typl`:
-  `string [0..18446744073709551615]`; used by `stdmsgs.Header.frameId`,
+  `string [0..18446744073709551615]`; used by
   `stdmsgs.MultiArrayDimension.label`, `stdmsgs.String.data`.
 - `stdmsgs.RosUInt16` in `std_msgs/messages.typl`: `integer [0..65535]`; used by
   `stdmsgs.UInt16.data`, `stdmsgs.UInt16MultiArray.data`.
@@ -3174,6 +3224,8 @@ They are declared once per package and reused by that package source files.
 - `stdsrvs.RosBoolean` in `std_srvs/interactions.ridl`: `boolean`; used by
   `stdsrvs.SetBoolRequest.data`, `stdsrvs.SetBoolResponse.success`,
   `stdsrvs.TriggerResponse.success`.
-- `stdsrvs.RosString` in `std_srvs/interactions.ridl`:
-  `string [0..18446744073709551615]`; used by `stdsrvs.SetBoolResponse.message`,
+- `stdsrvs.RosBoundedString` in `std_srvs/interactions.ridl`:
+  `string [0..3968]`; used by `stdsrvs.SetBoolResponse.message`,
   `stdsrvs.TriggerResponse.message`.
+- `stdsrvs.RosString` in `std_srvs/interactions.ridl`:
+  `string [0..18446744073709551615]`; used by no field.

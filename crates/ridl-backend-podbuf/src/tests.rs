@@ -98,3 +98,53 @@ fn a_tuple_member_with_no_name_is_named_by_its_position() {
     assert!(!h.contains("uint8_t a;"), "{h}");
     assert!(h.contains("q_st_f2_at("), "{h}");
 }
+
+/// A member whose pinned snake case is a C23 keyword (`staticAssert` is
+/// `static_assert`) is escaped with a trailing underscore, as every reserved
+/// word is, for a struct field and for a tuple member. The test pins the eight
+/// C23 spellings that are not also C11 keywords, except `bool`, `true` and
+/// `false`, and `asm`, the GNU-dialect keyword.
+#[test]
+fn a_member_named_by_a_c23_keyword_is_escaped() {
+    let h = generate_fixture(
+        "package q\n\
+         struct S {\n  staticAssert : integer [0..255]\n  typeof : integer [0..255]\n\
+         \x20 alignas : integer [0..255]\n  alignof : integer [0..255]\n\
+         \x20 threadLocal : integer [0..255]\n  typeofUnqual : integer [0..255]\n\
+         \x20 asm : integer [0..255]\n\
+         \x20 t : (constexpr: integer [0..255], nullptr: integer [0..255])\n}\n",
+    )
+    .header_source;
+    assert!(h.contains("_Alignas(8) uint8_t static_assert_;"), "{h}");
+    assert!(h.contains("q_s_static_assert_at("), "{h}");
+    for member in [
+        "typeof_",
+        "alignas_",
+        "alignof_",
+        "thread_local_",
+        "typeof_unqual_",
+        "asm_",
+    ] {
+        assert!(
+            h.contains(&format!("\n  uint8_t {member};")),
+            "{member}: {h}"
+        );
+        assert!(h.contains(&format!("q_s_{member}at(")), "{member}: {h}");
+    }
+    assert!(h.contains("_Alignas(8) uint8_t constexpr_;"), "{h}");
+    assert!(h.contains("\n  uint8_t nullptr_;"), "{h}");
+    assert!(h.contains("offsetof(q_st_head, nullptr_) == 1"), "{h}");
+    for bare in [
+        " static_assert;",
+        " typeof;",
+        " alignas;",
+        " alignof;",
+        " thread_local;",
+        " typeof_unqual;",
+        " asm;",
+        " constexpr;",
+        " nullptr;",
+    ] {
+        assert!(!h.contains(bare), "{bare}: {h}");
+    }
+}

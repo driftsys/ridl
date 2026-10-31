@@ -11,7 +11,9 @@
 //!
 //! Codes are grouped by hundreds and never renumbered or reused; a code
 //! retired from the `RIDL-` or `TYPL-` catalogue is listed in
-//! [`RETIRED_RIDL_CODES`] or [`RETIRED_TYPL_CODES`], and a guard keeps it out.
+//! [`RETIRED_RIDL_CODES`] or [`RETIRED_TYPL_CODES`], and a guard keeps it out;
+//! the lint name of a retired code is listed in [`RETIRED_LINT_NAMES`] and is
+//! never given to another row.
 //! Five namespaces are in play across the family, one catalogue each:
 //!
 //! - `FORM-…` — the shared family grammar: lexical `0xx`, parse `1xx`, and the
@@ -182,7 +184,17 @@ macro_rules! diag_codes {
 ///
 /// RIDL-415 (`package-fan-out`) was a design-lint calibration candidate that
 /// did not ship; its number is retired too.
-pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148, 415];
+///
+/// RIDL-150 (`payload-above-ceiling`) was retired on 2026-10-30 (ADR-0030
+/// decision 7 as amended): the error RIDL-157 reports the case it reported.
+pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148, 150, 415];
+
+/// The lint names of retired codes. A released lint name is a stable contract
+/// (ADR-0024 decision 7): a `ridl.toml` refers to it, so the name of a retired
+/// lint is never given to another row. `retired_lint_names_are_never_reused`
+/// keeps each name out of every catalogue. A `[lints]` key that names one is
+/// an unknown lint name and draws MANI-010 (ADR-0024 decision 11).
+pub const RETIRED_LINT_NAMES: &[&str] = &["payload-above-ceiling"];
 
 /// The `TYPL-` codes retired without shipping. TYPL-223
 /// (`inconsistent-abbreviation`) was a design-lint calibration candidate that
@@ -396,12 +408,11 @@ diag_codes! {
         TYPL_115 = "TYPL-115", Info,
             "type has no derivable init value and no declared `= value`", lint = "no-init-value";
 
-        /// `string` bound above 4,032 characters or `bytes` bound above 16,128
+        /// `string` bound above 16,256 characters or `bytes` bound above 65,280
         /// bytes (typl §4.4–§4.5, §16.2; ADR-0030 decision 7). Warning. The
-        /// payload ceiling is 16,256 bytes; the codecs do not yet enforce it
-        /// (driftsys/ridl#996).
+        /// largest payload of any kind is 65,280 bytes.
         TYPL_116 = "TYPL-116", Warning,
-            "`string`/`bytes` bound above the advised transfer limit", lint = "bound-above-transfer";
+            "`string`/`bytes` bound above what the largest payload of any kind can carry", lint = "bound-above-transfer";
 
         /// Array without explicit bounds (typl §16.3).
         TYPL_201 = "TYPL-201", Error,
@@ -814,13 +825,6 @@ diag_codes! {
         RIDL_149 = "RIDL-149", Error,
             "two names in one scope collide after a pinned name transform";
 
-        /// A payload carried by an interaction whose largest encoded size, in an
-        /// encoding that the workspace manifest enables, is above the payload ceiling of 16,256
-        /// bytes, or has no finite bound (ADR-0030 decision 7). Warning. Emitted
-        /// by `ridlc` after lowering, for `ridl check` and `ridl build`.
-        RIDL_150 = "RIDL-150", Warning,
-            "payload above the payload ceiling or with no finite bound", lint = "payload-above-ceiling";
-
         /// A payload whose largest encoded size, in an encoding that the
         /// workspace manifest enables, is above the limit that a `[limits]`
         /// entry of its unit gives the interaction, or has no finite bound
@@ -874,6 +878,18 @@ diag_codes! {
         /// release.
         RIDL_156 = "RIDL-156", Info,
             "struct field order wastes podbuf padding", lint = "podbuf-padding-order";
+
+        /// A payload carried by an interaction that no `[limits]` entry gives
+        /// a limit, whose largest encoded size, in an encoding that the
+        /// workspace manifest enables, is above the default ceiling of the
+        /// interaction's kind (3,840 bytes for a `signal` and an `event`,
+        /// 16,128 for a `command` and a `query`, 65,280 for a `fixed`), or
+        /// has no finite bound (ADR-0030 decisions 16 and 17). Error; as an
+        /// error code it has no name and no level (ADR-0024 decision 1).
+        /// Emitted by `ridlc` after lowering, for `ridl check` and
+        /// `ridl build`, on the interaction.
+        RIDL_157 = "RIDL-157", Error,
+            "payload above the default ceiling of its kind or with no finite bound";
 
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker.
@@ -1507,11 +1523,17 @@ diag_codes! {
         MANI_021 = "MANI-021", Error,
             "unknown kind in `[limits.kind]`";
 
-        /// A `[limits]` value is above the payload ceiling of 16,256 bytes.
-        /// Reported on the value; the entry is dropped. A value that is not an
-        /// integer from 0 up is MANI-015.
+        /// A `[limits]` value is above what its entry may give: a
+        /// `[limits.kind]` entry above the default ceiling of its kind (3,840
+        /// bytes for `signal` and `event`, 16,128 for `command` and `query`,
+        /// 65,280 for `fixed`), `default` or a `[limits.interaction]` entry
+        /// above 65,280 bytes, or a `[limits.interaction]` entry above 16,128
+        /// bytes that names a member other than a `fixed`, which `ridlc`
+        /// reports where the member's kind is known (ADR-0030 decisions 12
+        /// and 18). Reported on the value; the entry is dropped. A value that
+        /// is not an integer from 0 up is MANI-015.
         MANI_022 = "MANI-022", Error,
-            "payload limit above the payload ceiling of 16,256 bytes";
+            "payload limit above what its entry may give";
 
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
@@ -2294,6 +2316,23 @@ mod tests {
         }
     }
 
+    /// A retired lint name is never reused (ADR-0024 decision 7): no row of
+    /// any catalogue carries a name in [`RETIRED_LINT_NAMES`].
+    #[test]
+    fn retired_lint_names_are_never_reused() {
+        for (_, catalog) in ALL_CATALOGS {
+            for entry in *catalog {
+                if let Some(name) = entry.lint {
+                    assert!(
+                        !RETIRED_LINT_NAMES.contains(&name),
+                        "`{}` uses the retired lint name `{name}`",
+                        entry.code.as_str(),
+                    );
+                }
+            }
+        }
+    }
+
     /// A retired `TYPL-` code is never declared again: every number in
     /// [`RETIRED_TYPL_CODES`] stays out of the `TYPL-` catalogue.
     #[test]
@@ -2439,7 +2478,6 @@ mod tests {
             ("RIDL-100", "missing-timing"),
             ("RIDL-108", "degenerate-timing-range"),
             ("RIDL-112", "missing-response-bound"),
-            ("RIDL-150", "payload-above-ceiling"),
             ("RIDL-156", "podbuf-padding-order"),
             ("RIDL-304", "error-typed-parameter"),
             ("RIDL-305", "ensure-without-result"),

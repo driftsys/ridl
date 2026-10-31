@@ -37,3 +37,31 @@ pub fn compile_fixture(file_name: &str) -> ridl_ir::v2::Package {
     );
     output.package
 }
+
+/// Compiles the fixture named `file_name` to its IR package, where the
+/// fixture carries a payload with no finite bound on purpose: the checker
+/// reports RIDL-157 on the interaction (ADR-0030 decision 17), which this
+/// helper requires, and no other error. The IR is complete, so a test of what
+/// the backend does with such a payload reads it as any other package.
+#[allow(dead_code)]
+pub fn compile_oversized_fixture(file_name: &str) -> ridl_ir::v2::Package {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(file_name);
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+    let output = ridlc::compile(&path.display().to_string(), &text);
+    let errors: Vec<&str> = output
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| matches!(diagnostic.severity, ridl_core::diag::Severity::Error))
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect();
+    assert!(
+        !errors.is_empty() && errors.iter().all(|code| *code == "RIDL-157"),
+        "{} must draw RIDL-157 and no other error, got: {:?}",
+        path.display(),
+        output.diagnostics,
+    );
+    output.package
+}

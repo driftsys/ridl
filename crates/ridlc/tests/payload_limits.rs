@@ -90,13 +90,15 @@ fn signal() -> String {
         .to_string()
 }
 
+/// With no `[limits]` table, a payload above the default ceiling of its kind
+/// is RIDL-157 (`payload_ceiling.rs`), and neither RIDL-151 nor RIDL-152.
 #[test]
-fn no_limits_table_reports_nothing_new() {
+fn no_limits_table_reports_ridl_157_alone() {
     let source = "package demo\ntype Text: string [0..4032]\n\
                   struct Payload { a: Text, b: Text }\n\
                   interface Iface {\n  signal sig: Payload @[10ms..100ms]\n}\n";
     let diagnostics = check(source, "");
-    assert_eq!(with("RIDL-150", &diagnostics).len(), 1, "{diagnostics:?}");
+    assert_eq!(with("RIDL-157", &diagnostics).len(), 1, "{diagnostics:?}");
     assert!(with("RIDL-151", &diagnostics).is_empty(), "{diagnostics:?}");
     assert!(with("RIDL-152", &diagnostics).is_empty(), "{diagnostics:?}");
 }
@@ -161,14 +163,14 @@ fn resolution_order_is_name_then_kind_then_default() {
                   interface Iface {\n  signal sig: Payload @[10ms..100ms]\n  \
                   event first: Payload @[10ms..100ms]\n  \
                   event second: Payload @[10ms..100ms]\n}\n";
-    let limits = "[limits]\ndefault = 1\n[limits.kind]\nsignal = 10000\n\
-                  [limits.interaction]\n\"Iface.first\" = 10000\n";
+    let limits = "[limits]\ndefault = 1\n[limits.kind]\nsignal = 3000\n\
+                  [limits.interaction]\n\"Iface.first\" = 3000\n";
     let diagnostics = check(source, limits);
     let found = with("RIDL-151", &diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
     assert!(found[0].message.contains("`Iface.second`"), "{found:?}");
     // The name beats the kind and the default, in the lowering direction too.
-    let limits = "[limits]\ndefault = 10000\n[limits.kind]\nsignal = 10000\n\
+    let limits = "[limits]\ndefault = 10000\n[limits.kind]\nsignal = 3000\n\
                   [limits.interaction]\n\"Iface.sig\" = 10\n";
     let diagnostics = check(source, limits);
     let found = with("RIDL-151", &diagnostics);
@@ -224,13 +226,14 @@ fn an_unbounded_payload_under_a_declared_limit_is_an_error() {
 }
 
 #[test]
-fn a_fixed_is_checked_though_the_ceiling_check_skips_it() {
+fn a_fixed_is_checked_against_a_declared_limit() {
     let source = "package demo\ntype Text: string [0..4032]\n\
                   struct Payload { a: Text, b: Text }\ntype Small: bytes [0..10]\n\
                   interface Iface {\n  fixed big: Payload\n  fixed small: Small\n}\n";
-    // No table: a fixed above the ceiling draws nothing, as before.
+    // No table: a fixed of 32,000 bytes is within its default ceiling of
+    // 65,280 bytes and draws nothing.
     let diagnostics = check(source, "");
-    assert!(with("RIDL-150", &diagnostics).is_empty(), "{diagnostics:?}");
+    assert!(with("RIDL-157", &diagnostics).is_empty(), "{diagnostics:?}");
     assert!(with("RIDL-151", &diagnostics).is_empty(), "{diagnostics:?}");
     // A table with only `default` sizes the fixed.
     let diagnostics = check(source, "[limits]\ndefault = 16256\n");
@@ -238,7 +241,7 @@ fn a_fixed_is_checked_though_the_ceiling_check_skips_it() {
     assert_eq!(found.len(), 1, "{diagnostics:?}");
     assert!(found[0].message.contains("`Iface.big`"), "{found:?}");
     assert!(found[0].message.starts_with("the value of "), "{found:?}");
-    assert!(with("RIDL-150", &diagnostics).is_empty(), "{diagnostics:?}");
+    assert!(with("RIDL-157", &diagnostics).is_empty(), "{diagnostics:?}");
     // A kind entry reaches it too.
     let diagnostics = check(source, "[limits.kind]\nfixed = 5\n");
     let found = with("RIDL-151", &diagnostics);
@@ -486,13 +489,15 @@ fn a_unit_with_limits_and_no_interface_reports_each_entry() {
     assert_eq!(with("RIDL-152", &diagnostics).len(), 2, "{diagnostics:?}");
 }
 
+/// Where an entry gives the limit, RIDL-151 alone applies: a signal above its
+/// default ceiling under a declared limit draws no RIDL-157.
 #[test]
-fn a_payload_above_the_ceiling_under_a_declared_limit_draws_both_codes() {
+fn a_payload_above_the_ceiling_under_a_declared_limit_draws_ridl_151_alone() {
     let source = "package demo\ntype Text: string [0..4032]\n\
                   struct Payload { a: Text, b: Text }\n\
                   interface Iface {\n  signal sig: Payload @[10ms..100ms]\n}\n";
     let diagnostics = check(source, "[limits]\ndefault = 16256\n");
-    assert_eq!(with("RIDL-150", &diagnostics).len(), 1, "{diagnostics:?}");
+    assert!(with("RIDL-157", &diagnostics).is_empty(), "{diagnostics:?}");
     assert_eq!(with("RIDL-151", &diagnostics).len(), 1, "{diagnostics:?}");
 }
 
@@ -600,10 +605,10 @@ fn the_unmatched_name_message_names_the_unit() {
 }
 
 #[test]
-fn a_manifest_error_still_stops_the_ceiling_check_in_every_package() {
+fn a_manifest_error_of_one_member_does_not_stop_ridl_157_in_another() {
     // Member `a` has a manifest error; member `b` has a payload above the
-    // ceiling and no limits. RIDL-150 skips every package; RIDL-151 and
-    // RIDL-152 skip only the packages beneath the manifest.
+    // ceiling and no limits. The size pass skips only the packages beneath the
+    // manifest, so `b` draws RIDL-157.
     let big = "package b\ntype Text: string [0..4032]\n\
                struct Payload { a: Text, b: Text }\n\
                interface Iface {\n  signal sig: Payload @[10ms..100ms]\n}\n";
@@ -622,9 +627,8 @@ fn a_manifest_error_still_stops_the_ceiling_check_in_every_package() {
     ];
     let result = run(&members, PROTO3);
     assert_eq!(with("MANI-021", &result.diagnostics).len(), 1);
-    assert!(
-        with("RIDL-150", &result.diagnostics).is_empty(),
-        "{:?}",
-        result.diagnostics
-    );
+    let found = with("RIDL-157", &result.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", result.diagnostics);
+    let path = result.sources.path(found[0].primary.file).unwrap();
+    assert!(path.ends_with("b/m.ridl"), "{path}");
 }

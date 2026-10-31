@@ -28,6 +28,8 @@ type Call =
   }
   | {
     kind: typeof Kind.Query;
+    /** The payload limit of the queried member, in bytes. */
+    limit: number;
     timer: ReturnType<typeof setTimeout>;
     resolve: (reply: Uint8Array) => void;
     reject: (e: SessionError) => void;
@@ -62,12 +64,18 @@ export class Calls {
   /**
    * Starts a query, as {@link Calls.command} does. The promise resolves with
    * the payload of the `reply`, and rejects `timeout`, not `undelivered`, when
-   * the bound passes.
+   * the bound passes. `limit` is the payload limit of the queried member, in
+   * bytes: a `reply` whose payload is longer rejects the query with `corrupt`.
    */
-  query(bound: number, send: (seq: bigint) => void): Promise<Uint8Array> {
+  query(
+    bound: number,
+    limit: number,
+    send: (seq: bigint) => void,
+  ): Promise<Uint8Array> {
     return new Promise((resolve, reject) => {
       this.#start(bound, send, reject, (timer) => ({
         kind: Kind.Query,
+        limit,
         timer,
         resolve,
         reject,
@@ -80,11 +88,12 @@ export class Calls {
    * Returns why the response was not used, and changes nothing, when
    * `correlation` names no call in flight (`unknown-correlation`) or names a
    * call whose kind the outcome does not fit (`unexpected-outcome`):
-   * `accepted` settles only a command and `reply` only a query.
+   * `accepted` settles only a command and `reply` only a query. A `reply`
+   * whose payload is longer than the limit the query was started with
+   * rejects the query with `corrupt` and is not handed out. The limit is the
+   * call's, not one taken from `frame.target`, for the reason given below.
    */
-  settle(
-    frame: Response,
-  ): "unknown-correlation" | "unexpected-outcome" | null {
+  settle(frame: Response): "unknown-correlation" | "unexpected-outcome" | null {
     const call = this.#inFlight.get(frame.correlation);
     if (!call) return "unknown-correlation";
     const outcome = frame.outcome;
@@ -103,7 +112,12 @@ export class Calls {
         if (call.kind === Kind.Command) call.resolve();
         return null;
       case "reply":
-        if (call.kind === Kind.Query) call.resolve(outcome.payload);
+        if (call.kind !== Kind.Query) return null; // ruled out above
+        if (outcome.payload.length > call.limit) {
+          call.reject(new SessionError({ category: "corrupt" }));
+        } else {
+          call.resolve(outcome.payload);
+        }
         return null;
       case "contract":
         call.reject(

@@ -32,6 +32,42 @@ export const Kind = {
 /** The wire code of an interaction kind. */
 export type Kind = (typeof Kind)[keyof typeof Kind];
 
+/**
+ * The default ceiling of a `signal` and an `event`, in bytes of encoded
+ * payload: one 4,096-byte page minus 256 bytes of header. The limit of a
+ * member that no `[limits]` entry of the catalog (`[limits.interaction]`,
+ * `[limits.kind]` or `default`) gives one. The
+ * Rust crate `ridl-rt` holds the same three values in `ridl_rt::contract`, and
+ * a test of `ridl-transport-ws` keeps the two sides equal.
+ */
+export const SIGNAL_EVENT_CEILING = 3_840;
+/**
+ * The default ceiling of a `command` and a `query`, in bytes of encoded
+ * payload: four 4,096-byte pages minus 256 bytes of header. See
+ * {@link SIGNAL_EVENT_CEILING}.
+ */
+export const CALL_CEILING = 16_128;
+/**
+ * The default ceiling of a `fixed`, in bytes of encoded payload: sixteen
+ * 4,096-byte pages minus 256 bytes of header. See
+ * {@link SIGNAL_EVENT_CEILING}.
+ */
+export const FIXED_CEILING = 65_280;
+
+/** The default ceiling of an interaction of `kind`, in bytes of encoded payload. */
+export function defaultCeiling(kind: Kind): number {
+  switch (kind) {
+    case Kind.Signal:
+    case Kind.Event:
+      return SIGNAL_EVENT_CEILING;
+    case Kind.Command:
+    case Kind.Query:
+      return CALL_CEILING;
+    case Kind.Fixed:
+      return FIXED_CEILING;
+  }
+}
+
 /** The encodings an `attach` can ask for. */
 export type EncodingName = "flatbuffers" | "proto3" | "podbuf";
 

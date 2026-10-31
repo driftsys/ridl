@@ -68,9 +68,16 @@ Its exports:
   `iface`, `ord`, `kind` (`"signal"`, `"event"`, `"command"`, `"query"` or
   `"fixed"`) and the payload codecs of its roles: `payload` for a signal, an
   event and a `fixed`; `request` for a command; `request` and `reply` for a
-  query. A tombstone has no entry. A query with a fallible `T | E` reply has no
-  `reply`. An interaction whose payload has no finite bound has no entry, and a
-  comment stands at its place.
+  query. An entry carries `limit`, the member's payload limit in bytes, when a
+  `[limits]` entry of the manifest gives one: its `[limits.interaction]` entry,
+  else the entry of its kind in `[limits.kind]`, else `default` clamped to the
+  default ceiling of its kind (`Interaction.limit` of the model); absent, the
+  member has the default ceiling of its kind. The TypeScript client reads each
+  member's limit from these tables
+  ([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)). A tombstone has no
+  entry. A query with a fallible `T | E` reply has no `reply`. An interaction
+  whose payload has no finite bound has no entry, and a comment stands at its
+  place.
 
 An `internal` payload type is listed in `PAYLOAD_TYPES`, so that the list equals
 the package's part of `WASM_PAYLOAD_TYPES`, but gets no `encode` or `decode`,

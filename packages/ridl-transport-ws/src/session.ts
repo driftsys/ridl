@@ -4,10 +4,10 @@
  *
  * {@link connect} opens a connection, sends the `attach` and resolves with a
  * {@link Session} once the provider answers `attached(accepted)`. The session
- * applies the consumer's rules that need no catalog and no payload decoding:
- * the held sample of each subscribed signal, the order of a signal's
- * publications, the sequence of an event's occurrences, and the end of the
- * session.
+ * applies the consumer's rules that need no payload decoding: the held sample
+ * of each subscribed signal, the order of a signal's publications, the
+ * sequence of an event's occurrences, the size of each received payload
+ * against its member's limit, and the end of the session.
  *
  * @module
  */
@@ -15,6 +15,7 @@
 import {
   attach,
   decode,
+  defaultCeiling,
   encode,
   encodingTag,
   FRAME_VERSION,
@@ -38,6 +39,12 @@ export interface Sample {
   envelope: Envelope;
   /** The value under `live`, and `null` under `init` and `invalid`. */
   payload: Uint8Array | null;
+  /**
+   * Set when the session itself invalidated the sample: the `publish` carried
+   * a `live` payload longer than the member's limit. The provenance is then
+   * `invalid` and `payload` is `null`; the envelope is the frame's.
+   */
+  detected?: "corrupt";
 }
 
 /** One occurrence of a subscribed event. */
@@ -48,9 +55,49 @@ export interface Occurrence {
   ord: number;
   /** The envelope of the `occurrence`. */
   envelope: Envelope;
-  /** The value, as the provider encoded it. */
+  /**
+   * The value, as the provider encoded it; empty when the session refused it
+   * (`detected` is set).
+   */
   payload: Uint8Array;
+  /**
+   * Set when the session refused the value: the `occurrence` carried a
+   * payload longer than the member's limit. The occurrence is delivered with
+   * an empty payload, so that nothing fails silently.
+   */
+  detected?: "corrupt";
 }
+
+/**
+ * One member of a generated interface table: the entry
+ * `<Interface>.<member>` of a generated `<base>.codec.ts` module. `limit` is
+ * the member's payload limit in bytes when the catalog records one; absent,
+ * the member has the default ceiling of its kind.
+ */
+export interface MemberEntry {
+  /** The interface number. */
+  readonly iface: number;
+  /** The member ordinal. */
+  readonly ord: number;
+  /** The interaction kind, as the generated module spells it. */
+  readonly kind: "signal" | "event" | "command" | "query" | "fixed";
+  /**
+   * The payload limit a `[limits]` entry of the manifest gives the member:
+   * its `[limits.interaction]` entry, else the entry of its kind in
+   * `[limits.kind]`, else `default` clamped to the default ceiling of
+   * its kind.
+   */
+  readonly limit?: number;
+}
+
+/**
+ * A generated interface table: the object `export const <Interface>` of a
+ * generated `<base>.codec.ts` module, whose `iface` is the interface number
+ * and whose other properties are its members.
+ */
+export type InterfaceTable = {
+  readonly [member: string]: MemberEntry | number;
+};
 
 /**
  * What the consumer records about the session. A `violation` ends the
@@ -89,6 +136,14 @@ export interface ConnectOptions {
   catalog: { name: string; hash: Uint8Array };
   /** The payload encoding the `attach` asks for. The default is `proto3`. */
   encoding?: EncodingName;
+  /**
+   * The generated interface tables of the catalog, from which the session
+   * reads each member's payload limit. A received payload longer than its
+   * member's limit is refused before it reaches the application. A member no
+   * table names, and every member when no table is given, has the default
+   * ceiling of its kind.
+   */
+  interfaces?: readonly InterfaceTable[];
   /** Called for every accepted `publish` of a subscribed signal. */
   onPublish?: (target: Target, sample: Sample) => void;
   /** Called for every accepted occurrence, in arrival order. */
@@ -195,6 +250,35 @@ function identity(t: Target): string {
   return `${t.kind}:${t.iface}:${t.ord}`;
 }
 
+const KIND_CODES: Record<MemberEntry["kind"], Kind> = {
+  signal: Kind.Signal,
+  event: Kind.Event,
+  command: Kind.Command,
+  query: Kind.Query,
+  fixed: Kind.Fixed,
+};
+
+/**
+ * The limits the generated tables record, keyed by the identity of the
+ * member. A member with no `limit` has no entry.
+ */
+function recordedLimits(
+  tables: readonly InterfaceTable[] | undefined,
+): Map<string, number> {
+  const limits = new Map<string, number>();
+  for (const table of tables ?? []) {
+    for (const entry of Object.values(table)) {
+      if (typeof entry !== "object" || entry.limit === undefined) continue;
+      const kind = KIND_CODES[entry.kind];
+      limits.set(
+        identity({ kind, iface: entry.iface, ord: entry.ord }),
+        entry.limit,
+      );
+    }
+  }
+  return limits;
+}
+
 /** The largest interface number and member ordinal: 2^32 - 1. */
 const MAX_NUMBER = 4_294_967_295;
 
@@ -246,6 +330,8 @@ export class Session {
   #lastSeq = new Map<string, bigint>();
   /** The commands and queries in flight. */
   #calls = new Calls();
+  /** The limits the generated tables record, keyed by member identity. */
+  #limits: Map<string, number>;
 
   /** @internal Use {@link connect}. */
   constructor(
@@ -258,6 +344,7 @@ export class Session {
     this.#attachFrame = attachFrame;
     this.#options = options;
     this.#opening = opening;
+    this.#limits = recordedLimits(options.interfaces);
     this.closed = new Promise((resolve) => {
       this.#resolveClosed = resolve;
     });
@@ -347,8 +434,10 @@ export class Session {
    * a copy of `args`. Resolves on `accepted`. Rejects with a
    * {@link SessionError}: `contract`, `corrupt` or `busy` as the provider
    * answered, `undelivered` when `opts.bound` milliseconds pass with no
-   * `response`, `down` when the session has ended or ends first. Rejects with
-   * a `RangeError`, and sends nothing, when `opts.bound` is not a finite number
+   * `response`, `down` when the session has ended or ends first; `corrupt`
+   * also, before anything is sent, when `args` is longer than the member's
+   * limit, the refusal the provider would answer. Rejects with a
+   * `RangeError`, and sends nothing, when `opts.bound` is not a finite number
    * of milliseconds greater than 0 and at most 2147483647, or when `iface` or
    * `ord` is not an integer from 1 to 4294967295.
    */
@@ -360,6 +449,7 @@ export class Session {
   ): Promise<void> {
     try {
       checkNumbers(iface, ord);
+      this.#checkArgs({ kind: Kind.Command, iface, ord }, args);
     } catch (e) {
       return Promise.reject(e);
     }
@@ -382,13 +472,16 @@ export class Session {
     args: Uint8Array,
     opts: { bound: number },
   ): Promise<Uint8Array> {
+    const target: Target = { kind: Kind.Query, iface, ord };
     try {
       checkNumbers(iface, ord);
+      this.#checkArgs(target, args);
     } catch (e) {
       return Promise.reject(e);
     }
     return this.#calls.query(
       opts.bound,
+      this.#limitOf(target),
       (seq) => this.#request(Kind.Query, iface, ord, seq, args),
     );
   }
@@ -433,6 +526,26 @@ export class Session {
   #note(note: Note): void {
     const onNote = this.#options.onNote;
     if (onNote) this.#listen(() => onNote(note));
+  }
+
+  /**
+   * The payload limit of a member, in bytes: the one the generated tables
+   * record for it, else the default ceiling of its kind.
+   */
+  #limitOf(target: Target): number {
+    return this.#limits.get(identity(target)) ?? defaultCeiling(target.kind);
+  }
+
+  /**
+   * Throws the `corrupt` {@link SessionError} when the arguments of a call
+   * are longer than the member's limit: the provider would answer the
+   * `request` so, and a larger message could end the session instead, so the
+   * call is refused before it is sent.
+   */
+  #checkArgs(target: Target, args: Uint8Array): void {
+    if (args.length > this.#limitOf(target)) {
+      throw new SessionError({ category: "corrupt" });
+    }
   }
 
   /**
@@ -563,11 +676,23 @@ export class Session {
 
   #onPublish(frame: Extract<Frame, { form: "publish" }>): void {
     const t = frame.target;
-    const sample: Sample = {
-      provenance: frame.state.provenance,
-      envelope: frame.envelope,
-      payload: frame.state.provenance === "live" ? frame.state.payload : null,
-    };
+    // A `live` payload longer than the member's limit never reaches the
+    // application: the sample is invalid with `detected`, and a `read` it
+    // answers rejects `corrupt`.
+    const oversized = frame.state.provenance === "live" &&
+      frame.state.payload.length > this.#limitOf(t);
+    const sample: Sample = oversized
+      ? {
+        provenance: "invalid",
+        envelope: frame.envelope,
+        payload: null,
+        detected: "corrupt",
+      }
+      : {
+        provenance: frame.state.provenance,
+        envelope: frame.envelope,
+        payload: frame.state.provenance === "live" ? frame.state.payload : null,
+      };
     // Every `read` at the head of the identity's queue settles with this frame.
     const reads: Extract<Waiting, { op: "read" }>[] = [];
     const key = identity(t);
@@ -577,7 +702,10 @@ export class Session {
       if (read?.op === "read") reads.push(read);
     }
     if (queue && queue.length === 0) this.#waiting.delete(key);
-    for (const r of reads) r.resolve(sample);
+    for (const r of reads) {
+      if (oversized) r.reject(new SessionError({ category: "corrupt" }));
+      else r.resolve(sample);
+    }
 
     const ch = channel(t.iface, t.ord);
     if (t.kind !== Kind.Signal || !this.#signals.has(ch)) {
@@ -632,12 +760,22 @@ export class Session {
     }
     const onOccurrence = this.#options.onOccurrence;
     if (onOccurrence) {
-      const occurrence: Occurrence = {
-        iface: t.iface,
-        ord: t.ord,
-        envelope: frame.envelope,
-        payload: frame.payload,
-      };
+      // A payload longer than the member's limit is not handed out: the
+      // occurrence is delivered empty, with `detected` set.
+      const occurrence: Occurrence = frame.payload.length > this.#limitOf(t)
+        ? {
+          iface: t.iface,
+          ord: t.ord,
+          envelope: frame.envelope,
+          payload: new Uint8Array(),
+          detected: "corrupt",
+        }
+        : {
+          iface: t.iface,
+          ord: t.ord,
+          envelope: frame.envelope,
+          payload: frame.payload,
+        };
       this.#listen(() => onOccurrence(occurrence));
     }
   }

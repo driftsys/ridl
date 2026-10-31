@@ -307,6 +307,16 @@ bound `ridl_ir::projection::podbuf::max_size` computes. A constant has neither.
 A codec reads them as the declaration's largest encoded size, as the Rust
 backend does.
 
+Each `Interaction` also carries `limit`: the payload limit in bytes that a
+`[limits]` entry of the manifest gives the member (its `[limits.interaction]`
+entry, else the entry of its kind in `[limits.kind]`, else `default` clamped to
+the default ceiling of its kind), copied from the catalog. It is absent when no
+entry applies, and the member then has the default ceiling of its kind (3,840
+bytes for a `signal` and an `event`, 16,128 for a `command` and a `query`,
+65,280 for a `fixed`). A plugin that emits a member table, as the TypeScript
+backend's codec module does, reads the limit there, so that a consumer gets
+every limit from the catalog.
+
 **A plugin reads these sizes; it does not compute them.** The sizes of the
 `warning` event's payload in `examples/cabin`, and its reservation:
 

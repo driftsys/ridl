@@ -212,6 +212,15 @@ const VALUE_TABLE: &[Row] = &[
         bytes: "10000000 00000000 | 0a 00 02 00 04 00 00 00 00 | 01 09 | 0000000000",
         build: "build_sparse",
     },
+    // §5.3: one descriptor at 0..8 (`off` 16, `len` 1, `elem_size` 8) to one
+    // `Strict` head, `level` at 0 of the element, pad 1..8.
+    Row {
+        name: "Stricts",
+        ty: "Stricts",
+        value: "Stricts { items: vec![Strict { level: 3 }] }",
+        bytes: "08000000 00000000 | 10000000 0100 0800 | 03 00000000000000",
+        build: "build_stricts",
+    },
 ];
 
 /// The values of the table over `podbuf_roundtrip.ridl`.
@@ -288,6 +297,10 @@ fn build_sparse(v: &SparsePodbufView<'_>) -> Sparse {
 
 fn build_blob(v: &BlobPodbufView<'_>) -> Blob {
     Blob { data: v.data().to_vec(), marks: v.marks().collect() }
+}
+
+fn build_stricts(v: &StrictsPodbufView<'_>) -> Stricts {
+    Stricts { items: v.items().map(|s| Strict { level: s.level() }).collect() }
 }
 "#;
 
@@ -646,16 +659,55 @@ fn stride_differs_from_the_reader_in_both_directions_seen_by_version_1() {
     // A byte in the pad of a version 1 entry is not checked by version 1.
     aligned_bytes!(dirty, V1_ENTRIES_DIRTY);
     assert_eq!(verdict::<Entries>(dirty), "OK");
+"#,
+    );
+}
 
-    // `Payload::verify` refuses a buffer longer than the reader's own
-    // `MAX_SIZE`, which the reader sized its receive buffer from, whatever the
-    // content: 8 + 8 + 8 * 8 = 80 bytes for version 1. Unreferenced tail bytes
-    // are not checked, so 40 of them take the 50 bytes of `V2_ENTRIES` past it.
+/// `verify` checks structure, not length (ADR-0030 decision 19). A version 1
+/// reader accepts a version 2 buffer longer than its own `MAX_SIZE`: eight
+/// version 2 entries of 16 bytes take 8 + 8 + 8 * 16 = 144 bytes, against a
+/// version 1 `MAX_SIZE` of 8 + 8 + 8 * 8 = 80. Bytes past what the structure
+/// references are ignored, so a valid buffer with trailing bytes verifies and
+/// decodes to the same value; a malformed buffer longer than `MAX_SIZE` is
+/// refused for its structure, never as `TooLarge`.
+#[test]
+fn a_newer_writers_buffer_longer_than_the_readers_max_size_verifies() {
+    run_evolution(
+        "podbuf_evolution_v1.ridl",
+        "podbuf_evolution_v1_above_max_size",
+        r#"
     assert_eq!(<Entries as Payload<Podbuf>>::MAX_SIZE, 80);
-    let long = format!("{V2_ENTRIES} | {}", "00".repeat(40));
-    aligned_bytes!(too_long, &long);
-    assert_eq!(too_long.len(), 90);
-    assert_eq!(verdict::<Entries>(too_long), "TooLarge");
+
+    // Eight version 2 entries, ids 1 to 8, each `id` at 0, the flags byte at
+    // 1 clear, and a zero descriptor of the absent `note` at 4..12.
+    let mut spec = String::from("08000000 00000000 | 10000000 0800 1000");
+    for id in 1..=8u8 {
+        spec.push_str(&format!(" | {id:02x} 00 0000 0000000000000000 00000000"));
+    }
+    aligned_bytes!(v2_full, &spec);
+    assert_eq!(v2_full.len(), 144, "the probe must pass MAX_SIZE, or it proves nothing");
+    assert_eq!(verdict::<Entries>(v2_full), "OK");
+    let proof = Ref::<Entries, Podbuf>::verify(v2_full).expect("v1 accepts eight v2 entries");
+    assert_eq!(
+        proof.decode(),
+        Entries { items: (1..=8).map(|id| Entry { id }).collect() },
+    );
+
+    // A valid buffer followed by 80 unreferenced bytes.
+    let entries = Entries { items: vec![Entry { id: 3 }, Entry { id: 4 }] };
+    let trailing = format!("{V1_ENTRIES} | {}", "ff".repeat(80));
+    aligned_bytes!(with_tail, &trailing);
+    assert_eq!(with_tail.len(), 112);
+    assert_eq!(verdict::<Entries>(with_tail), "OK");
+    let proof = Ref::<Entries, Podbuf>::verify(with_tail).expect("trailing bytes are ignored");
+    assert_eq!(proof.decode(), entries);
+
+    // The same length, with the array's `off` pointing past the buffer's end:
+    // the structure fault is reported, not the length.
+    let mut past_end = parse(&trailing);
+    past_end[8] = 0xf0;
+    let buf = aligned(&past_end);
+    assert_eq!(verdict::<Entries>(&buf.0[..past_end.len()]), "OutOfBounds");
 "#,
     );
 }
@@ -921,6 +973,13 @@ fn compare(package: &v2::Package, others: &[&v2::Package], mismatches: &mut Vec<
                         Some(v2::decl::Kind::UnionDef(def)) => {
                             union_head(packages, &decl.name, def)
                         }
+                        // A named scalar is carried as a payload root in a
+                        // one-field head; one with no finite bound (the
+                        // unbounded `RosString` of the ros2 corpus) is
+                        // refused even when no struct uses it.
+                        Some(v2::decl::Kind::TypeDef(_)) => {
+                            return max_size(packages, decl).is_none();
+                        }
                         _ => return false,
                     };
                     head.is_ok_and(|head| exceeds_descriptor_limits(&head))
@@ -1049,6 +1108,60 @@ fn the_codec_layout_matches_the_model_projection() {
     assert!(
         compared > fixture_compared,
         "a corpus workspace was compared"
+    );
+}
+
+/// The ros2 corpus under `[Podbuf]`: every package that declares a
+/// `RosString`, a string with no finite length bound, is refused, and the
+/// refusal names the declaration and says that it has no finite podbuf bound.
+/// `builtininterfaces`, which declares no string, generates. The refusal
+/// holds even when no struct uses the named scalar, because the codec carries
+/// a named scalar as a payload root.
+#[test]
+fn the_ros2_corpus_is_refused_under_podbuf() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let std_ir = ridlc::std_ir();
+    let packages = podbuf::compile_workspace(&root.join("evals/corpus/ros2"))
+        .expect("the ros2 corpus compiles");
+    assert!(packages.len() > 1, "the ros2 corpus holds several packages");
+    let mut refused: BTreeMap<String, String> = BTreeMap::new();
+    let mut generated: Vec<String> = Vec::new();
+    for (at, package) in packages.iter().enumerate() {
+        let mut others: Vec<&v2::Package> = packages
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != at)
+            .map(|(_, other)| other)
+            .collect();
+        others.push(&std_ir);
+        match ridl_backend_rust::generate_pipeline(
+            package,
+            &[ridl_backend_rust::WireEncoding::Podbuf],
+            false,
+            &others,
+        ) {
+            Ok(_) => generated.push(package.name.clone()),
+            Err(error) => {
+                refused.insert(package.name.clone(), error.message);
+            }
+        }
+    }
+    assert_eq!(generated, ["builtininterfaces"]);
+    for name in ["stdmsgs", "stdsrvs"] {
+        let message = refused
+            .get(name)
+            .unwrap_or_else(|| panic!("`{name}` is refused under podbuf"));
+        assert!(
+            message.contains("has no finite podbuf bound"),
+            "`{name}` is refused for a missing bound, got: {message}"
+        );
+    }
+    // `stdsrvs` declares `RosString` and no struct that reaches it, so the
+    // refusal comes from the payload root of the named scalar itself.
+    assert!(
+        refused["stdsrvs"].starts_with("`stdsrvs.RosString` has no finite podbuf bound"),
+        "`stdsrvs`'s refusal names `RosString`, got: {}",
+        refused["stdsrvs"]
     );
 }
 

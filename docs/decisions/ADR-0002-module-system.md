@@ -52,6 +52,14 @@ are `default`, the `[limits.kind]` table (`signal`, `fixed`, `event`, `command`,
 16,256. A table applies to its own unit only. An unknown kind is MANI-021, a
 limit above 16,256 is MANI-022, and a value of the wrong type is MANI-015.
 
+Amended 2026-10-30 by ADR-0030 decisions 12 and 18: the range of a `[limits]`
+value depends on its entry. A `[limits.kind]` value is from 0 to the default
+ceiling of its kind (3,840 for `signal` and `event`, 16,128 for `command` and
+`query`, 65,280 for `fixed`). `default` and a `[limits.interaction]` value are
+from 0 to 65,280. MANI-022 is a value above its range. A `[limits.interaction]`
+value between 16,129 and 65,280 for a member that is not a `fixed` is MANI-022
+too, raised by `ridlc` where the member's kind is known.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts

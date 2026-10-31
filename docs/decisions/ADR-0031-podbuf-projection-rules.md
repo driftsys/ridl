@@ -13,6 +13,12 @@ codec in `ridl-backend-rust`, the C header backend `ridl-backend-podbuf`, the
 `ridl check`, and every codegen plugin that reads the podbuf layout from the
 codegen `Model`.
 
+**Amended 2026-10-29 — decision 10, the inline-append rule, from
+driftsys/ridl#1100.** The rule is narrowed to an append that grows the head of a
+struct a head of the old side holds inline; decision 10 states it and carries
+the dated note, decision 13 points to it, and the negative consequence on a type
+held inline is reworded.
+
 This record is the projection record that
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 4 asks for, in the shape of
@@ -42,6 +48,16 @@ When accepted, these records are changed:
   RIDL-156 (written with the code).
 - `docs/book/stability.md`: the `podbuf` feature and the podbuf lines of the
   `wire` dump.
+
+Amended 2026-10-30 by [ADR-0030](ADR-0030-transfer-and-bound-limits.md)
+decisions 17 and 19, from driftsys/ridl#1099. Decision 8 is changed in place:
+`Payload<Podbuf>::verify` no longer refuses a buffer longer than its own
+`MAX_SIZE`; the transport refuses a payload longer than its interaction's limit,
+once. Open item 2 is closed with that answer. Decision 6 is changed in place: a
+payload above the default ceiling of its kind is reported by the error RIDL-157,
+which replaces the retired lint RIDL-150. Built 2026-10-30: the generated
+`verify` checks structure only, and RIDL-157 replaces RIDL-150
+(driftsys/ridl#1108, driftsys/ridl#1128).
 
 ## Context
 
@@ -314,7 +330,9 @@ a field is appended.
    descriptor limit draws RIDL-154 on the field and not RIDL-153. The codes
    RIDL-151 and RIDL-152 were allocated by ADR-0030 after the plan was written,
    so the podbuf codes start at 153 (builder's call). A payload above the
-   payload ceiling of ADR-0030 is reported by RIDL-150, not by podbuf.
+   payload ceiling of ADR-0030 is reported by RIDL-150, not by podbuf. Amended
+   2026-10-30: by RIDL-157, which replaces the retired RIDL-150 for every kind
+   (ADR-0030 decision 17).
 
    **The size bound (builder's call).** `MAX_SIZE` of a `Payload<Podbuf>` is the
    preamble, the head and the largest tail, with every optional field present
@@ -325,7 +343,8 @@ a field is appended.
    as `Declaration.podbuf`. ADR-0030 decision 3 asks each backend to cap the
    generated `MAX_SIZE` at the payload ceiling; the podbuf codec, like the other
    two, emits the computed bound uncapped (driftsys/ridl#996), and RIDL-150
-   reports a payload above the ceiling at check time.
+   reports a payload above the ceiling at check time (RIDL-157 since ADR-0030's
+   amendment of 2026-10-30 was built).
 
 7. **Generated names (builder's call).** In Rust, per type `T`: `TPodbufHead`
    (the `#[repr(C, align(8))]` struct, for a struct, union or named tuple),
@@ -397,7 +416,15 @@ a field is appended.
 
    **`Payload<Podbuf>::verify` also refuses a buffer longer than `MAX_SIZE`**,
    with `Malformed::TooLarge`, before it reads the preamble (builder's call).
-   See open item 2.
+   See open item 2. Amended 2026-10-30: this check is withdrawn
+   ([ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision 19).
+   `Payload<Podbuf>::verify` refuses no buffer for its length; it reads the
+   preamble, the head and the tail that the descriptors reference, and ignores
+   the bytes past them. The transport refuses a payload longer than its
+   interaction's limit from the catalog before `verify` runs, and an embedder
+   whose gate copies bytes that no binding has checked checks that length
+   itself. The verify work bound below does not depend on the length check.
+   Built 2026-10-30 (driftsys/ridl#1128).
 
    **Not checked, by design** (author's call): pad bytes, anywhere. First-fit
    backfill can place a field appended in a later release in the pad bytes of an
@@ -480,18 +507,38 @@ a field is appended.
     integer turns signed only when an enum with no value gains values), which
     lays out a different integer in every head that holds the enum, the enum set
     or the union; appending a field that cannot read as 0; appending to a struct
-    that is nested inline anywhere in the workspace; changing a strict enum to
-    an open one or the reverse; and removing a field.
+    that a head of the released side holds inline, when the append grows the
+    struct's head; changing a strict enum to an open one or the reverse; and
+    removing a field.
 
     **A strict-enum append is reported (builder's call).** `ridl diff` reports
     an appended enum value or enum-set flag as the category
     `podbuf_strict_enum_append`, because an older reader's `verify` refuses a
     value or a bit its declaration does not name (decision 12).
 
-    **An append to a struct nested inline is a break** (author's call): the
-    inline copy cannot grow without moving the fields after it. The inline uses
-    are a struct field, a tuple member and an element of an exact-length array.
-    Moving such a field behind a descriptor is out of scope.
+    **An append that grows a struct nested inline is a break** (author's call,
+    narrowed 2026-10-29): the inline copy cannot grow without moving the fields
+    after it. The inline uses are a struct field, a tuple member and an element
+    of an exact-length array; moving such a field behind a descriptor is out of
+    scope. The holders are read on the old side: a head that holds the struct
+    inline there is a published copy, where a holder that is new on the new side
+    has none, and `ridl diff` names the old holders. The head grows when an
+    appended field does not fit entirely inside the old head: the layout law
+    places any of its bytes past the old head's size (every head has the
+    alignment `HEAD_ALIGN`, so a change of the head is a change of its size). A
+    field first-fit places entirely inside the old head, in its pad bytes,
+    changes no byte an older reader checks, because `verify` does not check pads
+    (decision 8, "Not checked, by design"), so it is compatible and draws the
+    ordinary `decl_added` line alone; a field that starts in the pads and ends
+    past the old size does not fit, and is a break. When several fields are
+    appended at once, `ridl diff` draws `podbuf_inline_append` for each field
+    that does not fit and for none that does. A new declaration the law refuses
+    is read as grown, which keeps the conservative verdict.
+
+    _Amended (2026-10-29, driftsys/ridl#1100)._ As first written, every append
+    to a struct held inline was a break, on holders of the new side. The two
+    narrowings above (the head must grow, and only an old holder counts) are the
+    amendment.
 
     **The inline-use rule, as built (builder's call).** `ridl diff` finds an
     inline use by asking the layout law what the encoder lays out inline, so the
@@ -556,19 +603,19 @@ a field is appended.
       compatible change as compatible. Three changes are judged by encoding, all
       listed under the heading "breaking under podbuf" and breaking when
       `podbuf` is among the encodings the comparison is judged for, compatible
-      otherwise: the append to an inline struct, the category
-      `podbuf_inline_append`, and an appended enum value, enum-set flag or union
-      arm that changes the podbuf integer of the enum or the enum set or the tag
-      of the union, by width or by signedness, the category
-      `podbuf_width_change`, reported once per declaration with the old and the
-      new integer. The compatible verdict without podbuf holds under proto3; an
-      enum-set flag that widens the integer also widens the enum set's
-      FlatBuffers scalar, which `ridl diff` does not report yet
-      (driftsys/ridl#1120). An appended enum value or enum-set flag is the
-      category `podbuf_strict_enum_append`, reported once per declaration,
-      except that an enum or an enum set whose append changes the integer draws
-      only the `podbuf_width_change` line (builder's call). An appended union
-      arm that keeps the tag is reported as the generic rule judges it,
+      otherwise: the append that grows an inline struct, the category
+      `podbuf_inline_append`; the append that changes the podbuf integer of an
+      enum, an enum set or a union's tag, the category `podbuf_width_change`,
+      reported once per declaration with the old and the new integer; and the
+      append to a strict enum or enum set, the category
+      `podbuf_strict_enum_append`, reported once per declaration, except that an
+      enum or an enum set whose append changes the integer draws only the
+      `podbuf_width_change` line (builder's call). The three rules are stated in
+      decision 10; `ridl diff --explain <category>` states each in full. The
+      compatible verdict without podbuf holds under proto3; an enum-set flag
+      that widens the integer also widens the enum set's FlatBuffers scalar,
+      which `ridl diff` does not report yet (driftsys/ridl#1120). An appended
+      union arm that keeps the tag is reported as the generic rule judges it,
       compatible. When the `open` keyword is built (open item 1), the strict
       enum rule narrows to strict enums and enum sets.
       `ridl diff --encoding <name>` and the `ridl_diff` MCP tool name the
@@ -656,7 +703,7 @@ stated in the decision above; this list is the index.
 - `verify` is a call tree with one function per head type (decision 8).
 - A boolean above 1 and an absent optional with non-zero bytes are refused with
   existing `Contract` rules; `Payload<Podbuf>::verify` refuses a buffer longer
-  than `MAX_SIZE` (decision 8).
+  than `MAX_SIZE` (decision 8; withdrawn on 2026-10-30 by ADR-0030 decision 19).
 - The string accessor re-validates UTF-8 on each read (decision 15).
 - A field removal is breaking under every encoding, not a podbuf-specific break
   (decision 10).
@@ -710,9 +757,10 @@ stated in the decision above; this list is the index.
   struct, because the 8-byte preamble precedes it. The adapter that an ARXML or
   Franca IDL plugin generates covers the difference.
 - **Negative.** A string that contains U+0000 cannot be encoded.
-- **Negative.** An append to a struct held inline is a break, so a type that
-  other types hold inline is frozen at its first release unless its holders
-  change too.
+- **Negative.** An append that grows a struct held inline is a break, so a type
+  that other types hold inline can grow after its first release only by the pad
+  bytes of its head, unless its holders change too (decision 10, as amended
+  2026-10-29).
 - **Negative.** Three encodings are three conformance obligations, and the
   oracle of this one is the layout law itself: no second implementation exists
   to compare against.
@@ -725,7 +773,12 @@ stated in the decision above; this list is the index.
 1. **The `open` keyword.** Decision 12's open enums wait for the typl change. It
    needs its own record, and a check of how every backend and `ridl diff` treat
    a new enum value under a strict default.
-2. **A compatible append that raises `max_size`.** `Payload<Podbuf>::verify`
+2. **A compatible append that raises `max_size`.** Closed 2026-10-30 by
+   [ADR-0030](ADR-0030-transfer-and-bound-limits.md) decision 19, with the first
+   answer: `verify` checks structure only and no longer refuses a buffer longer
+   than the reader's `MAX_SIZE`, and the transport refuses a payload longer than
+   its interaction's limit. An append that raises `max_size` stays compatible.
+   The text below is the question as it was asked. `Payload<Podbuf>::verify`
    refuses a buffer longer than the reader's own `MAX_SIZE`. Decision 10 makes
    an append of an optional field, or of a field that reads as 0, compatible. An
    append can raise the type's `max_size`, so an older reader refuses the
@@ -751,6 +804,7 @@ stated in the decision above; this list is the index.
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)                | decision 4 and open item 1 point at this record; open item 1 is closed: `Inline` stays FlatBuffers', podbuf is the in-place encoding |
 | [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | new: the as-built codec                                                                                                              |
+| [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md)                               | amended 2026-10-30: `verify` has no length check, and the "Known gaps" row of #1099 goes                                             |
 | [`docs/book/stability.md`](../book/stability.md)                                         | the `podbuf` feature and the podbuf lines of the wire dump                                                                           |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md) | ledger row 42, and row 35 cites this record                                                                                          |
 

@@ -1,6 +1,7 @@
 // Modified ROS 2-to-RIDL translation. Inputs and pinned revisions: PROVENANCE.md.
 package stdsrvs
 type RosBoolean : boolean
+type RosBoundedString : string [0..3968]
 type RosString : string [0..18446744073709551615]
 // Upstream: std_srvs/srv/Empty.srv
 struct EmptyRequest {
@@ -15,7 +16,7 @@ struct SetBoolRequest {
 struct SetBoolResponse {
 
   success : RosBoolean // indicate successful run of triggered service
-  message : RosString // informational, e.g. for error messages
+  message : RosBoundedString // informational, e.g. for error messages
 }
 // Upstream: std_srvs/srv/Trigger.srv
 struct TriggerRequest {
@@ -23,7 +24,7 @@ struct TriggerRequest {
 struct TriggerResponse {
 
   success : RosBoolean // indicate successful run of triggered service
-  message : RosString // informational, e.g. for error messages
+  message : RosBoundedString // informational, e.g. for error messages
 }
 interface StdSrvsInteractions {
   query empty(): EmptyResponse

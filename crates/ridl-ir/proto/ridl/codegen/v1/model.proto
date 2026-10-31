@@ -576,6 +576,14 @@ message Interaction {
   // The rules of the item, in the order `ridl_ir::rules::rules` returns
   // them (ADR-0028).
   repeated Rule rules = 23;
+  // The payload limit in bytes that a `[limits]` entry of the catalog gives
+  // the member (ADR-0030 decision 13): its `[limits.interaction]` entry, else
+  // the entry of its kind in `[limits.kind]`, else `default` clamped to
+  // the default ceiling of its kind; copied from the IR's `Decl.limit`.
+  // Absent when no entry applies: the member then has the default ceiling of
+  // its kind, which `ridl_rt::contract::default_ceiling` states. A plugin
+  // that emits a member table reads it there and does not compute it.
+  optional uint32 limit = 24;
 }
 
 // One thing that crosses, as a named type.

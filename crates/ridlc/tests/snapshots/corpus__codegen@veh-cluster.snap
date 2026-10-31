@@ -1,6 +1,5 @@
 ---
 source: crates/ridlc/tests/corpus.rs
-assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
 ---
@@ -4273,10 +4272,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "since": [],
       "rules": [],
       "proto3": {
-        "bounded": 67008
+        "bounded": 14658
       },
       "podbuf": {
-        "bounded": 67152
+        "bounded": 14702
       },
       "struct": {
         "slots": [
@@ -4305,7 +4304,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                     }
                   },
                   "min": "0",
-                  "max": "64"
+                  "max": "14"
                 }
               },
               "init": {
@@ -4320,10 +4319,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "since": [],
               "rules": [
                 {
-                  "text": "count 0 ..= 64",
+                  "text": "count 0 ..= 14",
                   "collectionBound": {
                     "min": "0",
-                    "max": "64"
+                    "max": "14"
                   }
                 }
               ]
@@ -10149,7 +10148,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   ],
   "catalog": {
     "package": "veh.cluster",
-    "hash": "/UYsF5Cuo5zdzorjZNuGhLpo0b4priGcCrMV+zwXTQM=",
+    "hash": "2I5UdFilDoaHjp/lzAKvhoQVk/7XdDGSImgTNPbKDUw=",
     "retired": [],
     "compatible": []
   },
@@ -10178,7 +10177,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       {
         "declaration": 4,
         "root": "FB_ROOT_KIND_OWN",
-        "maxSize": 70649
+        "maxSize": 15499
       },
       {
         "declaration": 5,
@@ -10368,7 +10367,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "table": 2
                 },
                 "min": "0",
-                "max": "64"
+                "max": "14"
               }
             },
             "needsNullDefault": false,
@@ -11819,7 +11818,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "elemSize": 24,
                   "min": "0",
-                  "max": "64"
+                  "max": "14"
                 }
               }
             }

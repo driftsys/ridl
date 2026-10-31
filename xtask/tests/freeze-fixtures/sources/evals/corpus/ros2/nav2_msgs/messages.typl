@@ -7,6 +7,7 @@ import geometrymsgs.PoseStamped
 import geometrymsgs.Vector3
 import stdmsgs.Header
 type RosBoolean : boolean
+type RosBoundedString : string [0..256]
 type RosFloat32 : float
 type RosFloat64 : float
 type RosString : string [0..18446744073709551615]
@@ -36,7 +37,7 @@ struct Costmap {
   metadata : CostmapMetaData
 
 // The cost data, in row-major order, starting with (0,0).
-  data : [RosUInt8; 0..18446744073709551615]
+  data : [RosUInt8; 0..14186]
 }
 // Upstream: nav2_msgs/msg/CostmapMetaData.msg
 struct CostmapMetaData {
@@ -49,7 +50,7 @@ struct CostmapMetaData {
   updateTime : Time
 
 // The corresponding layer name
-  layer : RosString
+  layer : RosBoundedString
 
 // The map resolution [m/cell]
   resolution : RosFloat32

@@ -899,19 +899,45 @@ impl CliRun {
 /// workspace member, the compile diagnostics are those of the member's files
 /// and of the remote units ([`retain_in_report_scope`]).
 pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
+    run_check_with_ir(entry, frozen).map(|(run, _)| run)
+}
+
+/// What [`run_check_with_ir`] returns beside the run: the checked workspace
+/// a caller reads after the run, so that it does not compile the workspace a
+/// second time. `ridl check` reads it for the desk check against the
+/// baseline and for the podbuf padding lint.
+pub struct CheckedIr {
+    /// Every checked package of the workspace, the remote units' included,
+    /// in the loader's order.
+    pub checked: Vec<CheckedPackage>,
+    /// The remote units the load took; their packages are in `checked`.
+    pub remote_units: BTreeMap<String, MaterializedUnit>,
+    /// The member directory the entry lies in, when the entry is inside a
+    /// workspace member ([`retain_in_report_scope`]).
+    pub report_scope: Option<PathBuf>,
+    /// The diagnostics of the whole workspace with the severities the emit
+    /// sites chose, before the report scope and the lint levels are applied
+    /// to the run's own list: the gate a whole-workspace pass reads.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// [`run_check`], returning the checked workspace as well ([`CheckedIr`]).
+pub fn run_check_with_ir(entry: &Path, frozen: Frozen) -> std::io::Result<(CliRun, CheckedIr)> {
     let mut db = RidlDatabase::default();
     let cache = Cache::user_default();
     let Compiled {
-        mut diagnostics,
+        diagnostics: unfiltered,
         sources,
         lints,
         report_scope,
         remote_units,
+        checked,
         ..
     } = load_and_check(&mut db, entry, &[], RemoteAccess::new(frozen, &cache))
         .map_err(load_io_error)?;
     // An entry inside a member reports on the member only (ADR-0024 decision
     // 9, as ADR-0026 amends it).
+    let mut diagnostics = unfiltered.clone();
     retain_in_report_scope(
         &mut diagnostics,
         &sources,
@@ -919,12 +945,20 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
         &remote_dirs(&remote_units, &cache, entry),
     );
     apply_lint_levels(&mut diagnostics, &sources, &lints);
-    Ok(CliRun {
-        diagnostics,
-        sources,
-        lints,
-        usage_error: false,
-    })
+    Ok((
+        CliRun {
+            diagnostics,
+            sources,
+            lints,
+            usage_error: false,
+        },
+        CheckedIr {
+            checked,
+            remote_units,
+            report_scope,
+            diagnostics: unfiltered,
+        },
+    ))
 }
 
 /// Runs `build`: everything [`run_check`] does, plus it writes the selected
@@ -1972,6 +2006,10 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String
         for (segment, child) in &node.children {
             match &child.file {
                 Some(file) if child.children.is_empty() => {
+                    // Every module loaded from a generated file is skipped by
+                    // rustfmt: the file is formatted by prettyplease, whose
+                    // layout `cargo fmt --check` would otherwise reject.
+                    out.push_str(&format!("{pad}#[rustfmt::skip]\n"));
                     out.push_str(&format!("{pad}#[path = \"{file}\"]\n"));
                     out.push_str(&format!("{pad}pub mod {segment};\n"));
                 }
@@ -2019,6 +2057,7 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String
                         // declaration name is lexed the same way, and the
                         // keyword escape only appends `_`, so neither a type
                         // of `veh` nor a child package spells this module.
+                        out.push_str(&format!("{pad}    #[rustfmt::skip]\n"));
                         out.push_str(&format!("{pad}    #[path = \"{file}\"]\n"));
                         out.push_str(&format!("{pad}    #[doc(hidden)]\n"));
                         out.push_str(&format!("{pad}    pub mod __ridl_package;\n"));
@@ -2058,7 +2097,9 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String
         // (`wasm_module_source`). A package whose first segment is `wasm`
         // would claim the same
         // module name, and `wasm_module_source` refuses that build.
-        out.push_str(&format!("#[path = \"{WASM_FILE}\"]\npub mod wasm;\n"));
+        out.push_str(&format!(
+            "#[rustfmt::skip]\n#[path = \"{WASM_FILE}\"]\npub mod wasm;\n"
+        ));
     }
     out
 }
@@ -2420,20 +2461,17 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         &resolutions,
         &mut sources,
     ));
-    // RIDL-150 lowers each package to the codegen model, so it skips a package
-    // that has an error, or that depends on one, and still examines the clean
-    // packages of the workspace. The errors that count are the ones that stop
-    // `ridl build` writing any artifact (`blocks_every_artifact`). The
-    // encodings are those of every `[backend.<name>]` table; none named means
-    // FlatBuffers is checked. A workspace with no interface has nothing to
-    // report, so `ridl.std` is not checked for it either.
-    let encodings = enabled_encodings(&backends);
     // RIDL-153 to RIDL-155 read types, not interactions, so they run for a
     // workspace with no interface, whenever a backend table enables podbuf.
+    // They lower each package to the codegen model, so they skip a package
+    // that has an error, or that depends on one, and still examine the clean
+    // packages of the workspace. The errors that count are the ones that stop
+    // `ridl build` writing any artifact (`blocks_every_artifact`). The
+    // encodings are those of every `[backend.<name>]` table.
+    let encodings = enabled_encodings(&backends);
     if encodings.iter().any(|name| name == "podbuf") {
-        let blocked =
-            payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
         let std_ir = check_package(db, workspace, std, std).ir;
+        let blocked = size_checks_blocked(db, &packages, &checked, &diagnostics, &sources, false);
         diagnostics.extend(design_lints::check_podbuf(
             db,
             &packages,
@@ -2445,22 +2483,22 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
             &mut sources,
         ));
     }
-    if checked.iter().any(|pkg| pkg.ir.shapes().next().is_some()) {
-        let blocked =
-            payload_ceiling_blocked(db, &packages, &checked, &diagnostics, &sources, false);
-        let std_ir = check_package(db, workspace, std, std).ir;
-        diagnostics.extend(design_lints::check_payload_ceiling(
-            db,
-            &packages,
-            &checked,
-            &resolutions,
-            &blocked,
-            &std_ir,
-            &encodings,
-            &mut sources,
-        ));
-    }
     drop_remote_non_errors(&mut diagnostics, &sources, &remote_units);
+    // The size pass raises errors only, so it runs after the remote units'
+    // non-errors are dropped. A podbuf error above blocks its package here.
+    let sized = check_payload_sizes(
+        db,
+        workspace,
+        std,
+        &packages,
+        &checked,
+        &resolutions,
+        &diagnostics,
+        &backends,
+        &unit_limits,
+        &mut sources,
+    );
+    diagnostics.extend(sized);
 
     let mut compiled = Compiled {
         workspace,
@@ -2479,7 +2517,6 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         root_package,
         remote_units,
     };
-    check_unit_limits(db, &packages, &mut compiled);
     // After the checks, which read the IR without a limit, the limit is
     // recorded on the interactions for every consumer of the checked IR.
     design_lints::annotate_payload_limits(db, &packages, &mut compiled.checked, &compiled.limits);
@@ -2498,48 +2535,73 @@ fn enabled_encodings(backends: &BTreeMap<String, ridl_core::BackendTable>) -> Ve
     encodings
 }
 
-/// RIDL-151 and RIDL-152 over the `[limits]` tables that the load carried in
-/// `compiled.limits` (ADR-0030 decisions 12 and 14). Both are errors, so they
-/// are added after the remote units' non-errors are dropped. A package with an
-/// error, and a package that depends on one, is skipped as for RIDL-150. An
-/// error in a manifest stops the checks of the packages beneath that manifest
-/// only, where it stops RIDL-150 in every package.
-fn check_unit_limits(db: &RidlDatabase, packages: &[Package], compiled: &mut Compiled) {
-    if compiled.limits.is_empty() {
-        return;
+/// The size pass over a checked workspace (ADR-0030 decisions 12, 14 and 17):
+/// RIDL-151 (a payload above the limit that a `[limits]` entry gives its
+/// interaction), RIDL-152 (a `[limits.interaction]` key that names no
+/// interaction of its unit), RIDL-157 (a payload above the default ceiling of
+/// its kind where no entry applies) and the MANI-022 of a
+/// `[limits.interaction]` entry above 16,128 bytes that names a member other
+/// than a fixed. Every code is an error, so lint levels do not apply, and a
+/// remote unit's packages are read as targets and never examined.
+///
+/// `packages`, `checked` and `resolutions` describe the same packages in the
+/// same order, as [`check_design_lints`] takes them; `workspace` and `std`
+/// are the handles they were checked against. `diagnostics` are the
+/// diagnostics raised so far: a package with an error that stops `ridl build`
+/// writing any artifact, and a package that depends on one, is skipped, and an
+/// error in a manifest skips the packages beneath that manifest only.
+/// `backends` are the `[backend.<name>]` tables, whose `encodings` are sized
+/// as one set (FlatBuffers when none is named), and `limits` the `[limits]`
+/// table of each unit by unit name. The spans of the returned diagnostics
+/// point into `sources`. `ridl check`, `ridl build` and the language server
+/// run the pass through this function, so they cannot diverge.
+#[allow(clippy::too_many_arguments)]
+pub fn check_payload_sizes(
+    db: &RidlDatabase,
+    workspace: Workspace,
+    std: Package,
+    packages: &[Package],
+    checked: &[CheckedPackage],
+    resolutions: &[Resolution],
+    diagnostics: &[Diagnostic],
+    backends: &BTreeMap<String, ridl_core::BackendTable>,
+    limits: &BTreeMap<String, ridl_core::UnitLimits>,
+    sources: &mut SourceMap,
+) -> Vec<Diagnostic> {
+    // With no interaction to size and no entry to match, the pass has
+    // nothing to report, so the site index and the std IR are not built.
+    let nothing_to_size = checked
+        .iter()
+        .all(|package| package.ir.shapes().next().is_none())
+        && limits
+            .values()
+            .all(|table| table.limits.interactions.is_empty());
+    if nothing_to_size {
+        return Vec::new();
     }
-    let blocked = payload_ceiling_blocked(
+    let blocked = size_checks_blocked(db, packages, checked, diagnostics, sources, true);
+    let encodings = enabled_encodings(backends);
+    let std_ir = check_package(db, workspace, std, std).ir;
+    design_lints::check_payload_sizes(
         db,
         packages,
-        &compiled.checked,
-        &compiled.diagnostics,
-        &compiled.sources,
-        true,
-    );
-    let encodings = enabled_encodings(&compiled.backends);
-    let std_ir = check_package(db, compiled.workspace, compiled.std, compiled.std).ir;
-    let found = design_lints::check_payload_limits(
-        db,
-        packages,
-        &compiled.checked,
-        &compiled.resolutions,
+        checked,
+        resolutions,
         &blocked,
         &std_ir,
         &encodings,
-        &compiled.limits,
-        &mut compiled.sources,
-    );
-    compiled.diagnostics.extend(found);
+        limits,
+        sources,
+    )
 }
 
-/// Per entry of `packages`, whether the payload checks skip it (RIDL-150,
-/// RIDL-151 and RIDL-152): the package has an error that blocks every
-/// artifact, or depends on a package that does. An error that no package's
-/// source file carries blocks every package, except that with `by_manifest` an
-/// error in a file whose directory holds the files of some packages blocks only
-/// those packages: a manifest error of one unit does not stop the checks of
-/// another unit.
-fn payload_ceiling_blocked(
+/// Per entry of `packages`, whether the size pass and the podbuf checks skip
+/// it: the package has an error that blocks every artifact, or depends on a
+/// package that does. An error that no package's source file carries blocks
+/// every package, except that with `by_manifest` an error in a file whose
+/// directory holds the files of some packages blocks only those packages: a
+/// manifest error of one unit does not stop the checks of another unit.
+fn size_checks_blocked(
     db: &RidlDatabase,
     packages: &[Package],
     checked: &[CheckedPackage],
@@ -3247,6 +3309,41 @@ fn manifest_root_of(entry: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod render_lib_rs_tests {
     use super::render_lib_rs;
+
+    /// Every module whose code is in a generated file carries
+    /// `#[rustfmt::skip]`, so that `cargo fmt` over a crate that contains the
+    /// generated crate leaves the generated files as they are. The inline
+    /// modules anchored at `.` hold no generated code and carry none.
+    #[test]
+    fn every_module_loaded_from_a_generated_file_is_skipped_by_rustfmt() {
+        let names = [
+            "veh".to_string(),
+            "veh.common".to_string(),
+            "ridl.std".to_string(),
+        ];
+        let lib = render_lib_rs(&names, "", true);
+        let lines: Vec<&str> = lib.lines().map(str::trim).collect();
+
+        let mut files = 0;
+        for (index, line) in lines.iter().enumerate() {
+            if !line.starts_with("#[path = ") {
+                continue;
+            }
+            let skipped = index > 0 && lines[index - 1] == "#[rustfmt::skip]";
+            if *line == "#[path = \".\"]" {
+                assert!(!skipped, "an inline module is skipped, lib.rs was:\n{lib}");
+            } else {
+                files += 1;
+                assert!(
+                    skipped,
+                    "{line} has no #[rustfmt::skip], lib.rs was:\n{lib}"
+                );
+            }
+        }
+        // `veh.rs` under `__ridl_package`, `veh.common.rs`, `ridl.std.rs` and
+        // the `wasm` module's file.
+        assert_eq!(files, 4, "lib.rs was:\n{lib}");
+    }
 
     /// A package name that is a strict prefix of another (`veh` alongside
     /// `veh.common`) lands in `render_lib_rs`'s non-leaf arm, which — without
