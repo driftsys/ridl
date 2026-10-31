@@ -295,7 +295,7 @@ impl RidlMcp {
     #[tool(
         name = "ridl_check",
         output_schema = rmcp::handler::server::common::schema_for_output::<CheckOutput>(),
-        description = "Pass the workspace root as `path` to check its files, with optional unsaved-text overlays. Read-only and offline. Alternatively, type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its; a lint diagnostic also names its lint. In source mode every lint has its default level. In source mode every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. In source mode the text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. Source mode does not check files beside the input, such as `interfaces.lock` and `.ridl/baseline/`. Path mode checks `interfaces.lock` and reports real source paths. Path mode applies the workspace's `[lints]` levels, so a lint's severity follows ridl.toml and a lint at `allow` is not reported. It omits remote fetching, the `ridl.lock` round trip and baseline checks."
+        description = "Pass the workspace root as `path` to check its files, with optional unsaved-text overlays. Read-only and offline. Alternatively, type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its; a lint diagnostic also names its lint. In source mode every lint has its default level, and a `// lint: allow` directive in the text also applies. In source mode every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. In source mode the text is checked as a workspace of one file, so the workspace-wide checks run over it as `ridl check` runs them, the rsdl system checks included. Source mode does not check files beside the input, such as `interfaces.lock` and `.ridl/baseline/`. Path mode checks `interfaces.lock` and reports real source paths. Path mode applies the workspace's `[lints]` levels, so a lint's severity follows ridl.toml and a lint at `allow`, or allowed by a `// lint: allow` directive, is not reported. It omits remote fetching, the `ridl.lock` round trip and baseline checks."
     )]
     async fn ridl_check(
         &self,
@@ -831,7 +831,7 @@ mod tests {
     // A directive in a member outside the report scope is checked against
     // that member's own diagnostics: used there, it is not reported unused
     // when the path names another member, and nothing from that member is
-    // reported.
+    // reported, a malformed or unused directive of its own included.
     #[tokio::test]
     async fn ridl_check_path_mode_directive_outside_the_report_scope_draws_nothing() {
         let copy = directive_workspace("// lint: allow missing-timing -- timing comes later");
@@ -852,13 +852,23 @@ mod tests {
             "package fx.other\n\n/// A speed reading.\ntype Speed: integer [0..300]\n\n\
              /// An untimed sensor.\ninterface Other {\n  \
              // lint: allow missing-timing -- timing comes later\n  \
-             /// The current speed.\n  signal speed: Speed\n}\n",
+             /// The current speed.\n  signal speed: Speed\n  \
+             // lint: allow missing-timing\n  /// The gear.\n  signal gear: Speed @10ms\n  \
+             // lint: allow unbounded-float -- nothing to allow\n  /// The rate.\n  signal rate: Speed @10ms\n}\n",
         )
         .unwrap();
         let value = check_path(&root.join("sensor")).await;
         assert_eq!(count_code(&value, "TYPL-411"), 0, "{value}");
         assert_eq!(count_code(&value, "TYPL-412"), 0, "{value}");
         assert_eq!(count_code(&value, "RIDL-100"), 0, "{value}");
+        assert!(
+            value["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|d| !d["span"]["path"].as_str().unwrap().ends_with("other.ridl")),
+            "nothing in the member outside the scope is reported: {value}"
+        );
     }
 
     #[tokio::test]

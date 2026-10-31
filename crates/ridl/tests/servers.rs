@@ -1315,11 +1315,18 @@ fn lsp_matches_check_with_lints() {
 
 /// A package with one used directive (it allows the RIDL-100 of `speed`),
 /// one unused directive (`rate` draws no RIDL-405) and one malformed
-/// directive (no reason).
+/// directive (no reason), one that names a loader lint (unused), and two that
+/// name lints that only `ridl check` raises (not unused on any face).
 const DIRECTIVES: &str = "package demo\n\ntype Speed: integer [0..300]\n\ninterface Sensor {\n  \
     // lint: allow missing-timing -- timing comes later\n  signal speed: Speed\n  \
     // lint: allow shared-error-type -- nothing to allow\n  signal rate: Speed @10ms\n  \
-    // lint: allow missing-timing\n  signal gear: Speed @10ms\n}\n";
+    // lint: allow missing-timing\n  signal gear: Speed @10ms\n}\n\n\
+    // lint: allow vendor-source-not-loaded -- no entry point reads a directive for it\n\
+    type A: integer [0..1]\n\n\
+    // lint: allow ordinal-changed -- raised by the desk check only\n\
+    type B: integer [0..1]\n\n\
+    // lint: allow podbuf-padding-order -- raised by the padding check only\n\
+    type C: integer [0..1]\n";
 
 /// The sorted `(code, file name, line)` triples of a JSON diagnostic array as
 /// `ridl check --format json` and `ridl_check` print it, with 1-based lines.
@@ -1373,7 +1380,7 @@ async fn directives_give_the_same_diagnostics_in_check_lsp_and_mcp() {
     // drawing the diagnostics it is here for. The used directive removes
     // RIDL-100 from `speed`; the unused one is TYPL-411 and the malformed
     // one is TYPL-412, each on the directive's line.
-    for (code, line) in [("TYPL-411", 8), ("TYPL-412", 10)] {
+    for (code, line) in [("TYPL-411", 8), ("TYPL-411", 14), ("TYPL-412", 10)] {
         assert!(
             expected.contains(&(code.to_string(), "demo.ridl".to_string(), line)),
             "{code} on line {line}: {expected:?}"
@@ -1381,6 +1388,19 @@ async fn directives_give_the_same_diagnostics_in_check_lsp_and_mcp() {
     }
     assert!(
         expected.iter().all(|(code, _, _)| code != "RIDL-100"),
+        "{expected:?}"
+    );
+    // The directives on lines 17 and 20 name lints that `ridl check` raises
+    // and the language server and the MCP tool do not (`ordinal-changed`,
+    // `podbuf-padding-order`), and none of the three faces reports them unused.
+    // The one on line 14 names a loader lint that no directive can cover, so
+    // it is unused on all three.
+    assert_eq!(
+        expected
+            .iter()
+            .filter(|(code, _, _)| code == "TYPL-411")
+            .count(),
+        2,
         "{expected:?}"
     );
 
@@ -1712,6 +1732,56 @@ fn lsp_resolves_a_cached_remote_unit_and_publishes_nothing_for_it() {
     assert_eq!(codes, ["RIDL-100"], "the import resolves: {app:?}");
     assert!(shown.is_empty(), "no notice on a cache hit: {shown:?}");
     assert_eq!(stub.hits(), 0, "the language server never fetches");
+}
+
+/// A used and a malformed directive in a remote unit's file draw no TYPL-411
+/// or TYPL-412 in the language server, and nothing is published for the file.
+#[test]
+fn lsp_reports_no_directive_for_a_remote_unit() {
+    use remote_support::{DIRECTIVE_UNIT, Stub, consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("lsp-directives");
+    let stub = Stub::serving(unit_tar(DIRECTIVE_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    let session = LspSession::start_in_with_home(&root, Some(&root), Some(dir.path()));
+    let (publishes, _) = session.shutdown_collecting();
+    for (uri, list) in published_lists(&publishes) {
+        assert!(!uri.contains(".ridl/cache"), "{uri}: {list:?}");
+        assert!(
+            list.iter()
+                .all(|d| d["code"] != "TYPL-411" && d["code"] != "TYPL-412"),
+            "{uri}: {list:?}"
+        );
+    }
+}
+
+/// The same for the MCP `ridl_check` path mode.
+#[tokio::test]
+async fn mcp_reports_no_directive_for_a_remote_unit() {
+    use remote_support::{DIRECTIVE_UNIT, Stub, consumer, ridl, unit_tar};
+    let dir = remote_support::TempDir::new("mcp-directives");
+    let stub = Stub::serving(unit_tar(DIRECTIVE_UNIT));
+    let root = consumer(&dir, stub.url());
+    let (code, _, stderr) = ridl(&root, dir.path(), &["check"]);
+    assert_eq!(code, 0, "{stderr}");
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect_with_home(Some(dir.path())).await;
+        let result = call_workspace_tool(&client, "ridl_check", json!({"path": root})).await;
+        assert_ne!(result.is_error, Some(true), "{}", tool_text(&result));
+        let found = result.structured_content.unwrap()["diagnostics"].clone();
+        assert!(
+            found
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|d| d["code"] != "TYPL-411" && d["code"] != "TYPL-412"),
+            "{found}"
+        );
+        client.cancel().await.unwrap();
+    })
+    .await
+    .expect("mcp remote directive timeout");
 }
 
 /// The consumer's `[lints]` do not apply to the remote unit in the language

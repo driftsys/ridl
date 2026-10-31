@@ -1054,6 +1054,17 @@ impl ServerState {
             );
             all.extend(sized);
         }
+        // The lint directives are reported once, over the list as it stands
+        // after the last diagnostic is raised and before any level is applied
+        // (ADR-0024 decision 19). They are reported before the remote filter
+        // below, which then drops what is reported for a remote unit's file.
+        // `not_raised` is the compile entry points' list: the loader's lints
+        // are not in `all`, but each is spanned at a file that cannot hold a
+        // directive (a manifest, an `interfaces.lock`, a `.rxdl` or `.rmdl`
+        // file, or the empty range of a file under `vendor/` that is not
+        // loaded), so a directive that names one is unused here, as it is in
+        // `ridl check`.
+        report_lint_directives(&mut all, &sources, ridlc::NOT_RAISED_BY_COMPILE);
         // A remote unit's packages were checked so that the consumer's
         // references resolve; nothing is published for their files. Their
         // Errors go to the window message instead, and their Warnings and
@@ -1070,24 +1081,6 @@ impl ServerState {
             }
             !remote
         });
-        // The lint directives are reported once, over the list as it stands
-        // after the last diagnostic is raised and before any level is applied
-        // (ADR-0024 decision 19). The loader's findings are not in `all`, so a
-        // directive that names a lint raised only by the loader would look
-        // unused. `not_raised` lists the lints that this list never carries:
-        //
-        // - RIDL-407 (`ridl check`'s baseline desk check) and RIDL-156 (its
-        //   podbuf padding check), the two `ridlc::NOT_RAISED_BY_COMPILE`
-        //   names, because the server runs neither;
-        // - MANI-018 (`vendor-source-not-loaded`), the one lint that
-        //   `ridl_core::load_workspace` raises with a span in a `.typl`,
-        //   `.ridl` or `.rsdl` file (`workspace.rs`, the `vendor/` scan).
-        //   RIDL-416 is spanned at an `interfaces.lock`, RIDL-417 at a `.rxdl`
-        //   or `.rmdl` file and MANI-010 at a manifest, none of which can hold
-        //   a directive.
-        let mut not_raised = ridlc::NOT_RAISED_BY_COMPILE.to_vec();
-        not_raised.push(DiagCode::MANI_018);
-        report_lint_directives(&mut all, &sources, &not_raised);
         // The `[lints]` levels, resolved through the paths this source map
         // recorded for every file, including an overlay's (ADR-0024
         // decision 6). `allow` removes a diagnostic before conversion, so it is

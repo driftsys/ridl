@@ -940,6 +940,9 @@ pub fn report_directives(run: &mut CliRun, ir: &CheckedIr, not_raised: &[DiagCod
             .cloned(),
     );
     report_lint_directives(&mut all, &run.sources, not_raised);
+    // A remote unit is a read-only dependency: no directive report is made
+    // for one of its files, as no other Warning or Info is.
+    drop_remote_non_errors(&mut all, &run.sources, &ir.remote_units);
     retain_in_report_scope(
         &mut all,
         &run.sources,
@@ -2755,7 +2758,7 @@ fn size_checks_blocked(
 /// unit name when the loader has not done so already. The loader applies the
 /// same rule to its own findings; this applies it to the parser's, the
 /// resolver's, the checker's and the workspace passes'.
-fn drop_remote_non_errors(
+pub fn drop_remote_non_errors(
     diagnostics: &mut Vec<Diagnostic>,
     sources: &SourceMap,
     remote_units: &BTreeMap<String, MaterializedUnit>,

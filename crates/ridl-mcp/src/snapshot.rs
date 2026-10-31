@@ -142,6 +142,7 @@ impl Snapshot {
             &self.output.sources,
             ridlc::NOT_RAISED_BY_COMPILE,
         );
+        ridlc::drop_remote_non_errors(&mut all, &self.output.sources, &self.output.remote_units);
         ridlc::retain_in_report_scope(
             &mut all,
             &self.output.sources,
