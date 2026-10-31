@@ -405,7 +405,7 @@ other entry below is Accepted.
   from the stage driver at implementation (the root-scope rule in 10, the source
   of the default level in 12, and 13 to 16; driftsys/ridl#678), and three added
   by the amendment of 2026-10-30, which also changes decision 2 in place (17 to
-  19; not built, driftsys/ridl#1124). Every Warning and Info catalogue code is a
+  19; built by driftsys/ridl#1124). Every Warning and Info catalogue code is a
   lint with a stable kebab-case name, and its catalogue severity is its default
   level unless its row declares `allow` (decisions 1, 8, 12 and 15, as ADR-0026
   amends them); a level (`allow`, `info`, `warn` or `deny`) is set in the

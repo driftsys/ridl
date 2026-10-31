@@ -92,13 +92,18 @@ crate the workspace holds — see `AGENTS.md` for that.
   The `lint` module looks lint names up in the catalogue, defines the four
   levels (`allow`, `info`, `warn`, `deny`), holds the effective levels of each
   directory the loader resolved (`LintScopes`), and applies them to a diagnostic
-  list (`apply_lint_levels`). The manifest parser reads the `[lints]` table of a
-  package or a workspace manifest, and the workspace loader builds the scopes
-  from it: the root's levels for the root directory, and the root's levels
-  overlaid with a member's own table for each member directory. The levels are
-  applied by the callers that report diagnostics — `ridl check`, `ridl build`,
-  `ridlc check`, `ridlc build`, the language server and the MCP tool
-  `ridl_check` — and not inside `ridl-sem`.
+  list (`apply_lint_levels`, which first removes every diagnostic a
+  `// lint: allow` directive allows). Its `directive` submodule reads the
+  directives of a parsed file (`directives_in`) and resolves the declaration
+  each applies to; `report_lint_directives` raises TYPL-411 for an unused one
+  and TYPL-412 for a malformed one, once per report, before the levels apply
+  (ADR-0024 decisions 2, 18 and 19). The manifest parser reads the `[lints]`
+  table of a package or a workspace manifest, and the workspace loader builds
+  the scopes from it: the root's levels for the root directory, and the root's
+  levels overlaid with a member's own table for each member directory. The
+  levels are applied by the callers that report diagnostics — `ridl check`,
+  `ridl build`, `ridlc check`, `ridlc build`, the language server and the MCP
+  tool `ridl_check` — and not inside `ridl-sem`.
 
 - **`crates/ridl-sem`** — the semantic passes, carved out of `ridl-core` at the
   start of E1 (ADR-0007 decision 4). `resolve` implements the ADR-0002 §5

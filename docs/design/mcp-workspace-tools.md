@@ -174,11 +174,15 @@ message depends on the caller (`refuse_nested_snapshot_directory`,
 ### 4.2 `ridl-mcp`
 
 - `snapshot(path, overlays)` in `snapshot.rs` builds the `RidlDatabase`, calls
-  `compile_workspace_with`, and returns `Snapshot { db, output, root, notes }`.
-  The database stays in the snapshot because a `Symbol`'s file and text are
-  salsa inputs read through it. It does not apply `[lints]` levels, so the
-  lookup tools keep the emitted severities; `ridl_check` in path mode applies
-  them (ADR-0024 decision 8).
+  `compile_workspace_with`, and returns
+  `Snapshot { db, output, root, notes, out_of_scope, remote_dirs }`: the
+  diagnostics outside the report scope and the remote units' directories, which
+  `Snapshot::report_directives` reads so that a directive in a member outside
+  the scope is checked against that member's own diagnostics. The database stays
+  in the snapshot because a `Symbol`'s file and text are salsa inputs read
+  through it. It does not apply `[lints]` levels, so the lookup tools keep the
+  emitted severities; `ridl_check` in path mode reports the directives and
+  applies the levels (ADR-0024 decisions 8 and 19).
 - `query.rs` holds the lookups (`find`, `resolve`, `describe_type`,
   `list_interactions`), `refs.rs` the reference and dependency walks,
   `metrics.rs` the package and interface metrics, and `explain.rs`, `diff.rs`
