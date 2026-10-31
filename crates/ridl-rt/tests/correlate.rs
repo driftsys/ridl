@@ -491,6 +491,40 @@ fn a_reclaimed_slot_holds_no_stream_waker_of_its_previous_call() {
 }
 
 #[test]
+fn take_stream_on_a_stale_correlation_leaves_the_new_calls_waker_in_place() {
+    let mut table = Table::<1>::new(None);
+    let old = table.insert(0).expect("a slot is free");
+    let _ = table.settle(old, Ok(()));
+    assert!(matches!(table.forget(old), Forgotten::Reclaimed));
+    let new = table.insert(0).expect("the slot is free again");
+    let (_count, waker) = counter();
+    assert!(table.wake_on_stream(new, REPLY_STREAM, &waker).is_none());
+    assert!(
+        table.take_stream(old, REPLY_STREAM).is_none(),
+        "a stale correlation takes nothing from the slot it once had"
+    );
+    assert!(
+        table.take_stream(new, REPLY_STREAM).is_some(),
+        "the new call's waker is still stored"
+    );
+}
+
+#[test]
+fn take_streams_of_a_slot_the_table_does_not_have_yields_nothing() {
+    let mut table = Table::<1>::new(None);
+    let c = table.insert(0).expect("a slot is free");
+    let (_count, waker) = counter();
+    assert!(table.wake_on_stream(c, REPLY_STREAM, &waker).is_none());
+    assert_eq!(table.take_streams(1).count(), 0);
+    assert_eq!(table.take_streams(usize::MAX).count(), 0);
+    assert_eq!(
+        table.take_streams(Table::<1>::slot(c)).count(),
+        1,
+        "the slot the table has still holds its waker"
+    );
+}
+
+#[test]
 fn registering_the_same_task_on_a_stream_is_a_refresh_that_hands_back_nothing() {
     let mut table = Table::<1>::new(None);
     let c = table.insert(0).expect("a slot is free");
