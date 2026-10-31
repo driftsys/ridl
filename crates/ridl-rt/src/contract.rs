@@ -448,6 +448,7 @@ mod tests {
             name: "member",
             timing,
             payloads: &[],
+            streams: &[],
         }
     }
 
@@ -494,6 +495,7 @@ mod tests {
                 max: Some(Duration(10_000)),
             }),
             payloads: &[],
+            streams: &[],
         };
         const FLOOR: Option<Duration> = SIGNAL.rate_floor();
         const BOUND: Option<Duration> = SIGNAL.staleness_bound();
