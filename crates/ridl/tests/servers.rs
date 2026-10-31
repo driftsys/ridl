@@ -1315,8 +1315,9 @@ fn lsp_matches_check_with_lints() {
 
 /// A package with one used directive (it allows the RIDL-100 of `speed`),
 /// one unused directive (`rate` draws no RIDL-405) and one malformed
-/// directive (no reason), one that names a loader lint (unused), and two that
-/// name lints that only `ridl check` raises (not unused on any face).
+/// directive (no reason), one that names a loader lint (unused), two that
+/// name lints that only `ridl check` raises, and one that names a lint only a
+/// build raises (not unused on any face).
 const DIRECTIVES: &str = "package demo\n\ntype Speed: integer [0..300]\n\ninterface Sensor {\n  \
     // lint: allow missing-timing -- timing comes later\n  signal speed: Speed\n  \
     // lint: allow shared-error-type -- nothing to allow\n  signal rate: Speed @10ms\n  \
@@ -1326,7 +1327,9 @@ const DIRECTIVES: &str = "package demo\n\ntype Speed: integer [0..300]\n\ninterf
     // lint: allow ordinal-changed -- raised by the desk check only\n\
     type B: integer [0..1]\n\n\
     // lint: allow podbuf-padding-order -- raised by the padding check only\n\
-    type C: integer [0..1]\n";
+    type C: integer [0..1]\n\n\
+    // lint: allow link-encoding-not-emitted -- raised by a build only\n\
+    type D: integer [0..1]\n";
 
 /// The sorted `(code, file name, line)` triples of a JSON diagnostic array as
 /// `ridl check --format json` and `ridl_check` print it, with 1-based lines.
@@ -1392,9 +1395,10 @@ async fn directives_give_the_same_diagnostics_in_check_lsp_and_mcp() {
     );
     // The directives on lines 17 and 20 name lints that `ridl check` raises
     // and the language server and the MCP tool do not (`ordinal-changed`,
-    // `podbuf-padding-order`), and none of the three faces reports them unused.
-    // The one on line 14 names a loader lint that no directive can cover, so
-    // it is unused on all three.
+    // `podbuf-padding-order`), and the one on line 23 names a lint that only
+    // a build raises (`link-encoding-not-emitted`); none of the three faces
+    // reports them unused. The one on line 14 names a loader lint that no
+    // directive can cover, so it is unused on all three.
     assert_eq!(
         expected
             .iter()

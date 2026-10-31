@@ -746,15 +746,19 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
     }
 
     // The report and the levels apply once, after the last diagnostic is
-    // raised (ADR-0024 decision 19). RIDL-407 is raised only when the desk
-    // check ran, and RIDL-156 only when the padding check ran.
-    let mut not_raised = Vec::new();
-    if !desk_checked {
-        not_raised.push(DiagCode::RIDL_407);
-    }
-    if !padding_checked {
-        not_raised.push(DiagCode::RIDL_156);
-    }
+    // raised (ADR-0024 decision 19). The list starts from the compile entry
+    // points' list, so a lint added there is not raised here either; RIDL-407
+    // leaves it when the desk check ran, and RIDL-156 when the padding check
+    // ran.
+    let not_raised: Vec<DiagCode> = ridlc::NOT_RAISED_BY_COMPILE
+        .iter()
+        .copied()
+        .filter(|code| match *code {
+            DiagCode::RIDL_407 => !desk_checked,
+            DiagCode::RIDL_156 => !padding_checked,
+            _ => true,
+        })
+        .collect();
     ridlc::report_directives(&mut run, &ir, &not_raised);
     apply_lint_levels(&mut run.diagnostics, &run.sources, &run.lints);
 
