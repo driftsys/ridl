@@ -649,8 +649,9 @@ a field is appended.
       encodings, so the step from a baseline published before `podbuf` was
       listed is judged by the podbuf rules; the hashes the history carried
       before then were judged without them and stay in it. An inline append
-      whose head reaches a type of an imported unit is not reported as a podbuf
-      break, so it does not end the history (driftsys/ridl#1141).
+      whose head reaches a type from a remote package (an `[imports]` unit) is
+      not reported as a podbuf break, so it does not end the history; a type
+      from another member of the workspace resolves (driftsys/ridl#1141).
       `ridl check --baseline` is the ordinal desk check (RIDL-407), not a diff
       gate, and it does not judge podbuf breaks; a workspace that builds podbuf
       catches them in CI with `ridl diff --encoding podbuf` against its
