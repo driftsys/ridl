@@ -2250,7 +2250,8 @@ fn inline_uses(scope: &[&v2::Package], package: &str, name: &str) -> Vec<String>
 /// as it is — a query's reply (a value as declared; the two arms of a fallible
 /// reply), and a fixed payload. A signal or event payload is a named type, a
 /// root on its own, and holds nothing at a fixed offset of another head, so it
-/// is not listed. A request with a stream parameter induces no struct.
+/// is not listed. A stream parameter is not part of the request and adds no
+/// field to the induced struct.
 /// [`root_holds_inline`] reads each one.
 fn interaction_payloads(decl: &v2::Decl) -> Vec<v2::FieldType> {
     use v2::decl::Kind;
