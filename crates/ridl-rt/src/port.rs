@@ -522,9 +522,13 @@ pub trait StreamCaller: Caller {
 /// error; the answers differ when the reply stream had already stopped, as
 /// after the caller's refusal: `abort_claim` answers [`PushError::Ended`],
 /// and `settle` answers `Ok(())`. [`Handler::settle`] with `Ok(&[])` on such
-/// a claim ends the reply stream exactly as `end_claim` does on
-/// [`REPLY_STREAM`]. What a runtime does with non-empty bytes there is not
-/// specified, and a runtime may refuse them. A command's claim is settled `Ok` at its
+/// a claim ends the reply stream as `end_claim` does on [`REPLY_STREAM`],
+/// with one difference after the caller refused the reply stream with outcome
+/// `e`: `end_claim` answers `PushError::Failed(e)` and settles the claim with
+/// `Err(e)`, while `settle(Ok(&[]))` records `Ok` and leaves the refusal on
+/// the stream, so the caller's pulls still answer `Pull::Failed(e)`. What a
+/// runtime does with non-empty bytes there is not specified, and a runtime
+/// may refuse them. A command's claim is settled `Ok` at its
 /// acknowledgment, before any chunk of a parameter stream is read, and a
 /// refusal of a chunk after that travels on the stream, through
 /// `abort_claim`, and reaches the producer through its next push or end; the

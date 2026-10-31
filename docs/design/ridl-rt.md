@@ -1062,10 +1062,16 @@ its parameter streams go on after it. A registration on a fifth stream of one
 call is handed back unstored, so its waiter is woken at once on every
 registration, which is a busy loop: the task reads again and registers again,
 and does not sleep while all four cells are occupied. A cell stays occupied
-until `take_stream` or `take_streams` takes its waker. `take_stream` takes one
-stream's waker, for a chunk, an end or a freed window. A settlement, a forget
-and a reclaim stop or change every stream of the call, so after each `settle`
-and each `forget` that did not answer `Unknown` the runtime calls
+until `take_stream` or `take_streams` takes its waker. The cap of four is a
+ruling of the port's build, kept because `Table` is fixed-size and allocates
+nothing; `ridl check` reports nothing for a member with five streams, so the
+cost falls on that member's fifth waiter, which does not sleep. Every slot
+carries the four cells, about 96 bytes, in a runtime that implements no stream
+extension too, and `insert` clears them: the table has one shape, and a runtime
+without streams pays the cells rather than a second table type. `take_stream`
+takes one stream's waker, for a chunk, an end or a freed window. A settlement, a
+forget and a reclaim stop or change every stream of the call, so after each
+`settle` and each `forget` that did not answer `Unknown` the runtime calls
 `take_streams(Table::slot(c))` under the same lock and wakes what it returns
 after releasing the lock; after `Unknown` it does not, because the slot of a
 stale correlation may hold another live call. A runtime that skips the call
@@ -1141,8 +1147,9 @@ default ceiling of its kind), else the default ceiling of its kind
 (`contract::default_ceiling`) — and refuses a longer one with that limit as
 `cap`, staging, raising, sending or recording nothing. `Detached` — the runtime
 behind the port is gone — is local to the port, not a stratum. Why `Contract`
-and `CallError` stay exhaustive while `Transport` and the eight port error enums
-stay `#[non_exhaustive]` is ADR-0021 decision 9. Every error type here is `Copy`
+and `CallError` stay exhaustive while `Transport` and the seven port error enums
+that decision names stay `#[non_exhaustive]` is ADR-0021 decision 9;
+`PushError`, the eighth, follows the same rule. Every error type here is `Copy`
 and owns nothing.
 
 `ClientError` and `ProviderError` compose these into one error per side of a

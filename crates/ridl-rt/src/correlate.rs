@@ -63,6 +63,11 @@ use crate::port::{Correlation, Interest};
 /// handed back, so its waiter is woken at once on every registration: the
 /// task reads its stream again and registers again, which is a busy loop
 /// until a cell is freed. It does not wait forever, but it does not sleep.
+///
+/// The cap is kept because the table is fixed-size and allocates nothing, and
+/// no diagnostic reports a member with five streams. Every slot carries the
+/// four cells, in a runtime that implements no stream extension too, and
+/// [`Table::insert`] clears them: the table has one shape.
 pub const STREAM_WAKERS: usize = 4;
 
 /// The bits of a correlation that hold the slot index.
