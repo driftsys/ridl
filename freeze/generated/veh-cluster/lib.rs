@@ -8,13 +8,16 @@ extern crate alloc as std;
 
 #[path = "."]
 pub mod ridl {
+    #[rustfmt::skip]
     #[path = "ridl.std.rs"]
     pub mod std;
 }
 #[path = "."]
 pub mod veh {
+    #[rustfmt::skip]
     #[path = "veh.cluster.rs"]
     pub mod cluster;
+    #[rustfmt::skip]
     #[path = "veh.common.rs"]
     pub mod common;
 }

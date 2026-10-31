@@ -8,6 +8,7 @@ extern crate alloc as std;
 
 #[path = "."]
 pub mod veh {
+    #[rustfmt::skip]
     #[path = "veh.cabin.rs"]
     pub mod cabin;
 }

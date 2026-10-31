@@ -8648,13 +8648,13 @@ impl GaugeSetParams {
         >(bytes, out)
     }
 }
-/**Descriptor for interface `Gauge`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
-
-Its size table in FlatBuffers is `<Gauge as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
-
-Its size table in proto3 is `<Gauge as Sizes<Proto3>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
-
-Its size table in podbuf is `<Gauge as Sizes<Podbuf>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.*/
+/// Descriptor for interface `Gauge`: its catalog, number, name and members, as `ridl_rt::contract::Interface`.
+///
+/// Its size table in FlatBuffers is `<Gauge as Sizes<FlatBuffers>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+///
+/// Its size table in proto3 is `<Gauge as Sizes<Proto3>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
+///
+/// Its size table in podbuf is `<Gauge as Sizes<Podbuf>>`: the space each member reserves, and the largest buffer a call or an event of this interface needs.
 pub struct Gauge;
 impl ::ridl_rt::contract::Interface for Gauge {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
@@ -8848,9 +8848,9 @@ pub mod gauge {
     {
         /// Two parameters: the request type is an induced struct.
         ///
-        /**Sends command `set` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
-
-The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.*/
+        /// Sends command `set` and returns its future. The call is sent when this method runs, not when the future is first polled, and the future resolves on the outcome. A `require` clause that fails, or a send failure other than `SendError::Busy`, is a future that is ready with `ClientError::Send` and sends nothing. `SendError::Busy` is a future that waits for a free slot and sends on a later poll.
+        ///
+        /// The call's bound is the member's `max`, measured from the port's clock when this method runs; a member with no `max` waits without a bound. The future holds this client's port until it is dropped.
         ///
         /// # Rules
         ///
@@ -8890,11 +8890,11 @@ The call's bound is the member's `max`, measured from the port's clock when this
         super::GaugeSetParams: ::ridl_rt::payload::Payload<P::Encoding>,
     {
         type Port = P;
-        /**Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
-
-# Panics
-
-Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Gauge as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Gauge` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        /// Binds the face to a port. The port is held by value: pass a handle, or a `&mut` borrow of one.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before the port is stored. A program that must not panic makes the same comparison first, `port.catalog() == <Gauge as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Gauge` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
         #[track_caller]
         fn new(port: P) -> Self {
             check_catalog(::ridl_rt::port::Attached::catalog(&port));
@@ -9083,9 +9083,9 @@ Panics when `port` is attached to a catalog other than the one this face was gen
     {
         port.ack(correlation.0)
     }
-    /**What an application implements to serve interface `Gauge`'s calls.
-
-An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.*/
+    /// What an application implements to serve interface `Gauge`'s calls.
+    ///
+    /// An argument is taken by reference because `serve` reads it again when it evaluates a query's `ensure` clauses.
     pub trait Provider {
         /// Two parameters: the request type is an induced struct.
         ///
@@ -9231,11 +9231,11 @@ An argument is taken by reference because `serve` reads it again when it evaluat
         Ok(settled)
     }
     const SERVE_BUDGET: usize = 32;
-    /**Serves interface `Gauge`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
-
-# Panics
-
-Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <Gauge as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Gauge` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+    /// Serves interface `Gauge`'s commands and queries with `p`, over the handler port `h`, and returns the future that does the serving. `Handler::serve` is called with the interface's command and query ordinals when this function runs; a refusal is a future that is ready with `ProviderError::Serve`. Each poll of the future registers its interest in the interface's claims, then takes and settles the claims the handler has, at most 32 in one poll, so that one poll does not hold a single-threaded executor while callers keep sending. A poll that took 32 claims wakes the future's waker and is `Pending`, so the executor polls it again after other tasks have run; a poll that found no claim left before 32 is `Pending` without waking it. Under `ridl_rt::task::noop_waker` that wake is discarded, so a frame loop that polls the future once per frame settles at most 32 claims per frame; a frame loop that polls with `ridl_rt::task::flag_waker` polls again while its flag was set, up to the loop's own limit of polls per frame. The future resolves only when the handler port fails, to `ProviderError::Claim`; every claim settled before the failure stays settled. `h` is held by value and `p` by `&mut` until the future is dropped.
+    ///
+    /// # Panics
+    ///
+    /// Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, before `Handler::serve` is called. A program that must not panic makes the same comparison first, `h.catalog() == <Gauge as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Gauge` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
     #[track_caller]
     pub fn serve<H, P>(mut h: H, p: &mut P) -> Serve<'_, H, P>
     where
@@ -9434,11 +9434,11 @@ Panics when `h` is attached to a catalog other than the one this face was genera
             super::super::GaugeSetParams: ::ridl_rt::payload::Payload<P::Encoding>,
         {
             type Port = P;
-            /**Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
-
-# Panics
-
-Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::Client`'s `new`. A program that must not panic makes the same comparison first, `port.catalog() == <Gauge as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Gauge` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+            /// Binds the face to a port, with no timeout. The port is held by value: pass a handle, or a `&mut` borrow of one.
+            ///
+            /// # Panics
+            ///
+            /// Panics when `port` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::Client`'s `new`. A program that must not panic makes the same comparison first, `port.catalog() == <Gauge as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Gauge` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
             #[track_caller]
             fn new(port: P) -> Self {
                 Client {
@@ -9473,11 +9473,11 @@ Panics when `port` is attached to a catalog other than the one this face was gen
                 self.timeout = timeout;
             }
         }
-        /**Serves interface `Gauge`'s commands and queries with `p`, over the handler port `h`, on the calling thread, until the handler port fails or `timeout` passes: it is `block_on` over `serve`. A failure is returned as `serve`'s future resolves to it; the timeout is `Ok(())`, so a loop that also does other work can call this repeatedly. With `None` it returns only on a failure. `h` is dropped when this returns.
-
-# Panics
-
-Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::serve`. A program that must not panic makes the same comparison first, `h.catalog() == <Gauge as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Gauge` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.*/
+        /// Serves interface `Gauge`'s commands and queries with `p`, over the handler port `h`, on the calling thread, until the handler port fails or `timeout` passes: it is `block_on` over `serve`. A failure is returned as `serve`'s future resolves to it; the timeout is `Ok(())`, so a loop that also does other work can call this repeatedly. With `None` it returns only on a failure. `h` is dropped when this returns.
+        ///
+        /// # Panics
+        ///
+        /// Panics when `h` is attached to a catalog other than the one this face was generated from, that is, when the package name or the catalog hash differs (ADR-0023 decision 8); the comparison is made once, by `super::serve`. A program that must not panic makes the same comparison first, `h.catalog() == <Gauge as ridl_rt::contract::Interface>::CATALOG` with `ridl_rt::port::Attached` in scope, where `Gauge` is the interface's descriptor type, declared beside this interface's module, and handles a mismatch its own way.
         #[track_caller]
         pub fn serve<H, P>(
             h: H,
