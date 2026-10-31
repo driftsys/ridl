@@ -1223,6 +1223,7 @@ impl<'a> Lowering<'a> {
         };
         let member = decl.name.as_str();
         let reservation = reserve(member, payloads.as_deref());
+        let streams = self.streams(home, decl);
         v1::Interaction {
             name: Some(spellings(&decl.name)),
             kind: kind as i32,
@@ -1239,6 +1240,74 @@ impl<'a> Lowering<'a> {
             since: decl.since.clone(),
             rules: model_rules(home, &self.deps, ItemRef::Decl(decl)),
             limit: decl.limit,
+            streams,
+        }
+    }
+
+    /// The streams of a call: the reply stream of a query as number 0, then
+    /// each stream parameter, counted from 1 in declaration order.
+    fn streams(&mut self, home: &'a v2::Package, decl: &v2::Decl) -> Vec<v1::StreamShape> {
+        let (params, reply) = match decl.kind.as_ref() {
+            Some(v2::decl::Kind::CommandDef(command)) => (&command.params, None),
+            Some(v2::decl::Kind::QueryDef(query)) => {
+                let reply = query.return_type.as_ref().and_then(|ret| match &ret.kind {
+                    Some(v2::return_type::Kind::Value(ty)) => Some(ty),
+                    _ => None,
+                });
+                (&query.params, reply)
+            }
+            _ => return Vec::new(),
+        };
+        fn carried(ty: &v2::FieldType) -> Option<&v2::StreamType> {
+            match ty.kind.as_ref() {
+                Some(v2::field_type::Kind::Stream(stream)) => Some(stream),
+                _ => None,
+            }
+        }
+        let mut streams = Vec::new();
+        let mut number = 0;
+        if let Some(stream) = reply.and_then(carried) {
+            streams.extend(self.stream_shape(home, number, stream));
+        }
+        for stream in params
+            .iter()
+            .filter_map(|param| param.r#type.as_ref().and_then(carried))
+        {
+            number += 1;
+            streams.extend(self.stream_shape(home, number, stream));
+        }
+        streams
+    }
+
+    fn stream_shape(
+        &mut self,
+        home: &'a v2::Package,
+        no: u32,
+        stream: &v2::StreamType,
+    ) -> Option<v1::StreamShape> {
+        match stream.element.as_ref()? {
+            v2::stream_type::Element::Named(reference) => {
+                let payload = self.payload(home, reference);
+                Some(v1::StreamShape {
+                    no,
+                    form: v1::StreamForm::Elements as i32,
+                    element: payload.r#type,
+                    sizes: payload.sizes,
+                })
+            }
+            v2::stream_type::Element::Primitive(primitive) => {
+                let form = match v2::PrimitiveType::try_from(*primitive).ok()? {
+                    v2::PrimitiveType::Bytes => v1::StreamForm::Bytes,
+                    v2::PrimitiveType::String => v1::StreamForm::Text,
+                    _ => return None,
+                };
+                Some(v1::StreamShape {
+                    no,
+                    form: form as i32,
+                    element: None,
+                    sizes: Some(absent_sizes()),
+                })
+            }
         }
     }
 
@@ -1270,7 +1339,11 @@ impl<'a> Lowering<'a> {
         // The struct's fields stand for the parameters, in declaration order,
         // so each one is documented with the parameter it was induced from
         // (ADR-0028).
-        self.tuples[index as usize].docs = params.iter().map(FieldDoc::of_param).collect();
+        self.tuples[index as usize].docs = params
+            .iter()
+            .filter(|param| !param.r#type.as_ref().is_some_and(is_stream))
+            .map(FieldDoc::of_param)
+            .collect();
         Some(v1::TupleRef { index })
     }
 
@@ -1605,7 +1678,11 @@ pub(super) type MemberPayload = (&'static str, String, Option<v1::PayloadSizes>)
 fn params_text(params: &[v2::Param]) -> String {
     single_param_type(params).map_or_else(
         || {
-            let names: Vec<&str> = params.iter().map(|param| param.name.as_str()).collect();
+            let names: Vec<&str> = params
+                .iter()
+                .filter(|param| !param.r#type.as_ref().is_some_and(is_stream))
+                .map(|param| param.name.as_str())
+                .collect();
             format!("({})", names.join(", "))
         },
         str::to_string,
@@ -1800,16 +1877,17 @@ fn decl_kind(decl: &v2::Decl) -> v1::DeclKind {
 }
 
 /// The parameter list as a tuple: the shape of the induced argument struct,
-/// one field per declared parameter in declaration order. A parameter with no
-/// declared type, and a stream parameter, have no struct field, so a list
-/// holding either induces nothing (interaction face design, the request-shape
+/// one field per declared parameter in declaration order. A stream parameter
+/// is not part of the request: it has no field, and travels as a stream of
+/// its own. A parameter with no declared type has no struct field, so a list
+/// holding one induces nothing (interaction face design, the request-shape
 /// rule).
 pub fn params_as_tuple(params: &[v2::Param]) -> Option<v2::TupleType> {
     let mut fields = Vec::with_capacity(params.len());
     for param in params {
         let ty = param.r#type.as_ref()?;
-        if matches!(ty.kind.as_ref()?, v2::field_type::Kind::Stream(_)) {
-            return None;
+        if is_stream(ty) {
+            continue;
         }
         fields.push(v2::TupleField {
             name: param.name.clone(),
@@ -1838,23 +1916,35 @@ pub fn reply_as_tuple(ret: Option<&v2::ReturnType>) -> Option<v2::TupleType> {
 }
 
 /// What a call's request is sized as: the induced argument struct when the
-/// call has one, otherwise the single named parameter.
+/// call has one, otherwise the single named non-stream parameter.
 pub fn request_shape<'a>(
     params: &'a [v2::Param],
     induced: Option<&'a v2::TupleType>,
 ) -> PayloadShape<'a> {
-    match induced {
-        Some(tuple) if single_param_type(params).is_none() => PayloadShape::Tuple(tuple),
+    match (induced, single_param_type(params)) {
+        (Some(tuple), None) => PayloadShape::Tuple(tuple),
+        // Beside a stream parameter, the list is not the request.
+        (_, Some(name)) if params.len() > 1 => PayloadShape::Named(name),
         _ => PayloadShape::Params(params),
     }
 }
 
-/// The single declared parameter's named type — the one call shape whose
-/// payload the generated face sends as it is.
+/// Whether a field type is a stream.
+fn is_stream(ty: &v2::FieldType) -> bool {
+    matches!(ty.kind, Some(v2::field_type::Kind::Stream(_)))
+}
+
+/// The single declared non-stream parameter's named type — the one call shape
+/// whose payload the generated face sends as it is. A stream parameter is
+/// not part of the request, so it does not count.
 fn single_param_type(params: &[v2::Param]) -> Option<&str> {
-    let [param] = params else {
+    let mut requested = params
+        .iter()
+        .filter(|param| !param.r#type.as_ref().is_some_and(is_stream));
+    let param = requested.next()?;
+    if requested.next().is_some() {
         return None;
-    };
+    }
     named_type(param.r#type.as_ref()?)
 }
 

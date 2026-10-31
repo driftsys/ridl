@@ -1,6 +1,5 @@
 ---
 source: crates/ridlc/tests/corpus.rs
-assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
 ---
@@ -79,6 +78,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -156,6 +156,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -230,6 +231,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "command": {
               "params": [
                 {
@@ -372,6 +374,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -1346,6 +1349,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [],
               "reply": {

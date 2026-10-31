@@ -349,6 +349,7 @@ ridl.codegen.v1.Interaction.rules = 23 repeated ridl.codegen.v1.Rule
 ridl.codegen.v1.Interaction.see = 21 repeated ridl.codegen.v1.DocLink
 ridl.codegen.v1.Interaction.signal = 10 singular ridl.codegen.v1.SignalShape oneof=shape
 ridl.codegen.v1.Interaction.since = 22 repeated string
+ridl.codegen.v1.Interaction.streams = 25 repeated ridl.codegen.v1.StreamShape
 ridl.codegen.v1.Interaction.timing = 7 singular ridl.codegen.v1.Timing
 ridl.codegen.v1.InteractionPath.interface = 1 singular uint32
 ridl.codegen.v1.InteractionPath.segments = 3 repeated string
@@ -598,6 +599,15 @@ ridl.codegen.v1.Spellings.declared = 1 singular string
 ridl.codegen.v1.Spellings.pascal = 5 singular string
 ridl.codegen.v1.Spellings.screaming = 4 singular string
 ridl.codegen.v1.Spellings.snake = 2 singular string
+ridl.codegen.v1.StreamForm values STREAM_FORM_BYTES STREAM_FORM_ELEMENTS STREAM_FORM_TEXT STREAM_FORM_UNSPECIFIED
+ridl.codegen.v1.StreamForm.STREAM_FORM_BYTES = 2
+ridl.codegen.v1.StreamForm.STREAM_FORM_ELEMENTS = 1
+ridl.codegen.v1.StreamForm.STREAM_FORM_TEXT = 3
+ridl.codegen.v1.StreamForm.STREAM_FORM_UNSPECIFIED = 0
+ridl.codegen.v1.StreamShape.element = 3 singular ridl.codegen.v1.TypeRef
+ridl.codegen.v1.StreamShape.form = 2 singular ridl.codegen.v1.StreamForm
+ridl.codegen.v1.StreamShape.no = 1 singular uint32
+ridl.codegen.v1.StreamShape.sizes = 4 singular ridl.codegen.v1.PayloadSizes
 ridl.codegen.v1.StreamType.named = 10 singular ridl.codegen.v1.TypeRef oneof=element
 ridl.codegen.v1.StreamType.primitive = 11 singular ridl.codegen.v1.PrimitiveType oneof=element
 ridl.codegen.v1.Struct.fixed_layout = 2 singular bool

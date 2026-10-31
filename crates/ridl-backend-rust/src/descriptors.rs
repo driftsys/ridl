@@ -689,13 +689,16 @@ fn payload_reference(payload: Option<&v1::Payload>) -> &str {
 
 /// The call's argument type: the single declared named parameter, or the
 /// induced argument struct the lowering named for every other parameter list,
-/// zero parameters included. Refuses only a shape no struct field can hold —
-/// a parameter with no declared type, and a stream.
+/// zero parameters included. Refuses a parameter with no declared type, and a
+/// call with a stream parameter, which the face does not carry yet.
 pub(crate) fn single_param_type<'a>(
     ctx: &Ctx<'a>,
     command: &'a v1::CommandShape,
     member: &str,
 ) -> Result<&'a str, GenerateError> {
+    if has_stream_param(&command.params) {
+        return Err(no_single_param(&command.params, member));
+    }
     if let Some(payload) = command.request.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
@@ -713,6 +716,9 @@ pub(crate) fn query_param_type<'a>(
     query: &'a v1::QueryShape,
     member: &str,
 ) -> Result<&'a str, GenerateError> {
+    if has_stream_param(&query.params) {
+        return Err(no_single_param(&query.params, member));
+    }
     if let Some(payload) = query.request.as_ref() {
         return Ok(payload_reference(Some(payload)));
     }
@@ -831,6 +837,18 @@ pub(crate) fn catalog_hash(ctx: &Ctx) -> Result<Vec<Literal>, GenerateError> {
 
 /// Why a call has no argument type. Every parameter list induces one, so the
 /// two causes left are a parameter the struct cannot hold.
+/// Whether a parameter is a stream. The request leaves a stream parameter
+/// out, but the face still leaves a call with one out too, so the argument
+/// type of such a call is refused here.
+fn has_stream_param(params: &[v1::Param]) -> bool {
+    params.iter().any(|param| {
+        matches!(
+            param.r#type.as_ref().and_then(|ty| ty.kind.as_ref()),
+            Some(v1::r#type::Kind::Stream(_))
+        )
+    })
+}
+
 fn no_single_param(params: &[v1::Param], member: &str) -> GenerateError {
     let untyped = params.iter().any(|param| param.r#type.is_none());
     let message = if untyped {

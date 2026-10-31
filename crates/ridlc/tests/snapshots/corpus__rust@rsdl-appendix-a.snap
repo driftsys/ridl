@@ -34,6 +34,7 @@ impl ::ridl_rt::contract::Interface for CruiseControl {
                     type_name: "veh.common.Engaged",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -49,6 +50,7 @@ impl ::ridl_rt::contract::Interface for CruiseControl {
                     type_name: "veh.common.Speed",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(3),
@@ -64,6 +66,7 @@ impl ::ridl_rt::contract::Interface for CruiseControl {
                     type_name: "veh.common.LeverCmd",
                 },
             ],
+            streams: &[],
         },
     ];
 }
@@ -1226,6 +1229,7 @@ impl ::ridl_rt::contract::Interface for LaneAssist {
                     type_name: "veh.common.Engaged",
                 },
             ],
+            streams: &[],
         },
     ];
 }

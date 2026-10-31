@@ -1348,6 +1348,7 @@ impl ::ridl_rt::contract::Interface for Telemetry {
                     type_name: "Odometer",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -1366,6 +1367,7 @@ impl ::ridl_rt::contract::Interface for Telemetry {
                     type_name: "Percent",
                 },
             ],
+            streams: &[],
         },
     ];
 }

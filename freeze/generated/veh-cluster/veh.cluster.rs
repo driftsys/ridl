@@ -508,6 +508,22 @@ impl ::core::default::Default for WheelDiagnosticsTickBoundsElement {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehHvacCabinReplayTraceParams {}
+#[allow(clippy::derivable_impls)]
+impl ::core::default::Default for VehHvacCabinReplayTraceParams {
+    fn default() -> Self {
+        VehHvacCabinReplayTraceParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct VehHvacCabinRebalanceParams {}
+#[allow(clippy::derivable_impls)]
+impl ::core::default::Default for VehHvacCabinRebalanceParams {
+    fn default() -> Self {
+        VehHvacCabinRebalanceParams {}
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VehHvacCabinGetBoundsParams {}
 #[allow(clippy::derivable_impls)]
 impl ::core::default::Default for VehHvacCabinGetBoundsParams {
@@ -2998,6 +3014,190 @@ for WheelDiagnosticsReadSpanReply {
     ) -> Self {
         let __view = r.view();
         __ridl_fb_decode_WheelDiagnosticsReadSpanReply(__view.buf, __view.table)
+    }
+}
+/// A `VehHvacCabinReplayTraceParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehHvacCabinReplayTraceParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinReplayTraceParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehHvacCabinReplayTraceParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehHvacCabinReplayTraceParams(
+    _value: &VehHvacCabinReplayTraceParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehHvacCabinReplayTraceParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehHvacCabinReplayTraceParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> VehHvacCabinReplayTraceParams {
+    VehHvacCabinReplayTraceParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehHvacCabinReplayTraceParams {
+    /// The largest FlatBuffers buffer any legal `VehHvacCabinReplayTraceParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = VehHvacCabinReplayTraceParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehHvacCabinReplayTraceParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehHvacCabinReplayTraceParams(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehHvacCabinReplayTraceParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinReplayTraceParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehHvacCabinReplayTraceParams(buf, table)?;
+        ::core::result::Result::Ok(VehHvacCabinReplayTraceParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehHvacCabinReplayTraceParams(__view.buf, __view.table)
+    }
+}
+/// A `VehHvacCabinRebalanceParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehHvacCabinRebalanceParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinRebalanceParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehHvacCabinRebalanceParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehHvacCabinRebalanceParams(
+    _value: &VehHvacCabinRebalanceParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehHvacCabinRebalanceParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehHvacCabinRebalanceParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> VehHvacCabinRebalanceParams {
+    VehHvacCabinRebalanceParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehHvacCabinRebalanceParams {
+    /// The largest FlatBuffers buffer any legal `VehHvacCabinRebalanceParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = VehHvacCabinRebalanceParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehHvacCabinRebalanceParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehHvacCabinRebalanceParams(self, &mut builder)?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehHvacCabinRebalanceParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinRebalanceParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehHvacCabinRebalanceParams(buf, table)?;
+        ::core::result::Result::Ok(VehHvacCabinRebalanceParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehHvacCabinRebalanceParams(__view.buf, __view.table)
     }
 }
 /// A `VehHvacCabinGetBoundsParams` value in FlatBuffers bytes, read in place without copying it.
@@ -6265,6 +6465,150 @@ for WheelDiagnosticsReadSpanReply {
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
         __ridl_pb_decode_WheelDiagnosticsReadSpanReply(
+            ::ridl_rt::payload::View::bytes(r.view()),
+        )
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_VehHvacCabinReplayTraceParams(
+    _value: &VehHvacCabinReplayTraceParams,
+) -> ::core::primitive::usize {
+    0usize
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_VehHvacCabinReplayTraceParams(
+    _value: &VehHvacCabinReplayTraceParams,
+    _writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
+pub(crate) fn __ridl_pb_verify_VehHvacCabinReplayTraceParams(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
+pub(crate) fn __ridl_pb_decode_VehHvacCabinReplayTraceParams(
+    _buf: &[::core::primitive::u8],
+) -> VehHvacCabinReplayTraceParams {
+    VehHvacCabinReplayTraceParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>
+for VehHvacCabinReplayTraceParams {
+    /// The largest proto3 message any legal `VehHvacCabinReplayTraceParams` encodes to: 0 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 0usize;
+    type Buffer = [::core::primitive::u8; 0usize];
+    const BUFFER: Self::Buffer = [0u8; 0usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_VehHvacCabinReplayTraceParams(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_VehHvacCabinReplayTraceParams(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_VehHvacCabinReplayTraceParams(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    #[allow(clippy::collapsible_if)]
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_VehHvacCabinReplayTraceParams(
+            ::ridl_rt::payload::View::bytes(r.view()),
+        )
+    }
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_len_VehHvacCabinRebalanceParams(
+    _value: &VehHvacCabinRebalanceParams,
+) -> ::core::primitive::usize {
+    0usize
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_pb_encode_VehHvacCabinRebalanceParams(
+    _value: &VehHvacCabinRebalanceParams,
+    _writer: &mut ::ridl_rt::proto3::Writer<'_>,
+) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
+pub(crate) fn __ridl_pb_verify_VehHvacCabinRebalanceParams(
+    buf: &[::core::primitive::u8],
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
+    while let ::core::option::Option::Some(__field) = __reader.next() {
+        __field.map_err(::ridl_rt::payload::VerifyError::Structure)?;
+    }
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
+pub(crate) fn __ridl_pb_decode_VehHvacCabinRebalanceParams(
+    _buf: &[::core::primitive::u8],
+) -> VehHvacCabinRebalanceParams {
+    VehHvacCabinRebalanceParams {}
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3>
+for VehHvacCabinRebalanceParams {
+    /// The largest proto3 message any legal `VehHvacCabinRebalanceParams` encodes to: 0 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 0usize;
+    type Buffer = [::core::primitive::u8; 0usize];
+    const BUFFER: Self::Buffer = [0u8; 0usize];
+    type View<'a> = ::ridl_rt::proto3::Verified<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, ::ridl_rt::proto3::Verified<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let __needed = __ridl_pb_len_VehHvacCabinRebalanceParams(self);
+        ::ridl_rt::proto3::check_capacity(__needed, out)?;
+        let mut __writer = ::ridl_rt::proto3::Writer::new(out);
+        __ridl_pb_encode_VehHvacCabinRebalanceParams(self, &mut __writer)?;
+        let bytes = __writer.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: ::ridl_rt::proto3::Verified::new(bytes),
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::proto3::Verified<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        __ridl_pb_verify_VehHvacCabinRebalanceParams(buf)?;
+        ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
+    }
+    #[allow(clippy::collapsible_if)]
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
+    ) -> Self {
+        __ridl_pb_decode_VehHvacCabinRebalanceParams(
             ::ridl_rt::payload::View::bytes(r.view()),
         )
     }
@@ -9635,6 +9979,268 @@ impl WheelDiagnosticsTickBoundsElement {
                 ),
             ),
         }
+    }
+}
+/// The podbuf head of `VehHvacCabinReplayTraceParams`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 0 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+pub struct VehHvacCabinReplayTraceParamsPodbufHead {}
+const _: () = {
+    assert!(
+        ::core::mem::size_of:: < VehHvacCabinReplayTraceParamsPodbufHead > () == 0usize
+    );
+    assert!(
+        ::core::mem::align_of:: < VehHvacCabinReplayTraceParamsPodbufHead > () == 8usize
+    );
+};
+#[allow(deprecated)]
+impl VehHvacCabinReplayTraceParams {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(0u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        _w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        _at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `VehHvacCabinReplayTraceParams` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct VehHvacCabinReplayTraceParamsPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinReplayTraceParamsPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehHvacCabinReplayTraceParamsPodbufView<'a> {}
+#[allow(deprecated)]
+impl VehHvacCabinReplayTraceParams {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinReplayTraceParamsPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(VehHvacCabinReplayTraceParamsPodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        _buf: &[::core::primitive::u8],
+        _at: ::core::primitive::usize,
+        _size: ::core::primitive::usize,
+        _tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+impl VehHvacCabinReplayTraceParams {
+    pub(crate) fn __ridl_podbuf_decode(
+        view: VehHvacCabinReplayTraceParamsPodbufView<'_>,
+    ) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        VehHvacCabinReplayTraceParams {}
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf>
+for VehHvacCabinReplayTraceParams {
+    /// The largest podbuf buffer any legal `VehHvacCabinReplayTraceParams` encodes to: 8 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 8usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 8usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 8usize],
+    >::zeroed();
+    type View<'a> = VehHvacCabinReplayTraceParamsPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehHvacCabinReplayTraceParamsPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehHvacCabinReplayTraceParamsPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 0usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinReplayTraceParamsPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
+    }
+}
+/// The podbuf head of `VehHvacCabinRebalanceParams`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 0 bytes.
+#[allow(deprecated)]
+#[derive(Clone, Copy, Debug)]
+#[repr(C, align(8))]
+pub struct VehHvacCabinRebalanceParamsPodbufHead {}
+const _: () = {
+    assert!(
+        ::core::mem::size_of:: < VehHvacCabinRebalanceParamsPodbufHead > () == 0usize
+    );
+    assert!(
+        ::core::mem::align_of:: < VehHvacCabinRebalanceParamsPodbufHead > () == 8usize
+    );
+};
+#[allow(deprecated)]
+impl VehHvacCabinRebalanceParams {
+    pub(crate) fn __ridl_podbuf_encode(
+        &self,
+        w: &mut ::ridl_rt::podbuf::Writer<'_>,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        let __at = w.reserve_head(0u32)?;
+        self.__ridl_podbuf_encode_at(w, __at)
+    }
+    pub(crate) fn __ridl_podbuf_encode_at(
+        &self,
+        _w: &mut ::ridl_rt::podbuf::Writer<'_>,
+        _at: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::EncodeError> {
+        ::core::result::Result::Ok(())
+    }
+}
+/// A `VehHvacCabinRebalanceParams` value in podbuf bytes, read in place without copying it. Each accessor is a bounds-checked load at the field's offset; a field past the size the producer wrote reads as 0.
+#[derive(Debug, Clone, Copy)]
+#[allow(deprecated)]
+pub struct VehHvacCabinRebalanceParamsPodbufView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) at: ::core::primitive::usize,
+    pub(crate) size: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinRebalanceParamsPodbufView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehHvacCabinRebalanceParamsPodbufView<'a> {}
+#[allow(deprecated)]
+impl VehHvacCabinRebalanceParams {
+    pub(crate) fn __ridl_podbuf_verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinRebalanceParamsPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let __p = ::ridl_rt::podbuf::Preamble::read(buf)?;
+        let __size = __p.head_size as ::core::primitive::usize;
+        let __tail = ::ridl_rt::podbuf::PREAMBLE_SIZE + __size;
+        Self::__ridl_podbuf_verify_at(
+            buf,
+            ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            __size,
+            __tail,
+        )?;
+        ::core::result::Result::Ok(VehHvacCabinRebalanceParamsPodbufView {
+            buf,
+            at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+            size: __size,
+        })
+    }
+    pub(crate) fn __ridl_podbuf_verify_at(
+        _buf: &[::core::primitive::u8],
+        _at: ::core::primitive::usize,
+        _size: ::core::primitive::usize,
+        _tail: ::core::primitive::usize,
+    ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+        ::core::result::Result::Ok(())
+    }
+}
+#[allow(deprecated)]
+impl VehHvacCabinRebalanceParams {
+    pub(crate) fn __ridl_podbuf_decode(
+        view: VehHvacCabinRebalanceParamsPodbufView<'_>,
+    ) -> Self {
+        #[allow(unused_variables)]
+        let (__b, __a, __z) = (view.buf, view.at, view.size);
+        VehHvacCabinRebalanceParams {}
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Podbuf>
+for VehHvacCabinRebalanceParams {
+    /// The largest podbuf buffer any legal `VehHvacCabinRebalanceParams` encodes to: 8 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 8usize;
+    type Buffer = ::ridl_rt::podbuf::Aligned<[::core::primitive::u8; 8usize]>;
+    const BUFFER: Self::Buffer = ::ridl_rt::podbuf::Aligned::<
+        [::core::primitive::u8; 8usize],
+    >::zeroed();
+    type View<'a> = VehHvacCabinRebalanceParamsPodbufView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehHvacCabinRebalanceParamsPodbufView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut __w = ::ridl_rt::podbuf::Writer::new(out);
+        self.__ridl_podbuf_encode(&mut __w)?;
+        let bytes = __w.finish()?;
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehHvacCabinRebalanceParamsPodbufView {
+                buf: bytes,
+                at: ::ridl_rt::podbuf::PREAMBLE_SIZE,
+                size: 0usize,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehHvacCabinRebalanceParamsPodbufView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        Self::__ridl_podbuf_verify(buf)
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Podbuf>,
+    ) -> Self {
+        Self::__ridl_podbuf_decode(r.into_view())
     }
 }
 /// The podbuf head of `VehHvacCabinGetBoundsParams`: every field at the offset the first-fit law gives it, with each unused byte run written out as a pad. A buffer holds it after the 8-byte preamble; its size is 0 bytes.

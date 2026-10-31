@@ -4094,3 +4094,39 @@ mod podbuf_width {
         assert_eq!(width_change(&report), None, "{}", render_text(&report));
     }
 }
+
+/// Pins what `ridl diff` reports today for a reply that changes from a type
+/// to a stream of that type. It records the current behaviour and does not
+/// state a rule, so a later change to the classification shows up here.
+#[test]
+fn a_reply_changed_from_a_type_to_a_stream_of_it_keeps_its_current_category() {
+    let query = |reply: v2::FieldType| {
+        interaction(
+            "latest",
+            1,
+            v2::decl::Kind::QueryDef(v2::QueryDef {
+                return_type: Some(v2::ReturnType {
+                    kind: Some(v2::return_type::Kind::Value(reply)),
+                }),
+                ..Default::default()
+            }),
+        )
+    };
+    let plain = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Named("FaultEvent".to_string())),
+    };
+    let streamed = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+            element: Some(v2::stream_type::Element::Named("FaultEvent".to_string())),
+        })),
+    };
+    let old = pkg("veh.cluster", interface("Faults", vec![query(plain)]));
+    let new = pkg("veh.cluster", interface("Faults", vec![query(streamed)]));
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.changes.len(), 1, "{:?}", report.changes);
+    assert_eq!(report.changes[0].category, Category::ReturnChanged);
+    assert_eq!(report.changes[0].verdict, Verdict::Breaking);
+}
