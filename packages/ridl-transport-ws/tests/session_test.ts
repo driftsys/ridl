@@ -9,6 +9,7 @@ import {
   ProtocolError,
   SessionError,
   SUBPROTOCOL,
+  SUBPROTOCOL_V1,
 } from "../mod.ts";
 import type {
   ConnectOptions,
@@ -21,6 +22,7 @@ import type {
   Target,
 } from "../mod.ts";
 import { FakeSocket } from "./fake_socket.ts";
+import { BLOCK_ONE, blockViolations } from "./block_vectors.ts";
 
 const HASH = Uint8Array.from({ length: 32 }, (_, i) => i);
 const SIGNAL: Target = { kind: Kind.Signal, iface: 1, ord: 2 };
@@ -56,10 +58,12 @@ function start(name = "veh.cabin", extra: Partial<ConnectOptions> = {}) {
   return { sockets, pending, notes, publishes, occurrences };
 }
 
-async function attached(): Promise<Harness & { session: Session }> {
+async function attached(
+  protocol = SUBPROTOCOL,
+): Promise<Harness & { session: Session }> {
   const h = start();
   const socket = h.sockets[0];
-  socket.open(SUBPROTOCOL);
+  socket.open(protocol);
   socket.deliver({ form: "attached", outcome: { outcome: "accepted" } });
   const session = await h.pending;
   return { ...h, socket, session };
@@ -134,15 +138,31 @@ async function subscribed(h: Harness & { session: Session }, t: Target) {
   await done;
 }
 
-Deno.test("connect sends attach with the catalog, frame version 1 and proto3", async () => {
+Deno.test("connect offers ridl-ws-v2 then ridl-ws-v1 and attaches with frame version 2 on ridl-ws-v2", async () => {
   const h = start();
   assert.equal(h.sockets.length, 1);
   const socket = h.sockets[0];
   assert.equal(socket.url, "ws://127.0.0.1:9000");
-  assert.deepEqual(socket.protocols, [SUBPROTOCOL]);
+  assert.deepEqual(socket.protocols, ["ridl-ws-v2", "ridl-ws-v1"]);
   assert.equal(socket.binaryType, "arraybuffer");
   assert.equal(socket.sent.length, 0);
-  socket.open(SUBPROTOCOL);
+  socket.open("ridl-ws-v2");
+  assert.deepEqual(frames(socket), [{
+    form: "attach",
+    frameVersion: 2,
+    encoding: 2,
+    hash: HASH,
+    name: "veh.cabin",
+  }]);
+  socket.deliver({ form: "attached", outcome: { outcome: "accepted" } });
+  await h.pending;
+  assert.deepEqual(h.notes, []);
+});
+
+Deno.test("the session attaches with frame version 1 when the server selects ridl-ws-v1", async () => {
+  const h = start();
+  const socket = h.sockets[0];
+  socket.open("ridl-ws-v1");
   assert.deepEqual(frames(socket), [{
     form: "attach",
     frameVersion: 1,
@@ -169,6 +189,74 @@ Deno.test("connect rejects with no-subprotocol and closes without a code when th
     note: "violation",
     violation: "no-subprotocol",
   }]);
+});
+
+Deno.test("a server that selects ridl-ws-v3 is a no-subprotocol violation", async () => {
+  const h = start();
+  const socket = h.sockets[0];
+  socket.open("ridl-ws-v3");
+  await assert.rejects(
+    h.pending,
+    (e: unknown) => e instanceof ProtocolError && e.cause === "no-subprotocol",
+  );
+  assert.deepEqual(socket.closes, [{}]);
+  assert.equal(socket.sent.length, 0);
+  assert.deepEqual(h.notes, [{
+    note: "violation",
+    violation: "no-subprotocol",
+  }]);
+});
+
+Deno.test("a block on a frame version 1 session is an unknown-code violation", async () => {
+  const h = await attached(SUBPROTOCOL_V1);
+  const reading = h.session.read(FIXED);
+  // Handled now, so that a failed assertion below is reported as itself.
+  const down = assert.rejects(reading, isFailure("down"));
+  h.socket.deliver(BLOCK_ONE);
+  assert.deepEqual(h.socket.closes, [{}]);
+  assert.deepEqual(h.notes, [{ note: "violation", violation: "unknown-code" }]);
+  await down;
+});
+
+Deno.test("a malformed form 11 message on a frame version 1 session is an unknown-code violation", async () => {
+  const lastLong = blockViolations().find((v) => v.id === "bad-last-long");
+  assert.ok(lastLong);
+  for (const message of [lastLong.message, Uint8Array.of(11)]) {
+    const h = await attached(SUBPROTOCOL_V1);
+    h.socket.deliver(message);
+    assert.deepEqual(h.socket.closes, [{}]);
+    assert.deepEqual(h.notes, [{
+      note: "violation",
+      violation: "unknown-code",
+    }]);
+  }
+  // Before `attached`: the block is refused as an unknown form, not as an
+  // unexpected one.
+  const h = start();
+  const socket = h.sockets[0];
+  socket.open(SUBPROTOCOL_V1);
+  socket.deliver(BLOCK_ONE);
+  await assert.rejects(
+    h.pending,
+    (e: unknown) => e instanceof ProtocolError && e.cause === "unknown-code",
+  );
+  assert.deepEqual(socket.closes, [{}]);
+  assert.deepEqual(h.notes, [{ note: "violation", violation: "unknown-code" }]);
+});
+
+Deno.test("a malformed form 11 message on a frame version 2 session is the decoder's violation", async () => {
+  const lastLong = blockViolations().find((v) => v.id === "bad-last-long");
+  assert.ok(lastLong);
+  const cases: [Uint8Array, string][] = [
+    [lastLong.message, "bad-block"],
+    [Uint8Array.of(11), "too-short"],
+  ];
+  for (const [message, violation] of cases) {
+    const h = await attached(SUBPROTOCOL);
+    h.socket.deliver(message);
+    assert.deepEqual(h.socket.closes, [{}]);
+    assert.deepEqual(h.notes, [{ note: "violation", violation }]);
+  }
 });
 
 Deno.test("connect rejects with AttachRefused catalog-mismatch and closed reports the refusal", async () => {

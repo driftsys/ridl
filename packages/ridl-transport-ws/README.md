@@ -1,9 +1,16 @@
 # @driftsys/ridl-transport-ws
 
 The client side of the WebSocket binding of the ridl frame. The package opens a
-WebSocket with the subprotocol `ridl-ws-v1`, sends and receives frames, and
-carries each payload as bytes without reading them. The caller encodes and
-decodes payloads.
+WebSocket that offers the subprotocols `ridl-ws-v2` and `ridl-ws-v1`, in that
+order, sends and receives frames, and carries each payload as bytes without
+reading them. The caller encodes and decodes payloads.
+
+The session speaks the frame version of the subprotocol the server selects: 2 on
+`ridl-ws-v2` and 1 on `ridl-ws-v1`, so the package also attaches to a server
+that serves frame version 1 only. Frame version 2 is frame version 1 plus the
+`block` form, which carries a `fixed` payload that does not fit one message in
+parts (driftsys/ridl#1129). On a session of frame version 1, a `block` is a
+protocol violation.
 
 The package runs on Deno and in a browser. It uses only the platform
 `WebSocket`, so it needs no other runtime. It is not yet published.

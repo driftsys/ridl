@@ -21,6 +21,7 @@ import {
   FRAME_VERSION,
   Kind,
   SUBPROTOCOL,
+  SUBPROTOCOL_V1,
 } from "./frame.ts";
 import type { EncodingName, Envelope, Frame, Reason, Target } from "./frame.ts";
 import {
@@ -174,8 +175,12 @@ export interface Ended {
 
 /**
  * Opens a session: validates the catalog name and hash, opens the connection
- * with the subprotocol `ridl-ws-v1`, sends the `attach` and resolves once the
- * provider answers `attached(accepted)`.
+ * offering the subprotocols `ridl-ws-v2` and `ridl-ws-v1`, in that order,
+ * sends the `attach` and resolves once the provider answers
+ * `attached(accepted)`. The `attach` carries the frame version of the
+ * subprotocol the server selected: 2 on `ridl-ws-v2`, 1 on `ridl-ws-v1`. On a
+ * session of frame version 1, a message of the `block` form is a violation
+ * `unknown-code`, as an unknown form.
  *
  * The promise rejects with:
  * - an `AttachError` or a `RangeError` from `attach`, before any socket is
@@ -196,14 +201,16 @@ export function connect(
   url: string,
   options: ConnectOptions,
 ): Promise<Session> {
-  let first: Frame;
+  let first: AttachFrame;
   try {
+    // `attach` builds an `attach` frame; its frame version is replaced by the
+    // one of the selected subprotocol when the connection opens.
     first = attach(
       FRAME_VERSION,
       encodingTag(options.encoding ?? "proto3"),
       options.catalog.hash,
       options.catalog.name,
-    );
+    ) as AttachFrame;
   } catch (e) {
     return Promise.reject(e);
   }
@@ -211,7 +218,7 @@ export function connect(
     ((u: string, p: string[]) => new WebSocket(u, p));
   let socket: WebSocket;
   try {
-    socket = create(url, [SUBPROTOCOL]);
+    socket = create(url, [SUBPROTOCOL, SUBPROTOCOL_V1]);
   } catch (e) {
     // For example a `SyntaxError` for an invalid URL.
     return Promise.reject(e);
@@ -234,6 +241,11 @@ type Waiting =
     resolve: (sample: Sample) => void;
     reject: (e: SessionError) => void;
   };
+
+type AttachFrame = Extract<Frame, { form: "attach" }>;
+
+/** The form code of `block`, which frame version 1 does not have. */
+const FORM_BLOCK = 11;
 
 interface Opening {
   resolve: (session: Session) => void;
@@ -311,7 +323,12 @@ export class Session {
   #socket: WebSocket;
   #options: ConnectOptions;
   #opening: Opening | null;
-  #attachFrame: Frame;
+  #attachFrame: AttachFrame;
+  /**
+   * The frame version of the session: 2 on `ridl-ws-v2`, 1 on `ridl-ws-v1`.
+   * Set when the connection opens.
+   */
+  #frameVersion = FRAME_VERSION;
   #attached = false;
   #ended = false;
   #closeSent = false;
@@ -336,7 +353,7 @@ export class Session {
   /** @internal Use {@link connect}. */
   constructor(
     socket: WebSocket,
-    attachFrame: Frame,
+    attachFrame: AttachFrame,
     options: ConnectOptions,
     opening: Opening,
   ) {
@@ -570,11 +587,18 @@ export class Session {
 
   #onOpen(): void {
     if (this.#ended) return;
-    if (this.#socket.protocol !== SUBPROTOCOL) {
-      this.#violate("no-subprotocol");
-      return;
+    switch (this.#socket.protocol) {
+      case SUBPROTOCOL:
+        this.#frameVersion = FRAME_VERSION;
+        break;
+      case SUBPROTOCOL_V1:
+        this.#frameVersion = 1;
+        break;
+      default:
+        this.#violate("no-subprotocol");
+        return;
     }
-    this.#send(this.#attachFrame);
+    this.#send({ ...this.#attachFrame, frameVersion: this.#frameVersion });
   }
 
   #onMessage(event: MessageEvent): void {
@@ -583,7 +607,14 @@ export class Session {
       this.#violate("text-message");
       return;
     }
-    const decoded = decode(new Uint8Array(event.data as ArrayBuffer));
+    const message = new Uint8Array(event.data as ArrayBuffer);
+    // Frame version 1 has no `block` form: the form code is unknown there,
+    // whatever follows it and whether or not the session is attached yet.
+    if (this.#frameVersion === 1 && message[0] === FORM_BLOCK) {
+      this.#violate("unknown-code");
+      return;
+    }
+    const decoded = decode(message);
     if (!decoded.ok) {
       if (decoded.class === "violation") {
         this.#violate(decoded.violation);

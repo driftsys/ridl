@@ -16,9 +16,11 @@
  */
 
 /** The frame version this binding carries. */
-export const FRAME_VERSION = 1;
-/** The WebSocket subprotocol name of binding version 1. */
-export const SUBPROTOCOL = "ridl-ws-v1";
+export const FRAME_VERSION = 2;
+/** The WebSocket subprotocol name of binding version 2. */
+export const SUBPROTOCOL = "ridl-ws-v2";
+/** The subprotocol name of binding version 1, which a server of frame version 1 selects. */
+export const SUBPROTOCOL_V1 = "ridl-ws-v1";
 /**
  * The smallest message size limit a receiver may configure: the largest header
  * of any message, an `attach` with a 255-byte name.
