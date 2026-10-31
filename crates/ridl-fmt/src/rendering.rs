@@ -120,11 +120,25 @@ impl<'a> Renderer<'a> {
 
     fn text(&mut self, text: &'a str) {
         if let Some((line, rest)) = text.split_once('\n') {
-            self.append(line);
+            self.append_line(line);
             self.prepend(Instruction::Text(rest));
             self.finish_line();
         } else {
-            self.append(text);
+            self.append_line(text);
+        }
+    }
+
+    /// Appends one physical line of text; a line comment inside it counts as
+    /// a trailing comment for the line's code width.
+    fn append_line(&mut self, line: &str) {
+        match super::line_comment_start(line) {
+            Some(at) => {
+                let code = line[..at].trim_end();
+                self.append(code);
+                self.state.code_columns.get_or_insert(self.state.columns);
+                self.append(&line[code.len()..]);
+            }
+            None => self.append(line),
         }
     }
 

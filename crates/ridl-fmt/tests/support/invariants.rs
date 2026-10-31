@@ -1,6 +1,7 @@
 //! Test-only invariant streams. D-4 normalizes only an interaction's sibling
-//! Timing/AttrBlock pair; all other nodes and code tokens retain their order.
-//! Comments retain their order among themselves (see [`content_tokens`]).
+//! Timing/AttrBlock pair; all other nodes and tokens retain their order, except
+//! that line comments retain their order among themselves (see
+//! [`content_tokens`]).
 
 use ridl_syntax::{Profile, SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{NodeOrToken, WalkEvent};
@@ -53,11 +54,13 @@ fn events(text: &str, profile: Profile) -> Vec<WalkEvent<Element>> {
     events
 }
 
-/// The content token stream: the code tokens in order, then the comments in
-/// order. A comment keeps its place among the comments but not among the code
-/// tokens, because a line comment on the first line of a declaration stays on
-/// that line when the formatter breaks the declaration over several lines
-/// (ADR-0024 decision 2), which moves it before the code of the later lines.
+/// The content token stream: every token but the line comments in order, then
+/// the line comments in order. A line comment keeps its place among the line
+/// comments but not among the other tokens, because a line comment on the
+/// first line of a declaration stays on that line when the formatter breaks
+/// the declaration over several lines (ADR-0024 decision 2), which moves it
+/// before the code of the later lines. Doc comments and block comments keep
+/// their places.
 pub(crate) fn content_tokens(text: &str, profile: Profile) -> Vec<(SyntaxKind, String)> {
     let (comments, code): (Vec<_>, Vec<_>) = events(text, profile)
         .into_iter()
@@ -74,7 +77,7 @@ pub(crate) fn content_tokens(text: &str, profile: Profile) -> Vec<(SyntaxKind, S
             }
             _ => None,
         })
-        .partition(|(kind, _)| kind.is_trivia());
+        .partition(|(kind, _)| *kind == SyntaxKind::LineComment);
     code.into_iter().chain(comments).collect()
 }
 

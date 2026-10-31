@@ -164,6 +164,61 @@ fn overlong_declaration_keeps_its_end_of_line_directive() {
     }
 }
 
+#[test]
+fn directive_after_a_member_on_the_first_line_moves_to_the_opening_brace() {
+    for (source, profile, opening) in [
+        (
+            "package demo\nstruct S { a: A // lint: allow missing-docs -- s\n  b: B\n}\n",
+            Profile::Typl,
+            "struct S {",
+        ),
+        (
+            "package demo\nstruct S { a: A, b: B // lint: allow missing-docs -- s\n}\n",
+            Profile::Typl,
+            "struct S {",
+        ),
+        (
+            "package demo\ninterface D { command c(a: u32) // lint: allow missing-docs -- d\n}\n",
+            Profile::Ridl,
+            "interface D {",
+        ),
+    ] {
+        let before = identities(source, profile);
+        assert_eq!(before.len(), 1, "one directive is read: {before:?}");
+        assert_eq!(
+            before[0].1,
+            Some(0),
+            "the directive names the declaration: {before:?}"
+        );
+        for width in WIDTHS {
+            let formatted = format_ok(source, profile, width, "directive after a member");
+            let lines = directive_lines(&formatted);
+            assert_eq!(lines.len(), 1, "width {width}:\n{formatted}");
+            assert!(
+                lines[0].0.starts_with(opening),
+                "the directive is on the opening-brace line at width {width}:\n{formatted}"
+            );
+            assert_eq!(
+                identities(&formatted, profile),
+                before,
+                "width {width}:\n{formatted}"
+            );
+        }
+    }
+}
+
+#[test]
+fn plain_comment_after_a_member_on_the_first_line_stays_with_the_member() {
+    let source = "package demo\nstruct S { a: A // note\n  b: B\n}\n";
+    for width in WIDTHS {
+        let formatted = format_ok(source, Profile::Typl, width, "plain comment after a member");
+        assert!(
+            formatted.contains("\n  a: A // note\n"),
+            "the comment stays on the member's line at width {width}:\n{formatted}"
+        );
+    }
+}
+
 /// The parser corpus files for the three implemented profiles, sorted by name.
 fn corpus_files() -> Vec<PathBuf> {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../ridl-syntax/test_data/parser/ok");
@@ -199,14 +254,16 @@ fn first_significant_token(node: &SyntaxNode) -> Option<SyntaxToken> {
 /// line. Each directive has a distinct reason, so a swap of two targets is
 /// visible in the identity list.
 ///
-/// A carrier that starts in the middle of a line (a parameter, an inline
-/// member) gets its own-line directive by breaking the line before the
-/// carrier, so the outermost carrier's first line ends where the first such
-/// break after it starts. A line that ends with a line comment gets the
-/// directive in front of that comment, which becomes the tail of the reason.
-/// A line whose end lies inside a token that spans lines gets no end-of-line
-/// directive.
-fn with_directives(text: &str, profile: Profile) -> String {
+/// With `break_lines`, a carrier that starts in the middle of a line (a
+/// parameter, an inline member) gets its own-line directive by breaking the
+/// line before the carrier, so the outermost carrier's first line ends where
+/// the first such break after it starts. Without it, such a carrier gets no
+/// own-line directive, and the end-of-line directive follows every member on
+/// the outer declaration's first line. A line that ends with a line comment
+/// gets the directive in front of that comment, which becomes the tail of the
+/// reason. A line whose end lies inside a token that spans lines gets no
+/// end-of-line directive.
+fn with_directives(text: &str, profile: Profile, break_lines: bool) -> String {
     let root = parse(text, profile).syntax();
     // The start offset of each carrier, and the offsets where a line is broken
     // before a carrier that starts in the middle of it.
@@ -223,11 +280,14 @@ fn with_directives(text: &str, profile: Profile) -> String {
             continue;
         };
         let start = usize::from(first.text_range().start());
-        starts.insert(start);
         let line_start = text[..start].rfind('\n').map_or(0, |i| i + 1);
         if !text[line_start..start].trim().is_empty() {
+            if !break_lines {
+                continue;
+            }
             breaks.insert(start);
         }
+        starts.insert(start);
         let end = text[start..].find('\n').map_or(text.len(), |i| start + i);
         lines
             .entry(end)
@@ -301,12 +361,20 @@ fn with_directives(text: &str, profile: Profile) -> String {
 #[test]
 fn directive_targets_survive_formatting_over_the_corpus() {
     let mut failures = Vec::new();
-    for path in corpus_files() {
-        let name = path.file_name().unwrap().to_str().unwrap();
+    for (path, break_lines) in corpus_files()
+        .into_iter()
+        .flat_map(|path| [(path.clone(), true), (path, false)])
+    {
+        let name = &format!(
+            "{}{}",
+            path.file_name().unwrap().to_str().unwrap(),
+            if break_lines { "" } else { " (unbroken lines)" }
+        );
         let profile = profile_of_path(&path).unwrap();
         let source = with_directives(
             &fs::read_to_string(&path).expect("read corpus file"),
             profile,
+            break_lines,
         );
         let before = identities(&source, profile);
         assert!(!before.is_empty(), "`{name}` carries directives");

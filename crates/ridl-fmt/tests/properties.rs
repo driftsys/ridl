@@ -10,10 +10,11 @@
 //!   **and comments**. Comparing it catches a dropped or renamed identifier, a
 //!   mutated literal, and a dropped comment — none of which a node-kind-only
 //!   comparison could see. Comment text is compared after trimming trailing
-//!   whitespace, which the formatter strips as insignificant. The comments are
-//!   compared in their own order, after the code tokens, because a line
-//!   comment on the first line of a declaration stays on that line when the
-//!   declaration is broken over several lines (ADR-0024 decision 2).
+//!   whitespace, which the formatter strips as insignificant. The line
+//!   comments are compared in their own order, after the other tokens,
+//!   because a line comment on the first line of a declaration stays on that
+//!   line when the declaration is broken over several lines (ADR-0024
+//!   decision 2); doc comments and block comments keep their places.
 //!
 //! The corpus is reached by a path relative to this crate's manifest, so the
 //! two crates stay decoupled at the filesystem level.

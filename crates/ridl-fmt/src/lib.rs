@@ -284,27 +284,35 @@ fn layout_container(
 }
 
 /// The line comment on the first source line of `node`, with its trailing
-/// whitespace trimmed, when the node has one in its own header. A comment
-/// after the first body member, or after the first attribute of an attribute
-/// block, belongs to that member or attribute, which is laid out on a line of
-/// its own and keeps its comment.
+/// whitespace trimmed, when the node has one that belongs to its own line. A
+/// comment after the first attribute of an attribute block belongs to that
+/// attribute, and a comment after the first body member belongs to that member
+/// unless the comment is a lint directive: a directive names the outermost
+/// declaration starting on its line (ADR-0024 decision 2), so a directive
+/// after a member on the declaration's first line moves to the line of the
+/// opening brace, where the declaration still is after formatting. Any `{`
+/// before the first line break is the node's own or nested in a member, so a
+/// `{` always starts the body region.
 fn first_line_comment(node: &SyntaxNode) -> Option<String> {
     let mut in_body = false;
+    let mut after_member = false;
     let mut after_attribute = false;
     for element in node.descendants_with_tokens() {
         match element {
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::LineComment => {
-                return (!after_attribute).then(|| token.text().trim_end().to_string());
+                let text = token.text().trim_end();
+                if after_attribute || (after_member && !is_lint_directive(text)) {
+                    return None;
+                }
+                return Some(text.to_string());
             }
             NodeOrToken::Token(token) if line_breaks(token.text()) > 0 => return None,
-            NodeOrToken::Token(token) if token.kind() == SyntaxKind::LBrace => {
-                in_body = token.parent().as_ref() == Some(node);
-            }
+            NodeOrToken::Token(token) if token.kind() == SyntaxKind::LBrace => in_body = true,
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::RBracket => {
                 after_attribute = false;
             }
             NodeOrToken::Token(_) => {}
-            NodeOrToken::Node(_) if in_body => return None,
+            NodeOrToken::Node(_) if in_body => after_member = true,
             NodeOrToken::Node(child) if child.kind() == SyntaxKind::Attribute => {
                 after_attribute = true;
             }
@@ -312,6 +320,39 @@ fn first_line_comment(node: &SyntaxNode) -> Option<String> {
         }
     }
     None
+}
+
+/// The byte offset where a line comment starts in `line`, one physical line of
+/// verbatim text, outside a string literal and outside a block comment. The
+/// renderers leave such a comment out of the line's code width, as they do a
+/// trailing comment, so a declaration kept verbatim because of a comment is
+/// broken the same as one without it.
+fn line_comment_start(line: &str) -> Option<usize> {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    let mut in_string = false;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\\' if in_string => i += 1,
+            b'"' => in_string = !in_string,
+            b'/' if !in_string && bytes.get(i + 1) == Some(&b'/') => return Some(i),
+            b'/' if !in_string && bytes.get(i + 1) == Some(&b'*') => {
+                i += line[i + 2..].find("*/").map_or(line.len(), |end| end + 4);
+                continue;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Whether a line comment's text is a lint directive: `//`, optional
+/// whitespace, then `lint:` (ADR-0024 decision 2).
+fn is_lint_directive(comment: &str) -> bool {
+    comment
+        .strip_prefix("//")
+        .is_some_and(|rest| rest.trim_start().starts_with("lint:"))
 }
 
 /// Whether the source text of `node` spans more than one line.
@@ -326,14 +367,22 @@ fn spans_lines(node: &SyntaxNode) -> bool {
 /// ends with it keeps its code. The lines are unchanged when the comment is on
 /// `lines[first]` already, or on none of the later lines.
 fn pin_to_first_line(lines: &mut Vec<String>, first: usize, comment: &str) {
-    let Some(index) = lines.iter().skip(first + 1).position(|line| {
-        let line = line.trim_end();
-        line.ends_with(comment)
-            && line[..line.len() - comment.len()]
-                .chars()
-                .next_back()
-                .is_none_or(char::is_whitespace)
-    }) else {
+    // The comment is the first line comment of the node, so when the first
+    // line ends with its text the comment is there already, and otherwise the
+    // first later line that ends with its text holds it: no earlier line can
+    // end with a line comment's text, since a string literal ends with a quote
+    // and a block comment with `*/`.
+    if lines
+        .get(first)
+        .is_some_and(|line| line.trim_end().ends_with(comment))
+    {
+        return;
+    }
+    let Some(index) = lines
+        .iter()
+        .skip(first + 1)
+        .position(|line| line.trim_end().ends_with(comment))
+    else {
         return;
     };
     let index = first + 1 + index;
@@ -368,23 +417,42 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
     let mut pending: Vec<PendingComment> = Vec::new();
     let mut nl_run = 0usize;
     let mut can_trail = false;
+    // The first block of the current source line: a lint directive after a
+    // later block of the line trails this one, the outermost declaration
+    // starting on the directive's line (ADR-0024 decision 2), including after
+    // a machine block.
+    let mut line_first: Option<usize> = None;
     for element in elements {
         match element {
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::Whitespace => {
-                nl_run += line_breaks(token.text());
+                let breaks = line_breaks(token.text());
+                nl_run += breaks;
+                if breaks > 0 {
+                    line_first = None;
+                }
             }
             NodeOrToken::Token(token) if is_comment(token.kind()) => {
                 let text = token.text().trim_end().to_string();
-                if can_trail && nl_run == 0 && pending.is_empty() {
-                    if let Some(last) = blocks.last_mut() {
-                        last.trailing.push(text);
-                    }
+                let trails = if nl_run > 0 || !pending.is_empty() {
+                    None
+                } else if token.kind() == SyntaxKind::LineComment && is_lint_directive(&text) {
+                    line_first
+                } else if can_trail {
+                    blocks.len().checked_sub(1)
+                } else {
+                    None
+                };
+                if let Some(index) = trails {
+                    blocks[index].trailing.push(text);
                 } else {
                     pending.push(PendingComment {
                         blank_before: nl_run >= 2,
                         text,
                     });
                     can_trail = false;
+                }
+                if line_breaks(token.text()) > 0 {
+                    line_first = None;
                 }
                 nl_run = 0;
             }
@@ -407,6 +475,9 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
                     node: Some(node.clone()),
                     trailing: Vec::new(),
                 });
+                if line_first.is_none() {
+                    line_first = Some(blocks.len() - 1);
+                }
                 nl_run = 0;
                 can_trail = node.kind() != SyntaxKind::MachineDef;
             }
@@ -1288,6 +1359,12 @@ impl Rendering {
     }
 
     fn trailing_comment(&mut self, comment: &str) {
+        self.record_code_columns();
+        self.push(" ");
+        self.push(comment);
+    }
+
+    fn record_code_columns(&mut self) {
         let columns = self
             .text
             .rsplit('\n')
@@ -1296,13 +1373,30 @@ impl Rendering {
             .chars()
             .count();
         self.code_columns.entry(self.line).or_insert(columns);
-        self.push(" ");
-        self.push(comment);
+    }
+
+    /// Pushes text line by line; a line comment inside a line counts as a
+    /// trailing comment for the line's code width.
+    fn push_text(&mut self, text: &str) {
+        for (i, line) in text.split('\n').enumerate() {
+            if i > 0 {
+                self.push("\n");
+            }
+            match line_comment_start(line) {
+                Some(at) => {
+                    let code = line[..at].trim_end();
+                    self.push(code);
+                    self.record_code_columns();
+                    self.push(&line[code.len()..]);
+                }
+                None => self.push(line),
+            }
+        }
     }
 
     fn layout(&mut self, layout: &Layout, broken: &HashSet<usize>, inside_inline: bool) {
         match layout {
-            Layout::Text(text) => self.push(text),
+            Layout::Text(text) => self.push_text(text),
             Layout::TrailingComment(text) => self.trailing_comment(text),
             Layout::LineBreak => {
                 let indent = self.current_indent();
@@ -3467,6 +3561,81 @@ mod tests {
             "package p\n\nservice  veh.body /* header */ { // brace\n  signal s: T\n}\n",
             Profile::Ridl,
             &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn a_comment_after_the_opening_bracket_stays_on_the_declaration_line() {
+        assert_profile_format(
+            "package p\ninterface I {\n  command c(x: X) [ // c\n    require x > 0\n  ]\n}\n",
+            "package p\n\ninterface I {\n  command c(x: X) [ // c\n    require x > 0\n  ]\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn a_brace_comment_stays_on_the_first_line_of_a_broken_header() {
+        assert_profile_format(
+            "package p\ncomponent Backend [ external ] { // c\n  requires X\n}\n",
+            "package p\n\ncomponent Backend [ // c\n  external\n] {\n  requires X\n}\n",
+            Profile::Rsdl,
+            &FormatOptions {
+                max_line_length: Some(20),
+            },
+        );
+    }
+
+    #[test]
+    fn a_directive_after_a_member_on_the_first_line_moves_to_the_brace_line() {
+        // The first directive moves; the member's own directive, with the same
+        // text, stays with its member.
+        assert_width_format(
+            "package p\nstruct S { a: A // lint: allow x -- r\n  b: B // lint: allow x -- r\n}\n",
+            "package p\n\nstruct S { // lint: allow x -- r\n  a: A\n  b: B // lint: allow x -- r\n}\n",
+            &FormatOptions::default(),
+        );
+        assert_width_format(
+            "package p\nstruct S { a: A // note\n  b: B\n}\n",
+            "package p\n\nstruct S {\n  a: A // note\n  b: B\n}\n",
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn a_directive_after_a_second_member_on_a_line_trails_the_first_member() {
+        // The directive names `a`, the outermost declaration starting on its
+        // line; a plain comment there stays with `b`.
+        assert_width_format(
+            "package p\nstruct S {\n  a: A, b: B // lint: allow x -- r\n  c: C, d: D // note\n}\n",
+            "package p\n\nstruct S {\n  a: A // lint: allow x -- r\n  b: B\n  c: C\n  d: D // note\n}\n",
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn a_directive_after_a_machine_block_trails_the_machine() {
+        // A plain comment after a machine block leads the next member; a
+        // directive after a single-line machine names that machine.
+        assert_profile_format(
+            "package p\ndeployment D for S {\n  machine A { First } // lint: allow x -- r\n  machine B { Second } // note\n  machine C {}\n}\n",
+            "package p\n\ndeployment D for S {\n  machine A { // lint: allow x -- r\n    First\n  }\n  machine B {\n    Second\n  }\n  // note\n  machine C {}\n}\n",
+            Profile::Rsdl,
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
+    fn a_comment_kept_verbatim_does_not_count_toward_the_line_width() {
+        // The tuple with a comment is kept verbatim; the comment does not make
+        // the parameter list break, so the first pass is a fixed point.
+        assert_profile_format(
+            "package p\ninterface I {\n  query getMinMax(window: Duration): ( // lint: allow x -- r\n    min: Speed,\n    max: Speed\n  )\n}\n",
+            "package p\n\ninterface I {\n  query getMinMax(window: Duration): ( // lint: allow x -- r\n    min: Speed,\n    max: Speed\n  )\n}\n",
+            Profile::Ridl,
+            &FormatOptions {
+                max_line_length: Some(45),
+            },
         );
     }
 
