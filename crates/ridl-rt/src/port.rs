@@ -434,8 +434,9 @@ pub struct ClaimId(pub u64);
 ///   [`abort`](StreamCaller::abort) and
 ///   `CallError::Transport(Transport::Interrupted)`; a receiver refuses what it
 ///   received with `abort` and the refusal's outcome. A
-///   [`forget`](Caller::forget) stops every stream of the call with
-///   `Transport::Interrupted`.
+///   [`forget`](Caller::forget) stops every stream of the call that was not
+///   ended with `Transport::Interrupted`, and keeps every stream its producer
+///   ended; [`StreamHandler`] states what the provider reads afterwards.
 ///
 /// Each method has two layers of error, as [`Caller::reply`] has. The outer
 /// error is the port call itself: [`ReadError`] for a pull and the
@@ -499,10 +500,25 @@ pub trait StreamCaller: Caller {
 /// after that travels on the stream, through `abort_claim`, and reaches the
 /// producer through its next push or end; the acknowledgment is not changed.
 ///
-/// After the caller forgets the call, [`pull_claim`](StreamHandler::pull_claim)
-/// answers `Pull::Failed(CallError::Transport(Transport::Interrupted))` and
-/// [`push_claim`](StreamHandler::push_claim)
-/// `PushError::Failed(CallError::Transport(Transport::Interrupted))`.
+/// A caller's [`forget`](Caller::forget) follows the same rules whether the
+/// claim was settled before it or not:
+///
+/// - A stream whose producer ended it is kept: the provider still pulls it,
+///   chunk by chunk, up to [`Pull::End`].
+/// - Every stream that was not ended stops with
+///   `CallError::Transport(Transport::Interrupted)`: the provider pulls the
+///   chunks pushed before the forget, then
+///   `Pull::Failed(CallError::Transport(Transport::Interrupted))`.
+/// - [`push_claim`](StreamHandler::push_claim) and
+///   [`end_claim`](StreamHandler::end_claim) on the reply stream answer
+///   `PushError::Failed(CallError::Transport(Transport::Interrupted))`; an
+///   `end_claim` of a claim still held settles it all the same.
+/// - The runtime keeps the call, and the slot it takes in the caller's call
+///   table, until the provider has pulled every stream parameter to
+///   [`Pull::End`] or [`Pull::Failed`], or its handler is gone, so a caller may
+///   find the table full sooner. Once the call is released, its claim is no
+///   longer known, and a stream operation on it answers
+///   `Contract::UnknownInteraction`.
 ///
 /// The errors have the two layers of [`StreamCaller`]'s.
 pub trait StreamHandler: Handler {

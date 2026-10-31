@@ -506,12 +506,23 @@ streams are read, so the entry records the handler that settled it. A settlement
 error, after the chunks already pushed; `end_claim` on the reply stream of a
 claim still held is a settlement `Ok` with no reply bytes, and `abort_claim` on
 it a settlement with the error. A `forget` stops every stream of the call that
-has not ended with `Transport::Interrupted`, and a stream first named after it
-starts stopped the same way. After every settlement and every forget that the
-table does not answer `Unknown`, the store takes the slot's `Stream` wakers with
-`Table::take_streams`, and a reclaim also takes the provider's wakers, before
-the entry, and the streams with it, are dropped. The stream cases are the
-`streams` module of the `ridl-rt-conformance` suite this runtime runs.
+has not ended with `Transport::Interrupted`, keeps every stream its producer
+ended, and a stream first named after it starts stopped the same way. After the
+forget, the provider's push or end of the reply stream answers
+`PushError::Failed(Interrupted)`. **A forget waits for the provider's streams**:
+when a handler holds or settled the call and the provider has not yet pulled
+every stream parameter to `End` or `Failed`, the store marks the call forgotten
+on its entry and does not tell the table, so the slot stays taken; the caller's
+correlation already answers as forgotten, and its `Outcome` and `Stream` waiters
+are woken. The provider's pull that reads the last of those ends, a settlement
+after it, or the handler's drop completes the forget through `Table::forget`.
+This holds a slot no longer than the provider's reading, and uses no storage
+beyond the slot, at the cost of a caller finding the table full sooner. After
+every settlement and every forget that the table does not answer `Unknown`, the
+store takes the slot's `Stream` wakers with `Table::take_streams`, and a reclaim
+also takes the provider's wakers, before the entry, and the streams with it, are
+dropped. The stream cases are the `streams` module of the `ridl-rt-conformance`
+suite this runtime runs.
 
 **An offered claim (2026-09-28, driftsys/ridl#569).** A call whose argument
 bytes do not fit the buffer passed to `next_claim` is offered rather than taken:

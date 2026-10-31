@@ -117,6 +117,8 @@ struct StreamState {
     stopped: Option<(CallError, Side)>,
     /// The provider's `Interest::ClaimStream` waker.
     claim_waker: Option<Waker>,
+    /// `true` once the provider pulled `End` or `Failed` from the stream.
+    drained: bool,
 }
 
 impl StreamState {
@@ -273,9 +275,21 @@ struct CallEntry {
     /// The call's streams, by stream number. A stream has an entry from the
     /// first operation that names it.
     streams: BTreeMap<u8, StreamState>,
+    /// `true` while the caller's `forget` waits for the provider: the call
+    /// is forgotten, but the table is not told until the provider has pulled
+    /// every stream parameter to its end or its handler is dropped, so the
+    /// slot is not reclaimed before then. `forgotten` is set as well.
+    pending_forget: bool,
 }
 
 impl CallEntry {
+    /// Whether the provider still has a stream parameter to pull to its end.
+    fn undrained(&self) -> bool {
+        self.streams
+            .iter()
+            .any(|(no, stream)| *no != REPLY_STREAM.0 && !stream.drained)
+    }
+
     /// Stream `s` of the call, made empty when nothing has named it yet. A
     /// stream first named after the caller forgot the call starts stopped
     /// with `Transport::Interrupted`, as the forget stopped every stream the
@@ -749,6 +763,7 @@ impl Store {
                 claim: None,
                 settled_by: None,
                 streams: BTreeMap::new(),
+                pending_forget: false,
             },
         );
         self.pending.push_back(c);
@@ -766,13 +781,28 @@ impl Store {
     /// correlation — an unknown or forgotten one — because no outcome will
     /// ever be recorded for it. The table decides which.
     pub(crate) fn wait_outcome(&mut self, c: Correlation, waker: &Waker, wake: &mut Vec<Waker>) {
+        if self.forgotten_pending(c) {
+            wake.push(waker.clone());
+            return;
+        }
         wake.extend(self.table.wake_on(c, waker));
+    }
+
+    /// Whether `c` is a call whose `forget` waits for the provider: the
+    /// table still holds it, but the caller released it.
+    fn forgotten_pending(&self, c: Correlation) -> bool {
+        self.calls
+            .get(&Calls::slot(c))
+            .is_some_and(|entry| entry.correlation == c && entry.pending_forget)
     }
 
     pub(crate) fn ack(&self, c: Correlation) -> Option<Result<(), CallError>> {
         // The table answers `None` for a call in flight, forgotten, or not
         // held; a correlation it answers for has its entry here.
         let outcome = self.table.outcome(c)?;
+        if self.forgotten_pending(c) {
+            return None;
+        }
         if self.entry(c).kind != CallKind::Command {
             // A query's correlation always answers `None` here, which
             // `Caller::ack` states: a query's outcome comes from `reply`.
@@ -786,6 +816,9 @@ impl Store {
         c: Correlation,
         out: &mut [u8],
     ) -> Result<Option<Result<usize, CallError>>, ReadError> {
+        if self.forgotten_pending(c) {
+            return Ok(None);
+        }
         match self.table.outcome(c) {
             None => Ok(None),
             Some(Err(error)) => Ok(Some(Err(error))),
@@ -838,6 +871,9 @@ impl Store {
     /// wakes every caller's `Slot` waiter, as any reclaim does, and no
     /// handler's `Claim` waiter, because it adds no call to claim.
     pub(crate) fn forget(&mut self, c: Correlation, wake: &mut Vec<Waker>) {
+        if self.forgotten_pending(c) {
+            return;
+        }
         self.interrupt_streams(c, wake);
         let waiting_at = if self.offered(c) {
             None
@@ -849,6 +885,56 @@ impl Store {
             self.withdraw(c, wake);
             return;
         }
+        if self.defer_forget(c, wake) {
+            return;
+        }
+        self.forget_in_table(c, wake);
+    }
+
+    /// Defers the `forget` of a call that a handler holds or settled while
+    /// the provider has a stream parameter to pull to its end: the call is
+    /// marked forgotten here and not in the table, so its slot stays taken.
+    /// Its `Outcome` waiter and its `Stream` waiters are woken now, as a
+    /// forget wakes them. Answers whether it deferred.
+    fn defer_forget(&mut self, c: Correlation, wake: &mut Vec<Waker>) -> bool {
+        let slot = Calls::slot(c);
+        let Some(entry) = self.calls.get(&slot) else {
+            return false;
+        };
+        let held = entry
+            .claim
+            .is_some_and(|claim| self.claims.contains_key(&claim))
+            || entry.settled_by.is_some();
+        if entry.correlation != c || entry.forgotten || !held || !entry.undrained() {
+            return false;
+        }
+        let entry = self.calls.get_mut(&slot).expect("looked up above");
+        entry.forgotten = true;
+        entry.pending_forget = true;
+        // The table hands back the stored `Outcome` waker when another is
+        // registered in its place; the no-op waker left behind wakes nothing.
+        wake.extend(self.table.wake_on(c, Waker::noop()));
+        wake.extend(self.table.take_streams(slot));
+        true
+    }
+
+    /// Completes a deferred `forget` once the provider has pulled every
+    /// stream parameter to its end.
+    fn release_if_drained(&mut self, slot: usize, wake: &mut Vec<Waker>) {
+        let Some(entry) = self.calls.get_mut(&slot) else {
+            return;
+        };
+        if !entry.pending_forget || entry.undrained() {
+            return;
+        }
+        entry.pending_forget = false;
+        let c = entry.correlation;
+        self.forget_in_table(c, wake);
+    }
+
+    /// The table's part of a `forget`: a settled call's slot is reclaimed,
+    /// and a call in flight is marked, so that its settlement reclaims it.
+    fn forget_in_table(&mut self, c: Correlation, wake: &mut Vec<Waker>) {
         match self.table.forget(c) {
             Forgotten::Reclaimed => self.reclaimed(c, wake),
             Forgotten::Marked(waker) => {
@@ -989,6 +1075,7 @@ impl Store {
     /// released, as `close_source` explains.
     pub(crate) fn close_handler(&mut self, id: usize, wake: &mut Vec<Waker>) -> Option<Waiters> {
         let waiters = self.handlers.remove(&id).map(|state| state.waiters);
+        let mut released = Vec::new();
         // The dropped handler's `ClaimStream` wakers, of the claims it holds
         // and of those it settled, are taken so that none is dropped under
         // the lock; a settled claim's streams are no longer addressable.
@@ -1000,11 +1087,19 @@ impl Store {
             if holds || entry.settled_by == Some(id) {
                 if entry.settled_by == Some(id) {
                     entry.settled_by = None;
+                    if entry.pending_forget {
+                        // No provider is left to pull the streams.
+                        entry.pending_forget = false;
+                        released.push(entry.correlation);
+                    }
                 }
                 for stream in entry.streams.values_mut() {
                     wake.extend(stream.claim_waker.take());
                 }
             }
+        }
+        for c in released {
+            self.forget_in_table(c, wake);
         }
         let held: Vec<u64> = self
             .claims
@@ -1303,6 +1398,7 @@ impl Store {
                 }
                 wake.extend(waker);
                 wake.extend(self.table.take_streams(Calls::slot(c)));
+                self.release_if_drained(Calls::slot(c), wake);
             }
             // The caller released it while it was in flight. It was still
             // presented and is still settled; nothing can read the outcome, so
@@ -1372,13 +1468,18 @@ impl Store {
             .expect("a held call has its entry");
         let stream = entry.stream(s);
         let Some(front) = stream.chunks.front() else {
-            return Ok(if stream.ended {
+            let pull = if stream.ended {
                 Pull::End
             } else if let Some((error, _)) = stream.stopped {
                 Pull::Failed(error)
             } else {
-                Pull::Pending
-            });
+                return Ok(Pull::Pending);
+            };
+            if side == Side::Provider {
+                stream.drained = true;
+                self.release_if_drained(slot, wake);
+            }
+            return Ok(pull);
         };
         if out.len() < front.len() {
             return Err(ReadError::Short {
@@ -1407,6 +1508,9 @@ impl Store {
         let entry = &self.calls[&slot];
         let (key, kind) = ((entry.iface, entry.ord), entry.kind.kind());
         let entry = self.calls.get_mut(&slot).expect("looked up above");
+        if side == Side::Provider && entry.forgotten {
+            return Err(PushError::Failed(INTERRUPTED));
+        }
         if let Some(closed) = entry.stream(s).closed(side) {
             return Err(closed);
         }
@@ -1439,11 +1543,14 @@ impl Store {
         if Side::producer(s) != side {
             return Err(PushError::Contract(Contract::UnknownInteraction));
         }
-        let stream = self
+        let entry = self
             .calls
             .get_mut(&slot)
-            .expect("a held call has its entry")
-            .stream(s);
+            .expect("a held call has its entry");
+        if side == Side::Provider && entry.forgotten {
+            return Err(PushError::Failed(INTERRUPTED));
+        }
+        let stream = entry.stream(s);
         if let Some(closed) = stream.closed(side) {
             return Err(closed);
         }
@@ -1489,13 +1596,18 @@ impl Store {
             .claim_slot(handler, claim)
             .ok_or(PushError::Contract(Contract::UnknownInteraction))?;
         if s == REPLY_STREAM && self.claims.contains_key(&claim.0) {
+            // The claim is settled whatever the stream's verdict, so that a
+            // provider whose reply stream was stopped does not hold the
+            // call's slot; the verdict is the answer.
             let entry = self.calls.get_mut(&slot).expect("a held claim's call");
-            if let Some(closed) = entry.stream(s).closed(Side::Provider) {
-                return Err(closed);
-            }
-            return self
-                .settle(handler, claim, Ok(&[]), wake)
-                .map_err(push_error);
+            let verdict = if entry.forgotten {
+                Some(PushError::Failed(INTERRUPTED))
+            } else {
+                entry.stream(s).closed(Side::Provider)
+            };
+            self.settle(handler, claim, Ok(&[]), wake)
+                .map_err(push_error)?;
+            return verdict.map_or(Ok(()), Err);
         }
         self.end(slot, Side::Provider, s, wake)
     }
@@ -1515,13 +1627,17 @@ impl Store {
             .claim_slot(handler, claim)
             .ok_or(PushError::Contract(Contract::UnknownInteraction))?;
         if s == REPLY_STREAM && self.claims.contains_key(&claim.0) {
+            // The claim is settled whatever the stream's state, as in
+            // `end_claim`.
             let entry = self.calls.get_mut(&slot).expect("a held claim's call");
-            if entry.stream(s).finished() {
-                return Err(PushError::Ended);
-            }
-            return self
-                .settle(handler, claim, Err(error), wake)
-                .map_err(push_error);
+            let finished = entry.stream(s).finished();
+            self.settle(handler, claim, Err(error), wake)
+                .map_err(push_error)?;
+            return if finished {
+                Err(PushError::Ended)
+            } else {
+                Ok(())
+            };
         }
         self.abort(slot, Side::Provider, s, error, wake)
     }

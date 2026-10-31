@@ -200,7 +200,10 @@ impl Loopback<FlatBuffers> {
     ///   taken, or offered through `ReadError::ShortClaim` and still waiting
     ///   (driftsys/ridl#569);
     /// - the drop of the handler that held it unsettled, when it was
-    ///   forgotten.
+    ///   forgotten;
+    /// - for a call forgotten while its provider still had a stream
+    ///   parameter to read, the provider's pull of the last stream's end, a
+    ///   settlement after it, or the drop of the handler.
     ///
     /// So a settled call keeps its slot until it is forgotten, and a claimed
     /// call keeps its slot after its `forget` until it is settled or its

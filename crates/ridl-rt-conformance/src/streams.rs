@@ -39,7 +39,7 @@ use ridl_rt::port::{
     StreamCaller, StreamHandler, StreamNo, Wakeable, REPLY_STREAM,
 };
 
-use crate::{fill, runtime, Factory, IFACE, ORD};
+use crate::{runtime, Factory, IFACE, ORD};
 
 /// The first stream parameter.
 const PARAM_1: StreamNo = StreamNo(1);
@@ -691,20 +691,40 @@ where
 /// A slot reclaimed and taken by a new call does not answer to the
 /// correlation it had before: a pull or a push on the old correlation is an
 /// unknown interaction, and does not read or write the new call's streams.
-/// With every other slot held, the new call can only take the slot that was
-/// reclaimed.
+///
+/// The old call is a query the test claims and settles itself, so it holds
+/// the claim: after the forget the provider pulls the old call's parameter
+/// stream to its end, the chunk and then `Failed(Interrupted)`, because the
+/// slot of a forgotten call is not reclaimed while the provider has a stream
+/// to read. Every other slot then holds a settled command, so the new call
+/// can only take the slot that was reclaimed.
 pub fn a_reclaimed_slots_stream_answers_unknown<F>()
 where
     F: Factory,
     F::Runtime: StreamCaller + StreamHandler + Wakeable,
 {
-    let mut rt = runtime::<F>();
-    rt.serve(IFACE, &[ORD]).expect("serve");
-    let old = fill::<F>(&mut rt)[0];
+    let (mut rt, old, old_claim) = claimed_query::<F>();
+    rt.settle(old_claim, Ok(&[])).expect("settle");
+    for _ in 1..F::SLOTS {
+        rt.command(IFACE, ORD, &[1], None).expect("a slot is free");
+        let claim = claim_next(&mut rt);
+        rt.settle(claim, Ok(&[])).expect("settle");
+    }
     // A chunk on the old call's parameter stream, which the call that takes
     // the slot must not inherit.
     assert_eq!(rt.push(old, PARAM_1, &[9]), Ok(1));
     rt.forget(old);
+    let mut out = [0u8; 8];
+    assert_eq!(
+        rt.pull_claim(old_claim, PARAM_1, &mut out),
+        Ok(Pull::Chunk(1)),
+        "the chunk pushed before the forget is still read"
+    );
+    assert_eq!(
+        rt.pull_claim(old_claim, PARAM_1, &mut out),
+        Ok(Pull::Failed(CallError::Transport(Transport::Interrupted))),
+        "the stream was not ended, so the forget interrupted it"
+    );
     let new = rt
         .query(IFACE, ORD, &[2], None)
         .expect("the reclaimed slot");
@@ -713,7 +733,6 @@ where
     assert_eq!(rt.push_claim(claim, REPLY_STREAM, &[1]), Ok(1));
 
     let unknown = Contract::UnknownInteraction;
-    let mut out = [0u8; 8];
     assert_eq!(
         rt.pull(old, REPLY_STREAM, &mut out),
         Err(ReadError::Contract(unknown)),
@@ -731,5 +750,50 @@ where
         Ok(Pull::Pending),
         "the new call holds neither the old call's chunk nor the push on the \
          old correlation"
+    );
+}
+
+/// A forget after a command's acknowledgment keeps a stream its producer
+/// ended, which the provider still reads to its end, and interrupts a stream
+/// that was not ended, which the provider reads to `Failed(Interrupted)`
+/// after the chunk pushed before the forget. The provider's push to the reply
+/// stream after the forget fails with `Interrupted`.
+pub fn a_forget_after_a_commands_acknowledgment_keeps_an_ended_stream_and_interrupts_an_open_one<
+    F,
+>()
+where
+    F: Factory,
+    F::Runtime: StreamCaller + StreamHandler + Wakeable,
+{
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let c = rt.command(IFACE, ORD, &[1], None).expect("command sent");
+    let claim = claim_next(&mut rt);
+    rt.settle(claim, Ok(&[])).expect("the acknowledgment");
+    assert_eq!(rt.push(c, PARAM_1, &[7]), Ok(1));
+    assert_eq!(rt.end(c, PARAM_1), Ok(()));
+    assert_eq!(rt.push(c, PARAM_2, &[8]), Ok(1));
+    rt.forget(c);
+
+    let interrupted = CallError::Transport(Transport::Interrupted);
+    assert_eq!(
+        rt.push_claim(claim, REPLY_STREAM, &[1]),
+        Err(PushError::Failed(interrupted)),
+        "the provider's push after the forget is interrupted"
+    );
+    let mut out = [0u8; 8];
+    assert_eq!(rt.pull_claim(claim, PARAM_1, &mut out), Ok(Pull::Chunk(1)));
+    assert_eq!(&out[..1], &[7]);
+    assert_eq!(
+        rt.pull_claim(claim, PARAM_1, &mut out),
+        Ok(Pull::End),
+        "a stream its producer ended is kept to its end"
+    );
+    assert_eq!(rt.pull_claim(claim, PARAM_2, &mut out), Ok(Pull::Chunk(1)));
+    assert_eq!(&out[..1], &[8]);
+    assert_eq!(
+        rt.pull_claim(claim, PARAM_2, &mut out),
+        Ok(Pull::Failed(interrupted)),
+        "a stream that was not ended is interrupted after its chunks"
     );
 }

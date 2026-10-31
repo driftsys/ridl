@@ -45,7 +45,7 @@ pub enum Transport {
     /// [`StreamCaller::abort`](crate::port::StreamCaller::abort) or
     /// [`StreamHandler::abort_claim`](crate::port::StreamHandler::abort_claim),
     /// and a caller's [`forget`](crate::port::Caller::forget) stops every
-    /// stream of the call with it.
+    /// stream of the call that was not ended with it.
     Interrupted,
 }
 

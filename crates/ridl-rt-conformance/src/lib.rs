@@ -362,6 +362,7 @@ macro_rules! suite {
             streams::two_stream_parameters_are_two_streams,
             streams::a_bidirectional_call_carries_both_streams,
             streams::a_reclaimed_slots_stream_answers_unknown,
+            streams::a_forget_after_a_commands_acknowledgment_keeps_an_ended_stream_and_interrupts_an_open_one,
         );
     };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {
