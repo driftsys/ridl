@@ -291,13 +291,21 @@ struct CallEntry {
     /// every stream parameter to its end or its handler is dropped, so the
     /// slot is not reclaimed before then. `forgotten` is set as well.
     pending_forget: bool,
-    /// `true` once a query was settled: its stream parameters are released.
+    /// `true` once a query was settled, or a command settled with an error:
+    /// its stream parameters are released.
     parameters_released: bool,
+    /// `true` once the provider moved one of the call's streams: it pulled a
+    /// chunk, an end or a failure, pushed or ended a stream, or aborted one.
+    /// A dropped handler's call with this mark is interrupted rather than
+    /// presented again, because another handler would read partial streams.
+    /// A pull that answers `Pending` and a registration move nothing.
+    provider_used_streams: bool,
 }
 
 impl CallEntry {
-    /// Releases the stream parameters of a query at its settlement: the
-    /// provider is done with them, so their unread chunks are dropped and
+    /// Releases the stream parameters of a query at its settlement, and of a
+    /// command at a settlement with an error, which refuses the whole call:
+    /// the provider is done with them, so their unread chunks are dropped and
     /// every unfinished one stops with `Transport::Interrupted`, by the
     /// provider's side. A stream parameter first named afterwards starts in
     /// the same state.
@@ -803,6 +811,7 @@ impl Store {
                 streams: BTreeMap::new(),
                 pending_forget: false,
                 parameters_released: false,
+                provider_used_streams: false,
             },
         );
         self.pending.push_back(c);
@@ -1097,8 +1106,9 @@ impl Store {
     /// returns to the waiting calls, in its place by send order and under the
     /// id it was first presented with, so another handler that serves the
     /// member can take it, and every handler that serves the member has its
-    /// `Claim` waiter woken, unless its call has any stream state: such a call
-    /// is interrupted instead (`Store::interrupt_claim`). A claim it had only
+    /// `Claim` waiter woken, unless the handler already moved one of the
+    /// call's streams: such a call is interrupted instead
+    /// (`Store::interrupt_claim`). A claim it had only
     /// been offered, through
     /// `ReadError::ShortClaim`, never left the waiting calls, so it is neither
     /// re-inserted nor woken for; its id stays on the entry for the next
@@ -1175,10 +1185,10 @@ impl Store {
             if !owner.taken {
                 continue;
             }
-            if !entry.streams.is_empty() {
-                // Its streams already moved between the caller and this
-                // handler, so another handler cannot take the call over
-                // without reading partial streams. Every unfinished stream
+            if entry.provider_used_streams {
+                // This handler already moved the call's streams, so another
+                // handler cannot take the call over without reading partial
+                // streams. Every unfinished stream
                 // stops with `Transport::Interrupted`, and the call settles
                 // with that error instead of returning to the waiting calls.
                 self.interrupt_claim(owner.call, wake);
@@ -1435,7 +1445,12 @@ impl Store {
                     entry.reply = bytes.to_vec();
                 }
                 entry.settled_by = Some(handler);
-                if entry.kind == CallKind::Query {
+                // A query's settlement is its end, and a settlement with an
+                // error refuses the whole call: either way the provider is
+                // done with the stream parameters. A command's settlement
+                // `Ok` is its acknowledgment, and its stream parameters go on
+                // after it.
+                if entry.kind == CallKind::Query || outcome.is_err() {
                     entry.release_parameters(wake);
                 }
                 // The settlement ends the reply stream, or stops it with the
@@ -1473,19 +1488,22 @@ impl Store {
             .map(|_| slot)
     }
 
-    /// The slot of the call `handler` holds under `claim`: a claim presented
-    /// to it and not settled, or one it settled whose call the caller has
-    /// not forgotten yet.
+    /// The slot of the call `handler` holds under `claim`: a claim it took
+    /// and has not settled, or one it settled whose call the caller has not
+    /// forgotten yet. A claim only offered through `ReadError::ShortClaim`
+    /// has no streams yet: the handler takes it first, so that a call whose
+    /// offer moves to another handler, or returns to the waiting calls, has
+    /// no stream that one holder has partly read.
     pub(crate) fn claim_slot(&self, handler: usize, claim: ClaimId) -> Option<usize> {
         let (slot, entry) = self
             .calls
             .iter()
             .find(|(_, entry)| entry.claim == Some(claim.0))?;
-        let holder = self
-            .claims
-            .get(&claim.0)
-            .map(|owner| owner.handler)
-            .or(entry.settled_by);
+        let holder = match self.claims.get(&claim.0) {
+            Some(owner) if owner.taken => Some(owner.handler),
+            Some(_) => None,
+            None => entry.settled_by,
+        };
         (holder == Some(handler)).then_some(*slot)
     }
 
@@ -1528,6 +1546,7 @@ impl Store {
             };
             if side == Side::Provider {
                 stream.drained = true;
+                entry.provider_used_streams = true;
                 self.release_if_drained(slot, wake);
             }
             return Ok(pull);
@@ -1538,6 +1557,9 @@ impl Store {
             });
         }
         let chunk = stream.chunks.pop_front().expect("the front was just read");
+        if side == Side::Provider {
+            entry.provider_used_streams = true;
+        }
         out[..chunk.len()].copy_from_slice(&chunk);
         wake.extend(self.take_stream_waker(slot, s, side.other()));
         Ok(Pull::Chunk(chunk.len()))
@@ -1578,6 +1600,12 @@ impl Store {
             return Ok(0);
         }
         stream.chunks.push_back(chunk.to_vec());
+        if side == Side::Provider {
+            self.calls
+                .get_mut(&slot)
+                .expect("looked up above")
+                .provider_used_streams = true;
+        }
         wake.extend(self.take_stream_waker(slot, s, side.other()));
         Ok(chunk.len())
     }
@@ -1606,6 +1634,9 @@ impl Store {
             return Err(closed);
         }
         stream.ended = true;
+        if side == Side::Provider {
+            entry.provider_used_streams = true;
+        }
         wake.extend(self.take_stream_waker(slot, s, side.other()));
         Ok(())
     }
@@ -1620,15 +1651,36 @@ impl Store {
         error: CallError,
         wake: &mut Vec<Waker>,
     ) -> Result<(), PushError> {
-        let stream = self
+        let entry = self
             .calls
             .get_mut(&slot)
-            .expect("a held call has its entry")
-            .stream(s);
+            .expect("a held call has its entry");
+        if side == Side::Provider {
+            entry.provider_used_streams = true;
+        }
+        let stream = entry.stream(s);
+        let receiver = Side::producer(s) != side;
         if stream.finished() {
+            // A receiver's abort of a stream that already ended or stopped
+            // changes nothing for the producer, and answers `Ended`; the
+            // receiver is done with the stream all the same, so its unread
+            // chunks are dropped, and a provider that refuses a stream
+            // parameter this way does not hold the call's slot.
+            if receiver {
+                stream.chunks.clear();
+                if side == Side::Provider {
+                    stream.drained = true;
+                    self.release_if_drained(slot, wake);
+                }
+            }
             return Err(PushError::Ended);
         }
         stream.stopped = Some((error, side));
+        // A receiver that refuses the stream reads none of what it refused:
+        // its later pulls answer `Failed` with its own outcome.
+        if receiver {
+            stream.chunks.clear();
+        }
         // A stream the provider stopped itself needs no more reading by it.
         if side == Side::Provider {
             stream.drained = true;

@@ -52,8 +52,10 @@ use crate::contract::StreamNo;
 use crate::error::CallError;
 use crate::port::{Correlation, Interest};
 
-/// The `Interest::Stream` wakers one slot of a [`Table`] holds, one for each
-/// stream of the call: the reply stream and up to three stream parameters.
+/// The `Interest::Stream` wakers one slot of a [`Table`] holds: one for each
+/// of up to four streams of the call, whatever their numbers, such as a
+/// query's reply stream and three stream parameters, or four stream
+/// parameters of a command.
 ///
 /// A cell stays occupied by its stream until [`Table::take_stream`] or
 /// [`Table::take_streams`] takes the waker. A registration on a fifth stream

@@ -73,7 +73,10 @@
 //! `WriteError::NotOwner`, `RaiseError::NotOwner`, `ServeError::NotOwner`, any
 //! port error's `Contract` variant except
 //! [`FixedReader::read_fixed`]'s and the stream ports'
-//! `Contract::UnknownInteraction` for a call or a claim it does not hold, and
+//! `Contract::UnknownInteraction`, for a call or a claim it does not hold,
+//! for a claim only offered through `ReadError::ShortClaim`, and for a push,
+//! an end or a pull from the side that is not the stream's producer or
+//! receiver, and
 //! `Freshness::Fresh` or `Freshness::Stale`. Nothing detaches, because every
 //! handle holds the store alive, so `Detached` never appears either. Two
 //! things are bounded. The call table's [`Loopback::SLOTS`]: a send with
@@ -110,8 +113,11 @@
 //! whose key already holds — the outcome is known, an occurrence or a call is
 //! waiting, a slot is free — is woken at once, and so is one under a kind the
 //! handle does not observe; a stream registration is stored, and is woken at
-//! once only for a call or a claim whose streams can no longer change. A registration of the waker already stored refreshes it
-//! without waking it. No waker is woken while the store is locked.
+//! once only for a call or a claim whose streams can no longer change, for a
+//! `ClaimStream` registration on a stream that already ended, stopped or was
+//! released, and for a `Stream` registration on a stream beyond the
+//! `ridl_rt::correlate::STREAM_WAKERS` cells of its call. A registration of
+//! the waker already stored refreshes it without waking it. No waker is woken while the store is locked.
 //!
 //! [`Attached::catalog`] returns the
 //! `CatalogRef` the runtime was built with, unexamined. ADR-0021 decision 3

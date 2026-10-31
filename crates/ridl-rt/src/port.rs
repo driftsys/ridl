@@ -304,7 +304,9 @@ pub const REPLY_STREAM: StreamNo = StreamNo(0);
 /// acknowledgment. Two calls are presented again. One is a claim a dropped
 /// handler held and did not settle: the runtime returns it to the waiting
 /// calls, so another handler that serves the member can take it, as many
-/// times as a holder is dropped (ADR-0021 decision 5). The other is a claim
+/// times as a holder is dropped (ADR-0021 decision 5), unless the handler
+/// already moved one of the call's streams ([`StreamHandler`] states what
+/// happens then). The other is a claim
 /// offered through [`ReadError::ShortClaim`], which stays the next call, under
 /// the same id, until it is read with a large enough buffer or settled by
 /// that id (decision 5, amended 2026-09-28). Calls from two callers are never
@@ -482,12 +484,23 @@ pub trait StreamCaller: Caller {
     fn end(&mut self, c: Correlation, s: StreamNo) -> Result<(), PushError>;
     /// Stops stream `s` of call `c` with outcome `e`, from either side of the
     /// stream: the producer interrupts it, or the receiver refuses what it
-    /// received. The other side reads `e` as [`Pull::Failed`] or
-    /// [`PushError::Failed`], after the chunks pushed before the abort.
+    /// received. When the producer aborts, the receiver pulls the chunks
+    /// pushed before the abort, then `Pull::Failed(e)`. When the receiver
+    /// refuses, the producer's next push or end answers
+    /// `PushError::Failed(e)`, and the receiver reads none of what it
+    /// refused: its unread chunks are dropped, and its later pulls answer
+    /// `Pull::Failed(e)`. After its own abort, a producer's push and end
+    /// answer [`PushError::Ended`].
     ///
     /// After the other side stopped the stream with outcome `e`, `abort`
     /// answers [`PushError::Ended`], while [`push`](StreamCaller::push) and
-    /// [`end`](StreamCaller::end) answer `PushError::Failed(e)`.
+    /// [`end`](StreamCaller::end) answer `PushError::Failed(e)`. An abort of
+    /// a stream that already ended or stopped answers `PushError::Ended` and
+    /// changes nothing for the producer. By the receiver, it still drops the
+    /// receiver's unread chunks: its later pulls answer `Pull::End`, or
+    /// `Pull::Failed` with the outcome the stream stopped with, and a
+    /// provider that aborts a stream parameter this way is done with it
+    /// ([`StreamHandler`] states what that releases).
     fn abort(&mut self, c: Correlation, s: StreamNo, e: CallError) -> Result<(), PushError>;
 }
 
@@ -503,15 +516,46 @@ pub trait StreamCaller: Caller {
 /// [`REPLY_STREAM`]. A task that waits registers [`Interest::ClaimStream`]
 /// with [`Wakeable`].
 ///
-/// [`Handler::settle`] with an error on a claim whose reply is a stream is the
-/// same as [`abort_claim`](StreamHandler::abort_claim) on [`REPLY_STREAM`]
-/// with that error. A command's claim is settled `Ok` at its acknowledgment,
-/// before any chunk of a parameter stream is read, and a refusal of a chunk
-/// after that travels on the stream, through `abort_claim`, and reaches the
-/// producer through its next push or end; the acknowledgment is not changed.
+/// [`Handler::settle`] with an error on a claim whose reply is a stream has
+/// the same effect on the claim and on the stream as
+/// [`abort_claim`](StreamHandler::abort_claim) on [`REPLY_STREAM`] with that
+/// error; the answers differ when the reply stream had already stopped, as
+/// after the caller's refusal: `abort_claim` answers [`PushError::Ended`],
+/// and `settle` answers `Ok(())`. [`Handler::settle`] with `Ok(bytes)` on such
+/// a claim ends the reply stream, as `end_claim` does, and [`Caller::reply`]
+/// reports the bytes. A command's claim is settled `Ok` at its
+/// acknowledgment, before any chunk of a parameter stream is read, and a
+/// refusal of a chunk after that travels on the stream, through
+/// `abort_claim`, and reaches the producer through its next push or end; the
+/// acknowledgment is not changed.
+///
+/// A claim offered through [`ReadError::ShortClaim`] and not yet taken has no
+/// streams: a stream operation on it answers
+/// `Contract::UnknownInteraction`, and a [`Wakeable`] registration on it is
+/// woken at once. The provider takes the claim with a large enough buffer
+/// first, or settles it by its id. So a claim that moves to another handler,
+/// or returns to the waiting calls, has no stream that one holder has partly
+/// read.
+///
+/// A handler dropped while it holds a claim on which it already moved a
+/// stream (it pulled a chunk, an end or a failure, or pushed, ended or
+/// aborted a stream) does not return the call to the waiting calls, because
+/// another handler would read partial streams: every stream of the call that
+/// has not ended stops with `CallError::Transport(Transport::Interrupted)`,
+/// and the call settles with that error, which [`Caller::ack`] or
+/// [`Caller::reply`] reports. A pull that answers [`Pull::Pending`] and a
+/// [`Wakeable`] registration move nothing.
 ///
 /// A caller's [`forget`](Caller::forget) follows the same rules whether the
-/// claim was settled before it or not:
+/// claim was settled before it or not, once a provider has taken the call's
+/// claim. A forget before that withdraws the call with all of its streams,
+/// the ended ones too, because no provider has the claim to read them: no
+/// handler is presented the call. A runtime that has already sent the call
+/// to its provider cannot withdraw it; it then follows the rules below, as
+/// for a claimed call.
+/// A caller that needs a stream parameter it ended to reach the provider
+/// waits for the claim's acknowledgment, through [`Interest::Outcome`], before
+/// it forgets the call.
 ///
 /// - A stream whose producer ended it is kept: the provider still pulls it,
 ///   chunk by chunk, up to [`Pull::End`].
@@ -530,14 +574,18 @@ pub trait StreamCaller: Caller {
 ///   operation has already named ([`StreamCaller::pull`] states the
 ///   consequence). The
 ///   provider is done with a stream parameter once it pulled
-///   [`Pull::End`] or [`Pull::Failed`] from it, or stopped it itself with
-///   [`abort_claim`](StreamHandler::abort_claim). The settlement of a query
-///   releases every stream parameter of the query: the provider is done with
-///   them, their unread chunks are dropped, and the caller's next push or end
-///   on one answers
-///   `PushError::Failed(CallError::Transport(Transport::Interrupted))`. The
-///   settlement of a command is its acknowledgment and does not release
-///   them: its stream parameters go on after it. Once a call whose claim was
+///   [`Pull::End`] or [`Pull::Failed`] from it, or aborted it with
+///   [`abort_claim`](StreamHandler::abort_claim), also by an abort that
+///   answers [`PushError::Ended`] because the stream had already ended or
+///   stopped. The settlement of a query releases every stream parameter of
+///   the query, and so does a settlement of a command with an error, which
+///   refuses the whole call: the provider is done with them, their unread
+///   chunks are dropped, and the caller's next push or end on one answers
+///   `PushError::Failed(CallError::Transport(Transport::Interrupted))`; the
+///   caller reads the settlement's error from [`Caller::reply`] or
+///   [`Caller::ack`]. The settlement `Ok` of a command is its
+///   acknowledgment and does not release them: its stream parameters go on
+///   after it. Once a call whose claim was
 ///   already settled is released, its claim is no longer known, and a stream
 ///   operation on it answers `Contract::UnknownInteraction`; a claim still
 ///   held stays known until its settlement.
@@ -576,7 +624,11 @@ pub trait StreamHandler: Handler {
 pub enum Pull {
     /// One chunk was copied into `out`; its length.
     Chunk(usize),
-    /// The producer ended the stream. Pulling again answers `End` again.
+    /// The producer ended the stream. Pulling again answers `End` again while
+    /// the call, or the claim, is still known. After the `End` that
+    /// completes a caller's [`forget`](Caller::forget), the claim may no
+    /// longer be known ([`StreamHandler`] states when), and a pull answers
+    /// `ReadError::Contract(Contract::UnknownInteraction)`.
     End,
     /// No chunk is waiting yet.
     Pending,
@@ -790,12 +842,15 @@ pub enum Interest {
     /// A claim on one of the interface's members is waiting.
     Claim(InterfaceNo),
     /// Stream `StreamNo` of one call changed: a chunk or its end arrived, its
-    /// window freed, or the call was settled or forgotten. The waker is stored
+    /// window freed, the provider stopped it with an abort, the call was
+    /// settled or forgotten, or the provider's handler was dropped. The
+    /// waker is stored
     /// with the call, as an `Outcome` waker is, one for each stream of the
     /// call.
     Stream(Correlation, StreamNo),
     /// Stream `StreamNo` of one claim changed, on the provider's side: a chunk
-    /// or its end arrived, its window freed, or the caller forgot the call.
+    /// or its end arrived, its window freed, the caller stopped it with an
+    /// abort, the caller forgot the call, or a settlement released it.
     /// The waker is stored with the claim, one for each stream of the claim.
     ClaimStream(ClaimId, StreamNo),
 }
