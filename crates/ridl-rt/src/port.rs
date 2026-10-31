@@ -24,7 +24,9 @@
 //! arrived from generated code can find the port under it. The crate-level
 //! documentation has the whole table, and
 //! `docs/technotes/ridl-rt-by-example.md` in this repository walks it against
-//! concrete generated code.
+//! concrete generated code. The generated face does not call
+//! [`StreamCaller`] or [`StreamHandler`] yet: a member with a stream has no
+//! generated method.
 
 use core::task::Waker;
 
@@ -413,8 +415,11 @@ pub struct ClaimId(pub u64);
 ///   elements, and a whole chunk is correct for both.
 /// - **A push takes the whole chunk or nothing.** [`push`](StreamCaller::push)
 ///   answers `chunk.len()` when the chunk was taken, and 0 when the stream's
-///   window is full and nothing was taken. 0 is the backpressure: the producer
-///   waits on [`Interest::Stream`] and pushes the same chunk again.
+///   window is full and a non-empty chunk was not taken. That 0 is the
+///   backpressure: the producer waits on [`Interest::Stream`] and pushes the
+///   same chunk again. An empty chunk is a chunk, and it is always taken,
+///   whatever the window: its push answers 0 and the receiver pulls
+///   `Pull::Chunk(0)`. The window bounds the non-empty chunks only.
 /// - **A reply stream ends with its call's settlement.** The provider ends the
 ///   reply stream with [`StreamHandler::end_claim`] on [`REPLY_STREAM`], which
 ///   settles the call `Ok` with no reply bytes, so [`Caller::reply`] reports
@@ -450,8 +455,10 @@ pub trait StreamCaller: Caller {
     /// runtime behind the port is gone.
     fn pull(&mut self, c: Correlation, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError>;
     /// Offers one chunk to stream `s` of call `c`. Answers `chunk.len()` when
-    /// the chunk was taken, and 0 when the window is full and nothing was
-    /// taken. The errors are those of [`PushError`].
+    /// the chunk was taken, and 0 when the window is full and a non-empty
+    /// chunk was not taken. An empty chunk is always taken, whatever the
+    /// window, and answers 0; the receiver pulls `Pull::Chunk(0)`. The errors
+    /// are those of [`PushError`].
     fn push(&mut self, c: Correlation, s: StreamNo, chunk: &[u8]) -> Result<usize, PushError>;
     /// Ends stream `s` of call `c`: the receiver pulls the chunks before the
     /// end, then [`Pull::End`]. A second end is [`PushError::Ended`].
@@ -480,7 +487,7 @@ pub trait StreamCaller: Caller {
 /// with that error. A command's claim is settled `Ok` at its acknowledgment,
 /// before any chunk of a parameter stream is read, and a refusal of a chunk
 /// after that travels on the stream, through `abort_claim`, and reaches the
-/// producer through its next push; the acknowledgment is not changed.
+/// producer through its next push or end; the acknowledgment is not changed.
 ///
 /// After the caller forgets the call, [`pull_claim`](StreamHandler::pull_claim)
 /// answers `Pull::Failed(CallError::Transport(Transport::Interrupted))` and
@@ -498,8 +505,9 @@ pub trait StreamHandler: Handler {
         out: &mut [u8],
     ) -> Result<Pull, ReadError>;
     /// Offers one chunk to stream `s` of the claim. Answers `chunk.len()` when
-    /// the chunk was taken, and 0 when the window is full and nothing was
-    /// taken.
+    /// the chunk was taken, and 0 when the window is full and a non-empty
+    /// chunk was not taken. An empty chunk is always taken, whatever the
+    /// window, and answers 0; the receiver pulls `Pull::Chunk(0)`.
     fn push_claim(&mut self, claim: ClaimId, s: StreamNo, chunk: &[u8])
         -> Result<usize, PushError>;
     /// Ends stream `s` of the claim. For [`REPLY_STREAM`] this is the claim's
@@ -529,11 +537,12 @@ pub enum Pull {
 
 /// A push, an end or an abort of a stream that failed.
 ///
-/// Two layers, as for a pull. [`Contract`](PushError::Contract) and
-/// [`Detached`](PushError::Detached) are the port call itself, and
-/// [`TooLarge`](PushError::TooLarge) and [`Ended`](PushError::Ended) are
-/// refused by this side; [`Failed`](PushError::Failed) is the other side's
-/// verdict on the stream.
+/// Two layers, as for a pull. The port call itself is the first:
+/// [`Contract`](PushError::Contract) and [`Detached`](PushError::Detached),
+/// and [`TooLarge`](PushError::TooLarge) and [`Ended`](PushError::Ended),
+/// which this side refuses before anything is sent.
+/// [`Failed`](PushError::Failed) is the second: the other side's verdict on
+/// the stream.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PushError {

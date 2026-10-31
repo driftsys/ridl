@@ -747,11 +747,14 @@ bound, so a runtime without streams stays a complete runtime. A stream is keyed
 by its call — the `Correlation` on the calling side, the `ClaimId` on the
 providing side — and a `StreamNo`. The unit is the chunk: a port never splits or
 merges one, so a pull copies one chunk, `ReadError::Short` does not consume it,
-and a push takes the whole chunk or nothing, answering `chunk.len()` or 0 when
-the stream's window is full. `end_claim` on `REPLY_STREAM` is the claim's
-settlement, `Ok(&[])`, and `settle(claim, Err(e))` ends the reply stream with
-`e` after the chunks already pushed. A side stops a stream on purpose with
-`abort` or `abort_claim`; a producer interrupts with
+and a push takes the whole chunk or nothing, answering `chunk.len()`, or 0 when
+the stream's window is full and a non-empty chunk was not taken. An empty chunk
+is a chunk and is always taken, whatever the window: its push answers 0 and the
+receiver pulls `Pull::Chunk(0)`, so 0 is backpressure only for a non-empty
+chunk, and the window bounds the non-empty chunks. `end_claim` on `REPLY_STREAM`
+is the claim's settlement, `Ok(&[])`, and `settle(claim, Err(e))` ends the reply
+stream with `e` after the chunks already pushed. A side stops a stream on
+purpose with `abort` or `abort_claim`; a producer interrupts with
 `CallError::Transport(Transport::Interrupted)`, and a caller's `forget` stops
 every stream of the call with it. The errors have two layers, as
 `Caller::reply`'s do: `ReadError`, and `PushError::Contract` and
@@ -1052,17 +1055,22 @@ for one stream — the displaced waker of another task, nothing on a refresh,
 `waker` itself for a forgotten call or an unknown correlation — with two
 differences. A settled call still stores the waker, because a command is settled
 at its acknowledgment and its parameter streams go on after it. A registration
-on a fifth stream of one call is handed back unstored, which is a spurious wake:
-the task reads again and registers again, and polls rather than sleeps while
-every cell holds another stream's waker. `take_stream` takes one stream's waker,
-for a chunk, an end or a freed window. A settlement, a forget and a reclaim stop
-or change every stream of the call, so after each `settle` and each `forget` the
-runtime calls `take_streams(Table::slot(c))` under the same lock and wakes what
-it returns after releasing the lock. The hand-back is an accessor keyed by the
-slot index, not a payload of `Settled` or `Forgotten`, so that those two enums
-keep their shape, and so that it reaches the wakers of a reclaimed slot whose
-correlation already answers as unknown; a reclaim keeps the stream wakers for
-`take_streams`, and the slot's next `insert` drops any left.
+on a fifth stream of one call is handed back unstored, so its waiter is woken at
+once on every registration, which is a busy loop: the task reads again and
+registers again, and does not sleep while all four cells are occupied. A cell
+stays occupied until `take_stream` or `take_streams` takes its waker.
+`take_stream` takes one stream's waker, for a chunk, an end or a freed window. A
+settlement, a forget and a reclaim stop or change every stream of the call, so
+after each `settle` and each `forget` that did not answer `Unknown` the runtime
+calls `take_streams(Table::slot(c))` under the same lock and wakes what it
+returns after releasing the lock; after `Unknown` it does not, because the slot
+of a stale correlation may hold another live call. A runtime that skips the call
+leaves that call's stream waiters asleep, and the stream tests of
+`ridl-rt-conformance` check that they are woken. The hand-back is an accessor
+keyed by the slot index, not a payload of `Settled` or `Forgotten`, so that
+those two enums keep their shape, and so that it reaches the wakers of a
+reclaimed slot whose correlation already answers as unknown; a reclaim keeps the
+stream wakers for `take_streams`, and the slot's next `insert` drops any left.
 
 **`Waiters` holds one waker per kind of key** — `Slot`, `Event`, `Claim` —
 whatever interface an `Event` or `Claim` key names, so any key of the kind takes

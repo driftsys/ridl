@@ -22,8 +22,8 @@
 //! its own indexed by [`Table::slot`].
 //!
 //! A settlement, a forget and a reclaim each stop or change every stream of
-//! the call, so after each of [`Table::settle`] and [`Table::forget`] the
-//! runtime takes the slot's stream wakers with [`Table::take_streams`], under
+//! the call, so after each [`Table::settle`] and [`Table::forget`] that did
+//! not answer `Unknown` the runtime takes the slot's stream wakers with [`Table::take_streams`], under
 //! the same lock, and wakes them after releasing it. The stream wakers are a
 //! separate hand-back, not a field of [`Settled`] or [`Forgotten`], so those
 //! two enums keep the shape a runtime already matches on.
@@ -54,10 +54,12 @@ use crate::port::{Correlation, Interest};
 /// The `Interest::Stream` wakers one slot of a [`Table`] holds, one for each
 /// stream of the call: the reply stream and up to three stream parameters.
 ///
-/// A registration on a further stream of the same call is not stored and is
-/// handed back to be woken at once, which is a spurious wake: the task reads
-/// its stream again and registers again, so it does not wait forever, but it
-/// polls instead of sleeping while every cell holds another stream's waker.
+/// A cell stays occupied by its stream until [`Table::take_stream`] or
+/// [`Table::take_streams`] takes the waker. A registration on a fifth stream
+/// of the same call, while all four cells are occupied, is not stored and is
+/// handed back, so its waiter is woken at once on every registration: the
+/// task reads its stream again and registers again, which is a busy loop
+/// until a cell is freed. It does not wait forever, but it does not sleep.
 pub const STREAM_WAKERS: usize = 4;
 
 /// The bits of a correlation that hold the slot index.
@@ -69,8 +71,11 @@ const GENERATION_MASK: u64 = (1 << (64 - SLOT_BITS)) - 1;
 
 /// What [`Table::settle`] did, and the waker it hands back to be woken.
 ///
-/// The runtime wakes the waker after releasing its lock, and also every
-/// stream waker [`Table::take_streams`] hands back for the slot. On
+/// The runtime wakes the waker after releasing its lock. Unless the answer
+/// is [`Unknown`](Settled::Unknown), it also takes the slot's stream wakers
+/// with [`Table::take_streams`] and wakes them; on `Unknown` it does not,
+/// because the slot of a stale correlation may hold another call that is
+/// still live. On
 /// [`Reclaimed`](Settled::Reclaimed) it also wakes every `Interest::Slot`
 /// waiter it holds and frees whatever it stored for the slot.
 #[must_use = "a waker or a reclaim handed back and ignored leaves a task waiting"]
@@ -91,9 +96,11 @@ pub enum Settled {
 
 /// What [`Table::forget`] did, and the waker it hands back to be woken.
 ///
-/// Whatever it did, the runtime then takes the slot's stream wakers with
-/// [`Table::take_streams`] and wakes them after releasing its lock: every
-/// stream of a forgotten call stops. On
+/// Unless the answer is [`Unknown`](Forgotten::Unknown), the runtime then
+/// takes the slot's stream wakers with [`Table::take_streams`] and wakes them
+/// after releasing its lock: every stream of a forgotten call stops. On
+/// `Unknown` it does not, because the slot of a stale correlation may hold
+/// another call that is still live. On
 /// [`Reclaimed`](Forgotten::Reclaimed) the runtime wakes every
 /// `Interest::Slot` waiter it holds and frees whatever it stored for the slot.
 #[must_use = "a waker or a reclaim handed back and ignored leaves a task waiting"]
@@ -340,9 +347,12 @@ impl<const N: usize> Table<N> {
 
     /// Takes every stream waker slot `slot` holds, whatever stream it was
     /// registered on. A runtime calls it after every [`settle`](Table::settle)
-    /// and [`forget`](Table::forget), with the slot of the correlation it
-    /// passed, [`Table::slot`]`(c)`: it works after a reclaim too, when `c`
-    /// already answers as unknown. The wakers are taken when this is called,
+    /// and [`forget`](Table::forget) that did not answer `Unknown`, with the
+    /// slot of the correlation it passed, [`Table::slot`]`(c)`: it works after
+    /// a reclaim too, when `c` already answers as unknown. A runtime that does
+    /// not call it after a settlement or a forget leaves the stream waiters of
+    /// that call asleep; the stream tests of `ridl-rt-conformance` check that
+    /// they are woken. The wakers are taken when this is called,
     /// whether or not the iterator is consumed, and the iterator does not
     /// borrow the table. A slot index the table does not have yields nothing.
     pub fn take_streams(&mut self, slot: usize) -> impl Iterator<Item = Waker> + use<N> {
