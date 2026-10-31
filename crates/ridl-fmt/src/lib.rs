@@ -10,9 +10,11 @@
 //!   to what they precede; an inline trailing comment stays on its line, except
 //!   after a machine block and after a separator comma that is on a line of its
 //!   own, where it leads the next member (or stays at the end of the body when
-//!   no member follows); a line comment on the first line of a declaration
-//!   stays on that line when the declaration is broken over several lines, so
-//!   a lint directive keeps its declaration (ADR-0024 decision 2);
+//!   no member follows); a lint directive at the end of the first line of a
+//!   declaration stays on that line when the declaration is broken over
+//!   several lines, so that it keeps its declaration (ADR-0024 decision 2),
+//!   while a plain comment there follows the member or the closing delimiter
+//!   it trailed;
 //! - **total** — every syntactically valid input formats; a file with parse
 //!   errors is never reformatted (fmt must not eat broken code, so it returns
 //!   [`FormatOutcome::ParseErrors`] untouched);
@@ -238,26 +240,33 @@ fn layout_container(
             if block.blank_before_node {
                 lines.push(String::new());
             }
-            // The node's first rendered line: a line comment on the node's
+            // The node's first rendered line: a lint directive on the node's
             // first source line stays on that line (ADR-0024 decision 2), so
-            // a lint directive keeps the declaration it names when the
-            // formatter breaks the declaration over several lines.
-            let mut first_line = lines.len();
+            // it keeps the declaration it names when the formatter breaks the
+            // declaration over several lines. A directive on a line where no
+            // declaration starts names nothing; it stays on the node's last
+            // line, and the node keeps its source layout, so that the
+            // directive still names nothing after formatting.
+            let first_line = lines.len();
             if let Some(node) = &block.node {
-                if !block.trailing.is_empty() && has_moved_annotation_line_comment(node) {
+                if !block.trailing.is_empty()
+                    && (block.directive_names_nothing || has_moved_annotation_line_comment(node))
+                {
                     lines.push(format!("{ind}{}", node.text()));
                 } else {
                     lines.extend(format_element(node, indent, options));
                 }
-                if let Some(comment) = first_line_comment(node) {
-                    pin_to_first_line(&mut lines, first_line, &comment);
-                }
-                if spans_lines(node) {
-                    first_line = lines.len().saturating_sub(1);
+                if let Some(directive) = first_line_directive(node) {
+                    pin_to_first_line(&mut lines, first_line, &directive);
                 }
             }
             for comment in &block.trailing {
-                if let Some(line) = lines.get_mut(first_line) {
+                let at = if is_lint_directive(comment) && !block.directive_names_nothing {
+                    first_line
+                } else {
+                    lines.len().saturating_sub(1)
+                };
+                if let Some(line) = lines.get_mut(at) {
                     line.push(' ');
                     line.push_str(comment);
                 }
@@ -283,62 +292,55 @@ fn layout_container(
     out
 }
 
-/// The line comment on the first source line of `node`, with its trailing
-/// whitespace trimmed, when the node has one that belongs to its own line. A
-/// comment after the first attribute of an attribute block belongs to that
-/// attribute, and a comment after the first body member belongs to that member,
-/// unless the comment is a lint directive: a directive names the outermost
-/// declaration starting on its line (ADR-0024 decision 2), so a directive
-/// after a member or an attribute on the declaration's first line moves to the
-/// line of the opening brace or bracket, where the declaration still is after
-/// formatting. Any `{`
-/// before the first line break is the node's own or nested in a member, so a
-/// `{` always starts the body region.
-fn first_line_comment(node: &SyntaxNode) -> Option<String> {
-    let mut in_body = false;
-    let mut after_member = false;
-    let mut after_attribute = false;
+/// The lint directive on the first source line of `node`, with its trailing
+/// whitespace trimmed, when the node ends that line with one. A directive
+/// names the outermost declaration starting on its line (ADR-0024 decision
+/// 2), so a directive after a member or an attribute on the declaration's
+/// first line moves to the line of the opening brace or bracket, where the
+/// declaration still is after formatting. A plain comment there stays with
+/// the member or the attribute, as it did before directives existed.
+fn first_line_directive(node: &SyntaxNode) -> Option<String> {
     for element in node.descendants_with_tokens() {
         match element {
             NodeOrToken::Token(token) if token.kind() == SyntaxKind::LineComment => {
                 let text = token.text().trim_end();
-                if (after_attribute || after_member) && !is_lint_directive(text) {
-                    return None;
-                }
-                return Some(text.to_string());
+                return is_lint_directive(text).then(|| text.to_string());
             }
             NodeOrToken::Token(token) if line_breaks(token.text()) > 0 => return None,
-            NodeOrToken::Token(token) if token.kind() == SyntaxKind::LBrace => in_body = true,
-            NodeOrToken::Token(token) if token.kind() == SyntaxKind::RBracket => {
-                after_attribute = false;
-            }
-            NodeOrToken::Token(_) => {}
-            NodeOrToken::Node(_) if in_body => after_member = true,
-            NodeOrToken::Node(child) if child.kind() == SyntaxKind::Attribute => {
-                after_attribute = true;
-            }
-            NodeOrToken::Node(_) => {}
+            _ => {}
         }
     }
     None
 }
 
 /// The byte offset where a line comment starts in `line`, one physical line of
-/// verbatim text, outside a string literal and outside a block comment. The
-/// renderers leave such a comment out of the line's code width, as they do a
-/// trailing comment, so a declaration kept verbatim because of a comment is
-/// broken the same as one without it.
-fn line_comment_start(line: &str) -> Option<usize> {
+/// verbatim text, outside a string literal and outside a block comment.
+/// `in_block` says whether the line starts inside a block comment that an
+/// earlier line opened, and is left as the line ends. The renderers leave such
+/// a comment out of the line's code width, as they do a trailing comment, so a
+/// declaration kept verbatim because of a comment is broken the same as one
+/// without it.
+fn line_comment_start(line: &str, in_block: &mut bool) -> Option<usize> {
     let bytes = line.as_bytes();
     let mut i = 0;
     let mut in_string = false;
+    if *in_block {
+        i = line.find("*/")? + 2;
+        *in_block = false;
+    }
     while i < bytes.len() {
         match bytes[i] {
             b'\\' if in_string => i += 1,
             b'"' => in_string = !in_string,
             b'/' if !in_string && bytes.get(i + 1) == Some(&b'/') => return Some(i),
             b'/' if !in_string && bytes.get(i + 1) == Some(&b'*') => {
-                i += line[i + 2..].find("*/").map_or(line.len(), |end| end + 4);
+                match line[i + 2..].find("*/") {
+                    Some(end) => i += end + 4,
+                    None => {
+                        *in_block = true;
+                        return None;
+                    }
+                }
                 continue;
             }
             _ => {}
@@ -411,6 +413,9 @@ struct ContainerBlock {
     blank_before_node: bool,
     node: Option<SyntaxNode>,
     trailing: Vec<String>,
+    /// A lint directive in `trailing` is on a source line where no block
+    /// starts, so it names no declaration.
+    directive_names_nothing: bool,
 }
 
 fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
@@ -421,7 +426,10 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
     // The first block of the current source line: a lint directive after a
     // later block of the line trails this one, the outermost declaration
     // starting on the directive's line (ADR-0024 decision 2), including after
-    // a machine block.
+    // a machine block. When no block starts on the line, because the last
+    // block or a block comment spans lines, the directive trails the last
+    // block: it names nothing, and leading the next member would make it
+    // name that member.
     let mut line_first: Option<usize> = None;
     for element in elements {
         match element {
@@ -437,7 +445,11 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
                 let trails = if nl_run > 0 || !pending.is_empty() {
                     None
                 } else if token.kind() == SyntaxKind::LineComment && is_lint_directive(&text) {
-                    line_first
+                    line_first.or_else(|| {
+                        let last = blocks.len().checked_sub(1)?;
+                        blocks[last].directive_names_nothing = true;
+                        Some(last)
+                    })
                 } else if can_trail {
                     blocks.len().checked_sub(1)
                 } else {
@@ -475,6 +487,7 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
                     blank_before_node,
                     node: Some(node.clone()),
                     trailing: Vec::new(),
+                    directive_names_nothing: false,
                 });
                 // A node that spans lines ends on a later line, where no
                 // block has started yet.
@@ -497,6 +510,7 @@ fn collect_container(elements: &[SyntaxElement]) -> Vec<ContainerBlock> {
             blank_before_node: false,
             node: None,
             trailing: Vec::new(),
+            directive_names_nothing: false,
         });
     }
     blocks
@@ -1383,11 +1397,12 @@ impl Rendering {
     /// Pushes text line by line; a line comment inside a line counts as a
     /// trailing comment for the line's code width.
     fn push_text(&mut self, text: &str) {
+        let mut in_block = false;
         for (i, line) in text.split('\n').enumerate() {
             if i > 0 {
                 self.push("\n");
             }
-            match line_comment_start(line) {
+            match line_comment_start(line, &mut in_block) {
                 Some(at) => {
                     let code = line[..at].trim_end();
                     self.push(code);
@@ -3489,7 +3504,7 @@ mod tests {
         ] {
             assert_profile_format(
                 &format!("package p\n{source} // shapes\n"),
-                "package p\n\nservice veh.body.composite: // shapes\n  DoorControl,\n  MotorControl\n",
+                "package p\n\nservice veh.body.composite:\n  DoorControl,\n  MotorControl // shapes\n",
                 Profile::Ridl,
                 &FormatOptions {
                     max_line_length: Some(40),
@@ -3570,20 +3585,28 @@ mod tests {
     }
 
     #[test]
-    fn a_comment_after_the_opening_bracket_stays_on_the_declaration_line() {
+    fn a_directive_after_the_opening_bracket_stays_on_the_declaration_line() {
+        // A plain comment there leads the first attribute, as before lint
+        // directives.
+        assert_profile_format(
+            "package p\ninterface I {\n  command c(x: X) [ // lint: allow x -- r\n    require x > 0\n  ]\n}\n",
+            "package p\n\ninterface I {\n  command c(x: X) [ // lint: allow x -- r\n    require x > 0\n  ]\n}\n",
+            Profile::Ridl,
+            &FormatOptions::default(),
+        );
         assert_profile_format(
             "package p\ninterface I {\n  command c(x: X) [ // c\n    require x > 0\n  ]\n}\n",
-            "package p\n\ninterface I {\n  command c(x: X) [ // c\n    require x > 0\n  ]\n}\n",
+            "package p\n\ninterface I {\n  command c(x: X) [\n    // c\n    require x > 0\n  ]\n}\n",
             Profile::Ridl,
             &FormatOptions::default(),
         );
     }
 
     #[test]
-    fn a_brace_comment_stays_on_the_first_line_of_a_broken_header() {
+    fn a_brace_directive_stays_on_the_first_line_of_a_broken_header() {
         assert_profile_format(
-            "package p\ncomponent Backend [ external ] { // c\n  requires X\n}\n",
-            "package p\n\ncomponent Backend [ // c\n  external\n] {\n  requires X\n}\n",
+            "package p\ncomponent Backend [ external ] { // lint: allow x -- r\n  requires X\n}\n",
+            "package p\n\ncomponent Backend [ // lint: allow x -- r\n  external\n] {\n  requires X\n}\n",
             Profile::Rsdl,
             &FormatOptions {
                 max_line_length: Some(20),
@@ -3631,6 +3654,32 @@ mod tests {
     }
 
     #[test]
+    fn a_directive_after_a_member_that_spans_lines_stays_on_its_last_line() {
+        // The directive names no declaration before formatting, so the member
+        // keeps its source layout and the directive stays on its last line,
+        // where it still names none: it does not lead `b`, and the member is
+        // not joined into one line.
+        assert_width_format(
+            "package p\nstruct S {\n  a: (x: A,\n    y: B) // lint: allow missing-docs -- s\n  b: B\n}\n",
+            "package p\n\nstruct S {\n  a: (x: A,\n    y: B) // lint: allow missing-docs -- s\n  b: B\n}\n",
+            &FormatOptions::default(),
+        );
+        // The same after a block comment that spans lines: no declaration
+        // starts on the directive's line.
+        assert_width_format(
+            "package p\nstruct S {\n  a: A /* x\n  y */ // lint: allow missing-docs -- s\n  b: B\n}\n",
+            "package p\n\nstruct S {\n  a: A /* x\n  y */ // lint: allow missing-docs -- s\n  b: B\n}\n",
+            &FormatOptions::default(),
+        );
+        // A plain comment there leads the next member, as before.
+        assert_width_format(
+            "package p\nstruct S {\n  a: (x: A,\n    y: B) // note\n  b: B\n}\n",
+            "package p\n\nstruct S {\n  a: (x: A, y: B) // note\n  b: B\n}\n",
+            &FormatOptions::default(),
+        );
+    }
+
+    #[test]
     fn a_directive_after_a_member_that_spans_lines_stays_with_the_next_member() {
         // `a` ends on the directive's line but starts earlier; the directive
         // names `b`, the declaration starting on its line.
@@ -3672,12 +3721,26 @@ mod tests {
 
     #[test]
     fn a_line_comment_starts_outside_strings_and_block_comments() {
-        assert_eq!(line_comment_start("x = 1 // c"), Some(6));
-        assert_eq!(line_comment_start("x = \"a//b\" // c"), Some(11));
-        assert_eq!(line_comment_start("x = \"a\\\"//b\""), None);
-        assert_eq!(line_comment_start("/* a // b */ x // c"), Some(15));
-        assert_eq!(line_comment_start("/* a // b"), None);
-        assert_eq!(line_comment_start("x = 1"), None);
+        let start = |line: &str| line_comment_start(line, &mut false);
+        assert_eq!(start("x = 1 // c"), Some(6));
+        assert_eq!(start("x = \"a//b\" // c"), Some(11));
+        assert_eq!(start("x = \"a\\\"//b\""), None);
+        assert_eq!(start("/* a // b */ x // c"), Some(15));
+        assert_eq!(start("/* a // b"), None);
+        assert_eq!(start("x = 1"), None);
+
+        // A block comment opened on an earlier line hides a `//` until it
+        // closes.
+        let mut in_block = false;
+        assert_eq!(line_comment_start("x: X /* see", &mut in_block), None);
+        assert!(in_block);
+        assert_eq!(line_comment_start("https://a // b", &mut in_block), None);
+        assert!(in_block);
+        assert_eq!(
+            line_comment_start("end */ y: Y // c", &mut in_block),
+            Some(12)
+        );
+        assert!(!in_block);
     }
 
     #[test]
@@ -4086,13 +4149,11 @@ mod tests {
                 if i == 127 { "" } else { "," }
             ));
         }
-        expected.push_str("  )\n}\n");
+        expected.push_str("  ) // tuple detail\n}\n");
         let input = format!(
             "package p\n// nested tuples\nstruct S {{ t: ({}) // tuple detail\n}}\n",
             fields.join(", ")
         );
-        // The trailing comment stays on the line where the field starts.
-        let expected = expected.replacen("  t: (\n", "  t: ( // tuple detail\n", 1);
         for width in [100, 60, 40] {
             assert_width_format(
                 &input,
@@ -4139,10 +4200,19 @@ mod tests {
     }
 
     #[test]
-    fn a_trailing_comment_stays_on_the_first_line_of_the_broken_tuple() {
+    fn a_trailing_comment_follows_the_broken_tuple_closer() {
+        // A plain comment follows the closer, as before lint directives; a
+        // directive stays on the first line, where the field starts.
         assert_width_format(
             "package p\nstruct S { pair: (a: A, b: B) // pair detail\n}\n",
-            "package p\n\nstruct S {\n  pair: ( // pair detail\n    a: A,\n    b: B\n  )\n}\n",
+            "package p\n\nstruct S {\n  pair: (\n    a: A,\n    b: B\n  ) // pair detail\n}\n",
+            &FormatOptions {
+                max_line_length: Some(19),
+            },
+        );
+        assert_width_format(
+            "package p\nstruct S {\n  pair: (a: A, b: B) // lint: allow x -- r\n}\n",
+            "package p\n\nstruct S {\n  pair: ( // lint: allow x -- r\n    a: A,\n    b: B\n  )\n}\n",
             &FormatOptions {
                 max_line_length: Some(19),
             },
