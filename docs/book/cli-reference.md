@@ -455,7 +455,10 @@ still applies, whatever the verdict. The scope is the unit's own source
 packages and every declaration its interfaces reach, in the unit or in another
 one, so a breaking change in a package that the unit does not reach leaves the
 unit's chain as it was. A breaking change that changes the catalog restarts the
-chain: the file then holds the one new hash. The file being replaced is carried
+chain: the file then holds the one new hash. The change is judged for the
+encodings the root manifest's `[backend.<name>]` tables list, so under `podbuf`
+a podbuf break restarts the chain, a replaced baseline published before `podbuf`
+was listed included. The file being replaced is carried
 only when its first hash is the hash recomputed from the snapshots published
 beside it; a file that does not describe those snapshots, as a partially
 hand-edited baseline leaves behind, restarts the chain instead of carrying a
@@ -706,7 +709,10 @@ hash. It is empty when the workspace has no baseline directory or the directory
 holds no `.ir.json` snapshot, when the baseline holds no package of the unit,
 when the unit has no `<unit>.catalogs` file (or the baseline has none at all), and when `ridl diff`'s classifier,
 scoped to the unit, judges the change from the baseline to the tree breaking
-and the current catalog hash is not the file's first hash. When the two hashes
+and the current catalog hash is not the file's first hash. The change is judged
+for the encodings the root manifest's `[backend.<name>]` tables list, as
+`ridl baseline` judges it, so under `podbuf` a podbuf break empties the list, a
+baseline published before `podbuf` was listed included. When the two hashes
 are equal the catalog did not change, and the list holds the file's other
 hashes whatever the verdict. The file is used at all only when its first hash
 is the hash recomputed from the baseline's own snapshots of the unit; a file

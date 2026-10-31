@@ -66,6 +66,14 @@ verdict. Ruling R-H2-3 of
 is amended to match, and the change is tracked as driftsys/ridl#787. Decisions 1
 to 14 are unchanged.
 
+**Amended 2026-10-31 — decision 15, the verdict and the encodings.**
+`ridl baseline` and `ridl build` judge the unit's verdict for the root
+manifest's `[backend.<name>] encodings`, so a podbuf break restarts the chain
+when a backend table lists `podbuf`
+([ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13). The hash is
+unchanged, and the change is tracked as driftsys/ridl#1095. Decisions 1 to 14
+are unchanged.
+
 **Amended 2026-10-20 — decision 15, where the hash functions are named.**
 `ridl-descriptor` no longer re-exports the hash functions of `ridl-ir`. It
 declares a wrapper function for each, with the same signature, so that the
@@ -673,7 +681,12 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       is one of the unit's source packages on either side, or whose top-level
       declaration one of the unit's interfaces reaches on either side
       (`reachable_decls`): the closure the hash covers. `ridl diff`'s own report
-      and exit code are unchanged.
+      and exit code are unchanged. `ridl baseline` and `ridl build` judge the
+      report for the root manifest's encodings, the union of `encodings` over
+      every `[backend.<name>]` table of the root `ridl.toml`, so under `podbuf`
+      a podbuf break ([ADR-0031](ADR-0031-podbuf-projection-rules.md) decision
+      13) restarts the chain as any other break does (amended 2026-10-31, from
+      driftsys/ridl#1095).
     - **Where the list lives.** The descriptor's `Catalog` gains `compatible`, a
       vector of `EarlierCatalog { hash }` tables appended at the end of the
       table and not required, under the schema's append-only rule;
