@@ -1419,9 +1419,10 @@ The formatter never changes which declaration a lint directive names (see
 When it breaks a declaration over several lines, a directive at the end of the
 declaration's first line stays on the first line, after the opening delimiter,
 also when it followed a member or an attribute on that line. A directive on a
-line where no declaration starts stays on the last line of the declaration it
-followed, which keeps its source layout. A plain `//` comment follows the
-member or the closing delimiter it trailed, as before.
+line where no declaration starts stays on that line: after a declaration, on
+the last line of that declaration, which keeps its source layout; after a
+block comment that leads the next member, on that comment's line. A plain `//`
+comment follows the member or the closing delimiter it trailed, as before.
 
 **Exit codes.** 0 when nothing needed rewriting, or the rewrite (without
 `--check`) succeeded. 1 under `--check` when a file would change, without

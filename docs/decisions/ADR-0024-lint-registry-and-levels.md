@@ -97,10 +97,11 @@ above leaves open:
   names none included. When the formatter breaks a declaration, a lint directive
   at the end of its first line stays on that line, after the opening delimiter,
   also when it followed a member or an attribute on that line. A directive on a
-  line where no declaration starts stays on the last line of the declaration it
-  followed, which keeps its source layout. A plain `//` comment is placed as it
-  was before directives existed, so the output for a source without a directive
-  is unchanged.
+  line where no declaration starts stays on that line: after a declaration, on
+  the last line of that declaration, which keeps its source layout; after a
+  block comment that leads the next member, on that comment's line. A plain `//`
+  comment is placed as it was before directives existed, so the output for a
+  source without a directive is unchanged.
 - `ridl check` applies the report and the levels once: it starts from the
   unlevelled run (`ridlc::run_check_unlevelled`), raises RIDL-407 and RIDL-156
   when their checks run, then reports the directives and applies the levels over
