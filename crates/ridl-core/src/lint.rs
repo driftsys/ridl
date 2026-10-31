@@ -5,14 +5,15 @@
 //! names up in it, defines the four levels a `[lints]` table can set, resolves
 //! the effective levels by directory ([`LintScopes`], ADR-0024 decision 10),
 //! and applies them to a diagnostic list ([`apply_lint_levels`], ADR-0024
-//! decision 6).
+//! decision 6). The same step removes a diagnostic that a `// lint: allow …`
+//! directive in its file allows ([`directives_in`], ADR-0024 decision 2).
 
 mod directive;
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::diag::{ALL_CATALOGS, CatalogEntry, DiagCode, Diagnostic, Severity, SourceMap};
+use crate::diag::{ALL_CATALOGS, CatalogEntry, DiagCode, Diagnostic, FileId, Severity, SourceMap};
 
 pub use directive::{DirectiveProblem, LintDirective, directives_in};
 
@@ -158,24 +159,37 @@ impl LintScopes {
     }
 }
 
-/// Applies the effective lint levels to `diagnostics` (ADR-0024 decision 6).
+/// Applies the lint directives and the effective lint levels to `diagnostics`
+/// (ADR-0024 decisions 2 and 6).
 ///
-/// For each diagnostic whose code is a lint, the level comes from the scope of
-/// `sources.path(primary.file)`, or from the registry defaults when the file
-/// has no path (a detached diagnostic, or an id `sources` never issued) or its
-/// path is in no scope. `allow` removes the diagnostic; `info`, `warn` and
-/// `deny` set its severity. A diagnostic with an Error code or with no code is
-/// left unchanged. Applying the function twice gives the same list.
+/// A diagnostic whose code is a lint is removed before its level is looked up
+/// when an effective directive ([`LintDirective::is_effective`]) of its file
+/// allows that lint and the directive's scope contains `primary.range`. The
+/// directive wins over every level, `deny` included; the check reads the code,
+/// not the severity, so a diagnostic an earlier application raised to Error is
+/// still removed. The two lints that report a directive's own mistakes
+/// (`unused-lint-directive` and `malformed-lint-directive`) are never removed.
+///
+/// For each remaining diagnostic whose code is a lint, the level comes from
+/// the scope of `sources.path(primary.file)`, or from the registry defaults
+/// when the file has no path (a detached diagnostic, or an id `sources` never
+/// issued) or its path is in no scope. `allow` removes the diagnostic; `info`,
+/// `warn` and `deny` set its severity. A diagnostic with an Error code or with
+/// no code is left unchanged. Applying the function twice gives the same list.
 pub fn apply_lint_levels(
     diagnostics: &mut Vec<Diagnostic>,
     sources: &SourceMap,
     scopes: &LintScopes,
 ) {
     let defaults = LintLevels::default();
+    let directives = directives_by_file(sources);
     diagnostics.retain_mut(|diagnostic| {
         let Some(entry) = lint_of(diagnostic.code) else {
             return true;
         };
+        if directive_allows(&directives, diagnostic, entry) {
+            return false;
+        }
         let levels = sources
             .path(diagnostic.primary.file)
             .and_then(|path| scopes.for_path(Path::new(path)))
@@ -193,6 +207,54 @@ pub fn apply_lint_levels(
     });
 }
 
+/// The directives of every file of `sources` whose path ends in `.typl`,
+/// `.ridl` or `.rsdl` and whose text contains `lint:`, keyed by file id.
+/// The file is parsed with `crate::db::profile_of_path`.
+fn directives_by_file(sources: &SourceMap) -> BTreeMap<FileId, Vec<LintDirective>> {
+    sources
+        .iter_files()
+        .filter(|(path, text)| {
+            (path.ends_with(".typl") || path.ends_with(".ridl") || path.ends_with(".rsdl"))
+                && text.contains("lint:")
+        })
+        .filter_map(|(path, text)| {
+            let id = sources.id_of(path)?;
+            let parse = ridl_syntax::parse(text, crate::db::profile_of_path(path));
+            Some((id, directives_in(&parse.syntax())))
+        })
+        .collect()
+}
+
+/// Whether an effective directive of the diagnostic's file allows `entry`,
+/// the lint row of its code, over a scope that contains its primary range.
+/// A directive lint (`directive::DIRECTIVE_LINT_NAMES`) is never allowed.
+fn directive_allows(
+    directives: &BTreeMap<FileId, Vec<LintDirective>>,
+    diagnostic: &Diagnostic,
+    entry: &CatalogEntry,
+) -> bool {
+    if entry
+        .lint
+        .is_some_and(|name| directive::DIRECTIVE_LINT_NAMES.contains(&name))
+    {
+        return false;
+    }
+    directives
+        .get(&diagnostic.primary.file)
+        .is_some_and(|directives| {
+            directives.iter().any(|directive| {
+                directive.is_effective()
+                    && directive
+                        .scope
+                        .is_some_and(|scope| scope.contains_range(diagnostic.primary.range))
+                    && directive
+                        .allows
+                        .iter()
+                        .any(|(allowed, _)| allowed.code == entry.code)
+            })
+        })
+}
+
 /// Removes every diagnostic whose lint is `allow` by default (ADR-0024
 /// decision 1) and leaves every other diagnostic unchanged.
 ///
@@ -208,7 +270,7 @@ pub fn drop_allowed_by_default(diagnostics: &mut Vec<Diagnostic>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diag::{FileId, Span};
+    use crate::diag::Span;
     use rowan::{TextRange, TextSize};
 
     #[test]
@@ -498,5 +560,196 @@ mod tests {
         let once = diagnostics.clone();
         apply_lint_levels(&mut diagnostics, &sources, &scopes);
         assert_eq!(diagnostics, once);
+    }
+
+    /// A `.ridl` text with one directive that allows `missing-docs` on
+    /// `interface A`, and a second interface outside the scope.
+    const DIRECTIVE_TEXT: &str = "package p\n\n\
+        // lint: allow missing-docs -- legacy\n\
+        interface A {}\n\n\
+        interface B {}\n";
+
+    /// A `.ridl` text with a directive that has no reason.
+    const NO_REASON_TEXT: &str = "package p\n\n// lint: allow missing-docs\ninterface A {}\n";
+
+    /// The range of the first occurrence of `needle` in `text`.
+    fn range_of(text: &str, needle: &str) -> TextRange {
+        let start = text.find(needle).expect("needle is in the text");
+        TextRange::at(
+            TextSize::from(start as u32),
+            TextSize::from(needle.len() as u32),
+        )
+    }
+
+    /// A diagnostic of `code` at `severity`, with its primary span at `range`
+    /// in `file`.
+    fn diagnostic_at(
+        code: DiagCode,
+        severity: Severity,
+        file: FileId,
+        range: TextRange,
+    ) -> Diagnostic {
+        let mut diagnostic = diagnostic(code, severity, file);
+        diagnostic.primary.range = range;
+        diagnostic
+    }
+
+    /// One scope for `/ws` with `missing-docs` at `level`.
+    fn missing_docs_scopes(level: LintLevel) -> LintScopes {
+        let mut scopes = LintScopes::default();
+        scopes.insert(PathBuf::from("/ws"), levels("missing-docs", level));
+        scopes
+    }
+
+    /// The codes left after `apply_lint_levels` over `diagnostics`, with
+    /// `text` interned as `/ws/x.ridl` and `missing-docs` at `level`.
+    fn apply_over(
+        text: &str,
+        level: LintLevel,
+        diagnostics: impl FnOnce(FileId) -> Vec<Diagnostic>,
+    ) -> Vec<(DiagCode, Severity)> {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("/ws/x.ridl", text);
+        let mut diagnostics = diagnostics(file);
+        apply_lint_levels(&mut diagnostics, &sources, &missing_docs_scopes(level));
+        diagnostics.iter().map(|d| (d.code, d.severity)).collect()
+    }
+
+    #[test]
+    fn directive_removes_its_lint_inside_scope() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![]);
+    }
+
+    #[test]
+    fn directive_wins_over_deny() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Deny, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![]);
+    }
+
+    #[test]
+    fn directive_leaves_a_diagnostic_outside_scope() {
+        let outside = range_of(DIRECTIVE_TEXT, "interface B");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                outside,
+            )]
+        });
+        assert_eq!(kept, vec![(DiagCode::TYPL_406, Severity::Warning)]);
+    }
+
+    #[test]
+    fn directive_leaves_another_lint() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::RIDL_100,
+                Severity::Warning,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![(DiagCode::RIDL_100, Severity::Warning)]);
+    }
+
+    #[test]
+    fn directive_never_removes_an_error_code() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let kept = apply_over(DIRECTIVE_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::RIDL_101,
+                Severity::Error,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![(DiagCode::RIDL_101, Severity::Error)]);
+    }
+
+    #[test]
+    fn ineffective_directive_removes_nothing() {
+        let inside = range_of(NO_REASON_TEXT, "interface A");
+        let kept = apply_over(NO_REASON_TEXT, LintLevel::Warn, |file| {
+            vec![diagnostic_at(
+                DiagCode::TYPL_406,
+                Severity::Warning,
+                file,
+                inside,
+            )]
+        });
+        assert_eq!(kept, vec![(DiagCode::TYPL_406, Severity::Warning)]);
+    }
+
+    /// The directive lints (`unused-lint-directive`, `malformed-lint-directive`)
+    /// stay even when a directive names them. The loop runs over the rows the
+    /// catalogue holds for those names; while it holds none, it checks nothing.
+    #[test]
+    fn directive_never_removes_typl_411_or_412() {
+        let text = "package p\n\n\
+            // lint: allow missing-docs, unused-lint-directive, malformed-lint-directive -- r\n\
+            interface A {}\n";
+        let inside = range_of(text, "interface A");
+        for name in directive::DIRECTIVE_LINT_NAMES {
+            let Some(entry) = lint_by_name(name) else {
+                continue;
+            };
+            let kept = apply_over(text, LintLevel::Warn, |file| {
+                vec![diagnostic_at(entry.code, entry.severity, file, inside)]
+            });
+            assert_eq!(kept, vec![(entry.code, entry.severity)], "{name} stays");
+        }
+    }
+
+    #[test]
+    fn directives_are_idempotent() {
+        let inside = range_of(DIRECTIVE_TEXT, "interface A");
+        let outside = range_of(DIRECTIVE_TEXT, "interface B");
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("/ws/x.ridl", DIRECTIVE_TEXT);
+        let scopes = missing_docs_scopes(LintLevel::Deny);
+        let mut diagnostics = vec![
+            diagnostic_at(DiagCode::TYPL_406, Severity::Warning, file, inside),
+            diagnostic_at(DiagCode::TYPL_406, Severity::Warning, file, outside),
+            diagnostic_at(DiagCode::RIDL_100, Severity::Warning, file, inside),
+        ];
+        apply_lint_levels(&mut diagnostics, &sources, &scopes);
+        let once = diagnostics.clone();
+        assert_eq!(once.len(), 2, "{once:?}");
+        apply_lint_levels(&mut diagnostics, &sources, &scopes);
+        assert_eq!(diagnostics, once);
+    }
+
+    #[test]
+    fn toml_file_is_not_scanned() {
+        let text = "// lint: allow unknown-lint -- not a source file\n[lints]\nfoo = \"warn\"\n";
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("/ws/ridl.toml", text);
+        let mut diagnostics = vec![diagnostic_at(
+            DiagCode::MANI_010,
+            Severity::Warning,
+            file,
+            range_of(text, "foo"),
+        )];
+        apply_lint_levels(&mut diagnostics, &sources, &LintScopes::default());
+        assert_eq!(diagnostics.len(), 1);
     }
 }

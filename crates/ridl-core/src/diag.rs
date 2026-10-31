@@ -1608,7 +1608,7 @@ pub enum Severity {
 /// An interned file id, issued by [`SourceMap::file_id`]. It indexes the file's
 /// path and text inside the [`SourceMap`], which the renderer reads to draw the
 /// source snippet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
 #[serde(transparent)]
 pub struct FileId(u32);
 

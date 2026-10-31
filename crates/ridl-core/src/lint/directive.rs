@@ -12,7 +12,8 @@ use crate::lint::lint_by_name;
 
 /// The lint names a directive may not allow (ADR-0024 decision 18): the lints
 /// that report a directive's own mistakes.
-const DIRECTIVE_LINT_NAMES: [&str; 2] = ["unused-lint-directive", "malformed-lint-directive"];
+pub(super) const DIRECTIVE_LINT_NAMES: [&str; 2] =
+    ["unused-lint-directive", "malformed-lint-directive"];
 
 /// One `// lint: allow …` comment, with the names it resolved and the
 /// declaration it applies to.
