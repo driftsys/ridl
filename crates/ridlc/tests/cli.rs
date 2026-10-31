@@ -2536,9 +2536,10 @@ fn topology_allowing_link_encoding() -> String {
 }
 
 /// A directive that allows `link-encoding-not-emitted` is used by the build
-/// that selects the deployment whose link draws it, and is not unused where
-/// the check does not run: `check`, a build with no deployment selected, and
-/// a build that selects the other deployment.
+/// that selects the deployment whose link draws it, and by a build that
+/// selects the other deployment, which runs the check over every declared
+/// deployment for the report; it is not unused where the check does not run:
+/// `check` and a build with no deployment selected.
 #[test]
 fn a_directive_on_the_link_encoding_lint_is_unused_only_where_the_check_ran() {
     let topology = topology_allowing_link_encoding();
@@ -2588,6 +2589,56 @@ fn a_directive_on_the_link_encoding_lint_is_unused_only_where_the_check_ran() {
     assert!(
         !stderr.contains("TYPL-411"),
         "no deployment selected, so the check did not run, got:\n{stderr}"
+    );
+}
+
+/// What the check raises for the other deployments counts for the report
+/// only: at `link-encoding-not-emitted = "deny"`, a `--deployment Lab` build
+/// reports no RSDL-807 and succeeds, as `Lab` places everything on one
+/// machine.
+#[test]
+fn the_other_deployments_links_are_not_reported_at_deny() {
+    let manifest = LINK_ENCODINGS_MANIFEST.replace(
+        "missing-docs = \"allow\"\n",
+        "missing-docs = \"allow\"\nlink-encoding-not-emitted = \"deny\"\n",
+    );
+    let dir = link_encodings_workspace("link-encoding-other-deny", &manifest, None);
+    let out = TempDir::new("link-encoding-other-deny-out");
+    let (code, stderr) = build_rust(dir.path(), out.path(), Some("Lab"));
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("RSDL-807"),
+        "`Bench`'s link is not reported by a `Lab` build, got:\n{stderr}"
+    );
+    assert!(out.path().join("lib.rs").is_file(), "the crate is written");
+}
+
+/// A build that selects a deployment but emits no backend with a codec
+/// compares nothing, so the check does not run and a directive that names
+/// `link-encoding-not-emitted` is not unused.
+#[test]
+fn a_build_that_compares_no_backend_does_not_run_the_check() {
+    let topology = topology_allowing_link_encoding();
+    let dir = link_encodings_workspace(
+        "link-encoding-no-codec",
+        LINK_ENCODINGS_MANIFEST,
+        Some(&topology),
+    );
+    let out = TempDir::new("link-encoding-no-codec-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+        "--deployment".as_ref(),
+        "Bench".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(
+        !stderr.contains("TYPL-411") && !stderr.contains("RSDL-807"),
+        "no backend is compared, got:\n{stderr}"
     );
 }
 
