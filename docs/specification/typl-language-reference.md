@@ -518,7 +518,11 @@ and FlatBuffers keep native `float`/`double`. See Appendix D.
 
 A `string` is a sequence of **Unicode scalar values**. `string [N]` bounds the
 count of scalar values — not graphemes, which are unbounded, and not bytes,
-which `bytes` counts. Default `[0..256]` when unspecified (warning).
+which `bytes` counts. Default `[0..256]` when unspecified (warning). The one
+position where the default and TYPL-103 do not apply is a bare `string` as the
+element of a ridl stream (`<string>`, ridl §12.2): there the element has no
+bound, and the stream is a UTF-8 text stream
+([ADR-0032](../decisions/ADR-0032-byte-streams.md) decisions 2 and 3).
 
 The largest advised bound is **16,256 characters**, 254 times 64. Four times
 that bound, plus 58 bytes of overhead, is within 65,280 bytes, the largest
@@ -558,7 +562,10 @@ a rejected alternative of that record.
 ### 4.5 Bytes
 
 Bound is in bytes; constraint syntax mirrors `string` but has no `match`.
-Default `[0..256]` when unspecified (warning).
+Default `[0..256]` when unspecified (warning). As for `string` (§4.4), the
+default and TYPL-103 do not apply to a bare `bytes` as the element of a ridl
+stream (`<bytes>`, ridl §12.2): there the element has no bound, and the stream
+is a byte stream ([ADR-0032](../decisions/ADR-0032-byte-streams.md) decision 2).
 
 The largest advised bound is **65,280 bytes**, the largest payload of any kind
 ([ADR-0030](../decisions/ADR-0030-transfer-and-bound-limits.md) decision 7). A
@@ -1180,10 +1187,10 @@ sensors  : [Label : Speed; 1..8]
 ```
 
 A bare `string` or `bytes` key takes §4.4–§4.5's `[0..256]` length default, with
-TYPL-103, the same as every other position — §15.3 keeps a bare `string`/`bytes`
-out of a field position, but a map key is not one, so the default applies there
-instead. A key therefore always carries a length bound, which is what lets a
-projection state a finite size for the map.
+TYPL-103, the same as every position other than a ridl stream element — §15.3
+keeps a bare `string`/`bytes` out of a field position, but a map key is not one,
+so the default applies there instead. A key therefore always carries a length
+bound, which is what lets a projection state a finite size for the map.
 
 **A map has no declared entry order, and typl defines no canonical payload
 encoding.** A map is the only typl construct whose ordering is free: an array is
@@ -1342,8 +1349,9 @@ permitted; no semicolons.
 ### 15.3 Type Usage
 
 - `string` and `bytes` must not be used directly as field types — always define
-  a named `type` (the ridl profile grants streams an element-type exception;
-  there is no exception inside typl)
+  a named `type` (the ridl profile grants streams an element-type exception, and
+  the element has no bound there: `<bytes>` is a byte stream and `<string>` a
+  UTF-8 text stream, ridl §12.2; there is no exception inside typl)
 - All variable-size types declare explicit bounds
 - `union` arms reference named types only
 - Prefer named types over inline primitives for all domain concepts
