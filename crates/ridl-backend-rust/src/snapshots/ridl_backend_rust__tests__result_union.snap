@@ -212,6 +212,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -240,6 +241,7 @@ impl ::core::convert::From<Counter> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Counter {
     fn default() -> Self {
         Counter::new(0)
@@ -254,6 +256,7 @@ pub struct SensorReading {
     /// - unit km/h
     pub value: Speed,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorReading {
     fn default() -> Self {
         SensorReading {
@@ -265,6 +268,7 @@ impl ::core::default::Default for SensorReading {
 pub struct SensorFault {
     pub code: Counter,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorFault {
     fn default() -> Self {
         SensorFault {
@@ -278,6 +282,7 @@ pub enum SensorResult {
     Ok(SensorReading),
     Err(SensorFault),
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorResult {
     fn default() -> Self {
         SensorResult::Ok(<SensorReading as ::core::default::Default>::default())

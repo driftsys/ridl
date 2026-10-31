@@ -60,6 +60,7 @@ impl ::core::convert::From<Temperature> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Temperature {
     fn default() -> Self {
         Temperature::new_unchecked(0)
@@ -125,6 +126,7 @@ impl ::core::convert::From<Level> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Level {
     fn default() -> Self {
         Level::new_unchecked(0)
@@ -190,6 +192,7 @@ impl ::core::convert::From<Window> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Window {
     fn default() -> Self {
         Window::new_unchecked(0)
@@ -256,6 +259,7 @@ impl ::core::convert::From<Average> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Average {
     fn default() -> Self {
         Average::new_unchecked(0)
@@ -295,6 +299,7 @@ impl ::core::convert::From<Health> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Health {
     fn default() -> Self {
         Health::Ok
@@ -312,6 +317,7 @@ pub struct Warning {
     /// The health the subsystem moved to.
     pub health: Health,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Warning {
     fn default() -> Self {
         Warning {
@@ -1119,7 +1125,7 @@ pub(crate) fn __ridl_pb_encode_Temperature(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Temperature(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1157,7 +1163,7 @@ pub(crate) fn __ridl_pb_verify_Temperature(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Temperature(
     buf: &[::core::primitive::u8],
 ) -> Temperature {
@@ -1211,6 +1217,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Temperature {
         __ridl_pb_verify_Temperature(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -1244,7 +1251,7 @@ pub(crate) fn __ridl_pb_encode_Level(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Level(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1282,7 +1289,7 @@ pub(crate) fn __ridl_pb_verify_Level(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Level(buf: &[::core::primitive::u8]) -> Level {
     let mut __f0 = Level::new_unchecked(0i64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -1334,6 +1341,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Level {
         __ridl_pb_verify_Level(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -1367,7 +1375,7 @@ pub(crate) fn __ridl_pb_encode_Window(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Window(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1405,7 +1413,7 @@ pub(crate) fn __ridl_pb_verify_Window(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Window(buf: &[::core::primitive::u8]) -> Window {
     let mut __f0 = Window::new_unchecked(0i64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -1457,6 +1465,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Window {
         __ridl_pb_verify_Window(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -1490,7 +1499,7 @@ pub(crate) fn __ridl_pb_encode_Average(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Average(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1528,7 +1537,7 @@ pub(crate) fn __ridl_pb_verify_Average(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Average(buf: &[::core::primitive::u8]) -> Average {
     let mut __f0 = Average::new_unchecked(0i64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -1580,6 +1589,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Average {
         __ridl_pb_verify_Average(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -1613,7 +1623,7 @@ pub(crate) fn __ridl_pb_encode_Health(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Health(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1653,7 +1663,7 @@ pub(crate) fn __ridl_pb_verify_Health(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Health(buf: &[::core::primitive::u8]) -> Health {
     let mut __f0 = Health::Ok;
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -1708,6 +1718,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Health {
         __ridl_pb_verify_Health(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -1756,7 +1767,7 @@ pub(crate) fn __ridl_pb_encode_Warning(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Warning(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -1826,7 +1837,7 @@ pub(crate) fn __ridl_pb_verify_Warning(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Warning(buf: &[::core::primitive::u8]) -> Warning {
     let mut __f0 = Level::new_unchecked(0i64);
     let mut __f1 = Health::Ok;
@@ -1897,6 +1908,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Warning {
         __ridl_pb_verify_Warning(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -3000,6 +3012,7 @@ impl ::ridl_rt::contract::Query for CabinAverage {
 /// the proof covers every interaction kind that carries a payload.
 ///
 ///The generated interaction face of interface `Cabin`.
+#[allow(clippy::module_inception)]
 pub mod cabin {
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
     pub(crate) struct SetLevelCorrelation(pub ::ridl_rt::port::Correlation);
@@ -4812,6 +4825,7 @@ impl ::ridl_rt::contract::Signal for HornActive {
 /// visibly computed per interface rather than fixed.
 ///
 ///The generated interaction face of interface `Horn`.
+#[allow(clippy::module_inception)]
 pub mod horn {
     #[track_caller]
     fn check_catalog(found: &::ridl_rt::contract::CatalogRef) {

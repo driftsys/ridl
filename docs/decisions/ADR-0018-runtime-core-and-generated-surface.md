@@ -318,15 +318,17 @@ be generated, and in what order", which is what this record answers.
    header first, and Sebastien decided on 2026-10-06 that the marker leads,
    because `rustfmt` reads `@generated` only in the first 5 lines. TypeScript
    adds `/* eslint-disable */` after the block. JSON and binary outputs carry no
-   marker. The emitted `lib.rs` allows exactly two lints,
-   `#![allow(clippy::derivable_impls, clippy::module_inception)]`; the design
-   text had no allow list, and Sebastien decided on 2026-10-06 to keep the list
-   and gate it: `just demo` swaps `allow` for `expect` and runs clippy with
-   `-D warnings` on the generated `examples/cabin` crate, so a new lint and a
-   listed lint that no longer fires both fail. Single-file mode writes no
-   `lib.rs`, so a consumer that uses `include!` puts the `#[allow(...)]` on the
-   wrapping `mod`. `ridl build` does not write a `.gitattributes` file; the book
-   recommends `generated/** linguist-generated=true`. The as-built record is
+   marker. The emitted `lib.rs` allowed exactly two lints at the crate root,
+   `#![allow(clippy::derivable_impls, clippy::module_inception)]`, which
+   Sebastien decided on 2026-10-06 to keep and gate with `just demo`. On
+   2026-10-31 Sebastien decided to move each allow onto the generated item that
+   needs it (driftsys/ridl#1133), so that a generated file included into another
+   crate draws no lint: `lib.rs` switches no lint off, and `just demo` runs
+   clippy with `-D warnings` on both generated crates, as edition 2021 and as
+   edition 2024. Single-file mode writes no `lib.rs`, and a consumer that uses
+   `include!` adds no allow. `ridl build` does not write a `.gitattributes`
+   file; the book recommends `generated/** linguist-generated=true`. The
+   as-built record is
    [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md) section 2;
    the design note, with the considered options, is
    [`docs/archive/2026-10-06-generated-file-headers-design.md`](../archive/2026-10-06-generated-file-headers-design.md).
@@ -703,7 +705,7 @@ be generated, and in what order", which is what this record answers.
 | Copy each source file's leading comment into the generated files            | rejected | unclear when several sources produce one file, and it puts comments in the IR; the project header from the manifest replaces it (amendment of 2026-10-06 to decision 6)                                                                                                                                |
 | Copy only the `SPDX-License-Identifier` lines of the contributing sources   | deferred | mechanical, but the IR and the request would still carry them; reopens when a user has a compliance requirement for it                                                                                                                                                                                 |
 | A licence attribute in the language, such as `@license("MIT")` on a package | rejected | an asymmetry between generated targets does not justify new syntax, and an attribute does not cover a copyright line                                                                                                                                                                                   |
-| `#![allow(warnings)]` on the generated crate root                           | rejected | it hides defects in the backend's output; the closed two-lint list is gated by `just demo` instead                                                                                                                                                                                                     |
+| `#![allow(warnings)]` on the generated crate root                           | rejected | it hides defects in the backend's output; each allow is on the generated item that needs it, and `just demo` lints the output with `-D warnings`                                                                                                                                                       |
 | The Go convention, `// Code generated … DO NOT EDIT.`, as the marker        | rejected | linguist recognises it only for Go files and rustfmt does not read it; `@generated` is the token the Rust tools read                                                                                                                                                                                   |
 
 ## Consequences

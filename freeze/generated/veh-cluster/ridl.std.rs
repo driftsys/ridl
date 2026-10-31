@@ -845,6 +845,7 @@ impl ::core::convert::From<Timestamp> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Timestamp {
     fn default() -> Self {
         Timestamp::new_unchecked(0)
@@ -917,6 +918,7 @@ impl ::core::convert::From<Duration> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Duration {
     fn default() -> Self {
         Duration::new_unchecked(0.0)
@@ -4100,7 +4102,7 @@ pub(crate) fn __ridl_pb_encode_Uuid(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Uuid(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4142,7 +4144,7 @@ pub(crate) fn __ridl_pb_verify_Uuid(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Uuid(buf: &[::core::primitive::u8]) -> Uuid {
     let mut __f0 = Uuid::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4194,6 +4196,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Uuid {
         __ridl_pb_verify_Uuid(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4227,7 +4230,7 @@ pub(crate) fn __ridl_pb_encode_Ulid(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Ulid(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4269,7 +4272,7 @@ pub(crate) fn __ridl_pb_verify_Ulid(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Ulid(buf: &[::core::primitive::u8]) -> Ulid {
     let mut __f0 = Ulid::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4321,6 +4324,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Ulid {
         __ridl_pb_verify_Ulid(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4354,7 +4358,7 @@ pub(crate) fn __ridl_pb_encode_Uri(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Uri(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4396,7 +4400,7 @@ pub(crate) fn __ridl_pb_verify_Uri(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Uri(buf: &[::core::primitive::u8]) -> Uri {
     let mut __f0 = Uri::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4448,6 +4452,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Uri {
         __ridl_pb_verify_Uri(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4481,7 +4486,7 @@ pub(crate) fn __ridl_pb_encode_Url(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Url(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4523,7 +4528,7 @@ pub(crate) fn __ridl_pb_verify_Url(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Url(buf: &[::core::primitive::u8]) -> Url {
     let mut __f0 = Url::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4575,6 +4580,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Url {
         __ridl_pb_verify_Url(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4608,7 +4614,7 @@ pub(crate) fn __ridl_pb_encode_Email(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Email(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4651,7 +4657,7 @@ pub(crate) fn __ridl_pb_verify_Email(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Email(buf: &[::core::primitive::u8]) -> Email {
     let mut __f0 = Email::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4703,6 +4709,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Email {
         __ridl_pb_verify_Email(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4736,7 +4743,7 @@ pub(crate) fn __ridl_pb_encode_IpV4(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_IpV4(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4778,7 +4785,7 @@ pub(crate) fn __ridl_pb_verify_IpV4(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_IpV4(buf: &[::core::primitive::u8]) -> IpV4 {
     let mut __f0 = IpV4::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4830,6 +4837,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for IpV4 {
         __ridl_pb_verify_IpV4(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4863,7 +4871,7 @@ pub(crate) fn __ridl_pb_encode_IpV6(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_IpV6(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -4905,7 +4913,7 @@ pub(crate) fn __ridl_pb_verify_IpV6(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_IpV6(buf: &[::core::primitive::u8]) -> IpV6 {
     let mut __f0 = IpV6::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -4957,6 +4965,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for IpV6 {
         __ridl_pb_verify_IpV6(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -4990,7 +4999,7 @@ pub(crate) fn __ridl_pb_encode_Label(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Label(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5033,7 +5042,7 @@ pub(crate) fn __ridl_pb_verify_Label(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Label(buf: &[::core::primitive::u8]) -> Label {
     let mut __f0 = Label::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5085,6 +5094,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Label {
         __ridl_pb_verify_Label(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5118,7 +5128,7 @@ pub(crate) fn __ridl_pb_encode_Name(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Name(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5160,7 +5170,7 @@ pub(crate) fn __ridl_pb_verify_Name(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Name(buf: &[::core::primitive::u8]) -> Name {
     let mut __f0 = Name::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5212,6 +5222,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Name {
         __ridl_pb_verify_Name(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5245,7 +5256,7 @@ pub(crate) fn __ridl_pb_encode_Message(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Message(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5288,7 +5299,7 @@ pub(crate) fn __ridl_pb_verify_Message(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Message(buf: &[::core::primitive::u8]) -> Message {
     let mut __f0 = Message::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5340,6 +5351,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Message {
         __ridl_pb_verify_Message(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5373,7 +5385,7 @@ pub(crate) fn __ridl_pb_encode_Timestamp(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Timestamp(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5408,7 +5420,7 @@ pub(crate) fn __ridl_pb_verify_Timestamp(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Timestamp(buf: &[::core::primitive::u8]) -> Timestamp {
     let mut __f0 = Timestamp::new_unchecked(0i64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5456,6 +5468,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Timestamp {
         __ridl_pb_verify_Timestamp(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5489,7 +5502,7 @@ pub(crate) fn __ridl_pb_encode_Duration(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Duration(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5524,7 +5537,7 @@ pub(crate) fn __ridl_pb_verify_Duration(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Duration(buf: &[::core::primitive::u8]) -> Duration {
     let mut __f0 = Duration::new_unchecked(0.0f64);
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5572,6 +5585,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Duration {
         __ridl_pb_verify_Duration(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5605,7 +5619,7 @@ pub(crate) fn __ridl_pb_encode_Date(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Date(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5647,7 +5661,7 @@ pub(crate) fn __ridl_pb_verify_Date(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Date(buf: &[::core::primitive::u8]) -> Date {
     let mut __f0 = Date::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5699,6 +5713,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Date {
         __ridl_pb_verify_Date(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5732,7 +5747,7 @@ pub(crate) fn __ridl_pb_encode_TimeOfDay(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_TimeOfDay(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5775,7 +5790,7 @@ pub(crate) fn __ridl_pb_verify_TimeOfDay(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_TimeOfDay(buf: &[::core::primitive::u8]) -> TimeOfDay {
     let mut __f0 = TimeOfDay::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5827,6 +5842,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for TimeOfDay {
         __ridl_pb_verify_TimeOfDay(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5860,7 +5876,7 @@ pub(crate) fn __ridl_pb_encode_Version(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Version(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -5903,7 +5919,7 @@ pub(crate) fn __ridl_pb_verify_Version(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Version(buf: &[::core::primitive::u8]) -> Version {
     let mut __f0 = Version::new_unchecked(::std::string::String::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -5955,6 +5971,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Version {
         __ridl_pb_verify_Version(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -5990,7 +6007,7 @@ pub(crate) fn __ridl_pb_encode_CountryCode(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_CountryCode(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -6033,7 +6050,7 @@ pub(crate) fn __ridl_pb_verify_CountryCode(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_CountryCode(
     buf: &[::core::primitive::u8],
 ) -> CountryCode {
@@ -6087,6 +6104,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for CountryCode {
         __ridl_pb_verify_CountryCode(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -6122,7 +6140,7 @@ pub(crate) fn __ridl_pb_encode_LanguageCode(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_LanguageCode(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -6165,7 +6183,7 @@ pub(crate) fn __ridl_pb_verify_LanguageCode(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_LanguageCode(
     buf: &[::core::primitive::u8],
 ) -> LanguageCode {
@@ -6219,6 +6237,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for LanguageCode {
         __ridl_pb_verify_LanguageCode(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -6252,7 +6271,7 @@ pub(crate) fn __ridl_pb_encode_Sha256Hash(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Sha256Hash(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -6293,7 +6312,7 @@ pub(crate) fn __ridl_pb_verify_Sha256Hash(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Sha256Hash(buf: &[::core::primitive::u8]) -> Sha256Hash {
     let mut __f0 = Sha256Hash::new_unchecked(::std::vec::Vec::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -6341,6 +6360,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Sha256Hash {
         __ridl_pb_verify_Sha256Hash(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -6374,7 +6394,7 @@ pub(crate) fn __ridl_pb_encode_Sha512Hash(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Sha512Hash(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -6415,7 +6435,7 @@ pub(crate) fn __ridl_pb_verify_Sha512Hash(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Sha512Hash(buf: &[::core::primitive::u8]) -> Sha512Hash {
     let mut __f0 = Sha512Hash::new_unchecked(::std::vec::Vec::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -6463,6 +6483,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Sha512Hash {
         __ridl_pb_verify_Sha512Hash(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -6496,7 +6517,7 @@ pub(crate) fn __ridl_pb_encode_Signature(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Signature(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -6537,7 +6558,7 @@ pub(crate) fn __ridl_pb_verify_Signature(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Signature(buf: &[::core::primitive::u8]) -> Signature {
     let mut __f0 = Signature::new_unchecked(::std::vec::Vec::new());
     let mut __reader = ::ridl_rt::proto3::Reader::new(buf);
@@ -6585,6 +6606,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Signature {
         __ridl_pb_verify_Signature(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {
@@ -6620,7 +6642,7 @@ pub(crate) fn __ridl_pb_encode_Certificate(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_verify_Certificate(
     buf: &[::core::primitive::u8],
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
@@ -6661,7 +6683,7 @@ pub(crate) fn __ridl_pb_verify_Certificate(
     }
     ::core::result::Result::Ok(())
 }
-#[allow(deprecated, non_snake_case)]
+#[allow(deprecated, non_snake_case, clippy::collapsible_if)]
 pub(crate) fn __ridl_pb_decode_Certificate(
     buf: &[::core::primitive::u8],
 ) -> Certificate {
@@ -6711,6 +6733,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::Proto3> for Certificate {
         __ridl_pb_verify_Certificate(buf)?;
         ::core::result::Result::Ok(::ridl_rt::proto3::Verified::new(buf))
     }
+    #[allow(clippy::collapsible_if)]
     fn decode(
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::Proto3>,
     ) -> Self {

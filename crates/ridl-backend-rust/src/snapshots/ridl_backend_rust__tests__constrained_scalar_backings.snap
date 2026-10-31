@@ -116,6 +116,7 @@ impl ::core::convert::From<Digest> for ::std::vec::Vec<::core::primitive::u8> {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Digest {
     fn default() -> Self {
         Digest::new_unchecked(::std::vec::Vec::new())
@@ -185,6 +186,7 @@ impl ::core::convert::From<Ratio> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Ratio {
     fn default() -> Self {
         Ratio::new_unchecked(0.0)

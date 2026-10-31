@@ -214,6 +214,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -429,6 +430,7 @@ impl ::core::convert::From<Temperature> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Temperature {
     fn default() -> Self {
         Temperature::new_unchecked(0.0)
@@ -681,6 +683,7 @@ impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Temperatu
 pub struct ClusterReading {
     pub speed: crate::veh::common::Speed,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for ClusterReading {
     fn default() -> Self {
         ClusterReading {

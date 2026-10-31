@@ -134,21 +134,6 @@ fn send_level_raw(port: &mut Loopback, level: i64) -> Correlation {
               glob-import no prelude of that interface; in the emitted crate the module \
               is reachable from the crate root and draws no such lint"
 )]
-#[allow(
-    clippy::derivable_impls,
-    reason = "the domain-type Default emission (crate::defaults, predating the face) \
-              writes a manual impl rather than #[derive(Default)]; this is the first \
-              place that output is compiled in-tree, so it is the first place this \
-              lint sees it. Fixing the emitter is outside the scope of the \
-              interaction face: it is baseline domain-type emission every backend \
-              consumer shares, not face- or descriptor-specific."
-)]
-#[allow(
-    clippy::collapsible_if,
-    reason = "the emitted code targets edition 2021, the edition of the crate `ridl build` \
-              writes, where an `if` and an `if let` inside it cannot be joined; this test \
-              crate is edition 2024, where clippy proposes a let chain"
-)]
 mod generated {
     // The fixture's `Zone` members are `@deprecated`. The generated code that
     // calls their methods allows the lint, so the face draws no `deprecated`

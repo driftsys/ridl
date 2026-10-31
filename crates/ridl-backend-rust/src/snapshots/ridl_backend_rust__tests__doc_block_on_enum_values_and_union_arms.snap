@@ -212,6 +212,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -240,6 +241,7 @@ impl ::core::convert::From<Counter> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Counter {
     fn default() -> Self {
         Counter::new(0)
@@ -281,6 +283,7 @@ impl ::core::convert::From<Gear> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Gear {
     fn default() -> Self {
         Gear::Park
@@ -298,6 +301,7 @@ pub enum Measurement {
     Reading(Speed),
     Fault(Counter),
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Measurement {
     fn default() -> Self {
         Measurement::Reading(<Speed as ::core::default::Default>::default())

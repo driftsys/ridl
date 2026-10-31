@@ -2085,8 +2085,7 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool) -> String
     // compiling without an `extern crate alloc;` of its own, which
     // `::alloc::` paths in the package files would require of it.
     let mut out = format!(
-        "{preamble}#![cfg_attr({NO_STD}, no_std)]\n\
-         #![allow(clippy::derivable_impls, clippy::module_inception)]\n\n\
+        "{preamble}#![cfg_attr({NO_STD}, no_std)]\n\n\
          #[cfg({NO_STD})]\n\
          extern crate alloc as std;\n\n"
     );
@@ -3487,7 +3486,6 @@ mod render_lib_rs_tests {
         assert!(
             lib.starts_with(
                 "#![cfg_attr(not(any(feature = \"std\", feature = \"validate-pattern\")), no_std)]\n\
-                 #![allow(clippy::derivable_impls, clippy::module_inception)]\n\
                  \n\
                  #[cfg(not(any(feature = \"std\", feature = \"validate-pattern\")))]\n\
                  extern crate alloc as std;\n"

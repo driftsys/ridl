@@ -34,6 +34,7 @@ impl ::core::convert::From<GearPosition> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for GearPosition {
     fn default() -> Self {
         GearPosition::Park

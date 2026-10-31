@@ -34,6 +34,7 @@ impl ::core::convert::From<Warning> for ::core::primitive::i64 {
         value as ::core::primitive::i64
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Warning {
     fn default() -> Self {
         Warning::LowFuel
@@ -68,6 +69,7 @@ impl ::core::convert::From<WarningFlags> for ::core::primitive::i64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for WarningFlags {
     fn default() -> Self {
         WarningFlags(0)

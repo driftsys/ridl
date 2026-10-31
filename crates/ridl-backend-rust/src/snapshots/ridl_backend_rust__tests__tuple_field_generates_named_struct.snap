@@ -212,6 +212,7 @@ impl ::core::convert::From<Speed> for ::core::primitive::f64 {
         value.0
     }
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for Speed {
     fn default() -> Self {
         Speed::new_unchecked(0.0)
@@ -221,6 +222,7 @@ impl ::core::default::Default for Speed {
 pub struct SensorBounds {
     pub range: SensorBoundsRange,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorBounds {
     fn default() -> Self {
         SensorBounds {
@@ -233,6 +235,7 @@ pub struct SensorBoundsRange {
     pub min: Speed,
     pub max: Speed,
 }
+#[allow(clippy::derivable_impls)]
 impl ::core::default::Default for SensorBoundsRange {
     fn default() -> Self {
         SensorBoundsRange {
