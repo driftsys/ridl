@@ -20,7 +20,7 @@ use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_rt::trace::TraceContext;
 use ridl_transport_ws::frame::{
     decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState, Reason,
-    Target, FRAME_VERSION, SUBPROTOCOL,
+    Target, BLOCK_BYTES, FRAME_VERSION, SUBPROTOCOL,
 };
 use ridl_transport_ws::{
     serve, Backend, Config, Connection, Described, Ended, MemberTable, Note, Polling, Scanning,
@@ -49,6 +49,11 @@ const QUERY: Target = Target {
     kind: Kind::Query,
     iface: IFACE,
     ord: Ordinal(4),
+};
+const FIXED: Target = Target {
+    kind: Kind::Fixed,
+    iface: IFACE,
+    ord: Ordinal(5),
 };
 
 /// The member table of the test catalog: signal 1, event 2, command 3, query
@@ -1374,8 +1379,8 @@ fn the_member_recorded_on_a_tie_is_the_first_in_key_order() {
     assert!(connect(client, SUBPROTOCOL).is_err());
 }
 
-/// A `fixed` counts at most 16,128 bytes, what one message carries: the part
-/// above it is not counted, so a catalog with a `fixed` of the default limit,
+/// A `fixed` counts at most one block message, 4,130 bytes: a larger value
+/// crosses in blocks, so a catalog with a `fixed` of the default limit,
 /// 65,280 bytes, is served at the default `Config`.
 ///
 /// Mutation: count the fixed's whole limit.
@@ -1390,4 +1395,193 @@ fn the_default_config_is_accepted_for_a_catalog_with_a_fixed_of_default_limit() 
     ws.close(None).unwrap();
     assert_eq!(handle.join().0, Ended::ClientClosed(None));
     assert!(notes.lock().unwrap().is_empty());
+}
+
+/// The table of the next tests: every member but the `fixed` lowered to 900
+/// bytes, and the `fixed` given `fixed`, or the default ceiling of its kind.
+fn fixed_table(fixed: Option<u32>) -> Arc<MemberTable> {
+    table(move |t| {
+        if t.kind == Kind::Fixed {
+            fixed
+        } else {
+            Some(900)
+        }
+    })
+}
+
+/// Serves `table` under the message limit `max` and returns how the session
+/// ended and the notes: a session that passes the check is attached and
+/// closed by the client.
+fn served_under(max: usize, table: Arc<MemberTable>) -> (Ended, Vec<Note>) {
+    let (config, notes) = recording();
+    let config = config.with_max_message_bytes(max).unwrap();
+    let (server, client) = pair();
+    let backend = Described::new(Scanning(Loopback::new(CATALOG)), table).unwrap();
+    let handle = spawn(server, backend, config);
+    if let Ok(mut ws) = connect(client, SUBPROTOCOL) {
+        attach(&mut ws);
+        ws.close(None).unwrap();
+    }
+    let ended = handle.join().0;
+    let notes = notes.lock().unwrap().clone();
+    (ended, notes)
+}
+
+/// A `fixed` of the default limit needs one block message, 4,130 bytes: a
+/// message limit one byte below cannot carry a block.
+///
+/// Mutation: count a `fixed` as 36 bytes plus 4,093.
+#[test]
+fn a_config_below_one_block_message_is_refused_for_a_fixed_of_default_limit() {
+    let (ended, notes) = served_under(4_129, fixed_table(None));
+    assert_eq!(ended, Ended::ConfigRefused);
+    assert_eq!(
+        notes,
+        vec![Note::MessageLimitTooSmall {
+            target: FIXED,
+            needed: 4_130
+        }]
+    );
+}
+
+#[test]
+fn a_config_of_one_block_message_is_accepted_for_a_fixed_of_default_limit() {
+    let (ended, notes) = served_under(4_130, fixed_table(None));
+    assert_eq!(ended, Ended::ClientClosed(None));
+    assert!(notes.is_empty());
+}
+
+/// A `fixed` below one block message counts 36 bytes plus its limit, the
+/// largest header with its envelope, as every member does: 9 bytes above the
+/// 27 that a `publish` needs.
+///
+/// Mutation: count a `fixed` as one block message always.
+#[test]
+fn a_fixed_below_one_block_message_is_counted_as_36_bytes_plus_its_limit() {
+    let (ended, notes) = served_under(3_035, fixed_table(Some(3_000)));
+    assert_eq!(ended, Ended::ConfigRefused);
+    assert_eq!(
+        notes,
+        vec![Note::MessageLimitTooSmall {
+            target: FIXED,
+            needed: 3_036
+        }]
+    );
+    let (ended, notes) = served_under(3_036, fixed_table(Some(3_000)));
+    assert_eq!(ended, Ended::ClientClosed(None));
+    assert!(notes.is_empty());
+}
+
+/// The largest limit a table can give a `fixed` still counts one block
+/// message. On a 64-bit host this pins the result; the rule clamps the limit
+/// before it adds the header, so that the sum does not overflow a 32-bit
+/// `usize` either.
+///
+/// Mutation: add the header to the limit before the clamp, with a wrapping
+/// addition.
+#[test]
+fn a_fixed_of_the_largest_table_limit_is_counted_as_one_block_message() {
+    let (ended, notes) = served_under(4_130, fixed_table(Some(u32::MAX)));
+    assert_eq!(ended, Ended::ClientClosed(None));
+    assert!(notes.is_empty());
+    let (ended, notes) = served_under(4_129, fixed_table(Some(u32::MAX)));
+    assert_eq!(ended, Ended::ConfigRefused);
+    assert_eq!(
+        notes,
+        vec![Note::MessageLimitTooSmall {
+            target: FIXED,
+            needed: 4_130
+        }]
+    );
+}
+
+/// The `n` bytes whose byte `i` is `i mod 251`.
+fn pattern(len: usize) -> Vec<u8> {
+    (0..len).map(|i| (i % 251) as u8).collect()
+}
+
+/// The largest `fixed`, 65,280 bytes, crosses a real socket as 16 binary
+/// messages, 15 of 4,130 bytes and one of 3,874, whose payloads joined are
+/// the value.
+#[test]
+fn a_fixed_of_65_280_bytes_crosses_as_16_block_messages() {
+    let (server, client) = pair();
+    let rt = Loopback::new(CATALOG);
+    let value = pattern(65_280);
+    rt.attach()
+        .provision_fixed(IFACE, FIXED.ord, &value)
+        .unwrap();
+    let handle = spawn(server, Scanning(rt), config());
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    attach(&mut ws);
+    send(&mut ws, Frame::Read(FIXED));
+    let mut joined = Vec::new();
+    for k in 0..16u32 {
+        let m = recv(&mut ws);
+        assert_eq!(m.len(), if k < 15 { 4_130 } else { 3_874 }, "block {k}");
+        let Frame::Block {
+            target,
+            envelope,
+            total,
+            index,
+            payload,
+        } = decode(&m).unwrap()
+        else {
+            panic!("message {k} is not a block");
+        };
+        assert_eq!(target, FIXED);
+        assert_eq!(envelope.seq, 0);
+        assert_eq!(total, 65_280);
+        assert_eq!(index, k);
+        assert!(payload.len() <= BLOCK_BYTES);
+        joined.extend_from_slice(payload);
+    }
+    assert_eq!(joined, value);
+    ws.close(None).unwrap();
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+}
+
+/// A client that sends reads of a large `fixed` and reads nothing ends the
+/// session at the liveness timeout: each `read` makes the server write
+/// 65,824 bytes, the socket buffers fill, and a write waits its whole write
+/// timeout.
+///
+/// Mutation: `run` sets no write timeout.
+#[test]
+fn a_client_that_reads_a_large_fixed_and_stops_reading_ends_at_the_liveness_timeout() {
+    let mut config = config();
+    config.liveness_timeout = Duration::from_millis(300);
+    // A full send buffer blocks a write for at most the liveness timeout,
+    // and the last message arrived at most one liveness timeout earlier.
+    let bound = 2 * config.liveness_timeout + Duration::from_millis(500);
+    let (server, client) = pair();
+    let rt = Loopback::new(CATALOG);
+    rt.attach()
+        .provision_fixed(IFACE, FIXED.ord, &pattern(65_280))
+        .unwrap();
+    // The sender's last send, into a server that no longer reads, ends at
+    // this timeout.
+    client.set_write_timeout(Some(TEST_LIMIT)).unwrap();
+    let handle = spawn(server, Scanning(rt), config);
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
+    attach(&mut ws);
+
+    // The reads are sent from another thread, which reads nothing, so that
+    // the test thread waits only in `join`, which `TEST_LIMIT` bounds.
+    let (done, ended) = mpsc::channel::<()>();
+    let sender = thread::spawn(move || {
+        while let Err(TryRecvError::Empty) = ended.try_recv() {
+            if ws
+                .send(Message::binary(encode(Frame::Read(FIXED))))
+                .is_err()
+            {
+                break;
+            }
+        }
+    });
+    let (ended, elapsed) = handle.join();
+    done.send(()).ok();
+    sender.join().unwrap();
+    assert_eq!(ended, Ended::LivenessTimeout);
+    assert!(elapsed < bound, "ended after {elapsed:?}, over {bound:?}");
 }
