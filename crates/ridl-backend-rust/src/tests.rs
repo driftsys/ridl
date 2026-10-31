@@ -7877,3 +7877,73 @@ mod transcode {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Doc comment rendering.
+// ---------------------------------------------------------------------------
+
+/// A doc string that holds a line break renders as one `///` line per line of
+/// text, never as one `/** */` block, and a blank line of the text renders as
+/// a bare `///`.
+#[test]
+fn multi_line_doc_renders_as_line_comments() {
+    let text = "First paragraph.\n\nSecond paragraph,\n    indented.";
+    let items = vec![quote::quote! {
+        #[doc = #text]
+        pub struct Item;
+    }];
+    let source = super::render(items).unwrap().rust_source;
+    assert!(!source.contains("/**"), "got:\n{source}");
+    assert!(
+        source.contains(
+            "/// First paragraph.\n///\n/// Second paragraph,\n///     indented.\npub struct Item;"
+        ),
+        "got:\n{source}"
+    );
+}
+
+/// A doc string with no line break is left as it is.
+#[test]
+fn single_line_doc_is_unchanged() {
+    let items = vec![quote::quote! {
+        #[doc = " One line."]
+        pub struct Item;
+    }];
+    let source = super::render(items).unwrap().rust_source;
+    assert!(
+        source.contains("/// One line.\npub struct Item;"),
+        "got:\n{source}"
+    );
+}
+
+/// The doc attributes nested in an item, here on a method of an `impl`, are
+/// split too.
+#[test]
+fn nested_multi_line_doc_renders_as_line_comments() {
+    let text = "a\nb";
+    let items = vec![quote::quote! {
+        pub struct Item;
+        impl Item {
+            #[doc = #text]
+            pub fn method(&self) {}
+        }
+    }];
+    let source = super::render(items).unwrap().rust_source;
+    assert!(!source.contains("/**"), "got:\n{source}");
+    assert!(source.contains("/// a\n    /// b\n"), "got:\n{source}");
+}
+
+/// A doc inside parentheses, here on a tuple-struct field, is split too, and
+/// an attribute that is not `doc` keeps its string as it is.
+#[test]
+fn doc_in_parentheses_is_split_and_other_attributes_are_kept() {
+    let text = "a\nb";
+    let items = vec![quote::quote! {
+        #[foo = #text]
+        pub struct Item(#[doc = #text] pub u8);
+    }];
+    let source = super::render(items).unwrap().rust_source;
+    assert!(!source.contains("/**"), "got:\n{source}");
+    assert!(source.contains("/// a\n    /// b\n"), "got:\n{source}");
+    assert!(source.contains("#[foo = \"a\\nb\"]"), "got:\n{source}");
+}

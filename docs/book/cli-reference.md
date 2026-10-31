@@ -822,6 +822,15 @@ the `mod` that wraps the `include!`. Explicit crate-root links in the generated
 docs can be unresolved when the file is included inside another module
 ([Documentation in the generated code](generated-code.md#documentation-in-the-generated-code)).
 
+**`rustfmt` skips the generated files.** The generated Rust is formatted with
+the `prettyplease` crate, whose layout is not the layout of `rustfmt`, and every
+doc comment in it is written with `///`. The emitted `lib.rs` puts
+`#[rustfmt::skip]` on each `mod` that is loaded from a generated file, so
+`cargo fmt --check` over a crate that holds the generated crate passes and
+leaves those files as they are. The `lib.rs` itself is formatted as `rustfmt`
+formats it. `rustfmt` does not read a file reached through `include!`, so a
+consumer that includes a generated file that way needs no attribute.
+
 **Two things it may leave out, each with a note in the source it writes.** A
 type whose size the compiler cannot bound — one that reaches itself, or a
 stream — carries no codec, and gets a `__RIDL_FB_NO_CODEC_<NAME>` constant
