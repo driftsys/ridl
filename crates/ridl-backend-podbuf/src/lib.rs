@@ -376,6 +376,13 @@ impl<'a> Header<'a> {
                 let (package, name) = self.foreign_names(*index);
                 format!("{package}_{name}_head")
             }
+            // The name the declaring package's header gives the tuple, so
+            // that the two headers define one head under one name.
+            Some(Source::NestedTuple(nested)) if !nested.wire.is_empty() => format!(
+                "{}_{}_head",
+                package_prefix(&nested.package),
+                snake_case(&nested.wire)
+            ),
             Some(Source::NestedTuple(nested)) => format!("{}_head", path_words(&nested.path)),
             None => format!("{prefix}_head{at}"),
         }

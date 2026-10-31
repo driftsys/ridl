@@ -5,6 +5,7 @@ import pod.parts.Hub
 import pod.parts.Tyre
 import pod.parts.Gauge
 import pod.parts.Clash
+import pod.parts.Pair
 
 struct Axle {
   note  : integer [0..255]
@@ -13,4 +14,7 @@ struct Axle {
   tyre  : Tyre
   gauge : Gauge
   clash : Clash
+  pair  : Pair
+  // The shape of `Pair.a`, local to this package: no foreign head uses it.
+  own   : (x: integer [0..10], y: integer [0..10])
 }

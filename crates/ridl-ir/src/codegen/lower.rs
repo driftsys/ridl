@@ -116,7 +116,25 @@ pub fn lower_with(
     patch_flatbuffers(&mut model, &projected);
     model.flatbuffers = Some(projected.projection);
     // A head that cannot be laid out is listed in `refused` with its cause.
-    model.podbuf = Some(super::podbuf::project(scope, &named, &lowering.foreign_at));
+    // The walk finds the tuple at a position by the path to it, whether the
+    // tuple is one of `Model.tuples` or one inside a foreign declaration.
+    let mut keys = super::podbuf::TupleKeys::default();
+    for (index, entry) in lowering.tuples.iter().enumerate() {
+        for key in &entry.keys {
+            if entry.named {
+                keys.local.insert(key.clone(), index as u32);
+            } else {
+                keys.foreign
+                    .insert(key.clone(), (entry.home.name.clone(), entry.wire.clone()));
+            }
+        }
+    }
+    model.podbuf = Some(super::podbuf::project(
+        scope,
+        &named,
+        &lowering.foreign_at,
+        &keys,
+    ));
     model
 }
 
@@ -154,6 +172,11 @@ fn root_tuples(model: &v1::Model) -> HashSet<u32> {
 struct Path {
     base: Base,
     segments: Vec<String>,
+    /// The position as the podbuf walk spells it: the root it starts from,
+    /// then a struct field's name, a tuple field's position, `key` or
+    /// `value`. An array element adds nothing. The walk looks a tuple up by
+    /// this path (`super::podbuf::TupleKeys`).
+    key: Vec<String>,
     rust: String,
     wire: String,
     visibility: i32,
@@ -176,6 +199,7 @@ impl Path {
         Self {
             base: Base::Declaration(index),
             segments: Vec::new(),
+            key: vec![owner.to_string()],
             rust: camel_case(owner),
             wire: owner.to_string(),
             visibility: decl.visibility,
@@ -183,10 +207,13 @@ impl Path {
         }
     }
 
-    fn foreign(owner: &str, visibility: i32) -> Self {
+    /// A declaration of another package. The podbuf walk reaches it under
+    /// its qualified name.
+    fn foreign(package: &str, owner: &str, visibility: i32) -> Self {
         Self {
             base: Base::Foreign,
             segments: Vec::new(),
+            key: vec![format!("{package}.{owner}")],
             rust: camel_case(owner),
             wire: owner.to_string(),
             visibility,
@@ -215,6 +242,10 @@ impl Path {
         Self {
             base: Base::Interaction(interface, slot),
             segments,
+            // The podbuf walk starts at no interaction: the tuples it reaches
+            // from an induced tuple are keyed under that tuple
+            // (`drain_tuples`), so this root never matches a walk path.
+            key: vec![format!("interaction {interface} {slot}")],
             rust: format!("{}{}", camel_case(&joined_camel(owner)), camel_case(member)),
             wire: format!("{}{}", joined_camel(owner), joined_camel(member)),
             visibility,
@@ -226,9 +257,12 @@ impl Path {
     fn field(&self, name: &str) -> Self {
         let mut segments = self.segments.clone();
         segments.push(name.to_string());
+        let mut key = self.key.clone();
+        key.push(name.to_string());
         Self {
             base: self.base,
             segments,
+            key,
             rust: format!("{}{}", self.rust, camel_case(name)),
             wire: format!("{}{}", self.wire, joined_camel(name)),
             visibility: self.visibility,
@@ -236,13 +270,21 @@ impl Path {
         }
     }
 
-    /// A positional word: `Element`, `Key`, `Value`.
+    /// A positional word: `Element`, `Key`, `Value`, or an interaction's
+    /// role word. The walk path takes a map's `key` and `value` only.
     fn step(&self, word: &str) -> Self {
         let mut segments = self.segments.clone();
         segments.push(word.to_string());
+        let mut key = self.key.clone();
+        match word {
+            "Key" => key.push("key".to_string()),
+            "Value" => key.push("value".to_string()),
+            _ => {}
+        }
         Self {
             base: self.base,
             segments,
+            key,
             rust: format!("{}{word}", self.rust),
             wire: format!("{}{word}", self.wire),
             visibility: self.visibility,
@@ -255,9 +297,12 @@ impl Path {
     fn tuple_field(&self, name: &str, position: usize) -> Self {
         let mut segments = self.segments.clone();
         segments.push(name.to_string());
+        let mut key = self.key.clone();
+        key.push(position.to_string());
         Self {
             base: self.base,
             segments,
+            key,
             rust: format!("{}{}", self.rust, camel_case(name)),
             wire: format!("{}Field{position}", self.wire),
             visibility: self.visibility,
@@ -293,6 +338,9 @@ struct TupleEntry<'a> {
     rust: String,
     wire: String,
     named: bool,
+    /// Every walk path that reaches this tuple (`Path::key`): the path it was
+    /// lifted at, and the path of each position whose claim it serves again.
+    keys: Vec<Vec<String>>,
     /// What each field is documented with, in declaration order. Empty for
     /// every tuple but an induced argument struct, whose fields stand for the
     /// parameters of a call.
@@ -388,7 +436,7 @@ impl<'a> Lowering<'a> {
         decl: &v2::Decl,
         path: Option<Path>,
     ) -> Option<v1::declaration::Kind> {
-        let path = path.unwrap_or_else(|| Path::foreign(&decl.name, decl.visibility));
+        let path = path.unwrap_or_else(|| Path::foreign(&home.name, &decl.name, decl.visibility));
         match decl.kind.as_ref()? {
             v2::decl::Kind::TypeDef(td) => {
                 Some(v1::declaration::Kind::Scalar(self.scalar(td, true)))
@@ -704,6 +752,7 @@ impl<'a> Lowering<'a> {
             // either, and each printer refuses that pair the way it refuses
             // two different shapes.
             if existing.source == *tuple && existing.path.visibility == at.visibility {
+                self.tuples[index].keys.push(at.key.clone());
                 return index as u32;
             }
             self.collisions.push(v1::TupleCollision {
@@ -732,6 +781,7 @@ impl<'a> Lowering<'a> {
             rust: at.rust.clone(),
             wire: at.wire.clone(),
             named: at.named,
+            keys: vec![at.key.clone()],
             docs: Vec::new(),
             lowered: None,
         });
@@ -750,8 +800,14 @@ impl<'a> Lowering<'a> {
             }
             let source = self.tuples[index].source.clone();
             let home = self.tuples[index].home;
-            let path = self.tuples[index].path.clone();
+            let mut path = self.tuples[index].path.clone();
             let named = self.tuples[index].named;
+            // The podbuf walk fills a named tuple as a root of its own, so a
+            // tuple inside it is reached under that root; a tuple inside a
+            // foreign declaration's tuple is reached under the declaration.
+            if named {
+                path.key = vec![format!("tuple {index}")];
+            }
             let docs = self.tuples[index].docs.clone();
             let (rust, wire) = (
                 self.tuples[index].rust.clone(),

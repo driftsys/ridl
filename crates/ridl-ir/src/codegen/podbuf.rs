@@ -15,8 +15,11 @@
 //! A struct, a tuple or a union written as a field is laid out inline as a
 //! copy of its own head. That copy is not stored again: the field names the
 //! head of the type it lays out, by the identity the projection records
-//! ([`Inlined`]): the declaration, or for a tuple, its structure and its
-//! member names.
+//! ([`Inlined`]): the declaration, or for a tuple, the tuple at that position
+//! of the lowering ([`TupleKeys`]). A tuple inside a foreign declaration gets
+//! one head per tuple, keyed by its home package and its induced wire name,
+//! so that a package that lays it out inline names the head the declaring
+//! package names, and never a head of the same shape.
 //!
 //! A head that cannot be laid out is not in the list. It is listed in
 //! `refused` with its cause, and so is every head that needs it.
@@ -29,6 +32,18 @@ use crate::projection::flatbuffers::Packages;
 use crate::projection::podbuf::{self, DescriptorKind, Form, Head, Inlined, Source};
 use crate::v2;
 
+/// The tuple at each position the walk can reach, by the walk's path to it:
+/// the root (`Decl`, `tuple N` or `pkg.Decl`), then a struct field's name, a
+/// tuple field's position, `key` or `value`.
+#[derive(Default)]
+pub(crate) struct TupleKeys {
+    /// The index in `Model.tuples` of a named tuple.
+    pub local: HashMap<Vec<String>, u32>,
+    /// The home package and the induced wire name of a tuple inside a
+    /// declaration of another package, which `Model.tuples` does not hold.
+    pub foreign: HashMap<Vec<String>, (String, String)>,
+}
+
 /// The podbuf heads of the package. A head the projection refuses, which is
 /// malformed IR or a type too large for a `u32` offset, is listed in
 /// `refused` with its cause, and so is each head that needs it.
@@ -36,6 +51,7 @@ pub(crate) fn project(
     scope: Scope<'_>,
     named: &[flatbuffers::NamedTuple<'_>],
     foreign_at: &HashMap<(String, String), u32>,
+    keys: &TupleKeys,
 ) -> v1::PodbufProjection {
     let packages = Packages {
         package: scope.package,
@@ -99,7 +115,7 @@ pub(crate) fn project(
     let mut excluded: HashSet<usize> = HashSet::new();
     let mut causes: HashMap<usize, String> = HashMap::new();
     loop {
-        match attempt(scope, &roots, &excluded, foreign_at) {
+        match attempt(scope, &roots, &excluded, foreign_at, keys) {
             Ok(heads) => {
                 let refused = roots
                     .iter()
@@ -138,25 +154,25 @@ fn boxes(scope: Scope<'_>) -> Vec<v1::PodbufBox> {
         others: scope.others,
     };
     let no_heads = HashMap::new();
+    let no_tuples = TupleKeys::default();
     let mut out = Vec::new();
     for (index, decl) in scope.package.decls.iter().enumerate() {
         let Some(head) = podbuf::boxed_head_of(packages, decl) else {
             continue;
         };
         let mut walk = Walk {
-            package: scope.package.name.clone(),
+            scope,
             foreign_at: &no_heads,
+            keys: &no_tuples,
             heads: vec![v1::PodbufHead::default()],
             declared: HashMap::new(),
-            tuples: Vec::new(),
-            nested: Vec::new(),
+            tuples: HashMap::new(),
+            nested: HashMap::new(),
             foreign: HashMap::new(),
             refused: HashSet::new(),
         };
-        if walk
-            .fill(0, &head, std::slice::from_ref(&decl.name), Owner::None)
-            .is_ok()
-        {
+        let root = std::slice::from_ref(&decl.name);
+        if walk.fill(0, &head, root, root, Owner::None).is_ok() {
             out.push(v1::PodbufBox {
                 declaration: index as u32,
                 head: walk.heads.pop(),
@@ -254,14 +270,16 @@ fn attempt(
     roots: &[Root],
     excluded: &HashSet<usize>,
     foreign_at: &HashMap<(String, String), u32>,
+    keys: &TupleKeys,
 ) -> Result<Vec<v1::PodbufHead>, (usize, String)> {
     let mut walk = Walk {
-        package: scope.package.name.clone(),
+        scope,
         foreign_at,
+        keys,
         heads: Vec::new(),
         declared: HashMap::new(),
-        tuples: Vec::new(),
-        nested: Vec::new(),
+        tuples: HashMap::new(),
+        nested: HashMap::new(),
         foreign: HashMap::new(),
         refused: roots
             .iter()
@@ -293,29 +311,33 @@ fn attempt(
             (v1::podbuf_refused::Source::Declaration(_), Some(name)) => {
                 walk.declared.insert(name.clone(), index);
             }
-            _ => walk.tuples.push((head.clone(), index)),
+            (v1::podbuf_refused::Source::Tuple(tuple), _) => {
+                walk.tuples.insert(*tuple, index);
+            }
+            _ => {}
         }
         pending.push((at, index, head, vec![path], declaration));
     }
     for (at, index, head, path, declaration) in pending {
-        walk.fill(index, head, &path, declaration)
+        walk.fill(index, head, &path, &path, declaration)
             .map_err(|cause| (at, cause))?;
     }
     Ok(walk.heads)
 }
 
 struct Walk<'a> {
-    /// The name of the package lowered.
-    package: String,
+    scope: Scope<'a>,
     foreign_at: &'a HashMap<(String, String), u32>,
+    /// The tuple at each position, by the path to it.
+    keys: &'a TupleKeys,
     heads: Vec<v1::PodbufHead>,
     /// The head of each local struct or union, by name.
     declared: HashMap<String, u32>,
-    /// The head of each named tuple, the heads a tuple written at a field is
-    /// matched against by structure.
-    tuples: Vec<(Head, u32)>,
-    /// The heads of the tuples reached inside a foreign aggregate.
-    nested: Vec<(Head, u32)>,
+    /// The head of each named tuple, by its index in `Model.tuples`.
+    tuples: HashMap<u32, u32>,
+    /// The head of each tuple reached inside a foreign aggregate, by its home
+    /// package and its induced wire name.
+    nested: HashMap<(String, String), u32>,
     /// The head of each foreign struct or union reached inline, by package and
     /// name.
     foreign: HashMap<(String, String), u32>,
@@ -335,26 +357,32 @@ impl Walk<'_> {
     /// Writes the size, the fields and the pads of `head` into slot `index`.
     /// `declaration` is the union or struct the walk started from, which names
     /// the arms of a union. `path` is the declaration name followed by the
-    /// names of the fields that lead to `head`.
+    /// names of the fields that lead to `head`. `key` is the same path as the
+    /// lowering spells it ([`TupleKeys`]): the two differ inside an arm of a
+    /// union, whose head is a copy of the arm type's head, so the key starts
+    /// again at that type.
     fn fill(
         &mut self,
         index: u32,
         head: &Head,
         path: &[String],
+        key: &[String],
         declaration: Owner,
     ) -> Result<(), String> {
         let mut fields = Vec::with_capacity(head.fields.len());
         for placement in &head.fields {
             let mut at = path.to_vec();
+            let mut key_at = key.to_vec();
             if let Some(segment) = segment(&placement.source) {
-                at.push(segment);
+                at.push(segment.clone());
+                key_at.push(segment);
             }
             fields.push(v1::PodbufField {
                 source: Some(source(&placement.source)),
                 offset: placement.offset,
                 size: placement.size,
                 align: placement.align,
-                form: Some(self.form(&placement.form, &at, declaration)?),
+                form: Some(self.form(&placement.form, &at, &key_at, declaration)?),
                 optional: placement.optional.map(|bit| v1::PodbufFlagBit {
                     flags: bit.flags,
                     bit: u32::from(bit.bit),
@@ -380,6 +408,7 @@ impl Walk<'_> {
         &mut self,
         form: &Form,
         path: &[String],
+        key: &[String],
         declaration: Owner,
     ) -> Result<v1::PodbufForm, String> {
         use v1::podbuf_form::Kind;
@@ -404,17 +433,20 @@ impl Walk<'_> {
                 reference: reference.clone(),
             }),
             Form::Inline { head, of } => {
-                Kind::InlineHead(self.inline(head, of, path, declaration)?)
+                Kind::InlineHead(self.inline(head, of, path, key, declaration)?)
             }
             Form::InlineArray { element, count } => {
                 Kind::InlineArray(Box::new(v1::PodbufInlineArray {
-                    element: Some(Box::new(self.form(element, path, declaration)?)),
+                    element: Some(Box::new(self.form(element, path, key, declaration)?)),
                     count: *count,
                 }))
             }
-            Form::Descriptor(descriptor) => {
-                Kind::Descriptor(Box::new(self.descriptor(descriptor, path, declaration)?))
-            }
+            Form::Descriptor(descriptor) => Kind::Descriptor(Box::new(self.descriptor(
+                descriptor,
+                path,
+                key,
+                declaration,
+            )?)),
         };
         Ok(v1::PodbufForm { kind: Some(kind) })
     }
@@ -425,27 +457,41 @@ impl Walk<'_> {
         head: &Head,
         of: &Inlined,
         path: &[String],
+        key: &[String],
         declaration: Owner,
     ) -> Result<u32, String> {
         let at = path.join(".");
         match of {
             Inlined::Tuple => {
-                // A tuple of this package's tuple list, or one reached inside
-                // a foreign aggregate, which the list does not hold: it gets
-                // a head of its own, found again by structure and member
-                // names.
-                let known = self.tuples.iter().chain(&self.nested);
-                if let Some((_, index)) = known.into_iter().find(|(named, _)| named == head) {
+                // The tuple at this position of the lowering: one of this
+                // package's tuple list, whose head is a root, or one reached
+                // inside a foreign aggregate, which the list does not hold.
+                // That one gets a head of its own, found again by the tuple's
+                // identity, never by a head of the same shape.
+                if let Some(tuple) = self.keys.local.get(key) {
+                    return self
+                        .tuples
+                        .get(tuple)
+                        .copied()
+                        .ok_or_else(|| format!("{at}: needs the refused head of tuple {tuple}"));
+                }
+                let Some((package, wire)) = self.keys.foreign.get(key) else {
+                    return Err(format!("{at}: no tuple was lowered at this position"));
+                };
+                let identity = (package.clone(), wire.clone());
+                if let Some(index) = self.nested.get(&identity) {
                     return Ok(*index);
                 }
                 let index = self.push(v1::podbuf_head::Source::NestedTuple(v1::NestedTuple {
                     path: path.to_vec(),
+                    package: package.clone(),
+                    wire: wire.clone(),
                 }));
-                self.nested.push((head.clone(), index));
-                self.fill(index, head, path, declaration)?;
+                self.nested.insert(identity, index);
+                self.fill(index, head, path, key, declaration)?;
                 Ok(index)
             }
-            Inlined::Declaration { package, name } if *package == self.package => {
+            Inlined::Declaration { package, name } if *package == self.scope.package.name => {
                 match self.declared.get(name) {
                     Some(index) => Ok(*index),
                     None if self.refused.contains(name) => {
@@ -465,12 +511,8 @@ impl Walk<'_> {
                     .ok_or_else(|| format!("{at}: {package}.{name} is not in the foreign list"))?;
                 let index = self.push(v1::podbuf_head::Source::Foreign(declaration));
                 self.foreign.insert(key, index);
-                self.fill(
-                    index,
-                    head,
-                    &[format!("{package}.{name}")],
-                    Owner::Foreign(declaration),
-                )?;
+                let root = [format!("{package}.{name}")];
+                self.fill(index, head, &root, &root, Owner::Foreign(declaration))?;
                 Ok(index)
             }
         }
@@ -480,6 +522,7 @@ impl Walk<'_> {
         &mut self,
         descriptor: &DescriptorKind,
         path: &[String],
+        key: &[String],
         declaration: Owner,
     ) -> Result<v1::PodbufDescriptor, String> {
         use v1::podbuf_descriptor::Kind;
@@ -498,7 +541,7 @@ impl Walk<'_> {
                 min,
                 max,
             } => Kind::Array(Box::new(v1::PodbufArray {
-                element: Some(Box::new(self.form(element, path, declaration)?)),
+                element: Some(Box::new(self.form(element, path, key, declaration)?)),
                 elem_size: *elem_size,
                 min: *min,
                 max: *max,
@@ -512,7 +555,7 @@ impl Walk<'_> {
                 let index = self.push(v1::podbuf_head::Source::MapEntry(v1::MapEntry {
                     path: path.to_vec(),
                 }));
-                self.fill(index, entry, path, declaration)?;
+                self.fill(index, entry, path, key, declaration)?;
                 Kind::Map(v1::PodbufMap {
                     entry_head: index,
                     elem_size: *elem_size,
@@ -540,7 +583,15 @@ impl Walk<'_> {
                     }));
                     let mut at = path.to_vec();
                     at.push(ordinal.to_string());
-                    self.fill(index, head, &at, declaration)?;
+                    // The arm's head is a copy of the arm type's head, so a
+                    // tuple inside it is the one the lowering reached under
+                    // that type.
+                    let key_at = self.arm_root(declaration, *ordinal).unwrap_or_else(|| {
+                        let mut key_at = key.to_vec();
+                        key_at.push(ordinal.to_string());
+                        key_at
+                    });
+                    self.fill(index, head, &at, &key_at, declaration)?;
                     out.push(v1::PodbufArm {
                         ordinal: *ordinal,
                         head: index,
@@ -550,6 +601,43 @@ impl Walk<'_> {
             }
         };
         Ok(v1::PodbufDescriptor { kind: Some(kind) })
+    }
+}
+
+impl Walk<'_> {
+    /// The root of the lowering's path to the type of arm `ordinal` of the
+    /// union `declaration`: its bare name for a type of this package, its
+    /// qualified name for one of another package. `None` when the union or
+    /// the arm's type is not found, which the projection has already refused.
+    fn arm_root(&self, declaration: Owner, ordinal: u32) -> Option<Vec<String>> {
+        let (home, decl) = match declaration {
+            Owner::None => return None,
+            Owner::Declaration(index) => (
+                self.scope.package,
+                self.scope.package.decls.get(index as usize)?,
+            ),
+            Owner::Foreign(index) => {
+                let ((package, name), _) = self.foreign_at.iter().find(|(_, at)| **at == index)?;
+                let home = self
+                    .scope
+                    .others
+                    .iter()
+                    .copied()
+                    .find(|other| other.name == *package)?;
+                let decl = home.decls.iter().find(|decl| decl.name == *name)?;
+                (home, decl)
+            }
+        };
+        let Some(v2::decl::Kind::UnionDef(def)) = decl.kind.as_ref() else {
+            return None;
+        };
+        let arm = def.arms.iter().find(|arm| arm.ordinal == ordinal)?;
+        let (target, declaring) = self.scope.resolve(home, &arm.type_ref)?;
+        Some(vec![if declaring.name == self.scope.package.name {
+            target.name.clone()
+        } else {
+            format!("{}.{}", declaring.name, target.name)
+        }])
     }
 }
 

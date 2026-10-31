@@ -135,6 +135,96 @@ fn a_tuple_whose_spelled_names_clash_falls_back_to_positions() {
     assert!(parts.contains("pod_parts_clash_clear_left_at("), "{parts}");
 }
 
+/// Every head the two headers both define is defined by the same text: the
+/// guarded `typedef` and the `_Static_assert` lines after it, byte for byte.
+/// The nested tuple heads are the ones the two headers once spelled apart
+/// (driftsys/ridl#1112): a tuple at a tuple position, a tuple as an array
+/// element, and the two same-shape tuples of `Pair`.
+#[test]
+fn a_head_both_headers_define_has_one_text() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/two-packages");
+    let packages = support::workspace(&path);
+    let parts = guarded_blocks(&support::header(&packages, "pod.parts"));
+    let vehicle = guarded_blocks(&support::header(&packages, "pod.vehicle"));
+    for guard in [
+        "POD_PARTS_HUB_SIZE_FIELD3_HEAD_DEFINED",
+        "POD_PARTS_HUB_SIZE_HEAD_DEFINED",
+        "POD_PARTS_PAIR_A_HEAD_DEFINED",
+        "POD_PARTS_PAIR_B_HEAD_DEFINED",
+        "POD_PARTS_PAIR_HEAD_DEFINED",
+    ] {
+        assert!(parts.contains_key(guard), "pod.parts has no {guard}");
+        assert!(vehicle.contains_key(guard), "pod.vehicle has no {guard}");
+    }
+    // A head reached only through a tail descriptor is not laid out inline,
+    // so the importing header does not define it.
+    let element = "POD_PARTS_HUB_ITEMS_ELEMENT_HEAD_DEFINED";
+    assert!(parts.contains_key(element), "pod.parts has no {element}");
+    assert!(
+        !vehicle.contains_key(element),
+        "pod.vehicle defines {element}"
+    );
+    let mut shared = 0;
+    for (guard, text) in &parts {
+        let Some(other) = vehicle.get(guard) else {
+            continue;
+        };
+        shared += 1;
+        assert_eq!(text, other, "{guard} differs between the two headers");
+    }
+    assert!(shared >= 5, "{shared} shared guards");
+}
+
+/// A tuple head names the tuple's own head, not a head of the same shape:
+/// `Pair` has two members with two heads in both headers, and no head of
+/// `pod.parts` that `pod.vehicle` defines names a head of `pod.vehicle`.
+#[test]
+fn an_inline_tuple_names_its_own_head() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/two-packages");
+    let packages = support::workspace(&path);
+    for name in ["pod.parts", "pod.vehicle"] {
+        let header = support::header(&packages, name);
+        let pair = head_body(&header, "pod_parts_pair_head");
+        assert!(pair.contains("pod_parts_pair_a_head a;"), "{name}: {pair}");
+        assert!(pair.contains("pod_parts_pair_b_head b;"), "{name}: {pair}");
+        let size = head_body(&header, "pod_parts_hub_size_head");
+        assert!(
+            size.contains("pod_parts_hub_size_field3_head inner;"),
+            "{name}: {size}"
+        );
+    }
+    let vehicle = support::header(&packages, "pod.vehicle");
+    for (start, _) in vehicle.match_indices("typedef struct pod_parts_") {
+        let end = start + vehicle[start..].find("\n}").unwrap();
+        let body = &vehicle[start..end];
+        assert!(
+            !body.contains("pod_vehicle_"),
+            "a head of pod.parts names a head of pod.vehicle: {body}"
+        );
+    }
+    let own = head_body(&vehicle, "pod_vehicle_axle_head");
+    assert!(own.contains("pod_vehicle_axle_own_head own;"), "{own}");
+}
+
+/// Each `#ifndef <GUARD>_HEAD_DEFINED` paragraph of `header`, by guard: the
+/// guarded `typedef` and the `_Static_assert` lines that follow it, up to the
+/// blank line.
+fn guarded_blocks(header: &str) -> std::collections::BTreeMap<String, String> {
+    let mut out = std::collections::BTreeMap::new();
+    for (start, _) in header.match_indices("#ifndef ") {
+        let line_end = header[start..].find('\n').unwrap();
+        let guard = &header[start + "#ifndef ".len()..start + line_end];
+        if !guard.ends_with("_HEAD_DEFINED") {
+            continue;
+        }
+        let end = header[start..]
+            .find("\n\n")
+            .map_or(header.len(), |at| start + at);
+        out.insert(guard.to_string(), header[start..end].to_string());
+    }
+    out
+}
+
 /// The text of the `typedef struct <name> { ... }` body in `header`.
 fn head_body<'h>(header: &'h str, name: &str) -> &'h str {
     let open = format!("typedef struct {name} {{");

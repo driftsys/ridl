@@ -8,9 +8,18 @@ struct Wheel {
   grip   : integer [0..1000000]
 }
 
+// `size` holds a tuple at a tuple position and `items` a tuple as an array
+// element: each is a head of its own in both headers.
 struct Hub {
-  size  : (width: integer [0..10], height: integer [0..10])
+  size  : (width: integer [0..10], height: integer [0..10], inner: (p: integer [0..10], q: integer [0..10]))
   label : string [0..16]
+  items : [(left: integer [0..10], right: integer [0..10]); 0..4]
+}
+
+// Two tuples of one shape at two members: each member has its own head.
+struct Pair {
+  a : (x: integer [0..10], y: integer [0..10])
+  b : (x: integer [0..10], y: integer [0..10])
 }
 
 union Tyre {

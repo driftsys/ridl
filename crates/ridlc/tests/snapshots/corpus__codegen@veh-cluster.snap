@@ -11860,7 +11860,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "form": {
               "inlineArray": {
                 "element": {
-                  "inlineHead": 7
+                  "inlineHead": 8
                 },
                 "count": 2
               }
