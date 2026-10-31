@@ -613,11 +613,12 @@ the life of the runtime (decision 1 of the
 with its
 [confirmed details](https://github.com/driftsys/ridl/pull/553#issuecomment-5848618786)).
 **A withdrawn command is never delivered**: no handler is presented it, so a
-command whose caller forgot it before any handler claimed it is delivered at
-most once. **`forget` and the handler side — `serve` and `next_claim` — run
-under the store's one lock**, so a call is either claimed first, and then held
-until it is settled, or withdrawn first, and then never presented. A dropped
-caller's calls go through the same path.
+command whose caller forgot it before any handler was presented the call (taken,
+or offered through a short claim) is delivered at most once. **`forget` and the
+handler side — `serve` and `next_claim` — run under the store's one lock**, so a
+call is either claimed first, and then held until it is settled, or withdrawn
+first, and then never presented. A dropped caller's calls go through the same
+path.
 
 The withdrawal is this runtime's behaviour, not a port contract: a transport
 that has already sent a request cannot recall it. The `ridl-rt-conformance` case

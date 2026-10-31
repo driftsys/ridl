@@ -521,9 +521,10 @@ pub trait StreamCaller: Caller {
 /// [`abort_claim`](StreamHandler::abort_claim) on [`REPLY_STREAM`] with that
 /// error; the answers differ when the reply stream had already stopped, as
 /// after the caller's refusal: `abort_claim` answers [`PushError::Ended`],
-/// and `settle` answers `Ok(())`. [`Handler::settle`] with `Ok(bytes)` on such
-/// a claim ends the reply stream, as `end_claim` does, and [`Caller::reply`]
-/// reports the bytes. A command's claim is settled `Ok` at its
+/// and `settle` answers `Ok(())`. [`Handler::settle`] with `Ok(&[])` on such
+/// a claim ends the reply stream exactly as `end_claim` does on
+/// [`REPLY_STREAM`]. What a runtime does with non-empty bytes there is not
+/// specified, and a runtime may refuse them. A command's claim is settled `Ok` at its
 /// acknowledgment, before any chunk of a parameter stream is read, and a
 /// refusal of a chunk after that travels on the stream, through
 /// `abort_claim`, and reaches the producer through its next push or end; the
@@ -549,8 +550,9 @@ pub trait StreamCaller: Caller {
 /// A caller's [`forget`](Caller::forget) follows the same rules whether the
 /// claim was settled before it or not, once a provider has taken the call's
 /// claim. A forget before that withdraws the call with all of its streams,
-/// the ended ones too, because no provider has the claim to read them: no
-/// handler is presented the call. A runtime that has already sent the call
+/// the ended ones too, because no provider has the claim to read them: before
+/// any handler was presented the call (taken, or offered through a short
+/// claim). A runtime that has already sent the call
 /// to its provider cannot withdraw it; it then follows the rules below, as
 /// for a claimed call.
 /// A caller that needs a stream parameter it ended to reach the provider
