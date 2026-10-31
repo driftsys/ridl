@@ -245,12 +245,13 @@ The encoding has no second implementation, so the oracle is the law itself.
 
 ## Known gaps
 
-| Gap                                                                                          | Issue                         |
-| -------------------------------------------------------------------------------------------- | ----------------------------- |
-| `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)        | the typl change it depends on |
-| The C header has no reader for a payload root that is a named scalar, an enum or an enum set | driftsys/ridl#1096            |
-| A string that holds U+0000 cannot be encoded                                                 | a limit of the encoding       |
-| TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                  | ADR-0020 decision 2           |
+| Gap                                                                                                                                      | Issue                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| An inline append whose head reaches a type of an imported unit is not reported as a podbuf break, so it does not end the catalog history | driftsys/ridl#1141            |
+| `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                                                    | the typl change it depends on |
+| The C header has no reader for a payload root that is a named scalar, an enum or an enum set                                             | driftsys/ridl#1096            |
+| A string that holds U+0000 cannot be encoded                                                                                             | a limit of the encoding       |
+| TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                              | ADR-0020 decision 2           |
 
 ## Trace
 

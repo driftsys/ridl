@@ -457,8 +457,9 @@ one, so a breaking change in a package that the unit does not reach leaves the
 unit's chain as it was. A breaking change that changes the catalog restarts the
 chain: the file then holds the one new hash. The change is judged for the
 root manifest's encodings ([ADR-0031][adr-0031] decision 13), so when a
-`[backend.<name>]` table lists `podbuf`, a podbuf break restarts the chain. The
-file being replaced is carried
+`[backend.<name>]` table lists `podbuf`, a podbuf break restarts the chain. That
+holds for the step from a baseline published before `podbuf` was listed; the
+hashes carried before then stay in the file. The file being replaced is carried
 only when its first hash is the hash recomputed from the snapshots published
 beside it; a file that does not describe those snapshots, as a partially
 hand-edited baseline leaves behind, restarts the chain instead of carrying a
@@ -712,8 +713,9 @@ scoped to the unit, judges the change from the baseline to the tree breaking
 and the current catalog hash is not the file's first hash. The change is judged
 for the root manifest's encodings, as `ridl baseline` judges it
 ([ADR-0031][adr-0031] decision 13), so when a `[backend.<name>]` table lists
-`podbuf`, a podbuf break empties the list. When the two hashes
-are equal the catalog did not change, and the list holds the file's other
+`podbuf`, a podbuf break empties the list, from a baseline published before
+`podbuf` was listed too; the hashes carried before then stay listed. When the
+two hashes are equal the catalog did not change, and the list holds the file's other
 hashes whatever the verdict. The file is used at all only when its first hash
 is the hash recomputed from the baseline's own snapshots of the unit; a file
 that does not describe those snapshots gives an empty list. The recorded file

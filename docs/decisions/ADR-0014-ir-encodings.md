@@ -678,8 +678,10 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
       is one of the unit's source packages on either side, or whose top-level
       declaration one of the unit's interfaces reaches on either side
       (`reachable_decls`): the closure the hash covers. `ridl diff`'s own report
-      and exit code are unchanged. The report is judged for the root manifest's
-      encodings ([ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13;
+      and exit code are unchanged, and `ridl diff` judges the encodings its
+      `--encoding` flags name only. The catalog history verdict of
+      `ridl baseline` and `ridl build` reads the root manifest's encodings
+      instead ([ADR-0031](ADR-0031-podbuf-projection-rules.md) decision 13;
       amended 2026-10-31).
     - **Where the list lives.** The descriptor's `Catalog` gains `compatible`, a
       vector of `EarlierCatalog { hash }` tables appended at the end of the

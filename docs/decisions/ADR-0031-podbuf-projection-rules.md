@@ -59,11 +59,11 @@ which replaces the retired lint RIDL-150. Built 2026-10-30: the generated
 `verify` checks structure only, and RIDL-157 replaces RIDL-150
 (driftsys/ridl#1108, driftsys/ridl#1128).
 
-Amended 2026-10-31 — decision 13, from driftsys/ridl#1095. `ridl build` and
-`ridl baseline` judge the catalog history for the root manifest's encodings, and
-`ridl check --baseline` is stated to be the ordinal desk check, not a diff gate;
-the known gap of decision 13 goes, and open item 3 is closed.
-[ADR-0014](ADR-0014-ir-encodings.md) decision 15 and
+**Amended 2026-10-31 — decision 13, the catalog history and the encodings, from
+driftsys/ridl#1095.** `ridl build` and `ridl baseline` judge the catalog history
+for the root manifest's encodings, and `ridl check --baseline` is stated to be
+the ordinal desk check, not a diff gate; the known gap of decision 13 goes, and
+open item 3 is closed. [ADR-0014](ADR-0014-ir-encodings.md) decision 15 and
 `docs/design/catalog-descriptor.md` say the per-unit verdict is judged for those
 encodings.
 
@@ -644,11 +644,16 @@ a field is appended.
       `[backend.<name>]` table of the root `ridl.toml`. Under `podbuf`, a podbuf
       break ends the unit's compatible history as any other break does, so
       `ridl build` lists no earlier catalog for the unit and `ridl baseline`
-      restarts its chain. A snapshot does not record encodings, so a baseline
-      published before `podbuf` was listed is judged by the podbuf rules once it
-      is. `ridl check --baseline` is the ordinal desk check (RIDL-407), not a
-      diff gate, and it does not judge podbuf breaks; a workspace that builds
-      podbuf catches them in CI with `ridl diff --encoding podbuf` against its
+      restarts its chain. Only the step from the latest published snapshots to
+      the tree is judged for the current encodings. A snapshot does not record
+      encodings, so the step from a baseline published before `podbuf` was
+      listed is judged by the podbuf rules; the hashes the history carried
+      before then were judged without them and stay in it. An inline append
+      whose head reaches a type of an imported unit is not reported as a podbuf
+      break, so it does not end the history (driftsys/ridl#1141).
+      `ridl check --baseline` is the ordinal desk check (RIDL-407), not a diff
+      gate, and it does not judge podbuf breaks; a workspace that builds podbuf
+      catches them in CI with `ridl diff --encoding podbuf` against its
       baseline. Amended 2026-10-31, from driftsys/ridl#1095: this replaces the
       known gap the decision recorded.
 
