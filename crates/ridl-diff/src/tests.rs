@@ -3499,9 +3499,9 @@ mod podbuf {
 
     /// A stream parameter is not part of the request, so a call with one
     /// named parameter beside it sends that named type as it is: the struct
-    /// is the root, not a member of an induced head. A walk that counted the
-    /// stream as a parameter would induce a head over both and find the
-    /// struct inline in it.
+    /// is the root, not a member of an induced head. A walk that read the
+    /// request as the induced argument struct, which holds the named
+    /// parameter alone, would find the struct inline in that one-member head.
     #[test]
     fn a_named_parameter_beside_a_stream_parameter_is_not_an_inline_use() {
         assert_no_interaction_use(|| {
