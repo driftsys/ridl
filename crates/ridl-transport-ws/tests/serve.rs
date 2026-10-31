@@ -19,7 +19,8 @@ use ridl_rt::port::{
 use ridl_rt::sample::{Envelope, Timestamp};
 use ridl_rt::trace::TraceContext;
 use ridl_transport_ws::frame::{
-    decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState, Target,
+    decode, AnswerOutcome, Attach, AttachOutcome, Frame, ProtocolViolation, PublishState, Reason,
+    Target, FRAME_VERSION, SUBPROTOCOL,
 };
 use ridl_transport_ws::{
     serve, Backend, Config, Connection, Described, Ended, MemberTable, Note, Polling, Scanning,
@@ -83,7 +84,7 @@ const UPGRADE_REQUEST: &[u8] = b"GET / HTTP/1.1\r\n\
     Connection: Upgrade\r\n\
     Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
     Sec-WebSocket-Version: 13\r\n\
-    Sec-WebSocket-Protocol: ridl-ws-v1\r\n\
+    Sec-WebSocket-Protocol: ridl-ws-v2\r\n\
     \r\n";
 
 /// How long a test waits on its peer before it fails instead of hanging.
@@ -200,7 +201,7 @@ fn recv_close(ws: &mut WebSocket<TcpStream>) -> Option<CloseCode> {
 
 /// Sends the matching `attach` and checks that it is accepted.
 fn attach(ws: &mut WebSocket<TcpStream>) {
-    let attach = Attach::new(1, 1, CATALOG.hash, CATALOG.name).unwrap();
+    let attach = Attach::new(FRAME_VERSION, 1, CATALOG.hash, CATALOG.name).unwrap();
     send(ws, Frame::Attach(attach));
     assert_eq!(
         decode(&recv(ws)).unwrap(),
@@ -226,7 +227,7 @@ fn serve_answers_attach_and_streams_a_signal_change() {
     let mut provider = rt.attach();
     let handle = spawn(server, Scanning(rt), config());
 
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     send(&mut ws, Frame::Subscribe(SIGNAL));
     assert_eq!(
@@ -257,13 +258,61 @@ fn serve_answers_attach_and_streams_a_signal_change() {
 fn a_rejected_handshake_returns_rejected() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    // Without `ridl-ws-v1` offered, the server answers 400, and the client
-    // reads that answer rather than a reset connection.
+    // Without `ridl-ws-v2` or `ridl-ws-v1` offered, the server answers 400,
+    // and the client reads that answer rather than a reset connection.
     match connect(client, "") {
         Err(tungstenite::Error::Http(response)) => assert_eq!(response.status(), 400),
         other => panic!("expected a 400 answer, got {:?}", other.map(|_| ())),
     }
     assert_eq!(handle.join().0, Ended::Rejected);
+}
+
+#[test]
+fn a_client_offering_both_versions_is_upgraded_with_v2_and_attached() {
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
+    let mut ws = connect(client, "ridl-ws-v2, ridl-ws-v1").unwrap();
+    let attach = Attach::new(2, 1, CATALOG.hash, CATALOG.name).unwrap();
+    send(&mut ws, Frame::Attach(attach));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Attached(AttachOutcome::Accepted)
+    );
+    ws.close(None).unwrap();
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ClientClosed(None));
+}
+
+#[test]
+fn a_version_1_client_is_upgraded_with_ridl_ws_v1_and_its_attach_refused() {
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let attach = Attach::new(1, 1, CATALOG.hash, CATALOG.name).unwrap();
+    send(&mut ws, Frame::Attach(attach));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Attached(AttachOutcome::Refused(Reason::FrameVersionUnsupported))
+    );
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ServerClosed(1000));
+}
+
+/// The session tests set the connection's frame version directly; this one
+/// checks that `serve` passes the version of the subprotocol it selected.
+#[test]
+fn an_attach_of_frame_version_2_on_a_ridl_ws_v1_connection_is_refused() {
+    let (server, client) = pair();
+    let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
+    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let attach = Attach::new(2, 1, CATALOG.hash, CATALOG.name).unwrap();
+    send(&mut ws, Frame::Attach(attach));
+    assert_eq!(
+        decode(&recv(&mut ws)).unwrap(),
+        Frame::Attached(AttachOutcome::Refused(Reason::FrameVersionUnsupported))
+    );
+    assert_eq!(recv_close(&mut ws), Some(CloseCode::Normal));
+    assert_eq!(handle.join().0, Ended::ServerClosed(1000));
 }
 
 #[test]
@@ -370,7 +419,7 @@ fn a_handshake_that_does_not_finish_ends_at_the_liveness_timeout() {
 fn a_client_close_returns_client_closed_with_its_code() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     ws.close(Some(CloseFrame {
         code: CloseCode::Library(4000),
@@ -388,7 +437,7 @@ fn a_client_close_returns_client_closed_with_its_code() {
 fn a_client_close_with_1008_is_answered_with_1008() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     ws.close(Some(CloseFrame {
         code: CloseCode::Policy,
@@ -406,7 +455,7 @@ fn the_server_pings_every_ping_interval() {
     config.ping_interval = interval;
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     let start = Instant::now();
     let mut pings = 0;
     while pings < 3 {
@@ -432,7 +481,7 @@ fn the_server_pings_every_ping_interval() {
 fn a_client_ping_is_answered_with_a_pong_carrying_its_payload() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     ws.send(Message::Ping(vec![1, 2, 3].into())).unwrap();
     let start = Instant::now();
     let pong = loop {
@@ -480,7 +529,7 @@ fn a_protocol_violation_closes_1002_and_records_a_note() {
     let (config, notes) = recording();
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // An empty message is shorter than any header.
     ws.send(Message::binary(Vec::new())).unwrap();
@@ -497,7 +546,7 @@ fn a_backend_that_detaches_closes_1001() {
     let (server, client) = pair();
     let (backend, _, _) = watched(true);
     let handle = spawn(server, backend, config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // The first tick after the `attach` reads the event queue, which fails.
     assert_eq!(recv_close(&mut ws), Some(CloseCode::Away));
@@ -509,7 +558,7 @@ fn the_end_of_a_session_forgets_each_call_in_flight_then_drops_the_backend() {
     let (server, client) = pair();
     let (backend, log, _) = watched(false);
     let handle = spawn(server, backend, config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // No handler serves the command, so its outcome stays unknown.
     send(
@@ -660,7 +709,7 @@ fn a_client_that_stops_reading_ends_the_session_at_the_liveness_timeout() {
     let backend = Described::new(Scanning(rt), table(limit)).unwrap();
     provider.set_limit(IFACE, Ordinal(1), CALL_CEILING);
     let handle = spawn(server, backend, config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     send(&mut ws, Frame::Subscribe(SIGNAL));
 
@@ -692,7 +741,7 @@ fn an_oversized_message_closes_1009_and_the_client_sees_it() {
     let config = config().with_max_message_bytes(1024).unwrap();
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     ws.send(Message::binary(vec![0u8; 256 * 1024])).unwrap();
     // A reset, when there is one, arrives within this wait, before the
@@ -706,7 +755,7 @@ fn an_oversized_message_closes_1009_and_the_client_sees_it() {
 fn a_text_message_closes_1003_and_the_client_sees_it() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // A large message after the text one is still unread when the server
     // closes.
@@ -725,7 +774,7 @@ fn a_data_message_resets_the_liveness_clock() {
     config.ping_interval = TEST_LIMIT;
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     let start = Instant::now();
     while start.elapsed() < Duration::from_millis(900) {
@@ -744,7 +793,7 @@ fn the_server_pings_while_messages_keep_arriving() {
     config.ping_interval = interval;
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // A message every 10 ms for 8 ping intervals.
     let start = Instant::now();
@@ -781,7 +830,7 @@ fn the_backend_is_polled_at_most_once_per_poll_interval_under_a_fast_sender() {
     let (server, client) = pair();
     let (backend, _, polls) = watched(false);
     let handle = spawn(server, backend, config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     let messages = 300;
     for _ in 0..messages {
@@ -844,7 +893,7 @@ fn a_change_reaches_a_fast_sender_within_two_poll_intervals() {
     read_upgrade_answer(&mut client);
 
     // The attach, then the subscribe: three frames come back.
-    let attach = Attach::new(1, 1, CATALOG.hash, CATALOG.name).unwrap();
+    let attach = Attach::new(FRAME_VERSION, 1, CATALOG.hash, CATALOG.name).unwrap();
     client
         .write_all(&masked(&encode(Frame::Attach(attach))))
         .unwrap();
@@ -918,7 +967,7 @@ fn a_control_frame_resets_the_liveness_clock() {
     config.ping_interval = TEST_LIMIT;
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     let start = Instant::now();
     while start.elapsed() < Duration::from_millis(900) {
@@ -934,7 +983,7 @@ fn a_control_frame_resets_the_liveness_clock() {
 fn a_client_that_closes_the_connection_without_a_close_frame_ends_with_eof() {
     let (server, client) = pair();
     let handle = spawn(server, Scanning(Loopback::new(CATALOG)), config());
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     drop(ws);
     assert_eq!(
@@ -1073,7 +1122,7 @@ fn a_read_after_a_message_waits_only_until_the_next_poll_is_due() {
     config.poll_interval = Duration::from_millis(50);
     config.liveness_timeout = Duration::from_millis(150);
     let timeouts = Arc::new(Mutex::new(Vec::new()));
-    let attach = Attach::new(1, 1, CATALOG.hash, CATALOG.name).unwrap();
+    let attach = Attach::new(FRAME_VERSION, 1, CATALOG.hash, CATALOG.name).unwrap();
     let conn = Scripted {
         request: UPGRADE_REQUEST.to_vec(),
         message: masked(&encode(Frame::Attach(attach))),
@@ -1226,7 +1275,7 @@ fn responses_past_the_retained_bytes_cap_close_1008_and_the_client_sees_it() {
     let mut provider = rt.attach();
     provider.serve(IFACE, &[QUERY.ord]).unwrap();
     let handle = spawn(server, Scanning(rt), config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     // Each `request` of the query is settled with 4,005 bytes, and its
     // `response` is 4,041 bytes; four of them are 16,164 bytes, the cap, and
@@ -1284,7 +1333,7 @@ fn a_config_that_cannot_carry_a_member_is_refused_before_the_handshake() {
             needed: 36 + CALL_CEILING
         }]
     );
-    assert!(connect(client, "ridl-ws-v1").is_err());
+    assert!(connect(client, SUBPROTOCOL).is_err());
 }
 
 #[test]
@@ -1294,7 +1343,7 @@ fn a_config_that_carries_every_lowered_member_is_accepted() {
     let (server, client) = pair();
     let backend = Described::new(Scanning(Loopback::new(CATALOG)), table(|_| Some(900))).unwrap();
     let handle = spawn(server, backend, config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     ws.close(None).unwrap();
     assert_eq!(handle.join().0, Ended::ClientClosed(None));
@@ -1322,7 +1371,7 @@ fn the_member_recorded_on_a_tie_is_the_first_in_key_order() {
             needed: 36 + 2000
         }]
     );
-    assert!(connect(client, "ridl-ws-v1").is_err());
+    assert!(connect(client, SUBPROTOCOL).is_err());
 }
 
 /// A `fixed` counts at most 16,128 bytes, what one message carries: the part
@@ -1336,7 +1385,7 @@ fn the_default_config_is_accepted_for_a_catalog_with_a_fixed_of_default_limit() 
     let (server, client) = pair();
     let backend = Described::new(Scanning(Loopback::new(CATALOG)), table(|_| None)).unwrap();
     let handle = spawn(server, backend, config);
-    let mut ws = connect(client, "ridl-ws-v1").unwrap();
+    let mut ws = connect(client, SUBPROTOCOL).unwrap();
     attach(&mut ws);
     ws.close(None).unwrap();
     assert_eq!(handle.join().0, Ended::ClientClosed(None));

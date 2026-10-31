@@ -107,6 +107,9 @@ pub(crate) struct Session<B: Backend> {
     max_retained_bytes: usize,
     call_abandon_after: Duration,
     record: Option<Record>,
+    /// The frame version of the subprotocol the opening handshake selected:
+    /// `FRAME_VERSION` for `ridl-ws-v2`, 1 for `ridl-ws-v1`.
+    frame_version: u32,
     /// Whether an `attach` has been accepted.
     attached: bool,
     /// The close code once a message or a tick returned [`Step::Close`]:
@@ -167,6 +170,7 @@ impl<B: Backend> Session<B> {
             max_retained_bytes: config.max_retained_bytes(),
             call_abandon_after: config.call_abandon_after,
             record: config.record(),
+            frame_version: FRAME_VERSION,
             attached: false,
             closed: None,
             signals: BTreeMap::new(),
@@ -184,6 +188,12 @@ impl<B: Backend> Session<B> {
             response_seq: 0,
             buf: vec![0; FIRST_BUFFER],
         }
+    }
+
+    /// Records the frame version of the subprotocol the handshake selected.
+    /// A new session assumes `FRAME_VERSION`.
+    pub(crate) fn upgraded(&mut self, frame_version: u32) {
+        self.frame_version = frame_version;
     }
 
     /// Handles one message from the client. Each entry pushed to `out` is one
@@ -505,25 +515,30 @@ impl<B: Backend> Session<B> {
     }
 
     /// Checks an `attach` in the order of its refusal reasons, so that one
-    /// reason is given: frame version, unit name, hash, encoding.
+    /// reason is given: frame version, unit name, hash, encoding. The frame
+    /// version is refused when the `attach` names another one or when the
+    /// handshake selected the subprotocol of another one: the provider
+    /// serves frame version 2 only, so every `attach` on a `ridl-ws-v1`
+    /// connection is refused.
     fn attach(&mut self, attach: Attach<'_>, out: &mut Vec<Vec<u8>>) -> Step {
-        let refusal = if attach.frame_version() != FRAME_VERSION {
-            Some(Reason::FrameVersionUnsupported)
-        } else if attach.name() != self.catalog.name {
-            Some(Reason::UnknownCatalog)
-        } else if !self
-            .backend
-            .members()
-            .map_or(*attach.hash() == self.catalog.hash, |t| {
-                t.accepts(attach.hash())
-            })
-        {
-            Some(Reason::CatalogMismatch)
-        } else if Some(attach.encoding()) != self.encoding {
-            Some(Reason::EncodingUnsupported)
-        } else {
-            None
-        };
+        let refusal =
+            if attach.frame_version() != FRAME_VERSION || self.frame_version != FRAME_VERSION {
+                Some(Reason::FrameVersionUnsupported)
+            } else if attach.name() != self.catalog.name {
+                Some(Reason::UnknownCatalog)
+            } else if !self
+                .backend
+                .members()
+                .map_or(*attach.hash() == self.catalog.hash, |t| {
+                    t.accepts(attach.hash())
+                })
+            {
+                Some(Reason::CatalogMismatch)
+            } else if Some(attach.encoding()) != self.encoding {
+                Some(Reason::EncodingUnsupported)
+            } else {
+                None
+            };
         match refusal {
             Some(reason) => {
                 push(out, &Frame::Attached(AttachOutcome::Refused(reason)));
@@ -1116,7 +1131,7 @@ enum Fetch {
 }
 
 /// Whether the frame can carry `c`: every contract error but an
-/// `InvalidValue` whose `Rule` frame version 1 has no code for (frame
+/// `InvalidValue` whose `Rule` frame version 2 has no code for (frame
 /// specification §9.6), which a backend built against a newer `ridl-rt`
 /// could report.
 fn carried(c: Contract) -> bool {
@@ -1177,7 +1192,7 @@ mod tests {
     use super::{Session, Step};
     use crate::frame::{
         decode, AnswerOutcome, Attach, AttachOutcome, Frame, PublishState, Reason, ResponseOutcome,
-        Target,
+        Target, FRAME_VERSION,
     };
     use crate::server::{
         Backend, Config, Described, MemberTable, Note, Polling, Scanning, TableMismatch,
@@ -1283,7 +1298,7 @@ mod tests {
 
     /// Attaches with the matching `attach` and checks it is accepted.
     fn open<B: Backend>(s: &mut Session<B>) {
-        let (step, out) = send(s, &attach_msg(1, 1, [7u8; 32], "ws.test"));
+        let (step, out) = send(s, &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.test"));
         assert_eq!(step, Step::Continue);
         assert_eq!(out.len(), 1);
         assert_eq!(
@@ -1364,7 +1379,7 @@ mod tests {
     fn a_second_attach_is_a_violation() {
         let (mut s, _p, notes) = scanning();
         open(&mut s);
-        let (step, out) = send(&mut s, &attach_msg(1, 1, [7u8; 32], "ws.test"));
+        let (step, out) = send(&mut s, &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.test"));
         assert_eq!(step, Step::Close(1002));
         assert!(out.is_empty());
         assert_eq!(*notes.lock().unwrap(), vec![Note::SecondAttach]);
@@ -1381,13 +1396,43 @@ mod tests {
     }
 
     #[test]
-    fn frame_version_2_is_refused() {
+    fn frame_versions_1_and_3_are_refused() {
+        for version in [1, 3] {
+            let (mut s, _p, _n) = scanning();
+            refused(
+                &mut s,
+                &attach_msg(version, 1, [7u8; 32], "ws.test"),
+                Reason::FrameVersionUnsupported,
+            );
+        }
+    }
+
+    /// The provider serves frame version 2 only, so a connection upgraded
+    /// with `ridl-ws-v1` refuses every `attach`. The check runs with the
+    /// frame-version check, before the unit name.
+    #[test]
+    fn an_attach_on_a_version_1_connection_is_refused_whatever_its_frame_version() {
+        let cases = [
+            (FRAME_VERSION, 1, [7u8; 32], "ws.test"),
+            (1, 1, [7u8; 32], "ws.test"),
+            (FRAME_VERSION, 2, [8u8; 32], "ws.other"),
+        ];
+        for (version, encoding, hash, name) in cases {
+            let (mut s, _p, _n) = scanning();
+            s.upgraded(1);
+            refused(
+                &mut s,
+                &attach_msg(version, encoding, hash, name),
+                Reason::FrameVersionUnsupported,
+            );
+        }
+    }
+
+    #[test]
+    fn an_attach_on_a_version_2_connection_is_accepted() {
         let (mut s, _p, _n) = scanning();
-        refused(
-            &mut s,
-            &attach_msg(2, 1, [7u8; 32], "ws.test"),
-            Reason::FrameVersionUnsupported,
-        );
+        s.upgraded(2);
+        open(&mut s);
     }
 
     #[test]
@@ -1395,7 +1440,7 @@ mod tests {
         let (mut s, _p, _n) = scanning();
         refused(
             &mut s,
-            &attach_msg(1, 1, [7u8; 32], "ws.other"),
+            &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.other"),
             Reason::UnknownCatalog,
         );
     }
@@ -1405,7 +1450,7 @@ mod tests {
         let (mut s, _p, _n) = scanning();
         refused(
             &mut s,
-            &attach_msg(1, 1, [8u8; 32], "ws.test"),
+            &attach_msg(FRAME_VERSION, 1, [8u8; 32], "ws.test"),
             Reason::CatalogMismatch,
         );
     }
@@ -1415,7 +1460,7 @@ mod tests {
         let (mut s, _p, _n) = scanning();
         refused(
             &mut s,
-            &attach_msg(1, 2, [7u8; 32], "ws.test"),
+            &attach_msg(FRAME_VERSION, 2, [7u8; 32], "ws.test"),
             Reason::EncodingUnsupported,
         );
     }
@@ -1423,7 +1468,7 @@ mod tests {
     #[test]
     fn a_refusal_is_followed_by_close_1000() {
         let (mut s, _p, _n) = scanning();
-        let (step, out) = send(&mut s, &attach_msg(1, 1, [7u8; 32], "ws.other"));
+        let (step, out) = send(&mut s, &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.other"));
         assert_eq!(out.len(), 1);
         assert_eq!(step, Step::Close(1000));
     }
@@ -2285,10 +2330,28 @@ mod tests {
     #[test]
     fn the_attach_checks_run_in_the_design_order() {
         let cases = [
-            (2, 2, [8u8; 32], "ws.other", Reason::FrameVersionUnsupported),
-            (1, 2, [8u8; 32], "ws.other", Reason::UnknownCatalog),
-            (1, 2, [8u8; 32], "ws.test", Reason::CatalogMismatch),
-            (1, 2, [7u8; 32], "ws.test", Reason::EncodingUnsupported),
+            (1, 2, [8u8; 32], "ws.other", Reason::FrameVersionUnsupported),
+            (
+                FRAME_VERSION,
+                2,
+                [8u8; 32],
+                "ws.other",
+                Reason::UnknownCatalog,
+            ),
+            (
+                FRAME_VERSION,
+                2,
+                [8u8; 32],
+                "ws.test",
+                Reason::CatalogMismatch,
+            ),
+            (
+                FRAME_VERSION,
+                2,
+                [7u8; 32],
+                "ws.test",
+                Reason::EncodingUnsupported,
+            ),
         ];
         for (version, encoding, hash, name, reason) in cases {
             let (mut s, _p, _n) = scanning();
@@ -2364,8 +2427,8 @@ mod tests {
     #[test]
     fn after_a_refusal_the_close_is_repeated() {
         let (mut s, _p, _n) = scanning();
-        send(&mut s, &attach_msg(1, 1, [7u8; 32], "ws.other"));
-        let (step, out) = send(&mut s, &attach_msg(1, 1, [7u8; 32], "ws.test"));
+        send(&mut s, &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.other"));
+        let (step, out) = send(&mut s, &attach_msg(FRAME_VERSION, 1, [7u8; 32], "ws.test"));
         assert_eq!(step, Step::Close(1000));
         assert!(out.is_empty());
     }
@@ -4256,7 +4319,7 @@ mod tests {
         t.add_compatible(CatalogHash([6; 32]));
         let backend = Described::new(Scanning(rt.attach()), Arc::new(t)).unwrap();
         let mut s = Session::new(backend, &config(&notes));
-        let (step, out) = send(&mut s, &attach_msg(1, 1, [6u8; 32], "ws.test"));
+        let (step, out) = send(&mut s, &attach_msg(FRAME_VERSION, 1, [6u8; 32], "ws.test"));
         assert_eq!(step, Step::Continue);
         assert_eq!(
             decode(&out[0]).unwrap(),
@@ -4267,7 +4330,7 @@ mod tests {
         let mut s = Session::new(backend, &config(&notes));
         refused(
             &mut s,
-            &attach_msg(1, 1, [5u8; 32], "ws.test"),
+            &attach_msg(FRAME_VERSION, 1, [5u8; 32], "ws.test"),
             Reason::CatalogMismatch,
         );
     }
@@ -4286,7 +4349,7 @@ mod tests {
         t.add_compatible(CatalogHash([6; 32]));
         let backend = Described::new(Scanning(rt), Arc::new(t)).unwrap();
         let mut s = Session::new(backend, &config(&notes));
-        let (_, out) = send(&mut s, &attach_msg(1, 1, [6u8; 32], "ws.test"));
+        let (_, out) = send(&mut s, &attach_msg(FRAME_VERSION, 1, [6u8; 32], "ws.test"));
         assert_eq!(
             decode(&out[0]).unwrap(),
             Frame::Attached(AttachOutcome::Accepted)

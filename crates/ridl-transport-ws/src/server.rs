@@ -128,8 +128,8 @@ pub enum Ended {
     /// The opening handshake was answered `400 Bad Request`, because the
     /// request was malformed, its head passed 8 KiB, it lacked a header the
     /// upgrade needs, its `Sec-WebSocket-Version` was not 13, or it did not
-    /// offer `ridl-ws-v1`; or `403 Forbidden`, because the check set by
-    /// [`Config::with_origin_check`] refused its `Origin`.
+    /// offer `ridl-ws-v2` or `ridl-ws-v1`; or `403 Forbidden`, because the
+    /// check set by [`Config::with_origin_check`] refused its `Origin`.
     Rejected,
     /// The opening handshake did not finish within
     /// [`Config::liveness_timeout`], no message of any kind, data or
@@ -301,7 +301,7 @@ fn run<C: Connection, B: Backend>(
     let deadline = Instant::now() + config.liveness_timeout;
     let accept_origin = |origin: Option<&str>| config.origin_accepted(origin);
     match ws::handshake(&mut Deadline { conn, at: deadline }, accept_origin) {
-        Ok(Upgrade::Accepted) => {}
+        Ok(Upgrade::Accepted(frame_version)) => session.upgraded(frame_version),
         Ok(Upgrade::Rejected | Upgrade::Forbidden) => {
             linger(conn);
             return Ended::Rejected;

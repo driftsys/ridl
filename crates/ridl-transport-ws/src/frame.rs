@@ -24,9 +24,12 @@ use ridl_rt::payload::{Rule, Violation};
 use ridl_rt::sample::{Envelope, Timestamp};
 
 /// The frame version this binding carries.
-pub const FRAME_VERSION: u32 = 1;
-/// The WebSocket subprotocol name of binding version 1.
-pub const SUBPROTOCOL: &str = "ridl-ws-v1";
+pub const FRAME_VERSION: u32 = 2;
+/// The WebSocket subprotocol name of binding version 2.
+pub const SUBPROTOCOL: &str = "ridl-ws-v2";
+/// The subprotocol name of binding version 1, which the provider selects
+/// only to refuse its `attach` (driftsys/ridl#1129).
+pub const SUBPROTOCOL_V1: &str = "ridl-ws-v1";
 /// The smallest message size limit a receiver may configure: the largest
 /// header of any message, an `attach` with a 255-byte name.
 pub const MIN_MESSAGE_LIMIT: usize = 294;
@@ -384,7 +387,7 @@ fn kind_from(code: u8) -> Result<Kind, ProtocolViolation> {
 
 /// The `detail` code of a violation's rule: `Range` 1, `Step` 2, `Length` 3,
 /// `Pattern` 4, `Variant` 5, `Unique` 6 (frame specification §9.6), or
-/// `None` for a `Rule` variant frame version 1 has no code for. `Rule` is
+/// `None` for a `Rule` variant frame version 2 has no code for. `Rule` is
 /// `#[non_exhaustive]`, and a new variant comes only with a new frame
 /// version, so a sender built against a newer `ridl-rt` checks here before
 /// it builds a `contract(InvalidValue)` outcome: the server sends such a

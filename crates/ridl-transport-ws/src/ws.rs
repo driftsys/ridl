@@ -35,9 +35,10 @@ const FORBIDDEN: &[u8] =
 /// The result of [`handshake`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Upgrade {
-    /// The server answered `101 Switching Protocols` with `ridl-ws-v1`
-    /// selected. The stream now carries WebSocket frames.
-    Accepted,
+    /// `101 Switching Protocols`; the value is the frame version of the
+    /// subprotocol selected: `FRAME_VERSION` for `ridl-ws-v2`, 1 for
+    /// `ridl-ws-v1`. The stream now carries WebSocket frames.
+    Accepted(u32),
     /// The server answered `400 Bad Request`. The caller closes the stream.
     Rejected,
     /// The server answered `403 Forbidden`: the origin check refused the
@@ -50,13 +51,16 @@ pub(crate) enum Upgrade {
 /// The request is upgraded when it is a `GET` with a `Host` header,
 /// `Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Version: 13`,
 /// one `Sec-WebSocket-Key` that decodes from base64 to 16 bytes, and
-/// `ridl-ws-v1` in any position of `Sec-WebSocket-Protocol` (RFC 6455
-/// §4.2.1), and when `accept_origin` accepts its `Origin` header, which is
-/// `None` when the request has none. The path, the query and every other
-/// header are ignored. A request head over 8 KiB, a malformed request, a
-/// request with more than one `Origin` header, or a request that does not
-/// offer `ridl-ws-v1` is answered `400 Bad Request` and returns
-/// [`Upgrade::Rejected`]; when the request is well formed and its version is
+/// `ridl-ws-v2` or `ridl-ws-v1` in any position of any
+/// `Sec-WebSocket-Protocol` header (RFC 6455 §4.2.1), and when
+/// `accept_origin` accepts its `Origin` header, which is `None` when the
+/// request has none. The `101` selects `ridl-ws-v2` when it is offered, else
+/// `ridl-ws-v1`, whatever the order of the offer (frame specification
+/// §11.1: the server selects the newest version it serves). The path, the
+/// query and every other header are ignored. A request head over 8 KiB, a
+/// malformed request, a request with more than one `Origin` header, or a
+/// request that offers neither subprotocol is answered `400 Bad Request` and
+/// returns [`Upgrade::Rejected`]; when the request is well formed and its version is
 /// not 13, whatever its other headers, the `400` names the version the server
 /// speaks in a `Sec-WebSocket-Version: 13` header (RFC 6455 §4.2.2 item 4).
 /// A request whose `Origin` `accept_origin` refuses is
@@ -94,11 +98,11 @@ pub(crate) fn handshake<S: Read + Write>(
          Sec-WebSocket-Protocol: {}\r\n\
          \r\n",
         accept_key(request.key),
-        frame::SUBPROTOCOL,
+        request.subprotocol,
     );
     stream.write_all(response.as_bytes())?;
     stream.flush()?;
-    Ok(Upgrade::Accepted)
+    Ok(Upgrade::Accepted(request.frame_version))
 }
 
 fn reject<S: Write>(stream: &mut S, response: &[u8]) -> io::Result<Upgrade> {
@@ -133,6 +137,10 @@ struct UpgradeRequest<'a> {
     key: &'a str,
     /// The `Origin`, when the request has one.
     origin: Option<&'a str>,
+    /// The subprotocol selected.
+    subprotocol: &'static str,
+    /// The frame version that `subprotocol` carries.
+    frame_version: u32,
 }
 
 /// Why a request is not upgraded, which decides the `400` written.
@@ -144,8 +152,8 @@ enum Reject {
     Version,
 }
 
-/// Returns the key and the origin of `head` when `head` is an upgrade request
-/// this server accepts, and why not otherwise.
+/// Returns the key, the origin and the subprotocol selected of `head` when
+/// `head` is an upgrade request this server accepts, and why not otherwise.
 fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
     let head = std::str::from_utf8(head).map_err(|_| Reject::BadRequest)?;
     let head = head.strip_suffix("\r\n\r\n").ok_or(Reject::BadRequest)?;
@@ -188,7 +196,10 @@ fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
     let mut host = false;
     let mut upgrade = false;
     let mut connection = false;
-    let mut subprotocol = false;
+    // Each `Sec-WebSocket-Protocol` line is read by itself, so the offers of
+    // every line are collected before one is selected.
+    let mut offers_v2 = false;
+    let mut offers_v1 = false;
     let mut key = None;
     let mut origin = None;
     for (name, value) in headers {
@@ -199,9 +210,10 @@ fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
         } else if name.eq_ignore_ascii_case("Connection") {
             connection |= has_token(value, "upgrade");
         } else if name.eq_ignore_ascii_case("Sec-WebSocket-Protocol") {
-            subprotocol |= value
-                .split(',')
-                .any(|p| p.trim_matches([' ', '\t']) == frame::SUBPROTOCOL);
+            for offer in value.split(',').map(|p| p.trim_matches([' ', '\t'])) {
+                offers_v2 |= offer == frame::SUBPROTOCOL;
+                offers_v1 |= offer == frame::SUBPROTOCOL_V1;
+            }
         } else if name.eq_ignore_ascii_case("Sec-WebSocket-Key") {
             // One key, of 16 bytes in base64 (RFC 6455 §4.2.1 item 5).
             if key.is_some() || !base64::decode(value).is_some_and(|k| k.len() == 16) {
@@ -217,11 +229,23 @@ fn upgrade_request(head: &[u8]) -> Result<UpgradeRequest<'_>, Reject> {
             origin = Some(value);
         }
     }
-    if !(host && upgrade && connection && subprotocol) {
+    if !(host && upgrade && connection) {
         return Err(Reject::BadRequest);
     }
+    let (subprotocol, frame_version) = if offers_v2 {
+        (frame::SUBPROTOCOL, frame::FRAME_VERSION)
+    } else if offers_v1 {
+        (frame::SUBPROTOCOL_V1, 1)
+    } else {
+        return Err(Reject::BadRequest);
+    };
     let key = key.ok_or(Reject::BadRequest)?;
-    Ok(UpgradeRequest { key, origin })
+    Ok(UpgradeRequest {
+        key,
+        origin,
+        subprotocol,
+        frame_version,
+    })
 }
 
 /// Whether the comma-separated list `value` holds `token`, compared without
@@ -575,8 +599,9 @@ mod tests {
         }
     }
 
-    /// Connects a `tungstenite` client that offers `ridl-ws-v1`, runs `client`
-    /// on its thread, and returns the server's end, upgraded, with the thread.
+    /// Connects a `tungstenite` client that offers `frame::SUBPROTOCOL`, runs
+    /// `client` on its thread, and returns the server's end, upgraded, with
+    /// the thread.
     fn upgraded<T: Send + 'static>(
         client: impl FnOnce(WebSocket<TcpStream>) -> T + Send + 'static,
     ) -> (TcpStream, thread::JoinHandle<T>) {
@@ -585,7 +610,10 @@ mod tests {
             let (ws, _) = connect(client_end, frame::SUBPROTOCOL).unwrap();
             client(ws)
         });
-        assert_eq!(handshake(&mut server, |_| true).unwrap(), Upgrade::Accepted);
+        assert_eq!(
+            handshake(&mut server, |_| true).unwrap(),
+            Upgrade::Accepted(frame::FRAME_VERSION)
+        );
         (server, handle)
     }
 
@@ -680,9 +708,32 @@ mod tests {
         Upgrade: websocket\r\n\
         Connection: keep-alive, Upgrade\r\n\
         Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+        Sec-WebSocket-Protocol: ridl-ws-v2\r\n\
+        Sec-WebSocket-Version: 13\r\n\
+        \r\n";
+
+    /// [`GOOD_HEAD`] offering `ridl-ws-v1` only.
+    const V1_HEAD: &str = "GET /chat HTTP/1.1\r\n\
+        Host: server.example.com\r\n\
+        Upgrade: websocket\r\n\
+        Connection: keep-alive, Upgrade\r\n\
+        Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
         Sec-WebSocket-Protocol: ridl-ws-v1\r\n\
         Sec-WebSocket-Version: 13\r\n\
         \r\n";
+
+    /// The `101` that [`handshake`] writes for the key of [`GOOD_HEAD`] with
+    /// `subprotocol` selected.
+    fn switching(subprotocol: &str) -> String {
+        format!(
+            "HTTP/1.1 101 Switching Protocols\r\n\
+             Upgrade: websocket\r\n\
+             Connection: Upgrade\r\n\
+             Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\
+             Sec-WebSocket-Protocol: {subprotocol}\r\n\
+             \r\n"
+        )
+    }
 
     // The opening handshake.
 
@@ -694,27 +745,59 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_client_offering_ridl_ws_v1_is_upgraded_with_it_selected() {
+    /// Runs the `tungstenite` client handshake offering `protocols` against
+    /// [`handshake`], and returns the server's result and the subprotocol the
+    /// client saw selected, `None` when the client's handshake failed.
+    fn offer(protocols: &'static str) -> (Upgrade, Option<String>) {
         let (mut server, client_end) = pair();
-        let client = thread::spawn(move || connect(client_end, "ridl-ws-v1").map(|(_, p)| p));
-        assert_eq!(handshake(&mut server, |_| true).unwrap(), Upgrade::Accepted);
+        let client = thread::spawn(move || connect(client_end, protocols).map(|(_, p)| p));
+        let upgrade = handshake(&mut server, |_| true).unwrap();
+        (upgrade, client.join().unwrap().ok().flatten())
+    }
+
+    #[test]
+    fn a_client_offering_ridl_ws_v2_is_upgraded_with_it_selected() {
         assert_eq!(
-            client.join().unwrap().unwrap().as_deref(),
-            Some("ridl-ws-v1")
+            offer("ridl-ws-v2"),
+            (Upgrade::Accepted(2), Some("ridl-ws-v2".to_owned()))
         );
     }
 
     #[test]
-    fn a_client_offering_ridl_ws_v1_second_is_still_upgraded() {
-        let (mut server, client_end) = pair();
-        let client =
-            thread::spawn(move || connect(client_end, "ridl-ws-v2, ridl-ws-v1").map(|(_, p)| p));
-        assert_eq!(handshake(&mut server, |_| true).unwrap(), Upgrade::Accepted);
+    fn a_client_offering_both_versions_gets_ridl_ws_v2_in_either_order() {
+        for protocols in ["ridl-ws-v2, ridl-ws-v1", "ridl-ws-v1, ridl-ws-v2"] {
+            assert_eq!(
+                offer(protocols),
+                (Upgrade::Accepted(2), Some("ridl-ws-v2".to_owned())),
+                "offer {protocols:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_client_offering_only_ridl_ws_v1_is_upgraded_with_it_selected() {
         assert_eq!(
-            client.join().unwrap().unwrap().as_deref(),
-            Some("ridl-ws-v1")
+            offer("ridl-ws-v1"),
+            (Upgrade::Accepted(1), Some("ridl-ws-v1".to_owned()))
         );
+    }
+
+    /// `upgrade_request` reads each `Sec-WebSocket-Protocol` line by itself:
+    /// the offer of an earlier line counts as much as the offer of the last.
+    #[test]
+    fn offers_on_two_header_lines_select_ridl_ws_v2_in_either_order() {
+        for (first, second) in [("ridl-ws-v2", "ridl-ws-v1"), ("ridl-ws-v1", "ridl-ws-v2")] {
+            let head = GOOD_HEAD.replace(
+                "Sec-WebSocket-Protocol: ridl-ws-v2\r\n",
+                &format!("Sec-WebSocket-Protocol: {first}\r\nSec-WebSocket-Protocol: {second}\r\n"),
+            );
+            let (upgrade, response) = handshake_on(&head);
+            assert_eq!(upgrade, Upgrade::Accepted(2), "head {head:?}");
+            assert!(
+                response.contains("Sec-WebSocket-Protocol: ridl-ws-v2\r\n"),
+                "response {response:?}"
+            );
+        }
     }
 
     #[test]
@@ -736,7 +819,7 @@ mod tests {
             seen = o.map(str::to_owned);
             true
         });
-        assert_eq!(upgrade, Upgrade::Accepted);
+        assert_eq!(upgrade, Upgrade::Accepted(2));
         assert_eq!(seen.as_deref(), Some("http://a.example"));
     }
 
@@ -754,7 +837,7 @@ mod tests {
 
     #[test]
     fn a_malformed_request_gets_400_before_the_origin_check() {
-        let head = GOOD_HEAD.replace("ridl-ws-v1", "ridl-ws-v2");
+        let head = GOOD_HEAD.replace("ridl-ws-v2", "ridl-ws-v3");
         let (upgrade, _) = handshake_checked(&head, |_| panic!("the check is not called"));
         assert_eq!(upgrade, Upgrade::Rejected);
     }
@@ -770,7 +853,7 @@ mod tests {
 
     #[test]
     fn a_client_offering_only_another_subprotocol_gets_400() {
-        let head = GOOD_HEAD.replace("ridl-ws-v1", "ridl-ws-v2");
+        let head = GOOD_HEAD.replace("ridl-ws-v2", "ridl-ws-v3");
         assert_eq!(
             handshake_on(&head),
             (
@@ -805,23 +888,20 @@ mod tests {
         let pad = 8192 - GOOD_HEAD.len() - "X: \r\n".len();
         let head = GOOD_HEAD.replace("Host:", &format!("X: {}\r\nHost:", "a".repeat(pad)));
         assert_eq!(head.len(), 8192);
-        assert_eq!(handshake_on(&head).0, Upgrade::Accepted);
+        assert_eq!(handshake_on(&head).0, Upgrade::Accepted(2));
         let head = GOOD_HEAD.replace("Host:", &format!("X: {}\r\nHost:", "a".repeat(pad + 1)));
         assert_eq!(handshake_on(&head).0, Upgrade::Rejected);
     }
 
     #[test]
     fn the_101_response_carries_the_accept_key_and_the_subprotocol() {
-        let (upgrade, response) = handshake_on(GOOD_HEAD);
-        assert_eq!(upgrade, Upgrade::Accepted);
         assert_eq!(
-            response,
-            "HTTP/1.1 101 Switching Protocols\r\n\
-             Upgrade: websocket\r\n\
-             Connection: Upgrade\r\n\
-             Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\
-             Sec-WebSocket-Protocol: ridl-ws-v1\r\n\
-             \r\n"
+            handshake_on(GOOD_HEAD),
+            (Upgrade::Accepted(2), switching("ridl-ws-v2"))
+        );
+        assert_eq!(
+            handshake_on(V1_HEAD),
+            (Upgrade::Accepted(1), switching("ridl-ws-v1"))
         );
     }
 
@@ -899,8 +979,14 @@ mod tests {
             );
         }
         // Any other refusal does not name the version.
-        let head = GOOD_HEAD.replace("ridl-ws-v1", "ridl-ws-v2");
-        assert!(!handshake_on(&head).1.contains("Sec-WebSocket-Version"));
+        let head = GOOD_HEAD.replace("ridl-ws-v2", "ridl-ws-v3");
+        assert_eq!(
+            handshake_on(&head),
+            (
+                Upgrade::Rejected,
+                String::from_utf8(BAD_REQUEST.to_vec()).unwrap()
+            )
+        );
     }
 
     #[test]
@@ -909,7 +995,7 @@ mod tests {
             .replace("Upgrade: websocket", "UPGRADE: WebSocket")
             .replace("Connection: keep-alive, Upgrade", "connection: upgrade")
             .replace("Sec-WebSocket-Version", "sec-websocket-version");
-        assert_eq!(handshake_on(&head).0, Upgrade::Accepted);
+        assert_eq!(handshake_on(&head).0, Upgrade::Accepted(2));
     }
 
     #[test]
@@ -941,7 +1027,10 @@ mod tests {
             input: GOOD_HEAD.as_bytes(),
             output: Vec::new(),
         };
-        assert_eq!(handshake(&mut stream, |_| true).unwrap(), Upgrade::Accepted);
+        assert_eq!(
+            handshake(&mut stream, |_| true).unwrap(),
+            Upgrade::Accepted(2)
+        );
         assert!(stream.interrupted);
     }
 
