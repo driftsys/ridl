@@ -1262,6 +1262,11 @@ fn a_stream_member_has_no_entry_in_the_interface_table() {
             !source.contains(&format!("  {member}: {{")),
             "`{member}` has an entry in:\n{source}"
         );
+        let note = format!("  // {member} has no entry: it carries a stream\n");
+        assert!(
+            source.contains(&note),
+            "the skip of `{member}` has no note in:\n{source}"
+        );
     }
 }
 
