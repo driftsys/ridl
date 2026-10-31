@@ -625,8 +625,8 @@ diag_codes! {
 
         /// A `//` comment that starts with `lint:` and is not a valid
         /// directive (ADR-0024 decision 18): a word other than `allow`, no
-        /// lint name, a name that is not a lint name, no reason, or no
-        /// declaration to apply to. Info. Emitted by
+        /// lint name, a name that is not a lint name, a name of a directive lint,
+        /// no reason, or no declaration to apply to. Info. Emitted by
         /// `ridl_core::lint::report_lint_directives`.
         TYPL_412 = "TYPL-412", Info,
             "malformed lint directive", lint = "malformed-lint-directive";

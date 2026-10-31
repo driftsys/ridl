@@ -72,9 +72,31 @@ included. Two lints join the registry, TYPL-411 `unused-lint-directive` and
 TYPL-412 `malformed-lint-directive`, both at `info` (decision 18). The deferred
 source attribute of the alternatives is taken in this comment form, and the
 `forbid` alternative now has something to forbid and stays deferred. Decision 4
-gains a sentence. Not built: driftsys/ridl#1124. Until it is built,
-[the lints page](../book/lints.md) keeps saying that no source attribute changes
-a level, because the book describes the system as built.
+gains a sentence. Built by driftsys/ridl#1124: the checker reads directives in
+`ridl_core::lint::directive`, and `apply_lint_levels` and
+`report_lint_directives` apply and report them in `ridl check` (the desk check
+included), `ridl build`, `ridlc check`, `ridlc build`, the language server and
+the MCP tool `ridl_check`. [The lints page](../book/lints.md) and the typl
+reference §13 and §16.5 describe it. The build settled these points the text
+above leaves open:
+
+- A directive that names `unused-lint-directive` or `malformed-lint-directive`
+  draws TYPL-412, and the name is ignored (ruling R-1).
+- RIDL-156 `podbuf-padding-order` joins RIDL-407 as a lint that most entry
+  points do not raise, so a directive that names it is unused only in
+  `ridl
+  check` (ruling R-8).
+- The language server lists no loader lint as not raised, because no directive
+  can cover a loader lint (ruling R-11).
+- TYPL-411 and TYPL-412 are not reported for a file of a remote unit (ruling
+  R-12).
+- When the formatter breaks a declaration, a `//` comment at the end of its
+  first line stays on that line. A lint directive after a member or an attribute
+  on that line moves to the line of the opening delimiter, so that it keeps its
+  declaration (rulings R-14 to R-16).
+- Known limit: a directive after a member that began on an earlier line names no
+  declaration before formatting, and can name the next member after it (ruling
+  R-17).
 
 Documents amended by the amendment of 2026-10-30: this record only. When the
 code lands, driftsys/ridl#1124 updates the lints page, adds one sentence to the

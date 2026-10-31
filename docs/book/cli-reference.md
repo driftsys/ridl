@@ -1414,6 +1414,12 @@ formatter ignores `indent_size`, `indent_style` and client formatting options.
 Compiler profiles for `.rmdl` and `.rxdl` are still pending; the glob includes
 them for editor settings.
 
+When the formatter breaks a declaration over several lines, a `//` comment at
+the end of the declaration's first line stays on the first line, after the
+opening delimiter. A lint directive after a member or an attribute on that line
+moves to the line of the opening delimiter, so that it keeps its declaration
+(see [Allowing a lint on one declaration](lints.md#allowing-a-lint-on-one-declaration)).
+
 **Exit codes.** 0 when nothing needed rewriting, or the rewrite (without
 `--check`) succeeded. 1 under `--check` when a file would change, without
 writing it. Starting from `speed.typl` holding
