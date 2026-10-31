@@ -9,11 +9,14 @@ name: npm-release
 #
 # Before it builds, the job confirms that the tag's commit is on main (as
 # `crates-io-release` does) and that the tag version equals the version in the
-# deno.json of each package, so the npm and JSR versions cannot differ. A prerelease version
-# publishes under the `next` dist-tag. The job skips a version that is already
-# on npm, so a re-run of a tag after a partial failure does not fail on a
-# duplicate. Publication uses the
-# organization secret NPM_TOKEN, with provenance from the job's OIDC token.
+# deno.json of each package, so the npm and JSR versions cannot differ. A
+# prerelease version publishes under the `next` dist-tag. The job skips a
+# version that is already on npm, so a re-run of a tag after a partial failure
+# does not fail on a duplicate. Publication uses npm trusted publishing: npm
+# exchanges the job's OIDC token for a short-lived publish token, so no npm
+# token is stored. Each package names this repository and this workflow file
+# as its trusted publisher on npmjs.com, and the npm CLI must be 11.5.1 or
+# newer.
 
 on:
   push:
@@ -71,6 +74,14 @@ jobs:
         with:
           node-version: lts/*
           registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or newer, which the Node LTS
+      # release does not always include. The version is exact, so a new npm
+      # release cannot change a publish without a change here.
+      - name: install npm
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.21.1
+          npm --version
       - run: just ts-check
       # Both packages are built before either is published, so a build
       # failure cannot leave a partial release. The runtime package comes
@@ -82,8 +93,6 @@ jobs:
             (cd "packages/${package}" && deno run -A scripts/build_npm.ts "${GITHUB_REF_NAME}")
           done
       - name: publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           for package in ridl-runtime ridl-transport-ws; do

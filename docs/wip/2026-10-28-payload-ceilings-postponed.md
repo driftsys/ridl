@@ -38,17 +38,6 @@ Done: decision 16 now states only the ceilings and the rules that use them. The
 page arithmetic and the cell layout are in its rationale, as the explanation of
 where the numbers come from, and do not bind an engine.
 
-The amendment's decision 16 states a cell layout: whole 4,096-byte pages, with
-128 bytes reserved before the payload for a header and 128 bytes after it for a
-trailer of end markers. That layout describes a store engine, and no store
-engine is in this repository.
-
-Proposal: ADR-0030 fixes only the numbers (3,840, 16,128 and 65,280 bytes) and
-the rules that use them. The page arithmetic stays in the rationale, to explain
-where the numbers come from, and does not bind an engine to a layout.
-
-Taken up again when: the amendment is next revised, before it is merged.
-
 ## 3. Measure before deciding
 
 Done, measured on `main` at 6d9903db. The largest N for a `string [0..N]` in a
@@ -59,17 +48,3 @@ that stop compiling are the two unbounded ROS 2 feedback events in
 `crates/ridl-backend-ts/tests/fixtures/codec/shape.ridl`. No number moved. The
 results are in the Consequences of ADR-0030, and the follow-up work is in
 driftsys/ridl#1108.
-
-No one has measured which sources newly fail under the draft ceilings: the
-corpus under `evals/`, the examples, the test fixtures and the book. Nor is the
-largest `string` bound that fits 3,840 bytes known for each codec (about 950
-characters is an estimate). driftsys/ridl#1108 planned to measure both after the
-decision.
-
-Proposal: measure first, because the data may move a number, for example if real
-signals cluster just above 3,840 bytes. The measurement needs no code change: a
-temporary `[limits.kind]` table with the draft numbers in each unit makes
-RIDL-151 report every payload above them. A fixed cannot be checked at 65,280
-bytes this way, because MANI-022 refuses a value above 16,256 today.
-
-Taken up again when: before the amendment is merged.

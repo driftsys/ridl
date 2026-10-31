@@ -33,12 +33,12 @@ no port, no transport framing and no generated code (driftsys/ridl#336).
   `PrimitiveType::STRING` in `StreamType.primitive`, with no bound
   (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto`). So the checker and the IR
   already treat a bare element as unbounded; the references do not say so.
-- ADR-0030 sets a payload ceiling of 16,256 bytes (decision 2) and states in
-  decision 11 that data larger than one transfer is modelled as a stream of
-  bounded elements. The open amendment of ADR-0030 (driftsys/ridl#1109) gives
-  each interaction kind its own ceiling, in 4 KiB pages (3,840 bytes for
-  `signal` and `event`, 16,256 bytes for `fixed`, `command` and `query`), and
-  makes the splitting of a payload a concern of each transport binding.
+- ADR-0030 states in decision 11 that data larger than one transfer is modelled
+  as a stream of bounded elements. Its amendment of 2026-10-28
+  (driftsys/ridl#1109) gives each interaction kind its own default payload
+  ceiling (decision 16: 3,840 bytes for `signal` and `event`, 16,128 bytes for
+  `command` and `query`, 65,280 bytes for `fixed`), and makes the splitting of a
+  payload a concern of each transport binding.
 - The use case that reopens streams is a file or a document that one side
   downloads from or uploads to the other, whose total size the contract author
   does not know and whose chunking the author has no reason to choose. An
