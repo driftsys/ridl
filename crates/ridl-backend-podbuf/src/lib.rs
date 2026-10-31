@@ -25,13 +25,30 @@
 //!   checks, and the accessors `<prefix>_<type>_value_at` and
 //!   `<prefix>_<type>_value`, as for the head of any other declaration.
 //!
-//! The names the header derives from the package are claimed once: the
-//! constants of the enums, enum sets and union tags, the head type names, the
-//! guard macro of each head, and the accessor and presence-test functions. A
-//! package where two of them are equal (an enum value equal to the guard of a
-//! head, two heads under one name, two accessors under one name) is refused,
-//! and the message names both claimants. The fixed `ridl_podbuf_*` names of
-//! the preamble and the include guard of the header are not claimed.
+//! The header claims each name it writes once: first the fixed names of the
+//! preamble (`ridl_podbuf_*` and `RIDL_PODBUF_PREAMBLE_*`, `PREAMBLE_NAMES`)
+//! and the include guard of the header, then the names it derives from the
+//! package: the constants of the enums, enum sets and union tags, the head
+//! type names, the guard macro of each head, and the accessor and
+//! presence-test functions. A package where two of them are equal (an enum
+//! value equal to the guard of a head, two heads under one name, two accessors
+//! under one name, an accessor `ridl_podbuf_desc_at` of a package
+//! `ridl.podbuf`) is refused, and the message names both claimants. The names
+//! `<stdint.h>` and `<stddef.h>` define are not claimed.
+//!
+//! The headers of one build are checked against each other too, by
+//! [`check_c_names`], because a C file includes any of them together and
+//! `package veh` with `type CommonSpeed` and `package veh.common` with
+//! `struct Speed` both derive `veh_common_speed_head`. Each claim carries the
+//! identity of the entity it names (`Identity`: the declaring package, a key
+//! for the entity, the role of the name) and, for a head and its guard, the
+//! text of the guarded definition. Two headers claim one name for one entity
+//! only when the identities are equal and, for a head or a guard, the
+//! definitions are equal; a name claimed for two or more entities is refused
+//! once, with one claimant per entity and its package named. A head that
+//! another package declares and this package lays out inline has the identity
+//! the declaring header gives it, so its second definition is not a clash
+//! when its text is identical to the first; two texts are refused.
 //!
 //! The layout is not computed here. It is read from the model's podbuf
 //! projection ([`v1::PodbufProjection`]), which `ridl_ir::projection::podbuf`
@@ -291,24 +308,175 @@ fn path_words(path: &[String]) -> String {
         .join("_")
 }
 
+/// The entity a C name stands for, compared across the headers of one build:
+/// the package that declares the entity, a key that names the entity inside
+/// that package, and the role of the name (the head type, its guard macro, an
+/// accessor of one member, ...). A head that another package declares and this
+/// package lays out inline has the identity the declaring header gives it; the
+/// second definition is accepted only when its text is identical to the first
+/// ([`Claim::same_entity`]), and equal identities with two texts are refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Identity {
+    package: String,
+    key: String,
+    role: String,
+}
+
+impl Identity {
+    /// The one identity of the fixed names of the preamble, shared by every
+    /// header.
+    fn preamble(name: &str) -> Self {
+        Self {
+            package: String::new(),
+            key: name.to_string(),
+            role: "preamble".to_string(),
+        }
+    }
+}
+
+/// One claim of a C name: what the name stands for in the message of a
+/// refusal, the identity the build-wide check compares, and, for a head and
+/// its guard, the guarded definition the header writes, which the check
+/// compares too.
+#[derive(Debug, Clone)]
+struct Claim {
+    what: String,
+    identity: Identity,
+    definition: Option<String>,
+}
+
+impl Claim {
+    /// Whether two claims of one name stand for one entity: equal identities
+    /// and, for a head or a guard, equal definitions. An importing lowering
+    /// can give a nested tuple of another package the wire name that package
+    /// gives a different tuple, so the identity alone is not trusted.
+    fn same_entity(&self, other: &Claim) -> bool {
+        self.identity == other.identity && self.definition == other.definition
+    }
+}
+
 /// The names the header claims at file scope, so that two claims of one name
-/// are refused instead of written.
+/// are refused instead of written. The fixed names of the preamble and the
+/// include guard of the header are claimed first, so a name the package
+/// derives cannot define one of them again.
 #[derive(Default)]
 struct Claims {
-    by_name: BTreeMap<String, String>,
+    by_name: BTreeMap<String, Claim>,
 }
 
 impl Claims {
-    fn claim(&mut self, name: &str, what: String) -> Result<(), GenerateError> {
+    fn claim(&mut self, name: &str, what: String, identity: Identity) -> Result<(), GenerateError> {
+        self.claim_definition(name, what, identity, None)
+    }
+
+    /// A claim that carries the guarded definition of a head, for the head's
+    /// type name and for its guard macro.
+    fn claim_definition(
+        &mut self,
+        name: &str,
+        what: String,
+        identity: Identity,
+        definition: Option<String>,
+    ) -> Result<(), GenerateError> {
         match self.by_name.get(name) {
             Some(first) => fail(format!(
-                "the C name `{name}` is claimed by {first} and by {what}"
+                "the C name `{name}` is claimed by {} and by {what}",
+                first.what
             )),
             None => {
-                self.by_name.insert(name.to_string(), what);
+                self.by_name.insert(
+                    name.to_string(),
+                    Claim {
+                        what,
+                        identity,
+                        definition,
+                    },
+                );
                 Ok(())
             }
         }
+    }
+}
+
+/// The fixed names [`PREAMBLE`] defines, which every header claims before any
+/// name it derives from the package.
+const PREAMBLE_NAMES: [&str; 12] = [
+    "RIDL_PODBUF_PREAMBLE_DEFINED",
+    "RIDL_PODBUF_PREAMBLE_SIZE",
+    "ridl_podbuf_preamble",
+    "ridl_podbuf_desc",
+    "ridl_podbuf_array_desc",
+    "ridl_podbuf_head_size",
+    "ridl_podbuf_fits",
+    "ridl_podbuf_load",
+    "ridl_podbuf_load_f32",
+    "ridl_podbuf_load_f64",
+    "ridl_podbuf_desc_at",
+    "ridl_podbuf_array_desc_at",
+];
+
+/// Checks the C names the headers of `packages` claim against each other, for
+/// a build that writes one header per package: a C file may include any of
+/// them together. A name two headers claim for two different entities (a head
+/// of `veh.CommonSpeed` and a head of `veh.common.Speed`, both
+/// `veh_common_speed_head`; the accessor `x_y_z_head` of `x.Y.zHead` and the
+/// head of `x.y.Z`; a constant of one package equal to the include guard of
+/// another header) is one error per name, which names one claimant per entity
+/// and its package. A head one package declares and another lays out inline is
+/// accepted only when the two headers define it with one text
+/// (`Claim::same_entity`); equal identities with two texts are refused. Each
+/// package is lowered over `packages`, as
+/// `ridl build` lowers it; a package whose own header is refused is skipped
+/// here, and its own generation reports that refusal, on the next run when a
+/// clash made `ridl build` write no header.
+///
+/// The errors are in name order, and the claimants of one error in the order
+/// of `packages`. Two headers of two separate builds are not checked against
+/// each other.
+pub fn check_c_names(packages: &[&v2::Package]) -> Result<(), Vec<GenerateError>> {
+    // Per name, the claimants of the headers of the build, in build order,
+    // one per entity: a later header that claims a name for an entity already
+    // listed adds nothing.
+    let mut claimants: BTreeMap<String, Vec<(Claim, String)>> = BTreeMap::new();
+    for package in packages {
+        let model = codegen::lower(package, packages);
+        let Some(projection) = model.podbuf.as_ref() else {
+            continue;
+        };
+        if check_limits(package, packages).is_err() || !projection.refused.is_empty() {
+            continue;
+        }
+        let Ok((_, claims)) = Header::new(&model, projection).render_with_claims() else {
+            continue;
+        };
+        for (name, claim) in claims.by_name {
+            let entry = claimants.entry(name).or_default();
+            if !entry.iter().any(|(seen, _)| seen.same_entity(&claim)) {
+                entry.push((claim, package.name.clone()));
+            }
+        }
+    }
+    let errors: Vec<GenerateError> = claimants
+        .into_iter()
+        .filter(|(_, claimants)| claimants.len() > 1)
+        .map(|(name, claimants)| {
+            let texts: Vec<String> = claimants
+                .iter()
+                .map(|(claim, package)| format!("{} in the header of `{package}`", claim.what))
+                .collect();
+            let (last, first) = texts.split_last().expect("two claimants or more");
+            GenerateError {
+                message: format!(
+                    "the C name `{name}` is claimed by {} and by {last}",
+                    first.join(", by ")
+                ),
+            }
+        })
+        .collect();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
     }
 }
 
@@ -325,6 +493,8 @@ struct Header<'a> {
     heads: Vec<v1::PodbufHead>,
     /// Whether each head is the head of a box.
     boxed: Vec<bool>,
+    /// `veh.cluster`: the package the header is written for.
+    package: String,
     /// `veh_cluster`.
     prefix: String,
     /// The C type name of each head.
@@ -336,11 +506,12 @@ struct Header<'a> {
 
 impl<'a> Header<'a> {
     fn new(model: &'a v1::Model, projection: &v1::PodbufProjection) -> Self {
-        let prefix = model
+        let package = model
             .name
             .as_ref()
-            .map(|name| package_prefix(&name.dotted))
+            .map(|name| name.dotted.clone())
             .unwrap_or_default();
+        let prefix = package_prefix(&package);
         let mut heads = projection.heads.clone();
         let mut is_box = vec![false; heads.len()];
         // A box whose declaration is out of range or whose head is unset is
@@ -363,6 +534,7 @@ impl<'a> Header<'a> {
             model,
             heads,
             boxed: is_box,
+            package,
             prefix,
             type_names: Vec::new(),
             positional,
@@ -598,6 +770,75 @@ impl<'a> Header<'a> {
         Some(format!("{}.{}", foreign.package, name.declared))
     }
 
+    /// The identity of head `at` in role `role`: the package that declares
+    /// the entity the head belongs to, and a key for the entity in it, so
+    /// that the declaring header and an importing header give one head one
+    /// identity ([`Identity`]):
+    ///
+    /// - a declaration or a box: (this package, the declared name); a foreign
+    ///   declaration: (its package, its declared name);
+    /// - a tuple of this package: (this package, the wire name); a tuple
+    ///   nested in a foreign declaration: (its package, its wire name), the
+    ///   key the declaring header uses, or its path when the model carries no
+    ///   wire name;
+    /// - a union arm or a map entry: (this package, the C type name). Such a
+    ///   head is reached through a descriptor, so no importing header defines
+    ///   it, and the type name is unique in this header;
+    /// - the fallbacks of [`Header::type_name`]: (this package, `tuple<N>`)
+    ///   and (this package, `head<N>`).
+    fn identity(&self, at: usize, role: &str) -> Identity {
+        use v1::podbuf_head::Source;
+        let declared = |index: u32| {
+            self.model
+                .declarations
+                .get(index as usize)
+                .and_then(|decl| decl.name.as_ref())
+                .map(|name| name.declared.clone())
+                .unwrap_or_default()
+        };
+        let (package, key) = match self.heads[at].source.as_ref() {
+            Some(Source::Declaration(index)) => (self.package.clone(), declared(*index)),
+            Some(Source::Tuple(index)) => {
+                let wire = self
+                    .model
+                    .tuples
+                    .get(*index as usize)
+                    .and_then(|tuple| tuple.name.as_ref())
+                    .map(|name| name.wire.clone())
+                    .filter(|wire| !wire.is_empty())
+                    .unwrap_or_else(|| format!("tuple{index}"));
+                (self.package.clone(), wire)
+            }
+            Some(Source::MapEntry(_)) | Some(Source::Arm(_)) => {
+                (self.package.clone(), self.type_names[at].clone())
+            }
+            Some(Source::Foreign(index)) => {
+                let package = self
+                    .model
+                    .foreign
+                    .get(*index as usize)
+                    .map(|foreign| foreign.package.clone())
+                    .unwrap_or_default();
+                let name = self
+                    .foreign_declared(*index)
+                    .and_then(|decl| decl.name.as_ref())
+                    .map(|name| name.declared.clone())
+                    .unwrap_or_default();
+                (package, name)
+            }
+            Some(Source::NestedTuple(nested)) if !nested.wire.is_empty() => {
+                (nested.package.clone(), nested.wire.clone())
+            }
+            Some(Source::NestedTuple(nested)) => (nested.package.clone(), nested.path.join(".")),
+            None => (self.package.clone(), format!("head{at}")),
+        };
+        Identity {
+            package,
+            key,
+            role: role.to_string(),
+        }
+    }
+
     /// The guard macro of head `at`: `<PKG>_<TYPE>_HEAD_DEFINED`.
     fn guard(&self, at: usize) -> String {
         let name = self.type_names[at].to_uppercase();
@@ -757,8 +998,30 @@ impl<'a> Header<'a> {
     // ---------------------------------------------------------------
 
     fn render(&self) -> Result<Generated, GenerateError> {
+        self.render_with_claims().map(|(generated, _)| generated)
+    }
+
+    /// The header and every C name it claims. The fixed names of the preamble
+    /// and the include guard of the header are claimed first.
+    fn render_with_claims(&self) -> Result<(Generated, Claims), GenerateError> {
         let mut claims = Claims::default();
+        for name in PREAMBLE_NAMES {
+            claims.claim(
+                name,
+                "the preamble of every header".to_string(),
+                Identity::preamble(name),
+            )?;
+        }
         let guard = format!("RIDL_PODBUF_{}_H", self.prefix.to_uppercase());
+        claims.claim(
+            &guard,
+            "the include guard of the header".to_string(),
+            Identity {
+                package: self.package.clone(),
+                key: String::new(),
+                role: "include guard".to_string(),
+            },
+        )?;
         let mut out = String::new();
         let _ = writeln!(out, "#ifndef {guard}");
         let _ = writeln!(out, "#define {guard}\n");
@@ -775,7 +1038,7 @@ impl<'a> Header<'a> {
             }
         }
         let _ = writeln!(out, "#endif /* {guard} */");
-        Ok(Generated { header_source: out })
+        Ok((Generated { header_source: out }, claims))
     }
 
     /// The constants of the enums, enum sets and union tags.
@@ -786,6 +1049,13 @@ impl<'a> Header<'a> {
                 continue;
             };
             let owner = format!("{package}_{}", name.screaming);
+            // A constant belongs to this package's declaration: the identity
+            // is the declared names of the declaration and of the value.
+            let identity = |value: &str| Identity {
+                package: self.package.clone(),
+                key: format!("{}.{value}", name.declared),
+                role: "constant".to_string(),
+            };
             match decl.kind.as_ref() {
                 Some(v1::declaration::Kind::Enum(value)) => {
                     for entry in &value.values {
@@ -793,8 +1063,11 @@ impl<'a> Header<'a> {
                             continue;
                         };
                         let constant = format!("{owner}_{}", spelled.screaming);
-                        claims
-                            .claim(&constant, format!("the enum value `{}`", spelled.declared))?;
+                        claims.claim(
+                            &constant,
+                            format!("the enum value `{}`", spelled.declared),
+                            identity(&spelled.declared),
+                        )?;
                         let _ = writeln!(out, "#define {constant} {}", int_literal(entry.value));
                     }
                 }
@@ -804,7 +1077,11 @@ impl<'a> Header<'a> {
                             continue;
                         };
                         let constant = format!("{owner}_{}", spelled.screaming);
-                        claims.claim(&constant, format!("the flag `{}`", spelled.declared))?;
+                        claims.claim(
+                            &constant,
+                            format!("the flag `{}`", spelled.declared),
+                            identity(&spelled.declared),
+                        )?;
                         let _ =
                             writeln!(out, "#define {constant} (UINT64_C(1) << {})", entry.value);
                     }
@@ -815,7 +1092,11 @@ impl<'a> Header<'a> {
                             continue;
                         };
                         let constant = format!("{owner}_TAG_{}", spelled.screaming);
-                        claims.claim(&constant, format!("the union arm `{}`", spelled.declared))?;
+                        claims.claim(
+                            &constant,
+                            format!("the union arm `{}`", spelled.declared),
+                            identity(&spelled.declared),
+                        )?;
                         let _ = writeln!(out, "#define {constant} {}", arm.ordinal);
                     }
                 }
@@ -839,11 +1120,7 @@ impl<'a> Header<'a> {
             return Ok(());
         }
         let name = &self.type_names[at];
-        claims.claim(name, self.owner_text(at))?;
-        // The guard is claimed too: a constant of the same name would make
-        // the `#ifndef` drop the head.
         let guard = self.guard(at);
-        claims.claim(&guard, format!("the guard of `{name}`"))?;
 
         // The members by offset, the pads among them.
         let mut members: Vec<Member> = Vec::new();
@@ -876,15 +1153,34 @@ impl<'a> Header<'a> {
             }
         }
 
-        let _ = writeln!(out, "#ifndef {guard}");
-        let _ = writeln!(out, "#define {guard}");
-        let _ = writeln!(out, "typedef struct {name} {{");
+        // The guarded definition, which the claims of the type name and of
+        // the guard carry: two headers that define one head with two texts
+        // are refused by the build-wide check.
+        let mut block = String::new();
+        let _ = writeln!(block, "#ifndef {guard}");
+        let _ = writeln!(block, "#define {guard}");
+        let _ = writeln!(block, "typedef struct {name} {{");
         for (index, member) in members.iter().enumerate() {
             let align = if index == 0 { "_Alignas(8) " } else { "" };
-            let _ = writeln!(out, "  {align}{};", member.declaration);
+            let _ = writeln!(block, "  {align}{};", member.declaration);
         }
-        let _ = writeln!(out, "}} {name};");
-        let _ = writeln!(out, "#endif");
+        let _ = writeln!(block, "}} {name};");
+        let _ = writeln!(block, "#endif");
+        claims.claim_definition(
+            name,
+            self.owner_text(at),
+            self.identity(at, "head"),
+            Some(block.clone()),
+        )?;
+        // The guard is claimed too: a constant of the same name would make
+        // the `#ifndef` drop the head.
+        claims.claim_definition(
+            &guard,
+            format!("the guard of {}", self.owner_text(at)),
+            self.identity(at, "guard"),
+            Some(block.clone()),
+        )?;
+        out.push_str(&block);
         let _ = writeln!(
             out,
             "_Static_assert(sizeof({name}) == {}, \"{name} size\");",
@@ -1044,6 +1340,7 @@ impl<'a> Header<'a> {
             claims.claim(
                 &at_name,
                 format!("the accessor of `{member}` of {owner_text}"),
+                self.identity(at, &format!("accessor `{member}` at")),
             )?;
             let lead = if uses_buf {
                 "const uint8_t *buf, const uint8_t *h, uint32_t sz"
@@ -1059,6 +1356,7 @@ impl<'a> Header<'a> {
                 claims.claim(
                     &function,
                     format!("the accessor of `{member}` of {owner_text}"),
+                    self.identity(at, &format!("accessor `{member}`")),
                 )?;
                 let pass = if uses_buf { "buf, " } else { "" };
                 let _ = writeln!(
@@ -1077,6 +1375,7 @@ impl<'a> Header<'a> {
                 claims.claim(
                     &format!("{has}_at"),
                     format!("the presence test of `{member}` of {owner_text}"),
+                    self.identity(at, &format!("presence test `{member}` at")),
                 )?;
                 let _ = writeln!(
                     out,
@@ -1088,6 +1387,7 @@ impl<'a> Header<'a> {
                     claims.claim(
                         &has,
                         format!("the presence test of `{member}` of {owner_text}"),
+                        self.identity(at, &format!("presence test `{member}`")),
                     )?;
                     let _ = writeln!(
                         out,

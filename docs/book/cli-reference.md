@@ -1051,7 +1051,10 @@ tags, and inline accessor functions that read through the preamble's head size
 and answer 0 for a field past it. It refuses a big-endian target with `#error`.
 It takes no option. A package that lays out a struct, tuple or union of another
 package inline defines that head again behind a guard macro, so the headers of
-two packages can be included in one translation unit.
+two packages can be included in one translation unit. `ridl build` refuses the
+headers of a build that derive one C name for different entities (`veh_common_speed_head`
+from `veh.CommonSpeed` and from `veh.common.Speed`), and writes no header for
+that build.
 
 **`codegen-model` is not a backend at all**: it writes the lowered codegen
 model — one package, resolved over the scope the build read, with the scalar

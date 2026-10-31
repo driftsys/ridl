@@ -79,6 +79,12 @@ guard macro of every head with its other names; decision 7 carries the dated
 note, decision 14's "As built" note says the C header has a head the Rust codec
 does not, and open item 4 is closed.
 
+**Amended 2026-10-31 — decision 7, C names across packages, from
+driftsys/ridl#1153.** Every header claims the fixed names of the preamble and
+its include guard before the names it derives, and `ridl build` checks the C
+names of the headers of one build against each other, by the identity of the
+entity each name stands for; decision 7 carries the dated note.
+
 ## Context
 
 ADR-0020 decision 1 adds a third payload encoding for a consumer that reads a
@@ -412,6 +418,32 @@ a field is appended.
    `ridl build --emit podbuf` refuses a package with a named scalar, enum or
    enum set that has no podbuf size bound, or whose box head name equals the
    name of another head, as the Rust codec refuses it.
+
+   _Amended 2026-10-31, from driftsys/ridl#1153._ The C names are not unique
+   across packages: a `.` of a package name and a `_` from the snake case of a
+   type name spell the same character, so `veh.CommonSpeed` and
+   `veh.common.Speed` both derive `veh_common_speed_head`, and the accessor
+   `x_y_z_head` of a field `zHead` of `x.Y` is the head name of `x.y.Z`. The
+   `<pkg>_<type>_head` shape is kept; a `__` separator would make the names
+   unique, since a package segment is `[a-z][a-z0-9]*` (MANI-006), but it breaks
+   the pinned shape, reads worse, and is reserved in C++. Instead, every header
+   claims each name it writes, the fixed names of the preamble (`ridl_podbuf_*`,
+   `RIDL_PODBUF_PREAMBLE_*`) and its own include guard (`RIDL_PODBUF_<PKG>_H`)
+   first, so a package `ridl.podbuf` cannot define a preamble helper again; and
+   `ridl build` checks the headers of one build against each other once, before
+   any header is written. Each claim carries the identity of the entity it
+   names, (declaring package, entity, role), and the claim of a head and of its
+   guard carries the guarded definition too; two headers claim one name for one
+   entity only when the identities are equal and the definitions are equal: the
+   second definition of a head one package declares and another lays out inline
+   is accepted only when its text is identical to the first, and equal
+   identities with two texts are refused. A name claimed for two or more
+   entities is one detached error naming one claimant per entity and its
+   package, no header is written for the build, the per-package files of the
+   other emits are still written (the generated crate's `lib.rs` and
+   `Cargo.toml` are not, as on any error of a build), and the build exits 1. Two
+   headers of two separate builds are not checked against each other;
+   [`docs/design/podbuf-codec.md`](../design/podbuf-codec.md) lists the gap.
 
 8. **Verify.** `verify(buf) -> Result` is generated per type, in Rust only,
    because the gate is Rust (author's call). It checks, over the data present:

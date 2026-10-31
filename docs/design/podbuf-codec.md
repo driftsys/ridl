@@ -227,18 +227,59 @@ no byte (`bytes [0]`) has no head and no accessor. A box head is defined only in
 the header of the package that declares the type: a consumer of an interface
 that sends a foreign boxed root includes that package's header.
 
-The names the header derives from the package are claimed once: the constants of
-the enums, enum sets and union tags, the head type names, the guard macro of
-each head, and the accessor and presence-test functions (the fixed
-`ridl_podbuf_*` names and the include guard of the header are not). A package
-where two are equal is refused, with a message that names both claimants: a
-constant equal to the guard of a head (an enum `Gear` with a value
-`BOX_HEAD_DEFINED` next to a struct `GearBox`), which would make the `#ifndef`
-drop the head, or a box head whose name equals the name of a tuple head (a
-scalar `HubSize` next to the tuple at `Hub.size`), which the Rust backend
-refuses too. A struct, a union or a box with no podbuf size bound is refused.
-The header carries `#error` on a big-endian target, and has no `verify`: the
-gate is Rust.
+Every C name the header defines is claimed once: first the fixed names of the
+preamble (`ridl_podbuf_*` and `RIDL_PODBUF_PREAMBLE_*`) and the include guard of
+the header (`RIDL_PODBUF_<PKG>_H`), then the constants of the enums, enum sets
+and union tags, the head type names, the guard macro of each head, and the
+accessor and presence-test functions. A package where two are equal is refused,
+with a message that names both claimants: a constant equal to the guard of a
+head (an enum `Gear` with a value `BOX_HEAD_DEFINED` next to a struct
+`GearBox`), which would make the `#ifndef` drop the head; a box head whose name
+equals the name of a tuple head (a scalar `HubSize` next to the tuple at
+`Hub.size`), which the Rust backend refuses too; or an accessor equal to a
+preamble helper (a struct `Desc` with a field `at` in a package `ridl.podbuf`,
+`ridl_podbuf_desc_at`). A struct, a union or a box with no podbuf size bound is
+refused. The header carries `#error` on a big-endian target, and has no
+`verify`: the gate is Rust.
+
+**The headers of one build are checked against each other.** The C names are not
+unique across packages: the `.` of a package name and a `_` from the snake case
+of a type name spell the same character, so `package veh` with
+`type CommonSpeed` and `package veh.common` with `struct Speed` both derive
+`veh_common_speed_head` and the guard `VEH_COMMON_SPEED_HEAD_DEFINED`, with two
+layouts, and a C file that includes both headers fails on the second's
+`_Static_assert` lines. The same holds for an accessor against a head
+(`x_y_z_head`, the whole-buffer accessor of the field `zHead` of `x.Y` and the
+head of `x.y.Z`), for the head of a tuple against the head of a struct
+(`a_hub_size_head`, the tuple at `a.Hub.size` and `a.hub.Size`), and for a
+constant against the include guard of another header (`RIDL_PODBUF_A_H`, the
+value `H` of an enum `A` of `ridl.podbuf` and the guard of `a.h`). Before
+`ridl build --emit podbuf` writes any header,
+`ridl_backend_podbuf::check_c_names` renders the header of every package of the
+build (`others`, the same scope every code emit reads, `ridl.std` included when
+present) and compares the claims. Each claim carries the identity of the entity
+it names, (declaring package, entity key, role): a declaration by its declared
+name in its package, a tuple by its wire name in the package that declares it
+(`NestedTuple.package` and `NestedTuple.wire` for a tuple of another package); a
+union arm and a map entry are reached through a descriptor, so no importing
+header defines their heads. The claim of a head and of its guard also carries
+the text of the guarded definition, because the importing lowering can give a
+nested tuple of another package the wire name that package gives a different
+tuple (`a_abx_field1_head`, the tuple at position 1 of `a.A.bX`, which the
+importer names `a.A.bX.1`, and the tuple at `a.AB.xField1`). Two headers claim
+one name for one entity only when the identities are equal and, for a head or a
+guard, the definitions are equal: the second definition of a head one package
+declares and another lays out inline is accepted only when its text is identical
+to the first, and equal identities with two texts are refused. A name claimed
+for two or more entities is one detached error, which names one claimant per
+entity and its package; on any clash no `.h` is written for the build, the
+per-package files of the other emits are still written (the generated crate's
+`lib.rs` and `Cargo.toml` are not, as on any error of a build), and the build
+exits 1. A package whose own header is refused is skipped by the check, because
+its own generation reports that refusal; in a run that found a clash the podbuf
+backend is not called, so that refusal is reported only once the clash is
+repaired. The check runs after the deployment is selected, so a clash together
+with a deployment no source declares is still a usage error.
 
 ## Determinism
 
@@ -285,6 +326,7 @@ The encoding has no second implementation, so the oracle is the law itself.
 | An inline append whose head reaches a type from a remote package (an `[imports]` unit, not another workspace member) is not reported as a podbuf break, so it does not end the catalog history | driftsys/ridl#1141            |
 | `open` enums and enum sets are not built; every enum is strict (ADR-0031 decision 12)                                                                                                          | the typl change it depends on |
 | A string that holds U+0000 cannot be encoded                                                                                                                                                   | a limit of the encoding       |
+| The C names of two headers from two separate builds are not checked against each other; a C file that includes both can meet one name with two definitions                                     | the check is per build        |
 | TypeScript and wasm have no podbuf codec; those boundaries keep FlatBuffers                                                                                                                    | ADR-0020 decision 2           |
 
 ## Trace

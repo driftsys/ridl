@@ -450,7 +450,7 @@ fn a_constant_equal_to_a_head_guard_is_refused() {
     assert!(
         err.message.contains("`P_G_GEAR_HEAD_DEFINED`")
             && err.message.contains("the enum value `HEAD_DEFINED`")
-            && err.message.contains("the guard of `p_g_gear_head`"),
+            && err.message.contains("the guard of the head of `Gear`"),
         "{}",
         err.message
     );
@@ -461,7 +461,7 @@ fn a_constant_equal_to_a_head_guard_is_refused() {
     assert!(
         err.message.contains("`P_G_GEAR_BOX_HEAD_DEFINED`")
             && err.message.contains("the enum value `BOX_HEAD_DEFINED`")
-            && err.message.contains("the guard of `p_g_gear_box_head`"),
+            && err.message.contains("the guard of the head of `GearBox`"),
         "{}",
         err.message
     );
@@ -666,4 +666,132 @@ fn a_presence_test_equal_to_an_accessor_is_refused_naming_both() {
         "{}",
         err.message
     );
+}
+
+/// The fixed names of the preamble are claimed before any name the package
+/// derives, so a package `ridl.podbuf` whose struct `Desc` has a field `at`
+/// is refused instead of defining `ridl_podbuf_desc_at` a second time
+/// (driftsys/ridl#1153).
+#[test]
+fn an_accessor_equal_to_a_preamble_helper_is_refused_naming_both() {
+    let err =
+        generate_fixture_err("package ridl.podbuf\nstruct Desc {\n  at : integer [0..10]\n}\n");
+    assert!(
+        err.message.contains("`ridl_podbuf_desc_at`")
+            && err.message.contains("the preamble of every header")
+            && err
+                .message
+                .contains("the accessor of `at` of the head of `Desc`"),
+        "{}",
+        err.message
+    );
+}
+
+/// A constant equal to a preamble macro is refused the same way: the enum
+/// `Preamble` of `ridl.podbuf` with a value `SIZE` would define
+/// `RIDL_PODBUF_PREAMBLE_SIZE` again.
+#[test]
+fn a_constant_equal_to_a_preamble_macro_is_refused_naming_both() {
+    let err = generate_fixture_err("package ridl.podbuf\nenum Preamble {\n  SIZE = 0\n}\n");
+    assert!(
+        err.message.contains("`RIDL_PODBUF_PREAMBLE_SIZE`")
+            && err.message.contains("the preamble of every header")
+            && err.message.contains("the enum value `SIZE`"),
+        "{}",
+        err.message
+    );
+}
+
+/// The include guard of the header is claimed too: the enum `RidlPodbuf` of
+/// `ridl.podbuf` with a value `H` spells `RIDL_PODBUF_RIDL_PODBUF_H`, the
+/// guard of its own header, and the `#define` would end the header early.
+#[test]
+fn a_constant_equal_to_the_include_guard_is_refused_naming_both() {
+    let err = generate_fixture_err("package ridl.podbuf\nenum RidlPodbuf {\n  H = 0\n}\n");
+    assert!(
+        err.message.contains("`RIDL_PODBUF_RIDL_PODBUF_H`")
+            && err.message.contains("the include guard of the header")
+            && err.message.contains("the enum value `H`"),
+        "{}",
+        err.message
+    );
+}
+
+/// `PREAMBLE_NAMES` is every identifier the preamble defines under the
+/// `ridl_podbuf_` and `RIDL_PODBUF_` prefixes, no more and no fewer, so a
+/// helper added to the preamble is claimed too.
+#[test]
+fn the_claimed_preamble_names_are_the_names_the_preamble_defines() {
+    let mut defined: Vec<&str> = crate::PREAMBLE
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .filter(|word| word.starts_with("ridl_podbuf_") || word.starts_with("RIDL_PODBUF_"))
+        .collect();
+    defined.sort_unstable();
+    defined.dedup();
+    let mut claimed = crate::PREAMBLE_NAMES.to_vec();
+    claimed.sort_unstable();
+    assert_eq!(defined, claimed);
+}
+
+/// `Header::identity` keeps the three parts the build-wide check compares:
+/// two heads of one package differ by their key, and one head's type name and
+/// guard differ by their role, under one package.
+#[test]
+fn the_identity_of_a_head_carries_its_package_its_key_and_its_role() {
+    let package = compile(
+        "package p.i\n\
+         struct S {\n  x : integer [0..10]\n}\n\
+         struct T {\n  y : integer [0..10]\n}\n",
+    );
+    let model = ridl_ir::codegen::lower(&package, &[]);
+    let projection = model.podbuf.clone().expect("a projection");
+    let header = crate::Header::new(&model, &projection);
+    assert_eq!(header.heads.len(), 2, "{:?}", header.type_names);
+    let (s, t) = (header.identity(0, "head"), header.identity(1, "head"));
+    assert_eq!(s.package, "p.i");
+    assert_eq!(s.package, t.package);
+    assert_ne!(s.key, t.key);
+    assert_eq!(s.role, "head");
+    let guard = header.identity(0, "guard");
+    assert_eq!((&guard.package, &guard.key), (&s.package, &s.key));
+    assert_ne!(guard, s);
+}
+
+/// `check_c_names` leaves out a package whose projection refuses a head: a
+/// struct whose field names a type that does not resolve, which checked
+/// source does not reach, so the IR is edited after the compile. The package
+/// also declares `CommonSpeed`, which would clash with `veh.common.Speed`;
+/// with the package left out, the check passes.
+#[test]
+fn a_package_whose_projection_refuses_a_head_is_left_out_of_the_check() {
+    let mut veh = compile(
+        "package veh\ntype CommonSpeed : integer [0..100]\n\
+         struct Bad {\n  s : integer [0..10]\n}\n",
+    );
+    let bad = veh
+        .decls
+        .iter_mut()
+        .find(|decl| decl.name == "Bad")
+        .expect("Bad");
+    let Some(v2::decl::Kind::StructDef(def)) = bad.kind.as_mut() else {
+        panic!("a struct");
+    };
+    let Some(v2::struct_member::Member::Field(field)) = def.members[0].member.as_mut() else {
+        panic!("a field");
+    };
+    field.r#type.as_mut().expect("a type").kind =
+        Some(v2::field_type::Kind::Named("Nowhere".to_string()));
+    let common = compile("package veh.common\nstruct Speed {\n  v : integer [0..1000]\n}\n");
+    let packages = [&veh, &common];
+    let model = ridl_ir::codegen::lower(&veh, &packages);
+    assert!(
+        !model
+            .podbuf
+            .as_ref()
+            .expect("a projection")
+            .refused
+            .is_empty(),
+        "the edited struct is refused by the projection"
+    );
+    assert_eq!(crate::check_c_names(&packages), Ok(()));
 }
