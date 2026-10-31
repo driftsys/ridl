@@ -255,13 +255,11 @@ fn an_internal_interface_gets_no_face_through_the_pipeline() {
     assert!(!source.contains("pub struct Diagnostics"), "{source}");
 }
 
-/// The skip note of a public interface whose call the face cannot carry names
-/// the call shape and what the source can change to get a face. A stream
-/// parameter has no payload type, so it is one of the three shapes still
-/// refused; a parameter list of any length is carried by its induced argument
-/// struct.
+/// A call with a stream parameter has no method on the face, but its
+/// descriptor is emitted: the interface is not skipped, so it leaves no skip
+/// note. An interface whose only calls take a stream has no face module.
 #[test]
-fn a_public_interface_with_an_uncarried_call_leaves_the_call_shape_note() {
+fn a_command_with_a_stream_parameter_has_a_descriptor_and_no_face_method() {
     let source = r#"
 package face.shape
 
@@ -275,52 +273,65 @@ interface Wide {
     let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate_pipeline");
     let text = generated.rust_source;
-    assert!(
-        text.contains("carries no generated interaction face"),
-        "{text}"
-    );
-    assert!(text.contains("A call the face cannot carry"), "{text}");
-    let owner = &text[text
-        .find("A call the face cannot carry")
-        .expect("owner line")..];
-    assert!(owner.contains("to get a face"), "{text}");
-    assert!(!text.contains("driftsys/ridl"), "{text}");
-    assert!(!text.contains("The interface is `internal`"), "{text}");
-    assert!(
-        owner.contains("which the face is built on"),
-        "a public note's trailer names the face:\n{text}"
-    );
+    assert!(!text.contains("__RIDL_NO_FACE_"), "{text}");
+    assert!(text.contains("pub struct WideSet;"), "{text}");
+    assert!(!text.contains("pub mod wide"), "{text}");
 }
 
-/// The skip note of a public interface whose query the face cannot carry
-/// names the call shape and what the source can change to get a face. The command case above reaches
-/// the command arm of `face_gap`'s match; this one reaches the query arm
-/// through its parameter operand (a stream), and the next one through its
-/// reply operand.
+/// The same for a query that has a stream parameter and one that replies with
+/// a stream: each has a descriptor, and the face module carries the methods
+/// of the other members only.
 #[test]
-fn a_public_interface_with_an_uncarried_query_leaves_the_call_shape_note() {
+fn a_query_with_a_stream_has_a_descriptor_and_no_face_method() {
     let source = r#"
 package face.query_shape
 
 type Level : integer [0..100]
 
 interface Wide {
+  signal level: Level @10ms
   query read(samples: <Level>): Level @[..50ms]
+  query history(limit: Level): <Level> @[..50ms]
 }
 "#;
     let output = ridlc::compile("query_shape.ridl", source);
     let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
         .expect("generate_pipeline");
     let text = generated.rust_source;
-    assert!(
-        text.contains("carries no generated interaction face"),
-        "{text}"
-    );
-    let owner = &text[text
-        .find("A call the face cannot carry")
-        .unwrap_or_else(|| panic!("the call-shape owner line:\n{text}"))..];
-    assert!(owner.contains("to get a face"), "{text}");
-    assert!(!text.contains("driftsys/ridl"), "{text}");
+    assert!(!text.contains("__RIDL_NO_FACE_"), "{text}");
+    assert!(text.contains("pub struct WideRead;"), "{text}");
+    assert!(text.contains("pub struct WideHistory;"), "{text}");
+    assert!(text.contains("pub mod wide"), "{text}");
+    assert!(!text.contains("fn read("), "{text}");
+    assert!(!text.contains("fn history("), "{text}");
+}
+
+/// A member with a stream is left out of the face, so it is never the call
+/// the skip note blames: beside a `fixed` that the face cannot carry, it leaves
+/// the note the `fixed` alone leaves.
+#[test]
+fn a_stream_member_does_not_change_the_skip_note_of_an_interface() {
+    let note = |members: &str| {
+        let source = format!(
+            "package face.stream_note\n\ntype Level : integer [0..100]\n\n\
+             interface Wide {{\n{members}\n}}\n"
+        );
+        let output = ridlc::compile("stream_note.ridl", &source);
+        let text = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
+            .expect("generate_pipeline")
+            .rust_source;
+        let at = text
+            .find("__RIDL_NO_FACE_Wide")
+            .unwrap_or_else(|| panic!("the interface is skipped:\n{text}"));
+        let start = text[..at]
+            .rfind("/// Interface `Wide`")
+            .expect("the note starts");
+        text[start..at].to_string()
+    };
+    let alone = note("  fixed blades: [Level; 4]");
+    let with_stream =
+        note("  fixed blades: [Level; 4]\n  query history(limit: Level): <Level> @[..50ms]");
+    assert_eq!(alone, with_stream);
 }
 
 /// A public query with one named parameter and a fallible reply reaches the
@@ -354,6 +365,38 @@ interface Wide {
     assert!(owner.contains("to get a face"), "{text}");
     assert!(!text.contains("driftsys/ridl"), "{text}");
     assert!(!text.contains("No tracking issue owns this one"), "{text}");
+}
+
+/// A query with a stream parameter and a fallible reply is left out of the
+/// face, but its descriptor is still refused for the reply, so the interface
+/// is skipped with the call-shape owner line, as the same query without the
+/// stream parameter is.
+#[test]
+fn a_stream_query_with_an_inline_reply_leaves_the_call_shape_note() {
+    let source = r#"
+package face.stream_query_reply
+
+type Level : integer [0..100]
+
+type Fault : integer [0..10]
+
+interface Wide {
+  signal level : Level @10ms
+  query lookup(samples: <Level>): Level | Fault @[..50ms]
+}
+"#;
+    let output = ridlc::compile("stream_query_reply.ridl", source);
+    let generated = generate_pipeline(&output.package, &[WireEncoding::FlatBuffers], false, &[])
+        .expect("generate_pipeline");
+    let text = generated.rust_source;
+    assert!(
+        text.contains("carries no generated interaction face"),
+        "{text}"
+    );
+    assert!(
+        text.contains("A call the face cannot carry"),
+        "the call-shape owner line:\n{text}"
+    );
 }
 
 /// An internal interface whose descriptors are refused for a contract clause

@@ -8702,6 +8702,7 @@ impl ::ridl_rt::contract::Interface for Gauge {
                     type_name: "GaugeSetParams",
                 },
             ],
+            streams: &[],
         },
     ];
 }

@@ -877,9 +877,10 @@ is the same with UTF-8 text, and a chunk never splits a code point. Anything
 about the transfer that the contract needs to say — a size, a content type, a
 digest — is an ordinary typed value, such as the reply of `describe` above.
 
-This is what the checker accepts today. Streams have no runtime yet: no stream
-port, no frame encoding and no generated reader or writer exist, so a declared
-stream compiles but nothing carries it. The specification's §12 and
+This is what the checker accepts today. The stream port of `ridl-rt` exists,
+and the in-process `ridl-loopback` implements it, but no frame encoding and no
+generated reader or writer exist, so a declared stream compiles and nothing over
+the code the CLI generates carries it yet. The specification's §12 and
 [ADR-0032](../decisions/ADR-0032-byte-streams.md) record the contract a stream
 declares, including how a stream ends and what its response bound covers.
 

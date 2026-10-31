@@ -9,10 +9,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Wake, Waker};
 
-use ridl_rt::contract::InterfaceNo;
-use ridl_rt::correlate::{Forgotten, Settled, Table, Waiters};
+use ridl_rt::contract::{InterfaceNo, StreamNo};
+use ridl_rt::correlate::{Forgotten, Settled, Table, Waiters, STREAM_WAKERS};
 use ridl_rt::error::{CallError, Contract, Transport};
-use ridl_rt::port::{Correlation, Interest};
+use ridl_rt::port::{ClaimId, Correlation, Interest, REPLY_STREAM};
 
 /// A waker that counts its wakes, built over `std::task::Wake` so the test
 /// needs no `unsafe` and no toolchain newer than the crate's.
@@ -380,6 +380,174 @@ fn a_table_can_be_built_in_a_const_context() {
 }
 
 // ---------------------------------------------------------------------------
+// The `Stream` wakers kept in the slot.
+// ---------------------------------------------------------------------------
+
+const PARAM: StreamNo = StreamNo(1);
+
+#[test]
+fn a_stream_waker_is_kept_per_slot_and_stream_and_handed_back_by_settle() {
+    let mut table = Table::<2>::new(None);
+    let c = table.insert(0).expect("a slot is free");
+    let (reply, reply_waker) = counter();
+    let (param, param_waker) = counter();
+    assert!(table
+        .wake_on_stream(c, REPLY_STREAM, &reply_waker)
+        .is_none());
+    assert!(
+        table.wake_on_stream(c, PARAM, &param_waker).is_none(),
+        "another stream of the call is another key: nothing is displaced"
+    );
+
+    assert!(matches!(table.settle(c, Ok(())), Settled::Recorded(None)));
+    wake(table.take_streams(Table::<2>::slot(c)));
+    assert_eq!((wakes(&reply), wakes(&param)), (1, 1));
+    assert_eq!(
+        (Arc::strong_count(&reply), Arc::strong_count(&param)),
+        (2, 2),
+        "the settlement took both wakers out of the slot"
+    );
+    assert_eq!(table.take_streams(Table::<2>::slot(c)).count(), 0);
+}
+
+#[test]
+fn take_stream_takes_one_streams_waker_and_leaves_the_others() {
+    let mut table = Table::<1>::new(None);
+    let c = table.insert(0).expect("a slot is free");
+    let (reply, reply_waker) = counter();
+    let (param, param_waker) = counter();
+    let _ = table.wake_on_stream(c, REPLY_STREAM, &reply_waker);
+    let _ = table.wake_on_stream(c, PARAM, &param_waker);
+
+    wake(table.take_stream(c, PARAM));
+    assert_eq!((wakes(&reply), wakes(&param)), (0, 1));
+    assert!(table.take_stream(c, PARAM).is_none(), "taking clears it");
+    wake(table.take_stream(c, REPLY_STREAM));
+    assert_eq!((wakes(&reply), wakes(&param)), (1, 1));
+}
+
+#[test]
+fn a_stream_waker_is_handed_back_by_forget_of_a_call_in_flight() {
+    let mut table = Table::<1>::new(None);
+    let c = table.insert(0).expect("a slot is free");
+    let (count, waker) = counter();
+    let _ = table.wake_on_stream(c, REPLY_STREAM, &waker);
+
+    assert!(matches!(table.forget(c), Forgotten::Marked(None)));
+    wake(table.take_streams(Table::<1>::slot(c)));
+    assert_eq!(wakes(&count), 1, "every stream of a forgotten call stops");
+    assert_eq!(Arc::strong_count(&count), 2, "the forget took the waker");
+
+    wake(table.wake_on_stream(c, REPLY_STREAM, &waker));
+    assert_eq!(
+        wakes(&count),
+        2,
+        "a registration on a forgotten call is handed back, not stored"
+    );
+    assert!(matches!(table.settle(c, Ok(())), Settled::Reclaimed));
+    assert_eq!(table.take_streams(Table::<1>::slot(c)).count(), 0);
+}
+
+#[test]
+fn a_stream_waker_is_handed_back_by_the_forget_that_reclaims_a_settled_call() {
+    let mut table = Table::<1>::new(None);
+    let c = table.insert(0).expect("a slot is free");
+    assert!(matches!(table.settle(c, Ok(())), Settled::Recorded(None)));
+    let (count, waker) = counter();
+    assert!(
+        table.wake_on_stream(c, PARAM, &waker).is_none(),
+        "a settled call's streams go on: a command's parameter stream \
+         outlives its acknowledgment"
+    );
+
+    assert!(matches!(table.forget(c), Forgotten::Reclaimed));
+    wake(table.take_streams(Table::<1>::slot(c)));
+    assert_eq!(wakes(&count), 1);
+}
+
+#[test]
+fn a_reclaimed_slot_holds_no_stream_waker_of_its_previous_call() {
+    let mut table = Table::<1>::new(None);
+    let old = table.insert(0).expect("a slot is free");
+    let (count, waker) = counter();
+    let _ = table.settle(old, Ok(()));
+    let _ = table.wake_on_stream(old, REPLY_STREAM, &waker);
+    // The runtime does not take the reclaimed slot's stream wakers here.
+    assert!(matches!(table.forget(old), Forgotten::Reclaimed));
+
+    let new = table.insert(0).expect("the slot is free again");
+    assert_eq!(Table::<1>::slot(new), Table::<1>::slot(old));
+    assert!(table.take_stream(new, REPLY_STREAM).is_none());
+    assert_eq!(table.take_streams(Table::<1>::slot(new)).count(), 0);
+    assert!(
+        table.take_stream(old, REPLY_STREAM).is_none(),
+        "the old correlation is unknown"
+    );
+    assert_eq!(
+        Arc::strong_count(&count),
+        2,
+        "the new call dropped the waker its slot still held"
+    );
+}
+
+#[test]
+fn registering_the_same_task_on_a_stream_is_a_refresh_that_hands_back_nothing() {
+    let mut table = Table::<1>::new(None);
+    let c = table.insert(0).expect("a slot is free");
+    let (count, waker) = counter();
+    assert!(table.wake_on_stream(c, REPLY_STREAM, &waker).is_none());
+    assert!(table.wake_on_stream(c, REPLY_STREAM, &waker).is_none());
+    assert!(
+        table
+            .wake_on_stream(c, REPLY_STREAM, &waker.clone())
+            .is_none(),
+        "a clone wakes the same task"
+    );
+    assert_eq!(wakes(&count), 0);
+
+    let (other, other_waker) = counter();
+    wake(table.wake_on_stream(c, REPLY_STREAM, &other_waker));
+    assert_eq!(
+        (wakes(&count), wakes(&other)),
+        (1, 0),
+        "another task displaces the stored waker, which is handed back"
+    );
+}
+
+#[test]
+fn a_stream_registration_on_an_unknown_call_is_handed_back() {
+    let mut table = Table::<1>::new(None);
+    let (count, waker) = counter();
+    wake(table.wake_on_stream(Correlation(0), REPLY_STREAM, &waker));
+    assert_eq!(wakes(&count), 1);
+    assert!(table.take_stream(Correlation(0), REPLY_STREAM).is_none());
+}
+
+#[test]
+fn a_stream_past_the_slots_capacity_is_handed_back_unstored() {
+    let mut table = Table::<1>::new(None);
+    let c = table.insert(0).expect("a slot is free");
+    let (count, waker) = counter();
+    for no in 0..STREAM_WAKERS {
+        let no = StreamNo(u8::try_from(no).expect("the capacity fits a stream number"));
+        assert!(table.wake_on_stream(c, no, &waker).is_none());
+    }
+    let past = StreamNo(u8::try_from(STREAM_WAKERS).expect("fits"));
+    wake(table.wake_on_stream(c, past, &waker));
+    assert_eq!(
+        wakes(&count),
+        1,
+        "with no cell free the waker is woken at once, as a spurious wake"
+    );
+    assert!(table.take_stream(c, past).is_none());
+    wake(table.take_stream(c, REPLY_STREAM));
+    assert!(
+        table.wake_on_stream(c, past, &waker).is_none(),
+        "a cell freed by a take is reused"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // `Waiters`.
 // ---------------------------------------------------------------------------
 
@@ -478,6 +646,23 @@ fn an_outcome_key_is_not_stored_and_is_handed_back_to_be_woken() {
     wake(waiters.register(Interest::Outcome(Correlation(0)), &waker));
     assert_eq!(wakes(&count), 1, "the table holds `Outcome`, not `Waiters`");
     assert!(waiters.take(Interest::Outcome(Correlation(0))).is_none());
+    assert_eq!(waiters.take_all().count(), 0, "nothing was stored");
+}
+
+#[test]
+fn a_stream_key_is_not_stored_and_is_handed_back_to_be_woken() {
+    let mut waiters = Waiters::new();
+    let (count, waker) = counter();
+    wake(waiters.register(Interest::Stream(Correlation(0), REPLY_STREAM), &waker));
+    wake(waiters.register(Interest::ClaimStream(ClaimId(0), REPLY_STREAM), &waker));
+    assert_eq!(
+        wakes(&count),
+        2,
+        "a stream's waker is kept with its call, not in `Waiters`"
+    );
+    assert!(waiters
+        .take(Interest::Stream(Correlation(0), REPLY_STREAM))
+        .is_none());
     assert_eq!(waiters.take_all().count(), 0, "nothing was stored");
 }
 

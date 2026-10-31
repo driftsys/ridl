@@ -387,7 +387,33 @@ fn describe_prints_the_descriptor_as_json() {
         &format!("\"toolchain\": \"{}\"", env!("CARGO_PKG_VERSION")),
         "\"toolchain\": \"[version]\"",
     );
+    // The corpus declares no stream, so every member prints an empty list.
+    for interface in json["interfaces"].as_array().unwrap() {
+        for member in interface["members"].as_array().unwrap() {
+            assert_eq!(member["streams"], serde_json::json!([]), "{member}");
+        }
+    }
     insta::assert_snapshot!("corpus_catalog", stdout);
+}
+
+#[test]
+fn describe_prints_an_empty_streams_list_for_a_pre_streams_file() {
+    // The veh-cluster corpus's catalog as the toolchain wrote it before a
+    // member's `streams` field existed. The corpus declares stream members,
+    // and the file carries no entry for them.
+    let file =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/pre-streams.catalog.binfb");
+    let (code, stdout, stderr) = ridl(&["describe".as_ref(), file.as_os_str()]);
+    assert_eq!(code, 0, "{stderr}");
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("stdout is JSON");
+    let mut members = 0;
+    for interface in json["interfaces"].as_array().unwrap() {
+        for member in interface["members"].as_array().unwrap() {
+            assert_eq!(member["streams"], serde_json::json!([]), "{member}");
+            members += 1;
+        }
+    }
+    assert!(members > 10, "{members} members");
 }
 
 #[test]

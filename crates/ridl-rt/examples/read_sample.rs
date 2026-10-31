@@ -99,6 +99,7 @@ impl Interface for Drivetrain {
             max: Some(Duration(500_000)),
         }),
         payloads: &[PayloadInfo { type_name: "Speed" }],
+        streams: &[],
     }];
 }
 

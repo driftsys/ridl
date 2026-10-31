@@ -52,12 +52,14 @@ ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace);
 
 The extension flags after the factory are optional. `scannable` and `coherent`
 select the tests of the two signal extensions, `wakeable` the tests of
-`Wakeable`, and `trace` the tests of a runtime that carries the trace context.
-`suite!(MyFactory)` alone runs the tests of the ports every runtime presents.
-The cases of the sending ports require a payload above the member's limit to be
-refused with `TooLarge { cap }`, `cap` being that limit, at the default ceiling
-of the member's kind when the runtime was given no other limit (ADR-0030
-decision 19). The reference runtime
+`Wakeable`, `trace` the tests of a runtime that carries the trace context, and
+`streams` the tests of the two stream extensions, `StreamCaller` and
+`StreamHandler`, which also require `Wakeable`. `suite!(MyFactory)` alone runs
+the tests of the ports every runtime presents. The cases of the sending ports
+require a payload above the member's limit to be refused with
+`TooLarge { cap }`, `cap` being that limit, at the default ceiling of the
+member's kind when the runtime was given no other limit (ADR-0030 decision 19).
+The reference runtime
 [`ridl-loopback`](https://github.com/driftsys/ridl/blob/main/crates/ridl-loopback/tests/conformance.rs)
 runs the suite this way.
 

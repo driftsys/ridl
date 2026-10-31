@@ -2354,6 +2354,7 @@ ridl describe out/corpus.baseline.catalog.binfb
               "type_name": "Speed"
             }
           ],
+          "streams": [],
           "timing": {
             "max_us": "10000",
             "min_us": "10000",

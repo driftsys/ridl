@@ -3,20 +3,24 @@
 //! built by walking the checked accessors. There is no JSON emit; this is a
 //! rendering of the binary. `flatc --json --strict-json --defaults-json` gives
 //! the same view with two differences. First, `flatc`
-//! omits an absent `timing`, `min_us`, `max_us` or `limit`, which is `null`
-//! here.
+//! omits an absent `timing`, `min_us`, `max_us`, `limit` or stream `element`,
+//! which is `null` here, and an absent `streams`, which is `[]` here.
 //! Second, `flatc` prints keys in schema order, and this view prints them in
 //! alphabetical order (the workspace's `serde_json` stores an object's keys
 //! sorted).
 
 use serde_json::{Value, json};
 
-use crate::{CatalogRef, Encoding, Kind, SizeStateTag, TimingMode, UnboundedCause};
+use crate::{
+    CatalogRef, Encoding, Kind, MaxSizeRef, SizeStateTag, StreamForm, TimingMode, UnboundedCause,
+};
 
 /// Renders `catalog` as JSON: the schema's field names as keys, enums by
 /// member name, `hash` as an array of bytes, an absent `timing`, `min_us`,
 /// `max_us` or `limit` as `null`, and every field of a `MaxSize` row, defaults
-/// included.
+/// included. A member's `streams` is an array of `no`, `form`, `element` and
+/// `max_sizes` objects, with an absent `element` as `null`; it is `[]` for a
+/// member with no stream and for a file written before the field existed.
 /// The serialized object prints its keys in alphabetical order.
 /// A payload's `type_name` is printed as it is stored.
 pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
@@ -29,21 +33,23 @@ pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
             let mut payloads = Vec::new();
             for payload in member.payloads()? {
                 let payload = payload?;
-                let mut sizes = Vec::new();
-                for size in payload.max_sizes()? {
-                    let size = size?;
-                    sizes.push(json!({
-                        "encoding": encoding_name(size.encoding()?),
-                        "bytes": size.bytes()?,
-                        "state": state_name(size.state()?),
-                        "cause": cause_name(size.cause()?),
-                    }));
-                }
                 payloads.push(json!({
                     "role": payload.role()?,
                     "type_name": payload.type_name()?,
-                    "max_sizes": sizes,
+                    "max_sizes": size_rows(payload.max_sizes()?)?,
                 }));
+            }
+            let mut streams = Vec::new();
+            if let Some(entries) = member.streams()? {
+                for stream in entries {
+                    let stream = stream?;
+                    streams.push(json!({
+                        "no": stream.no()?,
+                        "form": stream_form_name(stream.form()?),
+                        "element": stream.element()?,
+                        "max_sizes": size_rows(stream.max_sizes()?)?,
+                    }));
+                }
             }
             let timing = match member.timing()? {
                 Some(t) => json!({
@@ -60,6 +66,7 @@ pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
                 "payloads": payloads,
                 "timing": timing,
                 "limit": member.limit()?,
+                "streams": streams,
             }));
         }
         interfaces.push(json!({
@@ -90,6 +97,31 @@ pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<Value> {
         "retired": retired,
         "compatible": compatible,
     }))
+}
+
+/// Every row of one `max_sizes` list, every field included.
+fn size_rows<'a>(
+    sizes: impl IntoIterator<Item = planus::Result<MaxSizeRef<'a>>>,
+) -> planus::Result<Vec<Value>> {
+    let mut rows = Vec::new();
+    for size in sizes {
+        let size = size?;
+        rows.push(json!({
+            "encoding": encoding_name(size.encoding()?),
+            "bytes": size.bytes()?,
+            "state": state_name(size.state()?),
+            "cause": cause_name(size.cause()?),
+        }));
+    }
+    Ok(rows)
+}
+
+fn stream_form_name(form: StreamForm) -> &'static str {
+    match form {
+        StreamForm::Elements => "Elements",
+        StreamForm::Bytes => "Bytes",
+        StreamForm::Text => "Text",
+    }
 }
 
 fn kind_name(kind: Kind) -> &'static str {
@@ -141,7 +173,7 @@ mod tests {
     use super::*;
     use crate::{
         Catalog, EarlierCatalog, Interface, MaxSize, Member, Payload, RetiredInterface,
-        SCHEMA_VERSION, Timing, verify,
+        SCHEMA_VERSION, StreamPayload, Timing, verify,
     };
 
     #[test]
@@ -179,6 +211,7 @@ mod tests {
                     }],
                     timing: None,
                     limit: None,
+                    streams: None,
                 }],
                 reserved_ordinals: vec![],
             }],
@@ -211,7 +244,8 @@ mod tests {
                             ]
                         }],
                         "timing": null,
-                        "limit": null
+                        "limit": null,
+                        "streams": []
                     }],
                     "reserved_ordinals": []
                 }],
@@ -243,6 +277,7 @@ mod tests {
                         max_us: None,
                     })),
                     limit: None,
+                    streams: None,
                 }],
                 reserved_ordinals: vec![1, 2],
             }],
@@ -271,7 +306,8 @@ mod tests {
                         "kind": "Signal",
                         "payloads": [],
                         "timing": { "mode": "Range", "min_us": "100", "max_us": null },
-                        "limit": null
+                        "limit": null,
+                        "streams": []
                     }],
                     "reserved_ordinals": [1, 2]
                 }],
@@ -290,6 +326,7 @@ mod tests {
             payloads: vec![],
             timing: None,
             limit,
+            streams: None,
         };
         let catalog = Catalog {
             version: SCHEMA_VERSION,
@@ -313,6 +350,70 @@ mod tests {
         assert_eq!(members[1]["limit"], Value::Null);
         // A missing key also indexes as null, so check that the key is there.
         assert!(members[1].as_object().unwrap().contains_key("limit"));
+    }
+
+    #[test]
+    fn the_view_writes_each_stream_entry_and_a_null_element() {
+        let catalog = Catalog {
+            version: SCHEMA_VERSION,
+            name: "p".to_owned(),
+            hash: vec![],
+            toolchain: "0.0.0".to_owned(),
+            interfaces: vec![Interface {
+                name: "I".to_owned(),
+                number: 1,
+                provisional: false,
+                members: vec![Member {
+                    name: "rebalance".to_owned(),
+                    ordinal: 1,
+                    kind: Kind::Query,
+                    payloads: vec![],
+                    timing: None,
+                    limit: None,
+                    streams: Some(vec![
+                        StreamPayload {
+                            no: 0,
+                            form: StreamForm::Elements,
+                            element: Some("veh.cluster.FaultEvent".to_owned()),
+                            max_sizes: vec![MaxSize {
+                                encoding: Encoding::Proto3,
+                                bytes: 6,
+                                state: SizeStateTag::Bounded,
+                                cause: UnboundedCause::Unspecified,
+                            }],
+                        },
+                        StreamPayload {
+                            no: 1,
+                            form: StreamForm::Bytes,
+                            element: None,
+                            max_sizes: vec![],
+                        },
+                    ]),
+                }],
+                reserved_ordinals: vec![],
+            }],
+            retired: vec![],
+            compatible: None,
+        };
+        let bytes = crate::finish(&catalog);
+        let json = to_json(verify(&bytes).unwrap()).unwrap();
+        assert_eq!(
+            json["interfaces"][0]["members"][0]["streams"],
+            serde_json::json!([
+                {
+                    "no": 0,
+                    "form": "Elements",
+                    "element": "veh.cluster.FaultEvent",
+                    "max_sizes": [
+                        { "encoding": "Proto3", "bytes": 6, "state": "Bounded", "cause": "Unspecified" }
+                    ]
+                },
+                { "no": 1, "form": "Bytes", "element": null, "max_sizes": [] }
+            ])
+        );
+        // A missing key also indexes as null, so check that the key is there.
+        let entry = json["interfaces"][0]["members"][0]["streams"][1].as_object();
+        assert!(entry.unwrap().contains_key("element"));
     }
 
     #[test]
@@ -356,6 +457,9 @@ mod tests {
         }
         for value in UnboundedCause::ENUM_VALUES {
             assert_eq!(cause_name(value), format!("{value:?}"));
+        }
+        for value in StreamForm::ENUM_VALUES {
+            assert_eq!(stream_form_name(value), format!("{value:?}"));
         }
     }
 }

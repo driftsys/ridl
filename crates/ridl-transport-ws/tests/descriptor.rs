@@ -24,6 +24,7 @@ fn member(ordinal: u32, kind: ridl_descriptor::Kind, max_us: Option<&str>) -> Me
             })
         }),
         limit: None,
+        streams: None,
     }
 }
 

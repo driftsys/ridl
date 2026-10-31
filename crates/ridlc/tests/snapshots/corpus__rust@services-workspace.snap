@@ -1309,7 +1309,7 @@ for TelemetryFuelLevelParams {
 ///
 /// The emitter refused it: query `readDoor`'s reply is a fallible `T | E`, which the face does not carry
 ///
-/// A call the face cannot carry — a parameter with no declared type, a stream in either position, or a query whose reply is a fallible `T | E`. Give each parameter a declared, non-stream type, and give each query a reply that is a named type or a tuple, to get a face.
+/// A call the face cannot carry — a parameter with no declared type, or a query whose reply is a fallible `T | E`. Give each parameter a declared type, and give each query a reply that is a named type or a tuple, to get a face.
 ///
 /// Its descriptors are absent for the reason above: the refusal is
 /// raised by the descriptor emitter, which the face is built on. The
@@ -1348,6 +1348,7 @@ impl ::ridl_rt::contract::Interface for Telemetry {
                     type_name: "Odometer",
                 },
             ],
+            streams: &[],
         },
         ::ridl_rt::contract::Member {
             ordinal: ::ridl_rt::contract::Ordinal(2),
@@ -1366,6 +1367,7 @@ impl ::ridl_rt::contract::Interface for Telemetry {
                     type_name: "Percent",
                 },
             ],
+            streams: &[],
         },
     ];
 }

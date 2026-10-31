@@ -3497,6 +3497,63 @@ mod podbuf {
         );
     }
 
+    /// A stream parameter is not part of the request, so a call with one
+    /// named parameter beside it sends that named type as it is: the struct
+    /// is the root, not a member of an induced head.
+    #[test]
+    fn a_named_parameter_beside_a_stream_parameter_is_not_an_inline_use() {
+        assert_no_interaction_use(|| {
+            vec![command(
+                "put",
+                1,
+                vec![
+                    param("info", named("SensorReading")),
+                    param(
+                        "data",
+                        v2::FieldType {
+                            optional: false,
+                            kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                                element: Some(v2::stream_type::Element::Primitive(
+                                    v2::PrimitiveType::Bytes as i32,
+                                )),
+                            })),
+                        },
+                    ),
+                ],
+            )]
+        });
+    }
+
+    /// A stream parameter beside two named parameters leaves the two in the
+    /// induced argument struct, so the struct is still held inline in it.
+    #[test]
+    fn a_stream_parameter_beside_two_named_parameters_keeps_the_argument_struct() {
+        assert_interaction_use(
+            || {
+                vec![command(
+                    "set",
+                    1,
+                    vec![
+                        param(
+                            "data",
+                            v2::FieldType {
+                                optional: false,
+                                kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                                    element: Some(v2::stream_type::Element::Primitive(
+                                        v2::PrimitiveType::Bytes as i32,
+                                    )),
+                                })),
+                            },
+                        ),
+                        param("a", named("SensorReading")),
+                        param("b", named("Level")),
+                    ],
+                )]
+            },
+            "nested inline in veh.common/Ctl/set",
+        );
+    }
+
     /// A tuple parameter is a tuple head inside the argument struct.
     #[test]
     fn a_tuple_parameter_holds_the_struct_inline() {
@@ -4093,4 +4150,40 @@ mod podbuf_width {
         );
         assert_eq!(width_change(&report), None, "{}", render_text(&report));
     }
+}
+
+/// Pins what `ridl diff` reports today for a reply that changes from a type
+/// to a stream of that type. It records the current behaviour and does not
+/// state a rule, so a later change to the classification shows up here.
+#[test]
+fn a_reply_changed_from_a_type_to_a_stream_of_it_keeps_its_current_category() {
+    let query = |reply: v2::FieldType| {
+        interaction(
+            "latest",
+            1,
+            v2::decl::Kind::QueryDef(v2::QueryDef {
+                return_type: Some(v2::ReturnType {
+                    kind: Some(v2::return_type::Kind::Value(reply)),
+                }),
+                ..Default::default()
+            }),
+        )
+    };
+    let plain = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Named("FaultEvent".to_string())),
+    };
+    let streamed = v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+            element: Some(v2::stream_type::Element::Named("FaultEvent".to_string())),
+        })),
+    };
+    let old = pkg("veh.cluster", interface("Faults", vec![query(plain)]));
+    let new = pkg("veh.cluster", interface("Faults", vec![query(streamed)]));
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.changes.len(), 1, "{:?}", report.changes);
+    assert_eq!(report.changes[0].category, Category::ReturnChanged);
+    assert_eq!(report.changes[0].verdict, Verdict::Breaking);
 }

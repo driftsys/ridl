@@ -317,6 +317,17 @@ bytes for a `signal` and an `event`, 16,128 for a `command` and a `query`,
 backend's codec module does, reads the limit there, so that a consumer gets
 every limit from the catalog.
 
+A member whose `Interaction.streams` is not empty has a request of its
+non-stream parameters only, and a plugin must not emit it as a plain call. The
+Rust backend leaves such a member out of the interaction face, and the
+TypeScript backend leaves it out of the codec module's interface table. This is
+a change for a plugin written against an earlier model: such a member then had
+neither `request` nor `request_tuple`, so a plugin that does not read
+`Interaction.streams` emitted no call for it, and now sees what looks like a
+plain call. Such a plugin skips every member whose `Interaction.streams` is not
+empty. A streamed reply adds nothing to the member's reservation, so a query
+that replies with a stream reserves its request alone.
+
 **A plugin reads these sizes; it does not compute them.** The sizes of the
 `warning` event's payload in `examples/cabin`, and its reservation:
 
@@ -439,7 +450,8 @@ section carries those facts to a plugin at build time.
   with the source `UNDERIVABLE` when its timing gives no bound. The build warns
   with RSDL-806 when a consumer link consumes such an event with no declared
   `depth` (see [Lints](lints.md)); it does not warn when no link consumes the
-  event ([driftsys/ridl#735][i735]). A stream payload, a request of zero or of
+  event ([driftsys/ridl#735][i735]). A stream has no size of its own, and a
+  streamed reply adds nothing to its member's reservation. A request of zero or of
   several parameters, and an inline `T | E` reply have no size in any encoding,
   so the reservation of such a member is `unsized`. No single issue tracks
   these cases; each is recorded in [the design record, §7][design-deployment],

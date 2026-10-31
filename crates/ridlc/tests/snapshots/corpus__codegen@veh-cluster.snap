@@ -5563,6 +5563,66 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
+        "rust": "VehHvacCabinReplayTraceParams",
+        "wire": "VehHvacCabinReplayTraceParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 18,
+      "interaction": {
+        "interface": 5,
+        "slot": 8,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
+        "rust": "VehHvacCabinRebalanceParams",
+        "wire": "VehHvacCabinRebalanceParams"
+      },
+      "fields": [],
+      "visibility": "VISIBILITY_PUBLIC",
+      "closure": {
+        "reachesFloat": false,
+        "reachesTextOrBytes": false,
+        "reachesCollection": false,
+        "reachesForeign": false,
+        "reachesUnresolved": false,
+        "reachesCycle": false,
+        "reachesStreamOrUnspecified": false
+      },
+      "init": {
+        "derivable": true,
+        "source": "INIT_SOURCE_DERIVED",
+        "oneLevel": false
+      },
+      "flatbuffersTable": 19,
+      "interaction": {
+        "interface": 5,
+        "slot": 10,
+        "segments": [
+          "Params"
+        ]
+      }
+    },
+    {
+      "name": {
         "rust": "VehHvacCabinGetBoundsParams",
         "wire": "VehHvacCabinGetBoundsParams"
       },
@@ -5582,7 +5642,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 18,
+      "flatbuffersTable": 20,
       "interaction": {
         "interface": 5,
         "slot": 11,
@@ -5675,7 +5735,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 19,
+      "flatbuffersTable": 21,
       "interaction": {
         "interface": 5,
         "slot": 11,
@@ -5705,7 +5765,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 20,
+      "flatbuffersTable": 22,
       "interaction": {
         "interface": 5,
         "slot": 13,
@@ -5735,7 +5795,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 21,
+      "flatbuffersTable": 23,
       "interaction": {
         "interface": 5,
         "slot": 14,
@@ -5765,7 +5825,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "source": "INIT_SOURCE_DERIVED",
         "oneLevel": false
       },
-      "flatbuffersTable": 22,
+      "flatbuffersTable": 24,
       "interaction": {
         "interface": 5,
         "slot": 19,
@@ -5832,6 +5892,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -5909,6 +5970,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -5986,6 +6048,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -6063,6 +6126,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "event": {
               "payload": {
                 "type": {
@@ -6140,6 +6204,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "command": {
               "params": [
                 {
@@ -6290,6 +6355,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [
                 {
@@ -6460,13 +6526,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "streamFaults.reply: stream"
+                "bytes": "265"
               },
               "flatbuffers": {
-                "unsized": "streamFaults.reply: stream"
+                "bytes": "324"
               },
               "podbuf": {
-                "unsized": "streamFaults.reply: stream"
+                "bytes": "281"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -6478,6 +6544,31 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "text": "response within 1000000 us",
                 "responseBound": {
                   "maxUs": "1000000"
+                }
+              }
+            ],
+            "streams": [
+              {
+                "no": 0,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "FaultEvent",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 2,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 1044
+                  },
+                  "flatbuffers": {
+                    "bounded": 1110
+                  },
+                  "podbuf": {
+                    "bounded": 1057
+                  }
                 }
               }
             ],
@@ -6628,6 +6719,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [
                 {
@@ -6760,6 +6852,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "see": [],
             "since": [],
             "rules": [],
+            "streams": [],
             "fixed": {
               "payload": {
                 "optional": false,
@@ -6827,6 +6920,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "see": [],
             "since": [],
             "rules": [],
+            "streams": [],
             "fixed": {
               "payload": {
                 "optional": false,
@@ -6852,13 +6946,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       ],
       "tableBudget": {
         "proto3": {
-          "unsized": "streamFaults"
+          "unsized": "getFaultPage"
         },
         "flatbuffers": {
-          "unsized": "streamFaults"
+          "unsized": "getFaultPage"
         },
         "podbuf": {
-          "unsized": "streamFaults"
+          "unsized": "getFaultPage"
         }
       },
       "links": [],
@@ -6925,6 +7019,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -7014,6 +7109,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -7097,6 +7193,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -7205,6 +7302,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -7282,6 +7380,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "event": {
               "payload": {
                 "type": {
@@ -7350,6 +7449,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [],
               "reply": {
@@ -7458,6 +7558,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "command": {
               "params": [
                 {
@@ -7574,6 +7675,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [],
               "reply": {
@@ -7646,6 +7748,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "see": [],
             "since": [],
             "rules": [],
+            "streams": [],
             "fixed": {
               "payload": {
                 "optional": false,
@@ -7739,6 +7842,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -7847,6 +7951,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -7942,6 +8047,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "event": {
               "payload": {
                 "type": {
@@ -8048,6 +8154,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -8125,6 +8232,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -8200,6 +8308,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -8275,6 +8384,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -8352,6 +8462,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -8430,6 +8541,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "event": {
               "payload": {
                 "type": {
@@ -8512,6 +8624,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "command": {
               "params": [
                 {
@@ -8655,13 +8768,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "replayTrace.request: (samples)"
+                "bytes": "0"
               },
               "flatbuffers": {
-                "unsized": "replayTrace.request: (samples)"
+                "bytes": "33"
               },
               "podbuf": {
-                "unsized": "replayTrace.request: (samples)"
+                "bytes": "8"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8673,6 +8786,31 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "text": "response within 50000 us",
                 "responseBound": {
                   "maxUs": "50000"
+                }
+              }
+            ],
+            "streams": [
+              {
+                "no": 1,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "FilterState",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 8,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 54
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
                 }
               }
             ],
@@ -8709,22 +8847,19 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 },
                 "podbuf": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 8
                 }
               },
-              "shape": "SHAPE_NONE"
+              "shape": "SHAPE_NONE",
+              "requestTuple": {
+                "index": 6
+              }
             }
           }
         },
@@ -8749,13 +8884,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "streamFilterHistory.reply: stream"
+                "bytes": "6"
               },
               "flatbuffers": {
-                "unsized": "streamFilterHistory.reply: stream"
+                "bytes": "43"
               },
               "podbuf": {
-                "unsized": "streamFilterHistory.reply: stream"
+                "bytes": "16"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8767,6 +8902,31 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "text": "response within 50000 us",
                 "responseBound": {
                   "maxUs": "50000"
+                }
+              }
+            ],
+            "streams": [
+              {
+                "no": 0,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "FilterState",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 8,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 54
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
                 }
               }
             ],
@@ -8896,13 +9056,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             },
             "reservation": {
               "proto3": {
-                "unsized": "rebalance.request: (samples)"
+                "bytes": "0"
               },
               "flatbuffers": {
-                "unsized": "rebalance.request: (samples)"
+                "bytes": "33"
               },
               "podbuf": {
-                "unsized": "rebalance.request: (samples)"
+                "bytes": "8"
               }
             },
             "family": "FAMILY_DISPATCH",
@@ -8914,6 +9074,54 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "text": "response within 50000 us",
                 "responseBound": {
                   "maxUs": "50000"
+                }
+              }
+            ],
+            "streams": [
+              {
+                "no": 0,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "ClimateReport",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 9,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 16
+                  },
+                  "flatbuffers": {
+                    "bounded": 69
+                  },
+                  "podbuf": {
+                    "bounded": 24
+                  }
+                }
+              },
+              {
+                "no": 1,
+                "form": "STREAM_FORM_ELEMENTS",
+                "element": {
+                  "reference": "FilterState",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 8,
+                  "kind": "DECL_KIND_STRUCT"
+                },
+                "sizes": {
+                  "proto3": {
+                    "bounded": 8
+                  },
+                  "flatbuffers": {
+                    "bounded": 54
+                  },
+                  "podbuf": {
+                    "bounded": 16
+                  }
                 }
               }
             ],
@@ -8965,19 +9173,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "clauses": [],
               "requestSizes": {
                 "proto3": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 0
                 },
                 "flatbuffers": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 33
                 },
                 "podbuf": {
-                  "absent": {
-                    "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
-                  }
+                  "bounded": 8
                 }
               },
               "replySizes": {
@@ -8996,6 +9198,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                     "cause": "ABSENT_CAUSE_ENCODING_UNDEFINED"
                   }
                 }
+              },
+              "requestTuple": {
+                "index": 7
               }
             }
           }
@@ -9056,13 +9261,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [],
               "reply": {
                 "value": {
                   "optional": false,
                   "tuple": {
-                    "index": 7
+                    "index": 9
                   }
                 }
               },
@@ -9109,10 +9315,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               },
               "requestTuple": {
-                "index": 6
+                "index": 8
               },
               "replyTuple": {
-                "index": 7
+                "index": 9
               }
             }
           }
@@ -9167,6 +9373,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [
                 {
@@ -9319,6 +9526,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [],
               "reply": {
@@ -9380,7 +9588,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               },
               "requestTuple": {
-                "index": 8
+                "index": 10
               }
             }
           }
@@ -9428,6 +9636,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [],
               "reply": {
@@ -9489,7 +9698,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               },
               "requestTuple": {
-                "index": 9
+                "index": 11
               }
             }
           }
@@ -9524,6 +9733,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "see": [],
             "since": [],
             "rules": [],
+            "streams": [],
             "fixed": {
               "payload": {
                 "optional": false,
@@ -9591,6 +9801,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             "see": [],
             "since": [],
             "rules": [],
+            "streams": [],
             "fixed": {
               "payload": {
                 "optional": false,
@@ -9662,6 +9873,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "command": {
               "params": [
                 {
@@ -9804,6 +10016,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "command": {
               "params": [
                 {
@@ -9950,6 +10163,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [],
               "reply": {
@@ -10021,7 +10235,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               },
               "requestTuple": {
-                "index": 10
+                "index": 12
               }
             }
           }
@@ -10030,13 +10244,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "inlineOfService": 3,
       "tableBudget": {
         "proto3": {
-          "unsized": "replayTrace"
+          "unsized": "calibrate"
         },
         "flatbuffers": {
-          "unsized": "replayTrace"
+          "unsized": "calibrate"
         },
         "podbuf": {
-          "unsized": "replayTrace"
+          "unsized": "calibrate"
         }
       },
       "links": [],
@@ -10242,7 +10456,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "declaration": 0,
         "root": "FB_ROOT_KIND_OWN",
         "tuple": 7,
-        "maxSize": 59
+        "maxSize": 33
       },
       {
         "declaration": 0,
@@ -10254,12 +10468,24 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "declaration": 0,
         "root": "FB_ROOT_KIND_OWN",
         "tuple": 9,
-        "maxSize": 33
+        "maxSize": 59
       },
       {
         "declaration": 0,
         "root": "FB_ROOT_KIND_OWN",
         "tuple": 10,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 11,
+        "maxSize": 33
+      },
+      {
+        "declaration": 0,
+        "root": "FB_ROOT_KIND_OWN",
+        "tuple": 12,
         "maxSize": 33
       }
     ],
@@ -10705,10 +10931,22 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "tuple": 5
       },
       {
-        "name": "VehHvacCabinGetBoundsParams",
+        "name": "VehHvacCabinReplayTraceParams",
         "slots": [],
         "vtableSlots": 0,
         "tuple": 6
+      },
+      {
+        "name": "VehHvacCabinRebalanceParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 7
+      },
+      {
+        "name": "VehHvacCabinGetBoundsParams",
+        "slots": [],
+        "vtableSlots": 0,
+        "tuple": 8
       },
       {
         "name": "VehHvacCabinGetBoundsReply",
@@ -10737,25 +10975,25 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         ],
         "vtableSlots": 2,
-        "tuple": 7
+        "tuple": 9
       },
       {
         "name": "VehHvacCabinGetClimateParams",
         "slots": [],
         "vtableSlots": 0,
-        "tuple": 8
+        "tuple": 10
       },
       {
         "name": "VehHvacCabinGetCabinTempParams",
         "slots": [],
         "vtableSlots": 0,
-        "tuple": 9
+        "tuple": 11
       },
       {
         "name": "VehHvacCabinScaledFanParams",
         "slots": [],
         "vtableSlots": 0,
-        "tuple": 10
+        "tuple": 12
       }
     ]
   },
@@ -12171,6 +12409,20 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "tuple": 6
       },
       {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 7
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 8
+      },
+      {
         "size": 8,
         "align": 8,
         "fields": [
@@ -12200,20 +12452,6 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         ],
         "pads": [],
-        "tuple": 7
-      },
-      {
-        "size": 0,
-        "align": 8,
-        "fields": [],
-        "pads": [],
-        "tuple": 8
-      },
-      {
-        "size": 0,
-        "align": 8,
-        "fields": [],
-        "pads": [],
         "tuple": 9
       },
       {
@@ -12222,6 +12460,20 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "fields": [],
         "pads": [],
         "tuple": 10
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 11
+      },
+      {
+        "size": 0,
+        "align": 8,
+        "fields": [],
+        "pads": [],
+        "tuple": 12
       }
     ],
     "refused": [],

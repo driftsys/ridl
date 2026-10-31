@@ -96,6 +96,7 @@ const WARNING: Member = Member {
     payloads: &[PayloadInfo {
         type_name: "Warning",
     }],
+    streams: &[],
 };
 
 const AVERAGE: Member = Member {
@@ -111,6 +112,7 @@ const AVERAGE: Member = Member {
             type_name: "Warning",
         },
     ],
+    streams: &[],
 };
 
 const SET_WINDOW: Member = Member {
@@ -121,6 +123,7 @@ const SET_WINDOW: Member = Member {
     payloads: &[PayloadInfo {
         type_name: "Window",
     }],
+    streams: &[],
 };
 
 /// `interface Cabin`: an event of 8 bytes, a query of 24 + 8 bytes and a

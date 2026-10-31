@@ -228,8 +228,8 @@ impl Caller for RecordingPorts {
 }
 
 /// Routes each key as the aggregate does. There is no handler role here, so
-/// `Claim` goes to the caller handle, which wakes a kind it does not observe
-/// at once.
+/// `Claim` and `ClaimStream` go to the caller handle, which wakes a kind it
+/// does not observe at once.
 impl Wakeable for RecordingPorts {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         self.record(Op::WakeOn(what));
@@ -239,7 +239,10 @@ impl Wakeable for RecordingPorts {
                 *self.outcome_waker.lock().expect("no poisoned waker slot") = Some(waker.clone());
                 self.caller.wake_on(what, waker);
             }
-            Interest::Slot | Interest::Claim(_) => {
+            Interest::Slot
+            | Interest::Claim(_)
+            | Interest::Stream(..)
+            | Interest::ClaimStream(..) => {
                 self.caller.wake_on(what, waker);
             }
         }

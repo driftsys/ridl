@@ -181,9 +181,11 @@ ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace);
 
 The `wakeable` flag also requires that the three role handles implement
 `Wakeable`, and that the factory and the handles are `'static`, because one
-test runs on a thread of its own. The working example is
+test runs on a thread of its own. The `streams` flag runs the tests of
+`StreamCaller` and `StreamHandler`, and requires that the runtime implements
+both and `Wakeable`. The working example is
 [`crates/ridl-loopback/tests/conformance.rs`][loopback-conformance], which runs
-every test of the suite, with all four flags, over `ridl-loopback`.
+every test of the suite, with all five flags, over `ridl-loopback`.
 
 The suite does not test every case. The one list of
 what it leaves out is the section [What the suite leaves out][leaves-out] of the

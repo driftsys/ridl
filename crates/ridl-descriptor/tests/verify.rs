@@ -5,8 +5,8 @@
 use planus::ReadAsRoot;
 use ridl_descriptor::{
     Catalog, CatalogRef, EarlierCatalog, Encoding, FILE_IDENTIFIER, Interface, Kind, MaxSize,
-    Member, Payload, RetiredInterface, SCHEMA_VERSION, SizeStateTag, Timing, TimingMode,
-    UnboundedCause, VerifyError, finish, verify,
+    Member, Payload, RetiredInterface, SCHEMA_VERSION, SizeStateTag, StreamForm, StreamPayload,
+    Timing, TimingMode, UnboundedCause, VerifyError, finish, verify,
 };
 
 fn minimal(version: u32) -> Vec<u8> {
@@ -130,6 +130,7 @@ fn nested() -> Vec<u8> {
                 }],
                 timing: None,
                 limit: None,
+                streams: None,
             }],
             reserved_ordinals: vec![],
         }],
@@ -225,6 +226,7 @@ fn full_with(provisional: bool, timing: bool) -> Vec<u8> {
                         payloads: vec![],
                         timing: None,
                         limit: None,
+                        streams: None,
                     },
                     Member {
                         name: "m".to_owned(),
@@ -263,6 +265,37 @@ fn full_with(provisional: bool, timing: bool) -> Vec<u8> {
                             })
                         }),
                         limit: Some(7),
+                        // The walk checks structure, not meaning: the last
+                        // entry holds a non-default `no` and `form` and an
+                        // `element`, so every one of its fields is written
+                        // and a case can damage it.
+                        streams: Some(vec![
+                            StreamPayload {
+                                no: 0,
+                                form: StreamForm::Elements,
+                                element: Some("E0".to_owned()),
+                                max_sizes: vec![],
+                            },
+                            StreamPayload {
+                                no: 2,
+                                form: StreamForm::Text,
+                                element: Some("E".to_owned()),
+                                max_sizes: vec![
+                                    MaxSize {
+                                        encoding: Encoding::Proto3,
+                                        bytes: 8,
+                                        state: SizeStateTag::Bounded,
+                                        cause: UnboundedCause::Unspecified,
+                                    },
+                                    MaxSize {
+                                        encoding: Encoding::Podbuf,
+                                        bytes: 9,
+                                        state: SizeStateTag::Bounded,
+                                        cause: UnboundedCause::Unspecified,
+                                    },
+                                ],
+                            },
+                        ]),
                     },
                 ],
                 reserved_ordinals: vec![5, 6],
@@ -302,6 +335,11 @@ const MEMBER_KIND: usize = 2;
 const MEMBER_PAYLOADS: usize = 3;
 const MEMBER_TIMING: usize = 4;
 const MEMBER_LIMIT: usize = 5;
+const MEMBER_STREAMS: usize = 6;
+const STREAM_NO: usize = 0;
+const STREAM_FORM: usize = 1;
+const STREAM_ELEMENT: usize = 2;
+const STREAM_MAX_SIZES: usize = 3;
 const TIMING_MODE: usize = 0;
 const TIMING_MIN_US: usize = 1;
 const TIMING_MAX_US: usize = 2;
@@ -429,6 +467,8 @@ struct Tables {
     timing: Option<usize>,
     payload: usize,
     size: usize,
+    stream: usize,
+    stream_size: usize,
     retired: usize,
     earlier: usize,
 }
@@ -441,6 +481,8 @@ fn locate(bytes: &[u8]) -> Tables {
         .then(|| follow(bytes, field(bytes, member, MEMBER_TIMING)));
     let payload = last_in(bytes, member, MEMBER_PAYLOADS);
     let size = last_in(bytes, payload, PAYLOAD_MAX_SIZES);
+    let stream = last_in(bytes, member, MEMBER_STREAMS);
+    let stream_size = last_in(bytes, stream, STREAM_MAX_SIZES);
     let retired = last_in(bytes, catalog, CATALOG_RETIRED);
     let earlier = last_in(bytes, catalog, CATALOG_COMPATIBLE);
     Tables {
@@ -450,6 +492,8 @@ fn locate(bytes: &[u8]) -> Tables {
         timing,
         payload,
         size,
+        stream,
+        stream_size,
         retired,
         earlier,
     }
@@ -467,6 +511,8 @@ fn every_field_the_walk_reads_is_checked() {
     let timing: Pick = |t| t.timing.expect("this fixture has timing");
     let payload: Pick = |t| t.payload;
     let size: Pick = |t| t.size;
+    let stream: Pick = |t| t.stream;
+    let stream_size: Pick = |t| t.stream_size;
     let retired: Pick = |t| t.retired;
     let earlier: Pick = |t| t.earlier;
 
@@ -551,6 +597,18 @@ fn every_field_the_walk_reads_is_checked() {
         ("size.bytes", Full, size, SIZE_BYTES, Scalar),
         ("size.state", Full, size, SIZE_STATE, Tag),
         ("size.cause", Full, size, SIZE_CAUSE, Tag),
+        ("member.streams", Full, member, MEMBER_STREAMS, Offset),
+        ("stream.no", Full, stream, STREAM_NO, Scalar),
+        ("stream.form", Full, stream, STREAM_FORM, Tag),
+        ("stream.element", Full, stream, STREAM_ELEMENT, Offset),
+        ("stream.max_sizes", Full, stream, STREAM_MAX_SIZES, Offset),
+        (
+            "stream.size.encoding",
+            Full,
+            stream_size,
+            SIZE_ENCODING,
+            Tag,
+        ),
         ("retired.name", Full, retired, RETIRED_NAME, Offset),
         ("retired.number", Full, retired, RETIRED_NUMBER, Scalar),
         (
@@ -634,6 +692,7 @@ fn buffer_without_limit() -> Vec<u8> {
                     max_us: Some("1".to_owned()),
                 })),
                 limit: None,
+                streams: None,
             }],
             reserved_ordinals: vec![],
         }],
@@ -666,6 +725,37 @@ fn a_file_without_the_limit_field_still_verifies() {
     let interface = catalog.interfaces().unwrap().get(0).unwrap().unwrap();
     let member = interface.members().unwrap().get(0).unwrap().unwrap();
     assert_eq!(member.limit().unwrap(), None);
+}
+
+/// The veh-cluster corpus's catalog as the toolchain wrote it before a
+/// member's `streams` field existed (`tests/fixtures/pre-streams.catalog.binfb`).
+fn pre_streams() -> Vec<u8> {
+    std::fs::read(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/pre-streams.catalog.binfb"),
+    )
+    .expect("the fixture is checked in")
+}
+
+#[test]
+fn a_descriptor_written_before_streams_verifies_and_reads_no_streams() {
+    let bytes = pre_streams();
+    let catalog = verify(&bytes).expect("a file written before the field verifies");
+    let mut members = 0;
+    for interface in catalog.interfaces().unwrap() {
+        for member in interface.unwrap().members().unwrap() {
+            let member = member.unwrap();
+            assert!(
+                member.streams().unwrap().is_none(),
+                "{}",
+                member.name().unwrap()
+            );
+            members += 1;
+        }
+    }
+    // The corpus declares stream members (`replayTrace`, `streamFaults`),
+    // so a file of no members would prove nothing.
+    assert!(members > 10, "{members} members");
 }
 
 /// With `std` off the crate still implements `core::error::Error` for

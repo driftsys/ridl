@@ -48,10 +48,6 @@ name = "generated-crate"
 baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
 
 [[surface]]
-name = "runtime-crates"
-baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
-
-[[surface]]
 name = "keywords"
 baseline = "v0.10.0"
 

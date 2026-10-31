@@ -552,7 +552,10 @@ message Interaction {
   // The memory a call table reserves for the member, per wire encoding: the
   // sum of the sizes of its payloads. A signal and an event have one payload,
   // a command has its request, and a query has its request and then its
-  // reply. A fixed member counts no payload and is always `bytes` 0, whatever
+  // reply. A reply that is a stream adds nothing: its chunks are not held by
+  // the call table, and the member's limit bounds each one (ADR-0032
+  // decision 14), which is the row the Rust backend's size table has for it.
+  // A fixed member counts no payload and is always `bytes` 0, whatever
   // its payload: a fixed value is provisioned and never in flight, which is
   // the same number the runtime's size table carries for it.
   Reservation reservation = 8;
@@ -584,6 +587,42 @@ message Interaction {
   // its kind, which `ridl_rt::contract::default_ceiling` states. A plugin
   // that emits a member table reads it there and does not compute it.
   optional uint32 limit = 24;
+  // The streams of the member, one entry per stream, in ascending `no`: the
+  // reply stream first (`no` 0) when a query replies with a stream, then
+  // each stream parameter in declaration order. Empty for a member with no
+  // stream.
+  //
+  // A member with a stream parameter has a `request` or a `request_tuple`
+  // made of its non-stream parameters; a model written before this field
+  // existed had neither for such a member. A plugin that does not carry
+  // streams skips every member whose `streams` is not empty: emitting it as a
+  // plain call would send the request without its streams.
+  repeated StreamShape streams = 25;
+}
+
+// The form of a stream's chunks.
+enum StreamForm {
+  STREAM_FORM_UNSPECIFIED = 0;
+  // Each chunk is one element of a named type.
+  STREAM_FORM_ELEMENTS = 1;
+  // Each chunk is a run of bytes.
+  STREAM_FORM_BYTES = 2;
+  // Each chunk is a run of UTF-8 text.
+  STREAM_FORM_TEXT = 3;
+}
+
+// One stream of a call.
+message StreamShape {
+  // 0 names the reply stream; k from 1 names the k-th stream parameter,
+  // counting only the stream parameters.
+  uint32 no = 1;
+  StreamForm form = 2;
+  // The element type. Present under `STREAM_FORM_ELEMENTS` only.
+  TypeRef element = 3;
+  // The size states of the element under each wire encoding. Under
+  // `STREAM_FORM_ELEMENTS` they are the element's own; otherwise every state
+  // is `ABSENT_CAUSE_ENCODING_UNDEFINED`.
+  PayloadSizes sizes = 4;
 }
 
 // One thing that crosses, as a named type.
@@ -672,7 +711,7 @@ message ReservationState {
     //   type, and otherwise what the shape is: the kind word `primitive`,
     //   `inline scalar`, `tuple`, `map`, `stream`, `array of <element>` or
     //   `no type`; the parameter list `(a, b)` of a request that has no
-    //   induced argument struct, because a parameter is a stream or untyped;
+    //   induced argument struct, because a parameter is untyped;
     //   or `<ok> | <err>` for a fallible reply.
     //
     //   `<member>: no known payload shape` — a member whose kind this
@@ -706,7 +745,7 @@ message EventShape {
 
 message CommandShape {
   repeated Param params = 1;
-  // Present when the call declares exactly one named parameter.
+  // Present when the call declares exactly one named non-stream parameter.
   Payload request = 2;
   // require only (RIDL-302).
   repeated Clause clauses = 3;
@@ -719,19 +758,21 @@ message CommandShape {
   // sized through their proto3 root box message and their FlatBuffers box
   // table. Every other parameter list, including none, is sized as the
   // induced argument struct `request_tuple` names, under the same rules as a
-  // declared struct. It is absent under both encodings only where no struct
-  // exists: `ABSENT_CAUSE_ENCODING_UNDEFINED` for a parameter with no
-  // declared type and for a stream parameter.
+  // declared struct. A stream parameter is not a parameter of the request:
+  // the request is made of the non-stream parameters, and the stream is in
+  // `Interaction.streams`. The state is absent under both encodings only
+  // where no struct exists: `ABSENT_CAUSE_ENCODING_UNDEFINED` for a
+  // parameter with no declared type.
   PayloadSizes request_sizes = 4;
   // The operation shape of an intent command, copied from the IR. On the
   // command shape, not on Interaction, because Interaction's oneof is named
   // shape.
   Shape shape = 5;
-  // The induced argument struct, when the call's parameters are not exactly
-  // one named type: an index into `Model.tuples`. Exactly one of `request`
-  // and `request_tuple` is present for a call this toolchain lowers. The
-  // struct has one field per declared parameter, and no field when the call
-  // declares none.
+  // The induced argument struct, when the call's non-stream parameters are
+  // not exactly one named type: an index into `Model.tuples`. Exactly one of
+  // `request` and `request_tuple` is present for a call this toolchain
+  // lowers. The struct has one field per declared non-stream parameter, and
+  // no field when the call declares none.
   optional TupleRef request_tuple = 6;
 }
 

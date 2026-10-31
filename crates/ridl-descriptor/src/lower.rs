@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use ridl_ir::codegen::request_shape;
 use ridl_ir::projection::size::{self, Ctx, PayloadShape, SizeState, size_state};
 use ridl_ir::v2::{
     Constraint, Decl, FieldType, Package, Param, PrimitiveType, ReturnType, StreamType, decl,
@@ -17,7 +18,7 @@ use crate::hash::catalog_hash;
 use crate::number::{ZeroNumber, first_zero, unit_shapes};
 use crate::{
     Catalog, EarlierCatalog, Encoding, Interface, Kind, MaxSize, Member, Payload, RetiredInterface,
-    SCHEMA_VERSION, SizeStateTag, Timing, TimingMode, UnboundedCause,
+    SCHEMA_VERSION, SizeStateTag, StreamForm, StreamPayload, Timing, TimingMode, UnboundedCause,
 };
 
 /// Every encoding the size table has a column for, in `Encoding` order.
@@ -133,6 +134,7 @@ pub fn lower(
 }
 
 fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
+    let mut streams = Vec::new();
     let (kind, payloads, timing) = match decl.kind.as_ref()? {
         decl::Kind::SignalDef(def) => (
             Kind::Signal,
@@ -154,12 +156,16 @@ fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
             )],
             def.timing.as_ref(),
         ),
-        decl::Kind::CommandDef(def) => (
-            Kind::Command,
-            vec![request(&def.params, ctx)],
-            def.timing.as_ref(),
-        ),
+        decl::Kind::CommandDef(def) => {
+            streams = streams_of(&def.params, None, ctx);
+            (
+                Kind::Command,
+                vec![request(&def.params, ctx)],
+                def.timing.as_ref(),
+            )
+        }
         decl::Kind::QueryDef(def) => {
+            streams = streams_of(&def.params, def.return_type.as_ref(), ctx);
             let mut payloads = vec![request(&def.params, ctx)];
             if let Some(ret) = &def.return_type {
                 payloads.push(response(ret, ctx));
@@ -201,18 +207,26 @@ fn member_of(decl: &Decl, ctx: &Ctx<'_>) -> Option<Member> {
             })
         }),
         limit: decl.limit,
+        streams: Some(streams),
     })
 }
 
-/// The request payload: one parameter is spelled as its type, several as
-/// `(a: T, b: U)`; only one named parameter is sized
+/// The request payload, over the parameters that are not streams (a stream
+/// is listed in `Member.streams`): one such parameter is spelled as its type,
+/// zero or several as `(a: T, b: U)`; only one named parameter is sized
 /// (`docs/design/catalog-descriptor.md`, the section "The size states").
+/// Which parameters are the request is the rule of
+/// [`ridl_ir::codegen::request_shape`].
 fn request(params: &[Param], ctx: &Ctx<'_>) -> Payload {
-    let name = match params {
+    let requested: Vec<&Param> = params
+        .iter()
+        .filter(|p| p.r#type.as_ref().and_then(stream).is_none())
+        .collect();
+    let name = match requested.as_slice() {
         [single] => single.r#type.as_ref().map(spell).unwrap_or_default(),
         _ => format!(
             "({})",
-            params
+            requested
                 .iter()
                 .map(|p| format!(
                     "{}: {}",
@@ -223,7 +237,74 @@ fn request(params: &[Param], ctx: &Ctx<'_>) -> Payload {
                 .join(", ")
         ),
     };
-    payload("request", name, &PayloadShape::Params(params), ctx)
+    // With no induced struct given, the shape is the one named non-stream
+    // parameter, or the parameter list, which sizes only a single named
+    // parameter: the request of zero or several parameters keeps no row.
+    payload("request", name, &request_shape(params, None), ctx)
+}
+
+/// The stream a field type is, if it is one.
+fn stream(ty: &FieldType) -> Option<&StreamType> {
+    match &ty.kind {
+        Some(field_type::Kind::Stream(stream)) => Some(stream),
+        _ => None,
+    }
+}
+
+/// The streams of a call, in ascending number: the reply stream of a query
+/// as number 0, then each stream parameter, numbered from 1 in declaration
+/// order and counting only the stream parameters.
+fn streams_of(params: &[Param], ret: Option<&ReturnType>, ctx: &Ctx<'_>) -> Vec<StreamPayload> {
+    let reply = ret.and_then(|ret| match &ret.kind {
+        Some(return_type::Kind::Value(ty)) => stream(ty),
+        _ => None,
+    });
+    let mut entries = Vec::new();
+    if let Some(reply) = reply {
+        entries.extend(stream_entry(0, reply, ctx));
+    }
+    let parameters = params
+        .iter()
+        .filter_map(|p| p.r#type.as_ref().and_then(stream));
+    // `StreamNo` is a byte: a stream parameter past the 255th has no number.
+    for (no, parameter) in (1..=u8::MAX).zip(parameters) {
+        entries.extend(stream_entry(no, parameter, ctx));
+    }
+    entries
+}
+
+/// One stream entry: a named element carries its qualified name and the rows
+/// a payload of that type has; `<bytes>` and `<string>` carry neither. A
+/// stream of another primitive is not an entry, as in the codegen model.
+fn stream_entry(no: u8, stream: &StreamType, ctx: &Ctx<'_>) -> Option<StreamPayload> {
+    match stream.element.as_ref()? {
+        stream_type::Element::Named(reference) => {
+            let home = ctx.packages().package;
+            let element = match ctx.resolve(home, reference) {
+                Some((decl, declaring)) => format!("{}.{}", declaring.name, decl.name),
+                None => reference.clone(),
+            };
+            Some(StreamPayload {
+                no,
+                form: StreamForm::Elements,
+                element: Some(element),
+                max_sizes: max_sizes(&PayloadShape::Named(reference), ctx),
+            })
+        }
+        stream_type::Element::Primitive(primitive) => {
+            let form = match PrimitiveType::try_from(*primitive).ok()? {
+                PrimitiveType::Bytes => StreamForm::Bytes,
+                PrimitiveType::String => StreamForm::Text,
+                _ => return None,
+            };
+            Some(StreamPayload {
+                no,
+                form,
+                element: None,
+                max_sizes: Vec::new(),
+            })
+        }
+    }
 }
 
 fn response(ret: &ReturnType, ctx: &Ctx<'_>) -> Payload {
@@ -242,16 +323,21 @@ fn payload(role: &str, type_name: String, shape: &PayloadShape<'_>, ctx: &Ctx<'_
     Payload {
         role: role.to_owned(),
         type_name,
-        max_sizes: COLUMNS
-            .iter()
-            .filter_map(|&encoding| {
-                row(
-                    encoding,
-                    size_state(ctx.packages().package, shape, ctx, encoding),
-                )
-            })
-            .collect(),
+        max_sizes: max_sizes(shape, ctx),
     }
+}
+
+/// The rows of `shape`: one per encoding that has a state.
+fn max_sizes(shape: &PayloadShape<'_>, ctx: &Ctx<'_>) -> Vec<MaxSize> {
+    COLUMNS
+        .iter()
+        .filter_map(|&encoding| {
+            row(
+                encoding,
+                size_state(ctx.packages().package, shape, ctx, encoding),
+            )
+        })
+        .collect()
 }
 
 /// The row for one state, or none when the state is absent: the descriptor

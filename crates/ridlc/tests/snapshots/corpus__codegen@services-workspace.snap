@@ -1,6 +1,5 @@
 ---
 source: crates/ridlc/tests/corpus.rs
-assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 ---
@@ -553,6 +552,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -630,6 +630,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "event": {
               "payload": {
                 "type": {
@@ -698,6 +699,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "command": {
               "params": [
                 {
@@ -822,6 +824,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [
                 {
@@ -962,6 +965,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             "see": [],
             "since": [],
             "rules": [],
+            "streams": [],
             "fixed": {
               "payload": {
                 "optional": false,
@@ -1075,6 +1079,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -1156,6 +1161,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [],
               "reply": {
@@ -1929,6 +1935,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "signal": {
               "payload": {
                 "type": {
@@ -2003,6 +2010,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "command": {
               "params": [
                 {
@@ -2133,6 +2141,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [
                 {
@@ -2313,6 +2322,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             "see": [],
             "since": [],
             "rules": [],
+            "streams": [],
             "fixed": {
               "payload": {
                 "optional": false,
@@ -2400,6 +2410,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [
                 {
@@ -2560,6 +2571,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
+            "streams": [],
             "query": {
               "params": [
                 {

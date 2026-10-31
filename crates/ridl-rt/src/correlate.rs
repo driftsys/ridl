@@ -16,13 +16,24 @@
 //! by [`Table::forget`] alone — at once for a settled call, and at the
 //! settlement for a call in flight — and its generation advances when it is,
 //! so the correlation the slot had before answers as unknown. The table stores
-//! each call's outcome status and one `Interest::Outcome` waker, but no reply
-//! bytes: a runtime keeps those in storage of its own indexed by
-//! [`Table::slot`].
+//! each call's outcome status, one `Interest::Outcome` waker, and one
+//! `Interest::Stream` waker for each of up to [`STREAM_WAKERS`] streams of the
+//! call, but no reply bytes and no chunks: a runtime keeps those in storage of
+//! its own indexed by [`Table::slot`].
+//!
+//! A settlement, a forget and a reclaim each stop or change every stream of
+//! the call, so after each [`Table::settle`] and [`Table::forget`] that did
+//! not answer `Unknown` the runtime takes the slot's stream wakers with
+//! [`Table::take_streams`], under the same lock, and wakes them after
+//! releasing it. The stream wakers are a
+//! separate hand-back, not a field of [`Settled`] or [`Forgotten`], so those
+//! two enums keep the shape a runtime already matches on.
 //!
 //! [`Waiters`] holds one waker per kind of key a handle stores — `Slot`,
 //! `Event` and `Claim` — whatever interface an `Event` or `Claim` key names,
-//! so a change to any key of that kind takes it (ADR-0021 decision 13).
+//! so a change to any key of that kind takes it (ADR-0021 decision 13). It
+//! does not hold a `Stream` or a `ClaimStream` waker: each of those is kept
+//! with its call or its claim, one for each stream.
 //!
 //! `N` is checked at compile time: a table of more than 65536 slots does not
 //! build.
@@ -37,8 +48,22 @@
 
 use core::task::Waker;
 
+use crate::contract::StreamNo;
 use crate::error::CallError;
 use crate::port::{Correlation, Interest};
+
+/// The `Interest::Stream` wakers one slot of a [`Table`] holds: one for each
+/// of up to four streams of the call, whatever their numbers, such as a
+/// query's reply stream and three stream parameters, or four stream
+/// parameters of a command.
+///
+/// A cell stays occupied by its stream until [`Table::take_stream`] or
+/// [`Table::take_streams`] takes the waker. A registration on a fifth stream
+/// of the same call, while all four cells are occupied, is not stored and is
+/// handed back, so its waiter is woken at once on every registration: the
+/// task reads its stream again and registers again, which is a busy loop
+/// until a cell is freed. It does not wait forever, but it does not sleep.
+pub const STREAM_WAKERS: usize = 4;
 
 /// The bits of a correlation that hold the slot index.
 const SLOT_BITS: u32 = 16;
@@ -49,7 +74,11 @@ const GENERATION_MASK: u64 = (1 << (64 - SLOT_BITS)) - 1;
 
 /// What [`Table::settle`] did, and the waker it hands back to be woken.
 ///
-/// The runtime wakes the waker after releasing its lock. On
+/// The runtime wakes the waker after releasing its lock. Unless the answer
+/// is [`Unknown`](Settled::Unknown), it also takes the slot's stream wakers
+/// with [`Table::take_streams`] and wakes them; on `Unknown` it does not,
+/// because the slot of a stale correlation may hold another call that is
+/// still live. On
 /// [`Reclaimed`](Settled::Reclaimed) it also wakes every `Interest::Slot`
 /// waiter it holds and frees whatever it stored for the slot.
 #[must_use = "a waker or a reclaim handed back and ignored leaves a task waiting"]
@@ -70,7 +99,12 @@ pub enum Settled {
 
 /// What [`Table::forget`] did, and the waker it hands back to be woken.
 ///
-/// On [`Reclaimed`](Forgotten::Reclaimed) the runtime wakes every
+/// Unless the answer is [`Unknown`](Forgotten::Unknown), the runtime then
+/// takes the slot's stream wakers with [`Table::take_streams`] and wakes them
+/// after releasing its lock: every stream of a forgotten call stops. On
+/// `Unknown` it does not, because the slot of a stale correlation may hold
+/// another call that is still live. On
+/// [`Reclaimed`](Forgotten::Reclaimed) the runtime wakes every
 /// `Interest::Slot` waiter it holds and frees whatever it stored for the slot.
 #[must_use = "a waker or a reclaim handed back and ignored leaves a task waiting"]
 #[derive(Debug)]
@@ -105,7 +139,13 @@ struct Entry {
     reservation: u64,
     /// The call's one `Interest::Outcome` waker.
     waker: Option<Waker>,
+    /// The call's `Interest::Stream` wakers, one for each stream number.
+    streams: [Option<(StreamNo, Waker)>; STREAM_WAKERS],
 }
+
+/// An empty stream waker cell, as a constant so that an array of them can be
+/// built in a `const` context.
+const NO_STREAM: Option<(StreamNo, Waker)> = None;
 
 impl Entry {
     const FREE: Entry = Entry {
@@ -113,11 +153,13 @@ impl Entry {
         state: State::Free,
         reservation: 0,
         waker: None,
+        streams: [NO_STREAM; STREAM_WAKERS],
     };
 }
 
 /// The caller-side call table: `N` slots, each with a generation, the call's
-/// outcome status, and one waker, and an optional byte budget.
+/// outcome status, one outcome waker and up to [`STREAM_WAKERS`] stream
+/// wakers, and an optional byte budget.
 ///
 /// Every method takes `&self` or `&mut self` and returns; a runtime keeps the
 /// table behind its own lock. See the [module documentation](self).
@@ -164,12 +206,20 @@ impl<const N: usize> Table<N> {
         let entry = &mut self.slots[index];
         entry.state = State::InFlight { forgotten: false };
         entry.reservation = reservation;
+        // A runtime that did not take the stream wakers of the slot's
+        // previous call leaves them here; the new call does not inherit them.
+        entry.streams = [NO_STREAM; STREAM_WAKERS];
         Some(Correlation((entry.generation << SLOT_BITS) | index as u64))
     }
 
     /// Records the outcome of the call in flight under `c`, or, when the call
     /// was forgotten, reclaims its slot. The first settlement of a call is
     /// its outcome; a later one is [`Settled::Unknown`] and changes nothing.
+    ///
+    /// The slot's stream wakers are handed back through
+    /// [`take_streams`](Table::take_streams), which the runtime calls next:
+    /// a settlement ends a reply stream, and a parameter stream's producer
+    /// reads the stream again to learn whether it goes on.
     pub fn settle(&mut self, c: Correlation, outcome: Result<(), CallError>) -> Settled {
         let Some(index) = self.held(c) else {
             return Settled::Unknown;
@@ -201,7 +251,11 @@ impl<const N: usize> Table<N> {
 
     /// Releases `c`, the one operation that reclaims a slot: at once for a
     /// settled call, and at its settlement for a call in flight, which this
-    /// marks. Either way `c` has no readable outcome afterwards.
+    /// marks. Either way `c` has no readable outcome afterwards, and every
+    /// stream of the call stops: the slot's stream wakers are handed back
+    /// through [`take_streams`](Table::take_streams), which the runtime calls
+    /// next, and a later [`wake_on_stream`](Table::wake_on_stream) under `c`
+    /// stores nothing.
     pub fn forget(&mut self, c: Correlation) -> Forgotten {
         let Some(index) = self.held(c) else {
             return Forgotten::Unknown;
@@ -244,6 +298,74 @@ impl<const N: usize> Table<N> {
         }
     }
 
+    /// Stores `waker` as the `Interest::Stream(c, s)` waker of the call under
+    /// `c`, one for each stream number, and returns the waker to wake, under
+    /// the rule of [`wake_on`](Table::wake_on):
+    ///
+    /// - the displaced waker, when stream `s` held a waker of another task;
+    /// - nothing, when the stored waker of stream `s`
+    ///   [`will_wake`](Waker::will_wake) the same task as `waker`, which is a
+    ///   refresh;
+    /// - `waker` itself, not stored, when the call was forgotten or the table
+    ///   holds no call under `c`, since no stream of `c` will change again,
+    ///   and when the slot already holds [`STREAM_WAKERS`] wakers of other
+    ///   streams.
+    ///
+    /// A settled call still stores the waker: a command is settled at its
+    /// acknowledgment, and its parameter streams go on after it.
+    pub fn wake_on_stream(&mut self, c: Correlation, s: StreamNo, waker: &Waker) -> Option<Waker> {
+        let Some(index) = self.held(c) else {
+            return Some(waker.clone());
+        };
+        let entry = &mut self.slots[index];
+        match entry.state {
+            State::InFlight { forgotten: false } | State::Settled(_) => {}
+            State::InFlight { forgotten: true } | State::Free => return Some(waker.clone()),
+        }
+        if let Some((_, stored)) = entry.streams.iter_mut().flatten().find(|(no, _)| *no == s) {
+            return Some(core::mem::replace(stored, waker.clone()))
+                .filter(|displaced| !displaced.will_wake(waker));
+        }
+        match entry.streams.iter_mut().find(|cell| cell.is_none()) {
+            Some(cell) => {
+                *cell = Some((s, waker.clone()));
+                None
+            }
+            None => Some(waker.clone()),
+        }
+    }
+
+    /// Takes the `Interest::Stream(c, s)` waker of the call under `c`, which
+    /// a runtime wakes when a chunk or the end arrives on stream `s` or its
+    /// window frees. `None` when none is stored or the table holds no call
+    /// under `c`.
+    pub fn take_stream(&mut self, c: Correlation, s: StreamNo) -> Option<Waker> {
+        let index = self.held(c)?;
+        let cell = self.slots[index]
+            .streams
+            .iter_mut()
+            .find(|cell| matches!(cell, Some((no, _)) if *no == s))?;
+        cell.take().map(|(_, waker)| waker)
+    }
+
+    /// Takes every stream waker slot `slot` holds, whatever stream it was
+    /// registered on. A runtime calls it after every [`settle`](Table::settle)
+    /// and [`forget`](Table::forget) that did not answer `Unknown`, with the
+    /// slot of the correlation it passed, [`Table::slot`]`(c)`: it works after
+    /// a reclaim too, when `c` already answers as unknown. A runtime that does
+    /// not call it after a settlement or a forget leaves the stream waiters of
+    /// that call asleep; the stream tests of `ridl-rt-conformance` check that
+    /// they are woken. The wakers are taken when this is called,
+    /// whether or not the iterator is consumed, and the iterator does not
+    /// borrow the table. A slot index the table does not have yields nothing.
+    pub fn take_streams(&mut self, slot: usize) -> impl Iterator<Item = Waker> + use<N> {
+        let taken = match self.slots.get_mut(slot) {
+            Some(entry) => core::mem::replace(&mut entry.streams, [NO_STREAM; STREAM_WAKERS]),
+            None => [NO_STREAM; STREAM_WAKERS],
+        };
+        taken.into_iter().flatten().map(|(_, waker)| waker)
+    }
+
     /// The slot index of `c`, which a runtime uses to index its own storage
     /// for the call — reply bytes, arguments — beside the table.
     #[must_use]
@@ -259,8 +381,10 @@ impl<const N: usize> Table<N> {
         (entry.generation == generation && !matches!(entry.state, State::Free)).then_some(index)
     }
 
-    /// Frees a slot: credits its reservation, drops its waker, and advances
-    /// its generation so the correlation it had answers as unknown.
+    /// Frees a slot: credits its reservation, drops its outcome waker, and
+    /// advances its generation so the correlation it had answers as unknown.
+    /// The stream wakers stay for [`take_streams`](Table::take_streams) to
+    /// hand back; the slot's next [`insert`](Table::insert) drops any left.
     fn reclaim(&mut self, index: usize) {
         let entry = &mut self.slots[index];
         if let Some(free) = self.budget {
@@ -276,6 +400,10 @@ impl<const N: usize> Table<N> {
 /// The waiter registry a handle keeps behind
 /// [`Wakeable`](crate::port::Wakeable): one waker for each of the kinds
 /// `Slot`, `Event` and `Claim`.
+///
+/// `Interest::Stream` and `Interest::ClaimStream` are not stored here either:
+/// a `Stream` waker is kept with its call, in [`Table`], and a `ClaimStream`
+/// waker with its claim, in the providing runtime's own claim storage.
 ///
 /// An `Event` or `Claim` key's interface is not kept: the handle holds one
 /// waker per kind, and a change to any key of that kind takes it (ADR-0021
@@ -309,9 +437,10 @@ impl Waiters {
     /// - nothing, when the stored waker [`will_wake`](Waker::will_wake) the
     ///   same task as `waker`, which is a refresh: the stored waker is
     ///   replaced and not woken, whatever interface either key named;
-    /// - `waker` itself, not stored, for `Interest::Outcome`, which a
-    ///   [`Table`] holds: a registration here could never be taken, and
-    ///   handing it back leaves no task waiting on it.
+    /// - `waker` itself, not stored, for `Interest::Outcome`,
+    ///   `Interest::Stream` and `Interest::ClaimStream`, which are kept with
+    ///   their call or their claim: a registration here could never be taken,
+    ///   and handing it back leaves no task waiting on it.
     pub fn register(&mut self, what: Interest, waker: &Waker) -> Option<Waker> {
         match self.kind(what) {
             Some(stored) => store(stored, waker),
@@ -321,7 +450,7 @@ impl Waiters {
 
     /// Takes the waker of `what`'s kind, whatever interface it was registered
     /// under, which clears that kind. `None` when none is stored, and always
-    /// for `Interest::Outcome`.
+    /// for `Interest::Outcome`, `Interest::Stream` and `Interest::ClaimStream`.
     pub fn take(&mut self, what: Interest) -> Option<Waker> {
         self.kind(what)?.take()
     }
@@ -341,7 +470,7 @@ impl Waiters {
             Interest::Slot => Some(&mut self.slot),
             Interest::Event(_) => Some(&mut self.event),
             Interest::Claim(_) => Some(&mut self.claim),
-            Interest::Outcome(_) => None,
+            Interest::Outcome(_) | Interest::Stream(..) | Interest::ClaimStream(..) => None,
         }
     }
 }

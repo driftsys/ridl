@@ -16,10 +16,10 @@
 //!     // ...
 //! }
 //!
-//! // Every test of the ports every runtime presents, those of the three
-//! // extensions this runtime implements, and those of a runtime that
-//! // carries the trace context.
-//! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace);
+//! // Every test of the ports every runtime presents, those of the four
+//! // extension flags, and those of a runtime that carries the trace
+//! // context.
+//! ridl_rt_conformance::suite!(MyFactory; scannable, coherent, wakeable, trace, streams);
 //! ```
 //!
 //! `ridl-loopback` is the first runtime to run it
@@ -62,6 +62,16 @@
 //!   ordinal, an unowned member, a freshness of `Fresh` or `Stale` measured
 //!   against a staleness bound. The suite attaches to a catalog with no
 //!   descriptor, and a runtime with none reports `Freshness::Unbounded`.
+//! - **A stream number beyond the first two stream parameters, and the size
+//!   of a stream's window.** The suite attaches to a catalog with no
+//!   descriptor, so a runtime under test holds no member table. Such a
+//!   runtime must accept `REPLY_STREAM` on a query, and `StreamNo(1)` and
+//!   `StreamNo(2)` on any call; a stream number beyond those is not tested,
+//!   and neither is what a runtime with a member table answers for a stream
+//!   its member does not declare. A test
+//!   that needs a full window pushes until a push answers 0, at most 1,024
+//!   times, and a runtime whose window does not fill in that many pushes
+//!   skips the part of the test that needs it.
 //! - **The threading model.** ADR-0021 decision 12 holds a runtime whose
 //!   handles are used from more than one thread to `Send` and `Sync` bounds,
 //!   and a single-threaded runtime to neither, so no test here moves a handle
@@ -111,6 +121,7 @@ pub mod coherent;
 pub mod events;
 pub mod scannable;
 pub mod signals;
+pub mod streams;
 pub mod wakeable;
 
 /// What the suite needs from a runtime beyond its port traits.
@@ -126,8 +137,9 @@ pub trait Factory {
     /// handle, one the runtime offers or one its test crate writes over the
     /// role handles.
     ///
-    /// The three extensions — the two signal extensions and `Wakeable` — are
-    /// not in this bound, because a runtime may omit them; the tests of each
+    /// The extensions — the two signal extensions, `Wakeable`, and the two
+    /// stream extensions — are not in this bound, because a runtime may omit
+    /// them; the tests of each
     /// ask for it where they need it, on this type and on the role handles
     /// below.
     type Runtime: Attached
@@ -156,7 +168,10 @@ pub trait Factory {
     /// the runtime's and not a caller's. A call holds its slot from its send
     /// until it is reclaimed by [`Caller::forget`], at once for a settled
     /// call and at the settlement for a call in flight (ADR-0021 decision
-    /// 15), and a send with every slot held is refused with
+    /// 15). A call with a stream parameter that its provider is not done with
+    /// keeps its slot after the forget, until the provider is done with it or
+    /// its handler is gone, as `ridl_rt::port::StreamHandler` states. A send
+    /// with every slot held is refused with
     /// [`SendError::Busy`](ridl_rt::port::SendError::Busy). At least 1.
     ///
     /// The tests fill the table by sending this many calls, so a runtime
@@ -202,13 +217,16 @@ pub trait Factory {
 ///
 /// `suite!(F)` writes the tests of the ports every runtime presents. Naming
 /// an extension after a semicolon adds its tests: `scannable` and
-/// `coherent`, the two signal extensions, `wakeable`, and `trace`, in any
-/// combination, as in `suite!(F; scannable, coherent, wakeable, trace)`.
+/// `coherent`, the two signal extensions, `wakeable`, `trace`, and
+/// `streams`, the two stream extensions, in any combination, as in
+/// `suite!(F; scannable, coherent, wakeable, trace, streams)`.
 /// Each requires what that extension's tests ask for: `scannable` and
-/// `coherent` that `F::Runtime` implements the extension named, and
+/// `coherent` that `F::Runtime` implements the extension named,
 /// `wakeable` that `F::Runtime` and the three role handles `F` makes
 /// implement `Wakeable`, and that `F` and those handles are `'static`,
-/// because one test runs on a thread of its own. Each test is named after
+/// because one test runs on a thread of its own, and `streams` that
+/// `F::Runtime` implements `StreamCaller`, `StreamHandler` and `Wakeable`,
+/// because a stream test registers stream wakers. Each test is named after
 /// the function it calls, so a failure names the contract it breaks.
 ///
 /// `trace` is not a trait. It is for a runtime that carries the trace
@@ -323,6 +341,38 @@ macro_rules! suite {
             calls::an_all_zero_commands_context_is_carried_unchanged,
             calls::an_all_zero_querys_context_is_carried_unchanged,
             events::an_all_zero_occurrence_context_is_carried_unchanged,
+        );
+    };
+    (@streams $factory:ty) => {
+        $crate::suite!(@tests $factory;
+            streams::a_reply_stream_is_pulled_in_order_then_ends,
+            streams::a_pull_before_the_first_chunk_is_pending,
+            streams::a_zero_length_chunk_is_a_chunk,
+            streams::a_short_buffer_reports_needed_and_does_not_consume,
+            streams::end_claim_on_the_reply_stream_settles_the_claim,
+            streams::a_settle_err_after_chunks_fails_the_stream_after_them,
+            streams::a_push_into_a_full_window_answers_zero_and_a_pull_frees_it,
+            streams::a_stream_waker_is_woken_by_a_chunk_an_end_and_a_freed_window,
+            streams::a_parameter_streams_wakers_are_woken_by_a_chunk_and_a_freed_window,
+            streams::a_settlement_and_a_forget_wake_the_stream_wakers,
+            streams::forget_fails_the_providers_pull_and_push_with_interrupted,
+            streams::an_abort_by_the_producer_fails_the_receivers_pull_after_the_chunks_before_it,
+            streams::an_abort_or_a_push_after_the_end_is_ended_and_the_end_stands,
+            streams::a_receivers_abort_of_a_parameter_stream_fails_the_producers_next_push,
+            streams::a_refusal_after_the_acknowledgment_leaves_the_acknowledgment,
+            streams::a_parameter_stream_pushed_before_the_claim_is_pulled_after_it,
+            streams::a_parameter_stream_ends_explicitly_and_a_second_end_is_ended,
+            streams::a_chunk_longer_than_the_limit_is_too_large_and_not_sent,
+            streams::two_stream_parameters_are_two_streams,
+            streams::a_bidirectional_call_carries_both_streams,
+            streams::a_reclaimed_slots_stream_answers_unknown,
+            streams::a_forget_after_a_commands_acknowledgment_keeps_an_ended_stream_and_interrupts_an_open_one,
+            streams::a_callers_abort_of_a_parameter_stream_fails_the_providers_pull_after_the_chunks_before_it,
+            streams::a_callers_refusal_of_the_reply_stream_fails_the_providers_push_and_end,
+            streams::after_the_receivers_refusal_the_producers_end_fails_and_its_abort_is_ended,
+            streams::a_providers_abort_of_an_ended_parameter_stream_lets_the_forget_free_the_slot,
+            streams::a_querys_settlement_and_a_commands_refusal_release_the_parameter_streams,
+            streams::a_pull_by_the_producer_and_a_push_by_the_receiver_are_unknown,
         );
     };
     (@tests $factory:ty; $($module:ident :: $test:ident),+ $(,)?) => {
@@ -442,7 +492,8 @@ fn blank_change() -> Changed {
 #[cfg(test)]
 mod tests {
     /// The arm of `suite!` a test belongs in: the base arm, the arm of the
-    /// one extension its signature asks `F::Runtime` for, or the `trace` arm
+    /// one extension its signature asks `F::Runtime` for, the `streams` arm
+    /// when its signature asks for a stream extension, or the `trace` arm
     /// when it sends a trace context and asserts that the context arrives.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     enum Arm {
@@ -451,6 +502,7 @@ mod tests {
         Coherent,
         Wakeable,
         Trace,
+        Streams,
     }
 
     /// Whether a function's text names a trace constant (`TRACE_A`,
@@ -486,6 +538,7 @@ mod tests {
             ("events", include_str!("events.rs")),
             ("scannable", include_str!("scannable.rs")),
             ("signals", include_str!("signals.rs")),
+            ("streams", include_str!("streams.rs")),
             ("wakeable", include_str!("wakeable.rs")),
         ];
         let mut found = Vec::new();
@@ -500,15 +553,24 @@ mod tests {
                 // body. A test whose body names a trace constant sends that
                 // context, and asserts that it arrives.
                 let text = rest.split("\npub fn ").next().expect("a function");
-                let mut asked: Vec<Arm> = [
-                    ("ScannableSignals", Arm::Scannable),
-                    ("CoherentSignals", Arm::Coherent),
-                    ("Wakeable", Arm::Wakeable),
-                ]
-                .into_iter()
-                .filter(|(extension, _)| signature.contains(extension))
-                .map(|(_, arm)| arm)
-                .collect();
+                // A stream test asks for `Wakeable` as well, because it
+                // registers stream wakers, so a signature that names a stream
+                // extension places the test in the `streams` arm alone.
+                let streams =
+                    signature.contains("StreamCaller") || signature.contains("StreamHandler");
+                let mut asked: Vec<Arm> = if streams {
+                    vec![Arm::Streams]
+                } else {
+                    [
+                        ("ScannableSignals", Arm::Scannable),
+                        ("CoherentSignals", Arm::Coherent),
+                        ("Wakeable", Arm::Wakeable),
+                    ]
+                    .into_iter()
+                    .filter(|(extension, _)| signature.contains(extension))
+                    .map(|(_, arm)| arm)
+                    .collect()
+                };
                 if carries_trace(text) {
                     asked.push(Arm::Trace);
                 }
@@ -524,7 +586,7 @@ mod tests {
     }
 
     /// The text of each arm of `suite!` that lists tests.
-    fn macro_arms() -> [(Arm, &'static str); 5] {
+    fn macro_arms() -> [(Arm, &'static str); 6] {
         let lib = include_str!("lib.rs");
         let between = |from: &str, to: &str| {
             let start = lib.find(from).expect("the arm's opening") + from.len();
@@ -547,7 +609,11 @@ mod tests {
             ),
             (
                 Arm::Trace,
-                between("(@trace $factory:ty) => {", "(@tests $factory:ty"),
+                between("(@trace $factory:ty) => {", "(@streams"),
+            ),
+            (
+                Arm::Streams,
+                between("(@streams $factory:ty) => {", "(@tests $factory:ty"),
             ),
         ]
     }

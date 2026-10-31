@@ -479,10 +479,14 @@ package probe.x08b
 
 type Level : integer [0..100]
 
+error enum Fault {
+  Broken = 1,
+}
+
 interface Cabin {
   signal XY : Level @10ms
   signal x_y : Level @10ms
-  command set(samples: <Level>) @[..50ms]
+  query read(first: Level): Level | Fault @[..50ms]
 }
 "#,
     );
