@@ -464,6 +464,12 @@ pub trait StreamCaller: Caller {
     /// catalog with no descriptor, does not know which streams a member
     /// declares: it accepts [`REPLY_STREAM`] on a query, and `StreamNo(1)` and
     /// `StreamNo(2)` on any call.
+    ///
+    /// Such a runtime counts only the stream parameters an operation has
+    /// already named. After the [`forget`](Caller::forget) of a settled call
+    /// none of whose stream parameters was named, the claim is no longer
+    /// known, and a stream operation on it answers
+    /// `Contract::UnknownInteraction`.
     fn pull(&mut self, c: Correlation, s: StreamNo, out: &mut [u8]) -> Result<Pull, ReadError>;
     /// Offers one chunk to stream `s` of call `c`. Answers `chunk.len()` when
     /// the chunk was taken, and 0 when the window is full and a non-empty
@@ -478,6 +484,10 @@ pub trait StreamCaller: Caller {
     /// stream: the producer interrupts it, or the receiver refuses what it
     /// received. The other side reads `e` as [`Pull::Failed`] or
     /// [`PushError::Failed`], after the chunks pushed before the abort.
+    ///
+    /// After the other side stopped the stream with outcome `e`, `abort`
+    /// answers [`PushError::Ended`], while [`push`](StreamCaller::push) and
+    /// [`end`](StreamCaller::end) answer `PushError::Failed(e)`.
     fn abort(&mut self, c: Correlation, s: StreamNo, e: CallError) -> Result<(), PushError>;
 }
 
@@ -515,7 +525,10 @@ pub trait StreamCaller: Caller {
 ///   `end_claim` of a claim still held settles it all the same.
 /// - The runtime keeps the call, and the slot it takes in the caller's call
 ///   table, until the provider is done with every stream parameter, or its
-///   handler is gone, so a caller may find the table full sooner. The
+///   handler is gone, so a caller may find the table full sooner. A runtime
+///   that holds no member table counts only the stream parameters an
+///   operation has already named ([`StreamCaller::pull`] states the
+///   consequence). The
 ///   provider is done with a stream parameter once it pulled
 ///   [`Pull::End`] or [`Pull::Failed`] from it, or stopped it itself with
 ///   [`abort_claim`](StreamHandler::abort_claim). The settlement of a query

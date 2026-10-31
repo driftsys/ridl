@@ -172,7 +172,7 @@ pub enum TimingMode { StrictPeriodic, Range }
 pub struct Timing { pub mode: TimingMode, pub min: Option<Duration>, pub max: Option<Duration> }
 pub struct PayloadInfo { pub type_name: &'static str }
 pub struct StreamNo(pub u8);                 // 0 is the reply stream (`port::REPLY_STREAM`); k from 1 is the k-th stream parameter
-pub enum StreamForm { Elements, Bytes, Text }
+#[non_exhaustive] pub enum StreamForm { Elements, Bytes, Text }
 pub struct StreamInfo { pub no: StreamNo, pub form: StreamForm, pub element: &'static str } // element: the canonical element type name; "" under Bytes and Text
 ```
 
@@ -184,8 +184,10 @@ to live, and a call's response bound, depending on the member's `kind`.
 `Member`, `PayloadInfo` and `StreamInfo` are not `#[non_exhaustive]`, because
 generated code in another crate builds all three as struct literals — which is
 why a field added to any of them is a breaking change (ADR-0021 decision 10).
-`Command` and `Query` return `Result<(), ()>` from `require`/`ensure`: the value
-is decided in ADR-0021 decision 4.
+`StreamForm` is `#[non_exhaustive]`, because generated code only constructs it
+and never matches it, so a form added later is not a breaking change. `Command`
+and `Query` return `Result<(), ()>` from `require`/`ensure`: the value is
+decided in ADR-0021 decision 4.
 
 **The default ceilings are values of the catalog rule, not a guard of a codec.**
 `SIGNAL_EVENT_CEILING` (3,840 bytes), `CALL_CEILING` (16,128 bytes) and

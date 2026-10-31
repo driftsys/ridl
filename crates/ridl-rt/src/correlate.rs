@@ -23,8 +23,9 @@
 //!
 //! A settlement, a forget and a reclaim each stop or change every stream of
 //! the call, so after each [`Table::settle`] and [`Table::forget`] that did
-//! not answer `Unknown` the runtime takes the slot's stream wakers with [`Table::take_streams`], under
-//! the same lock, and wakes them after releasing it. The stream wakers are a
+//! not answer `Unknown` the runtime takes the slot's stream wakers with
+//! [`Table::take_streams`], under the same lock, and wakes them after
+//! releasing it. The stream wakers are a
 //! separate hand-back, not a field of [`Settled`] or [`Forgotten`], so those
 //! two enums keep the shape a runtime already matches on.
 //!

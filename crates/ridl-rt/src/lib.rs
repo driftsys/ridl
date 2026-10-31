@@ -141,10 +141,11 @@ pub mod sample;
 pub mod task;
 pub mod trace;
 
-/// Pins which enums stay `#[non_exhaustive]` under R-11: `Transport`,
+/// Pins which enums stay `#[non_exhaustive]`: under R-11 `Transport`,
 /// `ReadError`, `WriteError`, `RaiseError`, `SendError`, `SubscribeError`,
 /// `ServeError`, `SettleError`, `PushError`, `ClientError` and
-/// `ProviderError`. Each
+/// `ProviderError`, and `contract::StreamForm`, which generated code only
+/// constructs. Each
 /// `compile_fail` block below matches every variant of one such enum, with
 /// no `_` arm. Matching a
 /// `#[non_exhaustive]` enum from outside its crate with no `_` arm does not
@@ -270,7 +271,17 @@ pub mod trace;
 /// }
 /// ```
 ///
-/// The same eleven matches, each with a `_` arm, compile: every path and every
+/// ```compile_fail
+/// fn f(x: ridl_rt::contract::StreamForm) {
+///     match x {
+///         ridl_rt::contract::StreamForm::Elements => {}
+///         ridl_rt::contract::StreamForm::Bytes => {}
+///         ridl_rt::contract::StreamForm::Text => {}
+///     }
+/// }
+/// ```
+///
+/// The same twelve matches, each with a `_` arm, compile: every path and every
 /// variant name above resolves, so a block above fails only because it names
 /// no `_` arm against a `#[non_exhaustive]` enum.
 ///
@@ -369,6 +380,14 @@ pub mod trace;
 ///     match x {
 ///         ridl_rt::error::ProviderError::Serve(_) => {}
 ///         ridl_rt::error::ProviderError::Claim(_) => {}
+///         _ => {}
+///     }
+/// }
+/// fn stream_form(x: ridl_rt::contract::StreamForm) {
+///     match x {
+///         ridl_rt::contract::StreamForm::Elements => {}
+///         ridl_rt::contract::StreamForm::Bytes => {}
+///         ridl_rt::contract::StreamForm::Text => {}
 ///         _ => {}
 ///     }
 /// }

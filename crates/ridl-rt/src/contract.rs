@@ -402,6 +402,9 @@ pub struct StreamNo(pub u8);
 /// The form of a stream (ridl §12).
 ///
 /// A member with no stream has no form: its [`Member::streams`] is empty.
+/// The enum is `#[non_exhaustive]`, because generated code only constructs
+/// it, so a later form is not a breaking change.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StreamForm {
     /// A stream of elements of a named type: `<T>`.
