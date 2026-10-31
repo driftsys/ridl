@@ -1268,6 +1268,10 @@ impl<'a> Lowering<'a> {
                 _ => None,
             }
         }
+        // The model numbers streams as a `u32`, the field's type; the
+        // descriptor and `ridl_rt::port::StreamNo` hold a `u8`, so a stream
+        // parameter past the 255th has no descriptor entry and no `StreamNo`.
+        // No source declares that many, and no diagnostic reports it.
         let mut streams = Vec::new();
         let mut number = 0;
         if let Some(stream) = reply.and_then(carried) {

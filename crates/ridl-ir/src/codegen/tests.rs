@@ -4864,6 +4864,46 @@ fn a_stream_parameter_induces_a_params_struct_with_no_field_for_it() {
     ));
 }
 
+/// The text of an unsized request names the parameters the request is made
+/// of, which are the non-stream parameters: a stream parameter is not part of
+/// the request, so the text does not name it.
+#[test]
+fn an_unsized_request_beside_a_stream_parameter_names_only_the_non_stream_parameters() {
+    let param = |name: &str, ty: v2::FieldType| v2::Param {
+        name: name.to_string(),
+        r#type: Some(ty),
+        ..Default::default()
+    };
+    let bytes = v2::FieldType {
+        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+            element: Some(v2::stream_type::Element::Primitive(
+                v2::PrimitiveType::Bytes as i32,
+            )),
+        })),
+        ..Default::default()
+    };
+    let mut package = stream_package();
+    calls_interface(&mut package).interactions.push(call_decl(
+        "annotate",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![
+                param("info", named("Pair")),
+                param("tag", named("Tagged")),
+                param("data", bytes),
+            ],
+            ..Default::default()
+        }),
+    ));
+    let model = lower(&package, &[]);
+    let annotate = call_named(&model, "annotate");
+    for proto3 in [true, false] {
+        assert_eq!(
+            reserved(&annotate.reservation, proto3),
+            &unsized_by("annotate.request: (info, tag)")
+        );
+    }
+}
+
 /// Each stream of a member has one entry, in ascending number: 0 the reply
 /// stream, then the stream parameters from 1.
 #[test]
