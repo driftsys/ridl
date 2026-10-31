@@ -368,18 +368,19 @@ pub const fn table_budget<I: Sizes<E>, E: Encoding>() -> u64;
   `podbuf`), not a run-time error. `RESERVATIONS` is one row per member of
   `Interface::MEMBERS`, in order: the sum, as a `u64`, of `MAX_SIZE` over the
   member's payloads — the request then the reply for a query, `0` for a fixed,
-  which is never in flight. The codegen model's `Interaction.reservation` and
-  `Interface.table_budget` count a fixed member as `0` for the same reason, so
-  the model's numbers and this table's agree for every interface.
-  `Interaction::ROW` is the index of the descriptor's `MEMBER` in `MEMBERS`,
-  which is its row in every table of the interface, so `reservation::<X, E>()`
-  reads an interaction's row without a scan, and `table_budget::<I, E>()` sums
-  the rows, saturating; both are `const fn`, so a runtime whose set of
-  interfaces is known statically sums `table_budget::<I, E>()` terms in a
-  `const` and sizes a `static` table from it at compile time, with no allocator.
-  A runtime driven by data instead takes `<I as Sizes<E>>::RESERVATIONS` — a
-  `&'static [u64]` parallel to `I::MEMBERS` — at the one point where the
-  interface type is known, for example
+  which is never in flight, and no reply term for a query whose reply is a
+  stream, whose chunks the call table does not hold. The codegen model's
+  `Interaction.reservation` and `Interface.table_budget` count a fixed member as
+  `0` and a streamed reply as nothing for the same reasons, so the model's
+  numbers and this table's agree for every interface. `Interaction::ROW` is the
+  index of the descriptor's `MEMBER` in `MEMBERS`, which is its row in every
+  table of the interface, so `reservation::<X, E>()` reads an interaction's row
+  without a scan, and `table_budget::<I, E>()` sums the rows, saturating; both
+  are `const fn`, so a runtime whose set of interfaces is known statically sums
+  `table_budget::<I, E>()` terms in a `const` and sizes a `static` table from it
+  at compile time, with no allocator. A runtime driven by data instead takes
+  `<I as Sizes<E>>::RESERVATIONS` — a `&'static [u64]` parallel to `I::MEMBERS`
+  — at the one point where the interface type is known, for example
   `runtime.register(Cabin::MEMBERS, <Cabin as Sizes<FlatBuffers>>::RESERVATIONS)`,
   and reaches a row by the member's position from then on. The two buffer types
   are interface-wide because a face fills them before it knows the payload type:
@@ -757,11 +758,12 @@ is the claim's settlement, `Ok(&[])`, and `settle(claim, Err(e))` ends the reply
 stream with `e` after the chunks already pushed. A side stops a stream on
 purpose with `abort` or `abort_claim`; a producer interrupts with
 `CallError::Transport(Transport::Interrupted)`, and a caller's `forget` stops
-every stream of the call with it. The errors have two layers, as
-`Caller::reply`'s do: `ReadError`, and `PushError::Contract` and
-`PushError::Detached`, are the port call itself; `Pull::Failed` and
-`PushError::Failed` are the other side's verdict on the stream. Both traits are
-implemented for `&mut P`. No runtime in this workspace implements them yet.
+with it every stream of the call that its producer has not ended, and keeps
+every stream that was ended. The errors have two layers, as `Caller::reply`'s
+do: `ReadError`, and `PushError::Contract` and `PushError::Detached`, are the
+port call itself; `Pull::Failed` and `PushError::Failed` are the other side's
+verdict on the stream. Both traits are implemented for `&mut P`, and
+`ridl-loopback` implements both.
 
 `Watermark` has no sequence number; see
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10's
@@ -1050,22 +1052,23 @@ slot never holds a waker, because its settlement took it, so the three cases
 never need two wakers at once.
 
 **A slot holds one `Stream` waker for each of up to `STREAM_WAKERS` (4) streams
-of its call**: the reply stream and up to three stream parameters, inline,
-because the table allocates nothing. `wake_on_stream` follows `wake_on`'s rule
-for one stream — the displaced waker of another task, nothing on a refresh,
-`waker` itself for a forgotten call or an unknown correlation — with two
-differences. A settled call still stores the waker, because a command is settled
-at its acknowledgment and its parameter streams go on after it. A registration
-on a fifth stream of one call is handed back unstored, so its waiter is woken at
-once on every registration, which is a busy loop: the task reads again and
-registers again, and does not sleep while all four cells are occupied. A cell
-stays occupied until `take_stream` or `take_streams` takes its waker.
-`take_stream` takes one stream's waker, for a chunk, an end or a freed window. A
-settlement, a forget and a reclaim stop or change every stream of the call, so
-after each `settle` and each `forget` that did not answer `Unknown` the runtime
-calls `take_streams(Table::slot(c))` under the same lock and wakes what it
-returns after releasing the lock; after `Unknown` it does not, because the slot
-of a stale correlation may hold another live call. A runtime that skips the call
+of its call**, whatever their numbers — a query's reply stream and three stream
+parameters, or four stream parameters of a command — inline, because the table
+allocates nothing. `wake_on_stream` follows `wake_on`'s rule for one stream —
+the displaced waker of another task, nothing on a refresh, `waker` itself for a
+forgotten call or an unknown correlation — with two differences. A settled call
+still stores the waker, because a command is settled at its acknowledgment and
+its parameter streams go on after it. A registration on a fifth stream of one
+call is handed back unstored, so its waiter is woken at once on every
+registration, which is a busy loop: the task reads again and registers again,
+and does not sleep while all four cells are occupied. A cell stays occupied
+until `take_stream` or `take_streams` takes its waker. `take_stream` takes one
+stream's waker, for a chunk, an end or a freed window. A settlement, a forget
+and a reclaim stop or change every stream of the call, so after each `settle`
+and each `forget` that did not answer `Unknown` the runtime calls
+`take_streams(Table::slot(c))` under the same lock and wakes what it returns
+after releasing the lock; after `Unknown` it does not, because the slot of a
+stale correlation may hold another live call. A runtime that skips the call
 leaves that call's stream waiters asleep, and the stream tests of
 `ridl-rt-conformance` check that they are woken. The hand-back is an accessor
 keyed by the slot index, not a payload of `Settled` or `Forgotten`, so that

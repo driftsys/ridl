@@ -161,9 +161,10 @@ does not read, makes `ridl describe` exit with code 2. The
   the compiler cannot bound it in that encoding. For example, a FlatBuffers row
   is `Unbounded` when the payload's largest encoding would exceed 4 GiB, the
   most that FlatBuffers' 32-bit offsets can address. An encoding with no row
-  has no size computed by this toolchain. A stream payload, a request of zero
-  or of several parameters, and an inline `T | E` reply have no row in any
-  encoding. A `podbuf` row is present for a payload with a podbuf root, sized
+  has no size computed by this toolchain. The response payload of a stream
+  reply (`<T>`), a request of zero or of several non-stream parameters, and an
+  inline `T | E` reply have no row in any encoding; a stream's element carries
+  its rows in the member's `streams` entry. A `podbuf` row is present for a payload with a podbuf root, sized
   by `ridl_ir::projection::podbuf::max_size`, and a proto3 row is present only
   for a payload that is a struct, a union, a named scalar, an enum or an enum
   set, the kinds the proto3 schema gives a message of their own. A named

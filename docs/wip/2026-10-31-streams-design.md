@@ -346,7 +346,11 @@ and sizes of each stream; `Param.type` and `Reply.value` keep their `StreamType`
 for the declared shape; `request` or `request_tuple` for the non-stream
 arguments, present for every call. An older plugin that reads neither `streams`
 nor the new comment sees a request struct it did not see before and no stream,
-which is the model's additive rule.
+so it emits a plain call that sends the request without its stream: by
+`docs/book/stability.md` that is a break of the plugin protocol, not an
+addition, and the release states it (ruling U-7). A streamed reply adds nothing
+to `Interaction.reservation`, so the model's reservation agrees with the
+backend's `RESERVATIONS` row (ruling U-6).
 
 **R-10 (amended). A call's request payload is its non-stream parameters.** The
 lowering induces the argument struct over the non-stream parameters, zero
@@ -1098,8 +1102,18 @@ Rulings taken while the port was built. The source is the rustdoc of
 - A runtime without a member table accepts `REPLY_STREAM` on a query, and
   `StreamNo(1)` and `StreamNo(2)` on any call.
 - A forget keeps an ended stream and interrupts an open one.
-- A query's settlement releases its parameter streams; a command's does not.
-- A dropped handler interrupts a call whose streams have moved.
+- A query's settlement releases its parameter streams, and so does a command's
+  settlement with an error; a command's settlement `Ok` does not.
+- A dropped handler interrupts a call on which it moved a stream; a `Pending`
+  pull and a registration move nothing.
+- A receiver's abort drops its unread chunks; an abort of a finished stream
+  answers `Ended`, and by the provider on a stream parameter it still counts as
+  the provider's end of it.
+- A forget before any provider took the claim withdraws the call with its
+  streams.
+- A claim only offered through `ShortClaim` has no streams until it is taken.
+- The interaction's limit bounds every chunk in both directions.
+- A streamed reply reserves nothing in the codegen model.
 - No `Command` or `Query` impl is generated for a member that has a stream.
 
 ## Trace

@@ -873,17 +873,17 @@ A generated coherent multi-read, bounded on `CoherentSignals`, is a follow-up.
 
 ## The error enums, in one table
 
-There are seven port error enums rather than one, so that each method's
+There are eight port error enums rather than one, so that each method's
 signature says what can actually go wrong at that method. They repeat a small
 set of causes:
 
-| Cause                | Appears in                                                                           |
-| -------------------- | ------------------------------------------------------------------------------------ |
-| `Detached`           | Every one. The runtime behind the port is gone.                                      |
-| `Contract(Contract)` | `ReadError`, `WriteError`, `RaiseError`, `SendError`, `SubscribeError`, `ServeError` |
-| `TooLarge { cap }`   | `WriteError`, `RaiseError`, `SendError`, `SettleError`                               |
-| `Busy`               | `RaiseError`, `SendError`. Retryable.                                                |
-| `NotOwner`           | `WriteError`, `RaiseError`, `ServeError`                                             |
+| Cause                | Appears in                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------- |
+| `Detached`           | Every one. The runtime behind the port is gone.                                                   |
+| `Contract(Contract)` | `ReadError`, `WriteError`, `RaiseError`, `SendError`, `SubscribeError`, `ServeError`, `PushError` |
+| `TooLarge { cap }`   | `WriteError`, `RaiseError`, `SendError`, `SettleError`, `PushError`                               |
+| `Busy`               | `RaiseError`, `SendError`. Retryable.                                                             |
+| `NotOwner`           | `WriteError`, `RaiseError`, `ServeError`                                                          |
 
 `ReadError` serves every read on every port, so some of its variants are
 unreachable for a given method — `TooFewSamples` belongs to `read_coherent`
@@ -917,9 +917,10 @@ named type sends that type as it is; a call with no parameter, with several, or
 with one that is not a named type sends a struct named
 `<Interface><Member>Params`, whose fields are the parameters. A query's reply is
 read the same way: a named type as it is, and a tuple reply as the induced
-`<Interface><Member>Reply`. Three shapes are still refused, and skip the whole
-interface: a parameter or reply with no declared type, a stream in either
-position, and a fallible `T | E` reply.
+`<Interface><Member>Reply`. Two shapes are still refused, and skip the whole
+interface: a parameter or reply with no declared type, and a fallible `T | E`
+reply. A call with a stream, in either position, gets its descriptor but no
+method on the face.
 
 The clause translator is worth one extra sentence, because it fails loudly. The
 IR carries a contract clause only as canonical ridl text, not as an expression

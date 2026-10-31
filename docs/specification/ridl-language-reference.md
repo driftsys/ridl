@@ -1325,9 +1325,11 @@ query pipe(samples: <SensorSample>): <ProcessedSample>   // bidirectional
 query fetchDocument(id: DocId): <bytes>                  // byte stream, server produces
 ```
 
-No runtime carries a stream today: `ridl-rt` has no stream port and no frame
-version encodes one (driftsys/ridl#336, driftsys/ridl#1116). This section states
-the contract a stream declares, which the checker and the IR already accept.
+The stream port of `ridl-rt` is built, and `ridl-loopback` implements it in
+process, but no frame version encodes a stream and no generated face carries one
+yet (driftsys/ridl#1116), so nothing over the code the CLI generates carries a
+stream. This section states the contract a stream declares, which the checker
+and the IR already accept.
 
 ### 12.1 Direction by Position
 

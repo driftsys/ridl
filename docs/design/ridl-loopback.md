@@ -309,14 +309,14 @@ each key to the handle that observes it.
 
 What wakes a stored waker:
 
-| Kind          | Woken by                                                                                                                                                                                                                                         |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `Outcome`     | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight, or the drop of the caller handle that sent it                                                                                              |
-| `Slot`        | a reclaimed slot of the call table: a `forget` of a settled call or of a call no handler has claimed, the settlement of a claimed call forgotten while in flight, the drop of the handler that held such a call, or another caller handle's drop |
-| `Event`       | a raise that queues an occurrence for this source                                                                                                                                                                                                |
-| `Claim`       | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves                                                                                         |
-| `Stream`      | on the stream: a chunk or the end the provider pushes, an abort by the provider, or a pull by the provider that frees the window; on the call: its settlement, its `forget`, or the drop of the caller handle that sent it                       |
-| `ClaimStream` | on the stream: a chunk or the end the caller pushes, an abort by the caller, or a pull by the caller that frees the window; on the call: the caller's `forget`, the drop of the caller handle, or the drop of this handler                       |
+| Kind          | Woken by                                                                                                                                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Outcome`     | the settlement that records the outcome of the call, or a `forget` of the call while it is in flight, or the drop of the caller handle that sent it                                                                                                                       |
+| `Slot`        | a reclaimed slot of the call table: a `forget` of a settled call or of a call no handler has claimed, the settlement of a claimed call forgotten while in flight, the drop of the handler that held such a call, or another caller handle's drop                          |
+| `Event`       | a raise that queues an occurrence for this source                                                                                                                                                                                                                         |
+| `Claim`       | a send of a member this handler serves, a `serve` that admits a call already waiting, or another handler's drop that returns a claim this handler serves                                                                                                                  |
+| `Stream`      | on the stream: a chunk or the end the provider pushes, an abort by the provider, or a pull by the provider that frees the window; on the call: its settlement, its `forget`, the drop of the caller handle that sent it, or the drop of the handler that settled it       |
+| `ClaimStream` | on the stream: a chunk or the end the caller pushes, an abort by the caller, or a pull by the caller that frees the window; on the call: the caller's `forget`, the drop of the caller handle, the drop of this handler, or a settlement that releases a stream parameter |
 
 A `serve` takes the handler's `Claim` waker before it scans the waiting calls,
 and puts it back, unwoken, when no call the handler now serves is waiting. A
@@ -371,10 +371,13 @@ answer:
   and a slot kept for it would be lost to every other caller. The drop also
   removes the caller's own `Slot` waker.
 - **A stream registration is stored, not checked.** A `Stream` or `ClaimStream`
-  registration is woken at once only when no stream of that call can change
-  again: the correlation is unknown or forgotten, or the claim is not the
-  handler's. A chunk already waiting does not wake it, because the task reads
-  the stream after it registers.
+  registration is woken at once only in three cases: no stream of that call can
+  change again (the correlation is unknown or forgotten, or the claim is not the
+  handler's or is only offered); a `ClaimStream` registration names a stream
+  that already ended, stopped or was released; or a `Stream` registration names
+  a stream beyond the `ridl_rt::correlate::STREAM_WAKERS` cells of its call,
+  which the table hands back unstored. A chunk already waiting does not wake it,
+  because the task reads the stream after it registers.
 - **A kind no role of the handle observes is woken at once.** The reader, writer
   and sink handles observe no kind of key, the source handle observes one, and
   the caller and handler handles observe three and two, so a registration under
@@ -394,10 +397,12 @@ handler's offered claim is not returned, because it never left the waiting
 calls, and no handler is woken for it. A claim whose call the caller forgot is
 not returned: it is withdrawn, its slot is reclaimed, and no handler is woken
 for it (see "`Caller::forget` releases the caller's interest" below). A taken
-claim whose call has any stream state is not returned either, because another
-handler would read partial streams: every unfinished stream of the call stops
-with `Transport::Interrupted`, and the call settles `Err` with the same error,
-which wakes its `Outcome` and `Stream` waiters
+claim on which the handler already moved a stream — it pulled a chunk, an end or
+a failure, or pushed, ended or aborted a stream — is not returned either,
+because another handler would read partial streams; a pull that answered
+`Pending` and a registration move nothing. Every unfinished stream of the call
+stops with `Transport::Interrupted`, and the call settles `Err` with the same
+error, which wakes its `Outcome` and `Stream` waiters
 (`a_dropped_handler_interrupts_a_taken_call_whose_streams_moved`). The same
 `Drop` removes the handler's state from the store, its stored `Claim` waker with
 it, so no later send reaches a waker of a handler that is gone.
@@ -486,21 +491,27 @@ outcome it stopped with and the side that stopped it; a stream has state from
 the first operation that names it, and a pull of a stream nothing named yet
 answers `Pull::Pending`. The loopback has no member table, so it accepts every
 stream number on every call, and a stream number is unknown only when its call
-is. A stream parameter that an operation named and that the provider never
-reads, such as a stream number the member does not declare, holds the call's
-slot after a forget until the handler drops. The loopback also accepts
-`REPLY_STREAM` on a command's claim, and `end_claim(REPLY_STREAM)` there
-acknowledges the command. Each stream has one producer: the provider pushes the
-reply stream (`REPLY_STREAM`) and the caller pushes each stream parameter, and a
-push, an end or a pull from the other side answers
-`Contract::UnknownInteraction`; an abort is accepted from either side. A stream
-holds `Loopback::STREAM_WINDOW` — four — non-empty chunks; a push of a non-empty
-chunk into a full stream answers 0 and takes nothing, and an empty chunk is
-always taken. Because an empty chunk is always taken, as the contract requires,
-the window does not bound a producer that pushes empty chunks and never ends the
-stream: each one is stored until it is pulled. A chunk longer than the member's
-limit is refused with `PushError::TooLarge`, under the limit a settlement's
-reply has.
+is. A claim only offered through `ReadError::ShortClaim` has no streams: the
+handler takes it before a stream operation on it, which otherwise answers
+`Contract::UnknownInteraction`, so an offer that moves to another handler or
+stays among the waiting calls carries no stream one holder has partly read. A
+stream parameter that an operation named and that the provider never reads, such
+as a stream number the member does not declare, holds the call's slot after a
+forget until the handler drops. The loopback also accepts `REPLY_STREAM` on a
+command's claim, and `end_claim(REPLY_STREAM)` there acknowledges the command.
+Each stream has one producer: the provider pushes the reply stream
+(`REPLY_STREAM`) and the caller pushes each stream parameter, and a push, an end
+or a pull from the other side answers `Contract::UnknownInteraction`; an abort
+is accepted from either side. A receiver's abort drops the chunks it has not
+read, so its later pulls answer `Failed` with its own outcome, or `End` or the
+earlier outcome when the stream had already finished, in which case the abort
+answers `Ended`. A stream holds `Loopback::STREAM_WINDOW` — four — non-empty
+chunks; a push of a non-empty chunk into a full stream answers 0 and takes
+nothing, and an empty chunk is always taken. Because an empty chunk is always
+taken, as the contract requires, the window does not bound a producer that
+pushes empty chunks and never ends the stream: each one is stored until it is
+pulled. A chunk longer than the member's limit is refused with
+`PushError::TooLarge`, under the limit a settlement's reply has.
 
 The caller addresses a call's streams by its correlation while the table holds
 it and the caller has not forgotten it. The provider addresses them by the claim
@@ -521,25 +532,29 @@ on its entry and does not tell the table, so the slot stays taken; the caller's
 correlation already answers as forgotten, and its `Outcome` and `Stream` waiters
 are woken. The provider's pull that reads the last of those ends, a settlement
 after it, or the handler's drop completes the forget through `Table::forget`. An
-`abort_claim` of a stream parameter counts as the provider's end of it, and the
-settlement of a query releases its stream parameters (their unread chunks are
-dropped, and the caller's next push answers `Failed(Interrupted)`); the
-settlement of a command does not, because its stream parameters go on after the
-acknowledgment. The drop of a handler stops every unfinished stream of a claim
-it settled with `Interrupted` and wakes the caller's `Stream` waiters, so a
-caller still pushing to an acknowledged command learns the provider is gone.
-After the caller refused the reply stream, `end_claim` settles the claim with
-that refusal rather than `Ok`. This holds a slot no longer than the provider's
-reading, and uses no storage beyond the slot, at the cost of a caller finding
-the table full sooner. With no member table, the store counts only the stream
-parameters an operation has already named: after the forget of a settled call
-none of whose stream parameters was named, the forget completes at once, the
-claim is no longer known, and a stream operation on it answers
-`Contract::UnknownInteraction`. After every settlement and every forget that the
-table does not answer `Unknown`, the store takes the slot's `Stream` wakers with
-`Table::take_streams`, and a reclaim also takes the provider's wakers, before
-the entry, and the streams with it, are dropped. The stream cases are the
-`streams` module of the `ridl-rt-conformance` suite this runtime runs.
+`abort_claim` of a stream parameter counts as the provider's end of it, also
+when it answers `Ended` because the stream had already finished, and the
+settlement of a query, or of a command with an error, releases its stream
+parameters (their unread chunks are dropped, and the caller's next push answers
+`Failed(Interrupted)`); the settlement `Ok` of a command does not, because its
+stream parameters go on after the acknowledgment. A forget before any handler
+took the claim withdraws the call, with every stream it has, the ended ones too,
+because no provider has the claim to read them. The drop of a handler stops
+every unfinished stream of a claim it settled with `Interrupted` and wakes the
+caller's `Stream` waiters, so a caller still pushing to an acknowledged command
+learns the provider is gone. After the caller refused the reply stream,
+`end_claim` settles the claim with that refusal rather than `Ok`. This holds a
+slot no longer than the provider's reading, and uses no storage beyond the slot,
+at the cost of a caller finding the table full sooner. With no member table, the
+store counts only the stream parameters an operation has already named: after
+the forget of a settled call none of whose stream parameters was named, the
+forget completes at once, the claim is no longer known, and a stream operation
+on it answers `Contract::UnknownInteraction`. After every settlement and every
+forget that the table does not answer `Unknown`, the store takes the slot's
+`Stream` wakers with `Table::take_streams`, and a reclaim also takes the
+provider's wakers, before the entry, and the streams with it, are dropped. The
+stream cases are the `streams` module of the `ridl-rt-conformance` suite this
+runtime runs.
 
 **An offered claim (2026-09-28, driftsys/ridl#569).** A call whose argument
 bytes do not fit the buffer passed to `next_claim` is offered rather than taken:
@@ -828,11 +843,13 @@ there is no member table, and therefore:
 - **no unknown ordinal.** Nothing here can tell an ordinal that names no member
   from one that names a member with no value yet, so no port error's `Contract`
   variant is returned except `FixedReader::read_fixed`'s and the stream ports'
-  `Contract::UnknownInteraction` for a call or a claim the store does not hold.
-  The `read_fixed` one is not an exception to the rule but a case the rule does
-  not reach: a `fixed` is provisioned into the runtime rather than published
-  through a port, so an ordinal with no provisioned value is a read the store
-  cannot serve at all, where an unpublished signal is one it serves as `Init`.
+  `Contract::UnknownInteraction`: for a call or a claim the store does not hold,
+  for a claim only offered through `ReadError::ShortClaim`, and for a push, an
+  end or a pull from the side that is not the stream's producer or receiver. The
+  `read_fixed` one is not an exception to the rule but a case the rule does not
+  reach: a `fixed` is provisioned into the runtime rather than published through
+  a port, so an ordinal with no provisioned value is a read the store cannot
+  serve at all, where an unpublished signal is one it serves as `Init`.
 - **no unowned member.** `WriteError::NotOwner`, `RaiseError::NotOwner` and
   `ServeError::NotOwner` are never returned: a provider's ownership is a fact of
   the descriptor.
