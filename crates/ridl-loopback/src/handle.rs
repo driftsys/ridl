@@ -523,7 +523,8 @@ impl<E: Encoding> Clock for CallerHandle<E> {
 /// another task. Stores one `Slot` waker, woken at once while a slot is free
 /// and otherwise by the next reclaim. Stores one `Stream` waker per stream of
 /// a call, kept with the call and woken by a chunk or the end the provider
-/// pushes, an abort, a freed window, the call's settlement and its `forget`.
+/// pushes, an abort, a freed window, the call's settlement, its `forget`, and
+/// the drop of the handler that settled it.
 impl<E: Encoding> Wakeable for CallerHandle<E> {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
@@ -675,8 +676,8 @@ impl<E: Encoding> HandlerHandle<E> {
 /// only offered, through `ReadError::ShortClaim`, never left the waiting calls,
 /// so it is neither re-inserted nor woken for (driftsys/ridl#569). A claim whose
 /// call the caller forgot is withdrawn instead: its slot is reclaimed, and no
-/// handler is presented it again or woken for it. A taken claim whose call
-/// has any stream state is not returned: its unfinished streams stop with
+/// handler is presented it again or woken for it. A taken claim on which this
+/// handler moved a stream is not returned: its unfinished streams stop with
 /// `Transport::Interrupted` and the call settles with that error. The
 /// handler's waker is dropped after the lock is released, as the source's is.
 impl<E: Encoding> Drop for HandlerHandle<E> {
@@ -731,7 +732,8 @@ impl<E: Encoding> Handler for HandlerHandle<E> {
 /// already waiting, or by another handler's drop that returns a claim this
 /// handler serves. Stores one `ClaimStream` waker per stream of a claim, kept
 /// with the claim's call and woken by a chunk or the end the caller pushes,
-/// an abort, a freed window and the caller's `forget`.
+/// an abort, a freed window, the caller's `forget` and a settlement that
+/// releases a stream parameter.
 impl<E: Encoding> Wakeable for HandlerHandle<E> {
     fn wake_on(&self, what: Interest, waker: &Waker) {
         match what {
