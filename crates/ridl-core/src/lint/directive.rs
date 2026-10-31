@@ -367,8 +367,9 @@ mod tests {
         assert_eq!(found[0].target, None);
         assert_eq!(found[0].problems, vec![DirectiveProblem::NoDeclaration]);
 
-        // A block comment between them is not skipped either.
-        let text = "package p\n\n// lint: allow unbounded-float -- r\n/* x */\ntype T: float\n";
+        // A block comment between them is not skipped either. It sits on the
+        // declaration's line, so the blank-line rule does not apply.
+        let text = "package p\n\n// lint: allow unbounded-float -- r\n/* x */ type T: float\n";
         let found = typl(text);
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].target, None);
