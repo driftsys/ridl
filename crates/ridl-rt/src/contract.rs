@@ -4,8 +4,10 @@
 //! are the per-member form of the ordinal table of ADR-0013 decision 3,
 //! extended with the interface number and the catalog hash.
 //!
-//! One computation reads the descriptors: a member's call deadline
-//! ([`Member::call_deadline`]).
+//! Three computations read a member's timing from the descriptors: its call
+//! deadline ([`Member::call_deadline`]), its rate floor
+//! ([`Member::rate_floor`]) and its staleness bound
+//! ([`Member::staleness_bound`]).
 //!
 //! The size table of an interface in one encoding is [`Sizes`], which
 //! generated code implements once per interface per codec; [`reservation`]
@@ -301,8 +303,8 @@ impl Member {
     }
 
     /// The rate floor of the member's `timing` ([`Timing::rate_floor`]).
-    /// `None` when the member has no timing, which is the case of a `fixed`,
-    /// or when its timing declares no `min`.
+    /// `None` when the member has no timing (see [`Member::timing`]) or when
+    /// its timing declares no `min`.
     pub const fn rate_floor(&self) -> Option<Duration> {
         match self.timing {
             Some(timing) => timing.rate_floor(),
@@ -311,8 +313,8 @@ impl Member {
     }
 
     /// The staleness bound of the member's `timing`
-    /// ([`Timing::staleness_bound`]). `None` when the member has no timing,
-    /// which is the case of a `fixed`, or when its timing declares no `max`.
+    /// ([`Timing::staleness_bound`]). `None` when the member has no timing
+    /// (see [`Member::timing`]) or when its timing declares no `max`.
     pub const fn staleness_bound(&self) -> Option<Duration> {
         match self.timing {
             Some(timing) => timing.staleness_bound(),
@@ -429,6 +431,14 @@ mod tests {
         let fixed = member(Kind::Fixed, None);
         assert_eq!(fixed.rate_floor(), None);
         assert_eq!(fixed.staleness_bound(), None);
+        // A one-sided timing, on a kind other than a signal: each accessor
+        // reads its own side and does not fall back to the other.
+        let floor_only = member(Kind::Command, Some(timing(Some(20_000), None)));
+        assert_eq!(floor_only.rate_floor(), Some(Duration(20_000)));
+        assert_eq!(floor_only.staleness_bound(), None);
+        let bound_only = member(Kind::Event, Some(timing(None, Some(500_000))));
+        assert_eq!(bound_only.rate_floor(), None);
+        assert_eq!(bound_only.staleness_bound(), Some(Duration(500_000)));
     }
 
     #[test]

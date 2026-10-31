@@ -303,6 +303,11 @@ mod tests {
         );
         assert_eq!(Duration(0).to_core(), Some(core::time::Duration::ZERO));
         assert_eq!(Duration(-1).to_core(), None);
+        assert_eq!(
+            Duration(i64::MAX).to_core(),
+            Some(core::time::Duration::from_micros(i64::MAX as u64))
+        );
+        assert_eq!(Duration(i64::MIN).to_core(), None);
     }
 
     fn sample(provenance: Provenance, freshness: Freshness) -> Sample<u8> {
